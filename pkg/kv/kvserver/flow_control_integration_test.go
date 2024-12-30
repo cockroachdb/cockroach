@@ -6536,49 +6536,80 @@ func (h *flowControlTestHelper) resolveLevelArgs(
 // v1FlowTokensQueryStr is the query string to fetch flow tokens metrics from
 // the node metrics table. It fetches all flow token metrics available in v1.
 const v1FlowTokensQueryStr = `
-  SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvadmission%tokens%'
-ORDER BY name ASC;
+SELECT
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM
+  crdb_internal.node_metrics
+WHERE
+  name LIKE '%kvadmission%tokens%'
+ORDER BY
+  name ASC;
 `
 
 const v1FlowPerRangeStreamQueryStr = `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
+SELECT
+  range_id, count(*) AS streams
+FROM
+  crdb_internal.kv_flow_control_handles
+GROUP BY
+  (range_id)
+ORDER BY
+  streams DESC;
 `
 
 const v2FlowPerRangeStreamQueryStr = `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
+SELECT
+  range_id,
+  count(*) AS streams
+FROM
+  crdb_internal.kv_flow_control_handles_v2
+GROUP BY
+  (range_id)
+ORDER BY
+  streams DESC;
 `
 
 var flowPerRangeStreamQueryHeaderStrs = []string{"range_id", "stream_count"}
 
 const v1FlowPerStreamTrackedQueryStr = `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
+SELECT
+  range_id,
+  store_id,
+  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+FROM
+  crdb_internal.kv_flow_control_handles;
 `
 
 const v2FlowPerStreamTrackedQueryStr = `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
+SELECT
+  range_id,
+  store_id,
+  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+FROM
+  crdb_internal.kv_flow_control_handles_v2;
 `
 
 var flowPerStreamTrackedQueryHeaderStrs = []string{
 	"range_id", "store_id", "total_tracked_tokens"}
 
 const v1FlowPerStoreDeductionQueryStr = `
-  SELECT range_id, store_id, priority, crdb_internal.humanize_bytes(tokens::INT8)
-    FROM crdb_internal.kv_flow_token_deductions
+SELECT
+  range_id,
+  store_id,
+  priority, crdb_internal.humanize_bytes(tokens::INT8)
+FROM
+  crdb_internal.kv_flow_token_deductions;
 `
 
 const v2FlowPerStoreDeductionQueryStr = `
-  SELECT range_id, store_id, priority, crdb_internal.humanize_bytes(tokens::INT8)
-    FROM crdb_internal.kv_flow_token_deductions_v2
+SELECT
+  range_id,
+  store_id,
+  priority,
+  crdb_internal.humanize_bytes(tokens::INT8)
+FROM
+  crdb_internal.kv_flow_token_deductions_v2;
 `
 
 var flowPerStoreDeductionQueryHeaderStrs = []string{
@@ -6588,33 +6619,45 @@ var flowPerStoreDeductionQueryHeaderStrs = []string{
 // the node metrics table. It fetches all metrics related to flow control
 // tokens, distinct from v1 token metrics which only track eval tokens.
 const v2FlowTokensQueryStr = `
-  SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%tokens%'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%tokens%'
+ORDER BY
+  name ASC;
 `
 
 // flowSendQueueQueryStr is the query string to fetch flow control send queue
 // metrics from the node metrics table.
 const flowSendQueueQueryStr = `
-
-  SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%send_queue%'
-     AND name != 'kvflowcontrol.send_queue.count'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%send_queue%'
+  AND name != 'kvflowcontrol.send_queue.count'
+ORDER BY
+  name ASC;
 `
 
 // flowPerStoreTokenQueryStr is the query string to fetch per-store flow tokens
 // metrics from the kv_flow_controller_v2 table.
 const flowPerStoreTokenQueryStr = `
-  SELECT store_id,
-     crdb_internal.humanize_bytes(available_eval_regular_tokens),
-     crdb_internal.humanize_bytes(available_eval_elastic_tokens),
-     crdb_internal.humanize_bytes(available_send_regular_tokens),
-     crdb_internal.humanize_bytes(available_send_elastic_tokens)
-  FROM crdb_internal.kv_flow_controller_v2
-  ORDER BY store_id ASC;
+SELECT
+  store_id,
+  crdb_internal.humanize_bytes(available_eval_regular_tokens),
+  crdb_internal.humanize_bytes(available_eval_elastic_tokens),
+  crdb_internal.humanize_bytes(available_send_regular_tokens),
+  crdb_internal.humanize_bytes(available_send_elastic_tokens)
+FROM
+  crdb_internal.kv_flow_controller_v2
+ORDER BY
+  store_id ASC;
 `
 
 // flowPerStoreTokenQueryHeaderStrs are the headers for the per-store flow
