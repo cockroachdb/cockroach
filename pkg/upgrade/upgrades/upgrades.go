@@ -83,7 +83,13 @@ var upgrades = []upgradebase.Upgrade{
 		addJobsColumns,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
 	),
-
+	upgrade.NewTenantUpgrade(
+		"backfill new jobs tables",
+		clusterversion.V25_1_JobsBackfill.Version(),
+		upgrade.NoPrecondition,
+		backfillJobsTablesAndColumns,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore jobs tables"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
