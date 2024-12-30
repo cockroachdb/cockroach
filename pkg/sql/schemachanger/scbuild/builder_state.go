@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -110,8 +111,13 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		dst.target == scpb.ToAbsent &&
 		(target == scpb.ToPublic || target == scpb.Transient) &&
 		dst.metadata.IsLinkedToSchemaChange() {
-		panic(scerrors.NotImplementedErrorf(nil, "attempt to revive a ghost element:"+
-			" [elem=%v],[current=ABSENT],[target=ToAbsent],[newTarget=%v]", dst.element.String(), target.Status()))
+		panic(scerrors.NotImplementedErrorf(
+			nil,
+			redact.Sprintf(
+				"attempt to revive a ghost element: [elem=%v],[current=ABSENT],[target=ToAbsent],[newTarget=%v]",
+				dst.element.String(), target.Status(),
+			),
+		))
 	}
 
 	// Henceforth all possibilities lead to the target and metadata being
@@ -1472,8 +1478,10 @@ func (b *builderState) resolveBackReferences(c *cachedDesc) {
 	case catalog.DatabaseDescriptor:
 		if !d.HasPublicSchemaWithDescriptor() {
 			panic(scerrors.NotImplementedErrorf(nil, /* n */
-				"database %q (%d) with a descriptorless public schema",
-				d.GetName(), d.GetID()))
+				redact.Sprintf(
+					"database %q (%d) with a descriptorless public schema",
+					d.GetName(), d.GetID()),
+			))
 		}
 		// Handle special case of database children, which may include temporary
 		// schemas, which aren't explicitly referenced in the database's schemas
@@ -1606,7 +1614,7 @@ func (b *builderState) readDescriptor(id catid.DescID) catalog.Descriptor {
 		panic(errors.AssertionFailedf("invalid descriptor ID %d", id))
 	}
 	if id == keys.SystemPublicSchemaID || id == keys.PublicSchemaIDForBackup || id == keys.PublicSchemaID {
-		panic(scerrors.NotImplementedErrorf(nil /* n */, "descriptorless public schema %d", id))
+		panic(scerrors.NotImplementedErrorf(nil /* n */, redact.Sprintf("descriptorless public schema %d", id)))
 	}
 	if tempSchema := b.tempSchemas[id]; tempSchema != nil {
 		return tempSchema
