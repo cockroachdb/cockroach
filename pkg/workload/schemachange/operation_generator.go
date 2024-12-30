@@ -859,6 +859,10 @@ func (og *operationGenerator) addForeignKeyConstraint(
 		},
 	}
 
+	isMixedVersion, err := isMixedVersionState(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
 	parentColumnHasUniqueConstraint, err := og.columnHasSingleUniqueConstraint(ctx, tx, parentTable, parentColumn.name)
 	if err != nil {
 		return nil, err
@@ -888,8 +892,7 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: !parentColumnHasUniqueConstraint},
-		{code: pgcode.FeatureNotSupported, condition: childColumnIsVirtualComputed},
-		{code: pgcode.FeatureNotSupported, condition: parentColumnIsVirtualComputed || parentColumnIsStoredComputed},
+		{code: pgcode.FeatureNotSupported, condition: isMixedVersion || childColumnIsVirtualComputed || parentColumnIsVirtualComputed || parentColumnIsStoredComputed},
 		{code: pgcode.DuplicateObject, condition: constraintExists},
 		{code: pgcode.DatatypeMismatch, condition: !childColumn.typ.Equivalent(parentColumn.typ)},
 	})
