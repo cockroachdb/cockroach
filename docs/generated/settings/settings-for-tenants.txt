@@ -402,4 +402,4 @@ trace.span_registry.enabled	boolean	false	if set, ongoing traces can be seen at 
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
-version	version	1000024.3-upgrading-to-1000025.1-step-014	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000024.3-upgrading-to-1000025.1-step-018	set the active cluster version in the format '<major>.<minor>'	application
