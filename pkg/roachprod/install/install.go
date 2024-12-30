@@ -104,6 +104,11 @@ rm /tmp/otelcol-contrib.deb;
 	"side-eye": `
 	curl https://sh.side-eye.io/ | SIDE_EYE_API_TOKEN=%API_KEY% SIDE_EYE_ENVIRONMENT="%ROACHPROD_CLUSTER_NAME%" sh
 	`,
+
+	"bzip2": `
+sudo apt-get update;
+sudo apt-get install -y bzip2;
+`,
 }
 
 // installLocalCmds is a map from software name to a map of strings that

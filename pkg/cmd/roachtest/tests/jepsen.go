@@ -143,6 +143,13 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	c.Run(ctx, option.WithNodes(c.All()), "sh", "-c", `"sudo apt-get -y update > logs/apt-upgrade.log 2>&1"`)
 	c.Run(ctx, option.WithNodes(c.All()), "sh", "-c", `"sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade -o Dpkg::Options::='--force-confold' -o DPkg::options::='--force-confdef' > logs/apt-upgrade.log 2>&1"`)
 
+	// Jepsen artifact collection requires bzip2, which is not installed
+	// on the base image.
+	t.L().Printf("installing bzip2")
+	if err := c.Install(ctx, t.L(), c.All(), "bzip2"); err != nil {
+		t.Fatal(err)
+	}
+
 	// TODO(bdarnell): copying the raw binary and compressing it on the
 	// other side is silly, but this lets us avoid platform-specific
 	// quirks in tar. The --transform option is only available on gnu
