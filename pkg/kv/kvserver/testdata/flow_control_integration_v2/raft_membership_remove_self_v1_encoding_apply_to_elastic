@@ -95,14 +95,14 @@ ORDER BY
 -- on n1, then on n4.
 -- n1 connected v2 streams:
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles_v2
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
@@ -110,18 +110,18 @@ ORDER BY
 
 -- n4 connected v2 streams:
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles_v2
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 3             
+  a        | 3             
 
 
 -- (Allow below-raft admission to proceed.)

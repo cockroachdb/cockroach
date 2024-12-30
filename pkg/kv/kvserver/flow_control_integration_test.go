@@ -6545,45 +6545,50 @@ ORDER BY
 
 const v1FlowPerRangeStreamQueryStr = `
 SELECT
-  range_id, count(*) AS streams
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 `
 
 const v2FlowPerRangeStreamQueryStr = `
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles_v2
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 `
 
 var flowPerRangeStreamQueryHeaderStrs = []string{"range_id", "stream_count"}
 
 const v1FlowPerStreamTrackedQueryStr = `
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles;
+  crdb_internal.kv_flow_control_handles
+ORDER BY
+  range_id, store_id;
 `
 
 const v2FlowPerStreamTrackedQueryStr = `
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 `
 
 var flowPerStreamTrackedQueryHeaderStrs = []string{
@@ -6591,21 +6596,25 @@ var flowPerStreamTrackedQueryHeaderStrs = []string{
 
 const v1FlowPerStoreDeductionQueryStr = `
 SELECT
-  range_id,
-  store_id,
-  priority, crdb_internal.humanize_bytes(tokens::INT8)
-FROM
-  crdb_internal.kv_flow_token_deductions;
-`
-
-const v2FlowPerStoreDeductionQueryStr = `
-SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   priority,
   crdb_internal.humanize_bytes(tokens::INT8)
 FROM
-  crdb_internal.kv_flow_token_deductions_v2;
+  crdb_internal.kv_flow_token_deductions
+ORDER BY
+  range_id, store_id;
+`
+const v2FlowPerStoreDeductionQueryStr = `
+SELECT
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  store_id,
+  priority,
+  crdb_internal.humanize_bytes(tokens::INT8)
+FROM
+  crdb_internal.kv_flow_token_deductions_v2
+ORDER BY
+  range_id, store_id;
 `
 
 var flowPerStoreDeductionQueryHeaderStrs = []string{

@@ -20,17 +20,18 @@ echo
 -- 
 -- Start by checking that the leader (n1) has 3 connected v1 streams.
 SELECT
-  range_id, count(*) AS streams
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 3             
+  a        | 3             
 
 
 -- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)
@@ -95,17 +96,19 @@ ORDER BY
 
 -- The v1 tracked tokens per-stream on n1 should be 1 MiB for (s1,s2,s3).
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles;
+  crdb_internal.kv_flow_control_handles
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 1.0 MiB               
-  75       | 2        | 1.0 MiB               
-  75       | 3        | 1.0 MiB               
+  a        | 1        | 1.0 MiB               
+  a        | 2        | 1.0 MiB               
+  a        | 3        | 1.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -135,17 +138,19 @@ ORDER BY
 
 -- The v1 tracked tokens per-stream on n1 should now be 0.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles;
+  crdb_internal.kv_flow_control_handles
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 0 B                   
-  75       | 2        | 0 B                   
-  75       | 3        | 0 B                   
+  a        | 1        | 0 B                   
+  a        | 2        | 0 B                   
+  a        | 3        | 0 B                   
 
 
 -- (Block below-raft admission again.)
@@ -156,17 +161,19 @@ FROM
 
 -- The v1 tracked tokens per-stream on n1 should again be 1 MiB for (s1,s2,s3).
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles;
+  crdb_internal.kv_flow_control_handles
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 1.0 MiB               
-  75       | 2        | 1.0 MiB               
-  75       | 3        | 1.0 MiB               
+  a        | 1        | 1.0 MiB               
+  a        | 2        | 1.0 MiB               
+  a        | 3        | 1.0 MiB               
 
 
 --------------------------------------------------------------------------------
@@ -178,30 +185,31 @@ FROM
 -- These are lazily instantiated on the first raft event the leader 
 -- RangeController sees.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles_v2
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 3             
+  a        | 3             
 
 
 -- There should also now be no connected streams for the v1 protocol,
 -- at the leader n1.
 SELECT
-  range_id, count(*) AS streams
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
@@ -272,17 +280,19 @@ ORDER BY
 
 -- The v2 tracked tokens per-stream on n1 should now also be 2 MiB for (s1,s2,s3).
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 2.0 MiB               
-  75       | 2        | 2.0 MiB               
-  75       | 3        | 2.0 MiB               
+  a        | 1        | 2.0 MiB               
+  a        | 2        | 2.0 MiB               
+  a        | 3        | 2.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -333,17 +343,19 @@ ORDER BY
 -- The v2 tracked tokens per-stream on n1 reflect the most recent write
 -- and should be 1 MiB per stream now.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 1.0 MiB               
-  75       | 2        | 1.0 MiB               
-  75       | 3        | 1.0 MiB               
+  a        | 1        | 1.0 MiB               
+  a        | 2        | 1.0 MiB               
+  a        | 3        | 1.0 MiB               
 
 
 -- There should also be a corresponding elastic token deduction (not regular),
@@ -425,17 +437,18 @@ ORDER BY
 
 -- Now expect to see 3 connected v1 streams on n2.
 SELECT
-  range_id, count(*) AS streams
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 3             
+  a        | 3             
 
 
 -- (Issuing 1 x 3MiB elastic, 3x replicated write that's not admitted.)
@@ -443,17 +456,19 @@ ORDER BY
 
 -- The v1 tracked tokens per-stream on n2 should be 3 MiB.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles;
+  crdb_internal.kv_flow_control_handles
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 3.0 MiB               
-  75       | 2        | 3.0 MiB               
-  75       | 3        | 3.0 MiB               
+  a        | 1        | 3.0 MiB               
+  a        | 2        | 3.0 MiB               
+  a        | 3        | 3.0 MiB               
 
 
 -- Corresponding v1 token metrics on the new leader n2.
@@ -573,17 +588,19 @@ ORDER BY
 
 -- The v1 tracked tokens per-stream on n2 should be 4 MiB.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles;
+  crdb_internal.kv_flow_control_handles
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 4.0 MiB               
-  75       | 2        | 4.0 MiB               
-  75       | 3        | 4.0 MiB               
+  a        | 1        | 4.0 MiB               
+  a        | 2        | 4.0 MiB               
+  a        | 3        | 4.0 MiB               
 
 
 -- Corresponding v1 token metrics.
@@ -640,13 +657,14 @@ ORDER BY
 
 -- Also expect to see 0 connected v1 streams on n2.
 SELECT
-  range_id, count(*) AS streams
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
@@ -654,18 +672,18 @@ ORDER BY
 
 -- There should be 3 connected streams on n2 for the v2 protocol.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles_v2
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 3             
+  a        | 3             
 
 
 -- Corresponding v2 token metrics on the new leader n2. The most recent 
@@ -759,17 +777,19 @@ ORDER BY
 
 -- The v2 tracked tokens per-stream on n2 should be 1 MiB.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 1.0 MiB               
-  75       | 2        | 1.0 MiB               
-  75       | 3        | 1.0 MiB               
+  a        | 1        | 1.0 MiB               
+  a        | 2        | 1.0 MiB               
+  a        | 3        | 1.0 MiB               
 
 
 --------------------------------------------------------------------------------
@@ -779,17 +799,19 @@ FROM
 
 -- The v2 tracked tokens per-stream on n2 should still be 1 MiB.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 1.0 MiB               
-  75       | 2        | 1.0 MiB               
-  75       | 3        | 1.0 MiB               
+  a        | 1        | 1.0 MiB               
+  a        | 2        | 1.0 MiB               
+  a        | 3        | 1.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -797,17 +819,19 @@ FROM
 
 -- There should no longer be any tracked tokens on n2, as admission occurs.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 0 B                   
-  75       | 2        | 0 B                   
-  75       | 3        | 0 B                   
+  a        | 1        | 0 B                   
+  a        | 2        | 0 B                   
+  a        | 3        | 0 B                   
 
 
 -- Corresponding v2 token metrics on n2. All tokens should be returned.
@@ -895,11 +919,13 @@ ORDER BY
 -- There should no longer be any tracked tokens on n2, as it's no longer the
 -- leader.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
@@ -944,18 +970,18 @@ ORDER BY
 -- Viewing n1's v2 connected streams, there now should be three, as n1 acquired
 -- the leadership and lease.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles_v2
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 3             
+  a        | 3             
 
 
 -- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)
@@ -963,17 +989,19 @@ ORDER BY
 
 -- The v2 tracked tokens per-stream on n1.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 1.0 MiB               
-  75       | 2        | 1.0 MiB               
-  75       | 3        | 1.0 MiB               
+  a        | 1        | 1.0 MiB               
+  a        | 2        | 1.0 MiB               
+  a        | 3        | 1.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -1061,27 +1089,31 @@ ORDER BY
 
 -- The v2 tracked tokens per-stream on n1.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 1.0 MiB               
-  75       | 2        | 1.0 MiB               
-  75       | 3        | 1.0 MiB               
+  a        | 1        | 1.0 MiB               
+  a        | 2        | 1.0 MiB               
+  a        | 3        | 1.0 MiB               
 
 
 -- The v1 tracked tokens per-stream on n1. 
 -- There should be no tokens tracked.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles;
+  crdb_internal.kv_flow_control_handles
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------

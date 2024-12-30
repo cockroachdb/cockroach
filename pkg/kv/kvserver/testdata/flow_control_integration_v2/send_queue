@@ -114,17 +114,19 @@ ORDER BY
 
 -- Observe the total tracked tokens per-stream on n1.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 4.0 MiB               
-  75       | 2        | 4.0 MiB               
-  75       | 3        | 4.0 MiB               
+  a        | 1        | 4.0 MiB               
+  a        | 2        | 4.0 MiB               
+  a        | 3        | 4.0 MiB               
 
 
 -- And, the per-store tokens available post-write from n1.
@@ -152,17 +154,19 @@ ORDER BY
 
 -- Observe the total tracked tokens per-stream on n1.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 0 B                   
-  75       | 2        | 0 B                   
-  75       | 3        | 4.0 MiB               
+  a        | 1        | 0 B                   
+  a        | 2        | 0 B                   
+  a        | 3        | 4.0 MiB               
 
 
 -- Per-store tokens available from n1.
@@ -294,16 +298,18 @@ ORDER BY
 -- Observe the total tracked tokens per-stream on n1, n3's flushed entries 
 -- will also be tracked here.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 0 B                   
-  75       | 3        | 5.0 MiB               
+  a        | 1        | 0 B                   
+  a        | 3        | 5.0 MiB               
 
 
 -- Per-store tokens available from n1, these should reflect the deducted 
@@ -359,16 +365,18 @@ ORDER BY
 -- Observe the total tracked tokens per-stream on n1, n3's should track the latest write
 -- as well.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 0 B                   
-  75       | 3        | 6.0 MiB               
+  a        | 1        | 0 B                   
+  a        | 3        | 6.0 MiB               
 
 
 -- (Allowing below-raft admission to proceed on n1, n2, and n3. Note that n2 is still down.)
@@ -435,18 +443,18 @@ ORDER BY
 
 -- There should now be 3 connected streams again.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles_v2
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 3             
+  a        | 3             
 
 
 -- (Adding VOTER to n4 and n5.)
@@ -455,18 +463,18 @@ ORDER BY
 -- Now, after adding n4,n5, there should be 5 connected streams.
 -- [n1,n2,n3,n4,n5]
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles_v2
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 5             
+  a        | 5             
 
 
 -- Per-store tokens available from n1.
@@ -515,19 +523,21 @@ ORDER BY
   4        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
   5        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 0 B                   
-  75       | 2        | 0 B                   
-  75       | 3        | 0 B                   
-  75       | 4        | 4.0 MiB               
-  75       | 5        | 4.0 MiB               
+  a        | 1        | 0 B                   
+  a        | 2        | 0 B                   
+  a        | 3        | 0 B                   
+  a        | 4        | 4.0 MiB               
+  a        | 5        | 4.0 MiB               
 
 
 -- (Issuing 1x1MiB regular, 5x replicated write that's not admitted.)
@@ -661,19 +671,21 @@ ORDER BY
 -- streams should be prevented from forming a send queue and have higher tracked
 -- tokens than the other two.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 0 B                   
-  75       | 2        | 4.0 MiB               
-  75       | 3        | 4.0 MiB               
-  75       | 4        | 5.0 MiB               
-  75       | 5        | 5.0 MiB               
+  a        | 1        | 0 B                   
+  a        | 2        | 4.0 MiB               
+  a        | 3        | 4.0 MiB               
+  a        | 4        | 5.0 MiB               
+  a        | 5        | 5.0 MiB               
 
 
 -- Send queue and flow token metrics from n1.
