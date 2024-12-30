@@ -2011,9 +2011,9 @@ func (expr *Placeholder) TypeCheck(
 		expr.typ = typ
 		return expr, nil
 	}
-	if desired.IsAmbiguous() {
-		return nil, placeholderTypeAmbiguityError(expr.Idx)
-	}
+	//if desired.IsAmbiguous() {
+	//	return nil, placeholderTypeAmbiguityError(expr.Idx)
+	//}
 	if err := semaCtx.Placeholders.SetType(expr.Idx, desired); err != nil {
 		return nil, err
 	}
@@ -2788,6 +2788,24 @@ func findFirstTupleIndex(exprs ...Expr) (index int, ok bool) {
 		}
 	}
 	return 0, false
+}
+
+func typeCheckHeterogeneousExprs(
+	ctx context.Context, semaCtx *SemaContext, desired *types.T, exprs ...Expr,
+) ([]TypedExpr, *types.T, error) {
+	if len(exprs) == 0 {
+		return nil, nil, nil
+	}
+
+	typedExprs := make([]TypedExpr, len(exprs))
+	for i, e := range exprs {
+		typedExpr, err := e.TypeCheck(ctx, semaCtx, desired)
+		if err != nil {
+			return nil, nil, err
+		}
+		typedExprs[i] = typedExpr
+	}
+	return typedExprs, nil, nil
 }
 
 // typeCheckSameTypedExprs type checks a list of expressions, asserting that all
