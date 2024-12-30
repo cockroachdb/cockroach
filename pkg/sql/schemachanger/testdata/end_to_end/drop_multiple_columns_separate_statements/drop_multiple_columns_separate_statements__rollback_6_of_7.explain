@@ -6,7 +6,7 @@ ALTER TABLE t DROP COLUMN j CASCADE;
 ALTER TABLE t DROP COLUMN k CASCADE;
 EXPLAIN (DDL) rollback at post-commit stage 6 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹k› CASCADE; following ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE;
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t DROP COLUMN k CASCADE; following ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward PUBLIC

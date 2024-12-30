@@ -819,6 +819,7 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 	st.SetTime(stubTime)
 	defer s.Stopper().Stop(context.Background())
 
+	sqlDB.SetMaxOpenConns(1)
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
 	// Set query internal to `false` to guarantee that if an entry qith `internal-console` is showing
@@ -853,7 +854,7 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 		},
 	}
 
-	query := `SELECT count(*) FROM crdb_internal.statement_statistics`
+	query := `SELECT count(*) FROM defaultdb.crdb_internal.statement_statistics`
 	for _, tc := range testData {
 		db.Exec(t, `SET application_name = $1`, tc.appName)
 		db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal_console.enabled = $1;`, tc.logInternalConsole)

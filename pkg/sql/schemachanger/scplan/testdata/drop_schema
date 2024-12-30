@@ -4348,7 +4348,7 @@ PreCommitPhase stage 2 of 2 with 243 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops pending
       Statements:
       - statement: DROP SCHEMA defaultdb.sc1 CASCADE
-        redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        redactedstatement: DROP SCHEMA defaultdb.sc1 CASCADE
         statementtag: DROP SCHEMA
 PostCommitNonRevertiblePhase stage 1 of 1 with 23 MutationType ops
   transitions:

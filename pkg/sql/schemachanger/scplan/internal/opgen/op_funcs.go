@@ -14,12 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 func statementForDropJob(e scpb.Element, md *opGenContext) scop.StatementForDropJob {
 	stmtID := md.Targets[md.elementToTarget[e]].Metadata.StatementID
-	stmt := redact.RedactableString(md.Statements[stmtID].RedactedStatement).StripMarkers()
+	stmt := md.Statements[stmtID].RedactedStatement.StripMarkers()
 	switch e.(type) {
 	case *scpb.PrimaryIndex:
 		stmt = "removed primary index; " + stmt
