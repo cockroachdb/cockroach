@@ -68,8 +68,11 @@ func (n *controlJobsNode) startExec(params runParams) error {
 
 		if err := reg.UpdateJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.InternalSQLTxn(),
 			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				getLegacyPayload := func(ctx context.Context) (*jobspb.Payload, error) {
+					return md.Payload, nil
+				}
 				if err := jobsauth.Authorize(params.ctx, params.p,
-					md.ID, md.Payload, jobsauth.ControlAccess, globalPrivileges); err != nil {
+					md.ID, getLegacyPayload, md.Payload.UsernameProto.Decode(), md.Payload.Type(), jobsauth.ControlAccess, globalPrivileges); err != nil {
 					return err
 				}
 				switch n.desiredStatus {
