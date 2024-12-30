@@ -70,6 +70,9 @@ type AuthorizationAccessor interface {
 	// HasGlobalPrivilegeOrRoleOption mirrors sql.AuthorizationAccessor.
 	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
 
+	// MemberOfWithAdminOption mirrors sql.AuthorizationAccessor
+	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
+
 	// User mirrors sql.PlanHookState.
 	User() username.SQLUsername
 }
@@ -120,6 +123,13 @@ func Authorize(
 	accessLevel AccessLevel,
 	global GlobalJobPrivileges,
 ) error {
+	jobOwnerUser := payload.UsernameProto.Decode()
+
+	// If this is the user's own job, they have access to it.
+	if a.User() == jobOwnerUser {
+		return nil
+	}
+
 	callerIsAdmin, err := a.UserHasAdminRole(ctx, a.User())
 	if err != nil {
 		return err
@@ -128,10 +138,8 @@ func Authorize(
 		return nil
 	}
 
-	jobOwnerUser := payload.UsernameProto.Decode()
-
 	if accessLevel == ViewAccess {
-		if global.hasControl || global.hasView || a.User() == jobOwnerUser {
+		if global.hasControl || global.hasView {
 			return nil
 		}
 	}
@@ -145,6 +153,13 @@ func Authorize(
 			"only admins can control jobs owned by other admins")
 	}
 	if global.hasControl {
+		return nil
+	}
+
+	// If the user is a member of the role that owns the job, they own the job, so
+	// they have access to it.
+	memberOf, err := a.MemberOfWithAdminOption(ctx, a.User())
+	if _, ok := memberOf[jobOwnerUser]; ok {
 		return nil
 	}
 
