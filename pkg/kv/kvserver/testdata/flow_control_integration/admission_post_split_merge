@@ -5,10 +5,15 @@ echo
 -- that are yet to get admitted. We see 2*3*1MiB=6MiB deductions of
 -- {regular,elastic} tokens with no corresponding returns. The 2*1MiB writes
 -- happened on what is soon going to be the LHS and RHS of a range being split.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvadmission%tokens%'
-ORDER BY name ASC;
+SELECT
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM
+  crdb_internal.node_metrics
+WHERE
+  name LIKE '%kvadmission%tokens%'
+ORDER BY
+  name ASC;
 
   kvadmission.flow_controller.elastic_tokens_available   | 18 MiB   
   kvadmission.flow_controller.elastic_tokens_deducted    | 6.0 MiB  
@@ -27,10 +32,15 @@ ORDER BY name ASC;
 -- post-split LHS and RHS ranges respectively. We should see 15MiB extra tokens
 -- deducted which comes from (2MiB+3MiB)*3=15MiB. So we stand at
 -- 6MiB+15MiB=21MiB now.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvadmission%tokens%'
-ORDER BY name ASC;
+SELECT
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM
+  crdb_internal.node_metrics
+WHERE
+  name LIKE '%kvadmission%tokens%'
+ORDER BY
+  name ASC;
 
   kvadmission.flow_controller.elastic_tokens_available   | 3.0 MiB  
   kvadmission.flow_controller.elastic_tokens_deducted    | 21 MiB   
@@ -43,10 +53,14 @@ ORDER BY name ASC;
 
 
 -- Observe the newly split off replica, with its own three streams.
-SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
+SELECT
+  range_id, count(*) AS streams
+FROM
+  crdb_internal.kv_flow_control_handles
+GROUP BY
+  (range_id)
+ORDER BY
+  streams DESC;
 
   range_id | stream_count  
 -----------+---------------
@@ -74,10 +88,14 @@ ORDER BY name ASC;
 
 
 -- Observe only the merged replica with its own three streams.
-SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
+SELECT
+  range_id, count(*) AS streams
+FROM
+  crdb_internal.kv_flow_control_handles
+GROUP BY
+  (range_id)
+ORDER BY
+  streams DESC;
 
   range_id | stream_count  
 -----------+---------------
@@ -91,10 +109,15 @@ ORDER BY streams DESC;
 -- {regular,elastic} tokens returned, including those from:
 -- - the LHS before the merge, and
 -- - the LHS and RHS before the original split.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvadmission%tokens%'
-ORDER BY name ASC;
+SELECT
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM
+  crdb_internal.node_metrics
+WHERE
+  name LIKE '%kvadmission%tokens%'
+ORDER BY
+  name ASC;
 
   kvadmission.flow_controller.elastic_tokens_available   | 24 MiB  
   kvadmission.flow_controller.elastic_tokens_deducted    | 33 MiB  
