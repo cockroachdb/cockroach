@@ -3823,6 +3823,23 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
+
+	// CockroachDB extension.
+	`optimizer_use_histograms_for_join_selectivity`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_histograms_for_join_selectivity`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_histograms_for_join_selectivity", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseHistogramsForJoinSelectivity(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseHistogramsForJoinSelectivity), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

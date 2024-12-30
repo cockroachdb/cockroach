@@ -16,7 +16,7 @@ expr
 ----
 inner-join (hash)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:7(int!null) t.public.def.e:8(int) t.public.def.f:9(int)
- ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
+ ├── stats: [rows=9801, distinct(1)=100, null(1)=98.01, distinct(7)=100, null(7)=98.01]
  ├── cost: 2325.61625
  ├── fd: (1)==(7), (7)==(1)
  ├── prune: (2,3,8,9)
@@ -79,7 +79,7 @@ inner-join (merge)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:7(int!null) t.public.def.e:8(int) t.public.def.f:9(int)
  ├── left ordering: +1
  ├── right ordering: +7
- ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
+ ├── stats: [rows=9801, distinct(1)=100, null(1)=98.01, distinct(7)=100, null(7)=98.01]
  ├── cost: 2814.43387
  ├── fd: (1)==(7), (7)==(1)
  ├── sort

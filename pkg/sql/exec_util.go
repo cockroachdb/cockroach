@@ -4040,6 +4040,10 @@ func (m *sessionDataMutator) SetOptimizerCheckInputMinRowCount(val float64) {
 	m.data.OptimizerCheckInputMinRowCount = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseHistogramsForJoinSelectivity(val bool) {
+	m.data.OptimizerUseHistogramsForJoinSelectivity = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

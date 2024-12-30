@@ -204,6 +204,7 @@ type Memo struct {
 	minRowCount                                float64
 	checkInputMinRowCount                      float64
 	internal                                   bool
+	useHistogramsForJoinSelectivity            bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -300,6 +301,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		minRowCount:                                evalCtx.SessionData().OptimizerMinRowCount,
 		checkInputMinRowCount:                      evalCtx.SessionData().OptimizerCheckInputMinRowCount,
 		internal:                                   evalCtx.SessionData().Internal,
+		useHistogramsForJoinSelectivity:            evalCtx.SessionData().OptimizerUseHistogramsForJoinSelectivity,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -473,6 +475,7 @@ func (m *Memo) IsStale(
 		m.minRowCount != evalCtx.SessionData().OptimizerMinRowCount ||
 		m.checkInputMinRowCount != evalCtx.SessionData().OptimizerCheckInputMinRowCount ||
 		m.internal != evalCtx.SessionData().Internal ||
+		m.useHistogramsForJoinSelectivity != evalCtx.SessionData().OptimizerUseHistogramsForJoinSelectivity ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
