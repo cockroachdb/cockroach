@@ -100,6 +100,7 @@ go_library(
 go_test(
     name = "logical_test",
     srcs = [
+        "create_logical_replication_stmt_test.go",
         "dead_letter_queue_test.go",
         "logical_replication_job_test.go",
         "lww_kv_processor_test.go",
@@ -138,6 +139,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/resolver",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
@@ -166,6 +168,7 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
     ],

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -135,7 +136,7 @@ func createLogicalReplicationStreamPlanHook(
 				return pgerror.Newf(pgcode.InvalidParameterValue, "unknown discard option %q", m)
 			}
 		}
-		resolvedDestObjects, err := resolveDestinationObjects(ctx, p, stmt.Into, stmt.CreateTable)
+		resolvedDestObjects, err := resolveDestinationObjects(ctx, p, p.SessionData(), stmt.Into, stmt.CreateTable)
 		if err != nil {
 			return err
 		}
@@ -305,7 +306,8 @@ func (r *ResolvedDestObjects) TargetDescription() string {
 
 func resolveDestinationObjects(
 	ctx context.Context,
-	p sql.PlanHookState,
+	r resolver.SchemaResolver,
+	sessionData *sessiondata.SessionData,
 	destResources tree.LogicalReplicationResources,
 	createTable bool,
 ) (ResolvedDestObjects, error) {
@@ -315,15 +317,16 @@ func resolveDestinationObjects(
 		if err != nil {
 			return resolved, err
 		}
-		dstObjName.HasExplicitSchema()
-
+		dstTableName := dstObjName.ToTableName()
 		if createTable {
-			_, _, resPrefix, err := resolver.ResolveTarget(ctx,
-				&dstObjName, p, p.SessionData().Database, p.SessionData().SearchPath)
+			found, _, resPrefix, err := resolver.ResolveTarget(ctx,
+				&dstObjName, r, sessionData.Database, sessionData.SearchPath)
 			if err != nil {
 				return resolved, errors.Newf("resolving target import name")
 			}
-
+			if !found {
+				return resolved, errors.Newf("database or schema not found for destination table %s", destResources.Tables[i])
+			}
 			if resolved.ParentDatabaseID == 0 {
 				resolved.ParentDatabaseID = resPrefix.Database.GetID()
 				resolved.ParentSchemaID = resPrefix.Schema.GetID()
@@ -332,7 +335,9 @@ func resolveDestinationObjects(
 			} else if resolved.ParentSchemaID != resPrefix.Schema.GetID() {
 				return resolved, errors.Newf("destination tables must all be in the same schema")
 			}
-
+			if _, _, err := resolver.ResolveMutableExistingTableObject(ctx, r, &dstTableName, true, tree.ResolveRequireTableDesc); err == nil {
+				return resolved, errors.Newf("destination table %s already exists", destResources.Tables[i])
+			}
 			tbNameWithSchema := tree.MakeTableNameWithSchema(
 				tree.Name(resPrefix.Database.GetName()),
 				tree.Name(resPrefix.Schema.GetName()),
@@ -340,10 +345,9 @@ func resolveDestinationObjects(
 			)
 			resolved.TableNames = append(resolved.TableNames, tbNameWithSchema)
 		} else {
-			dstTableName := dstObjName.ToTableName()
-			prefix, td, err := resolver.ResolveMutableExistingTableObject(ctx, p, &dstTableName, true, tree.ResolveRequireTableDesc)
+			prefix, td, err := resolver.ResolveMutableExistingTableObject(ctx, r, &dstTableName, true, tree.ResolveRequireTableDesc)
 			if err != nil {
-				return resolved, err
+				return resolved, errors.Wrapf(err, "failed to find existing destination table %s", destResources.Tables[i])
 			}
 
 			tbNameWithSchema := tree.MakeTableNameWithSchema(
