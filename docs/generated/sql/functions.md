@@ -1180,9 +1180,9 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_length"></a><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="json_build_array"></a><code>json_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
+<tr><td><a name="json_build_array"></a><code>json_build_array(anyelement*) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="json_build_object"></a><code>json_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
+<tr><td><a name="json_build_object"></a><code>json_build_object(anyelement*) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="json_each"></a><code>json_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
@@ -1218,9 +1218,9 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_array_length"></a><code>jsonb_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
+<tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(anyelement*) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
+<tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(anyelement*) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_each"></a><code>jsonb_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
@@ -2880,7 +2880,7 @@ Can be used to define the tile bounds required by ST_AsMVTGeom to convert geomet
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="compress"></a><code>compress(data: <a href="bytes.html">bytes</a>, codec: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Compress <code>data</code> with the specified <code>codec</code> (<code>gzip</code>, ‘lz4’, ‘snappy’, 'zstd).</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="concat"></a><code>concat(anyelement...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates a comma-separated list of strings.</p>
+<tr><td><a name="concat"></a><code>concat(anyelement*) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates a comma-separated list of strings.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="concat_ws"></a><code>concat_ws(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Uses the first argument as a separator between the concatenation of the subsequent arguments.</p>
 <p>For example <code>concat_ws('!','wow','great')</code> returns <code>wow!great</code>.</p>
