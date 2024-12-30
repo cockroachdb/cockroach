@@ -40,7 +40,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 		Timeout:          1 * time.Hour,
 		Benchmark:        true,
 		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Cluster: r.MakeClusterSpec(4, spec.CPU(8),
 			spec.WorkloadNode(), spec.ReuseNone()),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
