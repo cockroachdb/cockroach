@@ -211,6 +211,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"Phase": {},
 						"Type":  {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb": {
+						"Status":       {},
+						"TargetStatus": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph": {
 						"RuleName": {},
 					},
