@@ -203,6 +203,14 @@ SELECT concat('foo'::concat_enum, ' ', 64.532, ' ', 'baz'::concat_enum, ' ', 42,
 ----
 foo 64.532 baz 42 f {"foo": "bar"} {1,2,3}
 
+statement ok
+PREPARE concat_stmt AS SELECT concat("foo"."a", $1) FROM foo
+
+query T
+EXECUTE concat_stmt(':')
+----
+1:
+
 query T
 SELECT substr('RoacH', 2, 3)
 ----

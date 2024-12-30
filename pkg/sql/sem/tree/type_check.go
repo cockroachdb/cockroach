@@ -2790,6 +2790,37 @@ func findFirstTupleIndex(exprs ...Expr) (index int, ok bool) {
 	return 0, false
 }
 
+// typeCheckHeterogeneousExprs is a non-type checker in the sense that it assumes
+// that any type is acceptable at evaluation time. This is used for functions
+// that can accept any type of argument which do not require that all arguments
+// have the same type (e.g. CONCAT()).
+func typeCheckHeterogeneousExprs(
+	ctx context.Context, semaCtx *SemaContext, desired *types.T, exprs ...Expr,
+) ([]TypedExpr, *types.T, error) {
+	if len(exprs) == 0 {
+		return nil, nil, nil
+	}
+
+	typedExprs := make([]TypedExpr, len(exprs))
+	for i, e := range exprs {
+		switch te := e.(type) {
+		case *Placeholder:
+			if err := semaCtx.Placeholders.SetType(te.Idx, types.Any); err != nil {
+				return nil, nil, err
+			}
+			te.typ = types.Any
+			typedExprs[i] = te
+		default:
+			typedExpr, err := e.TypeCheck(ctx, semaCtx, desired)
+			if err != nil {
+				return nil, nil, err
+			}
+			typedExprs[i] = typedExpr
+		}
+	}
+	return typedExprs, nil, nil
+}
+
 // typeCheckSameTypedExprs type checks a list of expressions, asserting that all
 // resolved TypeExprs have the same type. An optional desired type can be provided,
 // which will hint that type which the expressions should resolve to, if possible.
