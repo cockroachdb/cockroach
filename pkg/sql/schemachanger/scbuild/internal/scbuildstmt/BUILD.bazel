@@ -67,6 +67,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/catalog/funcinfo",
+        "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/seqexpr",

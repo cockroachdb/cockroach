@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -97,13 +96,6 @@ type Prober interface {
 	GetProbeTimeout() (bool, time.Duration)
 	// MarkPhysicalRegionAsAvailable deletes the unavailable_at timestamp for a region.
 	MarkPhysicalRegionAsAvailable(ctx context.Context, txn *kv.Txn, region string, timestamp *tree.DTimestamp) error
-}
-
-// RegionProvider abstracts the lookup of regions (see regions.Provider).
-type RegionProvider interface {
-	// GetRegions provides access to the set of regions available to the
-	// current tenant.
-	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
 }
 
 type CachedDatabaseRegions interface {

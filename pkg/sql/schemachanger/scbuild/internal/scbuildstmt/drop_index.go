@@ -92,11 +92,7 @@ func maybeDropIndex(
 	if sie == nil {
 		panic(errors.AssertionFailedf("programming error: cannot find secondary index element."))
 	}
-	// TODO(136320): If a region is being added or dropped on this database
-	// concurrently, we have to block dropping an index for RBR tables. The logic
-	// for detecting a concurrent ADD/DROP region is not yet in the DSC; falling
-	// back for now.
-	fallBackIfRegionalByRowTable(b, nil, sie.TableID)
+	panicIfRegionChangeUnderwayOnRBRTable(b, "DROP INDEX", sie.TableID)
 	panicIfSchemaChangeIsDisallowed(b.QueryByID(sie.TableID), n)
 	// Cannot drop the index if not CASCADE and a unique constraint depends on it.
 	if n.DropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {

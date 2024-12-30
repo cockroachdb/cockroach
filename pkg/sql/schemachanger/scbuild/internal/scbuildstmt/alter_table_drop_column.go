@@ -32,6 +32,7 @@ func alterTableDropColumn(
 	stmt tree.Statement,
 	n *tree.AlterTableDropColumn,
 ) {
+	panicIfRegionChangeUnderwayOnRBRTable(b, "DROP COLUMN", tbl.TableID)
 	fallBackIfRegionalByRowTable(b, n, tbl.TableID)
 	checkSafeUpdatesForDropColumn(b)
 	checkRegionalByRowColumnConflict(b, tbl, n)
