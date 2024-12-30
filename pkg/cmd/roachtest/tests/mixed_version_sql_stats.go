@@ -40,7 +40,7 @@ func registerSqlStatsMixedVersion(r registry.Registry) {
 		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run:              runSQLStatsMixedVersion,
 		Timeout:          1 * time.Hour,

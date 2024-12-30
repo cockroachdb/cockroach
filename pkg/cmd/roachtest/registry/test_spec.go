@@ -355,7 +355,6 @@ const (
 	ORM                   = "orm"
 	Driver                = "driver"
 	Tool                  = "tool"
-	Smoketest             = "smoketest"
 	Quick                 = "quick"
 	Fixtures              = "fixtures"
 	Pebble                = "pebble"
@@ -365,12 +364,13 @@ const (
 	Roachtest             = "roachtest"
 	Acceptance            = "acceptance"
 	Perturbation          = "perturbation"
+	MixedVersion          = "mixedversion"
 )
 
 var allSuites = []string{
-	Nightly, Weekly, ReleaseQualification, ORM, Driver, Tool, Smoketest, Quick, Fixtures,
+	Nightly, Weekly, ReleaseQualification, ORM, Driver, Tool, Quick, Fixtures,
 	Pebble, PebbleNightlyWrite, PebbleNightlyYCSB, PebbleNightlyYCSBRace, Roachtest, Acceptance,
-	Perturbation,
+	Perturbation, MixedVersion,
 }
 
 // SuiteSet represents a set of suites.
