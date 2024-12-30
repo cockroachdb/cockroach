@@ -57,7 +57,7 @@ inner-join (merge)
  ├── flags: force merge join
  ├── left ordering: +1
  ├── right ordering: +7
- ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
+ ├── stats: [rows=990, distinct(1)=100, null(1)=0, distinct(7)=100, null(7)=0]
  ├── cost: 2406.34194
  ├── fd: (1)==(7), (7)==(1)
  ├── scan a
@@ -87,7 +87,7 @@ inner-join (lookup a)
  ├── flags: force lookup join (into right side)
  ├── key columns: [1] = [6]
  ├── lookup columns are key
- ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
+ ├── stats: [rows=990, distinct(1)=100, null(1)=0, distinct(6)=100, null(6)=0]
  ├── cost: 7111.84
  ├── fd: (1)==(6), (6)==(1)
  ├── scan b
@@ -106,7 +106,7 @@ inner-join (hash)
  ├── columns: k:1!null x:7!null
  ├── flags: force lookup join (into right side)
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
- ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
+ ├── stats: [rows=990, distinct(1)=100, null(1)=0, distinct(7)=100, null(7)=0]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty
  ├── fd: (1)==(7), (7)==(1)
@@ -429,7 +429,7 @@ limit
  │    ├── columns: t.id:1!null sender_id:2!null receiver_id:3!null amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 s.id:16!null s.name:17!null s.gender:18 s.email:19 s.first_name:20 s.last_name:21 s.creation_date:22!null s.situation:23 s.balance:24!null s.is_blocked:25 r.id:28!null r.name:29!null r.gender:30 r.email:31 r.first_name:32 r.last_name:33 r.creation_date:34!null r.situation:35 r.balance:36!null r.is_blocked:37
  │    ├── key columns: [3] = [28]
  │    ├── lookup columns are key
- │    ├── stats: [rows=980.1, distinct(3)=98.995, null(3)=0, distinct(28)=98.995, null(28)=0]
+ │    ├── stats: [rows=980.1, distinct(3)=99.995, null(3)=0, distinct(28)=99.995, null(28)=0]
  │    ├── cost: 2134.43
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-13), (16)-->(17-25), (2)==(16), (16)==(2), (28)-->(29-37), (3)==(28), (28)==(3)
@@ -438,7 +438,7 @@ limit
  │    │    ├── columns: t.id:1!null sender_id:2!null receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 s.id:16!null s.name:17!null s.gender:18 s.email:19 s.first_name:20 s.last_name:21 s.creation_date:22!null s.situation:23 s.balance:24!null s.is_blocked:25
  │    │    ├── key columns: [2] = [16]
  │    │    ├── lookup columns are key
- │    │    ├── stats: [rows=990, distinct(2)=99, null(2)=0, distinct(3)=99.995, null(3)=9.9, distinct(16)=99, null(16)=0]
+ │    │    ├── stats: [rows=990, distinct(2)=100, null(2)=0, distinct(3)=99.995, null(3)=9.9, distinct(16)=100, null(16)=0]
  │    │    ├── cost: 1511.62
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-13), (16)-->(17-25), (2)==(16), (16)==(2)
@@ -1002,7 +1002,7 @@ project
       ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
       ├── left ordering: +29
       ├── right ordering: +4
-      ├── stats: [rows=198, distinct(4)=17.2927, null(4)=0, distinct(29)=17.2927, null(29)=0]
+      ├── stats: [rows=198, distinct(4)=18.2927, null(4)=0, distinct(29)=18.2927, null(29)=0]
       ├── cost: 2926.23877
       ├── fd: (4)==(29), (29)==(4)
       ├── scan pg_type@pg_type_oid_idx [as=t]
@@ -1050,7 +1050,7 @@ project
  └── inner-join (lookup pg_type@pg_type_oid_idx [as=t])
       ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
       ├── key columns: [4] = [29]
-      ├── stats: [rows=99, distinct(4)=8.56179, null(4)=0, distinct(29)=8.56179, null(29)=0]
+      ├── stats: [rows=99, distinct(4)=9.56179, null(4)=0, distinct(29)=9.56179, null(29)=0]
       ├── cost: 2868.61001
       ├── fd: ()-->(3), (4)==(29), (29)==(4)
       ├── select

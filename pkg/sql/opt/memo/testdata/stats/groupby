@@ -588,6 +588,8 @@ project
       ├── columns: col:1(timetz!null) count_rows:4(int!null)
       ├── grouping columns: col:1(timetz!null)
       ├── stats: [rows=2.005091e+16, distinct(1)=2.00509e+16, null(1)=0]
+      │   histogram(1)=  0     1.9162e+16     1978.9        1.4842e+07         8.8919e+14              0
+      │                <--- '00:00:00+15:59' -------- '04:40:23.558699+11:08' ------------ '03:33:06.598931+07:11:01'
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── select

@@ -1098,6 +1098,106 @@ func TestFilterBucket(t *testing.T) {
 
 }
 
+func TestInnerJoinHistogram(t *testing.T) {
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	//   0  1  3  3   4  5   0  0   40  35
+	// <--- 1 --- 10 --- 25 --- 30 ---- 42
+	histData := []cat.HistogramBucket{
+		{NumRange: 0, DistinctRange: 0, NumEq: 1, UpperBound: tree.NewDInt(1)},
+		{NumRange: 3, DistinctRange: 2, NumEq: 3, UpperBound: tree.NewDInt(10)},
+		{NumRange: 4, DistinctRange: 2, NumEq: 5, UpperBound: tree.NewDInt(25)},
+		{NumRange: 0, DistinctRange: 0, NumEq: 0, UpperBound: tree.NewDInt(30)},
+		{NumRange: 40, DistinctRange: 7, NumEq: 35, UpperBound: tree.NewDInt(42)},
+	}
+	h := &Histogram{}
+	h.Init(&evalCtx, opt.ColumnID(1), histData)
+
+	testData := []struct {
+		buckets  []cat.HistogramBucket
+		expected []cat.HistogramBucket
+	}{
+		{
+			buckets:  []cat.HistogramBucket{},
+			expected: []cat.HistogramBucket{},
+		},
+		{
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 1, UpperBound: tree.NewDInt(42)},
+				{NumRange: 3, DistinctRange: 2, NumEq: 3, UpperBound: tree.NewDInt(45)},
+			},
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 35, UpperBound: tree.NewDInt(42)},
+			},
+		},
+		{
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 1, UpperBound: tree.NewDInt(-1)},
+				{NumRange: 1, DistinctRange: 1, NumEq: 1, UpperBound: tree.NewDInt(1)},
+				{NumRange: 4, DistinctRange: 1, NumEq: 4, UpperBound: tree.NewDInt(10)},
+			},
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 1, UpperBound: tree.NewDInt(1)},
+				{NumRange: 4, DistinctRange: 1, NumEq: 12, UpperBound: tree.NewDInt(10)},
+			},
+		},
+		{
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 1, UpperBound: tree.NewDInt(0)},
+				{NumRange: 1, DistinctRange: 1, NumEq: 1, UpperBound: tree.NewDInt(5)},
+				{NumRange: 4, DistinctRange: 3, NumEq: 4, UpperBound: tree.NewDInt(10)},
+			},
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 1, UpperBound: tree.NewDInt(1)},
+				{NumRange: 1.13, DistinctRange: 0.75, NumEq: 0.38, UpperBound: tree.NewDInt(5)},
+				{NumRange: 4, DistinctRange: 1, NumEq: 12, UpperBound: tree.NewDInt(10)},
+			},
+		},
+		{
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 6, UpperBound: tree.NewDInt(25)},
+				{NumRange: 1, DistinctRange: 1, NumEq: 1, UpperBound: tree.NewDInt(30)},
+			},
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 30, UpperBound: tree.NewDInt(25)},
+				{NumRange: 0, DistinctRange: 0, NumEq: 0, UpperBound: tree.NewDInt(30)},
+			},
+		},
+		{
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 10, UpperBound: tree.NewDInt(15)},
+				{NumRange: 10, DistinctRange: 8, NumEq: 10, UpperBound: tree.NewDInt(27)},
+				{NumRange: 10, DistinctRange: 5, NumEq: 10, UpperBound: tree.NewDInt(35)},
+			},
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, DistinctRange: 0, NumEq: 20, UpperBound: tree.NewDInt(15)},
+				{NumRange: 8.18, DistinctRange: 1.29, NumEq: 4.55, UpperBound: tree.NewDInt(25)},
+				{NumRange: 0, DistinctRange: 0, NumEq: 0, UpperBound: tree.NewDInt(30)},
+				{NumRange: 14.55, DistinctRange: 2.55, NumEq: 36.36, UpperBound: tree.NewDInt(35)},
+			},
+		},
+	}
+
+	for i := range testData {
+		other := &Histogram{}
+		other.Init(&evalCtx, opt.ColumnID(1), testData[i].buckets)
+
+		filtered := h.InnerJoin(ctx, other)
+		roundHistogram(filtered)
+		if !reflect.DeepEqual(testData[i].expected, filtered.buckets) {
+			t.Fatalf("expected %v but found %v", testData[i].expected, filtered.buckets)
+		}
+
+		// Make sure that InnerJoin is symmetric.
+		filtered = other.InnerJoin(ctx, h)
+		roundHistogram(filtered)
+		if !reflect.DeepEqual(testData[i].expected, filtered.buckets) {
+			t.Fatalf("expected %v but found %v", testData[i].expected, filtered.buckets)
+		}
+	}
+}
+
 // makeDescSpan makes an equivalent version of s in which the start and end
 // keys are swapped.
 func makeDescSpan(s *constraint.Span) constraint.Span {
