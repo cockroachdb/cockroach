@@ -155,5 +155,50 @@ INSERT INTO t1 values (1), (10), (100);
 
 	rows = th.sqlDB.QueryStr(t, fmt.Sprintf(`ALTER BACKUP SCHEDULE %d EXECUTE IMMEDIATELY;`, scheduleID))
 	require.Equal(t, trim(th.env.Now().String()), trim(rows[0][3]))
+}
 
+func TestAlterBackupScheduleWithSQLSpecialCharacters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newAlterSchedulesTestHelper(t, nil)
+	defer cleanup()
+
+	// Characters that require quoting as specified in mustQuoteMap in
+	// sql/lexbase/encode.go.
+	uri := "nodelocal://1/backup/alter ,s{hedu}e"
+
+	createCmd := fmt.Sprintf(
+		"CREATE SCHEDULE FOR BACKUP INTO '%s' WITH"+
+			" incremental_location = '%s' RECURRING '@hourly' FULL BACKUP '@daily';",
+		uri, uri,
+	)
+	rows := th.sqlDB.QueryStr(t, createCmd)
+	require.Len(t, rows, 2)
+	incID, err := strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+	fullID, err := strconv.Atoi(rows[1][0])
+	require.NoError(t, err)
+
+	alterCmd := fmt.Sprintf(
+		"ALTER BACKUP SCHEDULE %d SET INTO '%s', "+
+			"SET RECURRING '@daily', SET FULL BACKUP '@weekly';",
+		fullID, uri,
+	)
+	th.sqlDB.Exec(t, alterCmd)
+
+	_, incRecurrence := scheduleStatusAndRecurrence(t, th, incID)
+	_, fullRecurrence := scheduleStatusAndRecurrence(t, th, fullID)
+	require.Equal(t, "@daily", incRecurrence)
+	require.Equal(t, "@weekly", fullRecurrence)
+}
+
+func scheduleStatusAndRecurrence(
+	t *testing.T, th *alterSchedulesTestHelper, id int,
+) (status string, recurrence string) {
+	t.Helper()
+	th.sqlDB.
+		QueryRow(t, `SELECT schedule_status, recurrence FROM [SHOW SCHEDULES] WHERE id=$1`, id).
+		Scan(&status, &recurrence)
+	return status, recurrence
 }
