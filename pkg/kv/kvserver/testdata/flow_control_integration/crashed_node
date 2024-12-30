@@ -29,16 +29,18 @@ ORDER BY
 
 -- Observe the per-stream tracked tokens on n1, before n2 is crashed.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles;
+  crdb_internal.kv_flow_control_handles
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 5.0 MiB               
-  75       | 2        | 5.0 MiB               
+  a        | 1        | 5.0 MiB               
+  a        | 2        | 5.0 MiB               
 
 
 -- (Crashing n2 but disabling the raft-transport-break token return mechanism.)
@@ -47,15 +49,17 @@ FROM
 -- Observe the per-stream tracked tokens on n1, after n2 crashed. We're no
 -- longer tracking the 5MiB held by n2.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles;
+  crdb_internal.kv_flow_control_handles
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 5.0 MiB               
+  a        | 1        | 5.0 MiB               
 
 
 -- Flow token metrics from n1 after n2 crashed. Observe that we've returned the

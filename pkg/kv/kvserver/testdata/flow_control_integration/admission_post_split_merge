@@ -54,18 +54,19 @@ ORDER BY
 
 -- Observe the newly split off replica, with its own three streams.
 SELECT
-  range_id, count(*) AS streams
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 3             
-  76       | 3             
+  a        | 3             
+  b        | 3             
 
 
 -- (Merging ranges.)
@@ -89,17 +90,18 @@ ORDER BY name ASC;
 
 -- Observe only the merged replica with its own three streams.
 SELECT
-  range_id, count(*) AS streams
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  count(*) AS streams
 FROM
   crdb_internal.kv_flow_control_handles
 GROUP BY
-  (range_id)
+  range_id
 ORDER BY
-  streams DESC;
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  75       | 3             
+  a        | 3             
 
 
 -- (Allow below-raft admission to proceed.)
