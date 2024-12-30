@@ -629,7 +629,7 @@ func (j *Job) loadJobPayloadAndProgress(
 	progress := &jobspb.Progress{}
 	infoStorage := j.InfoStorage(txn)
 
-	payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
+	payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx, "loadJobPayloadAndProgress")
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to get payload for job %d", j.ID())
 	}
@@ -640,7 +640,7 @@ func (j *Job) loadJobPayloadAndProgress(
 		return nil, nil, err
 	}
 
-	progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
+	progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx, "loadJobPayloadAndProgress")
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to get progress for job %d", j.ID())
 	}
@@ -977,7 +977,7 @@ func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracing
 	var traceID tracingpb.TraceID
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		jobInfo := InfoStorageForJob(txn, jobID)
-		progressBytes, exists, err := jobInfo.GetLegacyProgress(ctx)
+		progressBytes, exists, err := jobInfo.GetLegacyProgress(ctx, "GetJobTraceID")
 		if err != nil {
 			return err
 		}
@@ -1009,7 +1009,7 @@ func LoadJobProgress(
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := InfoStorageForJob(txn, jobID)
 		var err error
-		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
+		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx, "LoadJobProgress")
 		return err
 	}); err != nil || !exists {
 		return nil, err

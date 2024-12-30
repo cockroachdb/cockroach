@@ -379,12 +379,12 @@ func (i *InfoStorage) checkClaimSession(ctx context.Context) error {
 	return nil
 }
 
-func (i InfoStorage) get(ctx context.Context, infoKey string) ([]byte, bool, error) {
+func (i InfoStorage) get(ctx context.Context, opName, infoKey string) ([]byte, bool, error) {
 	if i.txn == nil {
 		return nil, false, errors.New("cannot access the job info table without an associated txn")
 	}
 
-	ctx, sp := tracing.ChildSpan(ctx, "get-job-info")
+	ctx, sp := tracing.ChildSpan(ctx, opName)
 	defer sp.Finish()
 
 	j := i.j
@@ -536,8 +536,8 @@ func (i InfoStorage) iterate(
 }
 
 // Get fetches the latest info record for the given job and infoKey.
-func (i InfoStorage) Get(ctx context.Context, infoKey string) ([]byte, bool, error) {
-	return i.get(ctx, infoKey)
+func (i InfoStorage) Get(ctx context.Context, opName, infoKey string) ([]byte, bool, error) {
+	return i.get(ctx, opName, infoKey)
 }
 
 // Write writes the provided value to an info record for the provided jobID and
@@ -651,8 +651,8 @@ func GetLegacyProgressKey() string {
 }
 
 // GetLegacyPayload returns the job's Payload from the system.job_info table.
-func (i InfoStorage) GetLegacyPayload(ctx context.Context) ([]byte, bool, error) {
-	return i.Get(ctx, LegacyPayloadKey)
+func (i InfoStorage) GetLegacyPayload(ctx context.Context, opName string) ([]byte, bool, error) {
+	return i.Get(ctx, opName, LegacyPayloadKey)
 }
 
 // WriteLegacyPayload writes the job's Payload to the system.job_info table.
@@ -661,8 +661,8 @@ func (i InfoStorage) WriteLegacyPayload(ctx context.Context, payload []byte) err
 }
 
 // GetLegacyProgress returns the job's Progress from the system.job_info table.
-func (i InfoStorage) GetLegacyProgress(ctx context.Context) ([]byte, bool, error) {
-	return i.Get(ctx, LegacyProgressKey)
+func (i InfoStorage) GetLegacyProgress(ctx context.Context, opName string) ([]byte, bool, error) {
+	return i.Get(ctx, opName, LegacyProgressKey)
 }
 
 // WriteLegacyProgress writes the job's Progress to the system.job_info table.
