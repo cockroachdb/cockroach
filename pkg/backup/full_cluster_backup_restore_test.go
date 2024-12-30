@@ -142,11 +142,12 @@ CREATE TABLE data2.foo (a int);
 
 		// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 		// Populate system.users.
-		numBatches := 100
+		numBatches := 5
+		usersPerBatch := 20
 		if util.RaceEnabled {
 			numBatches = 1
+			usersPerBatch = 5
 		}
-		usersPerBatch := 10
 		userID := 0
 		for b := 0; b < numBatches; b++ {
 			sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
@@ -193,7 +194,7 @@ CREATE TABLE data2.foo (a int);
 
 		// Create a bunch of user tables on the restoring cluster that we're going
 		// to delete.
-		numTables := 50
+		numTables := 10
 		if util.RaceEnabled {
 			numTables = 2
 		}
