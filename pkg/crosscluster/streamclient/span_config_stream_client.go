@@ -82,7 +82,7 @@ func GetFirstActiveSpanConfigClient(
 	ctx context.Context, streamAddresses []string, db isql.DB, opts ...Option,
 ) (SpanConfigClient, error) {
 
-	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (SpanConfigClient, error) {
+	newClient := func(ctx context.Context, address crosscluster.SourceClusterUri) (SpanConfigClient, error) {
 		streamURL, err := address.URL()
 		if err != nil {
 			return nil, err

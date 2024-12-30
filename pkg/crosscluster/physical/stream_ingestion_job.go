@@ -56,16 +56,16 @@ type streamIngestionResumer struct {
 func getStreamAddresses(ctx context.Context, ingestionJob *jobs.Job) []string {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
-	streamAddresses := progress.GetStreamIngest().StreamAddresses
+	streamAddresses := progress.GetStreamIngest().PartitionConnUris
 
 	if len(streamAddresses) > 0 {
 		return streamAddresses
 	}
-	// Without a list of addresses from existing progress, we use the stream
-	// address from the creation statement. This could happen if no progress has
-	// been reported.
-	log.Infof(ctx, "no stream addresses in progress. using stream address found during planning")
-	return []string{details.StreamAddress}
+	// Without a list of uris from existing progress, we use the source cluster
+	// uri from the creation statement. This could happen if no progress has been
+	// reported.
+	log.Infof(ctx, "no partition connection uris in progress. using connection uri found during planning")
+	return []string{details.SourceClusterConnUri}
 }
 
 func connectToActiveClient(

@@ -37,15 +37,15 @@ func TestGetFirstActiveClient(t *testing.T) {
 		"randomgen://test5/",
 		"randomgen://test6/",
 	}
-	addressDialCount := map[string]int{}
+	uriDialCount := map[string]int{}
 	for _, addr := range streamAddresses {
-		addressDialCount[addr] = 0
+		uriDialCount[addr] = 0
 	}
 
 	// Track dials and error for all but test3 and test4
 	client.RegisterDialInterception(func(streamURL *url.URL) error {
 		addr := streamURL.String()
-		addressDialCount[addr]++
+		uriDialCount[addr]++
 		if addr != streamAddresses[3] && addr != streamAddresses[4] {
 			return errors.Errorf("injected dial error")
 		}
@@ -57,13 +57,13 @@ func TestGetFirstActiveClient(t *testing.T) {
 
 	// Should've dialed the valid schemes up to the 5th one where it should've
 	// succeeded
-	require.Equal(t, 1, addressDialCount[streamAddresses[0]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[1]])
-	require.Equal(t, 1, addressDialCount[streamAddresses[2]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[3]])
-	require.Equal(t, 1, addressDialCount[streamAddresses[4]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[5]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[6]])
+	require.Equal(t, 1, uriDialCount[streamAddresses[0]])
+	require.Equal(t, 0, uriDialCount[streamAddresses[1]])
+	require.Equal(t, 1, uriDialCount[streamAddresses[2]])
+	require.Equal(t, 0, uriDialCount[streamAddresses[3]])
+	require.Equal(t, 1, uriDialCount[streamAddresses[4]])
+	require.Equal(t, 0, uriDialCount[streamAddresses[5]])
+	require.Equal(t, 0, uriDialCount[streamAddresses[6]])
 
 	// The 5th should've succeded as it was a valid scheme and succeeded Dial
 	require.Equal(t, activeClient.(streamclient.RandomClient).URL(), streamAddresses[4])

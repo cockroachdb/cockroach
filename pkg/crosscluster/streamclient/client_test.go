@@ -71,10 +71,10 @@ func (sc testStreamClient) PlanPhysicalReplication(
 	return Topology{
 		Partitions: []PartitionInfo{
 			{
-				SrcAddr: "test://host1",
+				ConnUri: "test://host1",
 			},
 			{
-				SrcAddr: "test://host2",
+				ConnUri: "test://host2",
 			},
 		},
 	}, nil
@@ -163,13 +163,12 @@ func TestGetFirstActiveClientEmpty(t *testing.T) {
 
 	var streamAddresses []string
 	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses, nil)
-	require.ErrorContains(t, err, "failed to connect, no addresses")
+	require.ErrorContains(t, err, "failed to connect, no connection uris")
 	require.Nil(t, activeClient)
 
 	activeSpanConfigClient, err := GetFirstActiveSpanConfigClient(context.Background(), streamAddresses, nil)
-	require.ErrorContains(t, err, "failed to connect, no addresses")
+	require.ErrorContains(t, err, "failed to connect, no connection uris")
 	require.Nil(t, activeSpanConfigClient)
-
 }
 
 func TestExternalConnectionClient(t *testing.T) {
@@ -190,8 +189,8 @@ func TestExternalConnectionClient(t *testing.T) {
 	sql.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION "%s" AS "%s"`,
 		externalConnection, pgURL.String()))
 	nonExistentConnection := "i-dont-exist"
-	address := crosscluster.StreamAddress(fmt.Sprintf("external://%s", externalConnection))
-	dontExistAddress := crosscluster.StreamAddress(fmt.Sprintf("external://%s", nonExistentConnection))
+	address := crosscluster.SourceClusterUri(fmt.Sprintf("external://%s", externalConnection))
+	dontExistAddress := crosscluster.SourceClusterUri(fmt.Sprintf("external://%s", nonExistentConnection))
 
 	isqlDB := srv.InternalDB().(descs.DB)
 	_, err := NewStreamClient(ctx, address, isqlDB)

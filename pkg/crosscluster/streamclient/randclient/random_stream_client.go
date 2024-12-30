@@ -432,7 +432,7 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 	tenantSpan := keys.MakeTenantSpan(m.config.tenantID)
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
-	// Allocate table IDs and return one per partition address in the topology.
+	// Allocate table IDs and return one per partition uri in the topology.
 	srcCodec := keys.MakeSQLCodec(m.config.tenantID)
 	for i := 0; i < m.config.numPartitions; i++ {
 		tableID := m.getNextTableID()
@@ -447,7 +447,7 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 		topology.Partitions = append(topology.Partitions,
 			streamclient.PartitionInfo{
 				ID:                strconv.Itoa(i),
-				SrcAddr:           crosscluster.PartitionAddress(partitionURI),
+				ConnUri:           crosscluster.PartitionUri(partitionURI),
 				SubscriptionToken: []byte(partitionURI),
 				Spans:             []roachpb.Span{tableDesc.TableSpan(srcCodec)},
 			})
@@ -807,7 +807,7 @@ func (m *RandomStreamClient) PlanLogicalReplication(
 	topology.Partitions = append(topology.Partitions,
 		streamclient.PartitionInfo{
 			ID:                strconv.Itoa(1),
-			SrcAddr:           crosscluster.PartitionAddress(partitionURI),
+			ConnUri:           crosscluster.PartitionUri(partitionURI),
 			SubscriptionToken: []byte(partitionURI),
 			Spans:             []roachpb.Span{m.tableDesc.TableSpan(srcCodec)},
 		})

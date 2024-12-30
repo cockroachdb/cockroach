@@ -49,7 +49,7 @@ func streamIngestionJobDescription(
 	redactedCreateStmt := &tree.CreateTenantFromReplication{
 		TenantSpec:                  streamIngestion.TenantSpec,
 		ReplicationSourceTenantName: streamIngestion.ReplicationSourceTenantName,
-		ReplicationSourceAddress:    tree.NewDString(redactedSourceAddr),
+		ReplicationSourceConnUri:    tree.NewDString(redactedSourceAddr),
 		Options:                     streamIngestion.Options,
 	}
 	ann := p.ExtendedEvalContext().Annotations
@@ -67,7 +67,7 @@ func ingestionTypeCheck(
 		exprutil.TenantSpec{TenantSpec: ingestionStmt.TenantSpec},
 		exprutil.TenantSpec{TenantSpec: ingestionStmt.ReplicationSourceTenantName},
 		exprutil.Strings{
-			ingestionStmt.ReplicationSourceAddress,
+			ingestionStmt.ReplicationSourceConnUri,
 			ingestionStmt.Options.Retention},
 	}
 
@@ -93,7 +93,7 @@ func ingestionPlanHook(
 
 	exprEval := p.ExprEvaluator("INGESTION")
 
-	from, err := exprEval.String(ctx, ingestionStmt.ReplicationSourceAddress)
+	from, err := exprEval.String(ctx, ingestionStmt.ReplicationSourceConnUri)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -141,12 +141,12 @@ func ingestionPlanHook(
 			return err
 		}
 
-		streamAddress := crosscluster.StreamAddress(from)
+		streamAddress := crosscluster.SourceClusterUri(from)
 		streamURL, err := streamAddress.URL()
 		if err != nil {
 			return err
 		}
-		streamAddress = crosscluster.StreamAddress(streamURL.String())
+		streamAddress = crosscluster.SourceClusterUri(streamURL.String())
 
 		if roachpb.IsSystemTenantName(roachpb.TenantName(dstTenantName)) ||
 			roachpb.IsSystemTenantID(dstTenantID) {
@@ -217,7 +217,7 @@ func ingestionPlanHook(
 func createReplicationJob(
 	ctx context.Context,
 	p sql.PlanHookState,
-	streamAddress crosscluster.StreamAddress,
+	streamAddress crosscluster.SourceClusterUri,
 	sourceTenant string,
 	destinationTenantID roachpb.TenantID,
 	retentionTTLSeconds int32,
@@ -260,7 +260,7 @@ func createReplicationJob(
 	}
 
 	streamIngestionDetails := jobspb.StreamIngestionDetails{
-		StreamAddress:         string(streamAddress),
+		SourceClusterConnUri:  string(streamAddress),
 		StreamID:              uint64(replicationProducerSpec.StreamID),
 		Span:                  keys.MakeTenantSpan(destinationTenantID),
 		ReplicationTTLSeconds: retentionTTLSeconds,

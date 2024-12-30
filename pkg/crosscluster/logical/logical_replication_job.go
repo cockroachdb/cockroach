@@ -122,7 +122,7 @@ func (r *logicalReplicationResumer) ingest(
 	)
 
 	client, err := streamclient.GetFirstActiveClient(ctx,
-		append([]string{payload.SourceClusterConnStr}, progress.StreamAddresses...),
+		append([]string{payload.SourceClusterConnUri}, progress.PartitionConnUris...),
 		execCfg.InternalDB,
 		streamclient.WithStreamID(streampb.StreamID(streamID)),
 		streamclient.WithLogical(),
@@ -150,7 +150,7 @@ func (r *logicalReplicationResumer) ingest(
 	}
 	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		ldrProg := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-		ldrProg.StreamAddresses = planInfo.streamAddress
+		ldrProg.PartitionConnUris = planInfo.partitionPgUrls
 		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {
@@ -289,7 +289,7 @@ type logicalReplicationPlanner struct {
 
 type logicalReplicationPlanInfo struct {
 	sourceSpans         []roachpb.Span
-	streamAddress       []string
+	partitionPgUrls     []string
 	destTableBySrcID    map[descpb.ID]dstTableMetadata
 	writeProcessorCount int
 }
@@ -347,7 +347,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		return nil, nil, info, err
 	}
 	info.sourceSpans = plan.SourceSpans
-	info.streamAddress = plan.Topology.StreamAddresses()
+	info.partitionPgUrls = plan.Topology.PartitionConnUris()
 
 	var defaultFnOID oid.Oid
 	if defaultFnID := payload.DefaultConflictResolution.FunctionId; defaultFnID != 0 {
@@ -415,7 +415,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 	}
 
 	specs, err := constructLogicalReplicationWriterSpecs(ctx,
-		crosscluster.StreamAddress(payload.SourceClusterConnStr),
+		crosscluster.SourceClusterUri(payload.SourceClusterConnUri),
 		plan.Topology,
 		destNodeLocalities,
 		payload.ReplicationStartTime,
@@ -674,7 +674,7 @@ func (r *logicalReplicationResumer) completeProducerJob(
 	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
 		func(ctx context.Context) error {
 			client, err := streamclient.GetFirstActiveClient(ctx,
-				append([]string{payload.SourceClusterConnStr}, progress.StreamAddresses...),
+				append([]string{payload.SourceClusterConnUri}, progress.PartitionConnUris...),
 				internalDB,
 				streamclient.WithStreamID(streamID),
 				streamclient.WithLogical(),

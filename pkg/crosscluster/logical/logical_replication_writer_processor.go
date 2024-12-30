@@ -299,12 +299,12 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	// Start the subscription for our partition.
 	partitionSpec := lrw.spec.PartitionSpec
 	token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
-	addr := partitionSpec.Address
+	addr := partitionSpec.PartitionConnUri
 	redactedAddr, redactedErr := streamclient.RedactSourceURI(addr)
 	if redactedErr != nil {
-		log.Warning(lrw.Ctx(), "could not redact stream address")
+		log.Warning(lrw.Ctx(), "could not redact source connection uri")
 	}
-	streamClient, err := streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(addr), db,
+	streamClient, err := streamclient.NewStreamClient(ctx, crosscluster.SourceClusterUri(addr), db,
 		streamclient.WithStreamID(streampb.StreamID(lrw.spec.StreamID)),
 		streamclient.WithCompression(true),
 		streamclient.WithLogical(),

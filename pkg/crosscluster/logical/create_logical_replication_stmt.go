@@ -161,12 +161,12 @@ func createLogicalReplicationStreamPlanHook(
 		// txn during statement execution.
 		p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
 
-		streamAddress := crosscluster.StreamAddress(from)
+		streamAddress := crosscluster.SourceClusterUri(from)
 		streamURL, err := streamAddress.URL()
 		if err != nil {
 			return err
 		}
-		streamAddress = crosscluster.StreamAddress(streamURL.String())
+		streamAddress = crosscluster.SourceClusterUri(streamURL.String())
 
 		cleanedURI, err := cloud.SanitizeExternalStorageURI(from, nil)
 		if err != nil {
@@ -260,7 +260,7 @@ func createLogicalReplicationStreamPlanHook(
 				SourceClusterID:           spec.SourceClusterID,
 				ReplicationStartTime:      replicationStartTime,
 				ReplicationPairs:          repPairs,
-				SourceClusterConnStr:      string(streamAddress),
+				SourceClusterConnUri:      string(streamAddress),
 				TableNames:                srcTableNames,
 				DefaultConflictResolution: defaultConflictResolution,
 				Discard:                   discard,

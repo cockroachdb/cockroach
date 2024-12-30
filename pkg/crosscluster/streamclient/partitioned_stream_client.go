@@ -207,7 +207,7 @@ func (p *partitionedStreamClient) createTopology(
 			ID:                sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
 			SrcInstanceID:     int(sp.NodeID),
-			SrcAddr:           crosscluster.PartitionAddress(pgURL.String()),
+			ConnUri:           crosscluster.PartitionUri(pgURL.String()),
 			SrcLocality:       sp.Locality,
 			Spans:             sp.SourcePartition.Spans,
 		})
