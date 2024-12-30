@@ -324,7 +324,9 @@ func TestAuthorization(t *testing.T) {
 			globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(ctx, testAuth)
 			assert.NoError(t, err)
 			err = jobsauth.Authorize(
-				ctx, testAuth, 0, tc.payload, tc.accessLevel, globalPrivileges,
+				ctx, testAuth, 0,
+				func(ctx context.Context) (*jobspb.Payload, error) { return tc.payload, nil },
+				tc.payload.UsernameProto.Decode(), tc.payload.Type(), tc.accessLevel, globalPrivileges,
 			)
 			assert.Equal(t, pgerror.GetPGCode(tc.userErr), pgerror.GetPGCode(err))
 		})

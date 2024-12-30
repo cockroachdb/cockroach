@@ -35,7 +35,7 @@ var authorizers = make(map[jobspb.Type]Authorizer)
 // Authorizer is a function which returns a pgcode.InsufficientPrivilege error if
 // authorization for the job denoted by jobID and payload fails.
 type Authorizer func(
-	ctx context.Context, a AuthorizationAccessor, jobID jobspb.JobID, payload *jobspb.Payload,
+	ctx context.Context, a AuthorizationAccessor, jobID jobspb.JobID, getLegacyPayload func(ctx context.Context) (*jobspb.Payload, error),
 ) error
 
 // RegisterAuthorizer registers a AuthorizationCheck for a certain job type.
@@ -116,7 +116,9 @@ func Authorize(
 	ctx context.Context,
 	a AuthorizationAccessor,
 	jobID jobspb.JobID,
-	payload *jobspb.Payload,
+	getLegacyPayload func(ctx context.Context) (*jobspb.Payload, error),
+	owner username.SQLUsername,
+	typ jobspb.Type,
 	accessLevel AccessLevel,
 	global GlobalJobPrivileges,
 ) error {
@@ -128,15 +130,14 @@ func Authorize(
 		return nil
 	}
 
-	jobOwnerUser := payload.UsernameProto.Decode()
-
 	if accessLevel == ViewAccess {
-		if global.hasControl || global.hasView || a.User() == jobOwnerUser {
+		if global.hasControl || global.hasView || owner == a.User() {
 			return nil
 		}
 	}
 
-	jobOwnerIsAdmin, err := a.UserHasAdminRole(ctx, jobOwnerUser)
+	// If the job is owned by an admin, other other admins can control it.
+	jobOwnerIsAdmin, err := a.UserHasAdminRole(ctx, owner)
 	if err != nil {
 		return err
 	}
@@ -148,9 +149,8 @@ func Authorize(
 		return nil
 	}
 
-	typ := payload.Type()
 	if check, ok := authorizers[typ]; ok {
-		return check(ctx, a, jobID, payload)
+		return check(ctx, a, jobID, getLegacyPayload)
 	}
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have privileges for job %d",

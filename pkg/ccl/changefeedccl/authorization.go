@@ -142,8 +142,12 @@ func AuthorizeChangefeedJobAccess(
 	ctx context.Context,
 	a jobsauth.AuthorizationAccessor,
 	jobID jobspb.JobID,
-	payload *jobspb.Payload,
+	getLegacyPayload func(ctx context.Context) (*jobspb.Payload, error),
 ) error {
+	payload, err := getLegacyPayload(ctx)
+	if err != nil {
+		return err
+	}
 	specs, ok := payload.UnwrapDetails().(jobspb.ChangefeedDetails)
 	if !ok {
 		return errors.Newf("could not unwrap details from the payload of job %d", jobID)
