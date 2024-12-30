@@ -1012,6 +1012,40 @@ func panicIfSystemColumn(column *scpb.Column, columnName string) {
 	}
 }
 
+// panicIfRegionChangeUnderwayOnRBRTable panics if the given table is regional
+// by row and any of the regions on the database of the table are currently
+// being modified by another schema change job.
+func panicIfRegionChangeUnderwayOnRBRTable(b BuildCtx, op redact.SafeString, tableID catid.DescID) {
+	tableElems := b.QueryByID(tableID)
+	_, _, rbrElem := scpb.FindTableLocalityRegionalByRow(tableElems)
+	if rbrElem == nil {
+		return
+	}
+	_, _, ns := scpb.FindNamespace(tableElems)
+	dbElems := b.QueryByID(ns.DatabaseID)
+	if _, _, rc := scpb.FindDatabaseRegionConfig(dbElems); rc == nil {
+		return
+	}
+	r, err := b.SynthesizeRegionConfig(b, ns.DatabaseID)
+	if err != nil {
+		panic(err)
+	}
+	if len(r.TransitioningRegions()) > 0 {
+		panic(errors.WithDetailf(
+			errors.WithHintf(
+				pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot %s on a REGIONAL BY ROW table while a region is being added or dropped on the database",
+					op,
+				),
+				"cancel the job which is adding or dropping the region or try again later",
+			),
+			"region %s is currently being added or dropped",
+			r.TransitioningRegions()[0],
+		))
+	}
+}
+
 // haveSameIndexColsByKind returns true if two indexes have the same index
 // columns of a particular kind.
 func haveSameIndexColsByKind(

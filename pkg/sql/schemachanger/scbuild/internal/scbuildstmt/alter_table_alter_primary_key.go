@@ -67,6 +67,7 @@ func alterPrimaryKey(
 		return
 	}
 
+	panicIfRegionChangeUnderwayOnRBRTable(b, "ALTER PRIMARY KEY", tbl.TableID)
 	// TODO (xiang): This section contains all fall-back cases and need to
 	// be removed to fully support `ALTER PRIMARY KEY`.
 	fallBackIfShardedIndexExists(b, t, tbl.TableID)
