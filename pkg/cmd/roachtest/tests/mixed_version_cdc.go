@@ -68,7 +68,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
 		Timeout:          3 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCMixedVersions(ctx, t, c)

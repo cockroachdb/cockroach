@@ -60,7 +60,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 		),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		CompatibleClouds:  registry.OnlyGCE,
-		Suites:            registry.Suites(registry.Weekly),
+		Suites:            registry.Suites(registry.MixedVersion, registry.Weekly),
 		Randomized:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			partitionConfig := fmt.Sprintf(

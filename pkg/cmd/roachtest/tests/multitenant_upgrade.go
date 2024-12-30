@@ -31,7 +31,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Timeout:          5 * time.Hour,
 		Cluster:          r.MakeClusterSpec(7),
 		CompatibleClouds: registry.CloudsWithServiceRegistration,
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Owner:            registry.OwnerServer,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultitenantUpgrade(ctx, t, c)
