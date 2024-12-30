@@ -140,12 +140,7 @@ ORDER BY name ASC;
 `)
 
 		h.comment(`-- Another view of the stream count, using /inspectz-backed vtables.`)
-		h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+		h.query(n1, v1FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 		h.comment(`
 -- Flow token metrics from n1 after issuing the regular 1MiB replicated write,
@@ -302,12 +297,7 @@ func TestFlowControlRangeSplitMerge(t *testing.T) {
 	h.query(n1, v1FlowTokensQueryStr)
 
 	h.comment(`-- Observe the newly split off replica, with its own three streams.`)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v1FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`-- (Merging ranges.)`)
 	merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
@@ -333,12 +323,7 @@ ORDER BY streams DESC;
 	h.query(n1, v1FlowTokensQueryStr)
 
 	h.comment(`-- Observe only the merged replica with its own three streams.`)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v1FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 }
 
 // TestFlowControlBlockedAdmission tests token tracking behavior by explicitly
@@ -408,16 +393,10 @@ func TestFlowControlBlockedAdmission(t *testing.T) {
 	h.query(n1, v1FlowTokensQueryStr)
 
 	h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- Observe the individual tracked tokens per-stream on the scratch range.`)
-	h.query(n1, `
-  SELECT range_id, store_id, priority, crdb_internal.humanize_bytes(tokens::INT8)
-    FROM crdb_internal.kv_flow_token_deductions
-`, "range_id", "store_id", "priority", "tokens")
+	h.query(n1, v1FlowPerStoreDeductionQueryStr, flowPerStoreDeductionQueryHeaderStrs...)
 
 	h.comment(`-- (Allow below-raft admission to proceed.)`)
 	disableWorkQueueGranting.Store(false)
@@ -539,12 +518,7 @@ func TestFlowControlAdmissionPostSplitMerge(t *testing.T) {
 	h.query(n1, v1FlowTokensQueryStr)
 
 	h.comment(`-- Observe the newly split off replica, with its own three streams.`)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v1FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`-- (Merging ranges.)`)
 	merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
@@ -568,12 +542,7 @@ ORDER BY name ASC;
 `)
 
 	h.comment(`-- Observe only the merged replica with its own three streams.`)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v1FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`-- (Allow below-raft admission to proceed.)`)
 	disableWorkQueueGranting.Store(false)
@@ -673,10 +642,7 @@ func TestFlowControlCrashedNode(t *testing.T) {
 `)
 	h.query(n1, v1FlowTokensQueryStr)
 	h.comment(`-- Observe the per-stream tracked tokens on n1, before n2 is crashed.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	// In this test we want to see how we integrate with nodes crashing -- we
 	// want to make sure that we return all held tokens when nodes crash.
@@ -694,10 +660,7 @@ func TestFlowControlCrashedNode(t *testing.T) {
 -- Observe the per-stream tracked tokens on n1, after n2 crashed. We're no
 -- longer tracking the 5MiB held by n2.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- Flow token metrics from n1 after n2 crashed. Observe that we've returned the
@@ -836,10 +799,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1. 1MiB is tracked for n1-n5.
 	`)
-	h.query(n1, `
-	 SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-	   FROM crdb_internal.kv_flow_control_handles
-	`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	tc.WaitForValues(t, k, []int64{incA, incA, incA, incA, incA})
 
@@ -872,10 +832,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 -- intentionally suppressing that behavior to observe token returns only once
 -- issuing a raft snapshot.
 	`)
-	h.query(n1, `
-	 SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-	   FROM crdb_internal.kv_flow_control_handles
-	`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- (Issuing another 1MiB of 5x replicated writes while n2 and n3 are down and
@@ -902,10 +859,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 -- Observe the total tracked tokens per-stream on n1. 2MiB is tracked for n1-n5;
 -- see last comment for an explanation why we're still deducting for n2, n3.
 `)
-	h.query(n1, `
-	 SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-	   FROM crdb_internal.kv_flow_control_handles
-	`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	tc.WaitForValues(t, k, []int64{incAB, 0 /* stopped */, 0 /* stopped */, incAB, incAB})
 
@@ -954,11 +908,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 -- Observe the total tracked tokens per-stream on n1. There's nothing tracked
 -- for n2 and n3 anymore.
 `)
-	h.query(n1, `
- SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-   FROM crdb_internal.kv_flow_control_handles
-   WHERE total_tracked_tokens > 0
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.waitForConnectedStreams(ctx, repl.RangeID, 5, 0 /* serverIdx */)
 	// [T1,n1,s1,r63/1:/{Table/Max-Max},raft] 651  connected to stream: t1/s2
@@ -990,10 +940,7 @@ ORDER BY name ASC;
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1; there should be nothing.
 `)
-	h.query(n1, `
- SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-   FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- Another view of tokens, using /inspectz-backed vtables.`)
 	h.query(n1, `
@@ -1086,10 +1033,7 @@ func TestFlowControlRaftTransportBreak(t *testing.T) {
 	h.comment(`
 -- Observe the per-stream tracked tokens on n1, before n2 is crashed.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	// In this test we want to see how we integrate with raft transport
 	// breaking. To break the raft transport between n1 and n2, we just kill n2.
@@ -1109,10 +1053,7 @@ func TestFlowControlRaftTransportBreak(t *testing.T) {
 -- longer tracking the 5MiB held by n2 because the raft transport between
 -- n1<->n2 is broken.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- Flow token metrics from n1 after n2 crashed. Observe that we've returned the
@@ -1216,10 +1157,7 @@ func TestFlowControlRaftTransportCulled(t *testing.T) {
 -- Observe the per-stream tracked tokens on n1, before we cull the n1<->n2 raft
 -- transport stream out of idleness.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Marking n2->n1 raft transport gRPC stream as idle.)`)
 
@@ -1242,11 +1180,7 @@ func TestFlowControlRaftTransportCulled(t *testing.T) {
 -- stream is culled. We're no longer tracking the 5MiB held by n2 because the
 -- raft transport between n1<->n2 is broken.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-   WHERE total_tracked_tokens > 0
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- Flow token metrics from n1 after n2->n1 raft transport stream is culled.
@@ -1329,10 +1263,7 @@ ORDER BY name ASC;
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1. s1-s3 should have 1MiB
 -- tracked each, and s4 should have none.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Issuing 1x1MiB, 4x replicated write that's not admitted.)`)
 	h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
@@ -1342,10 +1273,7 @@ ORDER BY name ASC;
 -- should have 2MiB tracked (they've observed 2x1MiB writes), s4 should have
 -- 1MiB.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Removing voting replica from n3.)`)
 	tc.RemoveVotersOrFatal(t, k, tc.Target(2))
@@ -1364,20 +1292,14 @@ ORDER BY name ASC;
 -- no s3 since it was removed, s4 and s5 should have 2MiB and 1MiB
 -- respectively.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Allow below-raft admission to proceed.)`)
 	disableWorkQueueGranting.Store(false)
 	h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
 
 	h.comment(`-- Observe that there no tracked tokens across s1,s2,s4,s5.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- Flow token metrics from n1 after work gets admitted. All {regular,elastic}
@@ -2197,10 +2119,7 @@ func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
 	h.query(n1, v1FlowTokensQueryStr)
 
 	h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Allow below-raft admission to proceed.)`)
 	disableWorkQueueGranting.Store(false)
@@ -2299,12 +2218,7 @@ ORDER BY name ASC;
 `)
 
 				h.comment(`-- Another view of the stream count, using /inspectz-backed vtables.`)
-				h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+				h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 				h.comment(`
 -- Flow token metrics from n1 after issuing the 1MiB replicated write,
@@ -2403,12 +2317,7 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 			h.query(n1, v2FlowTokensQueryStr)
 
 			h.comment(`-- Observe the newly split off replica, with its own three streams.`)
-			h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+			h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 			h.comment(`-- (Merging ranges.)`)
 			merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
@@ -2426,12 +2335,7 @@ ORDER BY streams DESC;
 			h.query(n1, v2FlowTokensQueryStr)
 
 			h.comment(`-- Observe only the merged replica with its own three streams.`)
-			h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+			h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 		})
 	})
 }
@@ -2511,16 +2415,10 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 			h.query(n1, v2FlowTokensQueryStr)
 
 			h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`-- Observe the individual tracked tokens per-stream on the scratch range.`)
-			h.query(n1, `
-  SELECT range_id, store_id, priority, crdb_internal.humanize_bytes(tokens::INT8)
-    FROM crdb_internal.kv_flow_token_deductions_v2
-`, "range_id", "store_id", "priority", "tokens")
+			h.query(n1, v2FlowPerStoreDeductionQueryStr, flowPerStoreDeductionQueryHeaderStrs...)
 
 			h.comment(`-- (Allow below-raft admission to proceed.)`)
 			disableWorkQueueGranting.Store(false)
@@ -2654,12 +2552,7 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 			h.query(n1, v2FlowTokensQueryStr)
 
 			h.comment(`-- Observe the newly split off replica, with its own three streams.`)
-			h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+			h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 			h.comment(`-- (Merging ranges.)`)
 			merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
@@ -2678,12 +2571,7 @@ ORDER BY streams DESC;
 			h.query(n1, v2FlowTokensQueryStr)
 
 			h.comment(`-- Observe only the merged replica with its own three streams.`)
-			h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+			h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 			h.comment(`-- (Allow below-raft admission to proceed.)`)
 			disableWorkQueueGranting.Store(false)
@@ -2781,10 +2669,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 `)
 			h.query(n1, v2FlowTokensQueryStr)
 			h.comment(`-- Observe the per-stream tracked tokens on n1, before n2 is crashed.`)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`-- (Crashing n2)`)
 			tc.StopServer(1)
@@ -2794,10 +2679,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 -- Observe the per-stream tracked tokens on n1, after n2 crashed. We're no
 -- longer tracking the 5MiB held by n2.
 `)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`
 -- Flow token metrics from n1 after n2 crashed. Observe that we've returned the
@@ -2952,10 +2834,7 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			h.comment(`
 -- Observe the total tracked tokens per-stream on n1. 1MiB is tracked for n1-n5.
 	`)
-			h.query(n1, `
-	 SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-	   FROM crdb_internal.kv_flow_control_handles_v2
-	`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			tc.WaitForValues(t, k, []int64{incA, incA, incA, incA, incA})
 
@@ -2980,10 +2859,7 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 -- for n1-n5, because they are not in StateSnapshot yet and have likely been
 -- in StateProbe for less than the close timer.
 	`)
-			h.query(n1, `
-	 SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-	   FROM crdb_internal.kv_flow_control_handles_v2
-	`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`
 -- (Issuing another 1MiB of 5x replicated writes while n2 and n3 are down and
@@ -3006,10 +2882,7 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 -- Observe the total tracked tokens per-stream on n1. 2MiB is tracked for n1-n5;
 -- see last comment for an explanation why we're still deducting for n2, n3.
 `)
-			h.query(n1, `
-	 SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-	   FROM crdb_internal.kv_flow_control_handles_v2
-	`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			tc.WaitForValues(t, k, []int64{incAB, 0 /* stopped */, 0 /* stopped */, incAB, incAB})
 
@@ -3045,11 +2918,7 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 -- Observe the total tracked tokens per-stream on n1. There's nothing tracked
 -- for n2 and n3 anymore.
 `)
-			h.query(n1, `
- SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-   FROM crdb_internal.kv_flow_control_handles_v2
-   WHERE total_tracked_tokens > 0
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.waitForConnectedStreams(ctx, repl.RangeID, 5, 0 /* serverIdx */)
 			h.comment(`-- (Allow below-raft admission to proceed.)`)
@@ -3066,10 +2935,7 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			h.comment(`
 -- Observe the total tracked tokens per-stream on n1; there should be nothing.
 `)
-			h.query(n1, `
- SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-   FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`-- Another view of tokens, using /inspectz-backed vtables.`)
 			h.query(n1, `
@@ -3170,10 +3036,7 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 			h.comment(`
 -- Observe the total tracked tokens per-stream on n1. s1-s3 should have 1MiB
 -- tracked each, and s4 should have none.`)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`-- (Issuing 1x1MiB, 4x replicated write that's not admitted.)`)
 			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
@@ -3183,10 +3046,7 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 -- should have 2MiB tracked (they've observed 2x1MiB writes), s4 should have
 -- 1MiB.
 `)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`-- (Removing voting replica from n3.)`)
 			tc.RemoveVotersOrFatal(t, k, tc.Target(2))
@@ -3205,20 +3065,14 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 -- no s3 since it was removed, s4 and s5 should have 2MiB and 1MiB
 -- respectively.
 `)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`-- (Allow below-raft admission to proceed.)`)
 			disableWorkQueueGranting.Store(false)
 			h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
 
 			h.comment(`-- Observe that there no tracked tokens across s1,s2,s4,s5.`)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`
 -- Flow token metrics from n1 after work gets admitted. All {regular,elastic}
@@ -3340,20 +3194,10 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 -- on n1, then on n4.
 -- n1 connected v2 streams:
 `)
-				h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+				h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 				h.comment(`-- n4 connected v2 streams:`)
-				h.query(n4, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+				h.query(n4, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 				h.comment(`-- (Allow below-raft admission to proceed.)`)
 				disableWorkQueueGranting.Store(false)
@@ -3891,10 +3735,7 @@ func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 			h.query(n1, v2FlowTokensQueryStr)
 
 			h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`-- (Allow below-raft admission to proceed.)`)
 			disableWorkQueueGranting.Store(false)
@@ -4037,12 +3878,7 @@ func TestFlowControlV1ToV2Transition(t *testing.T) {
 -- 
 -- Start by checking that the leader (n1) has 3 connected v1 streams.
 `)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v1FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)`)
 	h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
@@ -4055,10 +3891,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v1 tracked tokens per-stream on n1 should be 1 MiB for (s1,s2,s3).
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Allow below-raft admission to proceed.)`)
 	disableWorkQueueGranting.Store(false)
@@ -4072,10 +3905,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v1 tracked tokens per-stream on n1 should now be 0.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Block below-raft admission again.)`)
 	disableWorkQueueGranting.Store(true)
@@ -4086,10 +3916,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v1 tracked tokens per-stream on n1 should again be 1 MiB for (s1,s2,s3).
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 --------------------------------------------------------------------------------
@@ -4106,23 +3933,13 @@ ORDER BY streams DESC;
 -- These are lazily instantiated on the first raft event the leader 
 -- RangeController sees.
 `)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`
 -- There should also now be no connected streams for the v1 protocol,
 -- at the leader n1.
 `)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v1FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`
 -- The v1 flow token metrics, all deducted tokens should be returned after
@@ -4143,10 +3960,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v2 tracked tokens per-stream on n1 should now also be 2 MiB for (s1,s2,s3).
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Allow below-raft admission to proceed.)`)
 	disableWorkQueueGranting.Store(false)
@@ -4164,10 +3978,7 @@ ORDER BY streams DESC;
 -- The v2 tracked tokens per-stream on n1 reflect the most recent write
 -- and should be 1 MiB per stream now.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- There should also be a corresponding elastic token deduction (not regular),
@@ -4197,12 +4008,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- Now expect to see 3 connected v1 streams on n2.
 `)
-	h.query(n2, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n2, v1FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`-- (Issuing 1 x 3MiB elastic, 3x replicated write that's not admitted.)`)
 	// We specify the serverIdx to ensure that the write is routed to n2 and not
@@ -4214,10 +4020,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v1 tracked tokens per-stream on n2 should be 3 MiB. 
 `)
-	h.query(n2, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n2, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- Corresponding v1 token metrics on the new leader n2.
@@ -4261,10 +4064,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v1 tracked tokens per-stream on n2 should be 4 MiB. 
 `)
-	h.query(n2, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n2, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- Corresponding v1 token metrics.
@@ -4293,22 +4093,12 @@ ORDER BY streams DESC;
 	h.comment(`
 -- Also expect to see 0 connected v1 streams on n2.
 `)
-	h.query(n2, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n2, v1FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`
 -- There should be 3 connected streams on n2 for the v2 protocol.
 `)
-	h.query(n2, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n2, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`
 -- Corresponding v2 token metrics on the new leader n2. The most recent 
@@ -4343,10 +4133,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v2 tracked tokens per-stream on n2 should be 1 MiB. 
 `)
-	h.query(n2, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n2, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 --------------------------------------------------------------------------------
@@ -4358,10 +4145,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v2 tracked tokens per-stream on n2 should still be 1 MiB. 
 `)
-	h.query(n2, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n2, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Allow below-raft admission to proceed.)`)
 	disableWorkQueueGranting.Store(false)
@@ -4370,10 +4154,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- There should no longer be any tracked tokens on n2, as admission occurs.
 `)
-	h.query(n2, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n2, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- Corresponding v2 token metrics on n2. All tokens should be returned.
@@ -4407,10 +4188,7 @@ ORDER BY streams DESC;
 -- There should no longer be any tracked tokens on n2, as it's no longer the
 -- leader.
 `)
-	h.query(n2, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n2, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- Corresponding v2 token metrics on n2. All tokens should be returned.
@@ -4421,12 +4199,7 @@ ORDER BY streams DESC;
 -- Viewing n1's v2 connected streams, there now should be three, as n1 acquired
 -- the leadership and lease.
 `)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)`)
 	h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
@@ -4434,10 +4207,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v2 tracked tokens per-stream on n1.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Allow below-raft admission to proceed.)`)
 	disableWorkQueueGranting.Store(false)
@@ -4463,19 +4233,13 @@ ORDER BY streams DESC;
 	h.comment(`
 -- The v2 tracked tokens per-stream on n1.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- The v1 tracked tokens per-stream on n1. 
 -- There should be no tokens tracked.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v1FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 --------------------------------------------------------------------------------
@@ -4724,10 +4488,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
 	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 12<<20 /* 12MiB */, 0 /* serverIdx */)
 	h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`-- And, the per-store tokens available post-write from n1.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -4740,10 +4501,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, testingMkFlowStream(0), testingMkFlowStream(1))
 	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 4<<20 /* 4MiB */, 0 /* serverIdx */)
 	h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`-- Per-store tokens available from n1.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -4785,10 +4543,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1, n3's flushed entries 
 -- will also be tracked here.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
 -- Per-store tokens available from n1, these should reflect the deducted 
 -- tokens from force-flushing n3.`)
@@ -4809,10 +4564,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1, n3's should track the latest write
 -- as well.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`
 -- (Allowing below-raft admission to proceed on n1, n2, and n3. Note that n2 is still down.)
@@ -4828,12 +4580,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	require.NoError(t, tc.RestartServer(1))
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
 	h.comment(`-- There should now be 3 connected streams again.`)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	h.comment(`-- (Adding VOTER to n4 and n5.)`)
 	tc.AddVotersOrFatal(t, k, tc.Targets(3, 4)...)
@@ -4843,12 +4590,8 @@ ORDER BY streams DESC;
 -- Now, after adding n4,n5, there should be 5 connected streams.
 -- [n1,n2,n3,n4,n5]
 `)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
+
 	h.comment(`-- Per-store tokens available from n1.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -4868,10 +4611,7 @@ ORDER BY streams DESC;
 -- to track as they are blocked from admitting (logically).
 `)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Issuing 1x1MiB regular, 5x replicated write that's not admitted.)`)
 	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
@@ -4933,10 +4673,7 @@ ORDER BY streams DESC;
 -- streams should be prevented from forming a send queue and have higher tracked
 -- tokens than the other two.
 `)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`-- Send queue and flow token metrics from n1.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
@@ -5143,10 +4880,7 @@ func TestFlowControlSendQueueManyInflight(t *testing.T) {
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1, these should also reflect the
 -- large write.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Enabling wait-for-eval bypass.)`)
 	noopWaitForEval.Store(true)
@@ -5175,10 +4909,7 @@ func TestFlowControlSendQueueManyInflight(t *testing.T) {
 -- Observe the total tracked tokens per-stream on n1, one of the three
 -- streams will only be tracking the 16 MiB write, while the other two will
 -- track the 1024x4KiB writes as well.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 	h.comment(`-- (Allowing below-raft admission to proceed on [n1,n2,n3].)`)
 	disableWorkQueueGranting.Store(false)
@@ -5343,10 +5074,7 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 			h.comment(`
 -- Observe the total tracked tokens per-stream on n1, s3's entries will still
 -- be tracked here.`)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 			h.comment(`
 -- Per-store tokens available from n1, these should reflect the lack of tokens 
 -- for s3.`)
@@ -5420,20 +5148,13 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 			h.waitForAllTokensReturnedForStreamsV2(ctx, newLeaseholderIdx, toStreams...)
 
 			h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
-			h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			if newLeaseholderIdx != 0 {
 				// Avoid double printing if the lease hasn't moved.
 				h.comment(fmt.Sprintf(`
 -- Observe the total tracked tokens per-stream on new leaseholder n%v.`, newLeaseNode))
-				h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
-
+				h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 			}
 
 			// Allow admission to proceed on n3 and wait for all tokens to be returned.
@@ -5593,12 +5314,7 @@ func TestFlowControlRangeSplitMergeMixedVersion(t *testing.T) {
 	h.waitForConnectedStreams(ctx, right.RangeID, 3, 0 /* serverIdx */)
 
 	h.comment(`-- Observe the newly split off replica, with its own three streams.`)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 
 	// LHS post-split put.
 	leftIdx := len(cancels)
@@ -5871,10 +5587,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1, s3's entries will still
 -- be tracked here.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
 -- Per-store tokens available from n1, these should reflect the lack of tokens 
 -- for s3.`)
@@ -6059,10 +5772,7 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1, s3's entries will still
 -- be tracked here.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
 -- Per-store tokens available from n1, these should reflect the lack of tokens 
 -- for s3.`)
@@ -6076,12 +5786,7 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 	h.waitForSendQueueSize(ctx, right.RangeID, 0 /* expSize 0 MiB */, 0 /* serverIdx */)
 
 	h.comment(`-- Observe the newly split off replica, with its own three streams.`)
-	h.query(n1, `
-  SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
-`, "range_id", "stream_count")
+	h.query(n1, v2FlowPerRangeStreamQueryStr, flowPerRangeStreamQueryHeaderStrs...)
 	h.comment(`
 -- Send queue and flow token metrics from n1, post-split.
 -- We expect to see a force flush of the send queue for s3.`)
@@ -6369,10 +6074,7 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1, s3's entries will still
 -- be tracked here.`)
-	h.query(n1, `
-  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
-`, "range_id", "store_id", "total_tracked_tokens")
+	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
 -- Per-store tokens available from n1, these should reflect the lack of tokens 
 -- for s3.`)
@@ -6835,6 +6537,48 @@ const v1FlowTokensQueryStr = `
    WHERE name LIKE '%kvadmission%tokens%'
 ORDER BY name ASC;
 `
+
+const v1FlowPerRangeStreamQueryStr = `
+  SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+`
+
+const v2FlowPerRangeStreamQueryStr = `
+  SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
+`
+
+var flowPerRangeStreamQueryHeaderStrs = []string{"range_id", "stream_count"}
+
+const v1FlowPerStreamTrackedQueryStr = `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+`
+
+const v2FlowPerStreamTrackedQueryStr = `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+`
+
+var flowPerStreamTrackedQueryHeaderStrs = []string{
+	"range_id", "store_id", "total_tracked_tokens"}
+
+const v1FlowPerStoreDeductionQueryStr = `
+  SELECT range_id, store_id, priority, crdb_internal.humanize_bytes(tokens::INT8)
+    FROM crdb_internal.kv_flow_token_deductions
+`
+
+const v2FlowPerStoreDeductionQueryStr = `
+  SELECT range_id, store_id, priority, crdb_internal.humanize_bytes(tokens::INT8)
+    FROM crdb_internal.kv_flow_token_deductions_v2
+`
+
+var flowPerStoreDeductionQueryHeaderStrs = []string{
+	"range_id", "store_id", "priority", "tokens"}
 
 // v2FlowTokensQueryStr is the query string to fetch flow tokens metrics from
 // the node metrics table. It fetches all metrics related to flow control
