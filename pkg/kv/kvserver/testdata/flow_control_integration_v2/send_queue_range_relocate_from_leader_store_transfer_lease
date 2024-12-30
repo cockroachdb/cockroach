@@ -31,19 +31,21 @@ ORDER BY
 -- Observe the total tracked tokens per-stream on n1, s3's entries will still
 -- be tracked here.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 0 B                   
-  75       | 2        | 0 B                   
-  75       | 3        | 4.0 MiB               
-  75       | 4        | 0 B                   
-  75       | 5        | 0 B                   
+  a        | 1        | 0 B                   
+  a        | 2        | 0 B                   
+  a        | 3        | 4.0 MiB               
+  a        | 4        | 0 B                   
+  a        | 5        | 0 B                   
 
 
 -- Per-store tokens available from n1, these should reflect the lack of tokens 
@@ -82,11 +84,13 @@ ORDER BY
 
 -- Observe the total tracked tokens per-stream on n1.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
@@ -94,11 +98,13 @@ FROM
 
 -- Observe the total tracked tokens per-stream on new leaseholder n6.
 SELECT
-  range_id,
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
   store_id,
   crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
 FROM
-  crdb_internal.kv_flow_control_handles_v2;
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
