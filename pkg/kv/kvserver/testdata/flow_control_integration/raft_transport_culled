@@ -42,7 +42,6 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 -- raft transport between n1<->n2 is broken.
 SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
     FROM crdb_internal.kv_flow_control_handles
-   WHERE total_tracked_tokens > 0
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
