@@ -143,6 +143,11 @@ sudo apt-get update;
 sudo apt-get install -y \
   zfsutils-linux;
 `,
+
+	"bzip2": `
+sudo apt-get update;
+sudo apt-get install -y bzip2;
+`,
 }
 
 // SortedCmds TODO(peter): document
