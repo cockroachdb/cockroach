@@ -32,6 +32,7 @@ func registerAcceptance(r registry.Registry) {
 		randomized         bool
 		workloadNode       bool
 		incompatibleClouds registry.CloudSet
+		suites             []string
 	}{
 		// NOTE: acceptance tests are lightweight tests that run as part
 		// of CI. As such, they must:
@@ -75,6 +76,7 @@ func registerAcceptance(r registry.Registry) {
 				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases: true,
 				randomized:    true,
+				suites:        []string{registry.MixedVersion},
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -100,6 +102,7 @@ func registerAcceptance(r registry.Registry) {
 				defaultLeases: true,
 				randomized:    true,
 				numNodes:      1,
+				suites:        []string{registry.MixedVersion},
 			},
 			{
 				name:     "mismatched-locality",
@@ -136,7 +139,7 @@ func registerAcceptance(r registry.Registry) {
 					tc.name,
 				))
 			}
-
+			suites := append([]string{registry.Nightly, registry.Quick, registry.Acceptance}, tc.suites...)
 			testSpec := registry.TestSpec{
 				Name:              "acceptance/" + tc.name,
 				Owner:             owner,
@@ -145,7 +148,7 @@ func registerAcceptance(r registry.Registry) {
 				EncryptionSupport: tc.encryptionSupport,
 				Timeout:           10 * time.Minute,
 				CompatibleClouds:  registry.AllClouds.Remove(tc.incompatibleClouds),
-				Suites:            registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
+				Suites:            registry.Suites(suites...),
 				Randomized:        tc.randomized,
 			}
 

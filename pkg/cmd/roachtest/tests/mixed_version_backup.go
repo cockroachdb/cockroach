@@ -2653,7 +2653,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
-		Suites:                    registry.Suites(registry.Nightly),
+		Suites:                    registry.Suites(registry.MixedVersion, registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Randomized:                true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

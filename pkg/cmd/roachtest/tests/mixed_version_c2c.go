@@ -52,7 +52,7 @@ func registerC2CMixedVersions(r registry.Registry) {
 		Owner:            registry.OwnerDisasterRecovery,
 		Cluster:          r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, spec.WorkloadNode()),
 		CompatibleClouds: sp.clouds,
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runC2CMixedVersions(ctx, t, c, sp)
 		},

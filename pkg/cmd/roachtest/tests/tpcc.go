@@ -597,7 +597,7 @@ func registerTPCC(r registry.Registry) {
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
 		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
+		Suites:            registry.Suites(registry.MixedVersion, registry.Nightly),
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Randomized:        true,
