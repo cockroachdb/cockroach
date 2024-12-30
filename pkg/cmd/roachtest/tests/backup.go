@@ -362,7 +362,32 @@ func registerBackup(r registry.Registry) {
 			m.Wait()
 		},
 	})
-
+	// Running against a ceph cluster deployed on a GCE instance.
+	for _, cephVersion := range []string{"reef", "squid"} {
+		r.Add(registry.TestSpec{
+			Name:                      fmt.Sprintf("backup/ceph/%s", cephVersion),
+			Owner:                     registry.OwnerDisasterRecovery,
+			Cluster:                   r.MakeClusterSpec(4, spec.WorkloadNode()),
+			EncryptionSupport:         registry.EncryptionMetamorphic,
+			Leases:                    registry.MetamorphicLeases,
+			CompatibleClouds:          registry.Clouds(spec.GCE),
+			Suites:                    registry.Suites(registry.Nightly),
+			TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				ceph := cephManager{
+					t:         t,
+					c:         c,
+					bucket:    backupTestingBucket,
+					cephNodes: c.Node(c.Spec().NodeCount),
+					key:       randomString(32),
+					secret:    randomString(64),
+					version:   cephVersion,
+				}
+				ceph.install(ctx)
+				validateBackupRestore(ctx, t, c, ceph)
+			},
+		})
+	}
 	// Skip running on aws because the roachtest env does not have the proper
 	// credentials. See 127062
 	for _, cloudProvider := range []spec.Cloud{spec.GCE} {
