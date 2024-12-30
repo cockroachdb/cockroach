@@ -23,10 +23,15 @@ ORDER BY name ASC;
 
 -- Flow token metrics from n1 after raft leader removed itself from raft group.
 -- All {regular,elastic} tokens deducted are returned.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvadmission%tokens%'
-ORDER BY name ASC;
+SELECT
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM
+  crdb_internal.node_metrics
+WHERE
+  name LIKE '%kvadmission%tokens%'
+ORDER BY
+  name ASC;
 
   kvadmission.flow_controller.elastic_tokens_available   | 24 MiB   
   kvadmission.flow_controller.elastic_tokens_deducted    | 3.0 MiB  
@@ -43,10 +48,15 @@ ORDER BY name ASC;
 
 -- Flow token metrics from n1 after work gets admitted. Tokens were already
 -- returned earlier, so there's no change.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvadmission%tokens%'
-ORDER BY name ASC;
+SELECT
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM
+  crdb_internal.node_metrics
+WHERE
+  name LIKE '%kvadmission%tokens%'
+ORDER BY
+  name ASC;
 
   kvadmission.flow_controller.elastic_tokens_available   | 24 MiB   
   kvadmission.flow_controller.elastic_tokens_deducted    | 3.0 MiB  
