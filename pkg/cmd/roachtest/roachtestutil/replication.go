@@ -8,7 +8,6 @@ package roachtestutil
 import (
 	"context"
 	gosql "database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // WaitFor3XReplication is like WaitForReplication but specifically requires
@@ -41,6 +41,9 @@ const (
 // WaitForReplication waits until all ranges in the system are on at least or
 // exactly replicationFactor number of voters, depending on the supplied
 // waitForReplicationType.
+// N.B. When using a multi-tenant cluster, you'll want `db` to be a connection to the _system_ tenant, not a secondary
+// tenant. (Unless you _really_ just want to wait for replication of the secondary tenant's keyspace, not the whole
+// system's.)
 func WaitForReplication(
 	ctx context.Context,
 	l *logger.Logger,
@@ -48,7 +51,12 @@ func WaitForReplication(
 	replicationFactor int,
 	waitForReplicationType waitForReplicationType,
 ) error {
-	l.Printf("waiting for initial up-replication... (<%s)", 2*time.Minute)
+	// N.B. We must ensure SQL session is fully initialized before attempting to execute any SQL commands.
+	if err := WaitForSQLReady(ctx, db); err != nil {
+		return errors.Wrap(err, "failed to wait for SQL to be ready")
+	}
+
+	l.Printf("waiting for initial up-replication...")
 	tStart := timeutil.Now()
 	var compStr string
 	switch waitForReplicationType {

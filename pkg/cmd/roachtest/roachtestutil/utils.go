@@ -8,6 +8,7 @@ package roachtestutil
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
@@ -163,9 +165,25 @@ func CloseExporter(
 	}
 }
 
+// WaitForSQLReady waits until the corresponding node's SQL subsystem is fully initialized and ready
+// to serve SQL clients.
+// N.B. The fact that we have a live db connection doesn't imply that the SQL subsystem is ready to serve. E.g.,
+// a SQL session cannot be authenticated until after `SyntheticPrivilegeCache` is initialized, which is done
+// asynchronously at server startup.
+// (See "Root Cause" in https://github.com/cockroachdb/cockroach/issues/137988)
+func WaitForSQLReady(ctx context.Context, db *gosql.DB) error {
+	retryOpts := retry.Options{MaxRetries: 5}
+	return retryOpts.Do(ctx, func(ctx context.Context) error {
+		_, err := db.ExecContext(ctx, "SELECT 1")
+		return err
+	})
+}
+
 // WaitForReady waits until the given nodes report ready via health checks.
 // This implies that the node has completed server startup, is heartbeating its
 // liveness record, and can serve SQL clients.
+// FIXME(srosenberg): This function is a bit of a misnomer. It doesn't actually ensure that SQL is ready to serve, only
+// that the admin UI is ready to serve. We should consolidate this with WaitForSQLReady.
 func WaitForReady(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
 ) {
