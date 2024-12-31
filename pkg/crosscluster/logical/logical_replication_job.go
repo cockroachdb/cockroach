@@ -7,6 +7,7 @@ package logical
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -274,8 +276,8 @@ func (r *logicalReplicationResumer) maybePublishCreatedTables(
 	}
 	return sql.DescsTxn(ctx, jobExecCtx.ExecCfg(), func(ctx context.Context, txn isql.Txn, descCol *descs.Collection) error {
 		b := txn.KV().NewBatch()
-		for _, pair := range details.ReplicationPairs {
-			td, err := descCol.MutableByID(txn.KV()).Table(ctx, descpb.ID(pair.DstDescriptorID))
+		for i := range details.IngestedExternalCatalog.Tables {
+			td, err := descCol.MutableByID(txn.KV()).Table(ctx, details.IngestedExternalCatalog.Tables[i].GetID())
 			if err != nil {
 				return err
 			}
@@ -756,6 +758,9 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterRetryIteration != nil {
 			knobs.AfterRetryIteration(err)
 		}
+		if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("logical_replication.after.retryable_error"); err != nil {
+			return err
+		}
 	}
 	return err
 }
@@ -782,16 +787,25 @@ func loadOnlineReplicatedTime(
 func (r *logicalReplicationResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, _ error,
 ) error {
-	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	execCfg := jobExecCtx.ExecCfg()
 
 	// Remove the LDR job ID from the destination table descriptors.
 	details := r.job.Details().(jobspb.LogicalReplicationDetails)
+	progress := r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 	destTableIDs := make([]uint32, 0, len(details.ReplicationPairs))
 	for _, pair := range details.ReplicationPairs {
 		destTableIDs = append(destTableIDs, uint32(pair.DstDescriptorID))
 	}
 	if err := replicationutils.UnlockLDRTables(ctx, execCfg, destTableIDs, r.job.ID()); err != nil {
 		return err
+	}
+	if details.CreateTable && !progress.PublishedNewTables {
+		if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			return externalcatalog.DropIngestedExternalCatalog(ctx, execCfg, jobExecCtx.User(), details.IngestedExternalCatalog, txn, execCfg.JobRegistry, txn.Descriptors(), fmt.Sprintf("gc for ldr job %d", r.job.ID()))
+		}); err != nil {
+			return err
+		}
 	}
 
 	r.completeProducerJob(ctx, execCfg.InternalDB)

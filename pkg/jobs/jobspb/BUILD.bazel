@@ -38,6 +38,7 @@ proto_library(
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
+        "//pkg/sql/catalog/externalcatalog/externalpb:externalpb_proto",
         "//pkg/sql/sessiondatapb:sessiondatapb_proto",
         "//pkg/util/hlc:hlc_proto",
         "//pkg/util/tracing/tracingpb:tracingpb_proto",
@@ -62,6 +63,7 @@ go_proto_library(
         "//pkg/security/username",  # keep
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/externalcatalog/externalpb",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/sessiondatapb",
         "//pkg/util/hlc",
