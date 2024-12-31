@@ -7,19 +7,23 @@ package externalcatalog
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog/externalpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -139,4 +143,48 @@ func IngestExternalCatalog(
 		ctx, txn.KV(), user, descsCol, nil, nil, tablesToWrite, nil, nil,
 		tree.RequestedDescriptors, nil /* extra */, "", true,
 	)
+}
+
+func SetGCTTLForDroppingTable(
+	ctx context.Context, txn isql.Txn, descsCol *descs.Collection, tableToDrop *tabledesc.Mutable,
+) error {
+	log.VInfof(ctx, 2, "lowering TTL for table %q (%d)", tableToDrop.GetName(), tableToDrop.GetID())
+	// We get a mutable descriptor here because we are going to construct a
+	// synthetic descriptor collection in which they are online.
+	dbDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tableToDrop.GetParentID())
+	if err != nil {
+		return err
+	}
+
+	schemaDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, tableToDrop.GetParentSchemaID())
+	if err != nil {
+		return err
+	}
+	tableName := tree.NewTableNameWithSchema(
+		tree.Name(dbDesc.GetName()),
+		tree.Name(schemaDesc.GetName()),
+		tree.Name(tableToDrop.GetName()))
+
+	// Set the db and table to public so that we can use ALTER TABLE below.  At
+	// this point,they may be offline.
+	mutDBDesc := dbdesc.NewBuilder(dbDesc.DatabaseDesc()).BuildCreatedMutable()
+	mutTableDesc := tabledesc.NewBuilder(tableToDrop.TableDesc()).BuildCreatedMutable()
+	mutDBDesc.SetPublic()
+	mutTableDesc.SetPublic()
+
+	syntheticDescriptors := []catalog.Descriptor{
+		mutTableDesc,
+		mutDBDesc,
+	}
+	if schemaDesc.SchemaKind() == catalog.SchemaUserDefined {
+		mutSchemaDesc := schemadesc.NewBuilder(schemaDesc.SchemaDesc()).BuildCreatedMutable()
+		mutSchemaDesc.SetPublic()
+		syntheticDescriptors = append(syntheticDescriptors, mutSchemaDesc)
+	}
+
+	alterStmt := fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = 1", tableName.FQString())
+	return txn.WithSyntheticDescriptors(syntheticDescriptors, func() error {
+		_, err := txn.Exec(ctx, "set-low-gcttl", txn.KV(), alterStmt)
+		return err
+	})
 }
