@@ -1306,7 +1306,7 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %type <tree.Statement> grant_stmt
 %type <tree.Statement> insert_stmt
 %type <tree.Statement> import_stmt
-%type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt pause_all_jobs_stmt
+%type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt pause_all_jobs_stmt alter_job_stmt
 %type <*tree.Select>   for_schedules_clause
 %type <tree.Statement> reassign_owned_by_stmt
 %type <tree.Statement> drop_owned_by_stmt
@@ -1932,6 +1932,7 @@ alter_ddl_stmt:
 | alter_proc_stmt               // EXTEND WITH HELP: ALTER PROCEDURE
 | alter_backup_schedule  // EXTEND WITH HELP: ALTER BACKUP SCHEDULE
 | alter_policy_stmt             // EXTEND WITH HELP: ALTER POLICY
+| alter_job_stmt                // EXTEND WITH HELP: ALTER JOB
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -6707,6 +6708,22 @@ explain_option_list:
   {
     $$.val = append($1.strs(), $3)
   }
+
+// %Help: ALTER JOB - alter an existing job
+// %Category: Misc
+// %Text:
+// ALTER JOB <jobid> <cmd>
+// %SeeAlso: SHOW JOBS, CANCEL JOBS, RESUME JOBS
+alter_job_stmt:
+  ALTER JOB a_expr OWNER TO role_spec
+  {
+    $$.val = &tree.AlterJobOwner{
+      Job: $3.expr(),
+      Owner: $6.roleSpec(),
+    }
+  }
+| ALTER JOB error // SHOW HELP: ALTER JOB
+
 
 // %Help: ALTER CHANGEFEED - alter an existing changefeed
 // %Category: CCL

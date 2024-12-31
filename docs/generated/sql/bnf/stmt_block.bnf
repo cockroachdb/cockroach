@@ -540,6 +540,7 @@ alter_ddl_stmt ::=
 	| alter_func_stmt
 	| alter_proc_stmt
 	| alter_backup_schedule
+	| alter_job_stmt
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -1758,6 +1759,9 @@ alter_proc_stmt ::=
 
 alter_backup_schedule ::=
 	'ALTER' 'BACKUP' 'SCHEDULE' iconst64 alter_backup_schedule_cmds
+
+alter_job_stmt ::=
+	'ALTER' 'JOB' a_expr 'OWNER' 'TO' role_spec
 
 role_or_group_or_user ::=
 	'ROLE'
