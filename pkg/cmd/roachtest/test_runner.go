@@ -1535,7 +1535,8 @@ func (r *testRunner) postTestAssertions(
 		// the replica divergence check below will also fail.
 		if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
 			func() {
-				db := c.Conn(ctx, t.L(), validationNode)
+				// NB: the invalid description checks should run at the system tenant level.
+				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName("system"))
 				defer db.Close()
 				if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
 					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
