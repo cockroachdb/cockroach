@@ -6645,6 +6645,7 @@ JobResponse contains the job record for a job.
 | num_runs | [int64](#cockroach.server.serverpb.JobsResponse-int64) |  |  | [reserved](#support-status) |
 | execution_failures | [JobResponse.ExecutionFailure](#cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobResponse.ExecutionFailure) | repeated | ExecutionFailures is a log of execution failures of the job. It is not guaranteed to contain all execution failures and some execution failures may not contain an error or end. | [reserved](#support-status) |
 | coordinator_id | [int64](#cockroach.server.serverpb.JobsResponse-int64) |  | coordinator_id identifies the node coordinating the job. This value will only be present for jobs that are currently running or recently ran. | [reserved](#support-status) |
+| messages | [JobMessage](#cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobMessage) | repeated |  | [reserved](#support-status) |
 
 
 
@@ -6662,6 +6663,21 @@ attempt starting at start and ending at end.
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  | Start is the time at which the execution started. | [reserved](#support-status) |
 | end | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  | End is the time at which the error occurred. | [reserved](#support-status) |
 | error | [string](#cockroach.server.serverpb.JobsResponse-string) |  | Error is the error which occurred. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobMessage"></a>
+#### JobMessage
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| kind | [string](#cockroach.server.serverpb.JobsResponse-string) |  |  | [reserved](#support-status) |
+| timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.JobsResponse-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -6725,6 +6741,7 @@ JobResponse contains the job record for a job.
 | num_runs | [int64](#cockroach.server.serverpb.JobResponse-int64) |  |  | [reserved](#support-status) |
 | execution_failures | [JobResponse.ExecutionFailure](#cockroach.server.serverpb.JobResponse-cockroach.server.serverpb.JobResponse.ExecutionFailure) | repeated | ExecutionFailures is a log of execution failures of the job. It is not guaranteed to contain all execution failures and some execution failures may not contain an error or end. | [reserved](#support-status) |
 | coordinator_id | [int64](#cockroach.server.serverpb.JobResponse-int64) |  | coordinator_id identifies the node coordinating the job. This value will only be present for jobs that are currently running or recently ran. | [reserved](#support-status) |
+| messages | [JobMessage](#cockroach.server.serverpb.JobResponse-cockroach.server.serverpb.JobMessage) | repeated |  | [reserved](#support-status) |
 
 
 
@@ -6743,6 +6760,21 @@ attempt starting at start and ending at end.
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  | Start is the time at which the execution started. | [reserved](#support-status) |
 | end | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  | End is the time at which the error occurred. | [reserved](#support-status) |
 | error | [string](#cockroach.server.serverpb.JobResponse-string) |  | Error is the error which occurred. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.JobResponse-cockroach.server.serverpb.JobMessage"></a>
+#### JobMessage
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| kind | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
 
 
 
