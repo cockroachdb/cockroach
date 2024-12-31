@@ -2203,12 +2203,19 @@ func (c *clusterImpl) StartE(
 	if startOpts.WaitForReplicationFactor > 0 {
 		l.Printf("WaitForReplicationFactor: waiting for replication factor of at least %d", startOpts.WaitForReplicationFactor)
 		nodes := selectedNodesOrDefault(opts, c.All())
-
-		conn, err := c.ConnE(ctx, l, nodes[0])
+		// N.B. We must explicitly pass the virtual cluster name to `ConnE`, otherwise the default may turn out to be a
+		// secondary tenant, in which case we would only check the tenant's key range, not the whole system's.
+		// See "Unhidden Bug" in https://github.com/cockroachdb/cockroach/issues/137988
+		conn, err := c.ConnE(ctx, l, nodes[0], option.VirtualClusterName("system"))
 		if err != nil {
 			return errors.Wrapf(err, "failed to connect to n%d", nodes[0])
 		}
 		defer conn.Close()
+
+		// N.B. We must ensure SQL session is fully initialized before attempting to execute any SQL commands.
+		if err := roachtestutil.WaitForSQLReady(ctx, conn); err != nil {
+			return errors.Wrap(err, "failed to wait for SQL to be ready")
+		}
 
 		if err := roachtestutil.WaitForReplication(
 			ctx, l, conn, startOpts.WaitForReplicationFactor, roachtestutil.AtLeastReplicationFactor,

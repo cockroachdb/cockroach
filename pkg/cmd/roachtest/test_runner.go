@@ -1535,8 +1535,13 @@ func (r *testRunner) postTestAssertions(
 		// the replica divergence check below will also fail.
 		if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
 			func() {
-				db := c.Conn(ctx, t.L(), validationNode)
+				// NB: the invalid description checks should run at the system tenant level.
+				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName("system"))
 				defer db.Close()
+				// N.B. we have to ensure SQL is ready before submitting the checks.
+				if err := roachtestutil.WaitForSQLReady(ctx, db); err != nil {
+					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
+				}
 				if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
 					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
 				}
@@ -1549,6 +1554,10 @@ func (r *testRunner) postTestAssertions(
 				// NB: the consistency checks should run at the system tenant level.
 				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName("system"))
 				defer db.Close()
+				// N.B. we have to ensure SQL is ready before submitting the checks.
+				if err := roachtestutil.WaitForSQLReady(ctx, db); err != nil {
+					postAssertionErr(errors.WithDetail(err, "consistency check failed"))
+				}
 				if err := c.assertConsistentReplicas(ctx, db, t); err != nil {
 					postAssertionErr(errors.WithDetail(err, "consistency check failed"))
 				}
