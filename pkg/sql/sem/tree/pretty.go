@@ -185,7 +185,7 @@ func (p *PrettyCfg) fmtFlags() FmtFlags {
 		return p.FmtFlags
 	}
 
-	prettyFlags := FmtShowPasswords | FmtParsable | FmtTagDollarQuotes
+	prettyFlags := FmtShowPasswords | FmtParsable
 	if p.ValueRedaction {
 		prettyFlags |= FmtMarkRedactionNode | FmtOmitNameRedaction
 	}
