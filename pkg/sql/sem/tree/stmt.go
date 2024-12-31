@@ -705,6 +705,15 @@ func (n *ControlJobs) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*AlterJobOwner) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterJobOwner) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterJobOwner) StatementTag() string { return "ALTER JOB OWNER" }
+
+// StatementReturnType implements the Statement interface.
 func (*ControlSchedules) StatementReturnType() StatementReturnType { return RowsAffected }
 
 // StatementType implements the Statement interface.
@@ -2415,6 +2424,7 @@ func (n *AlterBackupSchedule) String() string                 { return AsString(
 func (n *AlterBackupScheduleCmds) String() string             { return AsString(n) }
 func (n *AlterIndex) String() string                          { return AsString(n) }
 func (n *AlterIndexVisible) String() string                   { return AsString(n) }
+func (n *AlterJobOwner) String() string                       { return AsString(n) }
 func (n *AlterDatabaseOwner) String() string                  { return AsString(n) }
 func (n *AlterDatabaseAddRegion) String() string              { return AsString(n) }
 func (n *AlterDatabaseDropRegion) String() string             { return AsString(n) }

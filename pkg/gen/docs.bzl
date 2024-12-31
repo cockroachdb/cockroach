@@ -47,6 +47,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:alter_index.bnf",
     "//docs/generated/sql/bnf:alter_index_partition_by.bnf",
     "//docs/generated/sql/bnf:alter_index_visible_stmt.bnf",
+    "//docs/generated/sql/bnf:alter_job_stmt.bnf",
     "//docs/generated/sql/bnf:alter_partition_stmt.bnf",
     "//docs/generated/sql/bnf:alter_primary_key.bnf",
     "//docs/generated/sql/bnf:alter_proc.bnf",
