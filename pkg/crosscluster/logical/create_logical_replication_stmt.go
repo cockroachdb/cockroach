@@ -381,6 +381,8 @@ func doLDRPlan(
 			if err != nil {
 				return err
 			}
+			details.IngestedExternalCatalog = ingestedCatalog
+			jr.Details = details
 		}
 
 		dstTableDescs := make([]*tabledesc.Mutable, 0, len(details.ReplicationPairs))
