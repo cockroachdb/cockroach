@@ -52,6 +52,8 @@ type testAuthAccessor struct {
 	// set of all usernames who are admins
 	admins map[string]struct{}
 
+	members map[username.SQLUsername]bool
+
 	rand *rand.Rand
 }
 
@@ -137,6 +139,12 @@ func (a *testAuthAccessor) HasGlobalPrivilegeOrRoleOption(
 	return false, nil
 }
 
+func (a *testAuthAccessor) MemberOfWithAdminOption(
+	ctx context.Context, member username.SQLUsername,
+) (map[username.SQLUsername]bool, error) {
+	return a.members, nil
+}
+
 func (a *testAuthAccessor) User() username.SQLUsername {
 	return a.user
 }
@@ -172,6 +180,7 @@ func TestAuthorization(t *testing.T) {
 
 		user                 username.SQLUsername
 		roleOptions          map[roleoption.Option]struct{}
+		members              map[username.SQLUsername]bool
 		userPrivileges       map[userPrivilege]struct{}
 		changeFeedPrivileges map[descpb.ID]struct{}
 		droppedDescriptors   map[descpb.ID]struct{}
@@ -218,6 +227,17 @@ func TestAuthorization(t *testing.T) {
 			payload:     makeBackupPayload("user1"),
 			accessLevel: jobsauth.ControlAccess,
 			userErr:     pgerror.New(pgcode.InsufficientPrivilege, "foo"),
+		},
+		{
+			name:        "users-can-control-their-roles-jobs",
+			user:        username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			roleOptions: map[roleoption.Option]struct{}{},
+			admins:      map[string]struct{}{},
+			payload:     makeBackupPayload("role1"),
+			accessLevel: jobsauth.ControlAccess,
+			members: map[username.SQLUsername]bool{
+				username.MakeSQLUsernameFromPreNormalizedString("role1"): false,
+			},
 		},
 		{
 			name:        "admins-control-admin-jobs",
@@ -317,6 +337,7 @@ func TestAuthorization(t *testing.T) {
 				changeFeedPrivileges: tc.changeFeedPrivileges,
 				droppedDescriptors:   tc.droppedDescriptors,
 				admins:               tc.admins,
+				members:              tc.members,
 				rand:                 rng,
 			}
 
