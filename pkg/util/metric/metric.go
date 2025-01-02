@@ -188,9 +188,6 @@ var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
-var _ json.Marshaler = &GaugeVec{}
-var _ json.Marshaler = &CounterVec{}
-var _ json.Marshaler = &HistogramVec{}
 
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
@@ -1170,16 +1167,13 @@ func (gv *GaugeVec) Dec(labels map[string]string, v int64) {
 
 // GetMetadata implements Iterable.
 func (gv *GaugeVec) GetMetadata() Metadata {
-	return gv.Metadata
+	md := gv.Metadata
+	md.MetricType = prometheusgo.MetricType_GAUGE
+	return md
 }
 
 // Inspect implements Iterable.
 func (gv *GaugeVec) Inspect(f func(interface{})) { f(gv) }
-
-// MarshalJSON implements JSONMarshaler.
-func (gv *GaugeVec) MarshalJSON() ([]byte, error) {
-	return json.Marshal(gv)
-}
 
 // GetType implements PrometheusExportable.
 func (gv *GaugeVec) GetType() *prometheusgo.MetricType {
@@ -1269,16 +1263,13 @@ func (cv *CounterVec) Count(labels map[string]string) int64 {
 
 // GetMetadata implements Iterable.
 func (cv *CounterVec) GetMetadata() Metadata {
-	return cv.Metadata
+	md := cv.Metadata
+	md.MetricType = prometheusgo.MetricType_COUNTER
+	return md
 }
 
 // Inspect implements Iterable.
 func (cv *CounterVec) Inspect(f func(interface{})) { f(cv) }
-
-// MarshalJSON implements JSONMarshaler.
-func (cv *CounterVec) MarshalJSON() ([]byte, error) {
-	return json.Marshal(cv)
-}
 
 // GetType implements PrometheusExportable.
 func (cv *CounterVec) GetType() *prometheusgo.MetricType {
@@ -1343,16 +1334,13 @@ func (hv *HistogramVec) Observe(labels map[string]string, v float64) {
 
 // GetMetadata implements Iterable.
 func (hv *HistogramVec) GetMetadata() Metadata {
-	return hv.Metadata
+	md := hv.Metadata
+	md.MetricType = prometheusgo.MetricType_HISTOGRAM
+	return md
 }
 
 // Inspect implements Iterable.
 func (hv *HistogramVec) Inspect(f func(interface{})) { f(hv) }
-
-// MarshalJSON implements JSONMarshaler.
-func (hv *HistogramVec) MarshalJSON() ([]byte, error) {
-	return json.Marshal(hv)
-}
 
 // GetType implements PrometheusExportable.
 func (hv *HistogramVec) GetType() *prometheusgo.MetricType {
