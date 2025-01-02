@@ -1759,7 +1759,7 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 			kvserver.OverrideDefaultLeaseType(ctx, &s.ClusterSettings().SV, leaseType)
 		}
 		t1 := tc.Target(newLeaseHolderNodeIdx)
-		newLease, err := tc.MoveRangeLeaseNonCooperatively(ctx, desc, t1, manual)
+		newLease, err := tc.MoveRangeLeaseNonCooperatively(t, ctx, desc, t1, manual)
 		require.NoError(t, err)
 		require.NotNil(t, newLease)
 		require.Equal(t, leaseType, newLease.Type())
