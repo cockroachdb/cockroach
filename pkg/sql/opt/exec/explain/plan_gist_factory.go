@@ -8,7 +8,7 @@ package explain
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
+	b64 "encoding/base64"
 	"encoding/binary"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/base64"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -89,13 +90,15 @@ func (fp PlanGist) Hash() uint64 {
 type PlanGistFactory struct {
 	wrappedFactory exec.Factory
 
-	// buffer accumulates the encoded gist. Data that is written to the buffer
-	// is also added to the hash. The exception is when we're dealing with ids
-	// where we will write the id to the buffer and the "string" to the hash.
-	// This allows the hash to be id agnostic (ie hash's will be stable across
-	// plans from different databases with different DDL history).
-	buffer bytes.Buffer
-	hash   util.FNV64
+	// enc accumulates the encoded gist. Data that is written to enc is also
+	// added to hash. The exception is when we're dealing with ids where we will
+	// write the id to buf and the "string" to hash. This allows the hash to be
+	// id agnostic (ie hash's will be stable across plans from different
+	// databases with different DDL history).
+	enc base64.Encoder
+	// buf is a scratch bytes buffer used during encoding.
+	buf  bytes.Buffer
+	hash util.FNV64
 }
 
 var _ exec.Factory = &PlanGistFactory{}
@@ -107,10 +110,9 @@ func (f *PlanGistFactory) Ctx() context.Context {
 
 // writeAndHash writes an arbitrary slice of bytes to the buffer and hashes each
 // byte.
-func (f *PlanGistFactory) writeAndHash(data []byte) int {
-	i, _ := f.buffer.Write(data)
+func (f *PlanGistFactory) writeAndHash(data []byte) {
+	f.enc.Write(data)
 	f.updateHash(data)
-	return i
 }
 
 func (f *PlanGistFactory) updateHash(data []byte) {
@@ -123,6 +125,7 @@ func (f *PlanGistFactory) updateHash(data []byte) {
 func NewPlanGistFactory(wrappedFactory exec.Factory) *PlanGistFactory {
 	f := new(PlanGistFactory)
 	f.wrappedFactory = wrappedFactory
+	f.enc.Init(b64.StdEncoding)
 	f.hash.Init()
 	f.encodeInt(gistVersion)
 	return f
@@ -141,10 +144,13 @@ func (f *PlanGistFactory) ConstructPlan(
 	return plan, err
 }
 
-// PlanGist returns a pointer to a PlanGist.
+// PlanGist returns an encoded PlanGist. It should only be called once after
+// ConstructPlan.
 func (f *PlanGistFactory) PlanGist() PlanGist {
-	return PlanGist{gist: base64.StdEncoding.EncodeToString(f.buffer.Bytes()),
-		hash: f.hash.Sum()}
+	return PlanGist{
+		gist: f.enc.String(),
+		hash: f.hash.Sum(),
+	}
 }
 
 // planGistDecoder is used to decode a plan gist into a logical plan.
@@ -193,7 +199,7 @@ func DecodePlanGistToRows(
 
 // DecodePlanGistToPlan constructs an explain.Node tree from a gist.
 func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, err error) {
-	b, err := base64.StdEncoding.DecodeString(s)
+	b, err := b64.StdEncoding.DecodeString(s)
 	if err != nil {
 		return nil, err
 	}
@@ -281,10 +287,7 @@ func (d *planGistDecoder) decodeInt() int {
 func (f *PlanGistFactory) encodeDataSource(id cat.StableID, name tree.Name) {
 	var buf [binary.MaxVarintLen64]byte
 	n := binary.PutVarint(buf[:], int64(id))
-	_, err := f.buffer.Write(buf[:n])
-	if err != nil {
-		panic(err)
-	}
+	f.enc.Write(buf[:n])
 	f.updateHash([]byte(string(name)))
 }
 
@@ -355,7 +358,7 @@ func (d *planGistDecoder) decodeResultColumns() colinfo.ResultColumns {
 }
 
 func (f *PlanGistFactory) encodeByte(b byte) {
-	f.buffer.WriteByte(b)
+	f.enc.Write([]byte{b})
 	f.hash.Add(uint64(b))
 }
 
@@ -386,11 +389,13 @@ func (d *planGistDecoder) decodeBool() bool {
 }
 
 func (f *PlanGistFactory) encodeFastIntSet(s intsets.Fast) {
-	lenBefore := f.buffer.Len()
-	if err := s.Encode(&f.buffer); err != nil {
+	f.buf.Reset()
+	if err := s.Encode(&f.buf); err != nil {
 		panic(err)
 	}
-	f.updateHash(f.buffer.Bytes()[lenBefore:])
+	b := f.buf.Bytes()
+	f.enc.Write(b)
+	f.updateHash(b)
 }
 
 // TODO: enable this or remove it...
