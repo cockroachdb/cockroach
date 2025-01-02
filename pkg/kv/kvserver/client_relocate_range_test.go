@@ -570,7 +570,7 @@ func setupReplicaRemovalTest(
 		require.NoError(t, err)
 		repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(rangeDesc.RangeID)
 		require.NoError(t, err)
-		_, err = tc.MoveRangeLeaseNonCooperatively(ctx, rangeDesc, tc.Target(1), manual)
+		_, err = tc.MoveRangeLeaseNonCooperatively(t, ctx, rangeDesc, tc.Target(1), manual)
 		require.NoError(t, err)
 
 		// Remove first store from raft group.
