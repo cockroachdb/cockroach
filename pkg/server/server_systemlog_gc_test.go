@@ -67,7 +67,7 @@ func TestLogGC(t *testing.T) {
 			a.NoError(err)
 		}
 	}
-	maxTS1 := timeutil.Now()
+	maxTS1 := timeutil.Now().Add(time.Duration(-24*7) * time.Hour)
 	maxTS2 := maxTS1.Add(time.Second)
 	maxTS3 := maxTS2.Add(time.Second)
 	maxTS4 := maxTS3.Add(time.Second)
