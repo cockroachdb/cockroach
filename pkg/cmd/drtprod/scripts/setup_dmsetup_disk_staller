@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Sets up datadog for the drt clusters.
+# NOTE - This uses CLUSTER environment variable, if not set the script fails
+
+if [ -z "${CLUSTER}" ]; then
+  echo "environment CLUSTER is not set"
+  exit 1
+fi
+
+roachprod ssh "$CLUSTER" -- "sudo apt-get purge -y snapd"
+roachprod ssh "$CLUSTER" -- "sudo umount -f /mnt/data1"
+roachprod ssh "$CLUSTER" -- "sudo dmsetup remove_all"
+roachprod ssh "$CLUSTER" -- "sudo tune2fs -O ^has_journal /dev/nvme0n1"
+roachprod ssh "$CLUSTER" -- 'echo "0 $(sudo blockdev --getsz /dev/nvme0n1) linear /dev/nvme0n1 0" | sudo dmsetup create data1'
+roachprod ssh "$CLUSTER" -- "sudo mount /dev/mapper/data1 /mnt/data1"
