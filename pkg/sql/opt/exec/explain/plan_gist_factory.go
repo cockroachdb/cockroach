@@ -149,7 +149,7 @@ func (f *PlanGistFactory) PlanGist() PlanGist {
 
 // planGistDecoder is used to decode a plan gist into a logical plan.
 type planGistDecoder struct {
-	buffer    bytes.Buffer
+	buf       bytes.Reader
 	nodeStack []*Node
 
 	// catalog is used to resolve table and index ids that are stored in the gist.
@@ -193,16 +193,15 @@ func DecodePlanGistToRows(
 
 // DecodePlanGistToPlan constructs an explain.Node tree from a gist.
 func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, err error) {
-	d := planGistDecoder{
-		catalog: cat,
-	}
-
 	b, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
 		return nil, err
 	}
 
-	d.buffer.Write(b)
+	var d planGistDecoder
+	d.buf.Reset(b)
+	d.catalog = cat
+
 	plan = &Plan{}
 
 	ver := d.decodeInt()
@@ -234,7 +233,7 @@ func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, err error) {
 }
 
 func (d *planGistDecoder) decodeOp() execOperator {
-	val, err := d.buffer.ReadByte()
+	val, err := d.buf.ReadByte()
 	if err != nil || val == 0 {
 		return unknownOp
 	}
@@ -269,7 +268,7 @@ func (f *PlanGistFactory) encodeInt(i int) {
 }
 
 func (d *planGistDecoder) decodeInt() int {
-	val, err := binary.ReadVarint(&d.buffer)
+	val, err := binary.ReadVarint(&d.buf)
 	if err != nil {
 		panic(err)
 	}
@@ -361,7 +360,7 @@ func (f *PlanGistFactory) encodeByte(b byte) {
 }
 
 func (d *planGistDecoder) decodeByte() byte {
-	val, err := d.buffer.ReadByte()
+	val, err := d.buf.ReadByte()
 	if err != nil {
 		panic(err)
 	}
@@ -432,7 +431,7 @@ func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
 
 func (d *planGistDecoder) decodeScanParams() exec.ScanParams {
 	neededCols := intsets.Fast{}
-	err := neededCols.Decode(&d.buffer)
+	err := neededCols.Decode(&d.buf)
 	if err != nil {
 		panic(err)
 	}
