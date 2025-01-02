@@ -36,6 +36,7 @@ targets:
         args:
           - $CLUSTER
           - cockroach
+      - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
       - command: start
         args:
