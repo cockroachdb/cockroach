@@ -220,13 +220,12 @@ func TestAuthorization(t *testing.T) {
 			accessLevel: jobsauth.ViewAccess,
 		},
 		{
-			name:        "users-cannot-control-their-own-jobs",
+			name:        "users-can-control-their-own-jobs",
 			user:        username.MakeSQLUsernameFromPreNormalizedString("user1"),
 			roleOptions: map[roleoption.Option]struct{}{},
 			admins:      map[string]struct{}{},
 			payload:     makeBackupPayload("user1"),
 			accessLevel: jobsauth.ControlAccess,
-			userErr:     pgerror.New(pgcode.InsufficientPrivilege, "foo"),
 		},
 		{
 			name:        "users-can-control-their-roles-jobs",
@@ -327,6 +326,17 @@ func TestAuthorization(t *testing.T) {
 			admins:      map[string]struct{}{"user2": {}},
 			payload:     makeBackupPayload("user2"),
 			accessLevel: jobsauth.ViewAccess,
+		},
+		{
+			name: "controljob-system-privilege-insufficient-to-control-admin-jobs",
+			user: username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			userPrivileges: map[userPrivilege]struct{}{
+				controlJobGlobalPrivilege: {},
+			},
+			admins:      map[string]struct{}{"user2": {}},
+			payload:     makeBackupPayload("user2"),
+			accessLevel: jobsauth.ControlAccess,
+			userErr:     pgerror.New(pgcode.InsufficientPrivilege, "admin"),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
