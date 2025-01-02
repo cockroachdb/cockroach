@@ -102,15 +102,15 @@ var IngestSplitEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
-// TODO(radu): re-enable this setting when we are confident in the implementation.
 // columnarBlocksEnabled controls whether columnar-blocks are enabled in Pebble.
-//var columnarBlocksEnabled = settings.RegisterBoolSetting(
-//	settings.SystemVisible,
-//	"storage.columnar_blocks.enabled",
-//	"set to true to enable columnar-blocks to store KVs in a columnar format",
-//	false, // TODO(jackson): Metamorphicize this.
-//	settings.WithPublic,
-//)
+var columnarBlocksEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"storage.columnar_blocks.enabled",
+	"set to true to enable columnar-blocks to store KVs in a columnar format (experimental)",
+	metamorphic.ConstantWithTestBool(
+		"storage.columnar_blocks.enabled", false /* defaultValue */),
+	settings.WithPublic,
+)
 
 // deleteCompactionsCanExcise controls whether delete compactions can
 // apply rangedels/rangekeydels on sstables they partially apply to, through
@@ -1245,9 +1245,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
 	cfg.opts.Experimental.EnableColumnarBlocks = func() bool {
-		// TODO(radu): re-enable this setting when we are confident in the implementation.
-		// return columnarBlocksEnabled.Get(&cfg.settings.SV)
-		return false
+		return columnarBlocksEnabled.Get(&cfg.settings.SV)
 	}
 	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
 		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
