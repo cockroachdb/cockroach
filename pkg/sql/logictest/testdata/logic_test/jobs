@@ -270,7 +270,7 @@ SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'POLL JOBS STATS' AN
 
 subtest control_job_priv
 
-user testuser
+user testuser2
 
 statement ok
 CREATE TABLE t_control_job_priv(x INT)
@@ -284,7 +284,9 @@ statement ok
 DROP TABLE t_control_job_priv
 
 let $job_id
-SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv'
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv'
+
+user testuser
 
 statement error user testuser does not have privileges for job
 PAUSE JOB (SELECT $job_id)
@@ -308,7 +310,7 @@ subtest end
 
 subtest control_job_priv_inherited
 
-user testuser
+user testuser2
 
 statement ok
 CREATE TABLE t_control_job_priv_inherited(x INT)
@@ -322,7 +324,9 @@ statement ok
 DROP TABLE t_control_job_priv_inherited
 
 let $job_id
-SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv_inherited'
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv_inherited'
+
+user testuser
 
 statement error user testuser does not have privileges for job
 PAUSE JOB (SELECT $job_id)

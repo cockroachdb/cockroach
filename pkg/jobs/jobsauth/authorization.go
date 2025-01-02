@@ -125,6 +125,11 @@ func Authorize(
 	accessLevel AccessLevel,
 	global GlobalJobPrivileges,
 ) error {
+	// If this is the user's own job, they have access to it.
+	if a.User() == owner {
+		return nil
+	}
+
 	callerIsAdmin, err := a.UserHasAdminRole(ctx, a.User())
 	if err != nil {
 		return err
@@ -134,7 +139,7 @@ func Authorize(
 	}
 
 	if accessLevel == ViewAccess {
-		if global.hasControl || global.hasView || owner == a.User() {
+		if global.hasControl || global.hasView {
 			return nil
 		}
 	}
@@ -150,14 +155,17 @@ func Authorize(
 		return nil
 	}
 
-	jobOwnerIsAdmin, err := a.UserHasAdminRole(ctx, owner)
-	if err != nil {
-		return err
+	if accessLevel == ControlAccess {
+		jobOwnerIsAdmin, err := a.UserHasAdminRole(ctx, owner)
+		if err != nil {
+			return err
+		}
+		if jobOwnerIsAdmin {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only admins can control jobs owned by other admins")
+		}
 	}
-	if jobOwnerIsAdmin {
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only admins can control jobs owned by other admins")
-	}
+
 	if global.hasControl {
 		return nil
 	}
