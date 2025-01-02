@@ -195,6 +195,7 @@ go_test(
         "restore_planning_test.go",
         "restore_progress_test.go",
         "restore_span_covering_test.go",
+        "restore_test.go",
         "schedule_pts_chaining_test.go",
         "show_test.go",
         "system_schema_test.go",
