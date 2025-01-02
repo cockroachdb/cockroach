@@ -17,7 +17,7 @@ fi
 
 dd_site="us5.datadoghq.com"
 
-roachprod ssh $WORKLOAD_CLUSTER -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
+drtprod ssh $WORKLOAD_CLUSTER -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
 ---
 receivers:
   prometheus/workload:
@@ -93,17 +93,17 @@ service:
       - datadog
 EOF"
 
-roachprod ssh $WORKLOAD_CLUSTER -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
+drtprod ssh $WORKLOAD_CLUSTER -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
 export DD_SITE=${dd_site}
 export DD_API_KEY=${dd_api_key}
 export DD_TAGS=env:development,cluster${CLUSTER%:*},team:drt,service:drt-cockroachdb
 EOF"
 
-roachprod opentelemetry-start $WORKLOAD_CLUSTER \
+drtprod opentelemetry-start $WORKLOAD_CLUSTER \
   --datadog-api-key "${dd_api_key}" \
   --datadog-tags 'service:drt-cockroachdb,team:drt'
 
-roachprod fluent-bit-start $WORKLOAD_CLUSTER \
+drtprod fluent-bit-start $WORKLOAD_CLUSTER \
   --datadog-api-key "${dd_api_key}" \
   --datadog-service drt-cockroachdb \
   --datadog-tags 'service:drt-cockroachdb,team:drt'

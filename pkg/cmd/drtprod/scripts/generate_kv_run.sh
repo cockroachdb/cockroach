@@ -29,7 +29,7 @@ if [ -z "${WORKLOAD_NODES}" ]; then
   exit 1
 fi
 
-PGURLS=$(roachprod pgurl $CLUSTER --external | sed s/\'//g)
+PGURLS=$(drtprod pgurl $CLUSTER --external | sed s/\'//g)
 
 # Loop through each node
 for NODE in $(seq 1 $WORKLOAD_NODES)
@@ -74,9 +74,9 @@ done
 EOF
 
   # Upload the script to the workload cluster
-  roachprod put $WORKLOAD_CLUSTER:$NODE /tmp/kv_run.sh
-  roachprod ssh $WORKLOAD_CLUSTER:$NODE -- "chmod +x kv_run.sh"
+  drtprod put $WORKLOAD_CLUSTER:$NODE /tmp/kv_run.sh
+  drtprod ssh $WORKLOAD_CLUSTER:$NODE -- "chmod +x kv_run.sh"
   if [ "$execute_script" = "true" ]; then
-    roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit kv_run --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/kv_run.sh"
+    drtprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit kv_run --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/kv_run.sh"
   fi
 done

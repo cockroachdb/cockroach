@@ -55,21 +55,21 @@ environment:
 		require.Equal(t, 8, len(name1Commands))
 		require.Equal(t, 1, len(name2Commands))
 		// the flags are maintained as map and can be in any sequence
-		require.True(t, strings.HasPrefix(name1Commands[0], "roachprod dummy1 name_value1 arg11"))
+		require.True(t, strings.HasPrefix(name1Commands[0], "drtprod dummy1 name_value1 arg11"))
 		require.True(t, strings.Contains(name1Commands[0], "--clouds=gce"))
 		require.True(t, strings.Contains(name1Commands[0], "--nodes=1"))
 		require.Equal(t, []string{
-			"dummy_script1", "dummy_script2 arg11", "roachprod dummy2", "script33",
+			"dummy_script1", "dummy_script2 arg11", "drtprod dummy2", "script33",
 		}, name1Commands[1:5])
 		// rollback
-		require.True(t, strings.HasPrefix(name1Commands[5], "roachprod rb_dummy2 arg1 arg2"))
+		require.True(t, strings.HasPrefix(name1Commands[5], "drtprod rb_dummy2 arg1 arg2"))
 		require.True(t, strings.Contains(name1Commands[5], "--flag1=value1"))
 		require.True(t, strings.Contains(name1Commands[5], "--flag2=value2"))
 		require.True(t, strings.HasPrefix(name1Commands[6], "dummy_script22"))
 		require.True(t, strings.Contains(name1Commands[6], "--f1=\\\"v1 v2\\\""))
-		require.Equal(t, "roachprod rb_dummy1", name1Commands[7])
+		require.Equal(t, "drtprod rb_dummy1", name1Commands[7])
 		require.Equal(t, []string{
-			"roachprod dummy2 name_value2 arg12",
+			"drtprod dummy2 name_value2 arg12",
 		}, name2Commands)
 	})
 	t.Run("expect no failure", func(t *testing.T) {
@@ -104,14 +104,14 @@ environment:
 		require.Equal(t, 1, len(depN1N2Commands))
 		require.Equal(t, 1, len(depNotPresentCommands))
 		// the flags are maintained as map and can be in any sequence
-		require.True(t, strings.HasPrefix(name1Commands[0], "roachprod dummy1 name_value1 arg11"))
+		require.True(t, strings.HasPrefix(name1Commands[0], "drtprod dummy1 name_value1 arg11"))
 		require.True(t, strings.Contains(name1Commands[0], "--clouds=gce"))
 		require.True(t, strings.Contains(name1Commands[0], "--nodes=1"))
 		require.Equal(t, []string{
-			"dummy_script1", "dummy_script2 arg11", "roachprod dummy2", "script33", "last_script",
+			"dummy_script1", "dummy_script2 arg11", "drtprod dummy2", "script33", "last_script",
 		}, name1Commands[1:])
 		require.Equal(t, []string{
-			"roachprod dummy2 name_value2 arg12",
+			"drtprod dummy2 name_value2 arg12",
 		}, name2Commands)
 	})
 }

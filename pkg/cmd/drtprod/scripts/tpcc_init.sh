@@ -36,20 +36,20 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
   exit 1
 fi
 
-absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
-pwd=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
-PGURLS=$(roachprod pgurl "${CLUSTER}":1)
+absolute_path=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
+pwd=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
+PGURLS=$(drtprod pgurl "${CLUSTER}":1)
 
 # script is responsible for importing the tpcc database for workload
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpcc_init_${suffix}.sh > /dev/null << 'EOF'
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpcc_init_${suffix}.sh > /dev/null << 'EOF'
 #!/bin/bash
 
 ${pwd}/cockroach workload fixtures import tpcc $PGURLS $@ --checks=false
 EOF"
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpcc_init_${suffix}.sh"
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpcc_init_${suffix}.sh"
 
 if [ "$execute_script" = "true" ]; then
-  roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh"
+  drtprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh"
 else
-  echo "Run --> roachprod run "${WORKLOAD_CLUSTER}":1 -- \"sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh\""
+  echo "Run --> drtprod run "${WORKLOAD_CLUSTER}":1 -- \"sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh\""
 fi

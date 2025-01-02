@@ -340,7 +340,7 @@ func generateStepCmd(clusterName string, s step) (*command, error) {
 func generateCmdFromCommand(s step, _ string) (*command, error) {
 	// Prepend the cluster name to the command arguments
 	s.Args = append([]string{s.Command}, s.Args...)
-	return getCommand(s, "roachprod")
+	return getCommand(s, "drtprod")
 }
 
 // generateCmdFromScript creates a command from a step that uses a script.

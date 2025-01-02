@@ -10,7 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/drtprod/cli/commands",
-        "//pkg/cmd/drtprod/helpers",
+        "//pkg/cmd/roachprod/cli",
         "//pkg/roachprod",
         "@com_github_spf13_cobra//:cobra",
     ],

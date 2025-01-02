@@ -17,7 +17,7 @@ fi
 
 dd_site="us5.datadoghq.com"
 
-roachprod ssh $CLUSTER -- "sudo mkdir -p /etc/fluent-bit && sudo tee /etc/fluent-bit/config-override.yaml > /dev/null << EOF
+drtprod ssh $CLUSTER -- "sudo mkdir -p /etc/fluent-bit && sudo tee /etc/fluent-bit/config-override.yaml > /dev/null << EOF
 ---
 pipeline:
  inputs:
@@ -41,17 +41,17 @@ pipeline:
    storage.total_limit_size: 25MB
 EOF"
 
-roachprod ssh $CLUSTER -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
+drtprod ssh $CLUSTER -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
 export DD_SITE=${dd_site}
 export DD_API_KEY=${dd_api_key}
 export DD_TAGS=env:development,cluster${CLUSTER%:*},team:drt,service:drt-cockroachdb
 EOF"
 
-roachprod opentelemetry-start $CLUSTER \
+drtprod opentelemetry-start $CLUSTER \
   --datadog-api-key "${dd_api_key}" \
   --datadog-tags 'service:drt-cockroachdb,team:drt'
 
-roachprod fluent-bit-start $CLUSTER \
+drtprod fluent-bit-start $CLUSTER \
   --datadog-api-key "${dd_api_key}" \
   --datadog-service drt-cockroachdb \
   --datadog-tags 'service:drt-cockroachdb,team:drt'
