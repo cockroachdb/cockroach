@@ -1877,7 +1877,7 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 			}
 			sideEyeEnv := w.Cluster().sideEyeEnvName()
 			if sideEyeEnv != "" {
-				clusterBuilder.WriteString(fmt.Sprintf(" (<a href='%s'>Side-Eye</a>)", sideeyeclient.SnapshotsURL(sideEyeEnv)))
+				clusterBuilder.WriteString(fmt.Sprintf(" (<a href='%s'>Side-Eye</a>)", sideeyeclient.RecordingsURL(sideEyeEnv)))
 			}
 		}
 		t := w.Test()
