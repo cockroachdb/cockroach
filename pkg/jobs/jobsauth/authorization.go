@@ -103,18 +103,16 @@ func GetGlobalJobPrivileges(
 	return GlobalJobPrivileges{hasControl: hasControlJob, hasView: hasViewJob}, nil
 }
 
-// Authorize returns nil if the user is authorized to access the job.
-// If the user is not authorized, then a pgcode.InsufficientPrivilege
-// error will be returned.
+// Authorize returns nil if the user is authorized to access the job. If the
+// user is not authorized, then a pgcode.InsufficientPrivilege error will be
+// returned.
 //
-// TODO(#96432): sort out internal job owners and rules for accessing them
-// Authorize checks these rules in order:
-//  1. If the user is an admin, grant access.
-//  2. If the AccessLevel is ViewAccess, grant access if the user has CONTROLJOB, VIEWJOB,
-//     or if the user owns the job.
-//  3. If the AccessLevel is ControlAccess, grant access if the user has CONTROLJOB
-//     and the job owner is not an admin.
-//  4. If there is an authorization check for this job type that passes, grant the user access.
+// Users have access to a job if any of these are true:
+//  1. they own the job, directly or via a role
+//  2. they are an admin
+//  3. they have the global CONTROLJOB or VIEWJOB (for view access) privilege
+//     and the job is *not* owned by an admin in the case of attempted control
+//  4. a job-specific custom authorization check allows access.
 func Authorize(
 	ctx context.Context,
 	a AuthorizationAccessor,
@@ -125,6 +123,11 @@ func Authorize(
 	accessLevel AccessLevel,
 	global GlobalJobPrivileges,
 ) error {
+	// If this is the user's own job, they have access to it.
+	if a.User() == owner {
+		return nil
+	}
+
 	callerIsAdmin, err := a.UserHasAdminRole(ctx, a.User())
 	if err != nil {
 		return err
@@ -134,7 +137,7 @@ func Authorize(
 	}
 
 	if accessLevel == ViewAccess {
-		if global.hasControl || global.hasView || owner == a.User() {
+		if global.hasControl || global.hasView {
 			return nil
 		}
 	}
@@ -150,14 +153,17 @@ func Authorize(
 		return nil
 	}
 
-	jobOwnerIsAdmin, err := a.UserHasAdminRole(ctx, owner)
-	if err != nil {
-		return err
+	if accessLevel == ControlAccess {
+		jobOwnerIsAdmin, err := a.UserHasAdminRole(ctx, owner)
+		if err != nil {
+			return err
+		}
+		if jobOwnerIsAdmin {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only admins can control jobs owned by other admins")
+		}
 	}
-	if jobOwnerIsAdmin {
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only admins can control jobs owned by other admins")
-	}
+
 	if global.hasControl {
 		return nil
 	}
