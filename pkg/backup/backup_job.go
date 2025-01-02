@@ -687,17 +687,18 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	insqlDB := p.ExecCfg().InternalDB
 	if details.URI == "" {
 		initialDetails := details
+		var tenantSpans []roachpb.Span
+		var tenantInfos []mtinfopb.TenantInfoWithUsage
 		if err := insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			backupDetails, m, err := getBackupDetailAndManifest(
-				ctx, p.ExecCfg(), txn, initialDetails, p.User(), backupDest,
-			)
-			if err != nil {
-				return err
-			}
-			details = backupDetails
-			backupManifest = &m
-			return nil
+			tenantSpans, tenantInfos, err = getTenantInfo(ctx, p.ExecCfg().Codec, txn, initialDetails)
+			return err
 		}); err != nil {
+			return err
+		}
+		details, backupManifest, err = getBackupDetailAndManifest(
+			ctx, p.ExecCfg(), tenantSpans, tenantInfos, initialDetails, p.User(), backupDest,
+		)
+		if err != nil {
 			return err
 		}
 
@@ -1553,7 +1554,8 @@ func checkForNewCompleteDatabases(
 func createBackupManifest(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	txn isql.Txn,
+	tenantSpans []roachpb.Span,
+	tenantInfos []mtinfopb.TenantInfoWithUsage,
 	jobDetails jobspb.BackupDetails,
 	prevBackups []backuppb.BackupManifest,
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
@@ -1612,10 +1614,6 @@ func createBackupManifest(
 
 	var spans []roachpb.Span
 	var tenants []mtinfopb.TenantInfoWithUsage
-	tenantSpans, tenantInfos, err := getTenantInfo(ctx, execCfg.Codec, txn, jobDetails)
-	if err != nil {
-		return backuppb.BackupManifest{}, err
-	}
 	spans = append(spans, tenantSpans...)
 	tenants = append(tenants, tenantInfos...)
 
@@ -1747,11 +1745,12 @@ func updateBackupDetails(
 func getBackupDetailAndManifest(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	txn isql.Txn,
+	tenantSpans []roachpb.Span,
+	tenantInfos []mtinfopb.TenantInfoWithUsage,
 	initialDetails jobspb.BackupDetails,
 	user username.SQLUsername,
 	backupDestination backupdest.ResolvedDestination,
-) (jobspb.BackupDetails, backuppb.BackupManifest, error) {
+) (jobspb.BackupDetails, *backuppb.BackupManifest, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
@@ -1771,7 +1770,7 @@ func getBackupDetailAndManifest(
 		baseEncryptionOptions, err = backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage,
 			backupDestination.PrevBackupURIs[0], *initialDetails.EncryptionOptions, &kmsEnv)
 		if err != nil {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+			return jobspb.BackupDetails{}, nil, err
 		}
 
 		var memSize int64
@@ -1779,7 +1778,7 @@ func getBackupDetailAndManifest(
 			makeCloudStorage, backupDestination.PrevBackupURIs, baseEncryptionOptions, &kmsEnv)
 
 		if err != nil {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+			return jobspb.BackupDetails{}, nil, err
 		}
 		defer mem.Shrink(ctx, memSize)
 	}
@@ -1788,12 +1787,12 @@ func getBackupDetailAndManifest(
 		baseManifest := prevBackups[0]
 		if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
 			!initialDetails.FullCluster {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
+			return jobspb.BackupDetails{}, nil, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
 		}
 
 		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
 		if lastEndTime.Compare(initialDetails.EndTime) > 0 {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{},
+			return jobspb.BackupDetails{}, nil,
 				errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
 					"the previous backup's end time of %s.",
 					initialDetails.EndTime.GoTime(), lastEndTime.GoTime())
@@ -1813,7 +1812,7 @@ func getBackupDetailAndManifest(
 		// context of their own cluster, so we need to ensure we only allow
 		// incremental previous backups that we created.
 		if fromCluster := prevBackup.ClusterID; !fromCluster.Equal(execCfg.NodeInfo.LogicalClusterID()) {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
+			return jobspb.BackupDetails{}, nil, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
 		}
 
 		prevLocalityKVs := prevBackup.LocalityKVs
@@ -1832,7 +1831,7 @@ func getBackupDetailAndManifest(
 			// necessary, because the default locality defines the backup manifest
 			// location. If that URI isn't right, the backup chain will fail to
 			// load.
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf(
+			return jobspb.BackupDetails{}, nil, errors.Newf(
 				"Requested backup has localities %s, but a previous backup layer in this collection has localities %s. "+
 					"Mismatched backup layers are not supported. Please take a new full backup with the new localities, or an "+
 					"incremental backup with matching localities.",
@@ -1855,27 +1854,28 @@ func getBackupDetailAndManifest(
 		baseEncryptionOptions,
 		&kmsEnv)
 	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+		return jobspb.BackupDetails{}, nil, err
 	}
 
 	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage, prevBackups, baseEncryptionOptions, &kmsEnv)
 	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+		return jobspb.BackupDetails{}, nil, err
 	}
 
 	backupManifest, err := createBackupManifest(
 		ctx,
 		execCfg,
-		txn,
+		tenantSpans,
+		tenantInfos,
 		updatedDetails,
 		prevBackups,
 		layerToIterFactory,
 	)
 	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+		return jobspb.BackupDetails{}, nil, err
 	}
 
-	return updatedDetails, backupManifest, nil
+	return updatedDetails, &backupManifest, nil
 }
 
 func (b *backupResumer) readManifestOnResume(
