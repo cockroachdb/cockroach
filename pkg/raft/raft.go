@@ -1840,7 +1840,7 @@ type stepFunc func(r *raft, m pb.Message) error
 
 func stepLeader(r *raft, m pb.Message) error {
 	// Compute the LeadSupportUntil on every tick.
-	r.fortificationTracker.UpdateComputedLeadSupportUntil(r.state)
+	r.fortificationTracker.ComputeLeadSupportUntil(r.state)
 
 	// These message types do not require any progress for m.From.
 	switch m.Type {
@@ -2760,7 +2760,7 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 
 	// Config changes might cause the LeadSupportUntil to change, we need to
 	// recalculate it here.
-	r.fortificationTracker.UpdateComputedLeadSupportUntil(r.state)
+	r.fortificationTracker.ComputeLeadSupportUntil(r.state)
 
 	if r.isLearner {
 		// This node is leader and was demoted, step down.
