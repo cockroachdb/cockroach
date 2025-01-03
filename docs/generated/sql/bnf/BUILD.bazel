@@ -38,6 +38,7 @@ FILES = [
     "alter_index_partition_by",
     "alter_index",
     "alter_index_visible_stmt",
+    "alter_job_stmt",
     "alter_partition_stmt",
     "alter_primary_key",
     "alter_range_relocate_stmt",
