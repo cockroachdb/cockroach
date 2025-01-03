@@ -64,7 +64,7 @@ func TestJobInfoAccessors(t *testing.T) {
 	getJobInfo := func(j *jobs.Job, key string) (v []byte, ok bool, err error) {
 		err = idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			infoStorage := j.InfoStorage(txn)
-			v, ok, err = infoStorage.Get(ctx, key)
+			v, ok, err = infoStorage.Get(ctx, "getJobInfo", key)
 			return err
 		})
 		return v, ok, err
@@ -226,6 +226,8 @@ func TestJobInfoAccessors(t *testing.T) {
 		return nil
 	}))
 
+	const opTest = "test"
+
 	// Verify we see 4 rows (c, e, f, g) in the prefix.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job2.InfoStorage(txn)
@@ -234,7 +236,7 @@ func TestJobInfoAccessors(t *testing.T) {
 			return err
 		}
 		require.Equal(t, 4, count)
-		_, ok, err := infoStorage.Get(ctx, kC)
+		_, ok, err := infoStorage.Get(ctx, opTest, kC)
 		if err != nil {
 			return err
 		}
@@ -256,12 +258,12 @@ func TestJobInfoAccessors(t *testing.T) {
 			return err
 		}
 		require.Equal(t, 2, count)
-		_, ok, err := infoStorage.Get(ctx, kC)
+		_, ok, err := infoStorage.Get(ctx, opTest, kC)
 		if err != nil {
 			return err
 		}
 		require.False(t, ok)
-		_, ok, err = infoStorage.Get(ctx, kF)
+		_, ok, err = infoStorage.Get(ctx, opTest, kF)
 		if err != nil {
 			return err
 		}
@@ -339,7 +341,7 @@ func TestAccessorsWithWrongSQLLivenessSession(t *testing.T) {
 	// A Get should still succeed even with an invalid session id.
 	require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job.InfoStorage(txn)
-		val, exists, err := infoStorage.Get(ctx, "foo")
+		val, exists, err := infoStorage.Get(ctx, "test", "foo")
 		if err != nil {
 			return err
 		}
