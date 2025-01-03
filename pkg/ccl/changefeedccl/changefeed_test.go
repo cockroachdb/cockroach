@@ -2340,7 +2340,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
 	changefeedbase.SpanCheckpointMaxBytes.Override(
 		context.Background(), &s.ClusterSettings().SV, 100<<20)
-	changefeedbase.FrontierHighwaterLagCheckpointThreshold.Override(
+	changefeedbase.SpanCheckpointLeadThreshold.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
 
 	// We'll start changefeed with the cursor.

@@ -170,7 +170,9 @@ func (f *CoordinatorFrontier) InBackfill(r jobspb.ResolvedSpan) bool {
 }
 
 // MakeCheckpoint creates a checkpoint based on the current state of the frontier.
-func (f *CoordinatorFrontier) MakeCheckpoint(maxBytes int64) jobspb.ChangefeedProgress_Checkpoint {
+func (f *CoordinatorFrontier) MakeCheckpoint(
+	baselineTS hlc.Timestamp, maxBytes int64,
+) jobspb.ChangefeedProgress_Checkpoint {
 	return checkpoint.Make(f.Frontier(), f.Entries, maxBytes)
 }
 
@@ -293,19 +295,21 @@ func (f *resolvedSpanFrontier) assertBoundaryNotEarlier(
 	return nil
 }
 
-// HasLaggingSpans returns whether the frontier has lagging spans as defined
+// HasLeadingSpans returns whether the frontier has lagging spans as defined
 // by whether the frontier trails the latest timestamp by at least
-// changefeedbase.FrontierHighwaterLagCheckpointThreshold.
-func (f *resolvedSpanFrontier) HasLaggingSpans(sv *settings.Values) bool {
-	lagThresholdNanos := int64(changefeedbase.FrontierHighwaterLagCheckpointThreshold.Get(sv))
+// changefeedbase.SpanCheckpointLeadThreshold. If there are, it returns the
+// lead timestamp (frontier + lead threshold).
+func (f *resolvedSpanFrontier) HasLeadingSpans(sv *settings.Values) (bool, hlc.Timestamp) {
+	lagThresholdNanos := int64(changefeedbase.SpanCheckpointLeadThreshold.Get(sv))
 	if lagThresholdNanos == 0 {
-		return false
+		return false, hlc.Timestamp{}
 	}
 	frontier := f.Frontier()
 	if frontier.IsEmpty() {
 		frontier = f.statementTime
 	}
-	return frontier.Add(lagThresholdNanos, 0).Less(f.latestTS)
+	leadTS := frontier.Add(lagThresholdNanos, 0)
+	return leadTS.Less(f.latestTS), leadTS
 }
 
 // resolvedSpanBoundary encapsulates a resolved span boundary, which is

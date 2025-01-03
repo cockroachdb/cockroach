@@ -52,10 +52,11 @@ func TestCheckpointMake(t *testing.T) {
 	}
 
 	for name, tc := range map[string]struct {
-		frontier hlc.Timestamp
-		spans    checkpointSpans
-		maxBytes int64
-		expected jobspb.ChangefeedProgress_Checkpoint
+		frontier      hlc.Timestamp
+		spans         checkpointSpans
+		maxBytes      int64
+		leadThreshold int64
+		expected      jobspb.ChangefeedProgress_Checkpoint
 	}{
 		"all spans ahead of frontier checkpointed": {
 			frontier: ts(1),
@@ -126,6 +127,51 @@ func TestCheckpointMake(t *testing.T) {
 				Spans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}},
 			},
 		},
+		"all spans ahead of frontier checkpointed due to lead threshold": {
+			frontier: ts(1),
+			spans: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(1)},
+				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(3)},
+				{span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}, ts: ts(1)},
+				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(4)},
+			},
+			maxBytes:      100,
+			leadThreshold: 1,
+			expected: jobspb.ChangefeedProgress_Checkpoint{
+				Timestamp: ts(3),
+				Spans: []roachpb.Span{
+					{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")},
+				},
+			},
+		},
+		"only some spans ahead of frontier checkpointed due to lead threshold": {
+			frontier: ts(1),
+			spans: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(1)},
+				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(3)},
+				{span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}, ts: ts(1)},
+				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(4)},
+			},
+			maxBytes:      100,
+			leadThreshold: 2,
+			expected: jobspb.ChangefeedProgress_Checkpoint{
+				Timestamp: ts(4),
+				Spans:     []roachpb.Span{{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}},
+			},
+		},
+		"no spans ahead of frontier checkpointed due to lead threshold": {
+			frontier: ts(1),
+			spans: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(1)},
+				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(3)},
+				{span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}, ts: ts(1)},
+				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(4)},
+			},
+			maxBytes:      100,
+			leadThreshold: 3,
+			expected:      jobspb.ChangefeedProgress_Checkpoint{},
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			forEachSpan := func(fn span.Operation) {
@@ -134,7 +180,8 @@ func TestCheckpointMake(t *testing.T) {
 				}
 			}
 
-			actual := checkpoint.Make(tc.frontier, forEachSpan, tc.maxBytes)
+			baselineTS := tc.frontier.Add(tc.leadThreshold, 0)
+			actual := checkpoint.Make(baselineTS, forEachSpan, tc.maxBytes)
 			require.Equal(t, tc.expected, actual)
 		})
 	}
