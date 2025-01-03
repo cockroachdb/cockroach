@@ -7,6 +7,7 @@ package sql_test
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,11 +33,12 @@ func TestTableRollback(t *testing.T) {
 	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING bulkio.import.predicate_delete_range_tombstone = false`);
 	db.Exec(t, `CREATE DATABASE IF NOT EXISTS test`)
 	db.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY, rev INT DEFAULT 0, INDEX (rev))`)
 
 	// Fill a table with some rows plus some revisions to those rows.
-	const numRows = 1000
+	const numRows = 100000
 	db.Exec(t, `INSERT INTO test (k) SELECT generate_series(1, $1)`, numRows)
 	db.Exec(t, `UPDATE test SET rev = 1 WHERE k % 3 = 0`)
 	db.Exec(t, `DELETE FROM test WHERE k % 10 = 0`)
@@ -61,8 +63,7 @@ func TestTableRollback(t *testing.T) {
 
 	predicates := kvpb.DeleteRangePredicates{StartTime: targetTime}
 	require.NoError(t, sql.DeleteTableWithPredicate(
-		ctx, kv, codec, sv, execCfg.DistSender, desc.GetID(), predicates, 10))
+		ctx, kv, codec, sv, execCfg.DistSender, desc.GetID(), predicates, rand.Int63n(1000)))
 
 	db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
-
 }

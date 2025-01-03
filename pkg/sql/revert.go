@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -35,7 +36,26 @@ var predicateDeleteRangeNumWorkers = settings.RegisterIntSetting(
 	"the number of workers used to issue Predicate Based DeleteRange request",
 	4)
 
+var predicateDeleteRangeTobmstone = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.predicate_delete_range_tombstone",
+	"the number of workers used to issue Predicate Based DeleteRange request",
+	true)
+
 const RevertTableDefaultBatchSize = 500000
+
+func (p *planner) DeleteRecentWrites(ctx context.Context, descID catid.DescID, since hlc.Timestamp) error {
+	// DO NOT SUBMIT(jeffswenson): this is used for testing the performance of `DeleteTableWithPredicate`
+	return DeleteTableWithPredicate(
+		ctx, 
+		p.txn.DB(),
+		p.execCfg.Codec,
+		&p.execCfg.Settings.SV,
+		p.execCfg.DistSender,
+		descID, 
+		kvpb.DeleteRangePredicates{ StartTime: since },
+		RevertTableDefaultBatchSize)
+}
 
 // DeleteTableWithPredicate issues a series of point and range tombstones over a subset of keys in a
 // table that match the passed-in predicate.
@@ -73,6 +93,7 @@ func DeleteTableWithPredicate(
 	// TODO (msbutler): tune these
 	rangesPerBatch := rollbackBatchSize.Get(sv)
 	numWorkers := int(predicateDeleteRangeNumWorkers.Get(sv))
+	useRangeTobmstone := predicateDeleteRangeTobmstone.Get(sv)
 
 	spansToDo := make(chan *roachpb.Span, 1)
 
@@ -108,7 +129,7 @@ func DeleteTableWithPredicate(
 								Key:    span.Key,
 								EndKey: span.EndKey,
 							},
-							UseRangeTombstone: true,
+							UseRangeTombstone: useRangeTobmstone,
 							Predicates:        predicates,
 						}
 						log.VEventf(ctx, 2, "deleting range %s - %s; attempt %v", span.Key, span.EndKey, resumeCount)
@@ -116,7 +137,9 @@ func DeleteTableWithPredicate(
 						rawResp, err := kv.SendWrappedWithAdmission(
 							ctx,
 							db.NonTransactionalSender(),
-							kvpb.Header{MaxSpanRequestKeys: batchSize},
+							kvpb.Header{
+								MaxSpanRequestKeys: batchSize,
+							},
 							admissionHeader,
 							delRangeRequest)
 

@@ -7537,6 +7537,36 @@ table's zone configuration this will return NULL.`,
 		},
 	),
 
+	"crdb_internal.delete_recent_writes": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemRepair,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{
+				{Name: "id", Typ: types.Int},
+				{Name: "hlc", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				id := catid.DescID(*args[0].(*tree.DInt))
+				hlcStr := string(*args[1].(*tree.DString))
+
+				since, err := hlc.ParseHLC(hlcStr)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+
+				err = evalCtx.Planner.DeleteRecentWrites(ctx, id, since)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+				return tree.DBoolTrue, err
+			},
+			Info:       "This function can be used to clear the data belonging to a table, when the table cannot be dropped.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.serialize_session": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
