@@ -1113,9 +1113,11 @@ func populateSystemJobsTableRows(
 		if err != nil {
 			return matched, wrapPayloadUnMarshalError(err, currentRow[jobIdIdx])
 		}
-
+		getLegacyPayload := func(ctx context.Context) (*jobspb.Payload, error) {
+			return payload, nil
+		}
 		err = jobsauth.Authorize(
-			ctx, p, jobspb.JobID(jobID), payload, jobsauth.ViewAccess, globalPrivileges,
+			ctx, p, jobspb.JobID(jobID), getLegacyPayload, payload.UsernameProto.Decode(), payload.Type(), jobsauth.ViewAccess, globalPrivileges,
 		)
 		if err != nil {
 			// Filter out jobs which the user is not allowed to see.
