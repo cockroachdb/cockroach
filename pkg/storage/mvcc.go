@@ -129,7 +129,7 @@ func getMaxConcurrentCompactions() int {
 
 			// By default use up to min(numCPU-1, 3) threads for background
 			// compactions per store (reserving the final process for flushes).
-			const max = 3
+			const max = 256
 			if n := runtime.GOMAXPROCS(0); n-1 < max {
 				return n - 1
 			}
@@ -345,7 +345,7 @@ func getMaxConcurrentCompactions() int {
 //     mcc=12, at sub-level=5, we get ac-tokens=12. So we are satisfying the
 //     objective even if mcc were as high as 12.
 var l0SubLevelCompactionConcurrency = envutil.EnvOrDefaultInt(
-	"COCKROACH_L0_SUB_LEVEL_CONCURRENCY", 2)
+	"COCKROACH_L0_SUB_LEVEL_CONCURRENCY", 1)
 
 // MakeValue returns the inline value.
 func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {

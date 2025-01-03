@@ -833,6 +833,42 @@ var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
 // supported binary version.
 const MinimumSupportedFormatVersion = pebble.FormatColumnarBlocks
 
+type noopCompactionSlot struct{}
+
+func (n *noopCompactionSlot) CompactionSelected(
+	firstInputLevel, outputLevel int, inputSize uint64,
+) {
+}
+
+func (n *noopCompactionSlot) UpdateMetrics(bytesRead, bytesWritten uint64) {
+}
+
+func (n *noopCompactionSlot) Release(totalBytesWritten uint64) {
+}
+
+type compactionLimiterContainer struct {
+	compactionLimiter atomic.Value
+}
+
+func (c *compactionLimiterContainer) RequestSlot(ctx context.Context) (pebble.CompactionSlot, error) {
+	// Implement the method logic here
+	val := c.compactionLimiter.Load()
+	if val == nil {
+		return &noopCompactionSlot{}, nil
+	}
+	return val.(pebble.CompactionLimiter).RequestSlot(ctx)
+}
+
+func (c *compactionLimiterContainer) TookWithoutPermission(ctx context.Context) pebble.CompactionSlot {
+	val := c.compactionLimiter.Load()
+	if val == nil {
+		return &noopCompactionSlot{}
+	}
+	return val.(pebble.CompactionLimiter).TookWithoutPermission(ctx)
+}
+
+var _ pebble.CompactionLimiter = &compactionLimiterContainer{}
+
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	opts := &pebble.Options{
@@ -1038,6 +1074,7 @@ type Pebble struct {
 		AggregatedBatchCommitStats
 	}
 	diskWriteStatsCollector *vfs.DiskWriteStatsCollector
+	compactionLimiter       *compactionLimiterContainer
 	// Relevant options copied over from pebble.Options.
 	logCtx        context.Context
 	logger        pebble.LoggerAndTracer
@@ -1203,6 +1240,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
 	}
+	clc := &compactionLimiterContainer{}
+	cfg.opts.Experimental.CompactionLimiter = clc
 
 	cfg.opts.EnsureDefaults()
 
@@ -1306,6 +1345,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		replayer:                replay.NewWorkloadCollector(cfg.env.Dir),
 		singleDelLogEvery:       log.Every(5 * time.Minute),
 		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
+		compactionLimiter:       clc,
 	}
 
 	cfg.opts.Experimental.SingleDeleteInvariantViolationCallback = func(userKey []byte) {
@@ -2754,6 +2794,11 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 		return err
 	}
 	return batch.Commit(true)
+}
+
+// SetCompactionLimiter implements the Engine interface.
+func (p *Pebble) SetCompactionLimiter(limiter pebble.CompactionLimiter) {
+	p.compactionLimiter.compactionLimiter.Store(limiter)
 }
 
 type pebbleReadOnly struct {

@@ -1382,6 +1382,7 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 			StoreID:         store.StoreID(),
 			Metrics:         m.Metrics,
 			WriteStallCount: m.WriteStallCount,
+			Registry:        store.Registry(),
 			DiskStats:       diskStats})
 		return nil
 	})

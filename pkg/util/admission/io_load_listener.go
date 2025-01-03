@@ -197,8 +197,9 @@ type ioLoadListener struct {
 	// Stats used to compute interval stats.
 	statsInitialized bool
 	adjustTokensResult
-	perWorkTokenEstimator storePerWorkTokenEstimator
-	diskBandwidthLimiter  *diskBandwidthLimiter
+	perWorkTokenEstimator  storePerWorkTokenEstimator
+	diskBandwidthLimiter   *diskBandwidthLimiter
+	compactionSlotAdjuster *compactionSlotAdjuster
 
 	l0CompactedBytes *metric.Counter
 	l0TokensProduced *metric.Counter
@@ -1055,8 +1056,11 @@ func (io *ioLoadListener) adjustTokensInner(
 	var smoothedCompactionByteTokens float64
 
 	score, _ := ioThreshold.Score()
+	// Update the compaction slot adjuster with our new score.
+	io.compactionSlotAdjuster.updateIOScore(score)
 	// Multiplying score by 2 for ease of calculation.
 	score *= 2
+
 	// We define four levels of load:
 	// Let C be smoothedIntL0CompactedBytes.
 	//

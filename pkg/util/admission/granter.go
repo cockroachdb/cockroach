@@ -710,6 +710,28 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 	return ioTokensUsed, ioTokensUsedByElasticWork
 }
 
+func (sg *kvStoreTokenGranter) trySubtractIOTokens(
+	wt admissionpb.StoreWorkType, count int64,
+) bool {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
+	for i := admissionpb.WorkClass(0); i < admissionpb.NumWorkClasses; i++ {
+		if sg.coordMu.availableIOTokens[i] < count {
+			return false
+		}
+	}
+	sg.subtractTokensForStoreWorkTypeLocked(wt, count)
+	return true
+}
+
+func (sg *kvStoreTokenGranter) addIOTokens(
+	wt admissionpb.StoreWorkType, count int64,
+) {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
+	sg.subtractTokensForStoreWorkTypeLocked(wt, -count)
+}
+
 // getDiskTokensUsedAndResetLocked implements granterWithIOTokens.
 func (sg *kvStoreTokenGranter) getDiskTokensUsedAndReset() (
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
@@ -801,6 +823,7 @@ type StoreMetrics struct {
 	WriteStallCount int64
 	// Optional.
 	DiskStats DiskStats
+	Registry  *metric.Registry
 }
 
 // DiskStats provide low-level stats about the disk resources used for a
@@ -923,6 +946,24 @@ var (
 		Name:        "admission.l0_tokens_produced.kv",
 		Help:        "Total bytes produced for L0 writes",
 		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
+	compactionTotalSlots = metric.Metadata{
+		Name:        "admission.compaction_granter.total_slots",
+		Help:        "Total slots for pebble compactions",
+		Measurement: "Slots",
+		Unit:        metric.Unit_COUNT,
+	}
+	compactionUsedSlots = metric.Metadata{
+		Name:        "admission.compaction_granter.used_slots",
+		Help:        "Used slots for pebble compactions",
+		Measurement: "Slots",
+		Unit:        metric.Unit_COUNT,
+	}
+	compactionDeniedSlots = metric.Metadata{
+		Name:        "admission.compaction_granter.denied_slots",
+		Help:        "Denied slots for pebble compactions",
+		Measurement: "Slots",
 		Unit:        metric.Unit_COUNT,
 	}
 )

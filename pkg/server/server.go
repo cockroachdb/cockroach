@@ -591,8 +591,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	db.AdmissionPacerFactory = gcoords.Elastic
 	goschedstats.RegisterSettings(st)
 	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
+	cbID2 := goschedstats.RegisterRunnableCountCallback(gcoords.Stores.CPULoad)
 	stopper.AddCloser(stop.CloserFn(func() {
 		goschedstats.UnregisterRunnableCountCallback(cbID)
+		goschedstats.UnregisterRunnableCountCallback(cbID2)
 	}))
 	stopper.AddCloser(gcoords)
 
@@ -1963,6 +1965,13 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// Raft commands like log application and snapshot application may be able
 	// to bypass admission control.
 	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, pmp, s.node)
+	for i := range s.engines {
+		id, err := kvstorage.ReadStoreIdent(context.Background(), s.engines[i])
+		if err != nil {
+			return err
+		}
+		s.storeGrantCoords.SetCompactionLimiterForEngine(id.StoreID, s.engines[i])
+	}
 
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.

@@ -8,6 +8,7 @@ package admission
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 )
 
@@ -67,11 +69,17 @@ type StoreGrantCoordinators struct {
 	onLogEntryAdmitted             OnLogEntryAdmitted
 	closeCh                        chan struct{}
 
+	compactionSlotAdjusters []*compactionSlotAdjuster
+
 	disableTickerForTesting bool // TODO(irfansharif): Fold into the testing knobs struct below.
 	knobs                   *TestingKnobs
 }
 
-// SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
+type CompactionLimiterSetter interface {
+	SetCompactionLimiter(limiter pebble.CompactionLimiter)
+}
+
+// SetPebbleHooks sets a PebbleMetricsProvider and causes the load
 // on the various storage engines to be used for admission control.
 func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	startupCtx context.Context, pmp PebbleMetricsProvider, iotc IOThresholdConsumer,
@@ -84,7 +92,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	sgc.closeCh = make(chan struct{})
 	metrics := pebbleMetricsProvider.GetPebbleMetrics()
 	for _, m := range metrics {
-		gc := sgc.initGrantCoordinator(m.StoreID)
+		gc := sgc.initGrantCoordinator(m.StoreID, m.Registry)
 		// Defensive call to LoadAndStore even though Store ought to be sufficient
 		// since SetPebbleMetricsProvider can only be called once. This code
 		// guards against duplication of stores returned by GetPebbleMetrics.
@@ -177,7 +185,13 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	}()
 }
 
-func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID) *GrantCoordinator {
+func (sgc *StoreGrantCoordinators) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
+	for i := range sgc.compactionSlotAdjusters {
+		sgc.compactionSlotAdjusters[i].CPULoad(runnable, procs, samplePeriod)
+	}
+}
+
+func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID, registry *metric.Registry) *GrantCoordinator {
 	coord := &GrantCoordinator{
 		settings:       sgc.settings,
 		useGrantChains: false,
@@ -247,7 +261,39 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		l0CompactedBytes:      sgc.l0CompactedBytes,
 		l0TokensProduced:      sgc.l0TokensProduced,
 	}
+	csg := &compactionSlotGranter{}
+	// NB: this is a duplicate GrantCoordinator. Get rid of it.
+	csg.g.coord = &GrantCoordinator{settings: sgc.settings, knobs: sgc.knobs}
+	csg.g.workKind = KVWork
+	csg.g.requester = &compactionSlotRequester{}
+	csg.g.totalSlots = min(4, runtime.NumCPU()/2)
+	csg.g.coord.granters[KVWork] = &csg.g
+	csa := &compactionSlotAdjuster{
+		settings:         sgc.settings,
+		granter:          csg,
+		minCPUSlots:      1,
+		maxCPUSlots:      max(1, runtime.NumCPU()/2),
+		kvGranter:        kvg,
+		totalSlotsMetric: metric.NewGauge(compactionTotalSlots),
+	}
+	coord.ioLoadListener.compactionSlotAdjuster = csa
+	csg.g.cpuOverload = csa
+	csg.g.usedSlotsMetric = metric.NewGauge(compactionUsedSlots)
+	csg.deniedSlotsMetric = metric.NewCounter(compactionDeniedSlots)
+	registry.AddMetric(csa.totalSlotsMetric)
+	registry.AddMetric(csg.g.usedSlotsMetric)
+	registry.AddMetric(csg.deniedSlotsMetric)
+	csg.g.slotsExhaustedDurationMetric = metric.NewCounter(metric.Metadata{})
+	coord.compactionLimiter = csg
+	sgc.compactionSlotAdjusters = append(sgc.compactionSlotAdjusters, csa)
+
 	return coord
+}
+
+func (sgc *StoreGrantCoordinators) SetCompactionLimiterForEngine(storeID roachpb.StoreID, engine CompactionLimiterSetter) {
+	if gc, ok := sgc.gcMap.Load(storeID); ok {
+		engine.SetCompactionLimiter(gc.GetCompactionLimiter())
+	}
 }
 
 // TryGetQueueForStore returns a WorkQueue for the given storeID, or nil if
@@ -329,7 +375,8 @@ type GrantCoordinator struct {
 	// close().
 	queues [numWorkKinds]requesterClose
 
-	ioLoadListener *ioLoadListener
+	ioLoadListener    *ioLoadListener
+	compactionLimiter pebble.CompactionLimiter
 
 	// See the comment at continueGrantChain that explains how a grant chain
 	// functions and the motivation. When !useGrantChains, grant chains are
@@ -766,6 +813,13 @@ func (coord *GrantCoordinator) testingTryGrant() {
 // the individual GrantCoordinators are hidden.
 func (coord *GrantCoordinator) GetWorkQueue(workKind WorkKind) *WorkQueue {
 	return coord.queues[workKind].(*WorkQueue)
+}
+
+// GetCompactionLimiter returns the compaction limiter for this store
+// GrantCoordinator. The caller is supposed to connect this with the appropriate
+// Engine.
+func (coord *GrantCoordinator) GetCompactionLimiter() pebble.CompactionLimiter {
+	return coord.compactionLimiter
 }
 
 // CPULoad implements CPULoadListener and is called periodically (see

@@ -1129,6 +1129,10 @@ type Engine interface {
 	// needs to be thread-safe as it could be called repeatedly in multiple threads
 	// over a short period of time.
 	RegisterDiskSlowCallback(cb func(info pebble.DiskSlowInfo))
+
+	// SetCompactionLimiter sets a compaction limiter on the engine. The previous
+	// limiter (if any) is unlinked.
+	SetCompactionLimiter(limiter pebble.CompactionLimiter)
 }
 
 // Batch is the interface for batch specific operations.

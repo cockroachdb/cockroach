@@ -4,6 +4,7 @@ go_library(
     name = "admission",
     srcs = [
         "admission.go",
+        "compaction.go",
         "disk_bandwidth.go",
         "elastic_cpu_granter.go",
         "elastic_cpu_work_handle.go",
