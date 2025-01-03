@@ -191,10 +191,9 @@ func (ft *FortificationTracker) LeadSupportUntil(state pb.StateType) hlc.Timesta
 		return ft.leaderMaxSupported.Load()
 	}
 
-	// Compute the lead support using the current configuration and forward the
-	// leaderMaxSupported to avoid regressions when the configuration changes.
-	leadSupportUntil := ft.computeLeadSupportUntil(state)
-	return ft.leaderMaxSupported.Forward(leadSupportUntil)
+	// Forward the leaderMaxSupported to avoid regressions when the configuration
+	// changes.
+	return ft.leaderMaxSupported.Forward(ft.lastComputedLeadSupportUntil)
 }
 
 // UpdateLastComputedLeadSupportUntil updates the field
@@ -227,39 +226,6 @@ func (ft *FortificationTracker) UpdateLastComputedLeadSupportUntil(state pb.Stat
 	})
 	ft.lastComputedLeadSupportUntil = ft.config.Voters.LeadSupportExpiration(supportExpMap)
 	return ft.lastComputedLeadSupportUntil
-}
-
-// computeLeadSupportUntil computes the timestamp until which the leader is
-// guaranteed fortification using the current quorum configuration.
-//
-// Unlike LeadSupportUntil, this computation does not provide a guarantee of
-// monotonicity. Specifically, its result may regress after a configuration
-// change.
-func (ft *FortificationTracker) computeLeadSupportUntil(state pb.StateType) hlc.Timestamp {
-	if state != pb.StateLeader {
-		panic("computeLeadSupportUntil should only be called by the leader")
-	}
-	if len(ft.fortification) == 0 {
-		return hlc.Timestamp{} // fast-path for no fortification
-	}
-
-	// TODO(ibrahim): avoid this map allocation as we're calling LeadSupportUntil
-	// from hot paths.
-	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
-	ft.config.Voters.Visit(func(id pb.PeerID) {
-		if supportEpoch, ok := ft.fortification[id]; ok {
-			curEpoch, curExp := ft.storeLiveness.SupportFrom(id)
-			// NB: We can't assert that supportEpoch <= curEpoch because there may be
-			// a race between a successful MsgFortifyLeaderResp and the store liveness
-			// heartbeat response that lets the leader know the follower's store is
-			// supporting the leader's store at the epoch in the MsgFortifyLeaderResp
-			// message.
-			if curEpoch == supportEpoch {
-				supportExpMap[id] = curExp
-			}
-		}
-	})
-	return ft.config.Voters.LeadSupportExpiration(supportExpMap)
 }
 
 // CanDefortify returns whether the caller can safely[1] de-fortify the term
@@ -396,7 +362,7 @@ func (ft *FortificationTracker) ConfigChangeSafe() bool {
 	// previous configuration, which is reflected in leaderMaxSupported.
 	//
 	// NB: Only run by the leader.
-	return ft.leaderMaxSupported.Load().LessEq(ft.computeLeadSupportUntil(pb.StateLeader))
+	return ft.leaderMaxSupported.Load().LessEq(ft.lastComputedLeadSupportUntil)
 }
 
 // QuorumActive returns whether the leader is currently supported by a quorum or
