@@ -2177,7 +2177,7 @@ func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bo
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 	assert.Equal(t, pb.StateLeader, a.state)
 	if storeLivenessEnabled {
-		assert.Equal(t, hlc.MaxTimestamp, getLeadSupportStatus(a).LeadSupportUntil)
+		assert.Equal(t, hlc.MaxTimestamp, getBasicStatus(a).LeadSupportUntil)
 	}
 
 	nt.isolate(1)
@@ -4533,7 +4533,7 @@ func testPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T, storeLivenessEn
 
 	assert.Equal(t, pb.StateLeader, n1.state)
 	if storeLivenessEnabled {
-		assert.Equal(t, hlc.MaxTimestamp, getLeadSupportStatus(n1).LeadSupportUntil)
+		assert.Equal(t, hlc.MaxTimestamp, getBasicStatus(n1).LeadSupportUntil)
 	}
 
 	if storeLivenessEnabled {
