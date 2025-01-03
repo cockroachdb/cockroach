@@ -46,7 +46,6 @@ go_library(
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/plpgsqltree",
-        "//pkg/sql/sem/plpgsqltree/utils",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
