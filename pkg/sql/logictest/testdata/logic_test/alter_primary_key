@@ -1,3 +1,5 @@
+# LogicTest: !metamorphic-batch-sizes
+
 statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, w INT, INDEX i (x), INDEX i2 (z))
 
