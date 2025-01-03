@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -32,25 +33,132 @@ import (
 
 var redactedAddress = fmt.Sprintf("%s=%s", rpc.RemoteAddressTag, redact.RedactedMarker())
 
-const regexpOfRemoteAddress = "[[:alnum:].:-]+"
+const (
+	regexpOfRemoteAddress   = "[[:alnum:].:-]+"
+	stacksFileName          = "stacks.txt"
+	stacksWithLabelFileName = "stacks_with_labels.txt"
+	heapPprofFileName       = "heap.pprof"
+	lsmFileName             = "lsm.txt"
+	rangesInfoFileName      = "ranges.json"
+	detailsFileName         = "details.json"
+	gossipFileName          = "gossip.json"
+	statusFileName          = "status.json"
+	cpuProfileFileName      = "cpu.pprof"
+	detailsName             = "details"
+	gossipName              = "gossip"
+)
+
+func (zc *debugZipContext) collectPerNodeData(
+	ctx context.Context,
+	nodeDetails serverpb.NodeDetails,
+	nodeStatus *statuspb.NodeStatus,
+	livenessByNodeID nodeLivenesses,
+	redactedNodeDetails serverpb.NodeDetails,
+) error {
+	nodeID := roachpb.NodeID(nodeDetails.NodeID)
+
+	if livenessByNodeID != nil {
+		liveness := livenessByNodeID[nodeID]
+		if liveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+			// Decommissioned + process terminated. Let's not waste time
+			// on this node.
+			//
+			// NB: we still inspect DECOMMISSIONING nodes (marked as
+			// decommissioned but the process is still alive) to get a
+			// chance to collect their log files.
+			//
+			// NB: we still inspect DEAD nodes because even though they
+			// don't heartbeat their liveness record their process might
+			// still be up and willing to deliver some log files.
+			return nil
+		}
+	}
+
+	nodePrinter := zipCtx.newZipReporter(redact.Sprintf("node %d", nodeID))
+	id := fmt.Sprintf("%d", nodeID)
+	prefix := fmt.Sprintf("%s%s/%s", zc.prefix, nodesPrefix, id)
+
+	if !zipCtx.nodes.isIncluded(nodeID) {
+		nodePrinter.info("skipping excluded node")
+		return nil
+	}
+	err := zc.getNodeStatus(nodeStatus, nodePrinter, prefix, redactedNodeDetails)
+	if err != nil {
+		return err
+	}
+
+	err = zc.getInternalTablesPerNode(nodeDetails, nodePrinter, prefix)
+	if err != nil {
+		return err
+	}
+
+	err = zc.getPerNodeMetadata(ctx, prefix, id, nodePrinter)
+	if err != nil {
+		return err
+	}
+
+	err = zc.getStackInformation(ctx, nodePrinter, id, prefix)
+	if err != nil {
+		return err
+	}
+
+	err = zc.getCurrentHeapProfile(ctx, nodePrinter, id, prefix)
+	if err != nil {
+		return err
+	}
+
+	err = zc.getEngineStats(ctx, nodePrinter, id, prefix)
+	if err != nil {
+		return err
+	}
+
+	err = zc.getProfiles(ctx, nodePrinter, id, prefix)
+	if err != nil {
+		return err
+	}
+
+	err = zc.getLogFiles(ctx, nodePrinter, id, prefix)
+	if err != nil {
+		return err
+	}
+
+	err = zc.getRangeInformation(ctx, nodePrinter, id, prefix)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 // makePerNodeZipRequests defines the zipRequests (API requests) that are to be
 // performed once per node.
-func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []zipRequest {
-	return []zipRequest{
-		{
+func makePerNodeZipRequests(
+	zr *zipReporter, prefix, id string, status serverpb.StatusClient,
+) []zipRequest {
+	var zipRequests []zipRequest
+
+	if zipCtx.files.shouldIncludeFile(detailsFileName) {
+		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Redact: zipCtx.redact})
 			},
-			pathName: prefix + "/details",
-		},
-		{
+
+			pathName: path.Join(prefix, detailsName),
+		})
+	} else {
+		zr.info("skipping %s due to file filters", detailsFileName)
+	}
+
+	if zipCtx.files.shouldIncludeFile(gossipFileName) {
+		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
 			},
-			pathName: prefix + "/gossip",
-		},
+			pathName: path.Join(prefix, gossipName),
+		})
+	} else {
+		zr.info("skipping %s due to file filters", gossipFileName)
 	}
+	return zipRequests
 }
 
 // collectCPUProfiles collects CPU profiles in parallel over all nodes
@@ -78,6 +186,10 @@ func (zc *debugZipContext) collectCPUProfiles(
 	}
 
 	zc.clusterPrinter.info("requesting CPU profiles")
+	if !zipCtx.files.shouldIncludeFile(cpuProfileFileName) {
+		zc.clusterPrinter.info("skipping %s due to file filters", cpuProfileFileName)
+		return nil
+	}
 
 	if ni == nil {
 		return errors.AssertionFailedf("nodes list is empty; nothing to do")
@@ -136,7 +248,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 		nodeID := nodeList[i].NodeID
 		prefix := fmt.Sprintf("%s%s/%s", zc.prefix, nodesPrefix, fmt.Sprintf("%d", nodeID))
 		s := zc.clusterPrinter.start(redact.Sprintf("profile for node %d", nodeID))
-		if err := zc.z.createRawOrError(s, prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
+		if err := zc.z.createRawOrError(s, prefix+"/"+cpuProfileFileName, pd.data, pd.err); err != nil {
 			return err
 		}
 	}
@@ -195,7 +307,7 @@ func (zc *debugZipContext) collectFileList(
 		for _, file := range files.Files {
 			ctime := extractTimeFromFileName(file.Name)
 			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
-				nodePrinter.info("skipping excluded %s: %s", fileKind, file.Name)
+				nodePrinter.info("skipping excluded %s: %s due to file filters", fileKind, file.Name)
 				continue
 			}
 
@@ -234,173 +346,45 @@ func (zc *debugZipContext) collectFileList(
 	return nil
 }
 
-func (zc *debugZipContext) collectPerNodeData(
-	ctx context.Context,
-	nodeDetails serverpb.NodeDetails,
-	nodeStatus *statuspb.NodeStatus,
-	livenessByNodeID nodeLivenesses,
-	redactedNodeDetails serverpb.NodeDetails,
+func (zc *debugZipContext) getRangeInformation(
+	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
 ) error {
-	nodeID := roachpb.NodeID(nodeDetails.NodeID)
-
-	if livenessByNodeID != nil {
-		liveness := livenessByNodeID[nodeID]
-		if liveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
-			// Decommissioned + process terminated. Let's not waste time
-			// on this node.
-			//
-			// NB: we still inspect DECOMMISSIONING nodes (marked as
-			// decommissioned but the process is still alive) to get a
-			// chance to collect their log files.
-			//
-			// NB: we still inspect DEAD nodes because even though they
-			// don't heartbeat their liveness record their process might
-			// still be up and willing to deliver some log files.
+	if zipCtx.includeRangeInfo {
+		if !zipCtx.files.shouldIncludeFile(rangesInfoFileName) {
+			nodePrinter.info("skipping %s due to file filters", rangesInfoFileName)
 			return nil
 		}
-	}
-
-	nodePrinter := zipCtx.newZipReporter(redact.Sprintf("node %d", nodeID))
-	id := fmt.Sprintf("%d", nodeID)
-	prefix := fmt.Sprintf("%s%s/%s", zc.prefix, nodesPrefix, id)
-
-	if !zipCtx.nodes.isIncluded(nodeID) {
-		nodePrinter.info("skipping excluded node")
-		return nil
-	}
-	if nodeStatus != nil {
-		// Use nodeStatus to populate the status.json file as it contains more data for a KV node.
-		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", *nodeStatus); err != nil {
+		var ranges *serverpb.RangesResponse
+		s := nodePrinter.start("requesting ranges")
+		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
+			var err error
+			ranges, err = zc.status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id, Redact: zipCtx.redact})
 			return err
-		}
-	} else {
-		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", redactedNodeDetails); err != nil {
-			return err
-		}
-	}
-
-	// Don't use sqlConn because that's only for is the node `debug
-	// zip` was pointed at, but here we want to connect to nodes
-	// individually to grab node- local SQL tables. Try to guess by
-	// replacing the host in the connection string; this may or may
-	// not work and if it doesn't, we let the invalid curSQLConn get
-	// used anyway so that anything that does *not* need it will
-	// still happen.
-	sqlAddr := nodeDetails.SQLAddress
-	if sqlAddr.IsEmpty() {
-		sqlAddr = nodeDetails.Address
-	}
-	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
-	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
-
-	for _, table := range zipInternalTablesPerNode.GetTables() {
-		query, err := zipInternalTablesPerNode.QueryForTable(table, zipCtx.redact)
-		if err != nil {
-			return err
-		}
-		if err := zc.dumpTableDataForZip(nodePrinter, curSQLConn, prefix, table, query); err != nil {
-			return errors.Wrapf(err, "fetching %s", table)
-		}
-	}
-
-	perNodeZipRequests := makePerNodeZipRequests(prefix, id, zc.status)
-
-	for _, r := range perNodeZipRequests {
-		if err := zc.runZipRequest(ctx, nodePrinter, r); err != nil {
-			return err
-		}
-	}
-
-	if zipCtx.includeStacks {
-		var stacksData []byte
-		s := nodePrinter.start("requesting stacks")
-		requestErr := zc.runZipFn(ctx, s,
-			func(ctx context.Context) error {
-				stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
-					NodeId: id,
-					Type:   serverpb.StacksType_GOROUTINE_STACKS,
-				})
-				if err == nil {
-					stacksData = stacks.Data
-				}
+		}); requestErr != nil {
+			if err := zc.z.createError(s, prefix+"/ranges", requestErr); err != nil {
 				return err
+			}
+		} else {
+			s.done()
+			sort.Slice(ranges.Ranges, func(i, j int) bool {
+				return ranges.Ranges[i].State.Desc.RangeID <
+					ranges.Ranges[j].State.Desc.RangeID
 			})
-		if err := zc.z.createRawOrError(s, prefix+"/stacks.txt", stacksData, requestErr); err != nil {
-			return err
-		}
-
-		var stacksDataWithLabels []byte
-		s = nodePrinter.start("requesting stacks with labels")
-		requestErr = zc.runZipFn(ctx, s,
-			func(ctx context.Context) error {
-				stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
-					NodeId: id,
-					Type:   serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1,
-				})
-				if err == nil {
-					stacksDataWithLabels = stacks.Data
-				}
+			s := nodePrinter.start("writing ranges")
+			name := fmt.Sprintf("%s/%s", prefix, rangesInfoFileName)
+			if err := zc.z.createJSON(s, name, ranges.Ranges); err != nil {
 				return err
-			})
-		if zipCtx.redact {
-			stacksDataWithLabels = redactStackTrace(stacksDataWithLabels)
-		}
-		if err := zc.z.createRawOrError(s, prefix+"/stacks_with_labels.txt", stacksDataWithLabels, requestErr); err != nil {
-			return err
-		}
-	} else {
-		nodePrinter.info("Skipping fetching goroutine stacks. Enable via the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag.")
-	}
-
-	var heapData []byte
-	s := nodePrinter.start("requesting heap profile")
-	requestErr := zc.runZipFn(ctx, s,
-		func(ctx context.Context) error {
-			heap, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
-				NodeId: id,
-				Type:   serverpb.ProfileRequest_HEAP,
-			})
-			if err == nil {
-				heapData = heap.Data
 			}
-			return err
-		})
-	if err := zc.z.createRawOrError(s, prefix+"/heap.pprof", heapData, requestErr); err != nil {
-		return err
+		}
 	}
+	return nil
+}
 
-	// Collect storage engine metrics using the same format as the /debug/lsm route.
-	var lsmStats string
-	s = nodePrinter.start("requesting engine stats")
-	requestErr = zc.runZipFn(ctx, s,
-		func(ctx context.Context) error {
-			resp, err := zc.status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
-			if err == nil {
-				lsmStats = debug.FormatLSMStats(resp.StatsByStoreId)
-			}
-			return err
-		})
-	if err := zc.z.createRawOrError(s, prefix+"/lsm.txt", []byte(lsmStats), requestErr); err != nil {
-		return err
-	}
-
-	// Collect all relevant heap profiles.
-	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_HEAP); err != nil {
-		return err
-	}
-
-	// Collect all relevant goroutine dumps.
-	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_GOROUTINES); err != nil {
-		return err
-	}
-
-	// Collect all relevant cpu profiles.
-	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_CPU); err != nil {
-		return err
-	}
-
+func (zc *debugZipContext) getLogFiles(
+	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
+) error {
 	var logs *serverpb.LogFilesListResponse
-	s = nodePrinter.start("requesting log files list")
+	s := nodePrinter.start("requesting log files list")
 	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
@@ -431,7 +415,7 @@ func (zc *debugZipContext) collectPerNodeData(
 			ctime := extractTimeFromFileName(file.Name)
 			mtime := timeutil.Unix(0, file.ModTimeNanos)
 			if !zipCtx.files.isIncluded(file.Name, ctime, mtime) {
-				nodePrinter.info("skipping excluded log file: %s", file.Name)
+				nodePrinter.info("skipping excluded log file: %s due to file filters", file.Name)
 				continue
 			}
 
@@ -507,29 +491,192 @@ func (zc *debugZipContext) collectPerNodeData(
 			}
 		}
 	}
+	return nil
+}
 
-	if zipCtx.includeRangeInfo {
-		var ranges *serverpb.RangesResponse
-		s = nodePrinter.start("requesting ranges")
-		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
-			var err error
-			ranges, err = zc.status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id, Redact: zipCtx.redact})
+func (zc *debugZipContext) getProfiles(
+	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
+) error {
+	// Collect all relevant heap profiles.
+	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_HEAP); err != nil {
+		return err
+	}
+
+	// Collect all relevant goroutine dumps.
+	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_GOROUTINES); err != nil {
+		return err
+	}
+
+	// Collect all relevant cpu profiles.
+	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_CPU); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (zc *debugZipContext) getEngineStats(
+	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
+) error {
+	if !zipCtx.files.shouldIncludeFile(lsmFileName) {
+		nodePrinter.info("skipping %s due to file filters", lsmFileName)
+		return nil
+	}
+	// Collect storage engine metrics using the same format as the /debug/lsm route.
+	var lsmStats string
+	s := nodePrinter.start("requesting engine stats")
+	requestErr := zc.runZipFn(ctx, s,
+		func(ctx context.Context) error {
+			resp, err := zc.status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
+			if err == nil {
+				lsmStats = debug.FormatLSMStats(resp.StatsByStoreId)
+			}
 			return err
-		}); requestErr != nil {
-			if err := zc.z.createError(s, prefix+"/ranges", requestErr); err != nil {
+		})
+	if err := zc.z.createRawOrError(s, prefix+"/"+lsmFileName, []byte(lsmStats), requestErr); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (zc *debugZipContext) getCurrentHeapProfile(
+	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
+) error {
+	if !zipCtx.files.shouldIncludeFile(heapPprofFileName) {
+		nodePrinter.info("skipping %s due to file filters", heapPprofFileName)
+		return nil
+	}
+	var heapData []byte
+	s := nodePrinter.start("requesting heap profile")
+	requestErr := zc.runZipFn(ctx, s,
+		func(ctx context.Context) error {
+			heap, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
+				NodeId: id,
+				Type:   serverpb.ProfileRequest_HEAP,
+			})
+			if err == nil {
+				heapData = heap.Data
+			}
+			return err
+		})
+	if err := zc.z.createRawOrError(s, prefix+"/"+heapPprofFileName, heapData, requestErr); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (zc *debugZipContext) getStackInformation(
+	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
+) error {
+	if zipCtx.includeStacks {
+		if zipCtx.files.shouldIncludeFile(stacksFileName) {
+			var stacksData []byte
+			s := nodePrinter.start("requesting stacks")
+			requestErr := zc.runZipFn(ctx, s,
+				func(ctx context.Context) error {
+					stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
+						NodeId: id,
+						Type:   serverpb.StacksType_GOROUTINE_STACKS,
+					})
+					if err == nil {
+						stacksData = stacks.Data
+					}
+					return err
+				})
+			if err := zc.z.createRawOrError(s, prefix+"/"+stacksFileName, stacksData, requestErr); err != nil {
 				return err
 			}
 		} else {
-			s.done()
-			sort.Slice(ranges.Ranges, func(i, j int) bool {
-				return ranges.Ranges[i].State.Desc.RangeID <
-					ranges.Ranges[j].State.Desc.RangeID
-			})
-			s := nodePrinter.start("writing ranges")
-			name := fmt.Sprintf("%s/ranges.json", prefix)
-			if err := zc.z.createJSON(s, name, ranges.Ranges); err != nil {
+			nodePrinter.info("skipping %s due to file filters", stacksFileName)
+		}
+
+		var stacksDataWithLabels []byte
+		if zipCtx.files.shouldIncludeFile(stacksWithLabelFileName) {
+			s := nodePrinter.start("requesting stacks with labels")
+			requestErr := zc.runZipFn(ctx, s,
+				func(ctx context.Context) error {
+					stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
+						NodeId: id,
+						Type:   serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1,
+					})
+					if err == nil {
+						stacksDataWithLabels = stacks.Data
+					}
+					return err
+				})
+			if zipCtx.redact {
+				stacksDataWithLabels = redactStackTrace(stacksDataWithLabels)
+			}
+			if err := zc.z.createRawOrError(s, prefix+"/"+stacksWithLabelFileName, stacksDataWithLabels, requestErr); err != nil {
 				return err
 			}
+		} else {
+			nodePrinter.info("skipping %s due to file filters", stacksWithLabelFileName)
+		}
+	} else {
+		nodePrinter.info("Skipping fetching goroutine stacks. Enable via the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag.")
+	}
+	return nil
+}
+
+func (zc *debugZipContext) getPerNodeMetadata(
+	ctx context.Context, prefix string, id string, nodePrinter *zipReporter,
+) error {
+	perNodeZipRequests := makePerNodeZipRequests(nodePrinter, prefix, id, zc.status)
+	for _, r := range perNodeZipRequests {
+		if err := zc.runZipRequest(ctx, nodePrinter, r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (zc *debugZipContext) getInternalTablesPerNode(
+	nodeDetails serverpb.NodeDetails, nodePrinter *zipReporter, prefix string,
+) error {
+	// Don't use sqlConn because that's only for is the node `debug
+	// zip` was pointed at, but here we want to connect to nodes
+	// individually to grab node- local SQL tables. Try to guess by
+	// replacing the host in the connection string; this may or may
+	// not work and if it doesn't, we let the invalid curSQLConn get
+	// used anyway so that anything that does *not* need it will
+	// still happen.
+	sqlAddr := nodeDetails.SQLAddress
+	if sqlAddr.IsEmpty() {
+		sqlAddr = nodeDetails.Address
+	}
+	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
+	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
+
+	for _, table := range zipInternalTablesPerNode.GetTables() {
+		query, err := zipInternalTablesPerNode.QueryForTable(table, zipCtx.redact)
+		if err != nil {
+			return err
+		}
+		if err := zc.dumpTableDataForZip(nodePrinter, curSQLConn, prefix, table, query); err != nil {
+			return errors.Wrapf(err, "fetching %s", table)
+		}
+	}
+	return nil
+}
+
+func (zc *debugZipContext) getNodeStatus(
+	nodeStatus *statuspb.NodeStatus,
+	nodePrinter *zipReporter,
+	prefix string,
+	redactedNodeDetails serverpb.NodeDetails,
+) error {
+	if !zipCtx.files.shouldIncludeFile(statusFileName) {
+		nodePrinter.info("skipping %s due to file filters", statusFileName)
+		return nil
+	}
+	if nodeStatus != nil {
+		// Use nodeStatus to populate the status.json file as it contains more data for a KV node.
+		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/"+statusFileName, *nodeStatus); err != nil {
+			return err
+		}
+	} else {
+		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/"+statusFileName, redactedNodeDetails); err != nil {
+			return err
 		}
 	}
 	return nil
