@@ -312,7 +312,7 @@ func (r *Registry) loadJobForResume(
 	progress := &jobspb.Progress{}
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job.InfoStorage(txn)
-		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
+		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx, "loadForResume")
 		if err != nil {
 			return err
 		}
@@ -323,7 +323,7 @@ func (r *Registry) loadJobForResume(
 			return err
 		}
 
-		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
+		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx, "loadForResume")
 		if err != nil {
 			return err
 		}
