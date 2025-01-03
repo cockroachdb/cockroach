@@ -21,8 +21,10 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lestrrat_go_jwx//jwk",
         "@com_github_lestrrat_go_jwx//jwt",
+        "@org_golang_x_exp//maps",
     ],
 )
 
@@ -55,6 +57,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lestrrat_go_jwx//jwa",
         "@com_github_lestrrat_go_jwx//jwk",
         "@com_github_lestrrat_go_jwx//jwt",
