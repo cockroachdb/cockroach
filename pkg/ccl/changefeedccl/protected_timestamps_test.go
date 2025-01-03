@@ -454,7 +454,22 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	// spanconfigstore.store, spanconfigreconciler.reconciler, kvserver.mvcc_gc_queue
 	require.NoError(t, log.SetVModule("store=2,reconciler=2,mvcc_gc_queue=2"))
 
-	s, db, stopServer := startTestFullServer(t, feedTestOptions{})
+	lastReconcilerCheckpoint := atomic.Value{}
+	lastReconcilerCheckpoint.Store(hlc.Timestamp{})
+	now := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+	s, db, stopServer := startTestFullServer(t, feedTestOptions{
+		knobsFn: func(knobs *base.TestingKnobs) {
+			if knobs.SpanConfig == nil {
+				knobs.SpanConfig = &spanconfig.TestingKnobs{}
+			}
+			knobs.SpanConfig.(*spanconfig.TestingKnobs).JobOnCheckpointInterceptor = func(lastCheckpoint hlc.Timestamp) error {
+				t.Logf("reconciler checkpoint %s (%s)", lastCheckpoint, now.GoTime().Sub(lastCheckpoint.GoTime()))
+				lastReconcilerCheckpoint.Store(lastCheckpoint)
+				return nil
+			}
+
+		},
+	})
 	defer stopServer()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -464,17 +479,6 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	sqlDB.Exec(t, `GRANT admin TO test`)
 	ts := s.Clock().Now()
 	ctx := context.Background()
-
-	lastReconcilerCheckpoint := atomic.Value{}
-	lastReconcilerCheckpoint.Store(hlc.Timestamp{})
-	if s.TestingKnobs().SpanConfig == nil {
-		s.TestingKnobs().SpanConfig = &spanconfig.TestingKnobs{}
-	}
-	s.TestingKnobs().SpanConfig.(*spanconfig.TestingKnobs).JobOnCheckpointInterceptor = func(lastCheckpoint hlc.Timestamp) error {
-		t.Logf("reconciler checkpoint %s", lastCheckpoint)
-		lastReconcilerCheckpoint.Store(lastCheckpoint)
-		return nil
-	}
 
 	fooDescr := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "d", "foo")
 	var targets changefeedbase.Targets
@@ -544,12 +548,12 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 
 	// wait for the spanconfigs to be reconciled
 	t.Logf("waiting for spanconfigs to be reconciled")
-	now := hlc.Timestamp{WallTime: time.Now().UnixNano()}
 	testutils.SucceedsSoon(t, func() error {
 		lastCheckpoint := lastReconcilerCheckpoint.Load().(hlc.Timestamp)
 		if lastCheckpoint.Less(now) {
 			return errors.Errorf("last checkpoint %s is not less than now %s", lastCheckpoint, now)
 		}
+		t.Logf("last checkpoint ok %s", lastCheckpoint)
 		return nil
 	})
 
