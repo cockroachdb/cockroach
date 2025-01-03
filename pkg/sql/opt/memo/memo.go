@@ -200,6 +200,7 @@ type Memo struct {
 	pushLimitIntoProjectFilteredScan           bool
 	unsafeAllowTriggersModifyingCascades       bool
 	legacyVarcharTyping                        bool
+	internal                                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -291,6 +292,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		pushLimitIntoProjectFilteredScan:           evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan,
 		unsafeAllowTriggersModifyingCascades:       evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades,
 		legacyVarcharTyping:                        evalCtx.SessionData().LegacyVarcharTyping,
+		internal:                                   evalCtx.SessionData().Internal,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -460,6 +462,7 @@ func (m *Memo) IsStale(
 		m.pushLimitIntoProjectFilteredScan != evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan ||
 		m.unsafeAllowTriggersModifyingCascades != evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades ||
 		m.legacyVarcharTyping != evalCtx.SessionData().LegacyVarcharTyping ||
+		m.internal != evalCtx.SessionData().Internal ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

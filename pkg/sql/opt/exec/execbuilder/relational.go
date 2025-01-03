@@ -604,6 +604,7 @@ func (b *Builder) scanParams(
 			err = pgerror.Newf(pgcode.WrongObjectType,
 				"index \"%s\" cannot be used for this query", idx.Name())
 			if b.evalCtx.SessionData().DisallowFullTableScans &&
+				!b.evalCtx.SessionData().Internal &&
 				(b.flags.IsSet(exec.PlanFlagContainsLargeFullTableScan) ||
 					b.flags.IsSet(exec.PlanFlagContainsLargeFullIndexScan)) {
 				// TODO(#123783): this code might need an adjustment for virtual

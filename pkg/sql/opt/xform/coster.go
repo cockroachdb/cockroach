@@ -776,7 +776,8 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 
 	stats := scan.Relational().Statistics()
 	rowCount := stats.RowCount
-	if isUnfiltered && c.evalCtx != nil && c.evalCtx.SessionData().DisallowFullTableScans {
+	if isUnfiltered && c.evalCtx != nil && c.evalCtx.SessionData().DisallowFullTableScans &&
+		!c.evalCtx.SessionData().Internal {
 		if !scan.IsVirtualTable(c.mem.Metadata()) {
 			// Don't apply the huge cost to full scans of virtual tables since
 			// we don't reject them anyway. In other words, we would only
