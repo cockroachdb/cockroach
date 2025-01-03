@@ -452,7 +452,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// spanconfigstore.store, spanconfigreconciler.reconciler, kvserver.mvcc_gc_queue
-	require.NoError(t, log.SetVModule("store=2,reconciler=2,mvcc_gc_queue=2"))
+	require.NoError(t, log.SetVModule("spanconfigstore=2,store=2,reconciler=2,mvcc_gc_queue=2"))
 
 	lastReconcilerCheckpoint := atomic.Value{}
 	lastReconcilerCheckpoint.Store(hlc.Timestamp{})
@@ -529,7 +529,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 		var rangeID int64
 		row.Scan(&rangeID)
 		refreshPTSReaderCache(s.Clock().Now(), tableName, databaseName)
-		t.Logf("enqueuing range %d for mvccGC", rangeID)
+		t.Logf("enqueuing range %d (table %s.%s) for mvccGC", rangeID, databaseName, tableName)
 		sqlDB.Exec(t, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID)
 	}
 
