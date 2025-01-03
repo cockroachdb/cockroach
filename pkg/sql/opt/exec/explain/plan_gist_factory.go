@@ -120,13 +120,30 @@ func (f *PlanGistFactory) updateHash(data []byte) {
 }
 
 // NewPlanGistFactory creates a new PlanGistFactory.
-func NewPlanGistFactory(wrappedFactory exec.Factory) *PlanGistFactory {
+func NewPlanGistFactory(factory exec.Factory) *PlanGistFactory {
 	f := new(PlanGistFactory)
-	f.wrappedFactory = wrappedFactory
+	f.Init(factory)
+	return f
+}
+
+// Init initializes a PlanGistFactory.
+func (f *PlanGistFactory) Init(factory exec.Factory) {
+	*f = PlanGistFactory{
+		wrappedFactory: factory,
+	}
 	f.enc.Init(b64.StdEncoding)
 	f.hash.Init()
 	f.encodeInt(gistVersion)
-	return f
+}
+
+// Initialized returns true if the PlanGistFactory has been initialized.
+func (f *PlanGistFactory) Initialized() bool {
+	return f.wrappedFactory != nil
+}
+
+// Reset resets the PlanGistFactory, clearing references to the wrapped factory.
+func (f *PlanGistFactory) Reset() {
+	*f = PlanGistFactory{}
 }
 
 // ConstructPlan delegates to the wrapped factory.
