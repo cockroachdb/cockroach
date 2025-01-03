@@ -95,9 +95,7 @@ type PlanGistFactory struct {
 	// write the id to buf and the "string" to hash. This allows the hash to be
 	// id agnostic (ie hash's will be stable across plans from different
 	// databases with different DDL history).
-	enc base64.Encoder
-	// buf is a scratch bytes buffer used during encoding.
-	buf  bytes.Buffer
+	enc  base64.Encoder
 	hash util.FNV64
 }
 
@@ -389,13 +387,9 @@ func (d *planGistDecoder) decodeBool() bool {
 }
 
 func (f *PlanGistFactory) encodeFastIntSet(s intsets.Fast) {
-	f.buf.Reset()
-	if err := s.Encode(&f.buf); err != nil {
+	if err := s.EncodeBase64(&f.enc, &f.hash); err != nil {
 		panic(err)
 	}
-	b := f.buf.Bytes()
-	f.enc.Write(b)
-	f.updateHash(b)
 }
 
 // TODO: enable this or remove it...
