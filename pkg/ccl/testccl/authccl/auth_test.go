@@ -48,7 +48,6 @@ import (
 )
 
 // The code in this file takes inspiration from pgwire/auth_test.go
-
 // TestAuthenticationAndHBARules exercises the authentication code
 // using datadriven testing.
 //
@@ -109,7 +108,6 @@ import (
 func TestAuthenticationAndHBARules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderRace(t, "takes >1min under race")
-
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		jwtRunTest(t, insecure)
 	})
@@ -153,12 +151,10 @@ func jwtRunTest(t *testing.T, insecure bool) {
 
 		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)
 		defer cleanup()
-
 		// We really need to have the logs go to files, so that -show-logs
 		// does not break the "authlog" directives.
 		sc := log.ScopeWithoutShowLogs(t)
 		defer sc.Close(t)
-
 		// Enable logging channels.
 		log.TestingResetActive()
 		cfg := logconfig.DefaultConfig()
@@ -231,7 +227,7 @@ func jwtRunTest(t *testing.T, insecure bool) {
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting issuers: %d", len(a.Vals))
 							}
-							jwtauthccl.JWTAuthIssuers.Override(ctx, sv, a.Vals[0])
+							jwtauthccl.JWTAuthIssuersConfig.Override(ctx, sv, a.Vals[0])
 						case "jwks":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting jwks: %d", len(a.Vals))
@@ -289,21 +285,18 @@ func jwtRunTest(t *testing.T, insecure bool) {
 						// Unix sockets not supported; assume the test succeeded.
 						return td.Expected, nil
 					}
-
 					// Prepare a connection string using the server's default.
 					// What is the user requested by the test?
 					user := username.RootUser
 					if td.HasArg("user") {
 						td.ScanArgs(t, "user", &user)
 					}
-
 					// Allow connections for non-root, non-testuser to force the
 					// use of client certificates.
 					forceCerts := false
 					if td.HasArg("force_certs") {
 						forceCerts = true
 					}
-
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := s.PGUrl(
@@ -311,7 +304,6 @@ func jwtRunTest(t *testing.T, insecure bool) {
 						serverutils.ClientCerts(forceCerts || user == username.RootUser || user == username.TestUser),
 					)
 					defer cleanupFn()
-
 					var host, port string
 					if td.Cmd == "connect" {
 						host, port, err = net.SplitHostPort(s.AdvSQLAddr())
@@ -326,7 +318,6 @@ func jwtRunTest(t *testing.T, insecure bool) {
 					if err != nil {
 						t.Fatal(err)
 					}
-
 					// Here we make use of the fact that pq accepts connection
 					// strings using the alternate postgres configuration format,
 					// consisting of k=v pairs separated by spaces.
