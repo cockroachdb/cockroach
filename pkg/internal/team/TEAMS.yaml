@@ -54,6 +54,9 @@ cockroachdb/spatial:
 cockroachdb/dev-inf:
   triage_column_id: 10210759
   label: T-dev-inf
+cockroachdb/drp-eng:
+  triage_column_id: 14041337
+  label: T-drpeng
 cockroachdb/multiregion:
   triage_column_id: 11926170
   label: T-multiregion
