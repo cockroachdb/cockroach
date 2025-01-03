@@ -3001,6 +3001,10 @@ func (es *ErrorState) Unwrap() error {
 	return es.cause
 }
 
+func (es *ErrorState) Cause() error {
+	return es.cause
+}
+
 func (es *ErrorState) Error() string {
 	return es.cause.Error()
 }
