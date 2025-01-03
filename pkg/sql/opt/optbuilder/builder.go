@@ -364,6 +364,11 @@ func (b *Builder) buildStmt(
 		case *tree.Insert, *tree.Update, *tree.Delete:
 		case *tree.Call:
 		default:
+			if tree.CanModifySchema(stmt) {
+				panic(unimplemented.NewWithIssuef(110080,
+					"%s usage inside a function definition is not supported", stmt.StatementTag(),
+				))
+			}
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
 	}
