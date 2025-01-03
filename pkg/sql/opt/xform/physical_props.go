@@ -85,6 +85,7 @@ func BuildChildPhysicalProps(
 
 	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
 	childProps.Distribution = distribution.BuildChildRequired(parent, &parentProps.Distribution, nth)
+	// needs to be aware of the current operator, I think, to skip over projection and explain
 	childProps.Pheromone = parentProps.Pheromone.Child(nth)
 
 	switch parent.Op() {

@@ -11,14 +11,20 @@ import (
 )
 
 func CanProvide(expr memo.RelExpr, required physical.Pheromone) bool {
-	if required.Any() {
-		return true
-	}
-	if expr.Op() != required.Op {
-		return false
-	}
-	if required.Children != nil && expr.ChildCount() != len(required.Children) {
-		return false
-	}
+
+	// can always provide, and then we check matching in the coster, like a hint
+
+	/*
+		if required.Any() {
+			return true
+		}
+		if expr.Op() != required.Op {
+			return false
+		}
+		if required.Children != nil && expr.ChildCount() != len(required.Children) {
+			return false
+		}
+	*/
+
 	return true
 }

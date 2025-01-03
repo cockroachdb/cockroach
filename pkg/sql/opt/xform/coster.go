@@ -7,6 +7,7 @@ package xform
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 
@@ -627,6 +628,11 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	// all else being equal.
 	if candidate.Relational().Cardinality.IsUnbounded() {
 		cost.C += cpuCostFactor
+	}
+
+	if !required.Pheromone.Any() && candidate.Op() != required.Pheromone.Op {
+		fmt.Println("setting pheromone mismatch penalty")
+		cost.Flags.PheromoneMismatchPenalty = true
 	}
 
 	if !cost.Less(memo.MaxCost) {

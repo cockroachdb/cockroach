@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cycle"
@@ -91,7 +92,21 @@ func (mf *memoFormatter) format() string {
 			c := tpChild.Childf("%s", s.required)
 			mf.formatBest(s.best, s.required)
 			c.Childf("best: %s", mf.buf.String())
-			c.Childf("cost: %.2f", s.cost.C)
+			c.Childf("cost: %.9g", s.cost.C)
+			if !s.cost.Flags.Empty() {
+				var b strings.Builder
+				b.WriteString("cost-flags:")
+				if s.cost.Flags.FullScanPenalty {
+					b.WriteString(" full-scan-penalty")
+				}
+				if s.cost.Flags.PheromoneMismatchPenalty {
+					b.WriteString(" pheromone-mismatch-penalty")
+				}
+				if s.cost.Flags.HugeCostPenalty {
+					b.WriteString(" huge-cost-penalty")
+				}
+				c.Child(b.String())
+			}
 		}
 	}
 
