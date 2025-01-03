@@ -114,7 +114,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 
 	checkpointingDisabled := false
 	shouldSkipRetry := false
-	var onCheckpointInterceptor func() error
+	var onCheckpointInterceptor func(lastCheckpoint hlc.Timestamp) error
 
 	retryOpts := retry.Options{
 		InitialBackoff: 5 * time.Second,
@@ -140,7 +140,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		started := timeutil.Now()
 		if err := rc.Reconcile(ctx, lastCheckpoint, r.job.Session(), func() error {
 			if onCheckpointInterceptor != nil {
-				if err := onCheckpointInterceptor(); err != nil {
+				if err := onCheckpointInterceptor(lastCheckpoint); err != nil {
 					return err
 				}
 			}
