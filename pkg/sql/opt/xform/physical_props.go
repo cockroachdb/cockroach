@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/pheromone"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,8 +36,7 @@ func CanProvidePhysicalProps(
 	// need to check for that.
 	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
 	canProvideDistribution := e.Op() == opt.DistributeOp || distribution.CanProvide(ctx, evalCtx, e, &required.Distribution)
-	canProvidePheromone := pheromone.CanProvide(e, required.Pheromone)
-	return canProvideOrdering && canProvideDistribution && canProvidePheromone
+	return canProvideOrdering && canProvideDistribution
 }
 
 // BuildChildPhysicalProps returns the set of physical properties required of
