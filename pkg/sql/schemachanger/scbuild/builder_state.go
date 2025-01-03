@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -1812,7 +1811,7 @@ func (b *builderState) replaceSeqNamesWithIDs(
 		}
 		stmts = plstmt.AST
 
-		v := utils.SQLStmtVisitor{Fn: replaceSeqFunc}
+		v := plpgsqltree.SQLStmtVisitor{Fn: replaceSeqFunc}
 		newStmt := plpgsqltree.Walk(&v, stmts)
 		fmtCtx.FormatNode(newStmt)
 	default:
@@ -1928,12 +1927,12 @@ func (b *builderState) serializeUserDefinedTypes(
 		}
 		stmts = plstmt.AST
 
-		v := utils.SQLStmtVisitor{Fn: replaceFunc}
+		v := plpgsqltree.SQLStmtVisitor{Fn: replaceFunc}
 		newStmt := plpgsqltree.Walk(&v, stmts)
 		// Some PLpgSQL statements (i.e., declarations), may contain type
 		// annotations containing the UDT. We need to walk the AST to replace them,
 		// too.
-		v2 := utils.TypeRefVisitor{Fn: replaceTypeFunc}
+		v2 := plpgsqltree.TypeRefVisitor{Fn: replaceTypeFunc}
 		newStmt = plpgsqltree.Walk(&v2, newStmt)
 		fmtCtx.FormatNode(newStmt)
 	default:
