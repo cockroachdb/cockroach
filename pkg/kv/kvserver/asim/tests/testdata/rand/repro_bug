@@ -1,0 +1,418 @@
+rand_cluster cluster_gen_type=multi_region
+----
+
+change_static_option ranges=20
+----
+
+rand_events type=cycle_via_interesting_cases duration_to_assert_on_event=10m
+----
+
+eval duration=5h num_iterations=1 verbose=(events,validate)
+----
+----
+----------------------------------
+sample1: start running
+54 events executed:
+	executed at: 2022-03-21 11:00:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 num_voters:1 
+	executed at: 2022-03-21 11:10:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 11:10:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:3 constraints:<key:"region" value:"a" > > constraints:<num_replicas:1 constraints:<key:"region" value:"b" > > constraints:<num_replicas:1 constraints:<key:"region" value:"c" > > voter_constraints:<num_replicas:3 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:1 constraints:<key:"region" value:"b" > > voter_constraints:<num_replicas:1 constraints:<key:"region" value:"c" > > 
+	executed at: 2022-03-21 11:20:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 11:20:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 num_voters:2 constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > 
+	executed at: 2022-03-21 11:30:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 11:30:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 num_voters:2 constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > 
+	executed at: 2022-03-21 11:40:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 11:40:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:3 constraints:<num_replicas:3 constraints:<key:"zone" value:"a3" > > voter_constraints:<num_replicas:3 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > 
+	executed at: 2022-03-21 11:50:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=24 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1: [a: 3 voters, a3: 2 voters, a4: 1 voter]
+  r2: [a: 3 voters, a3: 2 voters, a4: 1 voter]
+  r3: [a: 3 voters, a3: 2 voters, a4: 1 voter]
+... and 21 more
+ 	satisfiable:
+validation result:
+	1.zone:
+		a2: 2 voters
+		a3: 3 non_voters
+	2.region:
+		a: 3 voters, 2 non_voters
+	3.cluster: 3 voters, 3 non_voters
+constraint:
+replicas=6
+voters=3
+constraints=[+zone=a3:3]
+voter_constraints=[+region=a:3 +zone=a2:2]
+
+
+	executed at: 2022-03-21 11:50:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:15 num_voters:6 constraints:<num_replicas:11 constraints:<key:"region" value:"a" > > constraints:<num_replicas:3 constraints:<key:"region" value:"c" > > constraints:<num_replicas:10 constraints:<key:"zone" value:"a4" > > voter_constraints:<num_replicas:3 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"a3" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"b1" > > 
+	executed at: 2022-03-21 12:00:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=28 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1: [a: 3 voters, a2: 1 voter, a3: 1 voter, a4: 1 voter]
+  r1: [a: 3 voters, a2: 1 voter, a3: 1 voter, a4: 1 voter]
+  r2: [a: 3 voters, a4: 3 voters]
+... and 25 more
+ 	satisfiable:
+validation result:
+	1.zone:
+		a3: 1 voter
+		a4: 10 non_voters
+		b1: 1 voter
+	2.region:
+		a: 3 voters, 8 non_voters
+		b: 1 voter
+		c: 3 non_voters
+	3.cluster: 6 voters, 9 non_voters
+constraint:
+replicas=15
+voters=6
+constraints=[+region=a:11 +region=c:3 +zone=a4:10]
+voter_constraints=[+region=a:3 +zone=a3:1 +zone=b1:1]
+
+
+	executed at: 2022-03-21 12:00:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > 
+	executed at: 2022-03-21 12:10:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 12:10:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:28 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > 
+	executed at: 2022-03-21 12:20:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 12:20:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:28 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a1" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > constraints:<num_replicas:3 constraints:<key:"zone" value:"a3" > > constraints:<num_replicas:10 constraints:<key:"zone" value:"a4" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > constraints:<num_replicas:3 constraints:<key:"zone" value:"c1" > > constraints:<num_replicas:3 constraints:<key:"zone" value:"c2" > > constraints:<num_replicas:4 constraints:<key:"zone" value:"c3" > > voter_constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > voter_constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"a1" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"a3" > > voter_constraints:<num_replicas:10 constraints:<key:"zone" value:"a4" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"c1" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"c2" > > voter_constraints:<num_replicas:4 constraints:<key:"zone" value:"c3" > > 
+	executed at: 2022-03-21 12:30:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 12:30:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:25 constraints:<num_replicas:2 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"a" > > 
+	executed at: 2022-03-21 12:40:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 12:40:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:27 num_voters:16 voter_constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > 
+	executed at: 2022-03-21 12:50:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 12:50:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:16 num_voters:3 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a1" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"a4" > > 
+	executed at: 2022-03-21 13:00:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 13:00:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:3 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"c" > > 
+	executed at: 2022-03-21 13:10:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 13:10:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:5 constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"a3" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"b1" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"c1" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"a3" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"b1" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"c1" > > 
+	executed at: 2022-03-21 13:20:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 13:20:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:5 constraints:<num_replicas:1 constraints:<key:"zone" value:"a2" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a3" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"b1" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"c1" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > 
+	executed at: 2022-03-21 13:30:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 13:30:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:4 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"a" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a1" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > 
+	executed at: 2022-03-21 13:40:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 13:40:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > constraints:<constraints:<key:"zone" value:"a1" > > 
+	executed at: 2022-03-21 13:50:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=20 violating=0 lease-violating=0 lease-less-preferred=0
+over replicated:
+  r1: [a: 1 voter 1 non-voter, a1: 1 voter, a4: 1 non-voter]
+  r2: [a: 1 voter, a1: 1 voter, c: 1 non-voter, c2: 1 non-voter]
+  r3: [a: 1 voter 1 non-voter, a1: 1 voter, a4: 1 non-voter]
+... and 17 more
+ 	satisfiable:
+validation result:
+	1.zone:
+	2.region:
+	3.cluster: 
+constraint:
+replicas=0
+voters=0
+constraints=[+zone=a1]
+voter_constraints=[]
+
+
+	executed at: 2022-03-21 13:50:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:28 constraints:<num_replicas:17 constraints:<key:"region" value:"a" > > constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > 
+	executed at: 2022-03-21 14:00:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1: [a: 2 voters, a1: 1 voter, a4: 1 voter, c: 1 voter, c1: 1 voter]
+  r2: [a: 2 voters, a1: 1 voter, a4: 1 voter, c: 1 voter, c2: 1 voter]
+  r3: [a: 3 voters, a1: 1 voter, a4: 2 voters]
+... and 17 more
+ 	unsatisfiable:
+validation result:
+	1.zone:
+	2.region:
+	3.cluster: 
+failed to satisfy constraints for region a
+constraint:
+replicas=28
+voters=28
+constraints=[+region=a:17 +region=b:2 +region=c:10]
+voter_constraints=[]
+
+
+	executed at: 2022-03-21 14:00:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:16 num_voters:3 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"c" > > 
+	executed at: 2022-03-21 14:10:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=1, over=0 violating=22 lease-violating=0 lease-less-preferred=0
+under replicated:
+  r12: [a: 2 voters, a1: 1 voter, a4: 1 voter, c: 1 voter, c2: 1 voter]violating constraints:
+  r1: [a: 3 voters, a4: 3 voters]
+  r2: [a: 3 voters, a2: 1 voter, a4: 2 voters]
+  r3: [a: 3 voters, a3: 2 voters, a4: 1 voter]
+... and 19 more
+ 	unsatisfiable:
+validation result:
+	1.zone:
+	2.region:
+		a: 16 non_voters
+		c: 2 voters
+	3.cluster: 3 voters, 15 non_voters
+failed to satisfy constraints for cluster
+constraint:
+replicas=16
+voters=3
+constraints=[+region=a:16]
+voter_constraints=[+region=c:2]
+
+
+	executed at: 2022-03-21 14:10:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:1 num_voters:2 
+	executed at: 2022-03-21 14:20:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+	executed at: 2022-03-21 14:20:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:2 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > 
+	executed at: 2022-03-21 14:30:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 more
+ 	unsatisfiable:
+validation result:
+	1.zone:
+	2.region:
+		a: 16 non_voters
+	3.cluster: 2 voters, 14 non_voters
+failed to satisfy constraints for cluster
+constraint:
+replicas=6
+voters=2
+constraints=[+region=a:16]
+voter_constraints=[]
+
+
+	executed at: 2022-03-21 14:30:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:20 num_voters:2 voter_constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > 
+	executed at: 2022-03-21 14:40:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 more
+ 	unsatisfiable:
+validation result:
+	1.zone:
+	2.region:
+		a: 16 voters
+	3.cluster: 16 voters, 4 non_voters
+failed to satisfy constraints for cluster
+constraint:
+replicas=20
+voters=2
+constraints=[]
+voter_constraints=[+region=a:16]
+
+
+	executed at: 2022-03-21 14:40:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<constraints:<key:"region" value:"a" > > voter_constraints:<constraints:<key:"region" value:"b" > > 
+	executed at: 2022-03-21 14:50:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=20, over=20 violating=20 lease-violating=0 lease-less-preferred=0
+under replicated:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 moreover replicated:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 moreviolating constraints:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 more
+ 	unsatisfiable:
+validation result:
+	1.zone:
+	2.region:
+		a: 5 non_voters
+	3.cluster: 5 non_voters
+failed to satisfy constraints for region b
+constraint:
+replicas=5
+voters=3
+constraints=[+region=a]
+voter_constraints=[+region=b]
+
+
+	executed at: 2022-03-21 14:50:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 constraints:<constraints:<key:"az" value:"a" > > 
+	executed at: 2022-03-21 15:00:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=20, over=20 violating=20 lease-violating=0 lease-less-preferred=0
+under replicated:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 moreover replicated:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 moreviolating constraints:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 more
+ 	unsatisfiable:
+validation result:
+	1.zone:
+	2.region:
+	3.cluster: 
+only zone and region constraint keys are supported
+constraint:
+replicas=5
+voters=0
+constraints=[+az=a]
+voter_constraints=[]
+
+
+	executed at: 2022-03-21 15:00:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:1 voter_constraints:<num_replicas:1 constraints:<key:"region" value:"e" > > 
+	executed at: 2022-03-21 15:10:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1: [a: 1 voter 1 non-voter, a4: 1 voter 1 non-voter, b: 1 non-voter, b1: 1 non-voter]
+  r2: [a: 1 voter 1 non-voter, a4: 1 voter 1 non-voter, b: 1 non-voter, b1: 1 non-voter]
+  r3: [a: 1 voter 1 non-voter, a3: 1 non-voter, a4: 1 voter, c: 1 non-voter, c2: 1 non-voter]
+... and 17 more
+ 	unsatisfiable:
+validation result:
+	1.zone:
+	2.region:
+	3.cluster: 
+region constraint value e is not found in the cluster set up
+constraint:
+replicas=5
+voters=1
+constraints=[]
+voter_constraints=[+region=e:1]
+
+
+	executed at: 2022-03-21 15:10:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 constraints:<num_replicas:1 constraints:<key:"zone" value:"CA" > > 
+	executed at: 2022-03-21 15:20:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1: [a: 2 voters, a4: 2 voters, b: 1 voter, b1: 1 voter]
+  r2: [a: 2 voters, a3: 1 voter, a4: 1 voter, b: 1 voter, b1: 1 voter]
+  r3: [a: 1 voter, a4: 1 voter, c: 2 voters, c1: 1 voter, c3: 1 voter]
+... and 17 more
+ 	unsatisfiable:
+validation result:
+	1.zone:
+	2.region:
+	3.cluster: 
+zone constraint value CA is not found in the cluster set up
+constraint:
+replicas=5
+voters=0
+constraints=[+zone=CA:1]
+voter_constraints=[]
+
+
+	executed at: 2022-03-21 15:20:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 constraints:<num_replicas:1 constraints:<type:PROHIBITED key:"region" value:"b" > > 
+	executed at: 2022-03-21 15:30:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			passed
+sample1: pass
+----------------------------------
+----
+----
