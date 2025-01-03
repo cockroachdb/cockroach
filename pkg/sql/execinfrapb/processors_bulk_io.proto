@@ -537,3 +537,34 @@ message LogicalReplicationWriterSpec {
 
     // Next ID: 13.
 }
+
+message LogicalReplicationOfflineScanSpec {
+    // JobID of the job that ran the replicationWriterProcessor.
+    optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+
+    // StreamID is the ID of the stream (which is shared across the producer and consumer).
+    optional uint64 stream_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "StreamID"];
+
+    // PartitionSpec is the source partition this processor will create a
+    // subscription for.
+    optional StreamIngestionPartitionSpec partition_spec = 3 [(gogoproto.nullable) = false];
+
+    // InitialScanTimestamp is the timestamp at which the partition will run the
+    // initial rangefeed scan before replicating further changes to the target
+    // spans. This timestamp is always non-empty, but a partition will only run an
+    // initial scan if no progress has been recorded prior to the current
+    // resumption of the replication job. Otherwise, all spans will start
+    // ingesting data from the PreviousReplicatedTimestamp described above.
+    optional util.hlc.Timestamp initial_scan_timestamp = 4 [(gogoproto.nullable) = false];
+
+    // StreamAddress locate the stream so that a stream client can be initialized.
+    optional string stream_address = 5 [(gogoproto.nullable) = false];
+
+    // Checkpoint stores a set of resolved spans denoting completed progress.
+    optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 6 [(gogoproto.nullable) = false];
+
+    repeated TableRekey rekey = 7 [(gogoproto.nullable) = false];
+
+    optional string metrics_label = 8 [(gogoproto.nullable) = false];
+
+}

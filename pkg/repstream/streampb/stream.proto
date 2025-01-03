@@ -164,6 +164,7 @@ message LogicalReplicationPlanRequest {
     repeated int32 table_ids = 1 [(gogoproto.customname) = "TableIDs"];
     // PlanAsOf is the time as of which the plan should be produced.
     util.hlc.Timestamp plan_as_of = 2 [(gogoproto.nullable) = false];
+    bool use_table_span = 3;
 }
 
 // SourcePartition contains per partition information for a replication plan.

@@ -389,6 +389,10 @@ func TestCreateTables(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	sqlA := sqlDBs[0]
+	// Ensure the offline scan replicates index spans.
+	sqlA.Exec(t, "CREATE INDEX idx ON tab(payload)")
+
+	// Insert a row that should replicate via the initial scan.
 	sqlA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 	aURL, cleanup := srv.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
@@ -399,8 +403,16 @@ func TestCreateTables(t *testing.T) {
 	var jobID jobspb.JobID
 	sqlB.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE b.tab FROM TABLE tab ON $1", aURL.String()).Scan(&jobID)
 
+	// Check LWW on initial scan data.
+	sqlA.Exec(t, "UPSERT INTO tab VALUES (1, 'howdy')")
+
+	// Insert a row that should replicate during steady state.
+	sqlA.Exec(t, "INSERT INTO tab VALUES (2, 'bye')")
+
 	WaitUntilReplicatedTime(t, srv.Clock().Now(), sqlB, jobID)
-	sqlB.CheckQueryResults(t, "SELECT * FROM tab", [][]string{{"1", "hello"}})
+	sqlB.CheckQueryResults(t, "SELECT * FROM tab", [][]string{{"1", "howdy"}, {"2", "bye"}})
+	// Ensure secondary index was replicated as well.
+	compareReplicatedTables(t, srv, "a", "b", "tab", sqlA, sqlB)
 }
 
 // TestLogicalStreamIngestionAdvancePTS tests that the producer side pts advances
