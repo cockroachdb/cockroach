@@ -90,32 +90,51 @@ func CountPLpgSQLStmt(sql string) (PLpgSQLStmtCounter, error) {
 	return v.StmtCnt, v.Err
 }
 
-// SQLStmtVisitor calls Fn for every SQL statement and expression found while
-// walking the PLpgSQL AST. Since PLpgSQL nodes may have statement and
-// expression fields that are nil, Fn should handle the nil case.
+// SQLStmtVisitor applies a visitor to every SQL statement and expression found
+// while walking the PL/pgSQL AST. SQLStmtVisitor supports using
+// tree.v.visitExprFn for callers that don't need the full Visitor interface.
+//
+// *Only one of Fn or Visitor can be set.*
 type SQLStmtVisitor struct {
-	Fn  tree.SimpleVisitFn
-	Err error
+	Fn      tree.SimpleVisitFn
+	Visitor tree.Visitor
+	Err     error
 }
 
 var _ plpgsqltree.StatementVisitor = &SQLStmtVisitor{}
 
-// simpleStmtVisit wraps tree.SimpleStmtVisit and handles the case when the
-// statement is nil for convenience.
-func simpleStmtVisit(statement tree.Statement, fn tree.SimpleVisitFn) (tree.Statement, error) {
-	if statement == nil {
-		return nil, nil
-	}
-	return tree.SimpleStmtVisit(statement, fn)
-}
-
-// simpleVisit wraps tree.SimpleVisit and handles the case when the expression
-// is nil for convenience.
-func simpleVisit(expr tree.Expr, fn tree.SimpleVisitFn) (tree.Expr, error) {
+// visitExpr calls the visitor function on the given expression. The updated
+// expression could be nil, so SQLStmtVisitor must be prepared to handle that.
+func (v *SQLStmtVisitor) visitExpr(expr tree.Expr) (newExpr tree.Expr, err error) {
 	if expr == nil {
 		return nil, nil
 	}
-	return tree.SimpleVisit(expr, fn)
+	if v.Fn != nil {
+		newExpr, err = tree.SimpleVisit(expr, v.Fn)
+	} else {
+		newExpr, _ = tree.WalkExpr(v.Visitor, expr)
+	}
+	if err != nil {
+		v.Err = err
+	}
+	return newExpr, v.Err
+}
+
+// visitStmt calls the visitor function on the given statement. The updated
+// expression could be nil, so SQLStmtVisitor must be prepared to handle that.
+func (v *SQLStmtVisitor) visitStmt(stmt tree.Statement) (newStmt tree.Statement, err error) {
+	if stmt == nil {
+		return nil, nil
+	}
+	if v.Fn != nil {
+		newStmt, err = tree.SimpleStmtVisit(stmt, v.Fn)
+	} else {
+		newStmt, _ = tree.WalkStmt(v.Visitor, stmt)
+	}
+	if err != nil {
+		v.Err = err
+	}
+	return newStmt, v.Err
 }
 
 func (v *SQLStmtVisitor) Visit(
@@ -129,7 +148,7 @@ func (v *SQLStmtVisitor) Visit(
 	var e tree.Expr
 	switch t := stmt.(type) {
 	case *plpgsqltree.CursorDeclaration:
-		s, v.Err = simpleStmtVisit(t.Query, v.Fn)
+		s, v.Err = v.visitStmt(t.Query)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -139,7 +158,7 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 	case *plpgsqltree.Execute:
-		s, v.Err = simpleStmtVisit(t.SqlStmt, v.Fn)
+		s, v.Err = v.visitStmt(t.SqlStmt)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -149,7 +168,7 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 	case *plpgsqltree.Open:
-		s, v.Err = simpleStmtVisit(t.Query, v.Fn)
+		s, v.Err = v.visitStmt(t.Query)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -159,7 +178,7 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 	case *plpgsqltree.Declaration:
-		e, v.Err = simpleVisit(t.Expr, v.Fn)
+		e, v.Err = v.visitExpr(t.Expr)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -170,7 +189,7 @@ func (v *SQLStmtVisitor) Visit(
 		}
 
 	case *plpgsqltree.Assignment:
-		e, v.Err = simpleVisit(t.Value, v.Fn)
+		e, v.Err = v.visitExpr(t.Value)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -180,7 +199,7 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 	case *plpgsqltree.If:
-		e, v.Err = simpleVisit(t.Condition, v.Fn)
+		e, v.Err = v.visitExpr(t.Condition)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -190,7 +209,7 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 	case *plpgsqltree.ElseIf:
-		e, v.Err = simpleVisit(t.Condition, v.Fn)
+		e, v.Err = v.visitExpr(t.Condition)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -200,7 +219,7 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 	case *plpgsqltree.While:
-		e, v.Err = simpleVisit(t.Condition, v.Fn)
+		e, v.Err = v.visitExpr(t.Condition)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -210,7 +229,7 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 	case *plpgsqltree.Exit:
-		e, v.Err = simpleVisit(t.Condition, v.Fn)
+		e, v.Err = v.visitExpr(t.Condition)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -220,7 +239,7 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 	case *plpgsqltree.Continue:
-		e, v.Err = simpleVisit(t.Condition, v.Fn)
+		e, v.Err = v.visitExpr(t.Condition)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -230,7 +249,7 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 	case *plpgsqltree.Return:
-		e, v.Err = simpleVisit(t.Expr, v.Fn)
+		e, v.Err = v.visitExpr(t.Expr)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -241,7 +260,7 @@ func (v *SQLStmtVisitor) Visit(
 		}
 	case *plpgsqltree.Raise:
 		for i, p := range t.Params {
-			e, v.Err = simpleVisit(p, v.Fn)
+			e, v.Err = v.visitExpr(p)
 			if v.Err != nil {
 				return stmt, false
 			}
@@ -254,7 +273,7 @@ func (v *SQLStmtVisitor) Visit(
 			}
 		}
 		for i, p := range t.Options {
-			e, v.Err = simpleVisit(p.Expr, v.Fn)
+			e, v.Err = v.visitExpr(p.Expr)
 			if v.Err != nil {
 				return stmt, false
 			}
@@ -267,7 +286,7 @@ func (v *SQLStmtVisitor) Visit(
 			}
 		}
 	case *plpgsqltree.Assert:
-		e, v.Err = simpleVisit(t.Condition, v.Fn)
+		e, v.Err = v.visitExpr(t.Condition)
 		if v.Err != nil {
 			return stmt, false
 		}
@@ -279,7 +298,7 @@ func (v *SQLStmtVisitor) Visit(
 
 	case *plpgsqltree.DynamicExecute:
 		for i, p := range t.Params {
-			e, v.Err = simpleVisit(p, v.Fn)
+			e, v.Err = v.visitExpr(p)
 			if v.Err != nil {
 				return stmt, false
 			}
@@ -292,13 +311,17 @@ func (v *SQLStmtVisitor) Visit(
 			}
 		}
 	case *plpgsqltree.Call:
-		e, v.Err = simpleVisit(t.Proc, v.Fn)
+		e, v.Err = v.visitExpr(t.Proc)
 		if v.Err != nil {
 			return stmt, false
 		}
 		if t.Proc != e {
 			cpy := t.CopyNode()
-			cpy.Proc = e.(*tree.FuncExpr)
+			if e == nil {
+				cpy.Proc = nil
+			} else {
+				cpy.Proc = e.(*tree.FuncExpr)
+			}
 			newStmt = cpy
 		}
 
@@ -306,16 +329,16 @@ func (v *SQLStmtVisitor) Visit(
 		switch c := t.Control.(type) {
 		case *plpgsqltree.IntForLoopControl:
 			var newLower, newUpper, newStep tree.Expr
-			newLower, v.Err = simpleVisit(c.Lower, v.Fn)
+			newLower, v.Err = v.visitExpr(c.Lower)
 			if v.Err != nil {
 				return stmt, false
 			}
-			newUpper, v.Err = simpleVisit(c.Upper, v.Fn)
+			newUpper, v.Err = v.visitExpr(c.Upper)
 			if v.Err != nil {
 				return stmt, false
 			}
 			if c.Step != nil {
-				newStep, v.Err = simpleVisit(c.Step, v.Fn)
+				newStep, v.Err = v.visitExpr(c.Step)
 				if v.Err != nil {
 					return stmt, false
 				}
