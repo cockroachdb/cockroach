@@ -899,6 +899,7 @@ func TestConfigChangeSafe(t *testing.T) {
 
 		tc.afterConfigChange(&mockLiveness, ft)
 
+		ft.UpdateLastComputedLeadSupportUntil(pb.StateLeader)
 		require.Equal(t, tc.expConfigChangeSafe, ft.ConfigChangeSafe())
 		require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil(pb.StateLeader))
 	}
