@@ -236,7 +236,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		replicationInfo := v.replicationInfo
 		if replicationInfo != nil {
 			sourceTenantName = tree.NewDString(string(replicationInfo.IngestionDetails.SourceTenantName))
-			sourceClusterUri = tree.NewDString(replicationInfo.IngestionDetails.StreamAddress)
+			sourceClusterUri = tree.NewDString(replicationInfo.IngestionDetails.SourceClusterConnUri)
 			if replicationInfo.ReplicationLagInfo != nil {
 				minIngested := replicationInfo.ReplicationLagInfo.MinIngestedTimestamp
 				// The latest fully replicated time. Truncating to the nearest microsecond

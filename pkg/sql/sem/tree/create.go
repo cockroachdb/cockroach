@@ -2219,9 +2219,9 @@ type CreateTenantFromReplication struct {
 	// to use the TenantSpec type. This supports the auto-promotion
 	// of simple identifiers to strings.
 	ReplicationSourceTenantName *TenantSpec
-	// ReplicationSourceAddress is the address of the source cluster that we are
+	// ReplicationSourceConnUri is the address of the source cluster that we are
 	// replicating data from.
-	ReplicationSourceAddress Expr
+	ReplicationSourceConnUri Expr
 
 	Options TenantReplicationOptions
 }
@@ -2245,15 +2245,15 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 	// do not contain sensitive information.
 	ctx.FormatNode(node.TenantSpec)
 
-	if node.ReplicationSourceAddress != nil {
+	if node.ReplicationSourceConnUri != nil {
 		ctx.WriteString(" FROM REPLICATION OF ")
 		ctx.FormatNode(node.ReplicationSourceTenantName)
 		ctx.WriteString(" ON ")
-		_, canOmitParentheses := node.ReplicationSourceAddress.(alreadyDelimitedAsSyntacticDExpr)
+		_, canOmitParentheses := node.ReplicationSourceConnUri.(alreadyDelimitedAsSyntacticDExpr)
 		if !canOmitParentheses {
 			ctx.WriteByte('(')
 		}
-		ctx.FormatNode(node.ReplicationSourceAddress)
+		ctx.FormatNode(node.ReplicationSourceConnUri)
 		if !canOmitParentheses {
 			ctx.WriteByte(')')
 		}

@@ -381,6 +381,9 @@ func newRandomStreamClient(streamURL *url.URL, db descs.DB) (streamclient.Client
 			return nil, err
 		}
 	}
+	if err := c.dial(); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -403,8 +406,7 @@ func (m *RandomStreamClient) tableDescForID(tableID int) (catalog.TableDescripto
 	}
 }
 
-// Dial implements Client interface.
-func (m *RandomStreamClient) Dial(ctx context.Context) error {
+func (m *RandomStreamClient) dial() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, interceptor := range m.mu.dialInterceptors {
@@ -430,7 +432,7 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 	tenantSpan := keys.MakeTenantSpan(m.config.tenantID)
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
-	// Allocate table IDs and return one per partition address in the topology.
+	// Allocate table IDs and return one per partition uri in the topology.
 	srcCodec := keys.MakeSQLCodec(m.config.tenantID)
 	for i := 0; i < m.config.numPartitions; i++ {
 		tableID := m.getNextTableID()
@@ -445,7 +447,7 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 		topology.Partitions = append(topology.Partitions,
 			streamclient.PartitionInfo{
 				ID:                strconv.Itoa(i),
-				SrcAddr:           crosscluster.PartitionAddress(partitionURI),
+				ConnUri:           crosscluster.PartitionUri(partitionURI),
 				SubscriptionToken: []byte(partitionURI),
 				Spans:             []roachpb.Span{tableDesc.TableSpan(srcCodec)},
 			})
@@ -805,7 +807,7 @@ func (m *RandomStreamClient) PlanLogicalReplication(
 	topology.Partitions = append(topology.Partitions,
 		streamclient.PartitionInfo{
 			ID:                strconv.Itoa(1),
-			SrcAddr:           crosscluster.PartitionAddress(partitionURI),
+			ConnUri:           crosscluster.PartitionUri(partitionURI),
 			SubscriptionToken: []byte(partitionURI),
 			Spans:             []roachpb.Span{m.tableDesc.TableSpan(srcCodec)},
 		})

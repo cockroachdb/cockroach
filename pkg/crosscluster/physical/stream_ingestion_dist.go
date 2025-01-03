@@ -126,11 +126,12 @@ func startDistIngestion(
 
 	err = ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		// Persist the initial Stream Addresses to the jobs table before execution begins.
-		if len(planner.initialStreamAddresses) == 0 {
+		if len(planner.initialPartitionPgUrls) == 0 {
 			return jobs.MarkAsPermanentJobError(errors.AssertionFailedf(
-				"attempted to persist an empty list of stream addresses"))
+				"attempted to persist an empty list of partition connection uris"))
 		}
-		md.Progress.GetStreamIngest().StreamAddresses = planner.initialStreamAddresses
+		// TODO(jeffswenson): is this ever updated?
+		md.Progress.GetStreamIngest().PartitionConnUris = planner.initialPartitionPgUrls
 		ju.UpdateProgress(md.Progress)
 		return nil
 	})
@@ -474,7 +475,7 @@ type replicationFlowPlanner struct {
 
 	initialPlanCtx *sql.PlanningCtx
 
-	initialStreamAddresses  []string
+	initialPartitionPgUrls  []string
 	initialTopology         streamclient.Topology
 	initialDestinationNodes []base.SQLInstanceID
 
@@ -569,9 +570,8 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 
 		if !p.createdInitialPlan() {
 			p.initialTopology = topology
-			p.initialStreamAddresses = topology.StreamAddresses()
+			p.initialPartitionPgUrls = topology.PartitionConnUris()
 			p.initialDestinationNodes = sqlInstanceIDs
-
 		}
 
 		destNodeLocalities, err := GetDestNodeLocalities(ctx, dsp, sqlInstanceIDs)
@@ -829,7 +829,7 @@ func constructStreamIngestionPlanSpecs(
 			partition.ID: {
 				PartitionID:       partition.ID,
 				SubscriptionToken: string(partition.SubscriptionToken),
-				Address:           string(partition.SrcAddr),
+				PartitionConnUri:  string(partition.ConnUri),
 				Spans:             partition.Spans,
 				SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
 				DestInstanceID:    destID,
@@ -851,7 +851,7 @@ func constructStreamIngestionPlanSpecs(
 		TrackedSpans:          []roachpb.Span{tenantSpan},
 		JobID:                 int64(jobID),
 		StreamID:              uint64(streamID),
-		StreamAddresses:       topology.StreamAddresses(),
+		ConnectionUris:        topology.PartitionConnUris(),
 		Checkpoint:            checkpoint,
 		PartitionSpecs:        repackagePartitionSpecs(streamIngestionSpecs),
 	}

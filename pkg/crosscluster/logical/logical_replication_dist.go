@@ -23,7 +23,7 @@ import (
 
 func constructLogicalReplicationWriterSpecs(
 	ctx context.Context,
-	streamAddress crosscluster.StreamAddress,
+	streamAddress crosscluster.SourceClusterUri,
 	topology streamclient.Topology,
 	destSQLInstances []sql.InstanceLocality,
 	initialScanTimestamp hlc.Timestamp,
@@ -43,7 +43,7 @@ func constructLogicalReplicationWriterSpecs(
 		PreviousReplicatedTimestamp: previousReplicatedTimestamp,
 		InitialScanTimestamp:        initialScanTimestamp,
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
-		StreamAddress:               string(streamAddress),
+		PartitionConnUri:            string(streamAddress),
 		TableMetadataByDestID:       tableMetadataByDestID,
 		Discard:                     discard,
 		Mode:                        mode,
@@ -69,7 +69,7 @@ func constructLogicalReplicationWriterSpecs(
 		spec.PartitionSpec = execinfrapb.StreamIngestionPartitionSpec{
 			PartitionID:       partition.ID,
 			SubscriptionToken: string(partition.SubscriptionToken),
-			Address:           string(partition.SrcAddr),
+			PartitionConnUri:  string(partition.ConnUri),
 			Spans:             partition.Spans,
 			SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
 			DestInstanceID:    destID,

@@ -110,7 +110,7 @@ func newStreamIngestionFrontierProcessor(
 
 	streamID := streampb.StreamID(spec.StreamID)
 	streamClient, err := streamclient.GetFirstActiveClient(ctx,
-		spec.StreamAddresses,
+		spec.ConnectionUris,
 		flowCtx.Cfg.DB,
 		streamclient.WithStreamID(streamID))
 	if err != nil {

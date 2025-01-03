@@ -41,22 +41,10 @@ type SubscriptionToken []byte
 // information to start a stream processor.
 type CheckpointToken []byte
 
-// Dialer is a wrapper for different kinds of clients which stream updates from
-// a tenant.
-type Dialer interface {
-	// Dial checks if the source is able to be connected to for queries
-	Dial(ctx context.Context) error
-
-	// Close releases all the resources used by this client.
-	Close(ctx context.Context) error
-}
-
 // Client provides methods to stream updates from an application tenant.
 // The client persists state on the system tenant, allowing a new client
 // to resume from a checkpoint if a connection is lost.
 type Client interface {
-	Dialer
-
 	// CreateForTenant initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
@@ -81,7 +69,7 @@ type Client interface {
 	PlanPhysicalReplication(ctx context.Context, streamID streampb.StreamID) (Topology, error)
 
 	// Subscribe opens and returns a subscription for the specified partition from
-	// the specified remote address. This is used by each consumer processor to
+	// the specified remote stream. This is used by each consumer processor to
 	// open its subscription to its partition of a larger stream.
 	// TODO(dt): ts -> checkpointToken.
 	Subscribe(
@@ -112,6 +100,9 @@ type Client interface {
 
 	PlanLogicalReplication(ctx context.Context, req streampb.LogicalReplicationPlanRequest) (LogicalReplicationPlan, error)
 	CreateForTables(ctx context.Context, req *streampb.ReplicationProducerRequest) (*streampb.ReplicationProducerSpec, error)
+
+	// Close releases all the resources used by this client.
+	Close(ctx context.Context) error
 }
 
 type subscribeConfig struct {
@@ -170,11 +161,11 @@ type Topology struct {
 	SourceTenantID roachpb.TenantID
 }
 
-// StreamAddresses returns the list of source addresses in a topology
-func (t Topology) StreamAddresses() []string {
+// PartitionConnUris returns the list of source addresses in a topology
+func (t Topology) PartitionConnUris() []string {
 	var addresses []string
 	for _, partition := range t.Partitions {
-		addresses = append(addresses, string(partition.SrcAddr))
+		addresses = append(addresses, string(partition.ConnUri))
 	}
 	return addresses
 }
@@ -186,7 +177,7 @@ type PartitionInfo struct {
 	ID string
 	SubscriptionToken
 	SrcInstanceID int
-	SrcAddr       crosscluster.PartitionAddress
+	ConnUri       crosscluster.PartitionUri
 	SrcLocality   roachpb.Locality
 	Spans         []roachpb.Span
 }
@@ -216,7 +207,7 @@ type Subscription interface {
 
 // NewStreamClient creates a new stream client based on the stream address.
 func NewStreamClient(
-	ctx context.Context, streamAddress crosscluster.StreamAddress, db descs.DB, opts ...Option,
+	ctx context.Context, streamAddress crosscluster.SourceClusterUri, db descs.DB, opts ...Option,
 ) (Client, error) {
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
@@ -252,7 +243,7 @@ func NewStreamClient(
 
 func lookupExternalConnection(
 	ctx context.Context, name string, localDB isql.DB,
-) (crosscluster.StreamAddress, error) {
+) (crosscluster.SourceClusterUri, error) {
 	// Retrieve the external connection object from the system table.
 	var ec externalconn.ExternalConnection
 	if err := localDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -262,52 +253,45 @@ func lookupExternalConnection(
 	}); err != nil {
 		return "", errors.Wrap(err, "failed to load external connection object")
 	}
-	return crosscluster.StreamAddress(ec.ConnectionProto().UnredactedURI()), nil
+	return crosscluster.SourceClusterUri(ec.ConnectionProto().UnredactedURI()), nil
 }
 
-// GetFirstActiveClient iterates through each provided stream address
+// GetFirstActiveClient iterates through each provided stream uri
 // and returns the first client it's able to successfully dial.
 func GetFirstActiveClient(
-	ctx context.Context, streamAddresses []string, db descs.DB, opts ...Option,
+	ctx context.Context, connectionUris []string, db descs.DB, opts ...Option,
 ) (Client, error) {
-
-	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (Dialer, error) {
-		return NewStreamClient(ctx, address, db, opts...)
+	newClient := func(ctx context.Context, uri crosscluster.SourceClusterUri) (Client, error) {
+		return NewStreamClient(ctx, uri, db, opts...)
 	}
-	dialer, err := getFirstDialer(ctx, streamAddresses, newClient)
-	if err != nil {
-		return nil, err
-	}
-	return dialer.(Client), err
+	return getFirstClient(ctx, connectionUris, newClient)
 }
 
-type dialerFactory func(ctx context.Context, address crosscluster.StreamAddress) (Dialer, error)
+type clientFactory[T any] func(ctx context.Context, uri crosscluster.SourceClusterUri) (T, error)
 
-func getFirstDialer(
-	ctx context.Context, streamAddresses []string, getNewDialer dialerFactory,
-) (Dialer, error) {
-	if len(streamAddresses) == 0 {
-		return nil, errors.Newf("failed to connect, no addresses")
+func getFirstClient[T any](
+	ctx context.Context, connectionUri []string, getNewClient clientFactory[T],
+) (T, error) {
+	var zero T
+	if len(connectionUri) == 0 {
+		return zero, errors.Newf("failed to connect, no connection uris")
 	}
 	var combinedError error = nil
-	for _, address := range streamAddresses {
-		streamAddress := crosscluster.StreamAddress(address)
-		clientCandidate, err := getNewDialer(ctx, streamAddress)
+	for _, uri := range connectionUri {
+		connUri := crosscluster.SourceClusterUri(uri)
+		clientCandidate, err := getNewClient(ctx, connUri)
 		if err == nil {
-			err = clientCandidate.Dial(ctx)
-			if err == nil {
-				return clientCandidate, err
-			}
+			return clientCandidate, nil
 		}
 		// Note the failure and attempt the next address
-		redactedAddress, errRedact := RedactSourceURI(streamAddress.String())
+		redactedAddress, errRedact := RedactSourceURI(connUri.String())
 		if errRedact != nil {
 			log.Warning(ctx, "failed to redact stream address")
 		}
 		log.Errorf(ctx, "failed to connect to address %s: %s", redactedAddress, err.Error())
 		combinedError = errors.CombineErrors(combinedError, err)
 	}
-	return nil, errors.Wrap(combinedError, "failed to connect to any address")
+	return zero, errors.Wrap(combinedError, "failed to connect to any address")
 }
 
 type options struct {

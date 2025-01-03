@@ -532,7 +532,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	streamAddr := getTestRandomClientURI(tenantID, tenantName)
 
 	// The random client returns system and table data partitions.
-	streamClient, err := streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(streamAddr), nil)
+	streamClient, err := streamclient.NewStreamClient(ctx, crosscluster.SourceClusterUri(streamAddr), nil)
 	require.NoError(t, err)
 
 	randomStreamClient, ok := streamClient.(streamclient.RandomClient)
@@ -718,7 +718,7 @@ func getStreamIngestionProcessor(
 	for _, pa := range partitions.Partitions {
 		spec.PartitionSpecs[pa.ID] = execinfrapb.StreamIngestionPartitionSpec{
 			PartitionID:       pa.ID,
-			Address:           string(pa.SrcAddr),
+			PartitionConnUri:  string(pa.ConnUri),
 			SubscriptionToken: string(pa.SubscriptionToken),
 			Spans:             pa.Spans,
 		}

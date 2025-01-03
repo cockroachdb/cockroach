@@ -59,6 +59,11 @@ func NewPartitionedStreamClient(
 	}
 	client.mu.activeSubscriptions = make(map[*partitionedStreamSubscription]struct{})
 	client.mu.srcConn = conn
+
+	if err := client.dial(ctx); err != nil {
+		return nil, err
+	}
+
 	return &client, nil
 }
 
@@ -102,7 +107,7 @@ func (p *partitionedStreamClient) CreateForTenant(
 }
 
 // Dial implements Client interface.
-func (p *partitionedStreamClient) Dial(ctx context.Context) error {
+func (p *partitionedStreamClient) dial(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	err := p.mu.srcConn.Ping(ctx)
@@ -202,7 +207,7 @@ func (p *partitionedStreamClient) createTopology(
 			ID:                sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
 			SrcInstanceID:     int(sp.NodeID),
-			SrcAddr:           crosscluster.PartitionAddress(pgURL.String()),
+			ConnUri:           crosscluster.PartitionUri(pgURL.String()),
 			SrcLocality:       sp.Locality,
 			Spans:             sp.SourcePartition.Spans,
 		})

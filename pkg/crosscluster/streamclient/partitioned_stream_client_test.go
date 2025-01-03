@@ -359,7 +359,7 @@ INSERT INTO d.t2 VALUES (2);
 
 	// Ignore table t2 and only subscribe to the changes to table t1.
 	require.Equal(t, len(top.Partitions), 1)
-	url, err := crosscluster.StreamAddress(top.Partitions[0].SrcAddr).URL()
+	url, err := crosscluster.SourceClusterUri(top.Partitions[0].ConnUri).URL()
 	require.NoError(t, err)
 	// Create a new stream client with the given partition address.
 	subClient, err := streamclient.NewPartitionedStreamClient(ctx, url)
