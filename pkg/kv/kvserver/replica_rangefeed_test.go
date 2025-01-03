@@ -1631,8 +1631,12 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	log.Infof(ctx, "test waiting for another checkpoint")
 	ts2 := n1.Clock().Now()
 	waitForCheckpoint(ts2)
-	nudged := atomic.LoadInt64(&nudgeSeen)
-	require.Equal(t, int64(1), nudged)
+	testutils.SucceedsSoon(t, func() error {
+		if atomic.LoadInt64(&nudgeSeen) != int64(1) {
+			return errors.Errorf("nudge not seen yet")
+		}
+		return nil
+	})
 
 	// Check that n2 renewed its lease, like the test intended.
 	// Unfortunately this is flaky and it's not so clear how to fix it.
