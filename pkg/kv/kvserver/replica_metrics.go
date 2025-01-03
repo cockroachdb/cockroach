@@ -101,7 +101,6 @@ func (r *Replica) Metrics(
 		clusterNodes:             clusterNodes,
 		desc:                     r.shMu.state.Desc,
 		raftStatus:               r.raftSparseStatusRLocked(),
-		leadSupportStatus:        r.raftLeadSupportStatusRLocked(),
 		now:                      now,
 		leaseStatus:              r.leaseStatusAtRLocked(ctx, now),
 		storeID:                  r.store.StoreID(),
