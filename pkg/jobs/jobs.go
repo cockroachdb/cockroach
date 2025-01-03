@@ -597,6 +597,10 @@ type JobNotFoundError struct {
 	sessionID sqlliveness.SessionID
 }
 
+func NewJobNotFoundError(jobID jobspb.JobID) *JobNotFoundError {
+	return &JobNotFoundError{jobID: jobID}
+}
+
 var _ errors.SafeFormatter = &JobNotFoundError{}
 
 func (e *JobNotFoundError) SafeFormatError(p errors.Printer) (next error) {

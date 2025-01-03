@@ -3078,22 +3078,27 @@ func (t *logicTest) processSubtest(
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
 			}
-			rows, err := t.db.Query(stmt.sql)
-			if err != nil {
-				return errors.Wrapf(err, "%s: error running query %s", stmt.pos, stmt.sql)
+
+			if s.Skip {
+				s.LogAndResetSkip(t.t())
+			} else {
+				rows, err := t.db.Query(stmt.sql)
+				if err != nil {
+					return errors.Wrapf(err, "%s: error running query %s", stmt.pos, stmt.sql)
+				}
+				if !rows.Next() {
+					return errors.Errorf("%s: no rows returned by query %s", stmt.pos, stmt.sql)
+				}
+				var val string
+				if err := rows.Scan(&val); err != nil {
+					return errors.Wrapf(err, "%s: error getting result from query %s", stmt.pos, stmt.sql)
+				}
+				if rows.Next() {
+					return errors.Errorf("%s: more than one row returned by query  %s", stmt.pos, stmt.sql)
+				}
+				t.t().Logf("let %s = %s\n", varName, val)
+				t.varMap[varName] = val
 			}
-			if !rows.Next() {
-				return errors.Errorf("%s: no rows returned by query %s", stmt.pos, stmt.sql)
-			}
-			var val string
-			if err := rows.Scan(&val); err != nil {
-				return errors.Wrapf(err, "%s: error getting result from query %s", stmt.pos, stmt.sql)
-			}
-			if rows.Next() {
-				return errors.Errorf("%s: more than one row returned by query  %s", stmt.pos, stmt.sql)
-			}
-			t.t().Logf("let %s = %s\n", varName, val)
-			t.varMap[varName] = val
 
 		case "halt", "hash-threshold":
 
