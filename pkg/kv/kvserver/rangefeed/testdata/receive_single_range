@@ -1,0 +1,16 @@
+# Basic test verifies that rangefeed could be created and that data written to replica is delivered
+# to the feed.
+
+# Ensure that we are getting updates as realtime feed, not as catchup scan.
+create-feed startKey=a endKey=z
+----
+
+put k=a v=1
+put k=b v=2
+put k=c v=3
+put k=a v=4
+----
+key=a, val=1, ts=ts1
+key=a, val=4, ts=ts4
+key=b, val=2, ts=ts2
+key=c, val=3, ts=ts3
