@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -25,11 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -481,6 +484,40 @@ func (p *planner) AlterDatabaseDropRegion(
 	// not a part of any other database.
 	if isSystemDatabase := dbDesc.ID == keys.SystemDatabaseID; isSystemDatabase {
 		if err := p.checkCanDropSystemDatabaseRegion(ctx, n.Region); err != nil {
+			return nil, err
+		}
+		// We are about to delete n.Region. Mark this region as unavailable so that
+		// no probers will try to add a reference to n.Region back into our system
+		// tables.
+		if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			if _, err := txn.ExecEx(ctx, "upsert-unavailibility-for-region", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				`INSERT INTO system.region_liveness VALUES ($1, $2)`,
+				n.Region, time.Now().Format(time.RFC3339)); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			tablesToClean := []string{"sqlliveness", "lease", "sql_instances"}
+			for _, t := range tablesToClean {
+				deleteQuery := fmt.Sprintf(
+					`DELETE FROM system.%s WHERE crdb_region = '%s'`, t, n.Region)
+				if t == "sql_instances" {
+					deleteQuery = fmt.Sprintf(
+						`DELETE FROM system.%s WHERE crdb_region='%s' OR locality->>'Tiers' ILIKE '%%region=%s%%'`,
+						t, n.Region, n.Region)
+				}
+				fmt.Println(deleteQuery)
+				if _, err := txn.ExecEx(ctx, "delete-dropped-region", txn.KV(),
+					sessiondata.NodeUserSessionDataOverride, deleteQuery); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return nil, err
 		}
 	}
