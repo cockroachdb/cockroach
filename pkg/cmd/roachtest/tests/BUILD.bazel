@@ -177,6 +177,7 @@ go_library(
         "sqlalchemy_blocklist.go",
         "sqlsmith.go",
         "status_server.go",
+        "storage_provider.go",
         "sysbench.go",
         "tlp.go",
         "tombstones.go",
