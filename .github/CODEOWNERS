@@ -441,6 +441,7 @@
 /pkg/cmd/dev/                @cockroachdb/dev-inf
 #!/pkg/cmd/docgen/             @cockroachdb/docs-infra-prs
 /pkg/cmd/docs-issue-generation/ @cockroachdb/dev-inf
+/pkg/cmd/drt*                @cockroachdb/drp-eng
 /pkg/cmd/fuzz/               @cockroachdb/test-eng
 /pkg/cmd/generate-binary/    @cockroachdb/sql-foundations
 /pkg/cmd/generate-distdir/ @cockroachdb/dev-inf
@@ -475,9 +476,8 @@
 /pkg/cmd/roachtest/clusterstats/      @cockroachdb/test-eng
 /pkg/cmd/roachtest/grafana/           @cockroachdb/test-eng
 /pkg/cmd/roachtest/fixtures/          @cockroachdb/test-eng
-# TODO: should be owned by DRP team
-/pkg/cmd/roachtest/operation/         @cockroachdb/test-eng
-/pkg/cmd/roachtest/operations/        @cockroachdb/test-eng
+/pkg/cmd/roachtest/operation/         @cockroachdb/drp-eng
+/pkg/cmd/roachtest/operations/        @cockroachdb/drp-eng
 /pkg/cmd/roachtest/option/            @cockroachdb/test-eng
 /pkg/cmd/roachtest/registry/          @cockroachdb/test-eng
 /pkg/cmd/roachtest/roachtestflags     @cockroachdb/test-eng
@@ -605,7 +605,6 @@
 /pkg/workload/               @cockroachdb/test-eng
 /pkg/obs/                    @cockroachdb/obs-prs
 /pkg/ccl/auditloggingccl     @cockroachdb/obs-prs
-/pkg/cmd/drt*                @cockroachdb/test-eng
 
 # Own all bazel files to dev-inf, but don't request reviews for them
 # as they are mostly - but not only - generated code that changes with
