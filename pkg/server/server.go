@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
@@ -671,9 +674,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	// Create an ExternalStorageBuilder. This is only usable after Start() where
 	// we initialize all the configuration params.
+	leakChecker := cloudtestutils.NewStorageLeakDetector()
 	externalStorageBuilder := &externalStorageBuilder{}
-	externalStorage := externalStorageBuilder.makeExternalStorage
+	externalStorage := func(ctx context.Context, dest cloudpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+		storage, err := externalStorageBuilder.makeExternalStorage(ctx, dest, opts...)
+		return leakChecker.Wrap(storage), err
+	}
 	externalStorageFromURI := externalStorageBuilder.makeExternalStorageFromURI
+	externalStorageFromURI = func(ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+		storage, err := externalStorageBuilder.makeExternalStorageFromURI(ctx, uri, user, opts...)
+		return leakChecker.Wrap(storage), err
+	}
+	stopper.AddCloser(stop.CloserFn(func() {
+		if err := leakChecker.Check(); err != nil {
+			panic(err)
+		}
+	}))
 
 	protectedtsKnobs, _ := cfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
