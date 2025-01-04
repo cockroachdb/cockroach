@@ -639,17 +639,22 @@ func Reset(l *logger.Logger, clusterName string) error {
 }
 
 // SetupSSH sets up the keys and host keys for the vms in the cluster.
-func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
+func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string, sync bool) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	cld, err := Sync(l, vm.ListOptions{})
-	if err != nil {
-		return err
+	var cloudCluster *cloud.Cluster
+	if sync {
+		cld, err := Sync(l, vm.ListOptions{})
+		if err != nil {
+			return err
+		}
+		cloudCluster = cld.Clusters[clusterName]
+	} else {
+		cloudCluster, _ = readSyncedClusters(clusterName)
 	}
 
-	cloudCluster, ok := cld.Clusters[clusterName]
-	if !ok {
+	if cloudCluster == nil {
 		return fmt.Errorf("could not find %s in list of cluster", clusterName)
 	}
 
@@ -674,7 +679,7 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 		return err
 	}
 
-	if err = cloudCluster.PrintDetails(l); err != nil {
+	if err := cloudCluster.PrintDetails(l); err != nil {
 		return err
 	}
 	// Run ssh-keygen -R serially on each new VM in case an IP address has been recycled
@@ -715,6 +720,8 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 	if err := LoadClusters(); err != nil {
 		return err
 	}
+
+	// We force a sync to ensure cluster was not previously extended
 	c, err := getClusterFromCloud(l, clusterName)
 	if err != nil {
 		return err
@@ -724,8 +731,8 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 		return err
 	}
 
-	// Reload the clusters and print details.
-	c, err = getClusterFromCloud(l, clusterName)
+	// Save the cluster to the cache and print details.
+	err = saveCluster(l, c)
 	if err != nil {
 		return err
 	}
@@ -1450,7 +1457,16 @@ func Destroy(
 				// and let the caller retry.
 				cld, _ = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
 			}
-			return destroyCluster(ctx, cld, l, name)
+			err := destroyCluster(ctx, cld, l, name)
+			if err != nil {
+				return errors.Wrapf(err, "unable to destroy cluster %s", name)
+			}
+
+			err = deleteCluster(name)
+			if err != nil {
+				return errors.Wrapf(err, "unable to delete cluster %s from local cache", name)
+			}
+			return nil
 		}); err != nil {
 		return err
 	}
@@ -1641,8 +1657,15 @@ func Create(
 	}
 
 	l.Printf("Creating cluster %s with %d nodes...", clusterName, numNodes)
-	if createErr := cloud.CreateCluster(l, opts); createErr != nil {
+	c, createErr := cloud.CreateCluster(l, opts)
+	if createErr != nil {
 		return createErr
+	}
+
+	// Save the cluster to the cache.
+	err := saveCluster(l, c)
+	if err != nil {
+		return errors.Wrapf(err, "failed to save cluster %s", clusterName)
 	}
 
 	if config.IsLocalClusterName(clusterName) {
@@ -1650,7 +1673,7 @@ func Create(
 		return LoadClusters()
 	}
 	l.Printf("Created cluster %s; setting up SSH...", clusterName)
-	return SetupSSH(ctx, l, clusterName)
+	return SetupSSH(ctx, l, clusterName, false /* sync */)
 }
 
 func Grow(
@@ -1676,7 +1699,12 @@ func Grow(
 		// reload the clusters before returning.
 		err = LoadClusters()
 	default:
-		err = SetupSSH(ctx, l, clusterName)
+		// Save the cluster to the cache.
+		err = saveCluster(l, &c.Cluster)
+		if err != nil {
+			return err
+		}
+		err = SetupSSH(ctx, l, clusterName, false /* sync */)
 	}
 	if err != nil {
 		return err
@@ -1712,8 +1740,9 @@ func Shrink(ctx context.Context, l *logger.Logger, clusterName string, numNodes 
 		// clusters before returning.
 		return LoadClusters()
 	}
-	_, err = Sync(l, vm.ListOptions{})
-	return err
+
+	// Save the cluster to the cache.
+	return saveCluster(l, &c.Cluster)
 }
 
 // GC garbage-collects expired clusters, unused SSH key pairs in AWS, and unused
