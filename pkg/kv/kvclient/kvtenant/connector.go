@@ -684,6 +684,17 @@ func (c *connector) TenantRanges(
 	return
 }
 
+// NetworkConnectivity implements the serverpb.TenantStatusServer interface
+func (c *connector) NetworkConnectivity(
+	ctx context.Context, req *serverpb.NetworkConnectivityRequest,
+) (resp *serverpb.NetworkConnectivityResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.NetworkConnectivity(ctx, req)
+		return
+	})
+	return
+}
+
 // NewIterator implements the rangedesc.IteratorFactory interface.
 func (c *connector) NewIterator(
 	ctx context.Context, span roachpb.Span,

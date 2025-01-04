@@ -2119,6 +2119,30 @@ func (s *statusServer) NodeUI(
 	return &resp, nil
 }
 
+// NetworkConnectivity collects information about connections statuses across
+// all nodes. This works well for shared-process mode where inter-node network
+// connectivity for a secondary tenant is same as for the system tenant.
+// However, in external-process mode, this endpoint won't provide a complete
+// picture of network connectivity since the SQL server may run entirely outside
+// the KV node. We may need to extend this endpoint or create a new one for
+// SQL-SQL servers and SQL server to KV nodes. This work is left for the future,
+// and currently, this endpoint only shows KV-KV nodes network connectivity. As
+// a result, this endpoint isn't ready for external-process mode and should only
+// be enabled for secondary tenants. Here is nothing enforcing this, which
+// shouldn't be a problem. See issue #138156.
+func (t *statusServer) NetworkConnectivity(
+	ctx context.Context, req *serverpb.NetworkConnectivityRequest,
+) (*serverpb.NetworkConnectivityResponse, error) {
+	ctx = t.AnnotateCtx(ctx)
+
+	err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return t.sqlServer.tenantConnect.NetworkConnectivity(ctx, req)
+}
+
 // NetworkConnectivity collects information about connections statuses across all nodes.
 func (s *systemStatusServer) NetworkConnectivity(
 	ctx context.Context, req *serverpb.NetworkConnectivityRequest,
