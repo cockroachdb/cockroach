@@ -221,6 +221,12 @@ const (
 	SinkParamSASLAwsIAMSessionName  = `sasl_aws_iam_session_name`
 	SinkParamTableNameAttribute     = `with_table_name_attribute`
 
+	// These are custom fields required for custom auth. They should not be
+	// documented.
+	SinkParamSASLCustomResource            = `sasl_custom_resource`
+	SinkParamSASLCustomClientAssertionType = `sasl_custom_client_assertion_type`
+	SinkParamSASLCustomClientAssertion     = `sasl_custom_client_assertion`
+
 	SinkSchemeConfluentKafka    = `confluent-cloud`
 	SinkParamConfluentAPIKey    = `api_key`
 	SinkParamConfluentAPISecret = `api_secret`
@@ -239,8 +245,12 @@ const (
 	Topics = `topics`
 )
 
-// Support additional mechanism on top of the default SASL mechanism.
-const SASLTypeAWSMSKIAM = "AWS_MSK_IAM"
+// Support additional mechanisms on top of the default SASL mechanisms.
+const (
+	SASLTypeAWSMSKIAM = "AWS_MSK_IAM"
+	// TODO: better but generic name
+	SASLTypeCustom = "CUSTOM"
+)
 
 func makeStringSet(opts ...string) map[string]struct{} {
 	res := make(map[string]struct{}, len(opts))
