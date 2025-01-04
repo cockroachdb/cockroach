@@ -1160,16 +1160,11 @@ scalar-group-by
  ├── fd: ()-->(26)
  ├── inner-join (merge)
  │    ├── columns: w_id:1!null w_ytd:9!null d_w_id:13!null sum:25!null
- │    ├── left ordering: +1
- │    ├── right ordering: +13
+ │    ├── left ordering: +13
+ │    ├── right ordering: +1
  │    ├── immutable
  │    ├── key: (13)
  │    ├── fd: (1)-->(9), (13)-->(25), (1)==(13), (13)==(1)
- │    ├── scan warehouse
- │    │    ├── columns: w_id:1!null w_ytd:9
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(9)
- │    │    └── ordering: +1
  │    ├── group-by (streaming)
  │    │    ├── columns: d_w_id:13!null sum:25
  │    │    ├── grouping columns: d_w_id:13!null
@@ -1182,6 +1177,11 @@ scalar-group-by
  │    │    └── aggregations
  │    │         └── sum [as=sum:25, outer=(21)]
  │    │              └── d_ytd:21
+ │    ├── scan warehouse
+ │    │    ├── columns: w_id:1!null w_ytd:9
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(9)
+ │    │    └── ordering: +1
  │    └── filters
  │         └── w_ytd:9 != sum:25 [outer=(9,25), immutable, constraints=(/9: (/NULL - ]; /25: (/NULL - ])]
  └── aggregations

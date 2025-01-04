@@ -1651,7 +1651,7 @@ TABLE t
 inner-join (hash)
  ├── columns: a:1 b:2 k:8 v:9
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(8)=99, null(8)=0]
+ ├── stats: [rows=990, distinct(1)=100, null(1)=0, distinct(8)=100, null(8)=0]
  ├── cost: 2277.90625
  ├── fd: (8)-->(9), (1)==(8), (8)==(1)
  ├── distribution: test
@@ -1705,7 +1705,7 @@ TABLE t
 inner-join (hash)
  ├── columns: a:1 b:2 k:8 v:9
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(8)=99, null(8)=0]
+ ├── stats: [rows=990, distinct(1)=100, null(1)=0, distinct(8)=100, null(8)=0]
  ├── cost: 2277.90625
  ├── fd: (8)-->(9), (1)==(8), (8)==(1)
  ├── distribution: test
@@ -2397,7 +2397,7 @@ memo (optimized, ~18KB, required=[presentation: info:14] [distribution: test])
 inner-join (hash)
  ├── columns: a:1 b:2 k:8 v:9
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(8)=99, null(8)=0]
+ ├── stats: [rows=990, distinct(1)=100, null(1)=0, distinct(8)=100, null(8)=0]
  ├── cost: 2277.90625
  ├── fd: (8)-->(9), (1)==(8), (8)==(1)
  ├── distribution: test

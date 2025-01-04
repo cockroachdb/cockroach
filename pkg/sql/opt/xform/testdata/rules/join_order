@@ -2820,7 +2820,7 @@ memo (optimized, ~71KB, required=[presentation: ?column?:50])
  ├── G16: (select G14 G40) (inner-join G20 G24 G41) (inner-join G24 G20 G41)
  │    └── []
  │         ├── best: (inner-join G20 G24 G41)
- │         └── cost: 26855.10
+ │         └── cost: 26835.98
  ├── G17: (filters G32 G33 G34 G36 G37 G38 G39)
  ├── G18: (left-join G42 G30 G31) (right-join G30 G42 G31)
  │    └── []

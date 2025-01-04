@@ -63,6 +63,14 @@ func (h *Histogram) Init(evalCtx *eval.Context, col opt.ColumnID, buckets []cat.
 	}
 }
 
+// Copy makes a shallow copy of the histogram, replacing h.col with the given
+// column.
+func (h *Histogram) Copy(col opt.ColumnID) *Histogram {
+	hist := *h
+	hist.col = col
+	return &hist
+}
+
 // bucketCount returns the number of buckets in the histogram.
 func (h *Histogram) bucketCount() int {
 	return len(h.buckets)
@@ -593,6 +601,167 @@ func (h *Histogram) addBucket(ctx context.Context, bucket *cat.HistogramBucket, 
 		}
 	}
 	h.buckets = append(h.buckets, *bucket)
+}
+
+func (h *Histogram) Intersect(ctx context.Context, other *Histogram) *Histogram {
+	combineBuckets := func(filteredLeft, filteredRight *cat.HistogramBucket) *cat.HistogramBucket {
+		filteredBucket := cat.HistogramBucket{UpperBound: filteredLeft.UpperBound}
+		filteredBucket.NumRange = math.Min(filteredLeft.NumRange, filteredRight.NumRange)
+		filteredBucket.NumEq = math.Min(filteredLeft.NumEq, filteredRight.NumEq)
+		filteredBucket.DistinctRange = math.Min(filteredLeft.DistinctRange, filteredRight.DistinctRange)
+		return &filteredBucket
+	}
+	return h.join(ctx, other, combineBuckets)
+}
+
+// InnerJoin intersects h with other, and sets the counts in each bucket of the
+// intersected histogram to the result of performing an inner join with an
+// equality condition between h.col and other.col. It returns a new histogram
+// with the results, with col set to h.col.
+func (h *Histogram) InnerJoin(ctx context.Context, other *Histogram) *Histogram {
+	combineBuckets := func(filteredLeft, filteredRight *cat.HistogramBucket) *cat.HistogramBucket {
+		filteredBucket := cat.HistogramBucket{UpperBound: filteredLeft.UpperBound}
+		if math.Min(filteredLeft.NumRange, filteredRight.NumRange) > 0 {
+			// Use the maximum value for NumRange between the two buckets. We could
+			// probably be a bit more precise here depending on the distinct count,
+			// but it's not clear exactly what the right formula would be. This seems
+			// like a reasonable estimate for now.
+			filteredBucket.NumRange = math.Max(filteredLeft.NumRange, filteredRight.NumRange)
+		}
+		filteredBucket.NumEq = filteredLeft.NumEq * filteredRight.NumEq
+		filteredBucket.DistinctRange = math.Min(filteredLeft.DistinctRange, filteredRight.DistinctRange)
+		return &filteredBucket
+	}
+	return h.join(ctx, other, combineBuckets)
+}
+
+// join implements Intersect and InnerJoin.
+func (h *Histogram) join(
+	ctx context.Context,
+	other *Histogram,
+	combineBuckets func(*cat.HistogramBucket, *cat.HistogramBucket) *cat.HistogramBucket,
+) *Histogram {
+	leftCount := h.bucketCount()
+	rightCount := other.bucketCount()
+	filtered := &Histogram{
+		evalCtx: h.evalCtx,
+		col:     h.col,
+		// TODO(rytaft): should selectivity be something else?
+		selectivity: h.selectivity,
+		buckets:     make([]cat.HistogramBucket, 0, leftCount),
+	}
+	if leftCount == 0 || rightCount == 0 {
+		return filtered
+	}
+
+	// The first bucket always has a zero value for NumRange, so the lower bound
+	// of the histogram is the upper bound of the first bucket.
+	if h.numRange(0) != 0 {
+		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
+	}
+	if other.numRange(0) != 0 {
+		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
+	}
+
+	var sb spanBuilder
+	var leftIter, rightIter histogramIter
+	leftIter.init(h, false /* desc */)
+	rightIter.init(other, false /* desc */)
+	leftBucket := sb.makeSpanFromBucket(ctx, &leftIter, tree.Datums{})
+	rightBucket := sb.makeSpanFromBucket(ctx, &rightIter, tree.Datums{})
+
+	var cols constraint.Columns
+	cols.InitSingle(opt.MakeOrderingColumn(h.col, false /* descending */))
+	keyCtx := constraint.KeyContext{EvalCtx: h.evalCtx, Columns: cols}
+
+	swap := func() {
+		leftBucket, rightBucket = rightBucket, leftBucket
+		leftIter, rightIter = rightIter, leftIter
+		leftCount, rightCount = rightCount, leftCount
+	}
+
+	// Make sure that if the first buckets do not overlap, the left histogram
+	// starts first.
+	if leftBucket.StartsAfter(&keyCtx, &rightBucket) {
+		swap()
+	}
+
+	// Use binary search to find the first bucket in left that overlaps with right.
+	bucIndex := sort.Search(leftCount, func(i int) bool {
+		leftIter.setIdx(i)
+		bucket := sb.makeSpanFromBucket(ctx, &leftIter, tree.Datums{})
+		return !rightBucket.StartsAfter(&keyCtx, &bucket)
+	})
+	if bucIndex == leftCount {
+		return filtered
+	}
+	leftIter.setIdx(bucIndex)
+	if bucIndex > 0 {
+		prevUpperBound := leftIter.h.upperBound(bucIndex - 1)
+		filtered.addEmptyBucket(ctx, prevUpperBound, false /* desc */)
+	}
+
+	// For the remaining buckets, use a variation on merge sort.
+	for ok := true; ok; ok = leftIter.next() {
+		// Convert the buckets to spans in order to take advantage of the
+		// constraint library.
+		left := sb.makeSpanFromBucket(ctx, &leftIter, tree.Datums{})
+		right := sb.makeSpanFromBucket(ctx, &rightIter, tree.Datums{})
+
+		if left.StartsAfter(&keyCtx, &right) {
+			swap()
+			continue
+		}
+
+		filteredSpan := left
+		if !filteredSpan.TryIntersectWith(&keyCtx, &right) {
+			filtered.addEmptyBucket(ctx, leftIter.b.UpperBound, false /* desc */)
+			continue
+		}
+
+		filteredLeft := leftIter.b
+		if filteredSpan.Compare(&keyCtx, &left) != 0 {
+			// The bucket was cut off in the middle. Get the resulting filtered
+			// bucket.
+			//
+			// The span generated from the bucket may have an exclusive bound in
+			// order to avoid a datum allocation for the majority of cases where
+			// the span does not intersect the bucket. If the span does
+			// intersect with the bucket, we transform the bucket span into an
+			// inclusive one to make it easier to work with. Note that this
+			// conversion is best-effort; not all datums support Next or Prev
+			// which allow exclusive ranges to be converted to inclusive ones.
+			cmpStarts := filteredSpan.CompareStarts(&keyCtx, &left)
+			filteredSpan.PreferInclusive(&keyCtx)
+			filteredLeft = getFilteredBucket(&leftIter, &keyCtx, &filteredSpan, 0 /* colOffset */)
+			if cmpStarts != 0 {
+				// We need to add an empty bucket before the new bucket.
+				ub := leftIter.h.getPrevUpperBound(ctx, filteredSpan.StartKey(), filteredSpan.StartBoundary(), 0 /* colOffset */)
+				filtered.addEmptyBucket(ctx, ub, false /* desc */)
+			}
+		}
+		filteredRight := rightIter.b
+		if filteredSpan.Compare(&keyCtx, &right) != 0 {
+			filteredSpan.PreferInclusive(&keyCtx)
+			filteredRight = getFilteredBucket(&rightIter, &keyCtx, &filteredSpan, 0 /* colOffset */)
+		}
+		filteredBucket := combineBuckets(filteredLeft, filteredRight)
+		filtered.addBucket(ctx, filteredBucket, false /* desc */)
+
+		// Skip past whichever span ends first, or skip past both if they have
+		// the same endpoint.
+		cmp := left.CompareEnds(&keyCtx, &right)
+		if cmp == 0 {
+			// The loop will advance leftIter, so we just need to advance rightIter.
+			if ok := rightIter.next(); !ok {
+				break
+			}
+		} else if cmp > 0 {
+			swap()
+		}
+	}
+
+	return filtered
 }
 
 // ApplySelectivity returns a histogram with the given selectivity applied. If
