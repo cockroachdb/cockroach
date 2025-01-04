@@ -454,7 +454,25 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, stopServer := startTestFullServer(t, feedTestOptions{})
+	// spanconfigstore.store, spanconfigreconciler.reconciler, kvserver.mvcc_gc_queue
+	require.NoError(t, log.SetVModule("spanconfigstore=2,store=2,reconciler=2,mvcc_gc_queue=2"))
+
+	lastReconcilerCheckpoint := atomic.Value{}
+	lastReconcilerCheckpoint.Store(hlc.Timestamp{})
+	now := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+	s, db, stopServer := startTestFullServer(t, feedTestOptions{
+		knobsFn: func(knobs *base.TestingKnobs) {
+			if knobs.SpanConfig == nil {
+				knobs.SpanConfig = &spanconfig.TestingKnobs{}
+			}
+			knobs.SpanConfig.(*spanconfig.TestingKnobs).JobOnCheckpointInterceptor = func(lastCheckpoint hlc.Timestamp) error {
+				t.Logf("reconciler checkpoint %s (%s)", lastCheckpoint, now.GoTime().Sub(lastCheckpoint.GoTime()))
+				lastReconcilerCheckpoint.Store(lastCheckpoint)
+				return nil
+			}
+
+		},
+	})
 	defer stopServer()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -472,6 +490,8 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	})
 
 	// Lay protected timestamp record.
+	t.Logf("waiting before installing timestamp")
+	time.Sleep(30 * time.Second)
 	ptr := createProtectedTimestampRecord(ctx, s.Codec(), 42, targets, ts)
 	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
@@ -512,7 +532,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 		var rangeID int64
 		row.Scan(&rangeID)
 		refreshPTSReaderCache(s.Clock().Now(), tableName, databaseName)
-		t.Logf("enqueuing range %d for mvccGC", rangeID)
+		t.Logf("enqueuing range %d (table %s.%s) for mvccGC", rangeID, databaseName, tableName)
 		sqlDB.Exec(t, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID)
 	}
 
@@ -526,7 +546,20 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	// Change the user's password to update the users table.
 	sqlDB.Exec(t, `ALTER USER test WITH PASSWORD 'testpass'`)
 
+	// ssd dbg
 	time.Sleep(2 * time.Second)
+
+	// wait for the spanconfigs to be reconciled
+	t.Logf("waiting for spanconfigs to be reconciled")
+	testutils.SucceedsSoon(t, func() error {
+		lastCheckpoint := lastReconcilerCheckpoint.Load().(hlc.Timestamp)
+		if lastCheckpoint.Less(now) {
+			return errors.Errorf("last checkpoint %s is not less than now %s", lastCheckpoint, now)
+		}
+		t.Logf("last checkpoint ok %s", lastCheckpoint)
+		return nil
+	})
+
 	// If you want to GC all system tables:
 	//
 	// tabs := systemschema.MakeSystemTables()
@@ -535,6 +568,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	// 		gcTestTableRange("system", t.GetName())
 	// 	}
 	// }
+	t.Logf("gc'ing system tables")
 	gcTestTableRange("system", "descriptor")
 	gcTestTableRange("system", "zones")
 	gcTestTableRange("system", "comments")

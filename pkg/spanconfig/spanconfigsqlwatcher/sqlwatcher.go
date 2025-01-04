@@ -343,6 +343,9 @@ func (s *SQLWatcher) watchForProtectedTimestampUpdates(
 			return
 		}
 
+		log.Info(ctx, "PTS UPDATE!")
+		time.Sleep(15 * time.Second)
+
 		ts := ev.Value.Timestamp
 		switch t := target.Union.(type) {
 		case *ptpb.Target_Cluster:

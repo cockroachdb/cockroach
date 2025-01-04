@@ -331,6 +331,7 @@ func (s *Store) maybeLogUpdate(ctx context.Context, update *spanconfig.Update) e
 	// Return early from SystemTarget updates because they correspond to PTS
 	// updates.
 	if !target.IsSpanTarget() {
+		log.VInfof(ctx, 2, "changing the system spanconfig for target:%+v to:%+v", target, nextSC)
 		return nil
 	}
 
@@ -360,7 +361,8 @@ func (s *Store) maybeLogUpdate(ctx context.Context, update *spanconfig.Update) e
 
 	// Log if there is a SpanConfig change in any field other than
 	// ProtectedTimestamps to avoid logging PTS updates.
-	if found && curSpanConfig.HasConfigurationChange(nextSC) {
+	if log.V(2) || (found && curSpanConfig.HasConfigurationChange(nextSC)) {
+		// i do see this one
 		log.KvDistribution.Infof(ctx,
 			"changing the spanconfig for span:%+v from:%+v to:%+v",
 			target, curSpanConfig, nextSC)
