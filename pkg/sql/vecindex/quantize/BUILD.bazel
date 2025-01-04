@@ -39,6 +39,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/vecindex/internal",
+        "//pkg/util/buildutil",
         "//pkg/util/num32",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
