@@ -1264,7 +1264,7 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %type <tree.Statement> create_policy_stmt
 
 %type <tree.LogicalReplicationResources> logical_replication_resources, logical_replication_resources_list
-%type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list
+%type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list opt_logical_replication_create_table_options logical_replication_create_table_options logical_replication_create_table_options_list
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
@@ -4667,7 +4667,7 @@ create_logical_replication_stream_stmt:
       Options: *$11.logicalReplicationOptions(),
     }
   }
-| CREATE LOGICALLY REPLICATED logical_replication_resources FROM logical_replication_resources ON string_or_placeholder opt_logical_replication_options
+| CREATE LOGICALLY REPLICATED logical_replication_resources FROM logical_replication_resources ON string_or_placeholder opt_logical_replication_create_table_options
   {
     $$.val = &tree.CreateLogicalReplicationStream{
       Into: $4.logicalReplicationResources(),
@@ -4730,6 +4730,20 @@ opt_logical_replication_options:
     $$.val = &tree.LogicalReplicationOptions{}
   }
 
+opt_logical_replication_create_table_options:
+  WITH logical_replication_create_table_options_list
+  {
+    $$.val = $2.logicalReplicationOptions()
+  }
+| WITH OPTIONS '(' logical_replication_create_table_options_list ')'
+  {
+    $$.val = $4.logicalReplicationOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.LogicalReplicationOptions{}
+  }
+
 logical_replication_options_list:
   // Require at least one option
   logical_replication_options
@@ -4737,6 +4751,19 @@ logical_replication_options_list:
     $$.val = $1.logicalReplicationOptions()
   }
 | logical_replication_options_list ',' logical_replication_options
+  {
+    if err := $1.logicalReplicationOptions().CombineWith($3.logicalReplicationOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+logical_replication_create_table_options_list:
+  // Require at least one option
+  logical_replication_create_table_options
+  {
+    $$.val = $1.logicalReplicationOptions()
+  }
+| logical_replication_create_table_options_list ',' logical_replication_create_table_options
   {
     if err := $1.logicalReplicationOptions().CombineWith($3.logicalReplicationOptions()); err != nil {
       return setErr(sqllex, err)
@@ -4769,6 +4796,20 @@ logical_replication_options:
 | SKIP SCHEMA CHECK
   {
     $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)} 
+  }
+| LABEL '=' string_or_placeholder
+  {
+    $$.val = &tree.LogicalReplicationOptions{MetricsLabel: $3.expr()}
+  }
+
+logical_replication_create_table_options:
+  MODE '=' string_or_placeholder
+  {
+    $$.val = &tree.LogicalReplicationOptions{Mode: $3.expr()}
+  }
+ | DISCARD '=' string_or_placeholder
+  {
+    $$.val = &tree.LogicalReplicationOptions{Discard: $3.expr()}
   }
 | LABEL '=' string_or_placeholder
   {
