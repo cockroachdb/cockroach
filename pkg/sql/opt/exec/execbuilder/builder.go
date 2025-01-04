@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -38,7 +37,13 @@ var parallelScanResultThreshold = uint64(metamorphic.ConstantWithTestRange(
 	parallelScanResultThresholdProductionValue, /* max */
 ))
 
-const parallelScanResultThresholdProductionValue = 10000
+const (
+	parallelScanResultThresholdProductionValue = 10000
+
+	// numJoinTypes includes all join types except for descpb.RightSemiJoin and
+	// descpb.RightAntiJoin, which are recorded as left joins.
+	NumRecordedJoinTypes = 8
+)
 
 func getParallelScanResultThreshold(forceProductionValue bool) uint64 {
 	if forceProductionValue {
@@ -154,12 +159,12 @@ type Builder struct {
 	NanosSinceStatsForecasted time.Duration
 
 	// JoinTypeCounts records the number of times each type of logical join was
-	// used in the query.
-	JoinTypeCounts map[descpb.JoinType]int
+	// used in the query, up to 255.
+	JoinTypeCounts [NumRecordedJoinTypes]uint8
 
-	// JoinAlgorithmCounts records the number of times each type of join algorithm
-	// was used in the query.
-	JoinAlgorithmCounts map[exec.JoinAlgorithm]int
+	// JoinAlgorithmCounts records the number of times each type of join
+	// algorithm was used in the query, up to 255.
+	JoinAlgorithmCounts [exec.NumJoinAlgorithms]uint8
 
 	// ScanCounts records the number of times scans were used in the query.
 	ScanCounts [exec.NumScanCountTypes]int
