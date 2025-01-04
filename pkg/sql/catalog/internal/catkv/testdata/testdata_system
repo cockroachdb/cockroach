@@ -35,6 +35,7 @@ scan_namespace_for_databases
 catalog:
   "001":
     namespace: (0, 0, "system")
+    num_objects: 0
   "100":
     namespace: (0, 0, "defaultdb")
   "102":
@@ -221,212 +222,16 @@ catalog:
   "001":
     descriptor: database
     namespace: (0, 0, "system")
+    num_objects: 63
     zone: gc.ttlseconds=14400
-  "003":
-    descriptor: relation
-    namespace: (1, 29, "descriptor")
-  "004":
-    descriptor: relation
-    namespace: (1, 29, "users")
-  "005":
-    descriptor: relation
-    namespace: (1, 29, "zones")
-  "006":
-    descriptor: relation
-    namespace: (1, 29, "settings")
-  "007":
-    descriptor: relation
-    namespace: (1, 29, "descriptor_id_seq")
-  "008":
-    descriptor: relation
-    namespace: (1, 29, "tenants")
-  "009":
-    descriptor: relation
-    namespace: (1, 29, "region_liveness")
-  "011":
-    descriptor: relation
-    namespace: (1, 29, "lease")
-    zone: gc.ttlseconds=600
-  "012":
-    descriptor: relation
-    namespace: (1, 29, "eventlog")
-  "013":
-    descriptor: relation
-    namespace: (1, 29, "rangelog")
-  "014":
-    descriptor: relation
-    namespace: (1, 29, "ui")
-  "015":
-    descriptor: relation
-    namespace: (1, 29, "jobs")
   "016":
     zone: gc.ttlseconds=3600
   "017":
     zone: gc.ttlseconds=14400
   "018":
     zone: gc.ttlseconds=14400
-  "019":
-    descriptor: relation
-    namespace: (1, 29, "web_sessions")
-  "020":
-    descriptor: relation
-    namespace: (1, 29, "table_statistics")
-  "021":
-    descriptor: relation
-    namespace: (1, 29, "locations")
   "022":
     zone: gc.ttlseconds=600
-  "023":
-    descriptor: relation
-    namespace: (1, 29, "role_members")
-  "024":
-    descriptor: relation
-    namespace: (1, 29, "comments")
-  "025":
-    descriptor: relation
-    namespace: (1, 29, "replication_constraint_stats")
-    zone: gc.ttlseconds=600
-  "026":
-    descriptor: relation
-    namespace: (1, 29, "replication_critical_localities")
-  "027":
-    descriptor: relation
-    namespace: (1, 29, "replication_stats")
-    zone: gc.ttlseconds=600
-  "028":
-    descriptor: relation
-    namespace: (1, 29, "reports_meta")
-  "029":
-    namespace: (1, 0, "public")
-  "030":
-    descriptor: relation
-    namespace: (1, 29, "namespace")
-  "031":
-    descriptor: relation
-    namespace: (1, 29, "protected_ts_meta")
-  "032":
-    descriptor: relation
-    namespace: (1, 29, "protected_ts_records")
-  "033":
-    descriptor: relation
-    namespace: (1, 29, "role_options")
-  "034":
-    descriptor: relation
-    namespace: (1, 29, "statement_bundle_chunks")
-  "035":
-    descriptor: relation
-    namespace: (1, 29, "statement_diagnostics_requests")
-  "036":
-    descriptor: relation
-    namespace: (1, 29, "statement_diagnostics")
-  "037":
-    descriptor: relation
-    namespace: (1, 29, "scheduled_jobs")
-  "039":
-    descriptor: relation
-    namespace: (1, 29, "sqlliveness")
-  "040":
-    descriptor: relation
-    namespace: (1, 29, "migrations")
-  "041":
-    descriptor: relation
-    namespace: (1, 29, "join_tokens")
-  "042":
-    descriptor: relation
-    namespace: (1, 29, "statement_statistics")
-    zone: gc.ttlseconds=3600
-  "043":
-    descriptor: relation
-    namespace: (1, 29, "transaction_statistics")
-    zone: gc.ttlseconds=3600
-  "044":
-    descriptor: relation
-    namespace: (1, 29, "database_role_settings")
-  "045":
-    descriptor: relation
-    namespace: (1, 29, "tenant_usage")
-    zone: gc.ttlseconds=7200
-  "046":
-    descriptor: relation
-    namespace: (1, 29, "sql_instances")
-  "047":
-    descriptor: relation
-    namespace: (1, 29, "span_configurations")
-  "048":
-    descriptor: relation
-    namespace: (1, 29, "role_id_seq")
-  "050":
-    descriptor: relation
-    namespace: (1, 29, "tenant_settings")
-  "051":
-    descriptor: relation
-    namespace: (1, 29, "span_count")
-  "052":
-    descriptor: relation
-    namespace: (1, 29, "privileges")
-  "053":
-    descriptor: relation
-    namespace: (1, 29, "external_connections")
-  "054":
-    descriptor: relation
-    namespace: (1, 29, "job_info")
-  "055":
-    descriptor: relation
-    namespace: (1, 29, "span_stats_unique_keys")
-  "056":
-    descriptor: relation
-    namespace: (1, 29, "span_stats_buckets")
-  "057":
-    descriptor: relation
-    namespace: (1, 29, "span_stats_samples")
-  "058":
-    descriptor: relation
-    namespace: (1, 29, "span_stats_tenant_boundaries")
-    zone: gc.ttlseconds=3600
-  "059":
-    descriptor: relation
-    namespace: (1, 29, "task_payloads")
-  "060":
-    descriptor: relation
-    namespace: (1, 29, "tenant_tasks")
-  "061":
-    descriptor: relation
-    namespace: (1, 29, "statement_activity")
-    zone: gc.ttlseconds=3600
-  "062":
-    descriptor: relation
-    namespace: (1, 29, "transaction_activity")
-    zone: gc.ttlseconds=3600
-  "063":
-    descriptor: relation
-    namespace: (1, 29, "tenant_id_seq")
-  "064":
-    descriptor: relation
-    namespace: (1, 29, "mvcc_statistics")
-  "065":
-    descriptor: relation
-    namespace: (1, 29, "transaction_execution_insights")
-  "066":
-    descriptor: relation
-    namespace: (1, 29, "statement_execution_insights")
-  "067":
-    descriptor: relation
-    namespace: (1, 29, "table_metadata")
-  "068":
-    descriptor: relation
-    namespace: (1, 29, "job_progress")
-  "069":
-    descriptor: relation
-    namespace: (1, 29, "job_progress_history")
-  "070":
-    descriptor: relation
-    namespace: (1, 29, "job_status")
-  "071":
-    descriptor: relation
-    namespace: (1, 29, "job_message")
-  "072":
-    descriptor: relation
-    namespace: (1, 29, "prepared_transactions")
   "100":
     comments:
       database: this is the default database
@@ -587,6 +392,7 @@ scan_all_comments_nil_db
 catalog:
   "001":
     namespace: (0, 0, "system")
+    num_objects: 0
   "100":
     comments:
       database: this is the default database
