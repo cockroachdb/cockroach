@@ -1,15 +1,85 @@
 diff --git a/internal/buildtags/BUILD.bazel b/internal/buildtags/BUILD.bazel
+index b842a31e..91c581b3 100644
 --- a/internal/buildtags/BUILD.bazel
 +++ b/internal/buildtags/BUILD.bazel
-@@ -6,6 +6,7 @@ go_library(
+@@ -5,15 +5,33 @@ go_library(
+     srcs = [
          "cgo_off.go",
          "cgo_on.go",
-         "invariants_off.go",
-+        "invariants_on.go",
+-        "invariants_off.go",
          "race_off.go",
          "race_on.go",
          "tracing_off.go",
+-    ],
++    ] + select({
++        "@com_github_cockroachdb_cockroach//build/toolchains:crdb_test": [":gen-crdb-test-on"],
++        "//conditions:default": [":gen-crdb-test-off"],
++    }),
+     importpath = "github.com/cockroachdb/pebble/internal/buildtags",
+     visibility = ["//:__subpackages__"],
+ )
+ 
++REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
++
++genrule(
++    name = "gen-crdb-test-on",
++    srcs = ["invariants_on.go"],
++    outs = ["gen-crdb_test_on.go"],
++    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
++)
++
++genrule(
++    name = "gen-crdb-test-off",
++    srcs = ["invariants_off.go"],
++    outs = ["gen-crdb_test_off.go"],
++    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
++)
++
+ alias(
+     name = "go_default_library",
+     actual = ":buildtags",
+diff --git a/internal/invariants/BUILD.bazel b/internal/invariants/BUILD.bazel
+index 3dd80d65..f2986585 100644
+--- a/internal/invariants/BUILD.bazel
++++ b/internal/invariants/BUILD.bazel
+@@ -4,14 +4,32 @@ go_library(
+     name = "invariants",
+     srcs = [
+         "invariants.go",
+-        "off.go",
+-        "on.go",
+-    ],
++    ] + select({
++        "@com_github_cockroachdb_cockroach//build/toolchains:crdb_test": [":gen-crdb-test-on"],
++        # TODO(radu): add a condition for race builds to also map to "on".
++        "//conditions:default": [":gen-crdb-test-off"],
++    }),
+     importpath = "github.com/cockroachdb/pebble/internal/invariants",
+     visibility = ["//:__subpackages__"],
+     deps = ["//internal/buildtags"],
+ )
+ 
++REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
++
++genrule(
++    name = "gen-crdb-test-on",
++    srcs = ["on.go"],
++    outs = ["gen-crdb_test_on.go"],
++    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
++)
++
++genrule(
++    name = "gen-crdb-test-off",
++    srcs = ["off.go"],
++    outs = ["gen-crdb_test_off.go"],
++    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
++)
++
+ alias(
+     name = "go_default_library",
+     actual = ":invariants",
 diff --git a/objstorage/objstorageprovider/objiotracing/BUILD.bazel b/objstorage/objstorageprovider/objiotracing/BUILD.bazel
+index 21534041..d73ac30a 100644
 --- a/objstorage/objstorageprovider/objiotracing/BUILD.bazel
 +++ b/objstorage/objstorageprovider/objiotracing/BUILD.bazel
 @@ -5,6 +5,7 @@ go_library(
