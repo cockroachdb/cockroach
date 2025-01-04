@@ -149,6 +149,16 @@ CREATE TABLE public.t (
 );
 COMMENT ON COLUMN public.t.c IS 'first comment'
 
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t WITH FULLY_QUALIFIED];
+----
+CREATE TABLE test.public.t (
+  c INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+);
+COMMENT ON COLUMN test.public.t.c IS 'first comment'
+
 # Skipping in legacy mode, as it does not support altering column types that
 # require a backfill. Subsequent column type alterations are also skipped for
 # the same reason.
@@ -230,6 +240,17 @@ CREATE TABLE public.t_with_comps (
   c1 INT8 NOT NULL,
   sc1 sc1.comp1 NULL,
   sc2 sc2.comp1 NULL,
+  CONSTRAINT t_with_comps_pkey PRIMARY KEY (c1 ASC),
+  FAMILY f1 (c1, sc1, sc2)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE T_WITH_COMPS WITH FULLY_QUALIFIED];
+----
+CREATE TABLE test.public.t_with_comps (
+  c1 INT8 NOT NULL,
+  sc1 test.sc1.comp1 NULL,
+  sc2 test.sc2.comp1 NULL,
   CONSTRAINT t_with_comps_pkey PRIMARY KEY (c1 ASC),
   FAMILY f1 (c1, sc1, sc2)
 )
