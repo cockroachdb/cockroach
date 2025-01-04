@@ -205,11 +205,16 @@ message SnapshotRequest {
   }
 
   message Header {
-    // The replica state at the time the snapshot was generated. Note
-    // that ReplicaState.Desc differs from the above range_descriptor
-    // field which holds the updated descriptor after the new replica
-    // has been added while ReplicaState.Desc holds the descriptor
-    // before the new replica has been added.
+    // The replica state at the time the snapshot was generated.
+    //
+    // This state duplicates the one contained in the snapshot, and is attached
+    // for informational purposes. It must not materialize on the receiver's
+    // store because the receiver can be on a different binary version and
+    // encode it differently. The receiver applies the snapshot wholesale as
+    // encoded by the sender.
+    //
+    // NB: at the time of writing, the receiver only uses the RangeDescriptor
+    // and RaftAppliedIndex.
     storagepb.ReplicaState state = 5 [(gogoproto.nullable) = false];
 
     // The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
