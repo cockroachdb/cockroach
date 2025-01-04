@@ -163,10 +163,10 @@ func (s *Smither) makeDesiredTypes() []*types.T {
 }
 
 type typeInfo struct {
-	udts        []*types.T
-	udtNames    []tree.TypeName
-	seedTypes   []*types.T
-	scalarTypes []*types.T
+	enums, composites         []*types.T
+	enumNames, compositeNames []tree.TypeName
+	seedTypes                 []*types.T
+	scalarTypes               []*types.T
 }
 
 // ResolveType implements the tree.TypeReferenceResolver interface.
@@ -174,9 +174,14 @@ func (s *Smither) ResolveType(
 	_ context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	key := tree.MakeSchemaQualifiedTypeName(name.Schema(), name.Object())
-	for i, typeName := range s.types.udtNames {
+	for i, typeName := range s.types.enumNames {
 		if typeName == key {
-			return s.types.udts[i], nil
+			return s.types.enums[i], nil
+		}
+	}
+	for i, typeName := range s.types.compositeNames {
+		if typeName == key {
+			return s.types.composites[i], nil
 		}
 	}
 	return nil, errors.Newf("type name %s not found by smither", name.Object())
