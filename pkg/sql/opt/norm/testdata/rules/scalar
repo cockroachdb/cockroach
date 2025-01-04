@@ -1791,7 +1791,7 @@ project
  │    ├── columns: b.k:1!null a.k:8!null array_agg:17!null
  │    ├── grouping columns: b.k:1!null
  │    ├── key: (1)
- │    ├── fd: (1)==(8), (8)==(1), (1)-->(8,17)
+ │    ├── fd: (1)-->(8,17), (1)==(8), (8)==(1)
  │    ├── project
  │    │    ├── columns: a.k:8!null b.k:1!null
  │    │    ├── key: (1)

@@ -678,7 +678,7 @@ upsert bc
 query T
 EXPLAIN (OPT, MEMO, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
-memo (optimized, ~35KB, required=[presentation: info:25] [distribution: test])
+memo (optimized, ~36KB, required=[presentation: info:25] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:25] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1539,7 +1539,7 @@ delete f
 query T
 EXPLAIN (OPT, MEMO, REDACT) DELETE FROM f WHERE f = 8.5
 ----
-memo (optimized, ~16KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~17KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -2138,7 +2138,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
 ----
-memo (optimized, ~8KB, required=[presentation: info:17] [distribution: test])
+memo (optimized, ~9KB, required=[presentation: info:17] [distribution: test])
  ├── G1: (explain G2 [presentation: ?column?:8,if:9,?column?:10,coalesce:11,row:12,geometry:13,jsonb:14,bool:15,?column?:16,e:1] [distribution: test])
  │    └── [presentation: info:17] [distribution: test]
  │         ├── best: (explain G2="[presentation: ?column?:8,if:9,?column?:10,coalesce:11,row:12,geometry:13,jsonb:14,bool:15,?column?:16,e:1] [distribution: test]" [presentation: ?column?:8,if:9,?column?:10,coalesce:11,row:12,geometry:13,jsonb:14,bool:15,?column?:16,e:1] [distribution: test])
@@ -2435,7 +2435,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
-memo (optimized, ~27KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~28KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [presentation: b:1,c:2,f:7] [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[presentation: b:1,c:2,f:7] [distribution: test]" [presentation: b:1,c:2,f:7] [distribution: test])
@@ -2820,7 +2820,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
 ----
-memo (optimized, ~33KB, required=[presentation: info:16] [distribution: test])
+memo (optimized, ~35KB, required=[presentation: info:16] [distribution: test])
  ├── G1: (explain G2 [presentation: f:1,g:15] [distribution: test])
  │    └── [presentation: info:16] [distribution: test]
  │         ├── best: (explain G2="[presentation: f:1,g:15] [distribution: test]" [presentation: f:1,g:15] [distribution: test])
@@ -3099,7 +3099,7 @@ anti-join-apply
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
 ----
-memo (optimized, ~22KB, required=[presentation: info:15] [distribution: test])
+memo (optimized, ~23KB, required=[presentation: info:15] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1] [distribution: test])
  │    └── [presentation: info:15] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
@@ -3426,7 +3426,7 @@ top-k
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
 ----
-memo (optimized, ~7KB, required=[presentation: info:9] [distribution: test])
+memo (optimized, ~8KB, required=[presentation: info:9] [distribution: test])
  ├── G1: (explain G2 [presentation: c:1,d:2] [ordering: +8 opt(2)] [distribution: test])
  │    └── [presentation: info:9] [distribution: test]
  │         ├── best: (explain G2="[presentation: c:1,d:2] [ordering: +8 opt(2)] [distribution: test]" [presentation: c:1,d:2] [ordering: +8 opt(2)] [distribution: test])
@@ -3618,7 +3618,7 @@ scalar-group-by
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT covar_pop(d, d + 1) FROM d
 ----
-memo (optimized, ~7KB, required=[presentation: info:8] [distribution: test])
+memo (optimized, ~8KB, required=[presentation: info:8] [distribution: test])
  ├── G1: (explain G2 [presentation: covar_pop:7] [distribution: test])
  │    └── [presentation: info:8] [distribution: test]
  │         ├── best: (explain G2="[presentation: covar_pop:7] [distribution: test]" [presentation: covar_pop:7] [distribution: test])
@@ -3927,7 +3927,7 @@ create-table
 query T
 EXPLAIN (OPT, MEMO, REDACT) CREATE TABLE t (col STRING CHECK (col != 'secret'))
 ----
-memo (optimized, ~3KB, required=[presentation: info:1] [distribution: test])
+memo (optimized, ~4KB, required=[presentation: info:1] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:1] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])

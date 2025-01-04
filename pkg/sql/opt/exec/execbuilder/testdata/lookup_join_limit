@@ -293,7 +293,7 @@ project
       ├── stats: [rows=1]
       ├── cost: 29.125
       ├── key: ()
-      ├── fd: ()-->(1,8), (8)==(1), (1)==(8)
+      ├── fd: ()-->(1,8), (1)==(8), (8)==(1)
       ├── distribution: test
       ├── inner-join (lookup b)
       │    ├── columns: a.x:1 b.x:8

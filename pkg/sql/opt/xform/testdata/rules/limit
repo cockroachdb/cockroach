@@ -2325,7 +2325,7 @@ memo (optimized, ~5KB, required=[presentation: d:1,f:3,e:2] [ordering: +1,+3,+2]
 memo expect=GeneratePartialOrderTopK
 SELECT * FROM defg ORDER BY d, f, e LIMIT 10
 ----
-memo (optimized, ~15KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2])
+memo (optimized, ~16KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2])
  ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G4 &{10 +1,+3,+2 }) (top-k G5 &{10 +1,+3,+2 }) (top-k G6 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1}) (top-k G5 &{10 +1,+3,+2 +1,+3}) (top-k G6 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1,+3})
  │    ├── [presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2]
  │    │    ├── best: (top-k G6="[ordering: +1,+3] [limit hint: 100.00]" &{10 +1,+3,+2 +1,+3})

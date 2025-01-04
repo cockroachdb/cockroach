@@ -659,7 +659,7 @@ ordinality
  ├── columns: k:1!null i:2!null f:3!null s:4 j:5 ordinality:8!null
  ├── cardinality: [0 - 10]
  ├── key: (1)
- ├── fd: (1)-->(2-5,8), (2)==(3), (3)==(2), (8)-->(1-5)
+ ├── fd: (1)-->(2-5,8), (8)-->(1-5), (2)==(3), (3)==(2)
  ├── ordering: +(2|3) [actual: +2]
  └── limit
       ├── columns: k:1!null i:2!null f:3!null s:4 j:5

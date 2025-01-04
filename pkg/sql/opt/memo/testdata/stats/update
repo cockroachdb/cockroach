@@ -172,7 +172,7 @@ with &2 (q)
  │         ├── volatile, mutations
  │         ├── stats: [rows=632.3046, distinct(11)=632.305, null(11)=0]
  │         ├── key: (3)
- │         ├── fd: ()-->(2,11-13), (2)==(11), (11)==(2), (3)-->(1)
+ │         ├── fd: ()-->(2,11-13), (3)-->(1), (2)==(11), (11)==(2)
  │         ├── distinct-on
  │         │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
  │         │    ├── grouping columns: rowid:8(int!null)
