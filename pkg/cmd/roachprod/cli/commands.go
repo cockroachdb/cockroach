@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
@@ -28,14 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/exp/maps"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
 )
 
 const (
@@ -356,7 +351,8 @@ it exists:
 
 The second column lists the cloud providers that host VMs for the cluster.
 
-The third and fourth columns are the number of nodes in the cluster and the
+The third, fourth, fifth, sixth, seventh columns are the number of nodes in the cluster,
+machine type, cpu architecture, time cluster has been up, and the
 time remaining before the cluster will be automatically destroyed. Note that
 local clusters do not have an expiration.
 
@@ -395,148 +391,49 @@ hosts file.
 			if err != nil {
 				return err
 			}
-
-			// sort by cluster names for stable output.
-			names := make([]string, len(filteredCloud.Clusters))
-			maxClusterName := 0
-			i := 0
+			// Return JSON output if requested.
+			if listJSON {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(filteredCloud)
+			}
+			var i, maxClusterName int
+			clusterNames := make([]string, len(filteredCloud.Clusters))
 			for name := range filteredCloud.Clusters {
-				names[i] = name
+				clusterNames[i] = name
 				if len(name) > maxClusterName {
 					maxClusterName = len(name)
 				}
 				i++
 			}
-			sort.Strings(names)
+			// sort by cluster names for stable output.
+			sort.Strings(clusterNames)
 
-			p := message.NewPrinter(language.English)
-			if listJSON {
-				enc := json.NewEncoder(os.Stdout)
-				enc.SetIndent("", "  ")
-				if err := enc.Encode(filteredCloud); err != nil {
-					return err
-				}
-			} else {
-				machineType := func(clusterVMs vm.List) string {
-					return clusterVMs[0].MachineType
-				}
-				cpuArch := func(clusterVMs vm.List) string {
-					// Display CPU architecture and family.
-					if clusterVMs[0].CPUArch == "" {
-						// N.B. Either a local cluster or unsupported cloud provider.
-						return ""
-					}
-					if clusterVMs[0].CPUFamily != "" {
-						return clusterVMs[0].CPUFamily
-					}
-					if clusterVMs[0].CPUArch != vm.ArchAMD64 {
-						return string(clusterVMs[0].CPUArch)
-					}
-					// AMD64 is the default, so don't display it.
-					return ""
-				}
-				// Align columns right and separate with at least two spaces.
-				tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', tabwriter.AlignRight)
-				// N.B. colors use escape codes which don't play nice with tabwriter [1].
-				// We use a hacky workaround below to color the empty string.
-				// [1] https://github.com/golang/go/issues/12073
-
-				if !listDetails {
-					// Print header only if we are not printing cluster details.
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-						"Cluster", "Clouds", "Size", "VM", "Arch",
-						color.HiWhiteString("$/hour"), color.HiWhiteString("$ Spent"),
-						color.HiWhiteString("Uptime"), color.HiWhiteString("TTL"),
-						color.HiWhiteString("$/TTL"))
-					// Print separator.
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-						"", "", "", "",
-						color.HiWhiteString(""), color.HiWhiteString(""),
-						color.HiWhiteString(""), color.HiWhiteString(""),
-						color.HiWhiteString(""))
-				}
-				totalCostPerHour := 0.0
-				for _, name := range names {
+			// Print node-level details if requested.
+			if listDetails {
+				for _, name := range clusterNames {
 					c := filteredCloud.Clusters[name]
-					if listDetails {
-						if err = c.PrintDetails(config.Logger); err != nil {
-							return err
-						}
-					} else {
-						// N.B. Tabwriter doesn't support per-column alignment. It looks odd to have the cluster names right-aligned,
-						// so we make it left-aligned.
-						fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s", name+strings.Repeat(" ", maxClusterName-len(name)), c.Clouds(),
-							len(c.VMs), machineType(c.VMs), cpuArch(c.VMs))
-						if !c.IsLocal() {
-							colorByCostBucket := func(cost float64) func(string, ...interface{}) string {
-								switch {
-								case cost <= 100:
-									return color.HiGreenString
-								case cost <= 1000:
-									return color.HiBlueString
-								default:
-									return color.HiRedString
-								}
-							}
-							timeRemaining := c.LifetimeRemaining().Round(time.Second)
-							formatTTL := func(ttl time.Duration) string {
-								if c.VMs[0].Preemptible {
-									return color.HiMagentaString(ttl.String())
-								} else {
-									return color.HiBlueString(ttl.String())
-								}
-							}
-							cost := c.CostPerHour
-							totalCostPerHour += cost
-							alive := timeutil.Since(c.CreatedAt).Round(time.Minute)
-							costSinceCreation := cost * float64(alive) / float64(time.Hour)
-							costRemaining := cost * float64(timeRemaining) / float64(time.Hour)
-							if cost > 0 {
-								fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
-									color.HiGreenString(p.Sprintf("$%.2f", cost)),
-									colorByCostBucket(costSinceCreation)(p.Sprintf("$%.2f", costSinceCreation)),
-									color.HiWhiteString(alive.String()),
-									formatTTL(timeRemaining),
-									colorByCostBucket(costRemaining)(p.Sprintf("$%.2f", costRemaining)))
-							} else {
-								fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
-									color.HiGreenString(""),
-									color.HiGreenString(""),
-									color.HiWhiteString(alive.String()),
-									formatTTL(timeRemaining),
-									color.HiGreenString(""))
-							}
-						} else {
-							fmt.Fprintf(tw, "\t(-)")
-						}
-						fmt.Fprintf(tw, "\n")
+					if err = c.PrintDetails(config.Logger); err != nil {
+						return err
 					}
 				}
-				if err := tw.Flush(); err != nil {
-					return err
+				// Print any dangling instances with errors
+				collated := filteredCloud.BadInstanceErrors()
+
+				// Sort by Error() value for stable output
+				var errors ui.ErrorsByError
+				for err := range collated {
+					errors = append(errors, err)
 				}
+				sort.Sort(errors)
 
-				if totalCostPerHour > 0 {
-					_, _ = p.Printf("\nTotal cost per hour: $%.2f\n", totalCostPerHour)
+				for _, e := range errors {
+					fmt.Printf("%s: %s\n", e, collated[e].Names())
 				}
-
-				// Optionally print any dangling instances with errors
-				if listDetails {
-					collated := filteredCloud.BadInstanceErrors()
-
-					// Sort by Error() value for stable output
-					var errors ui.ErrorsByError
-					for err := range collated {
-						errors = append(errors, err)
-					}
-					sort.Sort(errors)
-
-					for _, e := range errors {
-						fmt.Printf("%s: %s\n", e, collated[e].Names())
-					}
-				}
+				return nil
 			}
-			return nil
+			// Otherwise, print _default_ cluster listing, if we made this far.
+			return listDefault(filteredCloud, clusterNames, maxClusterName)
 		}),
 	}
 	cr.addToExcludeFromBashCompletion(listCmd)

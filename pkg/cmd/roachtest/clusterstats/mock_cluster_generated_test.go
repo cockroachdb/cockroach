@@ -17,7 +17,7 @@ import (
 	roachprod "github.com/cockroachdb/cockroach/pkg/roachprod"
 	install "github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	logger "github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	prometheus "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	prominstaller "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus/prominstaller"
 	vm "github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -947,7 +947,7 @@ func (mr *MockClusterMockRecorder) StartE(arg0, arg1, arg2, arg3 interface{}, ar
 }
 
 // StartGrafana mocks base method.
-func (m *MockCluster) StartGrafana(arg0 context.Context, arg1 *logger.Logger, arg2 *prometheus.Config) error {
+func (m *MockCluster) StartGrafana(arg0 context.Context, arg1 *logger.Logger, arg2 *prominstaller.Config) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartGrafana", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)

@@ -246,6 +246,7 @@ go_library(
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
+        "//pkg/roachprod/prometheus/prominstaller",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/aws",
         "//pkg/security/username",

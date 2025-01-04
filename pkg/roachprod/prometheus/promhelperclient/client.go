@@ -39,7 +39,7 @@ var SupportedPromProjects = map[string]struct{}{gce.DefaultProject(): {}}
 // The URL for the Prometheus registration service. An empty string means that the
 // Prometheus integration is disabled. Should be accessed through
 // getPrometheusRegistrationUrl().
-var promRegistrationUrl = config.EnvOrDefaultString("ROACHPROD_PROM_HOST_URL",
+var promRegistrationUrl = config.EnvOrDefaultString("ROACHPROD_PROM_REGISTRY_URL",
 	"https://grafana.testeng.crdb.io/promhelpers")
 
 // PromClient is used to communicate with the prometheus helper service
