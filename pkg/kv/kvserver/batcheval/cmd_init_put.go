@@ -29,7 +29,7 @@ func InitPut(
 	args := cArgs.Args.(*kvpb.InitPutRequest)
 	h := cArgs.Header
 
-	failOnTombstones := args.FailOnTombstones && !cArgs.EvalCtx.EvalKnobs().DisableInitPutFailOnTombstones
+	failOnTombstones := args.FailOnTombstones && !cArgs.EvalCtx.EvalKnobs().DisableInitPutCPutFailOnTombstones
 	opts := storage.MVCCWriteOptions{
 		Txn:                            h.Txn,
 		LocalTimestamp:                 cArgs.Now,

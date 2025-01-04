@@ -1536,8 +1536,8 @@ func (t *logicTest) newCluster(
 					DisableConsistencyQueue:  true,
 					GlobalMVCCRangeTombstone: globalMVCCRangeTombstone,
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-						DisableInitPutFailOnTombstones:    ignoreMVCCRangeTombstoneErrors,
-						UseRangeTombstonesForPointDeletes: shouldUseMVCCRangeTombstonesForPointDeletes,
+						DisableInitPutCPutFailOnTombstones: ignoreMVCCRangeTombstoneErrors,
+						UseRangeTombstonesForPointDeletes:  shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
 				},
 				RangeFeed: &rangefeed.TestingKnobs{
