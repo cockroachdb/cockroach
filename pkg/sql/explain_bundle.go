@@ -610,7 +610,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 	}
 	blankLine()
-	c.printCreateAllDatabases(&buf, dbNames)
+	if err = c.printCreateAllDatabases(&buf, dbNames); err != nil {
+		b.printError(fmt.Sprintf("-- error getting all databases: %v", err), &buf)
+	}
 	if err := c.printCreateAllSchemas(&buf, schemaNames); err != nil {
 		b.printError(fmt.Sprintf("-- error getting all schemas: %v", err), &buf)
 	}
@@ -706,8 +708,14 @@ func makeStmtEnvCollector(ctx context.Context, p *planner, ie *InternalExecutor)
 	return stmtEnvCollector{ctx: ctx, p: p, ie: ie}
 }
 
-// query is a helper to run a query that returns a single string value.
+// query is a helper to run a query that returns a single string value. It
+// returns an error if the query didn't return exactly one row.
 func (c *stmtEnvCollector) query(query string) (string, error) {
+	return c.queryEx(query, false /* emptyOk */)
+}
+
+// queryEx is the same as query but allows no rows to be returned.
+func (c *stmtEnvCollector) queryEx(query string, emptyOk bool) (string, error) {
 	row, err := c.ie.QueryRowEx(
 		c.ctx,
 		"stmtEnvCollector",
@@ -718,14 +726,21 @@ func (c *stmtEnvCollector) query(query string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
+	if row == nil {
+		// The query returned no rows.
+		if emptyOk {
+			return "", nil
+		}
+		return "", errors.AssertionFailedf(
+			"expected env query %q to return one row, returned none", query,
+		)
+	}
 	if len(row) != 1 {
 		return "", errors.AssertionFailedf(
 			"expected env query %q to return a single column, returned %d",
 			query, len(row),
 		)
 	}
-
 	s, ok := row[0].(*tree.DString)
 	if !ok {
 		return "", errors.AssertionFailedf(
@@ -733,43 +748,7 @@ func (c *stmtEnvCollector) query(query string) (string, error) {
 			query, row[0],
 		)
 	}
-
 	return string(*s), nil
-}
-
-// queryRows is similar to query() for the case when multiple rows with single
-// string values can be returned.
-func (c *stmtEnvCollector) queryRows(query string) ([]string, error) {
-	rows, err := c.ie.QueryBufferedEx(
-		c.ctx,
-		"stmtEnvCollector",
-		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
-		query,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var values []string
-	for _, row := range rows {
-		if len(row) != 1 {
-			return nil, errors.AssertionFailedf(
-				"expected env query %q to return a single column, returned %d",
-				query, len(row),
-			)
-		}
-		s, ok := row[0].(*tree.DString)
-		if !ok {
-			return nil, errors.AssertionFailedf(
-				"expected env query %q to return a DString, returned %T",
-				query, row[0],
-			)
-		}
-		values = append(values, string(*s))
-	}
-
-	return values, nil
 }
 
 var testingOverrideExplainEnvVersion string
@@ -906,13 +885,6 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 			// parsable.
 			value = "''"
 		}
-		if varName == "database" {
-			// Special case the 'database' session variable - since env.sql is
-			// executed _before_ schema.sql when recreating the bundle, the
-			// target database might not exist yet.
-			fmt.Fprintf(w, "-- SET database = '%s';\n", value)
-			continue
-		}
 		fmt.Fprintf(w, formatStr+"\n", varName, value, defaultValue)
 	}
 	return nil
@@ -983,15 +955,11 @@ func (c *stmtEnvCollector) PrintCreateTable(
 ) error {
 	var formatOption string
 	if redactValues {
-		formatOption = " WITH REDACT"
+		formatOption = ", REDACT"
 	}
 	createStatement, err := c.query(
-		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s%s]", tn.FQString(), formatOption),
+		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s WITH FULLY_QUALIFIED%s]", tn.FQString(), formatOption),
 	)
-	// We need to replace schema.table_name in the create statement with the fully
-	// qualified table name.
-	createStatement = strings.Replace(createStatement,
-		fmt.Sprintf("%s.%s", tn.SchemaName, tn.Table()), tn.FQString(), 1)
 	if err != nil {
 		return err
 	}
@@ -1017,12 +985,14 @@ func (c *stmtEnvCollector) PrintCreateUDT(w io.Writer, id oid.Oid, redactValues 
 	if redactValues {
 		query = fmt.Sprintf("SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)", query)
 	}
-	createStatement, err := c.queryRows(query)
+	// Implicit crdb_internal_region type won't be found via the vtable, so we
+	// allow empty result.
+	createStatement, err := c.queryEx(query, true /* emptyOk */)
 	if err != nil {
 		return err
 	}
-	for _, cs := range createStatement {
-		fmt.Fprintf(w, "%s\n", cs)
+	if createStatement != "" {
+		fmt.Fprintf(w, "%s;\n", createStatement)
 	}
 	return nil
 }
@@ -1070,7 +1040,7 @@ func (c *stmtEnvCollector) PrintCreateView(
 	return nil
 }
 
-func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[string]struct{}) {
+func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[string]struct{}) error {
 	for db := range dbNames {
 		switch db {
 		case catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName, catconstants.SystemDatabaseName:
@@ -1078,8 +1048,15 @@ func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[stri
 			// exclude them to ease the recreation of the bundle.
 			continue
 		}
-		fmt.Fprintf(w, "CREATE DATABASE %s;\n", db)
+		createStatement, err := c.query(fmt.Sprintf(
+			"SELECT create_statement FROM crdb_internal.databases WHERE name = '%s'", db,
+		))
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "%s;\n", createStatement)
 	}
+	return nil
 }
 
 func (c *stmtEnvCollector) printCreateAllSchemas(
@@ -1155,18 +1132,19 @@ var skipReadOnlySessionVar = map[string]struct{}{
 // sessionVarNeedsQuotes contains all writable session variables that have
 // values that need single quotes around them in SET statements.
 var sessionVarNeedsQuotes = map[string]struct{}{
-	"application_name":                            {},
-	"datestyle":                                   {},
-	"distsql_workmem":                             {},
-	"index_join_streamer_batch_size":              {},
+	"application_name":               {},
+	"database":                       {},
+	"datestyle":                      {},
+	"distsql_workmem":                {},
+	"index_join_streamer_batch_size": {},
 	"join_reader_index_join_strategy_batch_size":  {},
 	"join_reader_no_ordering_strategy_batch_size": {},
 	"join_reader_ordering_strategy_batch_size":    {},
-	"lc_messages":                                 {},
-	"lc_monetary":                                 {},
-	"lc_numeric":                                  {},
-	"lc_time":                                     {},
-	"password_encryption":                         {},
-	"prepared_statements_cache_size":              {},
-	"timezone":                                    {},
+	"lc_messages":                    {},
+	"lc_monetary":                    {},
+	"lc_numeric":                     {},
+	"lc_time":                        {},
+	"password_encryption":            {},
+	"prepared_statements_cache_size": {},
+	"timezone":                       {},
 }
