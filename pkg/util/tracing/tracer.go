@@ -379,6 +379,7 @@ type Tracer struct {
 	stack debugutil.SafeStack
 	// closed is set on Close().
 	_closed int32 // accessed atomically
+	fr      *FlightRecorder
 }
 
 // SpanRegistry is a map that references all non-Finish'ed local root spans,
@@ -672,6 +673,20 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 		})
 	}
 	return t
+}
+
+// SetFlightRecorder will set up the flight recorder for this Tracer.
+func (t *Tracer) SetFlightRecorder(fr *FlightRecorder) {
+	t.fr = fr
+}
+
+// FlightRecorderSnapshot will take an execution trace snapshot of the last few
+// seconds of the system if execution traces are enabled and sufficient time has
+// passed since the last snapshot. Typically this method should only be called
+// if something took unusually long to complete and you want to save and analyze
+// what happened before this.
+func (t *Tracer) FlightRecorderSnapshot() bool {
+	return t.fr.MaybeSnapshot()
 }
 
 // tracerOptions groups configuration for Tracer construction.

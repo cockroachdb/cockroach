@@ -14,6 +14,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/log",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_logtags//:logtags",

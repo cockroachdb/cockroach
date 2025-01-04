@@ -281,6 +281,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if cfg.CPUProfileDirName == "" {
 				cfg.CPUProfileDirName = filepath.Join(storeSpec.Path, "logs", base.CPUProfileDir)
 			}
+			if cfg.ExecutionTraceDirName == "" {
+				cfg.ExecutionTraceDirName = filepath.Join(storeSpec.Path, "logs", base.ExecutionTraceDir)
+			}
 		}
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
@@ -1692,6 +1695,7 @@ func (ts *testServer) StartTenant(
 	baseCfg.CPUProfileDirName = ts.Cfg.BaseConfig.CPUProfileDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 	baseCfg.ExternalIODirConfig = params.ExternalIODirConfig
+	baseCfg.ExecutionTraceDirName = ts.Cfg.BaseConfig.ExecutionTraceDirName
 
 	// Grant the tenant the default capabilities.
 	if err := ts.grantDefaultTenantCapabilities(ctx, params.TenantID, params.SkipTenantCheck); err != nil {

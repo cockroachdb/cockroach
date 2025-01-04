@@ -6,6 +6,7 @@ go_library(
         "context.go",
         "crdbspan.go",
         "doc.go",
+        "flight_recorder.go",
         "span.go",
         "span_finalizer_race_off.go",
         "span_finalizer_race_on.go",
@@ -51,6 +52,7 @@ go_library(
         "@io_opentelemetry_go_otel_sdk//trace",
         "@io_opentelemetry_go_otel_trace//:trace",
         "@org_golang_google_grpc//metadata",
+        "@org_golang_x_exp//trace",
         "@org_golang_x_net//trace",
     ],
 )
