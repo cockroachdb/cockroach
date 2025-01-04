@@ -8,7 +8,6 @@ package changefeedccl
 import (
 	"math"
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -35,12 +34,8 @@ func TestChangefeedNemeses(t *testing.T) {
 
 			sqlDB := sqlutils.MakeSQLRunner(s.DB)
 			withLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
-			// TODO(dan): Ugly hack to disable `eventPause` in sinkless feeds. See comment in
-			// `RunNemesis` for details.
-			isSinkless := strings.Contains(t.Name(), "sinkless")
-			isCloudstorage := strings.Contains(t.Name(), "cloudstorage")
 
-			v, err := cdctest.RunNemesis(f, s.DB, isSinkless, isCloudstorage, withLegacySchemaChanger, rng, nop)
+			v, err := cdctest.RunNemesis(f, s.DB, t.Name(), withLegacySchemaChanger, rng, nop)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
