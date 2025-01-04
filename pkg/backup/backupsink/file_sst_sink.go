@@ -37,11 +37,6 @@ var (
 		settings.WithPublic)
 )
 
-type FileSSTSinkWriter interface {
-	io.Closer
-	Flush(context.Context) error
-}
-
 type ExportedSpan struct {
 	Metadata       backuppb.BackupManifest_File
 	DataSST        []byte
@@ -84,7 +79,9 @@ type FileSSTSink struct {
 	// flush. This counter resets on each flush.
 	completedSpans int32
 
-	elidePrefix roachpb.Key
+	// elidedPrefix represents the elided prefix of the last exportSpan/key written to the sink.
+	// This resets on each flush.
+	elidedPrefix roachpb.Key
 
 	// stats contain statistics about the actions of the FileSSTSink over its
 	// entire lifespan.
@@ -98,12 +95,16 @@ type FileSSTSink struct {
 }
 
 // fileSpanByteLimit is the maximum size of a file span that can be extended.
-const fileSpanByteLimit = 64 << 20
+var fileSpanByteLimit int64 = 64 << 20
 
 func MakeFileSSTSink(
 	conf SSTSinkConf, dest cloud.ExternalStorage, pacer *admission.Pacer,
 ) *FileSSTSink {
-	return &FileSSTSink{conf: conf, dest: dest, pacer: pacer}
+	return &FileSSTSink{
+		conf:  conf,
+		dest:  dest,
+		pacer: pacer,
+	}
 }
 
 func (s *FileSSTSink) Write(ctx context.Context, resp ExportedSpan) (roachpb.Key, error) {
@@ -120,12 +121,12 @@ func (s *FileSSTSink) Write(ctx context.Context, resp ExportedSpan) (roachpb.Key
 	// since it overlaps but SSTWriter demands writes in-order.
 	if len(s.flushedFiles) > 0 {
 		last := s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey
-		if span.Key.Compare(last) < 0 || !bytes.Equal(spanPrefix, s.elidePrefix) {
+		if span.Key.Compare(last) < 0 || !bytes.Equal(spanPrefix, s.elidedPrefix) {
 			log.VEventf(ctx, 1, "flushing backup file %s of size %d because span %s cannot append before %s",
 				s.outName, s.flushedSize, span, last,
 			)
 			s.stats.oooFlushes++
-			if err := s.flushFile(ctx); err != nil {
+			if err := s.Flush(ctx); err != nil {
 				return nil, err
 			}
 		}
@@ -137,7 +138,7 @@ func (s *FileSSTSink) Write(ctx context.Context, resp ExportedSpan) (roachpb.Key
 			return nil, err
 		}
 	}
-	s.elidePrefix = append(s.elidePrefix[:0], spanPrefix...)
+	s.elidedPrefix = append(s.elidedPrefix[:0], spanPrefix...)
 
 	log.VEventf(ctx, 2, "writing %s to backup file %s", span, s.outName)
 
@@ -145,7 +146,7 @@ func (s *FileSSTSink) Write(ctx context.Context, resp ExportedSpan) (roachpb.Key
 	// then surface all the range keys and flush.
 	//
 	// TODO(msbutler): investigate using single a single iterator that surfaces
-	// all point keys first and then all range keys
+	// all point keys first and then all range keys.
 	maxKey, err := s.copyPointKeys(ctx, resp.DataSST)
 	if err != nil {
 		return nil, err
@@ -208,7 +209,7 @@ func (s *FileSSTSink) Write(ctx context.Context, resp ExportedSpan) (roachpb.Key
 	if s.flushedSize > targetFileSize.Get(s.conf.Settings) && !s.midRow {
 		s.stats.sizeFlushes++
 		log.VEventf(ctx, 2, "flushing backup file %s with size %d", s.outName, s.flushedSize)
-		if err := s.flushFile(ctx); err != nil {
+		if err := s.Flush(ctx); err != nil {
 			return nil, err
 		}
 	} else {
@@ -238,10 +239,6 @@ func (s *FileSSTSink) Close() error {
 }
 
 func (s *FileSSTSink) Flush(ctx context.Context) error {
-	return s.flushFile(ctx)
-}
-
-func (s *FileSSTSink) flushFile(ctx context.Context) error {
 	if s.out == nil {
 		// If the writer was not initialized but the sink has reported completed
 		// spans then there were empty ExportRequests that were processed by the
@@ -310,7 +307,7 @@ func (s *FileSSTSink) flushFile(ctx context.Context) error {
 	}
 
 	s.flushedFiles = nil
-	s.elidePrefix = s.elidePrefix[:0]
+	s.elidedPrefix = s.elidedPrefix[:0]
 	s.flushedSize = 0
 	s.flushedRevStart.Reset()
 	s.completedSpans = 0
@@ -350,6 +347,7 @@ func (s *FileSSTSink) open(ctx context.Context) error {
 
 	return nil
 }
+
 func (s *FileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) (roachpb.Key, error) {
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
@@ -376,9 +374,9 @@ func (s *FileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) (roachp
 			break
 		}
 		k := iter.UnsafeKey()
-		suffix, ok := bytes.CutPrefix(k.Key, s.elidePrefix)
+		suffix, ok := bytes.CutPrefix(k.Key, s.elidedPrefix)
 		if !ok {
-			return nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", k.Key, s.elidePrefix)
+			return nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", k.Key, s.elidedPrefix)
 		}
 		k.Key = suffix
 
@@ -457,11 +455,11 @@ func (s *FileSSTSink) copyRangeKeys(dataSST []byte) (roachpb.Key, error) {
 				maxKey = append(maxKey[:0], rk.EndKey...)
 			}
 			var ok bool
-			if rk.StartKey, ok = bytes.CutPrefix(rk.StartKey, s.elidePrefix); !ok {
-				return nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.StartKey, s.elidePrefix)
+			if rk.StartKey, ok = bytes.CutPrefix(rk.StartKey, s.elidedPrefix); !ok {
+				return nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.StartKey, s.elidedPrefix)
 			}
-			if rk.EndKey, ok = bytes.CutPrefix(rk.EndKey, s.elidePrefix); !ok {
-				return nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.EndKey, s.elidePrefix)
+			if rk.EndKey, ok = bytes.CutPrefix(rk.EndKey, s.elidedPrefix); !ok {
+				return nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", rk.EndKey, s.elidedPrefix)
 			}
 			if err := s.sst.PutRawMVCCRangeKey(rk, v.Value); err != nil {
 				return nil, err
