@@ -764,7 +764,7 @@ func (r *Replica) leaseStatusForRequestRLocked(
 	// it unconditionally, regardless of the lease type or let leases.Status
 	// decide when to compute it. See #125255.
 	if in.Lease.Type() == roachpb.LeaseLeader {
-		in.RaftStatus = r.raftLeadSupportStatusRLocked()
+		in.RaftStatus = r.raftBasicStatusRLocked()
 	}
 	return leases.Status(ctx, r.store.cfg.NodeLiveness, in)
 }

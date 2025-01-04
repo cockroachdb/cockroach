@@ -92,6 +92,11 @@ type FortificationTracker struct {
 	// to campaign at a lower term, then learns about the higher term, and then
 	// use it in the next campaign attempt.
 	steppingDownTerm uint64
+
+	// lastComputedLeadSupportUntil is the last computed LeadSupportUntil. This
+	// exists to reduce the number of times we need to compute LeadSupportUntil by
+	// caching the result.
+	lastComputedLeadSupportUntil hlc.Timestamp
 }
 
 // NewFortificationTracker initializes a FortificationTracker.
@@ -128,6 +133,9 @@ func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch
 	// The supported epoch should never regress. Guard against out of order
 	// delivery of fortify responses by using max.
 	ft.fortification[id] = max(ft.fortification[id], epoch)
+	// Everytime there is a new fortification, we need to recompute the
+	// LeadSupportUntil since it might have changed.
+	ft.UpdateLastComputedLeadSupportUntil(pb.StateLeader)
 }
 
 // Reset clears out any previously tracked fortification and prepares the
@@ -143,6 +151,7 @@ func (ft *FortificationTracker) Reset(term uint64) {
 	ft.leaderMaxSupported.Reset()
 	ft.steppingDown = false
 	ft.steppingDownTerm = 0
+	ft.lastComputedLeadSupportUntil = hlc.Timestamp{}
 }
 
 // IsFortifiedBy returns whether the follower fortifies the leader or not.
@@ -182,27 +191,24 @@ func (ft *FortificationTracker) LeadSupportUntil(state pb.StateType) hlc.Timesta
 		return ft.leaderMaxSupported.Load()
 	}
 
-	// Compute the lead support using the current configuration and forward the
-	// leaderMaxSupported to avoid regressions when the configuration changes.
-	leadSupportUntil := ft.computeLeadSupportUntil(state)
-	return ft.leaderMaxSupported.Forward(leadSupportUntil)
+	// Forward the leaderMaxSupported to avoid regressions when the configuration
+	// changes.
+	return ft.leaderMaxSupported.Forward(ft.lastComputedLeadSupportUntil)
 }
 
-// computeLeadSupportUntil computes the timestamp until which the leader is
-// guaranteed fortification using the current quorum configuration.
-//
-// Unlike LeadSupportUntil, this computation does not provide a guarantee of
-// monotonicity. Specifically, its result may regress after a configuration
-// change.
-func (ft *FortificationTracker) computeLeadSupportUntil(state pb.StateType) hlc.Timestamp {
+// UpdateLastComputedLeadSupportUntil updates the field
+// lastComputedLeadSupportUntil by computing the LeadSupportExpiration.
+func (ft *FortificationTracker) UpdateLastComputedLeadSupportUntil(state pb.StateType) hlc.Timestamp {
 	if state != pb.StateLeader {
 		panic("computeLeadSupportUntil should only be called by the leader")
 	}
+
 	if len(ft.fortification) == 0 {
-		return hlc.Timestamp{} // fast-path for no fortification
+		ft.lastComputedLeadSupportUntil = hlc.Timestamp{}
+		return ft.lastComputedLeadSupportUntil // fast-path for no fortification
 	}
 
-	// TODO(arul): avoid this map allocation as we're calling LeadSupportUntil
+	// TODO(ibrahim): avoid this map allocation as we're calling LeadSupportUntil
 	// from hot paths.
 	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
 	ft.config.Voters.Visit(func(id pb.PeerID) {
@@ -218,7 +224,8 @@ func (ft *FortificationTracker) computeLeadSupportUntil(state pb.StateType) hlc.
 			}
 		}
 	})
-	return ft.config.Voters.LeadSupportExpiration(supportExpMap)
+	ft.lastComputedLeadSupportUntil = ft.config.Voters.LeadSupportExpiration(supportExpMap)
+	return ft.lastComputedLeadSupportUntil
 }
 
 // CanDefortify returns whether the caller can safely[1] de-fortify the term
@@ -355,7 +362,7 @@ func (ft *FortificationTracker) ConfigChangeSafe() bool {
 	// previous configuration, which is reflected in leaderMaxSupported.
 	//
 	// NB: Only run by the leader.
-	return ft.leaderMaxSupported.Load().LessEq(ft.computeLeadSupportUntil(pb.StateLeader))
+	return ft.leaderMaxSupported.Load().LessEq(ft.lastComputedLeadSupportUntil)
 }
 
 // QuorumActive returns whether the leader is currently supported by a quorum or

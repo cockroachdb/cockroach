@@ -2177,7 +2177,7 @@ func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bo
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 	assert.Equal(t, pb.StateLeader, a.state)
 	if storeLivenessEnabled {
-		assert.Equal(t, hlc.MaxTimestamp, getLeadSupportStatus(a).LeadSupportUntil)
+		assert.Equal(t, hlc.MaxTimestamp, getBasicStatus(a).LeadSupportUntil)
 	}
 
 	nt.isolate(1)
@@ -4533,7 +4533,7 @@ func testPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T, storeLivenessEn
 
 	assert.Equal(t, pb.StateLeader, n1.state)
 	if storeLivenessEnabled {
-		assert.Equal(t, hlc.MaxTimestamp, getLeadSupportStatus(n1).LeadSupportUntil)
+		assert.Equal(t, hlc.MaxTimestamp, getBasicStatus(n1).LeadSupportUntil)
 	}
 
 	if storeLivenessEnabled {
@@ -5217,6 +5217,7 @@ func SetRandomizedElectionTimeout(r *RawNode, v int64) {
 // testConfigModifiers allows callers to optionally modify newTestConfig.
 type testConfigModifiers struct {
 	testingStoreLiveness raftstoreliveness.StoreLiveness
+	testingLogger        raftlogger.Logger
 }
 
 // testConfigModifierOpt is the type of an optional parameter to newTestConfig
@@ -5235,6 +5236,13 @@ func withStoreLiveness(storeLiveness raftstoreliveness.StoreLiveness) testConfig
 	}
 }
 
+// withLogger explicitly uses the supplied raft logger.
+func withLogger(logger raftlogger.Logger) testConfigModifierOpt {
+	return func(modifier *testConfigModifiers) {
+		modifier.testingLogger = logger
+	}
+}
+
 func newTestConfig(
 	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
 ) *Config {
@@ -5248,6 +5256,14 @@ func newTestConfig(
 	} else {
 		storeLiveness = raftstoreliveness.AlwaysLive{}
 	}
+
+	var logger raftlogger.Logger
+	if modifiers.testingLogger != nil {
+		logger = modifiers.testingLogger
+	} else {
+		logger = raftlogger.DefaultRaftLogger
+	}
+
 	return &Config{
 		ID:              id,
 		ElectionTick:    election,
@@ -5256,6 +5272,7 @@ func newTestConfig(
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   storeLiveness,
+		Logger:          logger,
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 		Metrics:         NewMetrics(),
 	}
