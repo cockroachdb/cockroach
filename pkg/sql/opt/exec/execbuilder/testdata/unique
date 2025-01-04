@@ -805,7 +805,6 @@ quality of service: regular
 │           │ regions: <hidden>
 │           │ actual row count: 0
 │           │ estimated max memory allocated: 0 B
-│           │ estimated max sql temp disk usage: 0 B
 │           │ equality: (b, c) = (column2, column3)
 │           │
 │           ├── • scan
@@ -843,7 +842,6 @@ quality of service: regular
             │ regions: <hidden>
             │ actual row count: 0
             │ estimated max memory allocated: 0 B
-            │ estimated max sql temp disk usage: 0 B
             │ equality: (a) = (column1)
             │
             ├── • scan
@@ -2675,7 +2673,6 @@ quality of service: regular
 │       │           │ regions: <hidden>
 │       │           │ actual row count: 2
 │       │           │ estimated max memory allocated: 0 B
-│       │           │ estimated max sql temp disk usage: 0 B
 │       │           │ equality: (b, c) = (b, c)
 │       │           │
 │       │           ├── • scan
@@ -2758,7 +2755,6 @@ quality of service: regular
 │                   │ regions: <hidden>
 │                   │ actual row count: 0
 │                   │ estimated max memory allocated: 0 B
-│                   │ estimated max sql temp disk usage: 0 B
 │                   │ equality: (b, c) = (b, c_new)
 │                   │
 │                   ├── • scan
