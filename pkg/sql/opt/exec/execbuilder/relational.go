@@ -3948,10 +3948,6 @@ func (b *Builder) statementTag(expr memo.RelExpr) string {
 // recordJoinType increments the counter for the given join type for telemetry
 // reporting.
 func (b *Builder) recordJoinType(joinType descpb.JoinType) {
-	if b.JoinTypeCounts == nil {
-		const numJoinTypes = 7
-		b.JoinTypeCounts = make(map[descpb.JoinType]int, numJoinTypes)
-	}
 	// Don't bother distinguishing between left and right.
 	switch joinType {
 	case descpb.RightOuterJoin:
@@ -3961,16 +3957,17 @@ func (b *Builder) recordJoinType(joinType descpb.JoinType) {
 	case descpb.RightAntiJoin:
 		joinType = descpb.LeftAntiJoin
 	}
-	b.JoinTypeCounts[joinType]++
+	if b.JoinTypeCounts[joinType]+1 > b.JoinTypeCounts[joinType] {
+		b.JoinTypeCounts[joinType]++
+	}
 }
 
 // recordJoinAlgorithm increments the counter for the given join algorithm for
 // telemetry reporting.
 func (b *Builder) recordJoinAlgorithm(joinAlgorithm exec.JoinAlgorithm) {
-	if b.JoinAlgorithmCounts == nil {
-		b.JoinAlgorithmCounts = make(map[exec.JoinAlgorithm]int, exec.NumJoinAlgorithms)
+	if b.JoinAlgorithmCounts[joinAlgorithm]+1 > b.JoinAlgorithmCounts[joinAlgorithm] {
+		b.JoinAlgorithmCounts[joinAlgorithm]++
 	}
-	b.JoinAlgorithmCounts[joinAlgorithm]++
 }
 
 // boundedStalenessAllowList contains the operators that may be used with
