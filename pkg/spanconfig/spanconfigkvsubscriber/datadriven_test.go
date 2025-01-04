@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
@@ -129,7 +130,8 @@ func TestDataDriven(t *testing.T) {
 			ts.ClusterSettings(),
 			ts.Clock(),
 			fmt.Sprintf("defaultdb.public.%s", dummyTableName),
-			nil, /* knobs */
+			keys.SystemSQLCodec, /* TODO(shubham): Incorrect most likely */
+			nil,                 /* knobs */
 		)
 
 		mu := struct {

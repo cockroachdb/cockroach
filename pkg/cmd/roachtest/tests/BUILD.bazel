@@ -189,6 +189,7 @@ go_library(
         "tpchvec.go",
         "ts_util.go",
         "typeorm.go",
+        "uamigration.go",
         "unoptimized_query_oracle.go",
         "validate_system_schema_after_version_upgrade.go",
         "versionupgrade.go",

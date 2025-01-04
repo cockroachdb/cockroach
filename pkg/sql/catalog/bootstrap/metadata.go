@@ -43,6 +43,7 @@ type MetadataSchema struct {
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
 	ids           catalog.DescriptorIDSet
+	descsMap      map[string]catalog.Descriptor
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -52,7 +53,7 @@ func MakeMetadataSchema(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) MetadataSchema {
-	ms := MetadataSchema{codec: codec}
+	ms := MetadataSchema{codec: codec, descsMap: make(map[string]catalog.Descriptor)}
 	addSystemDatabaseToSchema(&ms, defaultZoneConfig, defaultSystemZoneConfig)
 	return ms
 }
@@ -76,9 +77,10 @@ const firstNonSystemDescriptorID = 100
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
 func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
+	_, isTable := desc.(catalog.TableDescriptor)
 	switch id := desc.GetID(); id {
 	case descpb.InvalidID:
-		if _, isTable := desc.(catalog.TableDescriptor); !isTable {
+		if !isTable {
 			log.Fatalf(context.TODO(), "only system tables may have dynamic IDs, got %T for %s",
 				desc, desc.GetName())
 		}
@@ -89,6 +91,10 @@ func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
 		if ms.ids.Contains(id) {
 			log.Fatalf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
 		}
+	}
+
+	if isTable {
+		ms.descsMap[desc.GetName()] = desc
 	}
 	ms.descs = append(ms.descs, desc)
 }
@@ -167,17 +173,19 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		add(catalogkeys.EncodeNameKey(ms.codec, desc), nameValue)
 
 		// Set initial sequence values.
-		if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsSequence() && tbl.GetID() != keys.DescIDSequenceID {
-			// Note that we skip over the DescIDSequence here,
-			// the value is initialized earlier in this function.
-			// DescIDSequence is special cased such that there
-			// is a special "descIDGenerator" for the system tenant.
-			// Because of this, there is no DescIDSequence for
-			// the system tenant and thus this loop over descriptors
-			// will not initialize the value for the system tenant.
-			value := roachpb.Value{}
-			value.SetInt(tbl.GetSequenceOpts().Start)
-			add(ms.codec.SequenceKey(uint32(tbl.GetID())), value)
+		if ms.codec.TenantID != roachpb.TenantTwo {
+			if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsSequence() && tbl.GetID() != keys.DescIDSequenceID {
+				// Note that we skip over the DescIDSequence here,
+				// the value is initialized earlier in this function.
+				// DescIDSequence is special cased such that there
+				// is a special "descIDGenerator" for the system tenant.
+				// Because of this, there is no DescIDSequence for
+				// the system tenant and thus this loop over descriptors
+				// will not initialize the value for the system tenant.
+				value := roachpb.Value{}
+				value.SetInt(tbl.GetSequenceOpts().Start)
+				add(ms.codec.SequenceKey(uint32(tbl.GetID())), value)
+			}
 		}
 
 		// Create descriptor metadata key.
@@ -576,7 +584,9 @@ func addSystemDatabaseToSchema(
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
-	addSystemTenantEntry(target)
+	if roachpb.EnableExperimentalUA || target.codec.TenantID != roachpb.TenantTwo {
+		addSystemTenantEntry(target)
+	}
 }
 
 // addSystemTenantEntry adds a kv pair to system.tenants to define the initial

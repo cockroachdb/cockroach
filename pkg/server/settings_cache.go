@@ -6,6 +6,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -150,6 +151,21 @@ func initializeCachedSettings(
 ) error {
 	dec := settingswatcher.MakeRowDecoder(codec)
 	for _, kv := range kvs {
+		if roachpb.EnableExperimentalUA {
+			// Fix key prefix if there is a mismatch
+			// (ssd) I believe there is a process by which inmemory snapshot is written to disk.
+			// (ssd) This could be probably one time thing.
+			// (ssd) Size is small and should may not be a concern.
+			// (ssd)
+			tenPrefix := codec.TenantPrefix()
+			if !bytes.HasPrefix(kv.Key, tenPrefix) {
+				newKey, err := keys.RewriteKeyToTenantPrefix(kv.Key, tenPrefix)
+				if err != nil {
+					return err
+				}
+				kv.Key = newKey
+			}
+		}
 		settingKeyS, val, _, err := dec.DecodeRow(kv, nil /* alloc */)
 		if err != nil {
 			return errors.WithHint(errors.Wrap(err, "while decoding settings data"),
