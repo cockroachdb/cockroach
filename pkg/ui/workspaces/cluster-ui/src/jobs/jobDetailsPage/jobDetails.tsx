@@ -165,19 +165,6 @@ export class JobDetails extends React.Component<
                 <JobStatusCell job={job} lineWidth={1.5} hideDuration={true} />
               }
             />
-            {hasNextRun && (
-              <>
-                <SummaryCardItem
-                  label="Next Planned Execution Time"
-                  value={
-                    <Timestamp
-                      time={nextRun}
-                      format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
-                    />
-                  }
-                />
-              </>
-            )}
             <SummaryCardItem
               label="Creation Time"
               value={
@@ -209,19 +196,6 @@ export class JobDetails extends React.Component<
                 }
               />
             )}
-            <SummaryCardItem
-              label="Last Execution Time"
-              value={
-                <Timestamp
-                  time={TimestampToMoment(job.last_run, null)}
-                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
-                />
-              }
-            />
-            <SummaryCardItem
-              label="Execution Count"
-              value={String(job.num_runs)}
-            />
             <SummaryCardItem label="User Name" value={job.username} />
             {job.highwater_timestamp && (
               <SummaryCardItem
