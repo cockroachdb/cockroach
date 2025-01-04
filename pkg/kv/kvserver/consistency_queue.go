@@ -125,11 +125,7 @@ func (q *consistencyQueue) shouldQueue(
 				return repl.getQueueLastProcessed(ctx, q.name)
 			},
 			isNodeAvailable: func(nodeID roachpb.NodeID) bool {
-				if repl.store.cfg.NodeLiveness != nil {
-					return repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.ConsistencyQueue)
-				}
-				// Some tests run without a NodeLiveness configured.
-				return true
+				return repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.ConsistencyQueue)
 			},
 			disableLastProcessedCheck: repl.store.cfg.TestingKnobs.DisableLastProcessedCheck,
 			interval:                  q.interval(),
