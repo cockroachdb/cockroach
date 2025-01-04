@@ -449,6 +449,7 @@ type TypeList interface {
 
 var _ TypeList = ParamTypes{}
 var _ TypeList = HomogeneousType{}
+var _ TypeList = HeterogeneousType{}
 var _ TypeList = VariadicType{}
 
 // ParamTypes is a list of function parameter names and their types.
@@ -696,6 +697,44 @@ func (v VariadicType) String() string {
 	return s.String()
 }
 
+type HeterogeneousType struct{}
+
+func (HeterogeneousType) Match(types []*types.T) bool {
+	return true
+}
+
+func (HeterogeneousType) MatchIdentical(types []*types.T) bool {
+	return true
+}
+
+func (HeterogeneousType) MatchAt(typ *types.T, i int) bool {
+	return true
+}
+
+func (t HeterogeneousType) MatchAtIdentical(typ *types.T, i int) bool {
+	return true
+}
+
+func (HeterogeneousType) MatchLen(l int) bool {
+	return true
+}
+
+func (HeterogeneousType) GetAt(i int) *types.T {
+	return types.Any
+}
+
+func (HeterogeneousType) Length() int {
+	return 1
+}
+
+func (HeterogeneousType) Types() []*types.T {
+	return []*types.T{types.Any}
+}
+
+func (HeterogeneousType) String() string {
+	return "anyelement*"
+}
+
 // UnknownReturnType is returned from ReturnTypers when the arguments provided are
 // not sufficient to determine a return type. This is necessary for cases like overload
 // resolution, where the argument types are not resolved yet so the type-level function
@@ -904,6 +943,21 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 					"only one overload can have HomogeneousType parameters")
 			}
 			typedExprs, _, err := typeCheckSameTypedExprs(ctx, semaCtx, desired, s.exprs...)
+			if err != nil {
+				return err
+			}
+			s.typedExprs = typedExprs
+			s.overloadIdxs = append(s.overloadIdxs[:0], uint8(i))
+			return nil
+		}
+
+		if _, ok := s.params[i].(HeterogeneousType); ok {
+			if numOverloads > 1 {
+				return errors.AssertionFailedf(
+					"only one overload can have HomogeneousType parameters")
+			}
+
+			typedExprs, _, err := typeCheckHeterogeneousExprs(ctx, semaCtx, desired, s.exprs...)
 			if err != nil {
 				return err
 			}

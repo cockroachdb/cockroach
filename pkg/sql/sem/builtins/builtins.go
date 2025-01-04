@@ -383,7 +383,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.Any},
+			Types:      tree.HeterogeneousType{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
