@@ -70,7 +70,7 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 		})
 
 	o.JoinOrderBuilder().NotifyOnAddJoin(
-		func(left, right, all, joinRefs, selRefs []memo.RelExpr, op opt.Operator) {
+		func(left, right, all, joinRefs, selRefs []memo.RelExpr, op opt.Operator, ub, cost float64) {
 			relsToJoin := jof.formatVertexSet(all)
 			if relsToJoin != relsJoinedLast {
 				ot.output("Joining %s\n", relsToJoin)
@@ -82,11 +82,13 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 			}
 			ot.indent(
 				fmt.Sprintf(
-					"%s %s [%s, refs=%s]%s",
+					"%s %s [%s, refs=%s, ub=%f, cost=%f]%s",
 					jof.formatVertexSet(left),
 					jof.formatVertexSet(right),
 					joinOpLabel(op),
 					jof.formatVertexSet(joinRefs),
+					ub,
+					cost,
 					selString,
 				),
 			)
