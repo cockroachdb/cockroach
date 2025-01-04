@@ -1,5 +1,7 @@
 # LogicTest: local
 
+# TODO(mgartner): Move this file into execbuiler tests.
+
 statement ok
 CREATE TABLE t (
   k INT PRIMARY KEY,
@@ -348,7 +350,7 @@ isolation level: serializable
 priority: normal
 quality of service: regular
 ·
-• lookup join
+• lookup join (streamer)
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
@@ -363,25 +365,21 @@ quality of service: regular
 │ equality cols are key
 │ pred: c = "$2"
 │
-└── • lookup join
-    │ sql nodes: <hidden>
-    │ kv nodes: <hidden>
-    │ regions: <hidden>
-    │ actual row count: 0
-    │ KV time: 0µs
-    │ KV contention time: 0µs
-    │ KV rows decoded: 0
-    │ KV bytes read: 0 B
-    │ KV gRPC calls: 0
-    │ estimated max memory allocated: 0 B
-    │ table: t@t_a_idx
-    │ equality: ($1) = (a)
+└── • render
     │
-    └── • values
+    └── • scan
           sql nodes: <hidden>
+          kv nodes: <hidden>
           regions: <hidden>
-          actual row count: 1
-          size: 2 columns, 1 row
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          table: t@t_a_idx
+          spans: [/1 - /1]
 
 # The generic plan can be reused with different placeholder values.
 query T
@@ -399,7 +397,7 @@ isolation level: serializable
 priority: normal
 quality of service: regular
 ·
-• lookup join
+• lookup join (streamer)
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
@@ -414,25 +412,21 @@ quality of service: regular
 │ equality cols are key
 │ pred: c = "$2"
 │
-└── • lookup join
-    │ sql nodes: <hidden>
-    │ kv nodes: <hidden>
-    │ regions: <hidden>
-    │ actual row count: 0
-    │ KV time: 0µs
-    │ KV contention time: 0µs
-    │ KV rows decoded: 0
-    │ KV bytes read: 0 B
-    │ KV gRPC calls: 0
-    │ estimated max memory allocated: 0 B
-    │ table: t@t_a_idx
-    │ equality: ($1) = (a)
+└── • render
     │
-    └── • values
+    └── • scan
           sql nodes: <hidden>
+          kv nodes: <hidden>
           regions: <hidden>
-          actual row count: 1
-          size: 2 columns, 1 row
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          table: t@t_a_idx
+          spans: [/11 - /11]
 
 statement ok
 SET plan_cache_mode = force_custom_plan
@@ -960,7 +954,7 @@ isolation level: serializable
 priority: normal
 quality of service: regular
 ·
-• lookup join
+• lookup join (streamer)
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
@@ -973,7 +967,7 @@ quality of service: regular
 │ table: g@g_a_b_idx
 │ equality: (k) = (a)
 │
-└── • lookup join
+└── • lookup join (streamer)
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 0
@@ -986,7 +980,7 @@ quality of service: regular
     │ table: c@c_a_idx
     │ equality: (k) = (a)
     │
-    └── • lookup join
+    └── • lookup join (streamer)
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
@@ -1001,25 +995,21 @@ quality of service: regular
         │ equality cols are key
         │ pred: c = "$2"
         │
-        └── • lookup join
-            │ sql nodes: <hidden>
-            │ kv nodes: <hidden>
-            │ regions: <hidden>
-            │ actual row count: 0
-            │ KV time: 0µs
-            │ KV contention time: 0µs
-            │ KV rows decoded: 0
-            │ KV bytes read: 0 B
-            │ KV gRPC calls: 0
-            │ estimated max memory allocated: 0 B
-            │ table: t@t_a_idx
-            │ equality: ($1) = (a)
+        └── • render
             │
-            └── • values
+            └── • scan
                   sql nodes: <hidden>
+                  kv nodes: <hidden>
                   regions: <hidden>
-                  actual row count: 1
-                  size: 2 columns, 1 row
+                  actual row count: 0
+                  KV time: 0µs
+                  KV contention time: 0µs
+                  KV rows decoded: 0
+                  KV bytes read: 0 B
+                  KV gRPC calls: 0
+                  estimated max memory allocated: 0 B
+                  table: t@t_a_idx
+                  spans: [/10000 - /10000]
 
 # On the seventh execution the generic plan is reused.
 query T
@@ -1037,7 +1027,7 @@ isolation level: serializable
 priority: normal
 quality of service: regular
 ·
-• lookup join
+• lookup join (streamer)
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
@@ -1050,7 +1040,7 @@ quality of service: regular
 │ table: g@g_a_b_idx
 │ equality: (k) = (a)
 │
-└── • lookup join
+└── • lookup join (streamer)
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 0
@@ -1063,7 +1053,7 @@ quality of service: regular
     │ table: c@c_a_idx
     │ equality: (k) = (a)
     │
-    └── • lookup join
+    └── • lookup join (streamer)
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
@@ -1078,25 +1068,21 @@ quality of service: regular
         │ equality cols are key
         │ pred: c = "$2"
         │
-        └── • lookup join
-            │ sql nodes: <hidden>
-            │ kv nodes: <hidden>
-            │ regions: <hidden>
-            │ actual row count: 0
-            │ KV time: 0µs
-            │ KV contention time: 0µs
-            │ KV rows decoded: 0
-            │ KV bytes read: 0 B
-            │ KV gRPC calls: 0
-            │ estimated max memory allocated: 0 B
-            │ table: t@t_a_idx
-            │ equality: ($1) = (a)
+        └── • render
             │
-            └── • values
+            └── • scan
                   sql nodes: <hidden>
+                  kv nodes: <hidden>
                   regions: <hidden>
-                  actual row count: 1
-                  size: 2 columns, 1 row
+                  actual row count: 0
+                  KV time: 0µs
+                  KV contention time: 0µs
+                  KV rows decoded: 0
+                  KV bytes read: 0 B
+                  KV gRPC calls: 0
+                  estimated max memory allocated: 0 B
+                  table: t@t_a_idx
+                  spans: [/10000 - /10000]
 
 statement ok
 DEALLOCATE p
@@ -1168,26 +1154,21 @@ quality of service: regular
 • limit
 │ count: 10
 │
-└── • lookup join
-    │ sql nodes: <hidden>
-    │ kv nodes: <hidden>
-    │ regions: <hidden>
-    │ actual row count: 0
-    │ KV time: 0µs
-    │ KV contention time: 0µs
-    │ KV rows decoded: 0
-    │ KV bytes read: 0 B
-    │ KV gRPC calls: 0
-    │ estimated max memory allocated: 0 B
-    │ estimated max sql temp disk usage: 0 B
-    │ table: g@g_a_b_idx
-    │ equality: ($1) = (a)
+└── • render
     │
-    └── • values
+    └── • scan
           sql nodes: <hidden>
+          kv nodes: <hidden>
           regions: <hidden>
-          actual row count: 1
-          size: 1 column, 1 row
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          table: g@g_a_b_idx
+          spans: [/10 - /10]
 
 statement ok
 DEALLOCATE p
