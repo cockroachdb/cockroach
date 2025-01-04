@@ -80,13 +80,13 @@ sort
       │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) s_suppkey:12(int!null) s_nationkey:15(int!null) l_orderkey:21(int!null) l_partkey:22(int!null) l_suppkey:23(int!null) l_quantity:25(float!null) l_extendedprice:26(float!null) l_discount:27(float!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null) o_orderkey:46(int!null) o_orderdate:50(date!null) n_nationkey:57(int!null) n_name:58(char!null)
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    ├── stats: [rows=2450.416, distinct(1)=1065.01, null(1)=0, distinct(2)=2405.95, null(2)=0, distinct(12)=1064.52, null(12)=0, distinct(15)=25, null(15)=0, distinct(21)=1066.43, null(21)=0, distinct(22)=1065.01, null(22)=0, distinct(23)=1064.52, null(23)=0, distinct(25)=50, null(25)=0, distinct(26)=958.165, null(26)=0, distinct(27)=11, null(27)=0, distinct(39)=958.326, null(39)=0, distinct(40)=958.326, null(40)=0, distinct(42)=956.829, null(42)=0, distinct(46)=1066.43, null(46)=0, distinct(50)=957.145, null(50)=0, distinct(57)=25, null(57)=0, distinct(58)=25, null(58)=0, distinct(50,58)=1548.5, null(50,58)=0, distinct(25-27,42)=958.326, null(25-27,42)=0]
-      │    │    ├── fd: (1)-->(2), (12)-->(15), (39,40)-->(42), (23)==(12,40), (40)==(12,23), (22)==(1,39), (39)==(1,22), (46)-->(50), (21)==(46), (46)==(21), (12)==(23,40), (57)-->(58), (15)==(57), (57)==(15), (1)==(22,39)
+      │    │    ├── fd: (1)-->(2), (12)-->(15), (39,40)-->(42), (46)-->(50), (57)-->(58), (12)==(23,40), (23)==(12,40), (40)==(12,23), (1)==(22,39), (22)==(1,39), (39)==(1,22), (21)==(46), (46)==(21), (15)==(57), (57)==(15)
       │    │    ├── inner-join (hash)
       │    │    │    ├── save-table-name: q9_inner_join_5
       │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) s_suppkey:12(int!null) s_nationkey:15(int!null) l_orderkey:21(int!null) l_partkey:22(int!null) l_suppkey:23(int!null) l_quantity:25(float!null) l_extendedprice:26(float!null) l_discount:27(float!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null) o_orderkey:46(int!null) o_orderdate:50(date!null)
       │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
       │    │    │    ├── stats: [rows=2450.416, distinct(1)=1223.85, null(1)=0, distinct(2)=2405.95, null(2)=0, distinct(12)=1224.18, null(12)=0, distinct(15)=25, null(15)=0, distinct(21)=1227.35, null(21)=0, distinct(22)=1223.85, null(22)=0, distinct(23)=1224.18, null(23)=0, distinct(25)=50, null(25)=0, distinct(26)=1058.35, null(26)=0, distinct(27)=11, null(27)=0, distinct(39)=1058.59, null(39)=0, distinct(40)=1058.59, null(40)=0, distinct(42)=1056.39, null(42)=0, distinct(46)=1227.35, null(46)=0, distinct(50)=1056.85, null(50)=0]
-      │    │    │    ├── fd: (1)-->(2), (12)-->(15), (39,40)-->(42), (23)==(12,40), (40)==(12,23), (22)==(1,39), (39)==(1,22), (46)-->(50), (21)==(46), (46)==(21), (12)==(23,40), (1)==(22,39)
+      │    │    │    ├── fd: (1)-->(2), (12)-->(15), (39,40)-->(42), (46)-->(50), (12)==(23,40), (23)==(12,40), (40)==(12,23), (1)==(22,39), (22)==(1,39), (39)==(1,22), (21)==(46), (46)==(21)
       │    │    │    ├── scan supplier@s_nk
       │    │    │    │    ├── save-table-name: q9_scan_6
       │    │    │    │    ├── columns: s_suppkey:12(int!null) s_nationkey:15(int!null)
@@ -103,21 +103,21 @@ sort
       │    │    │    │    ├── key columns: [21] = [46]
       │    │    │    │    ├── lookup columns are key
       │    │    │    │    ├── stats: [rows=2430.813, distinct(1)=1535.46, null(1)=0, distinct(2)=2387.05, null(2)=0, distinct(21)=1535.6, null(21)=0, distinct(22)=1535.46, null(22)=0, distinct(23)=1220.18, null(23)=0, distinct(25)=50, null(25)=0, distinct(26)=1219.79, null(26)=0, distinct(27)=11, null(27)=0, distinct(39)=1220.18, null(39)=0, distinct(40)=1220.18, null(40)=0, distinct(42)=1216.52, null(42)=0, distinct(46)=1535.6, null(46)=0, distinct(50)=1217.29, null(50)=0]
-      │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (23)==(40), (40)==(23), (22)==(1,39), (39)==(1,22), (46)-->(50), (21)==(46), (46)==(21), (1)==(22,39)
+      │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (46)-->(50), (23)==(40), (40)==(23), (1)==(22,39), (22)==(1,39), (39)==(1,22), (21)==(46), (46)==(21)
       │    │    │    │    ├── inner-join (lookup lineitem)
       │    │    │    │    │    ├── save-table-name: q9_lookup_join_8
       │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) l_orderkey:21(int!null) l_partkey:22(int!null) l_suppkey:23(int!null) l_quantity:25(float!null) l_extendedprice:26(float!null) l_discount:27(float!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null)
       │    │    │    │    │    ├── key columns: [21 24] = [21 24]
       │    │    │    │    │    ├── lookup columns are key
       │    │    │    │    │    ├── stats: [rows=2430.813, distinct(1)=2429.06, null(1)=0, distinct(2)=2387.05, null(2)=0, distinct(21)=1535.6, null(21)=0, distinct(22)=2429.06, null(22)=0, distinct(23)=1536.11, null(23)=0, distinct(25)=50, null(25)=0, distinct(26)=1535.27, null(26)=0, distinct(27)=11, null(27)=0, distinct(39)=1536.11, null(39)=0, distinct(40)=1536.11, null(40)=0, distinct(42)=1528.33, null(42)=0]
-      │    │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (23)==(40), (40)==(23), (22)==(1,39), (39)==(1,22), (1)==(22,39)
+      │    │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (23)==(40), (40)==(23), (1)==(22,39), (22)==(1,39), (39)==(1,22)
       │    │    │    │    │    ├── inner-join (lookup lineitem@l_pk_sk)
       │    │    │    │    │    │    ├── save-table-name: q9_lookup_join_9
       │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) l_orderkey:21(int!null) l_partkey:22(int!null) l_suppkey:23(int!null) l_linenumber:24(int!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null)
       │    │    │    │    │    │    ├── key columns: [39 40] = [22 23]
       │    │    │    │    │    │    ├── stats: [rows=812.7722, distinct(1)=807.834, null(1)=0, distinct(2)=807.748, null(2)=0, distinct(21)=812.556, null(21)=0, distinct(22)=812.772, null(22)=0, distinct(23)=812.772, null(23)=0, distinct(24)=7, null(24)=0, distinct(39)=812.772, null(39)=0, distinct(40)=812.772, null(40)=0, distinct(42)=809.246, null(42)=0]
       │    │    │    │    │    │    ├── key: (21,24)
-      │    │    │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (1)==(22,39), (39)==(1,22), (21,24)-->(22,23), (22)==(1,39), (23)==(40), (40)==(23)
+      │    │    │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (21,24)-->(22,23), (1)==(22,39), (22)==(1,39), (39)==(1,22), (23)==(40), (40)==(23)
       │    │    │    │    │    │    ├── inner-join (merge)
       │    │    │    │    │    │    │    ├── save-table-name: q9_merge_join_10
       │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null)

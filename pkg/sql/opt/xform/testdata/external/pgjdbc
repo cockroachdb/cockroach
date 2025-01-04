@@ -57,11 +57,11 @@ project
  │    │    │    ├── left-join (hash)
  │    │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null objoid:86 classoid:87 description:89 c.oid:91 relname:92 relnamespace:93 n.oid:128 nspname:129 rownum:134!null
  │    │    │    │    ├── immutable
- │    │    │    │    ├── fd: (4)==(34), (34)==(4), (134)-->(2-4,8,26,34,35), (87)==(91), (91)==(87), (93)==(128), (128)==(93)
+ │    │    │    │    ├── fd: (134)-->(2-4,8,26,34,35), (4)==(34), (34)==(4), (87)==(91), (91)==(87), (93)==(128), (128)==(93)
  │    │    │    │    ├── ordinality
  │    │    │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null rownum:134!null
  │    │    │    │    │    ├── key: (134)
- │    │    │    │    │    ├── fd: (4)==(34), (34)==(4), (134)-->(2-4,8,26,34,35)
+ │    │    │    │    │    ├── fd: (134)-->(2-4,8,26,34,35), (4)==(34), (34)==(4)
  │    │    │    │    │    └── inner-join (hash)
  │    │    │    │    │         ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null
  │    │    │    │    │         ├── fd: (4)==(34), (34)==(4)

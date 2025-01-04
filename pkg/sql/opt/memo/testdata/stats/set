@@ -257,7 +257,7 @@ intersect
  ├── right columns: z:7(int) b.x:6(int) rowid:9(int)
  ├── stats: [rows=2.000001, distinct(12-14)=2, null(12-14)=0]
  ├── key: (14)
- ├── fd: ()-->(13), (12)==(14), (14)==(12), (14)-->(12,13)
+ ├── fd: ()-->(13), (14)-->(12,13), (12)==(14), (14)==(12)
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    ├── stats: [rows=5000, distinct(1,2)=5000, null(1,2)=0]
