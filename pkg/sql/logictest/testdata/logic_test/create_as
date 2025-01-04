@@ -451,3 +451,13 @@ query B
 SELECT count(*) > 0 FROM t_105887_2
 ----
 true
+
+# Regression test for not setting the Annotations on the planner (#137631).
+statement ok
+SET experimental_enable_temp_tables = 'on';
+
+statement ok
+CREATE TABLE v00 (c01 INT, c02 STRING);
+
+statement ok
+CREATE TEMP TABLE v300 AS ( ( TABLE [ SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE v00 ] ) ) ;
