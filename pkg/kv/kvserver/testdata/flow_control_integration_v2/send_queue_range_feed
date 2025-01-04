@@ -31,11 +31,16 @@ SELECT
 
 
 -- Send queue metrics from n1, n3's send queue should have 1 MiB for s3.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%send_queue%'
-     AND name != 'kvflowcontrol.send_queue.count'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%send_queue%'
+  AND name != 'kvflowcontrol.send_queue.count'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.send_queue.bytes                                    | 1.0 MiB  
   kvflowcontrol.send_queue.prevent.count                            | 0 B      
@@ -48,25 +53,34 @@ ORDER BY name ASC;
 
 -- Observe the total tracked tokens per-stream on n1, s3's entries will still
 -- be tracked here.
-SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
+SELECT
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  store_id,
+  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+FROM
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 0 B                   
-  75       | 2        | 0 B                   
-  75       | 3        | 4.0 MiB               
+  a        | 1        | 0 B                   
+  a        | 2        | 0 B                   
+  a        | 3        | 4.0 MiB               
 
 
 -- Per-store tokens available from n1, these should reflect the lack of tokens 
 -- for s3.
-SELECT store_id,
-     crdb_internal.humanize_bytes(available_eval_regular_tokens),
-     crdb_internal.humanize_bytes(available_eval_elastic_tokens),
-     crdb_internal.humanize_bytes(available_send_regular_tokens),
-     crdb_internal.humanize_bytes(available_send_elastic_tokens)
-  FROM crdb_internal.kv_flow_controller_v2
-  ORDER BY store_id ASC;
+SELECT
+  store_id,
+  crdb_internal.humanize_bytes(available_eval_regular_tokens),
+  crdb_internal.humanize_bytes(available_eval_elastic_tokens),
+  crdb_internal.humanize_bytes(available_send_regular_tokens),
+  crdb_internal.humanize_bytes(available_send_elastic_tokens)
+FROM
+  crdb_internal.kv_flow_controller_v2
+ORDER BY
+  store_id ASC;
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
@@ -93,11 +107,16 @@ SELECT
 
 
 -- Send queue and flow token metrics from n1. All tokens should be returned.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%send_queue%'
-     AND name != 'kvflowcontrol.send_queue.count'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%send_queue%'
+  AND name != 'kvflowcontrol.send_queue.count'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.send_queue.bytes                                    | 0 B  
   kvflowcontrol.send_queue.prevent.count                            | 0 B  
@@ -106,13 +125,16 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B  
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B  
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B  
-SELECT store_id,
-     crdb_internal.humanize_bytes(available_eval_regular_tokens),
-     crdb_internal.humanize_bytes(available_eval_elastic_tokens),
-     crdb_internal.humanize_bytes(available_send_regular_tokens),
-     crdb_internal.humanize_bytes(available_send_elastic_tokens)
-  FROM crdb_internal.kv_flow_controller_v2
-  ORDER BY store_id ASC;
+SELECT
+  store_id,
+  crdb_internal.humanize_bytes(available_eval_regular_tokens),
+  crdb_internal.humanize_bytes(available_eval_elastic_tokens),
+  crdb_internal.humanize_bytes(available_send_regular_tokens),
+  crdb_internal.humanize_bytes(available_send_elastic_tokens)
+FROM
+  crdb_internal.kv_flow_controller_v2
+ORDER BY
+  store_id ASC;
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
