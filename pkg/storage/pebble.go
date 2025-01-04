@@ -891,6 +891,8 @@ func DefaultPebbleOptions() *pebble.Options {
 	// This issue tracks re-enablement: https://github.com/cockroachdb/pebble/issues/4139
 	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
 
+	opts.Experimental.UserKeyCategories = userKeyCategories
+
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
 		l.BlockSize = 32 << 10       // 32 KB
@@ -1491,6 +1493,28 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 
 	return p, nil
+}
+
+var userKeyCategories = pebble.MakeUserKeyCategories(
+	EngineComparer.Compare,
+	category("local-1", keys.LocalRangeIDPrefix.AsRawKey()),
+	category("rangeid", keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()),
+	category("local-2", keys.LocalRangePrefix),
+	category("range", keys.LocalRangePrefix.PrefixEnd()),
+	category("local-3", keys.LocalRangeLockTablePrefix),
+	category("lock", keys.LocalRangeLockTablePrefix.PrefixEnd()),
+	category("local-4", keys.LocalPrefix.PrefixEnd()),
+	category("meta", keys.MetaMax),
+	category("system", keys.SystemMax),
+	category("tenant", nil),
+)
+
+func category(name string, upperBound roachpb.Key) pebble.UserKeyCategory {
+	if upperBound == nil {
+		return pebble.UserKeyCategory{Name: name}
+	}
+	ek := EngineKey{Key: upperBound}
+	return pebble.UserKeyCategory{Name: name, UpperBound: ek.Encode()}
 }
 
 // async launches the provided function in a new goroutine. It uses a wait group
