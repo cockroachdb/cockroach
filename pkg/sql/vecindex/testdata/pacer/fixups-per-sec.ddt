@@ -1,0 +1,128 @@
+# ----------
+# Simulate case where fixups have slowed to only 1 per second.
+# ----------
+
+# Allowed query rate starts at 500 ops/sec and rapidly falls to the minimum of 1
+# ops/sec. After ~10 seconds, the allowed query rate should stabilize at ~50
+# ops/sec. The initial high ops/sec generates a fast-growing fixup queue, and it
+# can only be reduced by 1 per second, forcing the pacer to heavily throttle
+# queries until the fixup queue is stabilized.
+plot seconds=20 ops-per-fixup=50 fixups-per-sec=1
+----
+ Allowed ops per second = 60.20 ops/sec (avg), 49.91 ops/sec (final)
+ 506 ┼─╮
+ 455 ┤ ╰╮
+ 405 ┤  ╰╮
+ 354 ┤   ╰╮
+ 304 ┤    │
+ 253 ┤    ╰╮
+ 203 ┤     ╰╮
+ 152 ┤      ╰╮
+ 102 ┤       │
+  51 ┤       ╰╮                          ╭─────────────────────────────────────────────────────
+   1 ┤        ╰──────────────────────────╯
+
+# Fixup queue size grows rapidly and then is slowly reduced at 1 fixup / second
+# until it stabilizes at ~5 fixups.
+plot seconds=20 ops-per-fixup=50 fixups-per-sec=1 show-queue-size
+----
+ Fixup queue size = 5.99 fixups (avg)
+ 10.00 ┤      ╭──────╮
+  9.00 ┤     ╭╯      ╰───╮
+  8.00 ┤   ╭─╯           ╰────╮
+  7.00 ┤   │                  ╰───╮
+  6.00 ┤  ╭╯                      ╰────╮      ╭─╮ ╭─╮  ╭╮
+  5.00 ┤  │                            ╰──────╯ ╰─╯ ╰──╯╰────────╮╭──────────────────────────────
+  4.00 ┤ ╭╯                                                      ╰╯
+  3.00 ┤ │
+  2.00 ┤╭╯
+  1.00 ┤│
+  0.00 ┼╯
+
+# Fixup queue size increases at high rate and then goes negative once throttling
+# kicks in.
+plot seconds=20 ops-per-fixup=50 fixups-per-sec=1 show-queue-size-rate
+----
+ Fixup queue size rate = 0.45 fixups/sec (avg)
+  4.82 ┤  ╭─╮
+  4.24 ┤  │ ╰──╮
+  3.66 ┤ ╭╯    ╰╮
+  3.08 ┤ │      │
+  2.49 ┤ │      ╰╮
+  1.91 ┤╭╯       ╰───────────╮
+  1.33 ┤│                    │
+  0.75 ┤│                    │                ╭─╮ ╭─╮   ╭╮
+  0.16 ┼╯                    │                │ │ │ │   ││╭──╮╭──╮╭──────────────────────────────
+ -0.42 ┤                     ╰────╮         ╭─╯ ╰─╯ ╰───╯╰╯  ╰╯  ││
+ -1.00 ┤                          ╰─────────╯                    ╰╯
+
+# Expect long query delays while fixup queue is being reduced, since fixups are
+# happening only once per second.
+plot seconds=20 ops-per-fixup=50 fixups-per-sec=1 show-delay-millis
+----
+ Delay (ms) = 516.28415 ms (avg)
+ 2647 ┤         ╭───────────╮
+ 2382 ┤         │           │
+ 2118 ┤         │           │
+ 1853 ┤         │           │
+ 1589 ┤         │           │
+ 1324 ┤         │           │
+ 1059 ┤         │           ╰─────────────╮
+  795 ┤         │                         │
+  530 ┤         │                         │
+  266 ┤        ╭╯                         │
+    1 ┼────────╯                          ╰─────────────────────────────────────────────────────
+
+# ----------
+# Simulate case where fixups are resolved faster than than queries are arriving
+# (e.g. clearing out burst of fixups that have accumulated to some issue).
+# ----------
+
+# Allowed query rate should rise to ~1000 ops/sec, since fixups are being
+# cleared faster than they're being generated.
+plot seconds=20 ops-per-fixup=25 fixups-per-sec=50
+----
+ Allowed ops per second = 832.79 ops/sec (avg), 1007.58 ops/sec (final)
+ 1008 ┤                                                             ╭───────────────────────────
+  957 ┤                                                      ╭──────╯
+  906 ┤                                               ╭──────╯
+  855 ┤                                        ╭──────╯
+  805 ┤                                  ╭─────╯
+  754 ┤                           ╭──────╯
+  703 ┤                     ╭─────╯
+  652 ┤               ╭─────╯
+  602 ┤         ╭─────╯
+  551 ┤   ╭─────╯
+  500 ┼───╯
+
+# Fixup queue size should stay <= 1.
+plot seconds=20 ops-per-fixup=25 fixups-per-sec=50 show-queue-size
+----
+ Fixup queue size = 0.34 fixups (avg)
+ 1.00 ┤             ╭╮╭──╮ ╭╮  ╭╮╭╮╭╮     ╭─╮╭╮╭─╮  ╭╮    ╭╮ ╭╮╭╮╭╮╭╮                          ╭
+ 0.90 ┤             │││  │ ││  ││││││     │ ││││ │  ││    ││ ││││││││                          │
+ 0.80 ┤             │││  │ ││  ││││││     │ ││││ │  ││    ││ ││││││││                      ╭╮  │
+ 0.70 ┤             │││  │ ││  ││││││     │ ││││ │  ││    ││ ││││││││                      ││  │
+ 0.60 ┤             │││  │ ││  ││││││     │ ││││ │  ││    ││ ││││││││                      ││  │
+ 0.50 ┤             │││  │ ││  ││││││     │ ││││ │  ││    ││ ││││││││                      ││  │
+ 0.40 ┤             │││  │ ││  ││││││     │ ││││ │  ││    ││ ││││││││                      ││  │
+ 0.30 ┤             │││  │ ││  ││││││     │ ││││ │  ││    ││ ││││││││                      ││  │
+ 0.20 ┤             │││  │ ││  ││││││     │ ││││ │  ││    ││ ││││││││                      ││  │
+ 0.10 ┤             │││  │ ││  ││││││     │ ││││ │  ││    ││ ││││││││                      ││  │
+ 0.00 ┼─────────────╯╰╯  ╰─╯╰──╯╰╯╰╯╰─────╯ ╰╯╰╯ ╰──╯╰────╯╰─╯╰╯╰╯╰╯╰──────────────────────╯╰──╯
+
+# Query delay should drop to ~0 ms.
+plot seconds=20 ops-per-fixup=25 fixups-per-sec=50 show-delay-millis
+----
+ Delay (ms) = 0.65655 ms (avg)
+ 2.00 ┤╭╮     ╭╮        ╭╮
+ 1.80 ┤││     ││        ││
+ 1.60 ┤││     ││        ││
+ 1.40 ┤││     │╰╮       │╰╮
+ 1.20 ┤││     │ │       │ │
+ 1.00 ┼╯╰─────╯ ╰─╮╭─╮╭─╯ │╭──────╮ ╭──╮ ╭─╮╭─────╮╭╮╭──╮╭╮ ╭─╮ ╭──╮╭╮
+ 0.80 ┤           ││ ╰╯   ││      ╰╮│  │ │ ││     ╰╯││  │││ │ │ │  │││
+ 0.60 ┤           ││      ││       ╰╯  │ │ ││       ││  │││ │ │╭╯  │││
+ 0.40 ┤           ╰╯      ││           ╰╮│ ││       ││  ╰╯│ │ ││   │││
+ 0.20 ┤                   ╰╯            ││ ╰╯       ││    │ │ ││   │││
+ 0.00 ┤                                 ╰╯          ╰╯    ╰─╯ ╰╯   ╰╯╰──────────────────────────

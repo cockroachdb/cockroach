@@ -1,0 +1,93 @@
+# ----------
+# Start pacer with backlog of 100 fixups.
+# ----------
+
+# Pacer takes several seconds to discover the optimal allowed ops/sec (~400)
+# that will reduce the fixup queue by the target of ~2 fixups per second. While
+# it's possible to reduce it faster by throttling ops/sec more aggressively,
+# it's a  better user experience to reduce the queue more gradually over time.
+plot initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10
+----
+ Allowed ops per second = 371.44 ops/sec (avg), 397.52 ops/sec (final)
+ 500 ┼╮
+ 473 ┤│
+ 446 ┤╰╮
+ 420 ┤ │                                  ╭─────────────────╮
+ 393 ┤ ╰╮                            ╭────╯                 ╰──────────────────────────────────
+ 366 ┤  ╰╮                        ╭──╯
+ 339 ┤   ╰╮                    ╭──╯
+ 312 ┤    ╰╮                ╭──╯
+ 285 ┤     ╰╮             ╭─╯
+ 259 ┤      ╰─╮        ╭──╯
+ 232 ┤        ╰────────╯
+
+# Fixup queue size should steadily decrease over the 10 second period.
+plot initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10 show-queue-size
+----
+ Fixup queue size = 84.01 fixups (avg)
+ 99.00 ┼──╮
+ 96.50 ┤  ╰─────╮
+ 94.00 ┤        ╰───╮
+ 91.50 ┤            ╰───╮
+ 89.00 ┤                ╰─────╮
+ 86.50 ┤                      ╰───╮
+ 84.00 ┤                          ╰─────────────╮
+ 81.50 ┤                                        ╰──────────╮
+ 79.00 ┤                                                   ╰────────────╮
+ 76.50 ┤                                                                ╰────────╮
+ 74.00 ┤                                                                         ╰───────────────
+
+# Average queue size reduction should be ~2 fixups per second.
+plot initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10 show-queue-size-rate
+----
+ Fixup queue size rate = -1.86 fixups/sec (avg)
+  5.00 ┼─╮
+  4.08 ┤ ╰╮
+  3.16 ┤  ╰─╮
+  2.25 ┤    ╰─╮
+  1.33 ┤      ╰─╮
+  0.41 ┤        │
+ -0.51 ┤        ╰─╮                                   ╭─╮            ╭─╮       ╭╮               ╭
+ -1.42 ┤          ╰─╮ ╭╮               ╭╮     ╭─╮ ╭───╯ ╰─╮╭─────────╯ ╰─╮╭────╯╰╮  ╭─────╮ ╭───╯
+ -2.34 ┤            ╰─╯╰╮            ╭─╯│  ╭──╯ ╰─╯       ╰╯             ╰╯      ╰──╯     ╰─╯
+ -3.26 ┤                ╰─────────╮╭─╯  ╰──╯
+ -4.18 ┤                          ╰╯
+
+# Plot again, this time over 60 seconds to show point where fixup queue has been
+# reduced below the allowed level. Ensure that allowed ops/sec rises back up to
+# ~500 ops/sec that maintains a constant queue size.
+plot seconds=60 initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10
+----
+ Allowed ops per second = 421.60 ops/sec (avg), 500.18 ops/sec (final)
+ 525 ┤                                                                   ╭─╮
+ 495 ┼╮                                                                 ╭╯ ╰╮ ╭────────────────
+ 466 ┤│                                                                ╭╯   ╰─╯
+ 437 ┤│     ╭─╮                                                        │
+ 408 ┤│    ╭╯ ╰───╮╭───────────────────────────────────────────────────╯
+ 378 ┤│   ╭╯      ╰╯
+ 349 ┤│   │
+ 320 ┤│  ╭╯
+ 290 ┤╰╮ │
+ 261 ┤ │╭╯
+ 232 ┤ ╰╯
+
+# Show the fixup queue over the 60 second interval. It should drop to ~4 fixups.
+plot seconds=60 height=15 initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10 show-queue-size
+----
+ Fixup queue size = 37.65 fixups (avg)
+ 99.00 ┼╮
+ 92.67 ┤╰─╮
+ 86.33 ┤  ╰──╮
+ 80.00 ┤     ╰────╮
+ 73.67 ┤          ╰────╮
+ 67.33 ┤               ╰────╮
+ 61.00 ┤                    ╰───╮
+ 54.67 ┤                        ╰────╮
+ 48.33 ┤                             ╰───╮
+ 42.00 ┤                                 ╰────╮
+ 35.67 ┤                                      ╰────╮
+ 29.33 ┤                                           ╰────╮
+ 23.00 ┤                                                ╰───╮
+ 16.67 ┤                                                    ╰────╮
+ 10.33 ┤                                                         ╰────╮
+  4.00 ┤                                                              ╰──────────────────────────
