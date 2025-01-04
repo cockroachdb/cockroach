@@ -440,9 +440,14 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 		if line == "" {
 			continue
 		}
+		// N.B. Below, we skip over invalid public keys as opposed to failing. Since we don't control how these keys are
+		// uploaded, it's possible for a key to become invalid.
+		// N.B. This implies that an operation like `AddUserAuthorizedKey` has the side effect of removing invalid
+		// keys, since they are skipped here, and the result is then uploaded via `SetUserAuthorizedKeys`.
 		colonIdx := strings.IndexRune(line, ':')
 		if colonIdx == -1 {
-			return nil, fmt.Errorf("malformed public key line %q", line)
+			fmt.Fprintf(os.Stderr, "WARN: malformed public key line %q\n", line)
+			continue
 		}
 
 		user := line[:colonIdx]
@@ -454,7 +459,8 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 
 		pubKey, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(key))
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse public key in project metadata: %w\n%s", err, key)
+			fmt.Fprintf(os.Stderr, "WARN: failed to parse public key in project metadata: %v\n%q\n", err, key)
+			continue
 		}
 		authorizedKeys = append(authorizedKeys, AuthorizedKey{User: user, Key: pubKey, Comment: comment})
 	}
