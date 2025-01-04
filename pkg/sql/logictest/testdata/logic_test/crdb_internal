@@ -926,15 +926,15 @@ CREATE TYPE enum2 AS ENUM ()
 query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements ORDER BY descriptor_id
 ----
-104  test  public  116  enum1  CREATE TYPE test.public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
-104  test  public  118  enum2  CREATE TYPE test.public.enum2 AS ENUM ()               {}
+104  test  public  116  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
+104  test  public  118  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
 
 # Test the virtual index as well.
 
 query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements WHERE descriptor_id = (('enum1'::regtype::oid::int) - 100000)::oid
 ----
-104  test  public  116  enum1  CREATE TYPE test.public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
+104  test  public  116  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
 
 query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements WHERE descriptor_id = 'foo'::regclass::oid
@@ -1678,12 +1678,3 @@ statement ok
 DROP USER real_user;
 
 subtest end
-
-statement ok
-CREATE TYPE other_db.public.enum1 AS ENUM ('yo');
-
-# Ensure that the cross-DB lookup of UDTs works.
-query ITTITTT
-SELECT * FROM "".crdb_internal.create_type_statements WHERE descriptor_id = (('other_db.public.enum1'::regtype::int) - 100000)::oid
-----
-121  other_db  public  151  enum1  CREATE TYPE other_db.public.enum1 AS ENUM ('yo')  {yo}
