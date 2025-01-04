@@ -196,8 +196,6 @@ func (s *sqlSink) emit(
 
 // Flush implements the Sink interface.
 func (s *sqlSink) Flush(ctx context.Context) error {
-	defer s.metrics.recordFlushRequestCallback()()
-
 	if len(s.rowBuf) == 0 {
 		return nil
 	}
