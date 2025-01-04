@@ -366,7 +366,6 @@ func (f *BudgetFactory) CreateBudget(isSystem bool) *FeedBudget {
 	if rangeLimit == 0 {
 		return nil
 	}
-	// We use any table with reserved ID in system tenant as system case.
 	if isSystem {
 		acc := f.systemFeedBytesMon.MakeBoundAccount()
 		return NewFeedBudget(&acc, 0, f.settings)
