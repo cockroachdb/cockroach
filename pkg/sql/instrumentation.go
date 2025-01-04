@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -68,7 +67,6 @@ var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 //
 //   - SetDiscardRows(), ShouldDiscardRows(), ShouldSaveFlows(),
 //     ShouldBuildExplainPlan(), RecordExplainPlan(), RecordPlanInfo(),
-//     PlanForStats() can be called at any point during execution.
 //
 //   - Finish() is called after query execution.
 type instrumentationHelper struct {
@@ -147,10 +145,6 @@ type instrumentationHelper struct {
 	topLevelStats topLevelQueryStats
 
 	queryLevelStatsWithErr *execstats.QueryLevelStatsWithErr
-
-	// If savePlanForStats is true and the explainPlan was collected, the
-	// serialized version of the plan will be returned via PlanForStats().
-	savePlanForStats bool
 
 	explainPlan      *explain.Plan
 	distribution     physicalplan.PlanDistribution
@@ -419,12 +413,12 @@ func (ih *instrumentationHelper) Setup(
 	statsCollector *sslocal.StatsCollector,
 	p *planner,
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
-	fingerprint string,
+	stmt *Statement,
 	implicitTxn bool,
 	txnPriority roachpb.UserPriority,
 	collectTxnExecStats bool,
 ) (newCtx context.Context) {
-	ih.fingerprint = fingerprint
+	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
 	ih.codec = cfg.Codec
@@ -448,16 +442,13 @@ func (ih *instrumentationHelper) Setup(
 
 	default:
 		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
-			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint, "" /* planGist */)
+			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
 		// IsRedacted will be false when ih.collectBundle is false.
 		ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
 	}
 
 	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
-
-	var previouslySampled bool
-	previouslySampled, ih.savePlanForStats = statsCollector.ShouldSample(fingerprint, implicitTxn, p.SessionData().Database)
 
 	defer func() { ih.finalizeSetup(newCtx, cfg) }()
 
@@ -482,6 +473,12 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	shouldSampleFirstEncounter := func() bool {
+		if stmt.AST.StatementType() == tree.TypeTCL {
+			// We don't collect stats for  statements so
+			// there's no need to trace them.
+			return false
+		}
+
 		// If this is the first time we see this statement in the current stats
 		// container, we'll collect its execution stats anyway (unless the user
 		// disabled txn or stmt stats collection entirely).
@@ -490,6 +487,8 @@ func (ih *instrumentationHelper) Setup(
 			!sqlstats.StmtStatsEnable.Get(&cfg.Settings.SV) {
 			return false
 		}
+
+		previouslySampled := statsCollector.ShouldSample(stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
 
 		// We don't want to collect the stats if the stats container is full,
 		// since previouslySampled will always return false for statements
@@ -814,27 +813,6 @@ func (ih *instrumentationHelper) RecordPlanInfo(
 	ih.containsMutation = containsMutation
 	ih.generic = generic
 	ih.optimized = optimized
-}
-
-// PlanForStats returns the plan as an ExplainTreePlanNode tree, if it was
-// collected (nil otherwise). It should be called after RecordExplainPlan() and
-// RecordPlanInfo().
-func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *appstatspb.ExplainTreePlanNode {
-	if ih.explainPlan == nil || !ih.savePlanForStats {
-		return nil
-	}
-
-	ob := explain.NewOutputBuilder(explain.Flags{
-		HideValues: true,
-	})
-	ob.AddDistribution(ih.distribution.String())
-	ob.AddVectorized(ih.vectorized)
-	ob.AddPlanType(ih.generic, ih.optimized)
-	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
-		log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
-		return nil
-	}
-	return ob.BuildProtoTree()
 }
 
 // emitExplainAnalyzePlanToOutputBuilder creates an explain.OutputBuilder and
