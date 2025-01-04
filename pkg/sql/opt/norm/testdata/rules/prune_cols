@@ -5514,7 +5514,7 @@ distinct-on
  └── inner-join (hash)
       ├── columns: p.region:1!null p.id:2!null c100478.region:5!null p_id:7!null
       ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
-      ├── fd: (2)-->(1), (2)==(7), (7)==(2)
+      ├── fd: (2)-->(1), (2)==(7), (7)==(2), (1)==(5), (5)==(1)
       ├── scan p100478 [as=p]
       │    ├── columns: p.region:1!null p.id:2!null
       │    ├── key: (2)

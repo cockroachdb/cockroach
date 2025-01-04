@@ -44,6 +44,7 @@ type logicalPropsBuilder struct {
 	evalCtx *eval.Context
 	mem     *Memo
 	sb      statisticsBuilder
+	jph     joinPropsHelper
 
 	// When set to true, disableStats disables stat generation during
 	// logical prop building. Useful in checkExpr when we don't want
@@ -67,6 +68,7 @@ func (b *logicalPropsBuilder) clear() {
 	b.evalCtx = nil
 	b.mem = nil
 	b.sb.clear()
+	b.jph = joinPropsHelper{}
 }
 
 func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relational) {
@@ -456,33 +458,32 @@ func (b *logicalPropsBuilder) buildAntiJoinApplyProps(
 func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational) {
 	BuildSharedProps(join, &rel.Shared, b.evalCtx)
 
-	var h joinPropsHelper
-	h.init(b, join)
+	b.jph.init(b, join)
 
 	// Output Columns
 	// --------------
-	rel.OutputCols = h.outputCols()
+	rel.OutputCols = b.jph.outputCols()
 
 	// Not Null Columns
 	// ----------------
-	rel.NotNullCols = h.notNullCols()
+	rel.NotNullCols = b.jph.notNullCols()
 	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
 	// Outer Columns
 	// -------------
 	// Outer columns were initially set by BuildSharedProps. Remove any that are
 	// bound by the input columns.
-	inputCols := h.leftProps.OutputCols.Union(h.rightProps.OutputCols)
+	inputCols := b.jph.leftProps.OutputCols.Union(b.jph.rightProps.OutputCols)
 	rel.OuterCols.DifferenceWith(inputCols)
 
 	// Functional Dependencies
 	// -----------------------
-	h.setFuncDeps(rel)
+	b.jph.setFuncDeps(rel)
 
 	// Cardinality
 	// -----------
 	// Calculate cardinality, depending on join type.
-	rel.Cardinality = h.cardinality()
+	rel.Cardinality = b.jph.cardinality()
 	if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
 	}
@@ -490,7 +491,7 @@ func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildJoin(join, rel, &h)
+		b.sb.buildJoin(join, rel, &b.jph)
 	}
 }
 
@@ -2381,13 +2382,26 @@ type joinPropsHelper struct {
 	filterIsTrue      bool
 	filterIsFalse     bool
 
+	tables struct {
+		left  []opt.TableID
+		right []opt.TableID
+		set   bool
+	}
+
 	selfJoinCols opt.ColSet
 }
 
 func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
-	*h = joinPropsHelper{evalCtx: b.evalCtx, join: joinExpr}
+	*h = joinPropsHelper{
+		evalCtx: b.evalCtx,
+		join:    joinExpr,
+		tables:  h.tables,
+	}
+	h.tables.left = h.tables.left[:0]
+	h.tables.right = h.tables.right[:0]
+	h.tables.set = false
 
 	switch join := joinExpr.(type) {
 	case *LookupJoinExpr:
@@ -2628,6 +2642,37 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 	if h.evalCtx.SessionData().OptimizerUseImprovedJoinElimination {
 		h.addSelfJoinImpliedFDs(rel)
 	}
+	h.addFKJoinImpliedFDs(rel)
+}
+
+// leftAndRightTables returns two lists of distinct base tables the produce
+// columns on the left and right side of the join.
+func (h *joinPropsHelper) leftAndRightTables() (left, right []opt.TableID) {
+	if h.tables.set {
+		return h.tables.left, h.tables.right
+	}
+	add := func(tables []opt.TableID, tab opt.TableID) []opt.TableID {
+		for i := range tables {
+			if tables[i] == tab {
+				// Do not add the table to the list if it already exists.
+				return tables
+			}
+		}
+		return append(tables, tab)
+	}
+	md := h.join.Memo().Metadata()
+	h.leftProps.OutputCols.ForEach(func(col opt.ColumnID) {
+		if tab := md.ColumnMeta(col).Table; tab != opt.TableID(0) {
+			h.tables.left = add(h.tables.left, tab)
+		}
+	})
+	h.rightProps.OutputCols.ForEach(func(col opt.ColumnID) {
+		if tab := md.ColumnMeta(col).Table; tab != opt.TableID(0) {
+			h.tables.right = add(h.tables.right, tab)
+		}
+	})
+	h.tables.set = true
+	return h.tables.left, h.tables.right
 }
 
 // addSelfJoinImpliedFDs adds any extra equality FDs that are implied by a self
@@ -2639,27 +2684,15 @@ func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
 		// There are no equalities between left and right columns.
 		return
 	}
-	// Retrieve the tables that originate the given columns.
-	getTables := func(cols opt.ColSet) intsets.Fast {
-		var tables intsets.Fast
-		cols.ForEach(func(col opt.ColumnID) {
-			if tab := md.ColumnMeta(col).Table; tab != opt.TableID(0) {
-				tables.Add(int(tab))
-			}
-		})
-		return tables
-	}
-	leftTables, rightTables := getTables(leftCols), getTables(rightCols)
-	if leftTables.Empty() || rightTables.Empty() {
+	leftTables, rightTables := h.leftAndRightTables()
+	if len(leftTables) == 0 || len(rightTables) == 0 {
 		return
 	}
-	leftTables.ForEach(func(left int) {
-		leftTable := opt.TableID(left)
+	for _, leftTable := range leftTables {
 		baseTabFDs := MakeTableFuncDep(md, leftTable)
-		rightTables.ForEach(func(right int) {
-			rightTable := opt.TableID(right)
+		for _, rightTable := range rightTables {
 			if md.TableMeta(leftTable).Table.ID() != md.TableMeta(rightTable).Table.ID() {
-				return
+				continue
 			}
 			// This is a self-join. If there are equalities between columns at the
 			// same ordinal positions in each (meta) table and those columns form a
@@ -2685,7 +2718,82 @@ func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
 					rel.FuncDeps.AddEquivalency(leftTable.ColumnID(colOrd), rightTable.ColumnID(colOrd))
 				})
 			}
-		})
+		}
+	}
+}
+
+// forEachFK invokes the given function for each FK relationship in which
+// columns from one table in the FK come from the LHS, and columns from the
+// other table come from the RHS. The FK, the origin table ID, and the
+// referenced table ID are provided to the function.
+func (h *joinPropsHelper) forEachFK(
+	fn func(fk cat.ForeignKeyConstraint, originTabID, refTabID opt.TableID),
+) {
+	md := h.join.Memo().Metadata()
+	leftTables, rightTables := h.leftAndRightTables()
+	for _, leftTableID := range leftTables {
+		leftTable := md.Table(leftTableID)
+		for _, rightTableID := range rightTables {
+			rightTable := md.Table(rightTableID)
+			for i, n := 0, leftTable.OutboundForeignKeyCount(); i < n; i++ {
+				fk := leftTable.OutboundForeignKey(i)
+				if !fk.Validated() || fk.ReferencedTableID() != rightTable.ID() {
+					continue
+				}
+				fn(fk, leftTableID, rightTableID)
+			}
+			for i, n := 0, leftTable.InboundForeignKeyCount(); i < n; i++ {
+				fk := leftTable.InboundForeignKey(i)
+				if !fk.Validated() || fk.OriginTableID() != rightTable.ID() {
+					continue
+				}
+				fn(fk, rightTableID, leftTableID)
+			}
+		}
+	}
+}
+
+// addFKJoinImpliedFDs adds any extra equality FDs that are implied by a join
+// equality and a foreign key join.
+//
+// TODO(mgartner): Explain this in greater detail.
+func (h *joinPropsHelper) addFKJoinImpliedFDs(rel *props.Relational) {
+	md := h.join.Memo().Metadata()
+	leftCols, rightCols := h.leftProps.OutputCols, h.rightProps.OutputCols
+	if !rel.FuncDeps.ComputeEquivClosure(leftCols).Intersects(rightCols) {
+		// There are no equalities between left and right columns.
+		return
+	}
+	h.forEachFK(func(fk cat.ForeignKeyConstraint, originTabID, refTabID opt.TableID) {
+		// If there are equalities between columns in the FK that form a key on
+		// the base table of the referenced table, then all columns in the FK
+		// are equal.
+		originTab := md.Table(originTabID)
+		refTab := md.Table(refTabID)
+		var fkRefCols opt.ColSet
+		for i, n := 0, fk.ColumnCount(); i < n; i++ {
+			originColID := originTabID.ColumnID(fk.OriginColumnOrdinal(originTab, i))
+			refColID := refTabID.ColumnID(fk.ReferencedColumnOrdinal(refTab, i))
+			if rel.FuncDeps.AreColsEquiv(originColID, refColID) {
+				fkRefCols.Add(refColID)
+			}
+		}
+		if n := fkRefCols.Len(); n == fk.ColumnCount() || n == 0 {
+			// If all columns in the FK are equal, then there are no additional
+			// equalities to add. If none of the columns in the FK are equal,
+			// then there are no implied equalities.
+			return
+		}
+		// TODO(mgartner): What about tree.MatchFull? Do we need to do something
+		// special for the FK type?
+		refTabFDs := MakeTableFuncDep(md, refTabID)
+		if refTabFDs.ColsAreStrictKey(fkRefCols) {
+			for i, n := 0, fk.ColumnCount(); i < n; i++ {
+				originColID := originTabID.ColumnID(fk.OriginColumnOrdinal(originTab, i))
+				refColID := refTabID.ColumnID(fk.ReferencedColumnOrdinal(refTab, i))
+				rel.FuncDeps.AddEquivalency(originColID, refColID)
+			}
+		}
 	})
 }
 
