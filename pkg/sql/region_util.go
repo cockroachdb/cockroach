@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -650,7 +651,7 @@ func applyZoneConfigForMultiRegionTableOptionNewIndexes(
 				}
 				zoneConfig.SetSubzone(zonepb.Subzone{
 					IndexID:       uint32(indexID),
-					PartitionName: string(region),
+					PartitionName: string(region) + strconv.Itoa(int(indexID)),
 					Config:        zc,
 				})
 			}
