@@ -469,6 +469,7 @@ go_test(
         "server_systemlog_gc_test.go",
         "server_test.go",
         "settings_cache_test.go",
+        "span_download_test.go",
         "span_stats_server_test.go",
         "span_stats_test.go",
         "statements_test.go",

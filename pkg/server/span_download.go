@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"hash/fnv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -15,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -22,6 +25,14 @@ import (
 	"github.com/cockroachdb/errors/errorspb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+var testingSkipSpanDownload = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"backup.restore.test_skip_download",
+	"fraction of spans that should skip the download step",
+	0.0,
+	settings.NonNegativeFloatWithMaximum(1),
 )
 
 func (t *statusServer) DownloadSpan(
@@ -89,6 +100,39 @@ func (s *systemStatusServer) DownloadSpan(
 	return resp, nil
 }
 
+func maybeFilterSpans(
+	ctx context.Context, spans []roachpb.Span, settings *cluster.Settings, nodeID roachpb.NodeID,
+) []roachpb.Span {
+	skipFraction := testingSkipSpanDownload.Get(&settings.SV)
+	if skipFraction <= 0 {
+		return spans
+	}
+
+	nodeIDBytes := []byte(nodeID.String())
+	hash := fnv.New64a()
+
+	result := []roachpb.Span{}
+	for _, span := range spans {
+		// Use a hash to 'randomly' assign spans to be downloaded. The download is
+		// retried, so we need the decision to be deterministic to avoid dowloading
+		// more spans on each retry.
+		hash.Reset()
+		// Include the node id in the hash so that the replicas of a range are in a
+		// mixed state.
+		_, _ = hash.Write(nodeIDBytes)
+
+		_, _ = hash.Write(span.Key)
+		fraction := float64(hash.Sum64()%100) / 100
+		if skipFraction < fraction {
+			result = append(result, span)
+		}
+	}
+
+	log.Infof(ctx, "skipping download for %d out of %d spans", len(spans)-len(result), len(spans))
+
+	return result
+}
+
 func (s *systemStatusServer) localDownloadSpan(
 	ctx context.Context, req *serverpb.DownloadSpanRequest,
 ) error {
@@ -105,7 +149,8 @@ func (s *systemStatusServer) localDownloadSpan(
 			// Send spans to downloadSpansCh.
 			func(ctx context.Context) error {
 				defer close(downloadSpansCh)
-				return sendDownloadSpans(ctx, req.Spans, downloadSpansCh)
+				spans := maybeFilterSpans(ctx, req.Spans, s.st, s.rpcCtx.NodeID.Get())
+				return sendDownloadSpans(ctx, spans, downloadSpansCh)
 			},
 			func(ctx context.Context) error {
 				tick := time.NewTicker(time.Second * 15)
