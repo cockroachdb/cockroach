@@ -89,6 +89,20 @@ func (eq *EquivGroups) ContainsCol(col opt.ColumnID) bool {
 	return false
 }
 
+// Intersects returns true if at least one of the given columns is contained in
+// any of the equiv groups.
+func (eq *EquivGroups) Intersects(cols opt.ColSet) bool {
+	if buildutil.CrdbTestBuild {
+		defer eq.verify()
+	}
+	for i := range eq.groups {
+		if eq.groups[i].Intersects(cols) {
+			return true
+		}
+	}
+	return false
+}
+
 // AreColsEquiv indicates whether the given columns are equivalent.
 func (eq *EquivGroups) AreColsEquiv(left, right opt.ColumnID) bool {
 	if buildutil.CrdbTestBuild {
@@ -121,6 +135,42 @@ func (eq *EquivGroups) AreAllColsEquiv(cols opt.ColSet) bool {
 		}
 	}
 	return false
+}
+
+// ColsAreEquivClosure returns true if the given columns are their own
+// equivalence closure. In other words, there are no other columns that are
+// equivalent to any of the given columns.
+func (eq *EquivGroups) ColsAreEquivClosure(cols opt.ColSet) bool {
+	if buildutil.CrdbTestBuild {
+		defer eq.verify()
+	}
+	if cols.Empty() {
+		return true
+	}
+	for i := range eq.groups {
+		if eq.groups[i].Intersects(cols) && !eq.groups[i].SubsetOf(cols) {
+			return false
+		}
+	}
+	return true
+}
+
+// ColsAreEquivGroup returns true if the columns within the given ColSet
+// constitute a single equiv group. In other words, all columns are equivalent
+// to each other, and no column is equivalent to any column outside the set.
+func (eq *EquivGroups) ColsAreEquivGroup(cols opt.ColSet) bool {
+	if buildutil.CrdbTestBuild {
+		defer eq.verify()
+	}
+	if cols.Empty() {
+		return true
+	}
+	for i := range eq.groups {
+		if eq.groups[i].Intersects(cols) {
+			return eq.groups[i].Equals(cols)
+		}
+	}
+	return cols.Len() == 1
 }
 
 // ComputeEquivClosureNoCopy returns the equivalence closure of the given
