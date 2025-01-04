@@ -1,0 +1,124 @@
+syntax = "proto3";
+package cockroach.storage.configpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/configpb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/metadata.proto";
+
+enum WALFailoverMode {
+  // WALFailoverDefault leaves the WAL failover configuration unspecified. Today
+  // this is interpreted as FailoverDisabled but future releases may default to
+  // another mode.
+  WALFailoverDefault = 0;
+  // WALFailoverDisabled leaves WAL failover disabled. Commits to the
+  // storage engine observe the latency of a store's primary WAL directly.
+  WALFailoverDisabled = 1;
+  // WALFailoverAmongStores enables WAL failover among multiple
+  // stores within a node. This setting has no effect if the node
+  // has a single store. When a storage engine observes high latency
+  // writing to its WAL, it may transparently failover to an
+  // arbitrary, predetermined other store's data directory. If
+  // successful in syncing log entries to the other store's volume,
+  // the batch commit latency is insulated from the effects of
+  // momentary disk stalls.
+  WALFailoverAmongStores = 2;
+  // WALFailoverExplicitPath enables WAL failover for a single-store node to
+  // an explicitly specified path.
+  WALFailoverExplicitPath = 3;
+}
+
+// WALFailoverConfig configures a node's stores behavior under high write
+// latency to their write-ahead logs.
+message WALFailover {
+  option (gogoproto.equal) = true;
+  WALFailoverMode Mode = 1;
+  // Path is the non-store path to which WALs should be written when failing
+  // over. It must be nonempty if and only if Mode ==
+  // WALFailoverExplicitPath.
+  ExternalPath Path = 2;
+  // PrevPath is the previously used non-store path. It may be set
+  // with Mode == WALFailoverExplicitPath (when changing the
+  // secondary path) or WALFailoverDisabled (when disabling WAL
+  // failover after it was previously enabled with
+  // WALFailoverExplicitPath). It must be empty for other modes. If
+  // Mode is WALFailoverDisabled and previously WAL failover was
+  // enabled using WALFailoverAmongStores, then PrevPath must not be
+  // set.
+  ExternalPath PrevPath = 3;
+}
+
+// TODO: Copied from at encryption_options.proto
+enum EncryptionKeySource {
+  // Plain key files.
+  KeyFiles = 0;
+}
+
+message ExternalPath {
+  option (gogoproto.equal) = true;
+  string path = 1;
+  EncryptionOptions encryption = 2;
+}
+
+// EncryptionKeyFiles is used when plain key files are passed.
+message EncryptionKeyFiles {
+  option (gogoproto.equal) = true;
+  string current_key = 1;
+  string old_key = 2;
+}
+
+// EncryptionOptions defines the per-store encryption options.
+message EncryptionOptions {
+  option (gogoproto.equal) = true;
+  // The store key source. Defines which fields are useful.
+  EncryptionKeySource key_source = 1;
+
+  // Set if key_source == KeyFiles.
+  EncryptionKeyFiles key_files = 2;
+
+  // Default data key rotation in seconds.
+  int64 data_key_rotation_period = 3;
+}
+
+message DiskProperties {
+  option (gogoproto.equal) = true;
+  int64 capacity = 1;
+  double percent = 2;
+  int64 rate = 3;
+}
+
+message MemoryStore {
+  option (gogoproto.equal) = true;
+  string stickyVFSID = 1;
+  roachpb.Attributes attributes = 2;
+}
+
+message PhysicalStore {
+  option (gogoproto.equal) = true;
+  ExternalPath path = 1;
+  string options = 2;
+  DiskProperties ballast = 3;
+}
+
+message SharedStorage {
+  option (gogoproto.equal) = true;
+  string uri = 1;
+  string user = 2;
+  DiskProperties cache = 3 [ (gogoproto.nullable) = false ];
+}
+
+message Store {
+  option (gogoproto.equal) = true;
+  oneof store {
+    PhysicalStore physical = 1;
+    MemoryStore memory = 2;
+  }
+  DiskProperties properties = 3;
+  roachpb.Attributes attributes = 4 [ (gogoproto.nullable) = false ];
+  SharedStorage sharedStorage = 5;
+}
+
+message Storage {
+  option (gogoproto.equal) = true;
+  repeated Store storeSpec = 1 [ (gogoproto.nullable) = false ];
+  WALFailover walFailover = 3;
+}

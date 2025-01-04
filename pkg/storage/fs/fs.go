@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -89,6 +90,44 @@ func (e Envs) CloseAll() {
 	}
 }
 
+// InitEnvFromStoreSpec constructs a new Env from a store spec. See the
+// documentation for InitEnv for more details.
+//
+// stickyRegistry may be nil iff the spec's StickyVFSID field is unset.
+func InitEnvFromStoreConfig(
+	ctx context.Context,
+	store configpb.Store,
+	rw RWMode,
+	stickyRegistry StickyRegistry,
+	diskWriteStats disk.WriteStatsManager,
+) (*Env, error) {
+	fs := vfs.Default
+	var dir string
+	var enc []byte
+	switch s := store.Store.(type) {
+	case *configpb.Store_Memory:
+
+		if s.Memory.StickyVFSID != "" {
+			if stickyRegistry == nil {
+				return nil, errors.Errorf("missing StickyVFSRegistry")
+			}
+			fs = stickyRegistry.Get(s.Memory.StickyVFSID)
+		} else {
+			fs = vfs.NewMem()
+		}
+
+	case *configpb.Store_Physical:
+		dir = s.Physical.Path.Path
+		// TODO: Fill enc correctly.
+	}
+
+	return InitEnv(ctx, fs, dir, EnvConfig{
+		RW:                rw,
+		EncryptionOptions: enc,
+	}, diskWriteStats)
+}
+
+// TODO: Remove, only used by tests.
 // InitEnvFromStoreSpec constructs a new Env from a store spec. See the
 // documentation for InitEnv for more details.
 //

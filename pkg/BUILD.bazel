@@ -2309,6 +2309,7 @@ GO_TARGETS = [
     "//pkg/sql/vtable:vtable",
     "//pkg/sql:sql",
     "//pkg/sql:sql_test",
+    "//pkg/storage/configpb:configpb",
     "//pkg/storage/disk:disk",
     "//pkg/storage/disk:disk_test",
     "//pkg/storage/enginepb:enginepb",

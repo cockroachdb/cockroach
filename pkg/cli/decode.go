@@ -175,6 +175,7 @@ func tryDecodeValue(s, protoName string) protoutil.Message {
 	if err == nil {
 		return msg
 	}
+	fmt.Println(err)
 	_ = err // appease the linter
 
 	// Try to undo UTF-8 encoding of the bytes. This compensates for how Chrome

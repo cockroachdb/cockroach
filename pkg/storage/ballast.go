@@ -55,7 +55,7 @@ func IsDiskFull(fs vfs.FS, spec base.StoreSpec) (bool, error) {
 	// we need to create or grow the ballast but are unable because
 	// there's insufficient disk space, it'll be resized by the periodic
 	// capacity calculations when the conditions are met.
-	desiredSizeBytes := BallastSizeBytes(spec, diskUsage)
+	desiredSizeBytes := BallastSizeBytes(spec.BallastSize.InBytes, spec.BallastSize.Percent, diskUsage)
 	ballastPath := base.EmergencyBallastFile(fs.PathJoin, spec.Path)
 	if resized, err := maybeEstablishBallast(fs, ballastPath, desiredSizeBytes, diskUsage); err != nil {
 		return false, err
@@ -81,11 +81,11 @@ func IsDiskFull(fs vfs.FS, spec base.StoreSpec) (bool, error) {
 // the disk's total capacity), the store spec's size is used. Otherwise,
 // BallastSizeBytes returns 1GiB or 1% of total capacity, whichever is
 // smaller.
-func BallastSizeBytes(spec base.StoreSpec, diskUsage vfs.DiskUsage) int64 {
-	if spec.BallastSize != nil {
-		v := spec.BallastSize.InBytes
-		if spec.BallastSize.Percent != 0 {
-			v = int64(float64(diskUsage.TotalBytes) * spec.BallastSize.Percent / 100)
+func BallastSizeBytes(size int64, percent float64, diskUsage vfs.DiskUsage) int64 {
+	if size != 0 || percent != 0 {
+		v := size
+		if percent != 0 {
+			v = int64(float64(diskUsage.TotalBytes) * percent / 100)
 		}
 		return v
 	}
@@ -103,12 +103,11 @@ func BallastSizeBytes(spec base.StoreSpec, diskUsage vfs.DiskUsage) int64 {
 // explicit ballast size (either in bytes or as a percentage of the disk's total
 // capacity), that size is used. A zero value for cacheSize results in no
 // secondary cache.
-func SecondaryCacheBytes(cacheSize base.SizeSpec, diskUsage vfs.DiskUsage) int64 {
-	v := cacheSize.InBytes
-	if cacheSize.Percent != 0 {
-		v = int64(float64(diskUsage.TotalBytes) * cacheSize.Percent / 100)
+func SecondaryCacheBytes(size int64, percent float64, diskUsage vfs.DiskUsage) int64 {
+	if percent != 0 {
+		return int64(float64(diskUsage.TotalBytes) * percent / 100)
 	}
-	return v
+	return size
 }
 
 func maybeEstablishBallast(
