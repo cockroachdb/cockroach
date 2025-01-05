@@ -146,11 +146,7 @@ export class JobDetails extends React.Component<
     );
   };
 
-  renderOverviewTabContent = (
-    hasNextRun: boolean,
-    nextRun: moment.Moment,
-    job: JobResponse,
-  ): React.ReactElement => {
+  renderOverviewTabContent = (job: JobResponse): React.ReactElement => {
     if (!job) {
       return null;
     }
@@ -165,19 +161,6 @@ export class JobDetails extends React.Component<
                 <JobStatusCell job={job} lineWidth={1.5} hideDuration={true} />
               }
             />
-            {hasNextRun && (
-              <>
-                <SummaryCardItem
-                  label="Next Planned Execution Time"
-                  value={
-                    <Timestamp
-                      time={nextRun}
-                      format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
-                    />
-                  }
-                />
-              </>
-            )}
             <SummaryCardItem
               label="Creation Time"
               value={
@@ -209,19 +192,6 @@ export class JobDetails extends React.Component<
                 }
               />
             )}
-            <SummaryCardItem
-              label="Last Execution Time"
-              value={
-                <Timestamp
-                  time={TimestampToMoment(job.last_run, null)}
-                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
-                />
-              }
-            />
-            <SummaryCardItem
-              label="Execution Count"
-              value={String(job.num_runs)}
-            />
             <SummaryCardItem label="User Name" value={job.username} />
             {job.highwater_timestamp && (
               <SummaryCardItem
@@ -258,8 +228,6 @@ export class JobDetails extends React.Component<
       this.props.jobRequest.inFlight && !this.props.jobRequest.data;
     const error = this.props.jobRequest.error;
     const job = this.props.jobRequest.data;
-    const nextRun = TimestampToMoment(job?.next_run);
-    const hasNextRun = nextRun?.isAfter();
     const { currentTab } = this.state;
     return (
       <div className={jobCx("job-details")}>
@@ -304,7 +272,7 @@ export class JobDetails extends React.Component<
                   activeKey={currentTab}
                 >
                   <TabPane tab={TabKeysEnum.OVERVIEW} key="overview">
-                    {this.renderOverviewTabContent(hasNextRun, nextRun, job)}
+                    {this.renderOverviewTabContent(job)}
                   </TabPane>
                   {!useContext(CockroachCloudContext) &&
                     this.props.hasAdminRole && (
