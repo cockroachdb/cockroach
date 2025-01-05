@@ -38,11 +38,12 @@ const (
 	costPerTTLHdr  = "$/TTL"
 	uptimeHdr      = "Uptime"
 	ttlHdr         = "TTL"
+	roachtestHdr   = "Roachtest"
 	txnCommitsHdr  = "Txn_Commits"
 )
 
 var (
-	allHeaders = [11]string{clusterHdr, cloudsHdr, sizeHdr, vmHdr, archHdr, costPerHourHdr, costSpentHdr, costPerTTLHdr, uptimeHdr, ttlHdr, txnCommitsHdr}
+	allHeaders = [12]string{clusterHdr, cloudsHdr, sizeHdr, vmHdr, archHdr, costPerHourHdr, costSpentHdr, costPerTTLHdr, uptimeHdr, ttlHdr, roachtestHdr, txnCommitsHdr}
 )
 
 func clusterToSparkline(clusterNames []string) (map[string]string, error) {
@@ -108,6 +109,14 @@ func listDefault(cloud cloud.Cloud, names []string, maxClusterName int) error {
 		// AMD64 is the default, so don't display it.
 		return ""
 	}
+	// Max test name is dictated by label length (63); for brevity, we truncate it.
+	// https://cloud.google.com/resource-manager/docs/labels-overview#requirements
+	shortTestName := func(testName string) string {
+		if len(testName) > 32 {
+			return testName[:32]
+		}
+		return testName
+	}
 	var sparks map[string]string
 	if listSparkline {
 		var err error
@@ -136,8 +145,8 @@ func listDefault(cloud cloud.Cloud, names []string, maxClusterName int) error {
 
 		if c.IsLocal() {
 			//N.B. for proper formatting, we have to use colored strings since those emit terminal escape codes even for the empty string.
-			fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t", color.HiWhiteString(""), color.HiWhiteString(""),
-				color.HiWhiteString(""), "", color.HiWhiteString(""))
+			fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t%s\t", color.HiWhiteString(""), color.HiWhiteString(""),
+				color.HiWhiteString(""), "", color.HiWhiteString(""), color.HiWhiteString(""))
 			if listSparkline {
 				fmt.Fprintf(tw, "\t%s", strings.Repeat(" ", 15))
 			}
@@ -146,22 +155,25 @@ func listDefault(cloud cloud.Cloud, names []string, maxClusterName int) error {
 		}
 		timeRemaining := c.LifetimeRemaining().Round(time.Second)
 		alive := timeutil.Since(c.CreatedAt).Round(time.Minute)
+		testName := c.VMs[0].Labels["test_name"]
 		if listCost {
 			cost := c.CostPerHour
 			totalCostPerHour += cost
 			costSinceCreation := cost * float64(alive) / float64(time.Hour)
 			costRemaining := cost * float64(timeRemaining) / float64(time.Hour)
 
-			fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s",
+			fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t%s",
 				color.HiGreenString(costPrinter.Sprintf("$%.2f", cost)),
 				colorByCostBucket(costSinceCreation)(costPrinter.Sprintf("$%.2f", costSinceCreation)),
 				colorByCostBucket(costRemaining)(costPrinter.Sprintf("$%.2f", costRemaining)),
 				color.HiWhiteString(alive.String()),
-				color.HiWhiteString(timeRemaining.String()))
+				color.HiWhiteString(timeRemaining.String()),
+				color.HiWhiteString(shortTestName(testName)))
 		} else {
-			fmt.Fprintf(tw, "\t%s\t%s",
+			fmt.Fprintf(tw, "\t%s\t%s\t%s",
 				color.HiWhiteString(alive.String()),
-				color.HiWhiteString(timeRemaining.String()))
+				color.HiWhiteString(timeRemaining.String()),
+				color.HiWhiteString(shortTestName(testName)))
 		}
 		if listSparkline {
 			s := sparks[name]
@@ -196,6 +208,7 @@ func printHeaders(tw *tabwriter.Writer, maxClusterName int) {
 	header2color[costPerTTLHdr] = color.HiWhiteString
 	header2color[uptimeHdr] = color.HiWhiteString
 	header2color[ttlHdr] = color.HiWhiteString
+	header2color[roachtestHdr] = color.HiWhiteString
 	if !listCost {
 		// remove cost related headers
 		headers = append(headers[:5], headers[8:]...)
