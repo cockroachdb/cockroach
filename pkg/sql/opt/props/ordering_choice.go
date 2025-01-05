@@ -654,13 +654,12 @@ func (oc *OrderingChoice) AppendCol(id opt.ColumnID, descending bool) {
 // Copy returns a complete copy of this instance, with a private version of the
 // ordering column slice.
 func (oc *OrderingChoice) Copy() OrderingChoice {
+	// NOTE: since the Optional and Group ColSets are immutable, we can just
+	// shallow-copy them.
 	var other OrderingChoice
-	other.Optional = oc.Optional.Copy()
+	other.Optional = oc.Optional
 	other.Columns = make([]OrderingColumnChoice, len(oc.Columns))
 	copy(other.Columns, oc.Columns)
-	for i := range other.Columns {
-		other.Columns[i].Group = other.Columns[i].Group.Copy()
-	}
 	return other
 }
 
