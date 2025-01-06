@@ -240,6 +240,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.SQLAdvertiseAddr = params.SQLAddr
 		cfg.SplitListenSQL = true
 	}
+	if params.SQLAdvertiseAddr != "" {
+		cfg.SQLAdvertiseAddr = params.SQLAdvertiseAddr
+	}
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
 	}
@@ -474,7 +477,10 @@ func (ts *testServer) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, er
 		catconstants.SystemTenantName,
 		ts.Stopper(),
 		ts.topLevelServer.loopbackPgL,
-		ts.cfg.SQLAdvertiseAddr,
+		// Use the SQLAddr here. The SQLAddr is the literal address that the server
+		// bound to. Using SQL addr makes it possible to write tests that set the
+		// advertise addr to something unreachable.
+		ts.cfg.SQLAddr,
 		ts.cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,
@@ -502,7 +508,10 @@ func (ts *testServer) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func()
 		options.DBName,
 		options.User,
 		catconstants.SystemTenantName,
-		ts.cfg.SQLAdvertiseAddr,
+		// Use the SQLAddr here. The SQLAddr is the literal address that the server
+		// bound to. Using SQL addr makes it possible to write tests that set the
+		// advertise addr to something unreachable.
+		ts.cfg.SQLAddr,
 		ts.cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,

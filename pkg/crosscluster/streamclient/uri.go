@@ -89,6 +89,12 @@ func ParseClusterUri(uri string) (ClusterUri, error) {
 	if !allowedConfigUriSchemes[url.Scheme] {
 		return ClusterUri{}, errors.Newf("stream replication from scheme %q is unsupported", url.Scheme)
 	}
+	if url.Query().Has(RoutingModeKey) {
+		mode := url.Query().Get(RoutingModeKey)
+		if mode != string(RoutingModeNode) && mode != string(RoutingModeGateway) {
+			return ClusterUri{}, errors.Newf("unknown crdb_route value %q", mode)
+		}
+	}
 	return ClusterUri{uri: *url}, nil
 }
 
@@ -105,12 +111,16 @@ func MakeTestClusterUri(url url.URL) ClusterUri {
 	return ClusterUri{uri: url}
 }
 
-func (sa *ClusterUri) ResolveNode(hostname util.UnresolvedAddr) (ClusterUri, error) {
+func (c *ClusterUri) ResolveNode(hostname util.UnresolvedAddr) (ClusterUri, error) {
+	if c.RoutingMode() == RoutingModeGateway {
+		return *c, nil
+	}
+
 	host, port, err := net.SplitHostPort(hostname.AddressField)
 	if err != nil {
 		return ClusterUri{}, err
 	}
-	copy := sa.uri
+	copy := c.uri
 	copy.Host = net.JoinHostPort(host, port)
 	return ClusterUri{uri: copy}, nil
 }
@@ -136,4 +146,33 @@ func redactUrl(u url.URL) string {
 	}
 	u.RawQuery = "redacted"
 	return u.String()
+}
+
+const RoutingModeKey = "crdb_route"
+
+type RoutingMode string
+
+const (
+	// routinModeNode is the default routing mode for LDR and PCR. The
+	// configuration uri is used to connect to the cluster and build a dist sql
+	// plan for the stream producers. The processors in the destination client
+	// then connect directly to the nodes described by the source cluster's plan.
+	RoutingModeNode RoutingMode = "node"
+	// routingModeGateway is a routing mode that replaces the default node
+	// routing mode. Processors in the source cluster will connect to the
+	// configured uri instead of the per-node uris returned by the source
+	// clusters plan. This allows for LDR and PCR to be used in situations where
+	// the source cluster nodes are not directly routable from the destination
+	// nodes.
+	RoutingModeGateway RoutingMode = "gateway"
+)
+
+// RoutingMode returns the routing mode specified in the uri. If no routing
+// mode is specified, the default routing mode is returned. The routing mode is
+// validated by the ClusterUri constructor.
+func (c *ClusterUri) RoutingMode() RoutingMode {
+	if key := c.uri.Query().Get(RoutingModeKey); key != "" {
+		return RoutingMode(key)
+	}
+	return RoutingModeNode
 }

@@ -124,22 +124,25 @@ func startDistIngestion(
 		return err
 	}
 
-	err = ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		// Persist the initial Stream Addresses to the jobs table before execution begins.
-		if len(planner.initialPartitionPgUrls) == 0 {
-			return jobs.MarkAsPermanentJobError(errors.AssertionFailedf(
-				"attempted to persist an empty list of partition connection uris"))
+	if planner.initialPartitionPgUrls[0].RoutingMode() != streamclient.RoutingModeGateway {
+		err = ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			// Persist the initial Stream Addresses to the jobs table before execution begins.
+			if len(planner.initialPartitionPgUrls) == 0 {
+				return jobs.MarkAsPermanentJobError(errors.AssertionFailedf(
+					"attempted to persist an empty list of partition connection uris"))
+			}
+			md.Progress.GetStreamIngest().PartitionConnUris = make([]string, len(planner.initialPartitionPgUrls))
+			for i := range planner.initialPartitionPgUrls {
+				md.Progress.GetStreamIngest().PartitionConnUris[i] = planner.initialPartitionPgUrls[i].Serialize()
+			}
+			ju.UpdateProgress(md.Progress)
+			return nil
+		})
+		if err != nil {
+			return errors.Wrap(err, "failed to update job progress")
 		}
-		md.Progress.GetStreamIngest().PartitionConnUris = make([]string, len(planner.initialPartitionPgUrls))
-		for i := range planner.initialPartitionPgUrls {
-			md.Progress.GetStreamIngest().PartitionConnUris[i] = planner.initialPartitionPgUrls[i].Serialize()
-		}
-		ju.UpdateProgress(md.Progress)
-		return nil
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to update job progress")
 	}
+
 	jobsprofiler.StorePlanDiagram(ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, planner.initialPlan, execCtx.ExecCfg().InternalDB,
 		ingestionJob.ID())
 
