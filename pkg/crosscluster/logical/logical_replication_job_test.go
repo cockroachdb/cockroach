@@ -389,30 +389,74 @@ func TestCreateTables(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	sqlA := sqlDBs[0]
-	// Ensure the offline scan replicates index spans.
-	sqlA.Exec(t, "CREATE INDEX idx ON tab(payload)")
-
-	// Insert a row that should replicate via the initial scan.
-	sqlA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 	aURL, cleanup := srv.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 
-	sqlA.Exec(t, "CREATE DATABASE b")
-	sqlB := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("b")))
+	t.Run("basic", func(t *testing.T) {
+		// Ensure the offline scan replicates index spans.
+		sqlA.Exec(t, "CREATE INDEX idx ON tab(payload)")
 
-	var jobID jobspb.JobID
-	sqlB.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE b.tab FROM TABLE tab ON $1", aURL.String()).Scan(&jobID)
+		// Insert a row that should replicate via the initial scan.
+		sqlA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 
-	// Check LWW on initial scan data.
-	sqlA.Exec(t, "UPSERT INTO tab VALUES (1, 'howdy')")
+		sqlA.Exec(t, "CREATE DATABASE b")
+		sqlB := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("b")))
 
-	// Insert a row that should replicate during steady state.
-	sqlA.Exec(t, "INSERT INTO tab VALUES (2, 'bye')")
+		var jobID jobspb.JobID
+		sqlB.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE b.tab FROM TABLE tab ON $1", aURL.String()).Scan(&jobID)
 
-	WaitUntilReplicatedTime(t, srv.Clock().Now(), sqlB, jobID)
-	sqlB.CheckQueryResults(t, "SELECT * FROM tab", [][]string{{"1", "howdy"}, {"2", "bye"}})
-	// Ensure secondary index was replicated as well.
-	compareReplicatedTables(t, srv, "a", "b", "tab", sqlA, sqlB)
+		// Check LWW on initial scan data.
+		sqlA.Exec(t, "UPSERT INTO tab VALUES (1, 'howdy')")
+
+		// Insert a row that should replicate during steady state.
+		sqlA.Exec(t, "INSERT INTO tab VALUES (2, 'bye')")
+
+		WaitUntilReplicatedTime(t, srv.Clock().Now(), sqlB, jobID)
+		sqlB.CheckQueryResults(t, "SELECT * FROM tab", [][]string{{"1", "howdy"}, {"2", "bye"}})
+		// Ensure secondary index was replicated as well.
+		compareReplicatedTables(t, srv, "a", "b", "tab", sqlA, sqlB)
+	})
+	t.Run("pause initial scan", func(t *testing.T) {
+		sqlA.Exec(t, "CREATE DATABASE c")
+		sqlA.Exec(t, "CREATE TABLE tab2 (pk int primary key, payload string)")
+		sqlc := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("c")))
+		sqlc.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'logical_replication.after.retryable_error'")
+
+		var jobID jobspb.JobID
+		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab2 FROM TABLE tab2 ON $1", aURL.String()).Scan(&jobID)
+		jobutils.WaitForJobToPause(t, sqlc, jobID)
+
+		// Verify created tables are not visible as we paused before publishing
+		// tables.
+		var res int
+		sqlc.QueryRow(t, "SELECT count(*) FROM [SHOW TABLES]").Scan(&res)
+		require.Zero(t, res)
+
+		sqlc.QueryRow(t, "SELECT count(*) FROM system.namespace WHERE name = 'tab2'").Scan(&res)
+		require.Equal(t, 2, res)
+
+		// First, cancel the initial scan to verify the tables have been dropped.
+		sqlc.Exec(t, "CANCEL JOB $1", jobID)
+		jobutils.WaitForJobToCancel(t, sqlc, jobID)
+		sqlc.QueryRow(t, "SELECT count(*) FROM [SHOW TABLES]").Scan(&res)
+		require.Zero(t, res)
+		var dropTable string
+		sqlc.QueryRow(t, "SELECT name FROM crdb_internal.tables WHERE database_name = 'c' AND state = 'DROP'").Scan(&dropTable)
+		require.Equal(t, "tab2", dropTable)
+
+		// Next, setup the ldr job again and wait for it to pause.
+		//
+		// TODO(msbutler): use the recently cancelled tab2 to ensure we can quickly
+		// rerun LDR again. As you can see in the
+		// restore-on-fail-or-cancel-fast-drop test, setting this up is a pain, so I
+		// will address this in an upcoming pr.
+		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab FROM TABLE tab ON $1", aURL.String()).Scan(&jobID)
+		jobutils.WaitForJobToPause(t, sqlc, jobID)
+
+		// Next, resume it and wait for the table and its dlq table to come online.
+		sqlc.Exec(t, "RESUME JOB $1", jobID)
+		sqlc.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW TABLES]", [][]string{{"2"}})
+	})
 }
 
 // TestLogicalStreamIngestionAdvancePTS tests that the producer side pts advances

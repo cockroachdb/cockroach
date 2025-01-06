@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -374,14 +373,16 @@ func doLDRPlan(
 	details := jr.Details.(jobspb.LogicalReplicationDetails)
 	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		var (
-			err          error
-			writtenDescs []catalog.Descriptor
+			err             error
+			ingestedCatalog externalpb.ExternalCatalog
 		)
 		if details.CreateTable {
-			writtenDescs, err = externalcatalog.IngestExternalCatalog(ctx, execCfg, user, srcExternalCatalog, txn, txn.Descriptors(), resolvedDestObjects.ParentDatabaseID, resolvedDestObjects.ParentSchemaID, true /* setOffline */)
+			ingestedCatalog, err = externalcatalog.IngestExternalCatalog(ctx, execCfg, user, srcExternalCatalog, txn, txn.Descriptors(), resolvedDestObjects.ParentDatabaseID, resolvedDestObjects.ParentSchemaID, true /* setOffline */)
 			if err != nil {
 				return err
 			}
+			details.IngestedExternalCatalog = ingestedCatalog
+			jr.Details = details
 		}
 
 		dstTableDescs := make([]*tabledesc.Mutable, 0, len(details.ReplicationPairs))
@@ -394,7 +395,7 @@ func doLDRPlan(
 				// error during validation.
 				//
 				// Instead, we could populate repPairs in this txn.
-				details.ReplicationPairs[i].DstDescriptorID = int32(writtenDescs[i].GetID())
+				details.ReplicationPairs[i].DstDescriptorID = int32(ingestedCatalog.Tables[i].GetID())
 			}
 			dstTableDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, catid.DescID(details.ReplicationPairs[i].DstDescriptorID))
 			if err != nil {
