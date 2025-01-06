@@ -3560,6 +3560,24 @@ CREATE TABLE crdb_internal.create_type_statements (
 				if err != nil || typDesc == nil {
 					return false, err
 				}
+
+				// Handle special cases for the database descriptor provided. There are
+				// two scenarios:
+				// 1) A database descriptor is provided, but the type belongs to a
+				//    different database. In this case, the row will be filtered out as
+				//    it doesn't pertain to the requested database.
+				// 2) The database descriptor is nil. This occurs when requesting types
+				//    across all databases (e.g., SELECT .. FROM "".crdb_internal.create_type_statements).
+				//    In this case, the row will be returned, but a database lookup is
+				//    needed to populate columns that depend on the database descriptor.
+				if db != nil && typDesc.GetParentID() != db.GetID() {
+					return false, nil
+				} else if db == nil {
+					db, err = p.byIDGetterBuilder().WithoutDropped().Get().Database(ctx, typDesc.GetParentID())
+					if err != nil {
+						return false, err
+					}
+				}
 				return writeCreateTypeDescRow(ctx, db, scName, p, typDesc, addRow)
 			},
 		},
