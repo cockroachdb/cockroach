@@ -21,6 +21,7 @@ import "util/hlc/timestamp.proto";
 import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
+import "sql/catalog/externalcatalog/externalpb/external.proto";
 
 enum EncryptionMode {
   Passphrase = 0;
@@ -275,7 +276,9 @@ message LogicalReplicationDetails {
 
   bool create_table = 12;
 
-  // Next ID: 12.
+  sql.catalog.externalcatalog.externalpb.ExternalCatalog ingested_external_catalog = 13  [(gogoproto.nullable) = false];
+
+  // Next ID 14;
 }
 
 message LogicalReplicationProgress {
