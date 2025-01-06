@@ -7,10 +7,10 @@ package physical
 
 import (
 	"context"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -43,8 +43,7 @@ func TestCreateTenantFromReplicationUsingID(t *testing.T) {
 	sqlA := sqlutils.MakeSQLRunner(aDB)
 	sqlB := sqlutils.MakeSQLRunner(bDB)
 
-	serverAURL, cleanupURLA := sqlutils.PGUrl(t, serverA.SQLAddr(), t.Name(), url.User(username.RootUser))
-	defer cleanupURLA()
+	serverAURL := replicationtestutils.GetReplicationUri(t, serverA, serverB, serverutils.User(username.RootUser))
 
 	verifyCreatedTenant := func(t *testing.T, db *sqlutils.SQLRunner, id int64, fn func()) {
 		const query = "SELECT count(*), count(CASE WHEN id = $1 THEN 1 END) FROM system.tenants"

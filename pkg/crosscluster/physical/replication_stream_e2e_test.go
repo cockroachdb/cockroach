@@ -679,6 +679,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "fromSystem", func(t *testing.T, sys bool) {
 		args := replicationtestutils.DefaultTenantStreamingClustersArgs
 		args.MultitenantSingleClusterNumNodes = 3
+		args.RoutingMode = streamclient.RoutingModeNode
 
 		// Track the number of unique addresses that were connected to
 		clientAddresses := make(map[string]struct{})
@@ -787,6 +788,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	args.MultitenantSingleClusterNumNodes = 1
+	args.RoutingMode = streamclient.RoutingModeNode
 
 	retryErrorChan := make(chan error)
 	turnOffReplanning := make(chan struct{})
@@ -802,7 +804,6 @@ func TestStreamingAutoReplan(t *testing.T) {
 			clientAddresses[addr] = struct{}{}
 		},
 		AfterRetryIteration: func(err error) {
-
 			if err != nil && !alreadyReplanned.Load() {
 				retryErrorChan <- err
 				<-turnOffReplanning

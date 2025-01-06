@@ -178,6 +178,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/ctxgroup",
         "//pkg/util/duration",
         "//pkg/util/hlc",

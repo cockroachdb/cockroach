@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -505,6 +506,7 @@ func testEndToEndDLQ(t *testing.T, mode string) {
 
 	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.retry_queue_duration = '100ms'")
 	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.retry_queue_backoff  = '1ms'")
+	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
 
 	type testCase struct {
 		tableName         string

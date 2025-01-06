@@ -257,7 +257,7 @@ func heartbeatReplicationStream(
 }
 
 // getPhysicalReplicationStreamSpec gets a replication stream specification for the specified stream.
-func getPhysicalReplicationStreamSpec(
+func (r *replicationStreamManagerImpl) getPhysicalReplicationStreamSpec(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
@@ -274,11 +274,10 @@ func getPhysicalReplicationStreamSpec(
 	if j.Status() != jobs.StatusRunning {
 		return nil, jobIsNotRunningError(jobID, j.Status(), "create stream spec")
 	}
-	return buildReplicationStreamSpec(ctx, evalCtx, details.TenantID, false, details.Spans, true)
-
+	return r.buildReplicationStreamSpec(ctx, evalCtx, details.TenantID, false, details.Spans, true)
 }
 
-func buildReplicationStreamSpec(
+func (r *replicationStreamManagerImpl) buildReplicationStreamSpec(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	tenantID roachpb.TenantID,
@@ -325,6 +324,9 @@ func buildReplicationStreamSpec(
 		nodeInfo, err := dsp.GetSQLInstanceInfo(sp.SQLInstanceID)
 		if err != nil {
 			return nil, err
+		}
+		if r.knobs != nil && r.knobs.OnGetSQLInstanceInfo != nil {
+			nodeInfo = r.knobs.OnGetSQLInstanceInfo(nodeInfo)
 		}
 		res.Partitions = append(res.Partitions, streampb.ReplicationStreamSpec_Partition{
 			NodeID:     roachpb.NodeID(sp.SQLInstanceID),
@@ -379,7 +381,7 @@ func completeReplicationStream(
 	})
 }
 
-func setupSpanConfigsStream(
+func (r *replicationStreamManagerImpl) setupSpanConfigsStream(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, tenantName roachpb.TenantName,
 ) (eval.ValueGenerator, error) {
 
@@ -392,8 +394,8 @@ func setupSpanConfigsStream(
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
 	spanConfigName := systemschema.SpanConfigurationsTableName
-	if knobs := execConfig.StreamingTestingKnobs; knobs != nil && knobs.MockSpanConfigTableName != nil {
-		spanConfigName = knobs.MockSpanConfigTableName
+	if r.knobs != nil && r.knobs.MockSpanConfigTableName != nil {
+		spanConfigName = r.knobs.MockSpanConfigTableName
 	}
 
 	if err := sql.DescsTxn(ctx, execConfig, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {

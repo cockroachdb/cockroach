@@ -182,10 +182,17 @@ func (p *partitionedStreamClient) createTopology(
 		SourceTenantID: spec.SourceTenantID,
 	}
 	for _, sp := range spec.Partitions {
-		nodeUri, err := p.clusterUri.ResolveNode(sp.SQLAddress)
-		if err != nil {
-			return Topology{}, err
+		var connUri ClusterUri
+		if p.clusterUri.RoutingMode() == RoutingModeGateway {
+			connUri = p.clusterUri
+		} else {
+			var err error
+			connUri, err = MakeClusterUriForNode(p.clusterUri, sp.SQLAddress)
+			if err != nil {
+				return Topology{}, err
+			}
 		}
+
 		rawSpec, err := protoutil.Marshal(sp.SourcePartition)
 		if err != nil {
 			return Topology{}, err
@@ -194,7 +201,7 @@ func (p *partitionedStreamClient) createTopology(
 			ID:                sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
 			SrcInstanceID:     int(sp.NodeID),
-			ConnUri:           nodeUri,
+			ConnUri:           connUri,
 			SrcLocality:       sp.Locality,
 			Spans:             sp.SourcePartition.Spans,
 		})
