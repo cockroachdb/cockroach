@@ -918,7 +918,7 @@ type kvAndTS struct {
 	timestamp int64
 }
 
-func (k kvAndTS) toMvccKV(enc func(string) roachpb.Key) mvccKV {
+func (k kvAndTS) toMVCCKV(enc func(string) roachpb.Key) mvccKV {
 	v := roachpb.Value{}
 	v.SetBytes(k.value)
 	v.InitChecksum(nil)

@@ -61,8 +61,10 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				{{Key: s2k0("a"), EndKey: s2k0("c")}},
 			},
 		},
+		// Flushes do not occur if the last key written exceeds the file size. The caller is
+		// required to make the last flush call.
 		{
-			name: "single-span-size-flush-last-key",
+			name: "single-span-no-size-flush-last-key",
 			exportKVs: []*mvccKVSet{
 				newMVCCKeySet("a", "c").withKVs([]kvAndTS{
 					{key: "a", timestamp: 10}, {key: "b", value: gtSSTSizeVal, timestamp: 15},
@@ -86,39 +88,7 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				{{Key: s2k0("b"), EndKey: s2k0("c")}},
 			},
 		},
-		{
-			name: "double-size-flush-single-span",
-			exportKVs: []*mvccKVSet{
-				newMVCCKeySet("a", "e").withKVs(
-					[]kvAndTS{
-						{key: "a", timestamp: 10}, {key: "b", value: gtSSTSizeVal, timestamp: 15},
-						{key: "c", value: gtSSTSizeVal, timestamp: 15}, {key: "d", timestamp: 10},
-					},
-				),
-			},
-			flushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}},
-				{{Key: s2k0("c"), EndKey: s2k0("d")}},
-			},
-			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("d"), EndKey: s2k0("e")}},
-			},
-		},
-		{
-			name: "double-ooo-span-flush",
-			exportKVs: []*mvccKVSet{
-				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}}),
-				newMVCCKeySet("b", "d").withKVs([]kvAndTS{{key: "b", timestamp: 10}}),
-				newMVCCKeySet("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 10}}),
-			},
-			flushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}},
-				{{Key: s2k0("b"), EndKey: s2k0("d")}},
-			},
-			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("c"), EndKey: s2k0("e")}},
-			},
-		},
+		// Represents writing a series of keys and encountering each of the flush conditions.
 		{
 			name: "size-ooo-span-and-ooo-key-flush",
 			exportKVs: []*mvccKVSet{
@@ -156,7 +126,8 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				{{Key: s2k0("a"), EndKey: s2k0("e")}},
 			},
 		},
-		// If a span overlaps its previous span, a flush must occur first.
+		// If a span overlaps its previous span, a flush must occur first. Should not occur in
+		// backup compactions.
 		{
 			name: "flush-from-overlapping-ooo-spans",
 			exportKVs: []*mvccKVSet{
@@ -175,7 +146,7 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 			},
 		},
 		// If a span precedes the previous span but does not overlap, a flush must
-		// occur first.
+		// occur first. Should not occur in backup compactions.
 		{
 			name: "flush-from-non-overlapping-ooo-spans",
 			exportKVs: []*mvccKVSet{
@@ -193,13 +164,53 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				{{Key: s2k0("a"), EndKey: s2k0("c")}},
 			},
 		},
+		// If a span is non-contiguous with the previous span, the BackupManifest_File must be
+		// flushed.
+		{
+			name: "flush-file-from-non-contiguous-in-order-spans",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{
+					{key: "a", timestamp: 10}, {key: "b", timestamp: 10},
+				}),
+				newMVCCKeySet("d", "g").withKVs([]kvAndTS{
+					{key: "d", timestamp: 10}, {key: "e", timestamp: 10},
+				}),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{
+					{Key: s2k0("a"), EndKey: s2k0("c")},
+					{Key: s2k0("d"), EndKey: s2k0("g")},
+				},
+			},
+		},
+		// If a span is non-contiguous with the previous span and the previous span's last key
+		// exceeded the file size, the SST file must be flushed before writing the new span.
+		{
+			name: "flush-sst-before-adding-new-file",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{
+					{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtSSTSizeVal},
+				}),
+				newMVCCKeySet("d", "g").withKVs([]kvAndTS{
+					{key: "d", timestamp: 10}, {key: "e", timestamp: 10},
+				}),
+			},
+			flushedSpans:   []roachpb.Spans{{{Key: s2k0("a"), EndKey: s2k0("c")}}},
+			unflushedSpans: []roachpb.Spans{{{Key: s2k0("d"), EndKey: s2k0("g")}}},
+		},
 		// Writing keys with different prefixes should flush the previous span.
 		{
 			name: "prefixes-differ-with-eliding",
 			exportKVs: []*mvccKVSet{
-				newMVCCKeySet("2/a", "2/c").withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/b", timestamp: 10}}),
-				newMVCCKeySet("2/c", "2/e").withKVs([]kvAndTS{{key: "2/c", timestamp: 10}, {key: "2/d", timestamp: 10}}),
-				newMVCCKeySet("3/e", "3/g").withKVs([]kvAndTS{{key: "3/e", timestamp: 10}, {key: "3/f", timestamp: 10}}),
+				newMVCCKeySet("2/a", "2/c").withKVs(
+					[]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/b", timestamp: 10}},
+				),
+				newMVCCKeySet("2/c", "2/e").withKVs(
+					[]kvAndTS{{key: "2/c", timestamp: 10}, {key: "2/d", timestamp: 10}},
+				),
+				newMVCCKeySet("3/e", "3/g").withKVs(
+					[]kvAndTS{{key: "3/e", timestamp: 10}, {key: "3/f", timestamp: 10}},
+				),
 			},
 			flushedSpans: []roachpb.Spans{
 				{{Key: s2k0("2/a"), EndKey: s2k0("2/e")}},
@@ -213,9 +224,15 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 		{
 			name: "prefixes-differ-with-no-eliding",
 			exportKVs: []*mvccKVSet{
-				newMVCCKeySet("2/a", "2/c").withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/b", timestamp: 10}}),
-				newMVCCKeySet("2/c", "2/e").withKVs([]kvAndTS{{key: "2/c", timestamp: 10}, {key: "2/d", timestamp: 10}}),
-				newMVCCKeySet("3/e", "3/g").withKVs([]kvAndTS{{key: "3/e", timestamp: 10}, {key: "3/f", timestamp: 10}}),
+				newMVCCKeySet("2/a", "2/c").withKVs(
+					[]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/b", timestamp: 10}},
+				),
+				newMVCCKeySet("2/c", "2/e").withKVs(
+					[]kvAndTS{{key: "2/c", timestamp: 10}, {key: "2/d", timestamp: 10}},
+				),
+				newMVCCKeySet("3/e", "3/g").withKVs(
+					[]kvAndTS{{key: "3/e", timestamp: 10}, {key: "3/f", timestamp: 10}},
+				),
 			},
 			unflushedSpans: []roachpb.Spans{
 				{{Key: s2k0("2/a"), EndKey: s2k0("2/e")}, {Key: s2k0("3/e"), EndKey: s2k0("3/g")}},
@@ -226,14 +243,12 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 		{
 			name: "no-size-flush-if-mid-row",
 			exportKVs: []*mvccKVSet{
-				newRawMVCCKeySet(s2k0("a"), s2kWithColFamily("b", 1)).
-					withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtSSTSizeVal}}).
-					withStartEndTS(10, 15),
-				newRawMVCCKeySet(s2kWithColFamily("b", 1), s2k0("d")).
+				newMVCCKeySet("a", "d").
 					withRawKVs([]mvccKV{
-						kvAndTS{key: "b", timestamp: 10}.toMvccKV(s2k1),
-					}).
-					withStartEndTS(10, 15),
+						kvAndTS{key: "a", timestamp: 10}.toMVCCKV(s2k0),
+						kvAndTS{key: "b", timestamp: 10, value: gtSSTSizeVal}.toMVCCKV(s2k0),
+						kvAndTS{key: "b", timestamp: 10}.toMVCCKV(s2k1),
+					}),
 			},
 			unflushedSpans: []roachpb.Spans{
 				{{Key: s2k0("a"), EndKey: s2k0("d")}},
@@ -243,15 +258,13 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 		{
 			name: "size-flush-postponed-till-after-mid-row",
 			exportKVs: []*mvccKVSet{
-				newRawMVCCKeySet(s2k0("a"), s2kWithColFamily("b", 1)).
-					withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtSSTSizeVal}}).
-					withStartEndTS(10, 15),
-				newRawMVCCKeySet(s2kWithColFamily("b", 1), s2k0("d")).
+				newMVCCKeySet("a", "d").
 					withRawKVs([]mvccKV{
-						kvAndTS{key: "b", timestamp: 10}.toMvccKV(s2k1),
-						kvAndTS{key: "c", timestamp: 10}.toMvccKV(s2k0),
-					}).
-					withStartEndTS(10, 15),
+						kvAndTS{key: "a", timestamp: 10}.toMVCCKV(s2k0),
+						kvAndTS{key: "b", timestamp: 10, value: gtSSTSizeVal}.toMVCCKV(s2k0),
+						kvAndTS{key: "b", timestamp: 10}.toMVCCKV(s2k1),
+						kvAndTS{key: "c", timestamp: 10}.toMVCCKV(s2k0),
+					}),
 			},
 			flushedSpans: []roachpb.Spans{
 				{{Key: s2k0("a"), EndKey: s2k0("c")}},
@@ -260,24 +273,10 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				{{Key: s2k0("c"), EndKey: s2k0("d")}},
 			},
 		},
-		// It is safe to flush at the range boundary.
+		// If fileSpanByteLimit is reached, the file should be split at the new
+		// key.
 		{
-			name: "size-flush-at-range-boundary",
-			exportKVs: []*mvccKVSet{
-				newRawMVCCKeySet(s2k0("a"), s2k("c")).
-					withKVs([]kvAndTS{
-						{key: "a", timestamp: 10},
-						{key: "b", timestamp: 10, value: gtSSTSizeVal},
-					}),
-			},
-			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k("c")}},
-			},
-		},
-		// If fileSpanByteLimit is reached, extending the file should be prevented
-		// and a new file created.
-		{
-			name: "no-extend-due-to-manifest-size-limit",
+			name: "split-file-due-to-manifest-size-limit",
 			exportKVs: []*mvccKVSet{
 				newMVCCKeySet("a", "d").
 					withKVs([]kvAndTS{
@@ -290,35 +289,39 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 				{{Key: s2k0("a"), EndKey: s2k0("c")}, {Key: s2k0("c"), EndKey: s2k0("d")}},
 			},
 		},
-		// If fileSpanByteLimit is reached but the last key written was mid-row,
-		// the file must be extended.
+		// If a fileSpanByteLimit is reached, resetting on a new contiguous span
+		// should not extend the previous span.
 		{
-			name: "extend-mid-row-despite-manifest-size-limit",
+			name: "no-extend-due-to-manifest-size-limit",
 			exportKVs: []*mvccKVSet{
-				newRawMVCCKeySet(s2k0("a"), s2kWithColFamily("b", 1)).
-					withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtFileSizeVal}}).
-					withStartEndTS(10, 15),
-				newRawMVCCKeySet(s2kWithColFamily("b", 1), s2k0("d")).
-					withRawKVs([]mvccKV{
-						kvAndTS{key: "b", timestamp: 10}.toMvccKV(s2k1),
-						kvAndTS{key: "c", timestamp: 10}.toMvccKV(s2k0),
-					}).
-					withStartEndTS(10, 15),
+				newMVCCKeySet("a", "c").
+					withKVs([]kvAndTS{
+						{key: "a", timestamp: 10},
+						{key: "b", timestamp: 10, value: gtFileSizeVal},
+					}),
+				newMVCCKeySet("c", "e").
+					withKVs([]kvAndTS{
+						{key: "c", timestamp: 10},
+						{key: "d", timestamp: 10},
+					}),
 			},
 			unflushedSpans: []roachpb.Spans{
-				{{Key: s2k0("a"), EndKey: s2k0("c")}, {Key: s2k0("c"), EndKey: s2k0("d")}},
+				{
+					{Key: s2k0("a"), EndKey: s2k0("c")},
+					{Key: s2k0("c"), EndKey: s2k0("e")},
+				},
 			},
 		},
 		// fileSpanByteLimit reached in the middle of writing a span, but the
 		// key is mid-row, so the file must be extended.
 		{
-			name: "extend-mid-row-despite-manifest-size-limit-same-span",
+			name: "extend-mid-row-despite-manifest-size-limit",
 			exportKVs: []*mvccKVSet{
 				newRawMVCCKeySet(s2k0("a"), s2k0("d")).withRawKVs([]mvccKV{
-					kvAndTS{key: "a", timestamp: 10}.toMvccKV(s2k0),
-					kvAndTS{key: "b", timestamp: 10, value: gtFileSizeVal}.toMvccKV(s2k0),
-					kvAndTS{key: "b", timestamp: 10, value: gtFileSizeVal}.toMvccKV(s2k1),
-					kvAndTS{key: "c", timestamp: 10}.toMvccKV(s2k0),
+					kvAndTS{key: "a", timestamp: 10}.toMVCCKV(s2k0),
+					kvAndTS{key: "b", timestamp: 10, value: gtFileSizeVal}.toMVCCKV(s2k0),
+					kvAndTS{key: "b", timestamp: 10, value: gtFileSizeVal}.toMVCCKV(s2k1),
+					kvAndTS{key: "c", timestamp: 10}.toMVCCKV(s2k0),
 				}),
 			},
 			unflushedSpans: []roachpb.Spans{
@@ -345,6 +348,7 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 					for _, kv := range ek.kvs {
 						require.NoError(t, sink.WriteKey(ctx, kv.key, kv.value))
 					}
+					sink.AssumeNotMidRow()
 				}
 
 				progress := make([]backuppb.BackupManifest_File, 0)
@@ -376,36 +380,110 @@ func TestFileSSTSinkWriteKey(t *testing.T) {
 	}
 }
 
-func TestFileSSTSinkWriteKeyOOOFails(t *testing.T) {
+func TestFileSSTSinkWriteKeyBadKeyFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	sink, _ := sstSinkKeyWriterTestSetup(t, st, execinfrapb.ElidePrefix_TenantAndTable)
+	defer func() {
+		require.NoError(t, sink.Close())
+	}()
+
+	t.Run("ooo-key", func(t *testing.T) {
+		keySet := newMVCCKeySet("a", "e").withKVs([]kvAndTS{
+			{key: "a", timestamp: 10}, {key: "b", timestamp: 10},
+			{key: "d", timestamp: 10}, {key: "c", timestamp: 10},
+		})
+
+		require.NoError(t, sink.Reset(ctx, keySet.span))
+		for idx, kv := range keySet.kvs {
+			if idx < len(keySet.kvs)-1 {
+				require.NoError(t, sink.WriteKey(ctx, kv.key, kv.value))
+			} else {
+				require.ErrorContains(
+					t,
+					sink.WriteKey(ctx, kv.key, kv.value),
+					"must be greater than previous key",
+				)
+			}
+		}
+		sink.AssumeNotMidRow()
+		require.NoError(t, sink.Flush(ctx))
+	})
+
+	t.Run("key-outside-of-span", func(t *testing.T) {
+		keySet := newMVCCKeySet("a", "c").withKVs([]kvAndTS{
+			{key: "d", timestamp: 10},
+		})
+
+		require.NoError(t, sink.Reset(ctx, keySet.span))
+		require.ErrorContains(
+			t,
+			sink.WriteKey(ctx, keySet.kvs[0].key, keySet.kvs[0].value),
+			"not in span",
+		)
+		sink.AssumeNotMidRow()
+		require.NoError(t, sink.Flush(ctx))
+	})
+
+	t.Run("write-key-before-reset", func(t *testing.T) {
+		keySet := newMVCCKeySet("a", "c").withKVs([]kvAndTS{
+			{key: "d", timestamp: 10},
+		})
+
+		require.ErrorContains(
+			t,
+			sink.WriteKey(ctx, keySet.kvs[0].key, keySet.kvs[0].value),
+			"no BackupManifest_File to write key to",
+		)
+		sink.AssumeNotMidRow()
+		require.NoError(t, sink.Flush(ctx))
+	})
+}
+
+func TestEnforceFileSSTSinkAssumeNotMidRow(t *testing.T) {
+	// Ensure that AssumeNotMidRow *must* be called before resetting or flushing.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	sink, _ := sstSinkKeyWriterTestSetup(t, st, execinfrapb.ElidePrefix_None)
-	defer func() {
-		require.NoError(t, sink.Close())
-	}()
+	setA := newMVCCKeySet("a", "b").withKVs([]kvAndTS{{key: "a", timestamp: 10}})
 
-	keySet := newMVCCKeySet("a", "e").withKVs([]kvAndTS{
-		{key: "a", timestamp: 10}, {key: "b", timestamp: 10},
-		{key: "d", timestamp: 10}, {key: "c", timestamp: 10},
+	t.Run("require-assume-not-mid-row-for-reset", func(t *testing.T) {
+		sink, _ := sstSinkKeyWriterTestSetup(t, st, execinfrapb.ElidePrefix_None)
+		defer func() {
+			require.NoError(t, sink.Close())
+		}()
+		require.NoError(t, sink.Reset(ctx, setA.span))
+		require.NoError(t, sink.WriteKey(ctx, setA.kvs[0].key, setA.kvs[0].value))
+
+		setB := newMVCCKeySet("b", "c").withKVs([]kvAndTS{{key: "b", timestamp: 10}})
+		require.ErrorContains(
+			t, sink.Reset(ctx, setB.span), "cannot reset after writing a mid-row key",
+		)
+		sink.AssumeNotMidRow()
+		require.NoError(t, sink.Reset(ctx, setB.span))
+		require.NoError(t, sink.Flush(ctx))
 	})
 
-	require.NoError(t, sink.Reset(ctx, keySet.span))
-	for idx, kv := range keySet.kvs {
-		if idx < len(keySet.kvs)-1 {
-			require.NoError(t, sink.WriteKey(ctx, kv.key, kv.value))
-		} else {
-			require.ErrorContains(
-				t,
-				sink.WriteKey(ctx, kv.key, kv.value),
-				"must be greater than previous key",
-			)
-		}
-	}
-	require.NoError(t, sink.Flush(ctx))
+	t.Run("require-assume-not-mid-row-for-flush", func(t *testing.T) {
+		sink, _ := sstSinkKeyWriterTestSetup(t, st, execinfrapb.ElidePrefix_None)
+		defer func() {
+			require.NoError(t, sink.Close())
+		}()
+		require.NoError(t, sink.Reset(ctx, setA.span))
+		require.NoError(t, sink.WriteKey(ctx, setA.kvs[0].key, setA.kvs[0].value))
+
+		require.ErrorContains(
+			t, sink.Flush(ctx), "backup closed file ending mid-key in",
+		)
+		sink.AssumeNotMidRow()
+		require.NoError(t, sink.Flush(ctx))
+	})
 }
 
 func sstSinkKeyWriterTestSetup(
