@@ -3590,7 +3590,34 @@ func TestLeaderTransferToUpToDateNodeFromFollower(t *testing.T) {
 // transfer target, even before (and regardless of if) the target receives the
 // MsgTimeoutNow and campaigns.
 func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
-	nt := newNetwork(nil, nil, nil)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testLeaderTransferLeaderStepsDownImmediately(t, storeLivenessEnabled)
+		})
+}
+
+func testLeaderTransferLeaderStepsDownImmediately(t *testing.T, storeLivenessEnabled bool) {
+	var fabric *raftstoreliveness.LivenessFabric
+	var n1, n2, n3 *raft
+
+	if storeLivenessEnabled {
+		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(1)))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(2)))
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(3)))
+	} else {
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+	}
+
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// Isolate node 3. It is up-to-date, so the leadership transfer will be
@@ -3608,6 +3635,15 @@ func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
 
 	require.Equal(t, uint64(1), lead.Term)
 	checkLeaderTransferState(t, lead, pb.StateFollower, None)
+
+	// With leader leases, the ex-leader would send a MsgDefortifyLeader to
+	// its followers when the support is expired.
+	if storeLivenessEnabled {
+		nt.livenessFabric.SetSupportExpired(1, true)
+		lead.tick()
+		nt.send(lead.readMessages()...)
+		nt.livenessFabric.SetSupportExpired(1, false)
+	}
 
 	// Eventually, the previous leader gives up on waiting and calls an election
 	// to reestablish leadership at the next term.
@@ -4057,21 +4093,55 @@ func TestLeaderTransferDifferentTerms(t *testing.T) {
 // stale follower (a follower still at an earlier term) will cause the follower
 // to call an election which it can not win.
 func TestLeaderTransferStaleFollower(t *testing.T) {
-	nt := newNetwork(nil, nil, nil)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testLeaderTransferStaleFollower(t, storeLivenessEnabled)
+		})
+}
+
+func testLeaderTransferStaleFollower(t *testing.T, storeLivenessEnabled bool) {
+	var fabric *raftstoreliveness.LivenessFabric
+	var n1, n2, n3 *raft
+
+	if storeLivenessEnabled {
+		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(1)))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(2)))
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(3)))
+	} else {
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+	}
+
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	n1 := nt.peers[1].(*raft)
-	n2 := nt.peers[2].(*raft)
-	n3 := nt.peers[3].(*raft)
 	nodes := []*raft{n1, n2, n3}
 
 	// Attempt to transfer leadership to node 3. The MsgTimeoutNow is sent
 	// immediately and node 1 steps down as leader, but node 3 does not receive
 	// the message due to a network partition.
 	nt.isolate(3)
+
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	for _, n := range nodes {
 		require.Equal(t, pb.StateFollower, n.state)
 		require.Equal(t, uint64(1), n.Term)
+	}
+
+	// With leader leases, the ex-leader would send a MsgDefortifyLeader to
+	// its followers when the support is expired.
+	if storeLivenessEnabled {
+		nt.livenessFabric.SetSupportExpired(1, true)
+		n1.tick()
+		nt.send(nt.filter(n1.readMessages())...)
+		nt.livenessFabric.SetSupportExpired(1, false)
 	}
 
 	// Eventually, the previous leader gives up on waiting and calls an election
