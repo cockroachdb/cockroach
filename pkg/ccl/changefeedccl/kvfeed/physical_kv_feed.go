@@ -7,6 +7,7 @@ package kvfeed
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
@@ -27,14 +28,15 @@ type physicalFeedFactory interface {
 // rangeFeedConfig contains configuration options for creating a rangefeed.
 // It provides an abstraction over the actual rangefeed API.
 type rangeFeedConfig struct {
-	Frontier      hlc.Timestamp
-	Spans         []kvcoord.SpanTimePair
-	WithDiff      bool
-	WithFiltering bool
-	ConsumerID    int64
-	RangeObserver kvcoord.RangeObserver
-	Knobs         TestingKnobs
-	Timers        *timers.ScopedTimers
+	Frontier             hlc.Timestamp
+	Spans                []kvcoord.SpanTimePair
+	WithDiff             bool
+	WithFiltering        bool
+	WithFrontierQuantize time.Duration
+	ConsumerID           int64
+	RangeObserver        kvcoord.RangeObserver
+	Knobs                TestingKnobs
+	Timers               *timers.ScopedTimers
 }
 
 // rangefeedFactory is a function that creates and runs a rangefeed.
@@ -107,6 +109,19 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	return g.Wait()
 }
 
+// quantizeTS returns a new timestamp with the walltime rounded down to the
+// nearest multiple of the quantization granularity. If the granularity is 0, it
+// returns the original timestamp.
+func quantizeTS(ts hlc.Timestamp, granularity time.Duration) hlc.Timestamp {
+	if granularity == 0 {
+		return ts
+	}
+	return hlc.Timestamp{
+		WallTime: ts.WallTime - ts.WallTime%int64(granularity),
+		Logical:  0,
+	}
+}
+
 // addEventsToBuffer consumes rangefeed events from `p.eventCh`, transforms
 // them to kvevent.Event's, and pushes them into `p.memBuf`.
 func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
@@ -128,7 +143,9 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				}
 				stop()
 			case *kvpb.RangeFeedCheckpoint:
-				if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(p.cfg.Frontier) {
+				ev := e.ShallowCopy()
+				ev.Checkpoint.ResolvedTS = quantizeTS(ev.Checkpoint.ResolvedTS, p.cfg.WithFrontierQuantize)
+				if resolvedTs := ev.Checkpoint.ResolvedTS; !resolvedTs.IsEmpty() && resolvedTs.Less(p.cfg.Frontier) {
 					// RangeFeed happily forwards any closed timestamps it receives as
 					// soon as there are no outstanding intents under them.
 					// Changefeeds don't care about these at all, so throw them out.
@@ -139,7 +156,7 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				}
 				stop := p.st.RangefeedBufferCheckpoint.Start()
 				if err := p.memBuf.Add(
-					ctx, kvevent.MakeResolvedEvent(e.RangeFeedEvent, jobspb.ResolvedSpan_NONE),
+					ctx, kvevent.MakeResolvedEvent(ev, jobspb.ResolvedSpan_NONE),
 				); err != nil {
 					return err
 				}
