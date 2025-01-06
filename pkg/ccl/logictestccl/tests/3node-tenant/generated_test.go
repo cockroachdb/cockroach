@@ -1828,6 +1828,13 @@ func TestTenantLogic_set_schema(
 	runLogicTest(t, "set_schema")
 }
 
+func TestTenantLogic_set_session_variable(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "set_session_variable")
+}
+
 func TestTenantLogic_set_time_zone(
 	t *testing.T,
 ) {

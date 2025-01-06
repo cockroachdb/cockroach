@@ -1826,6 +1826,13 @@ func TestReadCommittedLogic_set_schema(
 	runLogicTest(t, "set_schema")
 }
 
+func TestReadCommittedLogic_set_session_variable(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "set_session_variable")
+}
+
 func TestReadCommittedLogic_set_time_zone(
 	t *testing.T,
 ) {

@@ -1991,6 +1991,13 @@ func TestLogic_set_schema(
 	runLogicTest(t, "set_schema")
 }
 
+func TestLogic_set_session_variable(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "set_session_variable")
+}
+
 func TestLogic_set_time_zone(
 	t *testing.T,
 ) {
