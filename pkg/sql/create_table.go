@@ -2524,7 +2524,7 @@ func newRowLevelTTLScheduledJob(
 	sj.SetScheduleLabel(ttlbase.BuildScheduleLabel(tblDesc))
 	sj.SetOwner(owner)
 	sj.SetScheduleDetails(jobspb.ScheduleDetails{
-		Wait: jobspb.ScheduleDetails_WAIT,
+		Wait: jobspb.ScheduleDetails_SKIP,
 		// If a job fails, try again at the allocated cron time.
 		OnError:                jobspb.ScheduleDetails_RETRY_SCHED,
 		ClusterID:              clusterID,
