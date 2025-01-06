@@ -1677,13 +1677,32 @@ DELETE FROM system.role_members WHERE member = 'non_cached_user';
 statement ok
 DROP USER real_user;
 
-subtest end
+subtest cross_db
 
 statement ok
 CREATE TYPE other_db.public.enum1 AS ENUM ('yo');
 
-# Ensure that the cross-DB lookup of UDTs works.
+# Ensure that the cross-DB lookup of UDTs works. This uses the full table scan.
 query ITTITTT
-SELECT * FROM "".crdb_internal.create_type_statements WHERE descriptor_id = (('other_db.public.enum1'::regtype::int) - 100000)::oid
+SELECT * FROM "".crdb_internal.create_type_statements WHERE descriptor_name = 'enum1' and database_name = 'other_db'
 ----
 121  other_db  public  151  enum1  CREATE TYPE other_db.public.enum1 AS ENUM ('yo')  {yo}
+
+# This uses the virtual index. descriptor_id is an int in the vtable.
+query ITTITTT
+SELECT * FROM "".crdb_internal.create_type_statements WHERE descriptor_id = (('other_db.public.enum1'::regtype::int) - 100000)
+----
+121  other_db  public  151  enum1  CREATE TYPE other_db.public.enum1 AS ENUM ('yo')  {yo}
+
+# Repeat above two queries but apply only for the current database. We do this by omitting the "".
+# This one uses the full table scan.
+query ITTITTT
+SELECT * FROM crdb_internal.create_type_statements WHERE descriptor_name = 'enum1'
+----
+
+# This one uses the virtual index
+query ITTITTT
+SELECT * FROM crdb_internal.create_type_statements WHERE descriptor_id = (('other_db.public.enum1'::regtype::int) - 100000)
+----
+
+subtest end
