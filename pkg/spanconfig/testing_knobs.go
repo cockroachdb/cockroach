@@ -49,7 +49,7 @@ type TestingKnobs struct {
 
 	// JobPersistCheckpointInterceptor, if set, is invoked before the
 	// reconciliation job persists checkpoints.
-	JobOnCheckpointInterceptor func() error
+	JobOnCheckpointInterceptor func(lastCheckpoint hlc.Timestamp) error
 
 	// KVSubscriberRangeFeedKnobs control lifecycle events for the rangefeed
 	// underlying the KVSubscriber.
