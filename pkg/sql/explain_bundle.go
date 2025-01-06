@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -588,12 +589,16 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		return
 	}
 
-	dbNames := make(map[string]struct{})
-	schemaNames := make(map[string]struct{})
+	dbNames := make(map[tree.Name]struct{})
+	// Mapping from a DB name to all schemas within that DB.
+	schemaNames := make(map[tree.Name]map[tree.Name]struct{})
 	collectDBAndSchemaNames := func(dataSources []tree.TableName) {
 		for _, ds := range dataSources {
-			dbNames[ds.CatalogName.String()] = struct{}{}
-			schemaNames[fmt.Sprintf("%s.%s", ds.CatalogName.String(), ds.SchemaName.String())] = struct{}{}
+			dbNames[ds.CatalogName] = struct{}{}
+			if _, ok := schemaNames[ds.CatalogName]; !ok {
+				schemaNames[ds.CatalogName] = make(map[tree.Name]struct{})
+			}
+			schemaNames[ds.CatalogName][ds.SchemaName] = struct{}{}
 		}
 	}
 	collectDBAndSchemaNames(tables)
@@ -889,16 +894,15 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		if skip && !all {
 			continue
 		}
-		formatStr := `SET %s = %s;  -- default value: %s`
-		if _, ok := sessionVarNeedsQuotes[varName]; ok {
-			formatStr = `SET %s = '%s';  -- default value: %s`
+		if _, ok := sessionVarNeedsEscaping[varName]; ok {
+			value = lexbase.EscapeSQLString(value)
 		}
 		if value == "" {
 			// Need a special case for empty strings to make the SET statement
 			// parsable.
 			value = "''"
 		}
-		fmt.Fprintf(w, formatStr+"\n", varName, value, defaultValue)
+		fmt.Fprintf(w, "SET %s = %s;  -- default value: %s\n", varName, value, defaultValue)
 	}
 	return nil
 }
@@ -963,28 +967,14 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer, all bool) error {
 	return nil
 }
 
-func getDBName(tn *tree.TableName) (string, error) {
-	parts := strings.Split(tn.FQString(), ".")
-	if len(parts) < 3 {
-		return "", errors.AssertionFailedf("expected at least three parts in fully-qualified name %s", tn.FQString())
-	}
-	return parts[0], nil
-}
-
-func printCreateStatement(w io.Writer, dbName, createStatement string) {
-	// TODO(138015): this might require an adjustment when the DB name has
-	// special characters.
-	fmt.Fprintf(w, "USE %s;\n", dbName)
+func printCreateStatement(w io.Writer, dbName tree.Name, createStatement string) {
+	fmt.Fprintf(w, "USE %s;\n", dbName.String())
 	fmt.Fprintf(w, "%s;\n", createStatement)
 }
 
 func (c *stmtEnvCollector) PrintCreateTable(
 	w io.Writer, tn *tree.TableName, redactValues bool,
 ) error {
-	dbName, err := getDBName(tn)
-	if err != nil {
-		return err
-	}
 	var formatOption string
 	if redactValues {
 		formatOption = " WITH REDACT"
@@ -995,22 +985,18 @@ func (c *stmtEnvCollector) PrintCreateTable(
 	if err != nil {
 		return err
 	}
-	printCreateStatement(w, dbName, createStatement)
+	printCreateStatement(w, tn.CatalogName, createStatement)
 	return nil
 }
 
 func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) error {
-	dbName, err := getDBName(tn)
-	if err != nil {
-		return err
-	}
 	createStatement, err := c.query(fmt.Sprintf(
 		"SELECT create_statement FROM [SHOW CREATE SEQUENCE %s]", tn.FQString(),
 	))
 	if err != nil {
 		return err
 	}
-	printCreateStatement(w, dbName, createStatement)
+	printCreateStatement(w, tn.CatalogName, createStatement)
 	return nil
 }
 
@@ -1028,7 +1014,7 @@ func (c *stmtEnvCollector) PrintCreateUDT(w io.Writer, id oid.Oid, redactValues 
 		return err
 	}
 	if res[0] != "" {
-		printCreateStatement(w, res[0] /* dbName */, res[1] /* createStatement */)
+		printCreateStatement(w, tree.Name(res[0]) /* dbName */, res[1] /* createStatement */)
 	}
 	return nil
 }
@@ -1055,17 +1041,13 @@ func (c *stmtEnvCollector) PrintCreateRoutine(
 	if err != nil {
 		return err
 	}
-	printCreateStatement(w, res[0] /* dbName */, res[1] /* createStatement */)
+	printCreateStatement(w, tree.Name(res[0]) /* dbName */, res[1] /* createStatement */)
 	return nil
 }
 
 func (c *stmtEnvCollector) PrintCreateView(
 	w io.Writer, tn *tree.TableName, redactValues bool,
 ) error {
-	dbName, err := getDBName(tn)
-	if err != nil {
-		return err
-	}
 	var formatOption string
 	if redactValues {
 		formatOption = " WITH REDACT"
@@ -1076,11 +1058,13 @@ func (c *stmtEnvCollector) PrintCreateView(
 	if err != nil {
 		return err
 	}
-	printCreateStatement(w, dbName, createStatement)
+	printCreateStatement(w, tn.CatalogName, createStatement)
 	return nil
 }
 
-func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[string]struct{}) error {
+func (c *stmtEnvCollector) printCreateAllDatabases(
+	w io.Writer, dbNames map[tree.Name]struct{},
+) error {
 	for db := range dbNames {
 		switch db {
 		case catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName, catconstants.SystemDatabaseName:
@@ -1088,8 +1072,21 @@ func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[stri
 			// exclude them to ease the recreation of the bundle.
 			continue
 		}
+		// Since we use the DB name as a string type in the filter, we need to
+		// have a special behavior to properly escape it. First, we rely on the
+		// formatting logic to do its work.
+		dbName := db.String()
+		// Now we need to manually escape the single quote character - this is
+		// needed since in the general case this character is not special (i.e.
+		// we surround the whole identifier with double quotes, but here we
+		// cannot have them).
+		dbName = strings.Replace(dbName, "'", "''", -1)
+		// Now remove the surrounding double quotes since otherwise the string
+		// would be treated as a column name.
+		dbName = strings.TrimPrefix(dbName, `"`)
+		dbName = strings.TrimSuffix(dbName, `"`)
 		createStatement, err := c.query(fmt.Sprintf(
-			"SELECT create_statement FROM crdb_internal.databases WHERE name = '%s'", db,
+			"SELECT create_statement FROM crdb_internal.databases WHERE name = '%s'", dbName,
 		))
 		if err != nil {
 			return err
@@ -1100,26 +1097,22 @@ func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[stri
 }
 
 func (c *stmtEnvCollector) printCreateAllSchemas(
-	w io.Writer, schemaNames map[string]struct{},
+	w io.Writer, schemaNames map[tree.Name]map[tree.Name]struct{},
 ) error {
-	for schema := range schemaNames {
-		// TODO(138015): this logic assumes that we don't have the period in the
-		// database name.
-		_, schemaOnly, found := strings.Cut(schema, ".")
-		if !found {
-			return errors.AssertionFailedf("expected schema name to be qualified with DB name")
+	for dbName, schemas := range schemaNames {
+		for schema := range schemas {
+			switch schema {
+			case catconstants.PublicSchemaName,
+				catconstants.InformationSchemaName,
+				catconstants.CRDBInternalSchemaName,
+				catconstants.PgCatalogName,
+				catconstants.PgExtensionSchemaName:
+				// The public and virtual schemas are always present, so
+				// exclude them to ease the recreation of the bundle.
+				continue
+			}
+			printCreateStatement(w, dbName, fmt.Sprintf("CREATE SCHEMA %s", schema.String()))
 		}
-		switch schemaOnly {
-		case catconstants.PublicSchemaName,
-			catconstants.InformationSchemaName,
-			catconstants.CRDBInternalSchemaName,
-			catconstants.PgCatalogName,
-			catconstants.PgExtensionSchemaName:
-			// The public and virtual schemas are always present, so
-			// exclude them to ease the recreation of the bundle.
-			continue
-		}
-		fmt.Fprintf(w, "CREATE SCHEMA %s;\n", schema)
 	}
 	return nil
 }
@@ -1171,9 +1164,9 @@ var skipReadOnlySessionVar = map[string]struct{}{
 	"virtual_cluster_name":      {},
 }
 
-// sessionVarNeedsQuotes contains all writable session variables that have
-// values that need single quotes around them in SET statements.
-var sessionVarNeedsQuotes = map[string]struct{}{
+// sessionVarNeedsEscaping contains all writable session variables that have
+// values that need escaping in SET statements.
+var sessionVarNeedsEscaping = map[string]struct{}{
 	"application_name":               {},
 	"database":                       {},
 	"datestyle":                      {},
