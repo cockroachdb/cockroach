@@ -293,6 +293,47 @@ func TestEquivSet(t *testing.T) {
 		require.False(t, equiv4.AreAllColsEquiv(c(7, 8)))
 	})
 
+	t.Run("AreAllColsEquiv2", func(t *testing.T) {
+		require.True(t, emptyEquiv.AreAllColsEquiv2(c(1), c()))
+		require.True(t, equiv1.AreAllColsEquiv2(c(1), c()))
+		require.True(t, equiv2.AreAllColsEquiv2(c(), c(1)))
+		require.True(t, equiv3.AreAllColsEquiv2(c(), c(1)))
+		require.True(t, equiv4.AreAllColsEquiv2(c(1), c(1)))
+
+		require.False(t, emptyEquiv.AreAllColsEquiv2(c(1), c(2)))
+		require.True(t, equiv1.AreAllColsEquiv2(c(2), c(2)))
+		require.True(t, equiv2.AreAllColsEquiv2(c(1), c(2)))
+		require.True(t, equiv3.AreAllColsEquiv2(c(1), c(2)))
+		require.True(t, equiv4.AreAllColsEquiv2(c(1), c(2)))
+
+		require.False(t, emptyEquiv.AreAllColsEquiv2(c(3), c(4)))
+		require.False(t, equiv1.AreAllColsEquiv2(c(3), c(4)))
+		require.True(t, equiv2.AreAllColsEquiv2(c(3), c(4)))
+		require.True(t, equiv3.AreAllColsEquiv2(c(3), c(4)))
+		require.True(t, equiv4.AreAllColsEquiv2(c(3), c(4)))
+
+		require.False(t, emptyEquiv.AreAllColsEquiv2(c(5), c(6)))
+		require.False(t, equiv1.AreAllColsEquiv2(c(5), c(6)))
+		require.False(t, equiv2.AreAllColsEquiv2(c(5), c(6)))
+		require.True(t, equiv3.AreAllColsEquiv2(c(5), c(6)))
+		require.False(t, equiv4.AreAllColsEquiv2(c(5), c(6)))
+
+		require.False(t, emptyEquiv.AreAllColsEquiv2(c(1, 2), c(3)))
+		require.False(t, equiv1.AreAllColsEquiv2(c(1, 2), c(3)))
+		require.False(t, equiv2.AreAllColsEquiv2(c(1), c(2, 3)))
+		require.False(t, equiv3.AreAllColsEquiv2(c(1), c(2, 3)))
+		require.True(t, equiv4.AreAllColsEquiv2(c(1), c(2, 3)))
+		require.True(t, equiv4.AreAllColsEquiv2(c(1, 2), c(2, 3)))
+		require.True(t, equiv4.AreAllColsEquiv2(c(1, 2, 3), c(1, 2, 3)))
+
+		require.False(t, emptyEquiv.AreAllColsEquiv2(c(7), c(8)))
+		require.False(t, equiv1.AreAllColsEquiv2(c(7), c(8)))
+		require.False(t, equiv2.AreAllColsEquiv2(c(7), c(8)))
+		require.False(t, equiv3.AreAllColsEquiv2(c(7), c(8)))
+		require.False(t, equiv4.AreAllColsEquiv2(c(7), c(8)))
+		require.True(t, equiv4.AreAllColsEquiv2(c(7), c(7)))
+	})
+
 	t.Run("ComputeEquivClosureNoCopy", func(t *testing.T) {
 		require.True(t, emptyEquiv.ComputeEquivClosureNoCopy(c()).Empty())
 		require.True(t, emptyEquiv.ComputeEquivClosureNoCopy(c(1, 2)).Equals(c(1, 2)))
