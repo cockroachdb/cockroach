@@ -319,52 +319,75 @@ func TestGetTableMetadataWithDetails(t *testing.T) {
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 	runner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
-	var (
-		db1Name   = "new_test_db_1"
-		db2Name   = "new_test_db_2"
-		myTable1  = "myTable1"
-		myTable11 = "myTable11"
-	)
-	setupTest(t, runner, db1Name, db2Name)
+
+	tests := []struct {
+		dbName     string
+		schemaName string
+		tableName  string
+		// The ids will be filled out below.
+		dbId    int
+		tableId int
+	}{
+		{
+			dbName:     "new_test_db_1",
+			schemaName: "public",
+			tableName:  "myTable1"},
+		{
+			dbName:     `new_test_db_2.With Special. 'name'`,
+			schemaName: "my 'custom' Schema",
+			tableName:  `myTable11. with 'special'. name`,
+		},
+	}
 
 	ts := testCluster.Server(0)
 	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
-	createTableStatement1 := fmt.Sprintf(`CREATE TABLE %s."%s" (col1 int)`, db1Name, myTable1)
-	createTableStatement2 := fmt.Sprintf(`CREATE TABLE %s."%s" (col1 int)`, db2Name, myTable11)
-	runner.Exec(t, createTableStatement1)
-	runner.Exec(t, createTableStatement2)
 
-	t.Run("get table metadata", func(t *testing.T) {
-		resp := makeApiRequest[tableMetadataWithDetailsResponse](
-			t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
-		require.NotEmpty(t, resp.Metadata)
-		require.Contains(t, resp.CreateStatement, myTable1)
-	})
+	// Create tables and fill in the id fields.
+	for i := range tests {
+		tc := &tests[i]
+		tc.dbId, tc.tableId = createTable(t, runner, tc.dbName, tc.schemaName, tc.tableName)
+		insertMockTable(t, runner, tc.dbId, tc.tableId, tc.dbName, tc.schemaName, tc.tableName)
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("get table metadata/%s", tc.tableName), func(t *testing.T) {
+			uri := fmt.Sprintf("/api/v2/table_metadata/%d/", tc.tableId)
+			resp := makeApiRequest[tableMetadataWithDetailsResponse](
+				t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+			require.NotEmpty(t, resp.Metadata)
+			require.Contains(t, resp.CreateStatement, "CREATE TABLE")
+			require.Contains(t, resp.CreateStatement, tc.tableName)
+		})
+	}
 
 	t.Run("authorization", func(t *testing.T) {
+		// Use first table for this subtest.
+		table := tests[0]
+		db := table.dbName
+		uri := fmt.Sprintf("/api/v2/table_metadata/%d/", table.tableId)
 		sessionUsername := username.TestUserName()
 		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
 		require.NoError(t, err)
 
 		// Request should succeed by default due to CONNECT on public.
 		resp := makeApiRequest[tableMetadataWithDetailsResponse](
-			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
+			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.NotEmpty(t, resp.Metadata)
-		require.Contains(t, resp.CreateStatement, myTable1)
+		require.Contains(t, resp.CreateStatement, table.tableName)
 
 		// Revoke access to db1.
-		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, "public"))
+		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db, "public"))
 		failed := makeApiRequest[string](
-			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
+			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, TableNotFound, failed)
 
 		// Grant admin access to the user.
 		runner.Exec(t, fmt.Sprintf("GRANT ADMIN TO %s", sessionUsername.Normalized()))
 		resp = makeApiRequest[tableMetadataWithDetailsResponse](
-			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
+			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.NotEmpty(t, resp.Metadata)
-		require.Contains(t, resp.CreateStatement, myTable1)
+		require.Contains(t, resp.CreateStatement, table.tableName)
 	})
 
 	t.Run("non GET method 405 error", func(t *testing.T) {
@@ -388,10 +411,11 @@ func TestGetTableMetadataWithDetails(t *testing.T) {
 	})
 
 	t.Run("error fetching create statement", func(t *testing.T) {
+		insertMockTable(t, runner, tests[0].dbId, 10, tests[0].dbName, "public", "myTable2")
 		// Since we never actually created the table 'myTable2', this request will result in an error
 		// fetching the create statement for it.
 		resp := makeApiRequest[tableMetadataWithDetailsResponse](
-			t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/2/").String(), http.MethodGet)
+			t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/10/").String(), http.MethodGet)
 		require.NotEmpty(t, resp.Metadata)
 		require.Contains(t, resp.CreateStatement, "Unable to retrieve create statement")
 		require.Contains(t, resp.CreateStatement, "myTable2")
@@ -910,17 +934,61 @@ func triggerAndWaitForJobToComplete(
 	<-jobComplete
 }
 
+// createTable creates the specified table and returns the db and table id.
+func createTable(
+	t *testing.T, runner *sqlutils.SQLRunner, db, schema, table string,
+) (dbId, tableId int) {
+	runner.Exec(t, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS "%s"`, db))
+	runner.QueryRow(t, `SELECT crdb_internal.get_database_id($1) AS database_id;`, db).
+		Scan(&dbId)
+	runner.Exec(t, fmt.Sprintf(`USE "%s"`, db))
+	runner.Exec(t, fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS "%s"`, schema))
+	runner.Exec(t, fmt.Sprintf(`CREATE TABLE "%s"."%s"."%s" (col1 int)`, db, schema, table))
+	runner.QueryRow(t,
+		`SELECT id FROM system.namespace WHERE name = $1 AND "parentID" = $2`,
+		table, dbId).Scan(&tableId)
+	return dbId, tableId
+}
+
+// insertMockTable inserts the specified table metadata into the system.table_metadata table,
+// mocking the rest of the fields.
+func insertMockTable(
+	t *testing.T, runner *sqlutils.SQLRunner, dbId, tableId int, db, schema, table string,
+) {
+	runner.Exec(t, `
+INSERT INTO system.table_metadata (
+    db_id,
+	db_name,
+	table_id,
+	schema_name,
+	table_name,
+	table_type,
+	replication_size_bytes,
+	total_ranges,
+	total_live_data_bytes,
+	total_data_bytes,
+	perc_live_data,
+	total_columns,
+	total_indexes,
+	store_ids,
+	last_update_error,
+	last_updated,
+	details)
+VALUES
+	($1, $2, $3, $4, $5, 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], null, '2025-06-20T00:00:00Z', '{"auto_stats_enabled": true, "stats_last_updated": "2024-01-01 00:00:00"}')
+`, dbId, db, tableId, schema, table)
+}
+
 func setupTest(
 	t *testing.T, runner *sqlutils.SQLRunner, db1 string, db2 string,
 ) (dbId1 int, dbId2 int) {
-	runner.Exec(t, `CREATE DATABASE IF NOT EXISTS `+db1)
+	runner.Exec(t, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS "%s"`, db1))
+	runner.Exec(t, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS "%s"`, db2))
 
-	runner.Exec(t, `CREATE DATABASE IF NOT EXISTS `+db2)
-
-	row := runner.QueryRow(t, fmt.Sprintf(`SELECT crdb_internal.get_database_id('%s') AS database_id;`, db1))
+	row := runner.QueryRow(t, `SELECT crdb_internal.get_database_id($1) AS database_id;`, db1)
 	row.Scan(&dbId1)
 
-	row = runner.QueryRow(t, fmt.Sprintf(`SELECT crdb_internal.get_database_id('%s') AS database_id;`, db2))
+	row = runner.QueryRow(t, `SELECT crdb_internal.get_database_id($1) AS database_id;`, db2)
 	row.Scan(&dbId2)
 
 	// Insert some tables with dbId 1 to mock system db.
