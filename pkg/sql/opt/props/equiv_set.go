@@ -123,6 +123,24 @@ func (eq *EquivGroups) AreAllColsEquiv(cols opt.ColSet) bool {
 	return false
 }
 
+// AreAllColsEquiv2 returns true if all columns in both the given sets are
+// equivalent to all others. It is provided in addition to AreAllColsEquiv so
+// that two sets can be tested without having to union them first.
+func (eq *EquivGroups) AreAllColsEquiv2(cols0, cols1 opt.ColSet) bool {
+	if buildutil.CrdbTestBuild {
+		defer eq.verify()
+	}
+	if cols0.Len()+cols1.Len() <= 1 {
+		return true
+	}
+	for i := range eq.groups {
+		if eq.groups[i].Intersects(cols0) || eq.groups[i].Intersects(cols1) {
+			return cols0.SubsetOf(eq.groups[i]) && cols1.SubsetOf(eq.groups[i])
+		}
+	}
+	return false
+}
+
 // ComputeEquivClosureNoCopy returns the equivalence closure of the given
 // columns. Note that the given ColSet is mutated and returned directly.
 func (eq *EquivGroups) ComputeEquivClosureNoCopy(cols opt.ColSet) opt.ColSet {
