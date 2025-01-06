@@ -32,6 +32,7 @@ func TestSQLStatsRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 137616)
 	skip.UnderDuress(t, "test is too heavy for special configs")
 
 	// We build a small multiregion cluster, with the proper settings for
