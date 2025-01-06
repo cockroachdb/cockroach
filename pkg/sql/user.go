@@ -539,9 +539,10 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 		return err
 	}
 
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role membership table",
-	)
+	return p.writeTableDesc(ctx, tableDesc)
+	// return p.writeSchemaChange(
+	// 	ctx, tableDesc, descpb.InvalidMutationID, "updating version for role membership table",
+	// )
 }
 
 // bumpUsersTableVersion increases the table version for the
@@ -552,9 +553,10 @@ func (p *planner) bumpUsersTableVersion(ctx context.Context) error {
 		return err
 	}
 
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for users table",
-	)
+	return p.writeTableDesc(ctx, tableDesc)
+	// return p.writeSchemaChange(
+	// 	ctx, tableDesc, descpb.InvalidMutationID, "updating version for users table",
+	// )
 }
 
 // bumpRoleOptionsTableVersion increases the table version for the
@@ -565,9 +567,11 @@ func (p *planner) bumpRoleOptionsTableVersion(ctx context.Context) error {
 		return err
 	}
 
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role options table",
-	)
+	// could we just do writeTableDesc here?
+	return p.writeTableDesc(ctx, tableDesc)
+	// return p.writeSchemaChange(
+	// 	ctx, tableDesc, descpb.InvalidMutationID, "updating version for role options table",
+	// )
 }
 
 // bumpDatabaseRoleSettingsTableVersion increases the table version for the
@@ -578,9 +582,10 @@ func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) erro
 		return err
 	}
 
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for database_role_settings table",
-	)
+	return p.writeTableDesc(ctx, tableDesc)
+	// return p.writeSchemaChange(
+	// 	ctx, tableDesc, descpb.InvalidMutationID, "updating version for database_role_settings table",
+	// )
 }
 
 // BumpPrivilegesTableVersion increases the table version for the
