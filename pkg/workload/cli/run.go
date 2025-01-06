@@ -595,8 +595,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 				continue
 			}
-			// Log the error so we get the stack trace.
-			log.Errorf(ctx, "%v", err)
+			// Log the error with %+v so we get the stack trace.
+			log.Errorf(ctx, "workload run error: %+v", err)
 			return err
 
 		case <-ticker.C:
