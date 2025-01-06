@@ -7,6 +7,7 @@ package kvfeed
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
@@ -27,14 +28,15 @@ type physicalFeedFactory interface {
 // rangeFeedConfig contains configuration options for creating a rangefeed.
 // It provides an abstraction over the actual rangefeed API.
 type rangeFeedConfig struct {
-	Frontier      hlc.Timestamp
-	Spans         []kvcoord.SpanTimePair
-	WithDiff      bool
-	WithFiltering bool
-	ConsumerID    int64
-	RangeObserver kvcoord.RangeObserver
-	Knobs         TestingKnobs
-	Timers        *timers.ScopedTimers
+	Frontier             hlc.Timestamp
+	Spans                []kvcoord.SpanTimePair
+	WithDiff             bool
+	WithFiltering        bool
+	WithFrontierQuantize time.Duration
+	ConsumerID           int64
+	RangeObserver        kvcoord.RangeObserver
+	Knobs                TestingKnobs
+	Timers               *timers.ScopedTimers
 }
 
 // rangefeedFactory is a function that creates and runs a rangefeed.
@@ -128,7 +130,12 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				}
 				stop()
 			case *kvpb.RangeFeedCheckpoint:
-				if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(p.cfg.Frontier) {
+				ev := e.RangeFeedEvent
+				if p.cfg.WithFrontierQuantize != 0 {
+					ev.Checkpoint.ResolvedTS.Logical = 0
+					ev.Checkpoint.ResolvedTS.WallTime -= ev.Checkpoint.ResolvedTS.WallTime % int64(p.cfg.WithFrontierQuantize)
+				}
+				if resolvedTs := ev.Checkpoint.ResolvedTS; resolvedTs.IsEmpty() && resolvedTs.Less(p.cfg.Frontier) {
 					// RangeFeed happily forwards any closed timestamps it receives as
 					// soon as there are no outstanding intents under them.
 					// Changefeeds don't care about these at all, so throw them out.
@@ -139,7 +146,7 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				}
 				stop := p.st.RangefeedBufferCheckpoint.Start()
 				if err := p.memBuf.Add(
-					ctx, kvevent.MakeResolvedEvent(e.RangeFeedEvent, jobspb.ResolvedSpan_NONE),
+					ctx, kvevent.MakeResolvedEvent(ev, jobspb.ResolvedSpan_NONE),
 				); err != nil {
 					return err
 				}
