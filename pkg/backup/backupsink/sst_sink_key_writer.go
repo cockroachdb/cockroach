@@ -6,12 +6,14 @@
 package backupsink
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,7 +45,10 @@ func MakeSSTSinkKeyWriter(
 // including the prefix. Reset needs to be called prior to WriteKey whenever
 // writing keys from a new span. Keys must also be written in order.
 //
-// Flush should be called after the last key is written to ensure that the SST
+// After writing the last key for a span, AssumeNotMidRow must be called to
+// enforce the invariant that BackupManifest_File spans do not end mid-row.
+//
+// Flush should be called before the sink is closed to ensure the SST
 // is written to the destination.
 func (s *SSTSinkKeyWriter) WriteKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	if len(s.flushedFiles) == 0 {
@@ -51,10 +56,11 @@ func (s *SSTSinkKeyWriter) WriteKey(ctx context.Context, key storage.MVCCKey, va
 			"no BackupManifest_File to write key to, call Reset before WriteKey",
 		)
 	}
-	lastFile := &s.flushedFiles[len(s.flushedFiles)-1]
-	if !lastFile.Span.ContainsKey(key.Key) {
+	if !s.flushedFiles[len(s.flushedFiles)-1].Span.ContainsKey(key.Key) {
 		return errors.AssertionFailedf(
-			"key %s not in span %s, call Reset on the new span", key.Key, lastFile.Span,
+			"key %s not in span %s, call Reset on the new span",
+			key.Key,
+			s.flushedFiles[len(s.flushedFiles)-1].Span,
 		)
 	}
 	if s.prevKey != nil && s.prevKey.Compare(key.Key) >= 0 {
@@ -65,16 +71,15 @@ func (s *SSTSinkKeyWriter) WriteKey(ctx context.Context, key storage.MVCCKey, va
 	// - The new key comes after the previous key.
 	// - This new key belongs to the span of the last BackupManifest_File in
 	//   s.flushedFiles.
-	lastFile, err := s.maybeDoSizeFlush(ctx, key.Key)
-	if err != nil {
+	s.setMidRowForPrevKey(key.Key)
+	if err := s.maybeDoSizeFlush(ctx, key.Key); err != nil {
 		return err
 	}
 
-	elidedKey, prefix, err := elideMVCCKeyPrefix(key, s.conf.ElideMode)
+	elidedKey, err := elideMVCCKey(key, s.conf.ElideMode)
 	if err != nil {
 		return err
 	}
-	s.elidedPrefix = append(s.elidedPrefix[:0], prefix...)
 	// TODO (kev-cao): Should add some method of tracking `Rows` (and potentially
 	// `IndexEntries`).
 	keyAsRowCount := roachpb.RowCount{
@@ -85,22 +90,38 @@ func (s *SSTSinkKeyWriter) WriteKey(ctx context.Context, key storage.MVCCKey, va
 		return err
 	}
 
-	lastFile.EntryCounts.Add(keyAsRowCount)
+	s.flushedFiles[len(s.flushedFiles)-1].EntryCounts.Add(keyAsRowCount)
 	s.flushedSize += keyAsRowCount.DataSize
 	s.prevKey = append(s.prevKey[:0], key.Key...)
-
+	// Until the next key is written, we cannot determine if this key is mid-row.
+	// As a safeguard, we assume it is mid-row, and if it is the last key to be
+	// written in this span, the caller has the responsibility of explicitly
+	// marking the key as not mid-row by calling AssumeNotMidRow.
+	s.midRow = true
 	return nil
+}
+
+// AssumeNotMidRow marks the last key written as not mid-row. This exists to
+// ensure that the caller explicitly is aware that SSTSinkKeyWriter is unable
+// to determine if the last key written in a span is mid-row and must enforce
+// the invariant themselves.
+func (s *SSTSinkKeyWriter) AssumeNotMidRow() {
+	s.midRow = false
 }
 
 // Reset resets the SSTSinkKeyWriter to write to a new span. It ensures that an
 // open BackupManifest_File exists for the new span. It will either open a new
 // BackupManifest_File, or if the new span contiguously extends the last span,
 // it will extend it if it remains under the fileSpanByteLimit. The caller is
-// responsible for ensuring that spans that are reset on do not end mid-row.
+// responsible for ensuring that spans that are reset on do not end mid-row
+// and calling AssumeNotMidRow before resetting to enforce this invariant.
 // Any time a new span is being written, Reset MUST be called prior to any
 // WriteKey calls.
 func (s *SSTSinkKeyWriter) Reset(ctx context.Context, newSpan roachpb.Span) error {
 	log.VEventf(ctx, 2, "resetting sink to span %s", newSpan)
+	if s.midRow {
+		return errors.AssertionFailedf("cannot reset after writing a mid-row key")
+	}
 	if err := s.maybeFlushNonExtendableSpans(newSpan); err != nil {
 		return err
 	}
@@ -111,15 +132,10 @@ func (s *SSTSinkKeyWriter) Reset(ctx context.Context, newSpan roachpb.Span) erro
 	}
 	// At this point, we can assume the new span is either contiguous with the
 	// last span or comes after the last span (if it exists).
-	var lastFile *backuppb.BackupManifest_File
 	if len(s.flushedFiles) > 0 {
-		lastFile = &s.flushedFiles[len(s.flushedFiles)-1]
-	}
-
-	if lastFile != nil {
-		s.setMidRowForPrevKey(lastFile.Span.EndKey)
+		lastFile := &s.flushedFiles[len(s.flushedFiles)-1]
 		if isContiguousSpan(lastFile.Span, newSpan) &&
-			(s.midRow || lastFile.EntryCounts.DataSize < fileSpanByteLimit) {
+			lastFile.EntryCounts.DataSize < fileSpanByteLimit {
 			log.VEventf(ctx, 2, "extending span %s to %s", lastFile.Span, newSpan)
 			s.stats.spanGrows++
 			lastFile.Span.EndKey = newSpan.EndKey
@@ -127,6 +143,11 @@ func (s *SSTSinkKeyWriter) Reset(ctx context.Context, newSpan roachpb.Span) erro
 		}
 	}
 
+	prefix, err := ElidedPrefix(newSpan.Key, s.conf.ElideMode)
+	if err != nil {
+		return err
+	}
+	s.elidedPrefix = append(s.elidedPrefix[:0], prefix...)
 	s.flushedFiles = append(
 		s.flushedFiles,
 		backuppb.BackupManifest_File{
@@ -138,19 +159,6 @@ func (s *SSTSinkKeyWriter) Reset(ctx context.Context, newSpan roachpb.Span) erro
 	return nil
 }
 
-func (s *SSTSinkKeyWriter) Flush(ctx context.Context) error {
-	if len(s.flushedFiles) > 0 {
-		lastFile := s.flushedFiles[len(s.flushedFiles)-1]
-		// If WriteKey was used, it is possible that the last written key was
-		// mid-row, but because no keys were written after, s.midRow was not updated.
-		// To ensure this, we update midRow using the end of the span that the last
-		// key belonged to.
-		s.setMidRowForPrevKey(lastFile.Span.EndKey)
-	}
-	err := s.FileSSTSink.Flush(ctx)
-	return err
-}
-
 // maybeFlushNonExtendableSpans checks if the new span's startKey precedes the
 // last spans' endKey or if the two spans do not share the same prefix based on
 // the sink's ElideMode. If either of these conditions are met, the current
@@ -159,7 +167,7 @@ func (s *SSTSinkKeyWriter) maybeFlushNonExtendableSpans(newSpan roachpb.Span) er
 	if len(s.flushedFiles) == 0 {
 		return nil
 	}
-	lastFile := &s.flushedFiles[len(s.flushedFiles)-1]
+	lastFile := s.flushedFiles[len(s.flushedFiles)-1]
 	samePrefix, err := sameElidedPrefix(newSpan.Key, lastFile.Span.EndKey, s.conf.ElideMode)
 	if err != nil {
 		return err
@@ -180,22 +188,19 @@ func (s *SSTSinkKeyWriter) maybeFlushNonExtendableSpans(newSpan roachpb.Span) er
 
 // maybeDoSizeFlush checks if either a BackupManifest_File needs to be flushed
 // due to reaching the fileSpanByteLimit or if the entire SST needs to be flushed
-// due to reaching targetFileSize. If either type of flush is performed, a new
-// BackupManifest_File is created for the nextKey, so that is returned.
-func (s *SSTSinkKeyWriter) maybeDoSizeFlush(
-	ctx context.Context, nextKey roachpb.Key,
-) (*backuppb.BackupManifest_File, error) {
+// due to reaching targetFileSize.
+// midRow for the last key written must be updated before calling this method.
+func (s *SSTSinkKeyWriter) maybeDoSizeFlush(ctx context.Context, nextKey roachpb.Key) error {
 	if len(s.flushedFiles) == 0 {
-		return nil, errors.AssertionFailedf("maybeDoSizeFlush with empty flushedFiles")
+		return errors.AssertionFailedf("maybeDoSizeFlush with empty flushedFiles")
 	}
-	s.setMidRowForPrevKey(nextKey)
 	lastFile := &s.flushedFiles[len(s.flushedFiles)-1]
 	if s.midRow {
-		return lastFile, nil
+		return nil
 	}
 	var hardFlush = s.flushedSize >= s.targetFileSize
 	if !hardFlush && lastFile.EntryCounts.DataSize < fileSpanByteLimit {
-		return lastFile, nil
+		return nil
 	}
 	newSpan := roachpb.Span{
 		Key:    nextKey,
@@ -206,19 +211,19 @@ func (s *SSTSinkKeyWriter) maybeDoSizeFlush(
 		log.VEventf(ctx, 1, "flushing backup file %s with size %d", s.outName, s.flushedSize)
 		s.stats.sizeFlushes++
 		if err := s.Flush(ctx); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	// A new span is created for the new BackupManifest_File, so a Reset is needed.
 	if err := s.Reset(ctx, newSpan); err != nil {
-		return nil, err
+		return err
 	}
-	return &s.flushedFiles[len(s.flushedFiles)-1], nil
+	return nil
 }
 
 // setMidRowForPrevKey checks if the last key written using WriteKey was mid-row
-// by using the next key to be written or e end key of its span and sets s.midRow
-// accordingly. If no key was previously written using WriteKey, this is a no-op.
+// by using the next key to be written. If no key was previously written using
+// WriteKey, this is a no-op.
 func (s *SSTSinkKeyWriter) setMidRowForPrevKey(endKey roachpb.Key) {
 	if s.prevKey == nil {
 		return
@@ -239,4 +244,19 @@ func (s *SSTSinkKeyWriter) setMidRowForPrevKey(endKey roachpb.Key) {
 	// is now some prefix less than the last copied key. The latter is unfortunate
 	// but should be rare given range-sized export requests.
 	s.midRow = endRowKey.Compare(s.prevKey) <= 0
+}
+
+// elideMVCCKeyPrefix elides the MVCC key prefix based on the ElideMode
+// and returns the elided key.
+func elideMVCCKey(key storage.MVCCKey, mode execinfrapb.ElidePrefix) (storage.MVCCKey, error) {
+	prefix, err := ElidedPrefix(key.Key, mode)
+	if err != nil {
+		return storage.MVCCKey{}, err
+	}
+	cutKey, ok := bytes.CutPrefix(key.Key, prefix)
+	if !ok {
+		return storage.MVCCKey{}, errors.AssertionFailedf("prefix mismatch %q does not have %q", key.Key, prefix)
+	}
+	key.Key = cutKey
+	return key, nil
 }

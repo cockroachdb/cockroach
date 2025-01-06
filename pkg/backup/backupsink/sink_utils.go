@@ -14,8 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/errors"
 )
 
 // ElidedPrefix returns the prefix of the key that is elided by the given mode.
@@ -36,21 +34,6 @@ func ElidedPrefix(key roachpb.Key, mode execinfrapb.ElidePrefix) ([]byte, error)
 		return key[: len(key)-len(rest) : len(key)-len(rest)], nil
 	}
 	return nil, nil
-}
-
-func elideMVCCKeyPrefix(
-	key storage.MVCCKey, mode execinfrapb.ElidePrefix,
-) (storage.MVCCKey, []byte, error) {
-	prefix, err := ElidedPrefix(key.Key, mode)
-	if err != nil {
-		return storage.MVCCKey{}, nil, err
-	}
-	cutKey, ok := bytes.CutPrefix(key.Key, prefix)
-	if !ok {
-		return storage.MVCCKey{}, nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", key.Key, prefix)
-	}
-	key.Key = cutKey
-	return key, prefix, nil
 }
 
 // adjustFileEndKey checks if the export respsonse end key can be used as a
