@@ -530,6 +530,24 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
 		)
 	})
+
+	t.Run("multiple databases and special characters", func(t *testing.T) {
+		r.Exec(t, `CREATE DATABASE "db.name";`)
+		r.Exec(t, `CREATE DATABASE "db'name";`)
+		r.Exec(t, `CREATE SCHEMA "db.name"."sc.name"`)
+		r.Exec(t, `CREATE SCHEMA "db'name"."sc'name"`)
+		r.Exec(t, `CREATE TABLE "db.name"."sc.name".t (pk INT PRIMARY KEY);`)
+		r.Exec(t, `CREATE TABLE "db'name"."sc'name".t (pk INT PRIMARY KEY);`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db.name"."sc.name".t, "db'name"."sc'name".t;`)
+		checkBundle(
+			t, fmt.Sprint(rows), `"sc.name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
+		)
+		checkBundle(
+			t, fmt.Sprint(rows), `"sc'name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
+		)
+	})
 }
 
 func getBundleDownloadURL(t *testing.T, text string) string {
@@ -838,7 +856,7 @@ func TestExplainBundleEnv(t *testing.T) {
 		_, err := sqlDB.ExecContext(ctx, line)
 		if err != nil {
 			words := strings.Split(line, " ")
-			t.Fatalf("%v: probably need to add %q into 'sessionVarNeedsQuotes' map", err, words[1])
+			t.Fatalf("%s\n%v: probably need to add %q into 'sessionVarNeedsEscaping' map", line, err, words[1])
 		}
 	}
 
