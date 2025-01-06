@@ -729,6 +729,8 @@ func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
 // are transitively equal to either a or e. Therefore, all columns must have
 // equal non-NULL values, or else all must be NULL (see definition for NULL= in
 // the comment for FuncDepSet).
+//
+// Note that it always returns a new set, even if there are no equivalencies.
 func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
 	return f.ComputeEquivClosureNoCopy(cols.Copy())
 }
@@ -1747,9 +1749,12 @@ func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
 		return true
 	}
 
-	in = f.ComputeEquivClosure(in)
-	if cols.SubsetOf(in) {
-		return true
+	in = in.Copy()
+	if !f.equiv.Empty() {
+		in = f.equiv.ComputeEquivClosureNoCopy(in)
+		if cols.SubsetOf(in) {
+			return true
+		}
 	}
 
 	// Lax dependencies are not transitive (see figure 2.1 in the paper for
