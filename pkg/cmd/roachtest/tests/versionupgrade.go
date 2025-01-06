@@ -14,6 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -286,4 +289,70 @@ for i in 1 2 3 4; do
      pkg/cmd/roachtest/fixtures/${i}/
 done
 `)
+}
+
+func registerHTTPRestart(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:             "http-restart/mixed-version",
+		Owner:            registry.OwnerTestEng,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Randomized:       true,
+		Run:              runHTTPRestart,
+		Timeout:          1 * time.Hour,
+	})
+}
+
+func runHTTPRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c,
+		c.CRDBNodes(),
+		mixedversion.MinimumSupportedVersion("v24.2.0"),
+		mixedversion.MinUpgrades(2),
+		mixedversion.EnabledDeploymentModes(mixedversion.SeparateProcessDeployment),
+	)
+
+	httpCall := func(ctx context.Context, node int, l *logger.Logger) {
+		logEvery := roachtestutil.Every(1 * time.Second)
+		adminURLs, err := c.ExternalAdminUIAddr(ctx, l, c.Node(node))
+		if err != nil {
+			t.Fatal(err)
+		}
+		url := "https://" + adminURLs[0] + "/ts/query"
+		l.Printf("Sending requests to %s", url)
+		client := roachtestutil.DefaultHTTPClient(c, l)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			// Copied from elsewhere, actual HTTP req shouldn't matter
+			var response tspb.TimeSeriesQueryResponse
+			request := tspb.TimeSeriesQueryRequest{
+				StartNanos: timeutil.Now().UnixNano() - 10*time.Second.Nanoseconds(),
+				EndNanos:   timeutil.Now().UnixNano(),
+				// Ask for 10s intervals.
+				SampleNanos: (10 * time.Second).Nanoseconds(),
+				Queries: []tspb.Query{{
+					Name:             "cr.node.sql.service.latency-p90",
+					SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+				}},
+			}
+			if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
+				if logEvery.ShouldLog() {
+					l.Printf("Error posting protobuf: %s", err)
+				}
+			}
+		}
+	}
+
+	for i := 1; i <= 4; i++ {
+		mvt.BackgroundFunc("HTTP requests", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			httpCall(ctx, i, l)
+			return nil
+		})
+	}
+	mvt.Run()
 }

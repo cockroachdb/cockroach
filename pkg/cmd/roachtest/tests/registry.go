@@ -62,6 +62,7 @@ func RegisterTests(r registry.Registry) {
 	registerGossip(r)
 	registerHibernate(r, hibernateOpts)
 	registerHibernate(r, hibernateSpatialOpts)
+	registerHTTPRestart(r)
 	registerHotSpotSplits(r)
 	registerImportCancellation(r)
 	registerImportDecommissioned(r)
