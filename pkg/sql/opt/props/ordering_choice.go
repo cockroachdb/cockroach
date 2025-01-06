@@ -676,18 +676,18 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 	}
 
 	// Check whether optional columns can be added by the FD set.
-	optional := fdset.ComputeClosure(oc.Optional)
-	if !optional.Equals(oc.Optional) {
+	if !fdset.ColsAreClosure(oc.Optional) {
 		return true
 	}
 
-	closure := optional
+	closure := oc.Optional
+	copiedClosure := false
 	for i := range oc.Columns {
 		group := &oc.Columns[i]
 
 		// If group contains an optional column, then group can be simplified
 		// or removed entirely.
-		if group.Group.Intersects(optional) {
+		if group.Group.Intersects(oc.Optional) {
 			return true
 		}
 
@@ -703,8 +703,14 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 		}
 
 		// Add this group's columns and find closure with new columns.
+		if !copiedClosure {
+			closure = closure.Copy()
+			copiedClosure = true
+		}
 		closure.UnionWith(group.Group)
-		closure = fdset.ComputeClosure(closure)
+		if !fdset.ColsAreClosure(closure) {
+			closure = fdset.ComputeClosureNoCopy(closure)
+		}
 	}
 
 	return false
@@ -731,9 +737,12 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 //
 // This logic should be changed in concert with the CanSimplify logic.
 func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
-	oc.Optional = fdset.ComputeClosure(oc.Optional)
+	if !fdset.ColsAreClosure(oc.Optional) {
+		oc.Optional = fdset.ComputeClosure(oc.Optional)
+	}
 
 	closure := oc.Optional
+	copiedClosure := false
 	n := 0
 	for i := range oc.Columns {
 		group := &oc.Columns[i]
@@ -769,8 +778,14 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 		}
 
 		// Add this group's columns and find closure with the new columns.
-		closure = closure.Union(group.Group)
-		closure = fdset.ComputeClosure(closure)
+		if !copiedClosure {
+			closure = closure.Copy()
+			copiedClosure = true
+		}
+		closure.UnionWith(group.Group)
+		if !fdset.ColsAreClosure(closure) {
+			closure = fdset.ComputeClosureNoCopy(closure)
+		}
 
 		if n != i {
 			oc.Columns[n] = oc.Columns[i]

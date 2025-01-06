@@ -679,6 +679,21 @@ func (f *FuncDepSet) InClosureOf(cols, in opt.ColSet) bool {
 	return f.inClosureOf(cols, in, true /* strict */)
 }
 
+// ColsAreClosure returns true if the given columns form their own strict
+// closure.
+func (f *FuncDepSet) ColsAreClosure(cols opt.ColSet) bool {
+	if !f.equiv.ColsAreEquivClosure(cols) {
+		return false
+	}
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+		if fd.strict && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
+			return false
+		}
+	}
+	return true
+}
+
 // ComputeClosure returns the strict closure of the given columns. The closure
 // includes the input columns plus all columns that are functionally dependent
 // on those columns, either directly or indirectly. Consider this set of FD's:
@@ -691,7 +706,12 @@ func (f *FuncDepSet) InClosureOf(cols, in opt.ColSet) bool {
 // columns. Therefore, if two rows have the same value for (a), then the rows
 // will be duplicates, since all other columns will be equal.
 func (f *FuncDepSet) ComputeClosure(cols opt.ColSet) opt.ColSet {
-	cols = cols.Copy()
+	return f.ComputeClosureNoCopy(cols.Copy())
+}
+
+// ComputeClosureNoCopy is similar to ComputeClosure, but computes the closure
+// in-place (e.g. the argument ColSet will be mutated).
+func (f *FuncDepSet) ComputeClosureNoCopy(cols opt.ColSet) opt.ColSet {
 	for {
 		restart := false
 		cols = f.equiv.ComputeEquivClosureNoCopy(cols)
