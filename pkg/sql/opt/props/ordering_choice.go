@@ -699,13 +699,12 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 		}
 
 		// Check whether the equivalency group needs to change based on the FD.
-		equiv := fdset.ComputeEquivGroup(group.AnyID())
-		if !equiv.Equals(group.Group) {
+		if !fdset.ColsAreEquivGroup(group.Group) {
 			return true
 		}
 
 		// Add this group's columns and find closure with new columns.
-		closure.UnionWith(equiv)
+		closure.UnionWith(group.Group)
 		closure = fdset.ComputeClosure(closure)
 	}
 
@@ -758,7 +757,17 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 		// Set group to columns equivalent to an arbitrary column in the group
 		// based on the FD set. This can both add and remove columns from the
 		// group.
-		group.Group = fdset.ComputeEquivGroup(group.AnyID())
+		anyCol := group.AnyID()
+		immutableEquivCols := fdset.GetImmutableEquivGroup(anyCol)
+		if immutableEquivCols.Empty() {
+			// The column is equal only to itself. As an optimization, we can avoid
+			// modifying the group if it only consists of a single column.
+			if group.Group.Len() > 1 {
+				group.Group = opt.MakeColSet(anyCol)
+			}
+		} else {
+			group.Group = immutableEquivCols
+		}
 
 		// Add this group's columns and find closure with the new columns.
 		closure = closure.Union(group.Group)

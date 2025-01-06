@@ -716,6 +716,18 @@ func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
 	return f.equiv.AreColsEquiv(col1, col2)
 }
 
+// AreAllColsEquiv returns true if all the given columns are equivalent.
+func (f *FuncDepSet) AreAllColsEquiv(cols opt.ColSet) bool {
+	return f.equiv.AreAllColsEquiv(cols)
+}
+
+// ColsAreEquivGroup returns true if the columns within the given ColSet
+// constitute a single equiv group. In other words, all columns are equivalent
+// to each other, and no column is equivalent to any column outside of the set.
+func (f *FuncDepSet) ColsAreEquivGroup(cols opt.ColSet) bool {
+	return f.equiv.ColsAreEquivGroup(cols)
+}
+
 // ComputeEquivClosure returns the equivalence closure of the given columns. The
 // closure includes the input columns plus all columns that are equivalent to
 // any of these columns, either directly or indirectly. For example:
@@ -1567,10 +1579,13 @@ func (f *FuncDepSet) EquivReps() opt.ColSet {
 	return reps
 }
 
-// ComputeEquivGroup returns the group of columns that are equivalent to the
-// given column. See ComputeEquivClosure for more details.
-func (f *FuncDepSet) ComputeEquivGroup(rep opt.ColumnID) opt.ColSet {
-	return f.ComputeEquivClosureNoCopy(opt.MakeColSet(rep))
+// GetImmutableEquivGroup returns the set of columns that are equivalent to the
+// given column. If the column is not part of any equivalence group, it returns\
+// the empty set.
+//
+// NOTE: The returned ColSet *must* be treated as immutable if non-empty.
+func (f *FuncDepSet) GetImmutableEquivGroup(col opt.ColumnID) opt.ColSet {
+	return f.equiv.GroupForCol(col)
 }
 
 // ensureKeyClosure checks whether the closure for this FD set's key (if there

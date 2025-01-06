@@ -1363,7 +1363,8 @@ func (c *CustomFuncs) TryRemapOuterCols(
 		// substituteCols is the set of input columns for which it may be possible to
 		// push a filter constraining the column to be equal to an outer column.
 		// Doing so would allow the column to be substituted for the outer column.
-		substituteCols := expr.Relational().FuncDeps.ComputeEquivGroup(col)
+		substituteCols := opt.MakeColSet(col)
+		substituteCols = expr.Relational().FuncDeps.ComputeEquivClosureNoCopy(substituteCols)
 		for i := range filters {
 			// ComputeEquivClosureNoCopy is ok here because ComputeEquivGroup builds
 			// a new ColSet.

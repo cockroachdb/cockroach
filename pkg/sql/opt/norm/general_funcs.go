@@ -347,11 +347,17 @@ func (c *CustomFuncs) CanRemapCols(from, to opt.ColSet, fds *props.FuncDepSet) b
 func (c *CustomFuncs) remapColWithIdenticalType(
 	fromCol opt.ColumnID, to opt.ColSet, fds *props.FuncDepSet,
 ) (_ opt.ColumnID, ok bool) {
+	if to.Contains(fromCol) {
+		// Fast path: the fromCol is part of the "to" set.
+		return fromCol, true
+	}
 	md := c.mem.Metadata()
 	fromColType := md.ColumnMeta(fromCol).Type
-	equivCols := fds.ComputeEquivGroup(fromCol)
-	equivCols.IntersectionWith(to)
+	equivCols := fds.GetImmutableEquivGroup(fromCol)
 	for equivCol, ok := equivCols.Next(0); ok; equivCol, ok = equivCols.Next(equivCol + 1) {
+		if !to.Contains(equivCol) {
+			continue
+		}
 		equivColType := md.ColumnMeta(equivCol).Type
 		if fromColType.Identical(equivColType) {
 			return equivCol, true

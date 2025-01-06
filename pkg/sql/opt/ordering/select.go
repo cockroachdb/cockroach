@@ -70,13 +70,19 @@ func trimColumnGroups(required *props.OrderingChoice, fds *props.FuncDepSet) pro
 	copied := false
 	for i := range res.Columns {
 		c := &res.Columns[i]
-		eqGroup := fds.ComputeEquivGroup(c.AnyID())
-		if !c.Group.SubsetOf(eqGroup) {
+		if !fds.AreAllColsEquiv(c.Group) {
 			if !copied {
 				res = res.Copy()
 				copied = true
 			}
-			res.Columns[i].Group = c.Group.Intersection(eqGroup)
+			anyCol := c.AnyID()
+			immutableEquivCols := fds.GetImmutableEquivGroup(anyCol)
+			if immutableEquivCols.Empty() {
+				// The column is equal only to itself.
+				res.Columns[i].Group = opt.MakeColSet(anyCol)
+			} else {
+				res.Columns[i].Group = c.Group.Intersection(immutableEquivCols)
+			}
 		}
 	}
 	return res

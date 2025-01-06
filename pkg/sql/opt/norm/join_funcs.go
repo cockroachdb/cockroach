@@ -419,20 +419,20 @@ func (c *CustomFuncs) MapJoinOpFilter(
 func (c *CustomFuncs) GetEquivColsWithEquivType(
 	col opt.ColumnID, equivFD props.FuncDepSet, allowCompositeEncoding bool,
 ) opt.ColSet {
-	var res opt.ColSet
+	// The column is always equivalent to itself.
+	res := opt.MakeColSet(col)
 	colType := c.f.Metadata().ColumnMeta(col).Type
 
 	// Don't bother looking for equivalent columns if colType has a composite
 	// key encoding.
 	if !allowCompositeEncoding && colinfo.CanHaveCompositeKeyEncoding(colType) {
-		res.Add(col)
 		return res
 	}
 
 	// Compute all equivalent columns.
-	eqCols := equivFD.ComputeEquivGroup(col)
+	immutableEquivCols := equivFD.GetImmutableEquivGroup(col)
 
-	eqCols.ForEach(func(i opt.ColumnID) {
+	immutableEquivCols.ForEach(func(i opt.ColumnID) {
 		// Only include columns that have the same type as col.
 		eqColType := c.f.Metadata().ColumnMeta(i).Type
 		if colType.Equivalent(eqColType) {
