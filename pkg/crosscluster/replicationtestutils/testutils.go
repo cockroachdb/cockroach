@@ -18,6 +18,7 @@ import (
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -77,6 +78,8 @@ type TenantStreamingClustersArgs struct {
 
 	NoMetamorphicExternalConnection bool
 	ExternalIODir                   string
+
+	RoutingMode streamclient.RoutingMode
 }
 
 var DefaultTenantStreamingClustersArgs = TenantStreamingClustersArgs{
@@ -93,11 +96,11 @@ var DefaultTenantStreamingClustersArgs = TenantStreamingClustersArgs{
 	`)
 	},
 	SrcNumNodes:         1,
-	SrcClusterSettings:  defaultSrcClusterSetting,
+	SrcClusterSettings:  DefaultClusterSettings,
 	DestTenantName:      roachpb.TenantName("destination"),
 	DestTenantID:        roachpb.MustMakeTenantID(2),
 	DestNumNodes:        1,
-	DestClusterSettings: defaultDestClusterSetting,
+	DestClusterSettings: DefaultClusterSettings,
 }
 
 type TenantStreamingClusters struct {
@@ -451,6 +454,12 @@ func CreateMultiTenantStreamingCluster(
 	cluster, url, cleanup := startC2CTestCluster(ctx, t, serverArgs,
 		args.MultitenantSingleClusterNumNodes, args.MultiTenantSingleClusterTestRegions)
 
+	if args.RoutingMode != "" {
+		query := url.Query()
+		query.Set(streamclient.RoutingModeKey, string(args.RoutingMode))
+		url.RawQuery = query.Encode()
+	}
+
 	rng, _ := randutil.NewPseudoRand()
 
 	destNodeIdx := args.MultitenantSingleClusterNumNodes - 1
@@ -495,6 +504,11 @@ func CreateTenantStreamingClusters(
 	g.GoCtx(func(ctx context.Context) error {
 		// Start the source cluster.
 		srcCluster, srcURL, srcCleanup = startC2CTestCluster(ctx, t, serverArgs, args.SrcNumNodes, args.SrcClusterTestRegions)
+		if args.RoutingMode != "" {
+			query := srcURL.Query()
+			query.Set(streamclient.RoutingModeKey, string(args.RoutingMode))
+			srcURL.RawQuery = query.Encode()
+		}
 		return nil
 	})
 
@@ -626,33 +640,32 @@ func CreateScatteredTable(t *testing.T, c *TenantStreamingClusters, numNodes int
 	}, timeout)
 }
 
-var defaultSrcClusterSetting = map[string]string{
-	`kv.rangefeed.enabled`: `true`,
+var DefaultClusterSettings = map[string]string{
+	`bulkio.stream_ingestion.failover_signal_poll_interval`: `'100ms'`,
+	`bulkio.stream_ingestion.minimum_flush_interval`:        `'10ms'`,
+	`jobs.registry.interval.adopt`:                          `'1s'`,
+	`kv.bulk_io_write.small_write_size`:                     `'1'`,
+	`kv.closed_timestamp.side_transport_interval`:           `'50ms'`,
 	// Speed up the rangefeed. These were set by squinting at the settings set in
 	// the changefeed integration tests.
 	`kv.closed_timestamp.target_duration`:            `'100ms'`,
 	`kv.rangefeed.closed_timestamp_refresh_interval`: `'200ms'`,
-	`kv.closed_timestamp.side_transport_interval`:    `'50ms'`,
-	// Large timeout makes test to not fail with unexpected timeout failures.
-	`stream_replication.stream_liveness_track_frequency`: `'2s'`,
-	`stream_replication.min_checkpoint_frequency`:        `'1s'`,
+	`kv.rangefeed.enabled`:                           `true`,
 	// Finer grain checkpoints to keep replicated time close to present.
 	`physical_replication.producer.timestamp_granularity`: `'100ms'`,
-	// Make all AddSSTable operation to trigger AddSSTable events.
-	`kv.bulk_io_write.small_write_size`: `'1'`,
-	`jobs.registry.interval.adopt`:      `'1s'`,
 	// Speed up span reconciliation
 	`spanconfig.reconciliation_job.checkpoint_interval`: `'100ms'`,
+	`stream_replication.consumer_heartbeat_frequency`:   `'1s'`,
+	`stream_replication.job_checkpoint_frequency`:       `'100ms'`,
+	`stream_replication.min_checkpoint_frequency`:       `'1s'`,
+	// Large timeout makes test to not fail with unexpected timeout failures.
+	`stream_replication.stream_liveness_track_frequency`: `'2s'`,
 }
 
-var defaultDestClusterSetting = map[string]string{
-	`stream_replication.consumer_heartbeat_frequency`:       `'1s'`,
-	`stream_replication.job_checkpoint_frequency`:           `'100ms'`,
-	`bulkio.stream_ingestion.minimum_flush_interval`:        `'10ms'`,
-	`bulkio.stream_ingestion.failover_signal_poll_interval`: `'100ms'`,
-	`jobs.registry.interval.adopt`:                          `'1s'`,
-	`spanconfig.reconciliation_job.checkpoint_interval`:     `'100ms'`,
-	`kv.rangefeed.enabled`:                                  `true`,
+func ConfigureDefaultSettings(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+	for key, val := range DefaultClusterSettings {
+		sqlRunner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = %s;", key, val))
+	}
 }
 
 func ConfigureClusterSettings(setting map[string]string) []string {

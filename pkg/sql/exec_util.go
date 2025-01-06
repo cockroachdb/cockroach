@@ -1940,6 +1940,8 @@ type StreamingTestingKnobs struct {
 
 	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
 
+	OnGetSQLInstanceInfo func(cluster *roachpb.NodeDescriptor) *roachpb.NodeDescriptor
+
 	FailureRate uint32
 }
 

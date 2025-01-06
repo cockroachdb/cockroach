@@ -190,13 +190,18 @@ func (r *logicalReplicationResumer) ingest(
 	if err != nil {
 		return err
 	}
-	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		ldrProg := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-		ldrProg.PartitionConnUris = planInfo.partitionPgUrls
-		ju.UpdateProgress(md.Progress)
-		return nil
-	}); err != nil {
-		return err
+
+	// If the routing mode is gateway, we don't want to checkpoint addresses
+	// since they may not be in the same network.
+	if uris[0].RoutingMode() != streamclient.RoutingModeGateway {
+		if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			ldrProg := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+			ldrProg.PartitionConnUris = planInfo.partitionPgUrls
+			ju.UpdateProgress(md.Progress)
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
 	// Update the local progress copy as it was just updated.
 	progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
