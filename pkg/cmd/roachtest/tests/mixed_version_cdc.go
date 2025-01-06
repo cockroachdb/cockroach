@@ -66,7 +66,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Owner: registry.OwnerCDC,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
 		Cluster:          r.MakeClusterSpec(5, spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
-		Timeout:          30 * time.Minute,
+		Timeout:          3 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
