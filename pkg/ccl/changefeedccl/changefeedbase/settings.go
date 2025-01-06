@@ -335,3 +335,10 @@ var DefaultLaggingRangesThreshold = 3 * time.Minute
 // DefaultLaggingRangesPollingInterval is the default polling rate at which
 // lagging ranges are checked and metrics are updated.
 var DefaultLaggingRangesPollingInterval = 1 * time.Minute
+
+var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
+	settings.ApplicationLevel,
+	"changefeed.frontier.timestamp_granularity",
+	"the granularity at which changefeed progress are quantized to make tracking more efficient",
+	0,
+)
