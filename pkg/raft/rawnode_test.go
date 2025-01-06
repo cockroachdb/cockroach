@@ -887,13 +887,16 @@ func BenchmarkStatus(b *testing.B) {
 		for i := range peers {
 			peers[i] = pb.PeerID(i + 1)
 		}
-		cfg := newTestConfig(1, 3, 1, newTestMemoryStorage(withPeers(peers...)))
-		cfg.Logger = raftlogger.DiscardLogger
-		r := newRaft(cfg)
-		r.becomeFollower(1, 1)
-		r.becomeCandidate()
-		r.becomeLeader()
-		return &RawNode{raft: r}
+
+		raftPeers := make([]stateMachine, members)
+		for i := range raftPeers {
+			raftPeers[i] = newTestRaft(pb.PeerID(i+1), 10, 1, newTestMemoryStorage(withPeers(peers...)),
+				withLogger(raftlogger.DiscardLogger))
+		}
+
+		tt := newNetworkWithConfig(nil, raftPeers...)
+		tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+		return &RawNode{raft: raftPeers[0].(*raft)}
 	}
 
 	for _, members := range []int{1, 3, 5, 100} {

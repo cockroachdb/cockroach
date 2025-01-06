@@ -5217,6 +5217,7 @@ func SetRandomizedElectionTimeout(r *RawNode, v int64) {
 // testConfigModifiers allows callers to optionally modify newTestConfig.
 type testConfigModifiers struct {
 	testingStoreLiveness raftstoreliveness.StoreLiveness
+	testingLogger        raftlogger.Logger
 }
 
 // testConfigModifierOpt is the type of an optional parameter to newTestConfig
@@ -5235,6 +5236,13 @@ func withStoreLiveness(storeLiveness raftstoreliveness.StoreLiveness) testConfig
 	}
 }
 
+// withLogger explicitly uses the supplied raft logger.
+func withLogger(logger raftlogger.Logger) testConfigModifierOpt {
+	return func(modifier *testConfigModifiers) {
+		modifier.testingLogger = logger
+	}
+}
+
 func newTestConfig(
 	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
 ) *Config {
@@ -5248,6 +5256,14 @@ func newTestConfig(
 	} else {
 		storeLiveness = raftstoreliveness.AlwaysLive{}
 	}
+
+	var logger raftlogger.Logger
+	if modifiers.testingLogger != nil {
+		logger = modifiers.testingLogger
+	} else {
+		logger = raftlogger.DefaultRaftLogger
+	}
+
 	return &Config{
 		ID:              id,
 		ElectionTick:    election,
@@ -5256,6 +5272,7 @@ func newTestConfig(
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   storeLiveness,
+		Logger:          logger,
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 		Metrics:         NewMetrics(),
 	}
