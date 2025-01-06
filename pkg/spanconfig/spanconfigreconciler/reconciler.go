@@ -461,6 +461,10 @@ func updateSpanConfigRecords(
 			}
 			return err // not a retryable error, bubble up
 		}
+
+		if log.V(3) {
+			log.Infof(ctx, "successfully updated span config records: deleted = %+#v; upserted = %+#v", toDelete, toUpsert)
+		}
 		return nil // we performed the update; we're done here
 	}
 	return nil

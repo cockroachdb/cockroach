@@ -360,7 +360,7 @@ func (s *Store) maybeLogUpdate(ctx context.Context, update *spanconfig.Update) e
 
 	// Log if there is a SpanConfig change in any field other than
 	// ProtectedTimestamps to avoid logging PTS updates.
-	if found && curSpanConfig.HasConfigurationChange(nextSC) {
+	if log.V(2) || (found && curSpanConfig.HasConfigurationChange(nextSC)) {
 		log.KvDistribution.Infof(ctx,
 			"changing the spanconfig for span:%+v from:%+v to:%+v",
 			target, curSpanConfig, nextSC)
