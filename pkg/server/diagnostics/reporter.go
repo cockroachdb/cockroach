@@ -182,6 +182,9 @@ func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
 // phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
+		var cancel context.CancelFunc
+		ctx, cancel = stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
 		nextReport := r.StartTime
 
@@ -192,11 +195,7 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 			// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 			// stat reset periods for reporting.
 			if shouldReportDiagnostics(ctx, r.Settings) {
-				func() {
-					ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
-					defer cancel()
-					r.ReportDiagnostics(ctx)
-				}()
+				r.ReportDiagnostics(ctx)
 			}
 
 			nextReport = nextReport.Add(reportFrequency.Get(&r.Settings.SV))
