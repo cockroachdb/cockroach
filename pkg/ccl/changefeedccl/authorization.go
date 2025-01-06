@@ -153,6 +153,10 @@ func AuthorizeChangefeedJobAccess(
 		return errors.Newf("could not unwrap details from the payload of job %d", jobID)
 	}
 
+	if len(specs.TargetSpecifications) == 0 {
+		return pgerror.Newf(pgcode.InsufficientPrivilege, "job contains no tables on which the user has %s privilege", privilege.CHANGEFEED)
+	}
+
 	for _, spec := range specs.TargetSpecifications {
 		err := a.CheckPrivilegeForTableID(ctx, spec.TableID, privilege.CHANGEFEED)
 		if err != nil {

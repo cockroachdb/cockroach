@@ -1924,14 +1924,17 @@ func TestUserPrivileges(t *testing.T) {
 	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
 	defer cleanupB()
 
-	var jobAID jobspb.JobID
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
-
 	// Create user with no privileges
 	dbA.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+	dbA.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser+"2"))
+	dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"2"))
 	testuser := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser), serverutils.DBName("a")))
+	testuser2 := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser+"2"), serverutils.DBName("a")))
 
-	t.Run("view-job", func(t *testing.T) {
+	var jobAID jobspb.JobID
+	testuser2.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+
+	t.Run("view-control-job", func(t *testing.T) {
 		showJobStmt := "select job_id from [SHOW JOBS] where job_id=$1"
 		showLDRJobStmt := "select job_id from [SHOW LOGICAL REPLICATION JOBS] where job_id=$1"
 		// NEED VIEWJOB system grant to view admin LDR jobs
@@ -1948,6 +1951,13 @@ func TestUserPrivileges(t *testing.T) {
 
 		testuser.QueryRow(t, showLDRJobStmt, jobAID).Scan(&returnedJobID)
 		require.Equal(t, returnedJobID, jobAID, "The user should see the LDR job with the VIEWJOB grant when running [SHOW LOGICAL REPLICATION JOBS]")
+
+		pauseJobStmt := "PAUSE JOB $1"
+		testuser.ExpectErr(t, fmt.Sprintf("user testuser does not have privileges for job %s", jobAID), pauseJobStmt, jobAID)
+
+		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM CONTROLJOB to %s", username.TestUser))
+		testuser.Exec(t, pauseJobStmt, jobAID)
+		jobutils.WaitForJobToPause(t, dbA, jobAID)
 	})
 
 	// Kill replication job so we can create one with the testuser for the following test
@@ -1967,15 +1977,6 @@ func TestUserPrivileges(t *testing.T) {
 		testuser.ExpectErr(t, "user testuser does not have REPLICATION system privilege", createWithUDFStmt, dbBURL.String())
 		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser))
 		testuser.QueryRow(t, createWithUDFStmt, dbBURL.String()).Scan(&jobAID)
-	})
-
-	t.Run("control-job", func(t *testing.T) {
-		pauseJobStmt := "PAUSE JOB $1"
-		testuser.ExpectErr(t, fmt.Sprintf("user testuser does not have privileges for job %s", jobAID), pauseJobStmt, jobAID)
-
-		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM CONTROLJOB to %s", username.TestUser))
-		testuser.Exec(t, pauseJobStmt, jobAID)
-		jobutils.WaitForJobToPause(t, dbA, jobAID)
 	})
 }
 
