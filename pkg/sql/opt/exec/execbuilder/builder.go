@@ -40,8 +40,9 @@ var parallelScanResultThreshold = uint64(metamorphic.ConstantWithTestRange(
 const (
 	parallelScanResultThresholdProductionValue = 10000
 
-	// numJoinTypes includes all join types except for descpb.RightSemiJoin and
-	// descpb.RightAntiJoin, which are recorded as left joins.
+	// NumRecordedJoinTypes includes all join types except for
+	// descpb.RightSemiJoin and descpb.RightAntiJoin, which are recorded as left
+	// joins.
 	NumRecordedJoinTypes = 8
 )
 
