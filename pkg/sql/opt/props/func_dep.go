@@ -1824,7 +1824,7 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict bool) {
 	}
 
 	// Non-constant FDs are weaker than equivalence constraints.
-	if f.equiv.AreAllColsEquiv(to.Union(from)) {
+	if f.equiv.AreAllColsEquiv2(to, from) {
 		return
 	}
 
