@@ -281,7 +281,7 @@ func (a *apiV2Server) GetTableMetadataWithDetails(w http.ResponseWriter, r *http
 		return
 	}
 
-	createStatement, err := a.getTableCreateStatement(ctx, tmd.DbName, tmd.TableName)
+	createStatement, err := a.getTableCreateStatement(ctx, tmd.DbName, tmd.SchemaName, tmd.TableName)
 	if err != nil {
 		srverrors.APIV2InternalError(ctx, err, w)
 		return
@@ -316,12 +316,13 @@ func (a *apiV2Server) getTableMetadataForId(
 }
 
 func (a *apiV2Server) getTableCreateStatement(
-	ctx context.Context, dbName, tableName string,
+	ctx context.Context, dbName, schemaName, tableName string,
 ) (string, error) {
 	escTableName := tree.NameString(tableName)
+	escSchemaName := tree.NameString(schemaName)
 	escDbName := tree.NameString(dbName)
 	query := safesql.NewQuery()
-	query.Append(fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s.%s]`, escDbName, escTableName))
+	query.Append(fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s.%s.%s]`, escDbName, escSchemaName, escTableName))
 	row, types, err := a.sqlServer.internalExecutor.QueryRowExWithCols(ctx, "get-table-create-statement", nil,
 		sessiondata.NodeUserSessionDataOverride, query.String(), query.QueryArguments()...)
 	if err != nil {
