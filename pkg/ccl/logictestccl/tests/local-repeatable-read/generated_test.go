@@ -1609,6 +1609,13 @@ func TestRepeatableReadLogic_routine_schema_change(
 	runLogicTest(t, "routine_schema_change")
 }
 
+func TestRepeatableReadLogic_row_level_security(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "row_level_security")
+}
+
 func TestRepeatableReadLogic_row_level_ttl(
 	t *testing.T,
 ) {
