@@ -6,13 +6,15 @@
 package testutils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"os/exec"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/cli"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -137,7 +139,9 @@ func (t *testDNSServer) Metrics() Metrics {
 	return t.metrics
 }
 
-func (t *testDNSServer) execFunc(cmd *exec.Cmd) ([]byte, error) {
+func (t *testDNSServer) execFunc(
+	ctx context.Context, l *logger.Logger, args []string, opts ...cli.Option,
+) ([]byte, error) {
 	getArg := func(args []string, arg string) string {
 		for i, a := range args {
 			if a == arg {
@@ -146,16 +150,16 @@ func (t *testDNSServer) execFunc(cmd *exec.Cmd) ([]byte, error) {
 		}
 		return ""
 	}
-	for _, arg := range cmd.Args {
+	for _, arg := range args {
 		switch arg {
 		case "list":
-			return t.list(getArg(cmd.Args, "--filter"))
+			return t.list(getArg(args, "--filter"))
 		case "create":
-			return t.create(getArg(cmd.Args, "create"), getArg(cmd.Args, "--rrdatas"))
+			return t.create(getArg(args, "create"), getArg(args, "--rrdatas"))
 		case "update":
-			return t.update(getArg(cmd.Args, "update"), getArg(cmd.Args, "--rrdatas"))
+			return t.update(getArg(args, "update"), getArg(args, "--rrdatas"))
 		case "delete":
-			return t.delete(getArg(cmd.Args, "delete"))
+			return t.delete(getArg(args, "delete"))
 		}
 	}
 	return nil, errors.New("unknown command")

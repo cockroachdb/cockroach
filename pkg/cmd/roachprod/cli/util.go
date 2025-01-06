@@ -12,6 +12,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
@@ -202,7 +203,7 @@ Node specification
 func ValidateAndConfigure(cmd *cobra.Command, args []string) {
 	// Skip validation for commands that are self-sufficient.
 	switch cmd.Name() {
-	case "help", "version", "list":
+	case "help", "version":
 		return
 	}
 
@@ -236,5 +237,11 @@ func ValidateAndConfigure(cmd *cobra.Command, args []string) {
 			printErrAndExit(fmt.Errorf("duplicate cloud provider specified %q", p))
 		}
 		providersSet[p] = struct{}{}
+	}
+	if config.DryRun {
+		if config.Verbose {
+			printErrAndExit(fmt.Errorf("--verbose and --dry-run are mutually exclusive"))
+		}
+		config.Logger.Printf("Enabling [***Experimental***] --dry-run mode. No infra changes will be made!")
 	}
 }

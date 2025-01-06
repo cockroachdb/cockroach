@@ -8,6 +8,7 @@ package gce
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,9 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/cli"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/ssh"
 )
+
+var cliProvider = cli.CLIProvider{
+	CLICommand: "gcloud",
+}
 
 const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
@@ -420,7 +426,7 @@ func (ak AuthorizedKeys) AsProjectMetadata() []byte {
 // GetUserAuthorizedKeys retrieves reads a list of user public keys from the
 // gcloud cockroach-ephemeral project and returns them formatted for use in
 // an authorized_keys file.
-func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
+func GetUserAuthorizedKeys(l *logger.Logger) (AuthorizedKeys, error) {
 	var outBuf bytes.Buffer
 	// The below command will return a stream of user:pubkey as text.
 	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
@@ -428,6 +434,8 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 		"--format=value(commonInstanceMetadata.ssh-keys)")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &outBuf
+
+	cli.MaybeLogCmd(context.Background(), l, cmd)
 
 	if err := cmd.Run(); err != nil {
 		return nil, err
@@ -481,8 +489,8 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 // keys installed on clusters managed by roachprod. Currently, these
 // keys are stored in the project metadata for the roachprod's
 // `DefaultProject`.
-func AddUserAuthorizedKey(ak AuthorizedKey) error {
-	existingKeys, err := GetUserAuthorizedKeys()
+func AddUserAuthorizedKey(l *logger.Logger, ak AuthorizedKey) error {
+	existingKeys, err := GetUserAuthorizedKeys(l)
 	if err != nil {
 		return err
 	}
