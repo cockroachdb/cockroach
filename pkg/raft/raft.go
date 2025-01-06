@@ -877,6 +877,7 @@ func (r *raft) sendDeFortify(to pb.PeerID) {
 		}
 		return
 	}
+	fmt.Printf("!!! IBRAHIM !!! sending MsgDeFortifyLeader to %v\n", to)
 	r.send(pb.Message{To: to, Type: pb.MsgDeFortifyLeader, Term: fortifiedTerm})
 }
 
@@ -923,6 +924,7 @@ func (r *raft) bcastDeFortify() {
 	assertTrue(r.fortificationTracker.CanDefortify(), "unsafe to de-fortify")
 
 	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
+		fmt.Printf("Sending defortify to %v\n", id)
 		r.sendDeFortify(id)
 	})
 }
@@ -1174,8 +1176,12 @@ func (r *raft) tickElection() {
 	r.heartbeatElapsed++
 	if r.heartbeatElapsed >= r.heartbeatTimeout {
 		r.heartbeatElapsed = 0
+
 		if r.shouldBcastDeFortify() {
+			fmt.Printf("!!! IBRAHIM !!! tickElection bcast defortify\n")
 			r.bcastDeFortify()
+		} else {
+			fmt.Printf("!!! IBRAHIM !!! tickElection NOT bcast defortify\n")
 		}
 	}
 
@@ -2542,6 +2548,7 @@ func (r *raft) handleDeFortify(m pb.Message) {
 		r.logger.Debugf("%d is not fortifying %d; de-fortification is a no-op", r.id, m.From)
 	}
 
+	fmt.Printf("!!! IBRAHIM !!! %v is defortifying the current leader\n", r.id)
 	r.deFortify(m.From, m.Term)
 }
 

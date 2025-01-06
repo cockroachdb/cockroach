@@ -99,7 +99,7 @@ func getBasicStatus(r *raft) BasicStatus {
 	// StateLeader. The replica may have been the leader and stepped down to a
 	// follower before its lead support ran out.
 	//s.LeadSupportUntil = hlc.Timestamp{}
-	s.LeadSupportUntil = r.fortificationTracker.LeadSupportUntil(r.state)
+	s.LeadSupportUntil = r.fortificationTracker.LeadSupportUntil()
 
 	assertTrue((s.RaftState == pb.StateLeader) == (s.Lead == r.id), "inconsistent lead / raft state")
 	return s
