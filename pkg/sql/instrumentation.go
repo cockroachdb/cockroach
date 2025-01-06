@@ -418,12 +418,12 @@ func (ih *instrumentationHelper) Setup(
 	statsCollector *sslocal.StatsCollector,
 	p *planner,
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
-	fingerprint string,
+	stmt *Statement,
 	implicitTxn bool,
 	txnPriority roachpb.UserPriority,
 	collectTxnExecStats bool,
 ) (newCtx context.Context) {
-	ih.fingerprint = fingerprint
+	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
 	ih.codec = cfg.Codec
@@ -447,7 +447,7 @@ func (ih *instrumentationHelper) Setup(
 
 	default:
 		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
-			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint, "" /* planGist */)
+			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
 		// IsRedacted will be false when ih.collectBundle is false.
 		ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
 	}
@@ -456,7 +456,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
 
 	var previouslySampled bool
-	previouslySampled, ih.savePlanForStats = statsCollector.ShouldSample(fingerprint, implicitTxn, p.SessionData().Database)
+	previouslySampled, ih.savePlanForStats = statsCollector.ShouldSample(stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
 
 	defer func() { ih.finalizeSetup(newCtx, cfg) }()
 
@@ -481,6 +481,12 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	shouldSampleFirstEncounter := func() bool {
+		if stmt.AST.StatementType() == tree.TypeTCL {
+			// We don't collect stats for TCL statements so
+			// there's no need to trace them.
+			return false
+		}
+
 		// If this is the first time we see this statement in the current stats
 		// container, we'll collect its execution stats anyway (unless the user
 		// disabled txn or stmt stats collection entirely).

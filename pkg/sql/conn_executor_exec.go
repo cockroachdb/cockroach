@@ -508,7 +508,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	ctx = ih.Setup(
 		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-		stmt.StmtNoConstants, os.ImplicitTxn.Get(),
+		&stmt, os.ImplicitTxn.Get(),
 		// This goroutine is the only one that can modify
 		// txnState.mu.priority, so we don't need to get a mutex here.
 		ex.state.mu.priority,
@@ -1462,7 +1462,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	if !portal.isPausable() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 		ctx = ih.Setup(
 			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-			vars.stmt.StmtNoConstants, os.ImplicitTxn.Get(),
+			&vars.stmt, os.ImplicitTxn.Get(),
 			// This goroutine is the only one that can modify
 			// txnState.mu.priority, so we don't need to get a mutex here.
 			ex.state.mu.priority,
