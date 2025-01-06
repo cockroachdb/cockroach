@@ -622,7 +622,7 @@ create_external_connection_stmt ::=
 	'CREATE' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
 
 create_logical_replication_stream_stmt ::=
-	'CREATE' 'LOGICALLY' 'REPLICATED' logical_replication_resources 'FROM' logical_replication_resources 'ON' string_or_placeholder opt_logical_replication_options
+	'CREATE' 'LOGICALLY' 'REPLICATED' logical_replication_resources 'FROM' logical_replication_resources 'ON' string_or_placeholder opt_logical_replication_create_table_options
 
 create_schedule_stmt ::=
 	create_schedule_for_changefeed_stmt
@@ -1883,9 +1883,9 @@ logical_replication_resources ::=
 	| 'TABLES' '(' logical_replication_resources_list ')'
 	| 'DATABASE' database_name
 
-opt_logical_replication_options ::=
-	'WITH' logical_replication_options_list
-	| 'WITH' 'OPTIONS' '(' logical_replication_options_list ')'
+opt_logical_replication_create_table_options ::=
+	'WITH' logical_replication_create_table_options_list
+	| 'WITH' 'OPTIONS' '(' logical_replication_create_table_options_list ')'
 	| 
 
 create_schedule_for_changefeed_stmt ::=
@@ -2691,8 +2691,8 @@ target_elem ::=
 logical_replication_resources_list ::=
 	( db_object_name ) ( ( ',' db_object_name ) )*
 
-logical_replication_options_list ::=
-	( logical_replication_options ) ( ( ',' logical_replication_options ) )*
+logical_replication_create_table_options_list ::=
+	( logical_replication_create_table_options ) ( ( ',' logical_replication_create_table_options ) )*
 
 schedule_label_spec ::=
 	label_spec
@@ -3344,13 +3344,9 @@ bare_col_label ::=
 	'identifier'
 	| bare_label_keywords
 
-logical_replication_options ::=
-	'CURSOR' '=' string_or_placeholder
-	| 'MODE' '=' string_or_placeholder
-	| 'DEFAULT' 'FUNCTION' '=' string_or_placeholder
-	| 'FUNCTION' db_object_name 'FOR' 'TABLE' db_object_name
+logical_replication_create_table_options ::=
+	'MODE' '=' string_or_placeholder
 	| 'DISCARD' '=' string_or_placeholder
-	| 'SKIP' 'SCHEMA' 'CHECK'
 	| 'LABEL' '=' string_or_placeholder
 
 common_table_expr ::=

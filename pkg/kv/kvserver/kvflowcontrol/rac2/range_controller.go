@@ -1214,9 +1214,9 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 				// In a joint config (numSets == 2), config 0 may not need a replica
 				// to force-flush, but the replica may also be in config 1 and be
 				// force-flushing due to that (or vice versa). This complicates
-				// computeVoterDirectives, so under the assumption that joint configs
-				// are temporary, we don't bother stopping force flushes in that joint
-				// configs.
+				// computeVoterDirectivesRaftMuLocked, so under the assumption that
+				// joint configs are temporary, we don't bother stopping force flushes
+				// in that joint configs.
 				noChangesNeeded = false
 			}
 			// Else, common case.
@@ -1224,7 +1224,7 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 		if noChangesNeeded {
 			// Common case.
 		} else {
-			rc.computeVoterDirectives(votersContributingToQuorum, quorumCounts)
+			rc.computeVoterDirectivesRaftMuLocked(votersContributingToQuorum, quorumCounts)
 		}
 	}
 
@@ -1291,7 +1291,7 @@ type replicaScore struct {
 }
 
 // Second-pass decision-making.
-func (rc *rangeController) computeVoterDirectives(
+func (rc *rangeController) computeVoterDirectivesRaftMuLocked(
 	votersContributingToQuorum [2]int, quorumCounts [2]int,
 ) {
 	var scratchFFScores, scratchCandidateFFScores, scratchDenySendQScores [5]replicaScore
@@ -1335,7 +1335,7 @@ func (rc *rangeController) computeVoterDirectives(
 		sendTokens := rs.sendTokenCounter.tokens(admissionpb.ElasticWorkClass)
 		bucketedSendTokens := (sendTokens / sendPoolBucket) * sendPoolBucket
 		score := replicaScore{
-			replicaID:          rs.desc.ReplicaID,
+			replicaID:          rs.replicaID,
 			bucketedTokensSend: bucketedSendTokens,
 			tokensEval:         rs.evalTokenCounter.tokens(admissionpb.ElasticWorkClass),
 		}
@@ -1486,7 +1486,7 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(
 				rc.opts.Scheduler.ScheduleControllerEvent(rc.opts.RangeID)
 			}
 			for _, rs := range nextScheduled {
-				rc.scheduledMu.replicas[rs.desc.ReplicaID] = struct{}{}
+				rc.scheduledMu.replicas[rs.replicaID] = struct{}{}
 			}
 		}()
 	}
@@ -1756,7 +1756,7 @@ func (rc *rangeController) updateSendQueueStatsRaftMuLocked(now time.Time) {
 	rc.lastSendQueueStatsScratch.Clear()
 	for _, rs := range rc.replicaMap {
 		stats := ReplicaSendQueueStats{
-			ReplicaID: rs.desc.ReplicaID,
+			ReplicaID: rs.replicaID,
 		}
 		if rs.sendStream != nil {
 			func() {
@@ -1983,13 +1983,17 @@ func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
 // replicaState holds state for each replica. All methods are called with
 // raftMu held, hence it does not have its own mutex.
 type replicaState struct {
+	// ==== Immutable fields ====
 	parent *rangeController
 	// stream aggregates across the streams for the same (tenant, store). This
 	// is the identity that is used to deduct tokens or wait for tokens to be
 	// positive.
 	stream                             kvflowcontrol.Stream
 	evalTokenCounter, sendTokenCounter *tokenCounter
-	desc                               roachpb.ReplicaDescriptor
+	replicaID                          roachpb.ReplicaID
+
+	// ==== Mutable fields ====
+	desc roachpb.ReplicaDescriptor
 
 	sendStream *replicaSendStream
 
@@ -2063,6 +2067,7 @@ func NewReplicaState(
 		stream:           stream,
 		evalTokenCounter: parent.opts.SSTokenCounter.Eval(stream),
 		sendTokenCounter: parent.opts.SSTokenCounter.Send(stream),
+		replicaID:        desc.ReplicaID,
 		desc:             desc,
 	}
 	// Don't bother creating the replicaSendStream here. We will do this in
@@ -2415,7 +2420,7 @@ func (rs *replicaState) computeReplicaStreamStateRaftMuLocked(
 		indexToSend:              rss.mu.sendQueue.indexToSend,
 		preventSendQNoForceFlush: false,
 	}
-	if rs.desc.ReplicaID == rs.parent.leaseholder {
+	if rs.replicaID == rs.parent.leaseholder {
 		if vss.noSendQ {
 			// The first-pass itself decides that we need to send.
 			vss.hasSendTokens = true
@@ -2427,7 +2432,7 @@ func (rs *replicaState) computeReplicaStreamStateRaftMuLocked(
 		}
 		return vss
 	}
-	if rs.desc.ReplicaID == rs.parent.opts.LocalReplicaID {
+	if rs.replicaID == rs.parent.opts.LocalReplicaID {
 		// Leader.
 		vss.hasSendTokens = true
 		return vss
@@ -2574,7 +2579,7 @@ func (rs *replicaState) scheduledRaftMuLocked(
 	ctx context.Context, mode RaftMsgAppMode, logSnapshot raft.LogSnapshot,
 ) (scheduleAgain bool, updateWaiterSets bool) {
 	rs.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
-	if rs.desc.ReplicaID == rs.parent.opts.LocalReplicaID {
+	if rs.replicaID == rs.parent.opts.LocalReplicaID {
 		panic("scheduled called on the leader replica")
 	}
 	rss := rs.sendStream
@@ -2639,9 +2644,9 @@ func (rs *replicaState) scheduledRaftMuLocked(
 	if err == nil {
 		var sent bool
 		msg, sent = rss.parent.parent.opts.RaftInterface.SendMsgAppRaftMuLocked(
-			rss.parent.desc.ReplicaID, slice)
+			rss.parent.replicaID, slice)
 		if !sent {
-			err = errors.Errorf("SendMsgApp could not send for replica %d", rss.parent.desc.ReplicaID)
+			err = errors.Errorf("SendMsgApp could not send for replica %d", rss.parent.replicaID)
 		}
 	}
 	if err != nil {
@@ -2742,7 +2747,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 		n := len(event.sendingEntries)
 		if n != 0 {
 			panic(errors.AssertionFailedf("pull mode must not have sending entries (leader=%t)",
-				rss.parent.desc.ReplicaID == rss.parent.parent.opts.LocalReplicaID))
+				rss.parent.replicaID == rss.parent.parent.opts.LocalReplicaID))
 		}
 		if directive.forceFlushStopIndex.active() {
 			// Must have a send-queue, so sendingEntries should stay empty (these
@@ -2755,7 +2760,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 				}
 				if wasExceedingInflightBytesThreshold &&
 					!rss.reachedInflightBytesThresholdRaftMuAndStreamLocked() {
-					rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
+					rss.parent.parent.scheduleReplica(rss.parent.replicaID)
 				}
 			}
 		} else {
@@ -2894,10 +2899,10 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 			return false, err
 		}
 		msg, sent := rss.parent.parent.opts.RaftInterface.SendMsgAppRaftMuLocked(
-			rss.parent.desc.ReplicaID, slice)
+			rss.parent.replicaID, slice)
 		if !sent {
 			return false,
-				errors.Errorf("SendMsgApp could not send for replica %d", rss.parent.desc.ReplicaID)
+				errors.Errorf("SendMsgApp could not send for replica %d", rss.parent.replicaID)
 		}
 		rss.updateInflightRaftMuAndStreamLocked(slice)
 		rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, false)
@@ -2984,7 +2989,7 @@ func (rss *replicaSendStream) startForceFlushRaftMuAndStreamLocked(
 	rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Inc(1)
 	rss.mu.sendQueue.forceFlushStopIndex = forceFlushStopIndex
 	if !rss.reachedInflightBytesThresholdRaftMuAndStreamLocked() {
-		rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
+		rss.parent.parent.scheduleReplica(rss.parent.replicaID)
 	}
 	rss.stopAttemptingToEmptySendQueueViaWatcherRaftMuAndStreamLocked(ctx, false)
 }
@@ -3220,7 +3225,7 @@ func (rss *replicaSendStream) Notify(ctx context.Context) {
 	}
 	rss.mu.sendQueue.deductedForSchedulerTokens = tokens
 	rss.parent.parent.opts.RangeControllerMetrics.SendQueue.DeductedForSchedulerBytes.Inc(int64(tokens))
-	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
+	rss.parent.parent.scheduleReplica(rss.parent.replicaID)
 }
 
 // NB: raftMu may or may not be held. Specifically, when called from Notify,
