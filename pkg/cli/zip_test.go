@@ -1376,6 +1376,10 @@ func trimNonDeterministicZipOutputFiles(out string) string {
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m).*job_status\.txt$` + "\n")
 	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m).*(memprof|memstats|memmonitoring).*\.txt$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m).*goroutine_dump.*\.txt\.gz$` + "\n")
+	out = re.ReplaceAllString(out, ``)
 	return out
 }
 
