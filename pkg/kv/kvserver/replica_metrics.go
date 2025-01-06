@@ -335,7 +335,7 @@ func calcBehindCount(
 }
 
 func calcRaftFlowStateCounts(status *raft.SparseStatus) (cnt [tracker.StateCount]int64) {
-	if status.RaftState != raftpb.StateLeader {
+	if status == nil || status.RaftState != raftpb.StateLeader {
 		return cnt
 	}
 	for _, pr := range status.Progress {
