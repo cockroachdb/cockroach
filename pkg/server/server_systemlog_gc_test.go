@@ -28,6 +28,7 @@ func TestLogGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
+	skip.UnderDeadlock(t, "takes >1 min under deadlock")
 
 	ctx := context.Background()
 	a := assert.New(t)
