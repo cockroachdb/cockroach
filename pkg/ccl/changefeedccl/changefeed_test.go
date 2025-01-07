@@ -3920,6 +3920,71 @@ func TestChangefeedAvroNotice(t *testing.T) {
 	expectNotice(t, s.Server, sql, `avro is no longer experimental, use format=avro`)
 }
 
+func TestChangefeedResolvedNotice(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cluster, _, cleanup := startTestCluster(t)
+	defer cleanup()
+	s := cluster.Server(1)
+
+	pgURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+	pgBase, err := pq.NewConnector(pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual string
+	connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {
+		actual = n.Message
+	})
+
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
+
+	t.Run("resolved<min_checkpoint_frequency", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='5s', min_checkpoint_frequency='10s'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `resolved (5s) messages will not be emitted more frequently than the configured min_checkpoint_frequency (10s), but may be emitted less frequently`, actual)
+	})
+	t.Run("resolved<min_checkpoint_frequency default", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='20ms'`)
+		defer closeFeed(t, testFeed)
+		// Note: default min_checkpoint_frequency is set to 100ms in startTestCluster.
+		require.Equal(t, `resolved (20ms) messages will not be emitted more frequently than the configured min_checkpoint_frequency (100ms), but may be emitted less frequently`, actual)
+	})
+	t.Run("resolved=min_checkpoint_frequency", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='5s', min_checkpoint_frequency='5s'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+	})
+	t.Run("resolved>min_checkpoint_frequency", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='10s', min_checkpoint_frequency='5s'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+	})
+	t.Run("resolved default", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved, min_checkpoint_frequency='10s'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `resolved (0s) messages will not be emitted more frequently than the configured min_checkpoint_frequency (10s), but may be emitted less frequently`, actual)
+	})
+}
+
 func TestChangefeedOutputTopics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
