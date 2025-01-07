@@ -1432,11 +1432,11 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, err error) (removed bool) {
 // be queued for Ready processing; false otherwise.
 func (r *Replica) tick(
 	ctx context.Context, livenessMap livenesspb.IsLiveMap, ioThresholdMap *ioThresholdMap,
-) (exists bool, err error) {
+) (processReady bool, err error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	defer func() {
-		if exists && err == nil {
+		if processReady && err == nil {
 			// NB: since we are returning true, there will be a Ready handling
 			// immediately after this call, so any pings stashed in raft will be sent.
 			// NB: Replica.mu must not be held here.
@@ -1456,11 +1456,11 @@ func (r *Replica) tick(
 	}
 
 	r.unreachablesMu.Lock()
-	remotes := r.unreachablesMu.remotes
+	unreachableRemotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
 	r.unreachablesMu.Unlock()
 	bypassFn := r.store.TestingKnobs().RaftReportUnreachableBypass
-	for remoteReplica := range remotes {
+	for remoteReplica := range unreachableRemotes {
 		if bypassFn != nil && bypassFn(remoteReplica) {
 			continue
 		}
@@ -1551,7 +1551,15 @@ func (r *Replica) tick(
 		// have been pending for 1 to 2 reproposal timeouts.
 		r.refreshProposalsLocked(ctx, refreshAtDelta, reasonTicks)
 	}
-	return true, nil
+
+	// Perform Ready processing immediately after handling the tick if the Raft
+	// group has Ready to process.
+	processReady = r.mu.internalRaftGroup.HasReady() ||
+		// Also do so if we just marked a replica as unreachable. This can be
+		// helpful for RACv2, which responds to changes in the Progress.StateType of
+		// follower replicas, despite that not being a Ready event.
+		len(unreachableRemotes) > 0
+	return processReady, nil
 }
 
 func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) {
