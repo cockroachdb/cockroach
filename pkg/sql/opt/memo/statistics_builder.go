@@ -4040,19 +4040,23 @@ func (sb *statisticsBuilder) applyEquivalencies(
 	s *props.Statistics,
 ) {
 	equivReps.ForEach(func(i opt.ColumnID) {
-		equivGroup := filterFD.ComputeEquivGroup(i)
-		sb.updateDistinctNullCountsFromEquivalency(equivGroup, e, notNullCols, s)
+		immutableEquivGroup := filterFD.GetImmutableEquivGroup(i)
+		if immutableEquivGroup.Empty() {
+			// Trivial case: the column is equivalent only to itself.
+			immutableEquivGroup = opt.MakeColSet(i)
+		}
+		sb.updateDistinctNullCountsFromEquivalency(immutableEquivGroup, e, notNullCols, s)
 	})
 }
 
 func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
-	equivGroup opt.ColSet, e RelExpr, notNullCols opt.ColSet, s *props.Statistics,
+	immutableEquivGroup opt.ColSet, e RelExpr, notNullCols opt.ColSet, s *props.Statistics,
 ) {
 	// Find the minimum distinct and null counts for all columns in this equivalency
 	// group.
 	minDistinctCount := s.RowCount
 	minNullCount := s.RowCount
-	equivGroup.ForEach(func(col opt.ColumnID) {
+	immutableEquivGroup.ForEach(func(col opt.ColumnID) {
 		colStat, ok := s.ColStats.LookupSingleton(col)
 		if !ok {
 			colSet := opt.MakeColSet(col)
@@ -4073,7 +4077,7 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 
 	// Set the distinct and null counts to the minimum for all columns in this
 	// equivalency group.
-	equivGroup.ForEach(func(col opt.ColumnID) {
+	immutableEquivGroup.ForEach(func(col opt.ColumnID) {
 		colStat, _ := s.ColStats.LookupSingleton(col)
 		colStat.DistinctCount = minDistinctCount
 		colStat.NullCount = minNullCount
@@ -4619,8 +4623,12 @@ func (sb *statisticsBuilder) selectivityFromEquivalencies(
 ) (selectivity props.Selectivity) {
 	selectivity = props.OneSelectivity
 	equivReps.ForEach(func(i opt.ColumnID) {
-		equivGroup := filterFD.ComputeEquivGroup(i)
-		selectivity.Multiply(sb.selectivityFromEquivalency(equivGroup, e, s))
+		immutableEquivGroup := filterFD.GetImmutableEquivGroup(i)
+		if immutableEquivGroup.Empty() {
+			// Trivial case: the column is equivalent only to itself.
+			immutableEquivGroup = opt.MakeColSet(i)
+		}
+		selectivity.Multiply(sb.selectivityFromEquivalency(immutableEquivGroup, e, s))
 	})
 
 	return selectivity
@@ -4803,7 +4811,7 @@ func addEqExprConjuncts(
 }
 
 func (sb *statisticsBuilder) selectivityFromEquivalency(
-	equivGroup opt.ColSet, e RelExpr, s *props.Statistics,
+	immutableEquivGroup opt.ColSet, e RelExpr, s *props.Statistics,
 ) (selectivity props.Selectivity) {
 	var derivedEquivCols opt.ColSet
 	if lookupJoinExpr, ok := e.(*LookupJoinExpr); ok {
@@ -4812,7 +4820,7 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 	// Find the maximum input distinct count for all columns in this equivalency
 	// group.
 	maxDistinctCount := float64(0)
-	equivGroup.ForEach(func(col opt.ColumnID) {
+	immutableEquivGroup.ForEach(func(col opt.ColumnID) {
 		if derivedEquivCols.Contains(col) {
 			// Don't apply selectivity from derived equivalencies internally
 			// manufactured by lookup join solely to facilitate index lookups.
@@ -4847,9 +4855,13 @@ func (sb *statisticsBuilder) selectivityFromEquivalenciesSemiJoin(
 ) (selectivity props.Selectivity) {
 	selectivity = props.OneSelectivity
 	equivReps.ForEach(func(i opt.ColumnID) {
-		equivGroup := filterFD.ComputeEquivGroup(i)
+		immutableEquivGroup := filterFD.GetImmutableEquivGroup(i)
+		if immutableEquivGroup.Empty() {
+			// Trivial case: the column is equivalent only to itself.
+			immutableEquivGroup = opt.MakeColSet(i)
+		}
 		selectivity.Multiply(sb.selectivityFromEquivalencySemiJoin(
-			equivGroup, leftOutputCols, rightOutputCols, e, s,
+			immutableEquivGroup, leftOutputCols, rightOutputCols, e, s,
 		))
 	})
 
@@ -4857,13 +4869,13 @@ func (sb *statisticsBuilder) selectivityFromEquivalenciesSemiJoin(
 }
 
 func (sb *statisticsBuilder) selectivityFromEquivalencySemiJoin(
-	equivGroup, leftOutputCols, rightOutputCols opt.ColSet, e RelExpr, s *props.Statistics,
+	immutableEquivGroup, leftOutputCols, rightOutputCols opt.ColSet, e RelExpr, s *props.Statistics,
 ) (selectivity props.Selectivity) {
 	// Find the minimum (maximum) input distinct count for all columns in this
 	// equivalency group from the right (left).
 	minDistinctCountRight := math.MaxFloat64
 	maxDistinctCountLeft := float64(0)
-	equivGroup.ForEach(func(col opt.ColumnID) {
+	immutableEquivGroup.ForEach(func(col opt.ColumnID) {
 		// If any of the distinct counts were updated by the filter, we want to use
 		// the updated value.
 		colStat, ok := s.ColStats.LookupSingleton(col)

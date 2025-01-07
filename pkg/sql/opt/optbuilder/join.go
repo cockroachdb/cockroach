@@ -116,9 +116,27 @@ func (b *Builder) buildJoin(
 
 	case *tree.OnJoinCond, nil:
 		// Append columns added by the children, as they are visible to the filter.
+		// Reuse one of the child column slices if there is sufficient capacity.
+		// This is safe because the child scopes are not used after this point.
 		outScope = inScope.push()
-		outScope.appendColumnsFromScope(leftScope)
-		outScope.appendColumnsFromScope(rightScope)
+		leftCols, rightCols := leftScope.cols, rightScope.cols
+		leftScope.cols, rightScope.cols = nil, nil
+		neededCap := len(leftCols) + len(rightCols)
+		if cap(leftCols) >= neededCap {
+			// The left columns are already in the correct location.
+			outScope.cols = leftCols
+			outScope.appendColumns(rightCols)
+		} else if cap(rightCols) >= neededCap {
+			// Shift the right columns, and then copy the left columns to the correct
+			// location.
+			outScope.cols = rightCols[:neededCap]
+			outScope.copyColumns(len(leftCols), rightCols)
+			outScope.copyColumns(0, leftCols)
+		} else {
+			outScope.cols = make([]scopeColumn, 0, neededCap)
+			outScope.appendColumns(leftCols)
+			outScope.appendColumns(rightCols)
+		}
 
 		var filters memo.FiltersExpr
 		if on, ok := cond.(*tree.OnJoinCond); ok {

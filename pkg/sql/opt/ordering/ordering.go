@@ -488,7 +488,7 @@ func checkRequired(expr memo.RelExpr, required *props.OrderingChoice) {
 	// Verify that columns in a column group are equivalent.
 	for i := range required.Columns {
 		c := &required.Columns[i]
-		if !c.Group.SubsetOf(rel.FuncDeps.ComputeEquivGroup(c.AnyID())) && !rel.Cardinality.IsZero() {
+		if !rel.FuncDeps.AreAllColsEquiv(c.Group) && !rel.Cardinality.IsZero() {
 			panic(errors.AssertionFailedf(
 				"ordering column group %s contains non-equivalent columns (op %s)",
 				c.Group, expr.Op(),

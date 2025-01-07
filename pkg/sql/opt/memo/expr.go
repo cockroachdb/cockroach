@@ -999,7 +999,7 @@ func (lj *LookupJoinPrivate) LookupIndexPrefixIsEquatedWithColInColSet(
 	for i := range lj.LookupExpr {
 		props := lj.LookupExpr[i].ScalarProps()
 
-		equivCols := props.FuncDeps.ComputeEquivGroup(idxCol)
+		equivCols := props.FuncDeps.GetImmutableEquivGroup(idxCol)
 		if colSet.Intersects(equivCols) {
 			return true
 		}

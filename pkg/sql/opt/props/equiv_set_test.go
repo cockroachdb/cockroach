@@ -217,6 +217,44 @@ func TestEquivSet(t *testing.T) {
 		require.False(t, equiv4.ContainsCol(7))
 	})
 
+	t.Run("Intersects", func(t *testing.T) {
+		require.False(t, emptyEquiv.Intersects(c(1)))
+		require.True(t, equiv1.Intersects(c(1)))
+		require.True(t, equiv2.Intersects(c(1)))
+		require.True(t, equiv3.Intersects(c(1)))
+		require.True(t, equiv4.Intersects(c(1)))
+
+		require.False(t, emptyEquiv.Intersects(c(3)))
+		require.False(t, equiv1.Intersects(c(3)))
+		require.True(t, equiv2.Intersects(c(3)))
+		require.True(t, equiv3.Intersects(c(3)))
+		require.True(t, equiv4.Intersects(c(3)))
+
+		require.False(t, emptyEquiv.Intersects(c(5)))
+		require.False(t, equiv1.Intersects(c(5)))
+		require.False(t, equiv2.Intersects(c(5)))
+		require.True(t, equiv3.Intersects(c(5)))
+		require.False(t, equiv4.Intersects(c(5)))
+
+		require.False(t, emptyEquiv.Intersects(c(7)))
+		require.False(t, equiv1.Intersects(c(7)))
+		require.False(t, equiv2.Intersects(c(7)))
+		require.False(t, equiv3.Intersects(c(7)))
+		require.False(t, equiv4.Intersects(c(7)))
+
+		require.False(t, emptyEquiv.Intersects(c(3, 5)))
+		require.False(t, equiv1.Intersects(c(3, 5)))
+		require.True(t, equiv2.Intersects(c(3, 5)))
+		require.True(t, equiv3.Intersects(c(3, 5)))
+		require.True(t, equiv4.Intersects(c(3, 5)))
+
+		require.False(t, emptyEquiv.Intersects(c(5, 7)))
+		require.False(t, equiv1.Intersects(c(5, 7)))
+		require.False(t, equiv2.Intersects(c(5, 7)))
+		require.True(t, equiv3.Intersects(c(5, 7)))
+		require.False(t, equiv4.Intersects(c(5, 7)))
+	})
+
 	t.Run("AreColsEquiv", func(t *testing.T) {
 		require.True(t, emptyEquiv.AreColsEquiv(1, 1))
 		require.True(t, equiv1.AreColsEquiv(1, 1))
@@ -291,6 +329,106 @@ func TestEquivSet(t *testing.T) {
 		require.False(t, equiv2.AreAllColsEquiv(c(7, 8)))
 		require.False(t, equiv3.AreAllColsEquiv(c(7, 8)))
 		require.False(t, equiv4.AreAllColsEquiv(c(7, 8)))
+	})
+
+	t.Run("ColsAreEquivClosure", func(t *testing.T) {
+		require.True(t, emptyEquiv.ColsAreEquivClosure(c(1)))
+		require.False(t, equiv1.ColsAreEquivClosure(c(1)))
+		require.False(t, equiv2.ColsAreEquivClosure(c(1)))
+		require.False(t, equiv3.ColsAreEquivClosure(c(1)))
+		require.False(t, equiv4.ColsAreEquivClosure(c(1)))
+
+		require.True(t, emptyEquiv.ColsAreEquivClosure(c(3)))
+		require.True(t, equiv1.ColsAreEquivClosure(c(3)))
+		require.False(t, equiv2.ColsAreEquivClosure(c(3)))
+		require.False(t, equiv3.ColsAreEquivClosure(c(3)))
+		require.False(t, equiv4.ColsAreEquivClosure(c(3)))
+
+		require.True(t, emptyEquiv.ColsAreEquivClosure(c(7)))
+		require.True(t, equiv1.ColsAreEquivClosure(c(7)))
+		require.True(t, equiv2.ColsAreEquivClosure(c(7)))
+		require.True(t, equiv3.ColsAreEquivClosure(c(7)))
+		require.True(t, equiv4.ColsAreEquivClosure(c(7)))
+
+		require.True(t, emptyEquiv.ColsAreEquivClosure(c(1, 2)))
+		require.True(t, equiv1.ColsAreEquivClosure(c(1, 2)))
+		require.True(t, equiv2.ColsAreEquivClosure(c(1, 2)))
+		require.True(t, equiv3.ColsAreEquivClosure(c(1, 2)))
+		require.False(t, equiv4.ColsAreEquivClosure(c(1, 2)))
+
+		require.True(t, emptyEquiv.ColsAreEquivClosure(c(3, 4)))
+		require.True(t, equiv1.ColsAreEquivClosure(c(3, 4)))
+		require.True(t, equiv2.ColsAreEquivClosure(c(3, 4)))
+		require.True(t, equiv3.ColsAreEquivClosure(c(3, 4)))
+		require.False(t, equiv4.ColsAreEquivClosure(c(3, 4)))
+
+		require.True(t, emptyEquiv.ColsAreEquivClosure(c(5, 6)))
+		require.True(t, equiv1.ColsAreEquivClosure(c(5, 6)))
+		require.True(t, equiv2.ColsAreEquivClosure(c(5, 6)))
+		require.True(t, equiv3.ColsAreEquivClosure(c(5, 6)))
+		require.True(t, equiv4.ColsAreEquivClosure(c(5, 6)))
+
+		require.True(t, emptyEquiv.ColsAreEquivClosure(c(1, 2, 3, 4)))
+		require.True(t, equiv1.ColsAreEquivClosure(c(1, 2, 3, 4)))
+		require.True(t, equiv2.ColsAreEquivClosure(c(1, 2, 3, 4)))
+		require.True(t, equiv3.ColsAreEquivClosure(c(1, 2, 3, 4)))
+		require.True(t, equiv4.ColsAreEquivClosure(c(1, 2, 3, 4)))
+
+		require.True(t, emptyEquiv.ColsAreEquivClosure(c(1, 2, 3)))
+		require.True(t, equiv1.ColsAreEquivClosure(c(1, 2, 3)))
+		require.False(t, equiv2.ColsAreEquivClosure(c(1, 2, 3)))
+		require.False(t, equiv3.ColsAreEquivClosure(c(1, 2, 3)))
+		require.False(t, equiv4.ColsAreEquivClosure(c(1, 2, 3)))
+	})
+
+	t.Run("ColsAreEquivGroup", func(t *testing.T) {
+		require.True(t, emptyEquiv.ColsAreEquivGroup(c(1)))
+		require.False(t, equiv1.ColsAreEquivGroup(c(1)))
+		require.False(t, equiv2.ColsAreEquivGroup(c(1)))
+		require.False(t, equiv3.ColsAreEquivGroup(c(1)))
+		require.False(t, equiv4.ColsAreEquivGroup(c(1)))
+
+		require.True(t, emptyEquiv.ColsAreEquivGroup(c(3)))
+		require.True(t, equiv1.ColsAreEquivGroup(c(3)))
+		require.False(t, equiv2.ColsAreEquivGroup(c(3)))
+		require.False(t, equiv3.ColsAreEquivGroup(c(3)))
+		require.False(t, equiv4.ColsAreEquivGroup(c(3)))
+
+		require.True(t, emptyEquiv.ColsAreEquivGroup(c(7)))
+		require.True(t, equiv1.ColsAreEquivGroup(c(7)))
+		require.True(t, equiv2.ColsAreEquivGroup(c(7)))
+		require.True(t, equiv3.ColsAreEquivGroup(c(7)))
+		require.True(t, equiv4.ColsAreEquivGroup(c(7)))
+
+		require.False(t, emptyEquiv.ColsAreEquivGroup(c(1, 2)))
+		require.True(t, equiv1.ColsAreEquivGroup(c(1, 2)))
+		require.True(t, equiv2.ColsAreEquivGroup(c(1, 2)))
+		require.True(t, equiv3.ColsAreEquivGroup(c(1, 2)))
+		require.False(t, equiv4.ColsAreEquivGroup(c(1, 2)))
+
+		require.False(t, emptyEquiv.ColsAreEquivGroup(c(3, 4)))
+		require.False(t, equiv1.ColsAreEquivGroup(c(3, 4)))
+		require.True(t, equiv2.ColsAreEquivGroup(c(3, 4)))
+		require.True(t, equiv3.ColsAreEquivGroup(c(3, 4)))
+		require.False(t, equiv4.ColsAreEquivGroup(c(3, 4)))
+
+		require.False(t, emptyEquiv.ColsAreEquivGroup(c(5, 6)))
+		require.False(t, equiv1.ColsAreEquivGroup(c(5, 6)))
+		require.False(t, equiv2.ColsAreEquivGroup(c(5, 6)))
+		require.True(t, equiv3.ColsAreEquivGroup(c(5, 6)))
+		require.False(t, equiv4.ColsAreEquivGroup(c(5, 6)))
+
+		require.False(t, emptyEquiv.ColsAreEquivGroup(c(1, 2, 3, 4)))
+		require.False(t, equiv1.ColsAreEquivGroup(c(1, 2, 3, 4)))
+		require.False(t, equiv2.ColsAreEquivGroup(c(1, 2, 3, 4)))
+		require.False(t, equiv3.ColsAreEquivGroup(c(1, 2, 3, 4)))
+		require.True(t, equiv4.ColsAreEquivGroup(c(1, 2, 3, 4)))
+
+		require.False(t, emptyEquiv.ColsAreEquivGroup(c(1, 2, 3)))
+		require.False(t, equiv1.ColsAreEquivGroup(c(1, 2, 3)))
+		require.False(t, equiv2.ColsAreEquivGroup(c(1, 2, 3)))
+		require.False(t, equiv3.ColsAreEquivGroup(c(1, 2, 3)))
+		require.False(t, equiv4.ColsAreEquivGroup(c(1, 2, 3)))
 	})
 
 	t.Run("ComputeEquivClosureNoCopy", func(t *testing.T) {

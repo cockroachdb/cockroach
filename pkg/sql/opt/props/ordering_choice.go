@@ -654,13 +654,12 @@ func (oc *OrderingChoice) AppendCol(id opt.ColumnID, descending bool) {
 // Copy returns a complete copy of this instance, with a private version of the
 // ordering column slice.
 func (oc *OrderingChoice) Copy() OrderingChoice {
+	// NOTE: since the Optional and Group ColSets are immutable, we can just
+	// shallow-copy them.
 	var other OrderingChoice
-	other.Optional = oc.Optional.Copy()
+	other.Optional = oc.Optional
 	other.Columns = make([]OrderingColumnChoice, len(oc.Columns))
 	copy(other.Columns, oc.Columns)
-	for i := range other.Columns {
-		other.Columns[i].Group = other.Columns[i].Group.Copy()
-	}
 	return other
 }
 
@@ -677,18 +676,18 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 	}
 
 	// Check whether optional columns can be added by the FD set.
-	optional := fdset.ComputeClosure(oc.Optional)
-	if !optional.Equals(oc.Optional) {
+	if !fdset.ColsAreClosure(oc.Optional) {
 		return true
 	}
 
-	closure := optional
+	closure := oc.Optional
+	copiedClosure := false
 	for i := range oc.Columns {
 		group := &oc.Columns[i]
 
 		// If group contains an optional column, then group can be simplified
 		// or removed entirely.
-		if group.Group.Intersects(optional) {
+		if group.Group.Intersects(oc.Optional) {
 			return true
 		}
 
@@ -699,14 +698,19 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 		}
 
 		// Check whether the equivalency group needs to change based on the FD.
-		equiv := fdset.ComputeEquivGroup(group.AnyID())
-		if !equiv.Equals(group.Group) {
+		if !fdset.ColsAreEquivGroup(group.Group) {
 			return true
 		}
 
 		// Add this group's columns and find closure with new columns.
-		closure.UnionWith(equiv)
-		closure = fdset.ComputeClosure(closure)
+		if !copiedClosure {
+			closure = closure.Copy()
+			copiedClosure = true
+		}
+		closure.UnionWith(group.Group)
+		if !fdset.ColsAreClosure(closure) {
+			closure = fdset.ComputeClosureNoCopy(closure)
+		}
 	}
 
 	return false
@@ -733,9 +737,12 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 //
 // This logic should be changed in concert with the CanSimplify logic.
 func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
-	oc.Optional = fdset.ComputeClosure(oc.Optional)
+	if !fdset.ColsAreClosure(oc.Optional) {
+		oc.Optional = fdset.ComputeClosure(oc.Optional)
+	}
 
 	closure := oc.Optional
+	copiedClosure := false
 	n := 0
 	for i := range oc.Columns {
 		group := &oc.Columns[i]
@@ -758,11 +765,27 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 		// Set group to columns equivalent to an arbitrary column in the group
 		// based on the FD set. This can both add and remove columns from the
 		// group.
-		group.Group = fdset.ComputeEquivGroup(group.AnyID())
+		anyCol := group.AnyID()
+		immutableEquivCols := fdset.GetImmutableEquivGroup(anyCol)
+		if immutableEquivCols.Empty() {
+			// The column is equal only to itself. As an optimization, we can avoid
+			// modifying the group if it only consists of a single column.
+			if group.Group.Len() > 1 {
+				group.Group = opt.MakeColSet(anyCol)
+			}
+		} else {
+			group.Group = immutableEquivCols
+		}
 
 		// Add this group's columns and find closure with the new columns.
-		closure = closure.Union(group.Group)
-		closure = fdset.ComputeClosure(closure)
+		if !copiedClosure {
+			closure = closure.Copy()
+			copiedClosure = true
+		}
+		closure.UnionWith(group.Group)
+		if !fdset.ColsAreClosure(closure) {
+			closure = fdset.ComputeClosureNoCopy(closure)
+		}
 
 		if n != i {
 			oc.Columns[n] = oc.Columns[i]

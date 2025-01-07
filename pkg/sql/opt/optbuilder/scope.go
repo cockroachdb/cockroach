@@ -241,6 +241,17 @@ func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tr
 	}
 }
 
+// copyColumns copies the given columns into this scope, starting at the given
+// index. The expressions in the new columns are reset to nil.
+func (s *scope) copyColumns(idx int, cols []scopeColumn) {
+	copy(s.cols[idx:], cols)
+	// We want to reset the expressions, as these become pass-through columns in
+	// the new scope.
+	for i := idx; i < len(s.cols) && i < len(cols); i++ {
+		s.cols[i].scalar = nil
+	}
+}
+
 // appendColumns adds newly bound variables to this scope.
 // The expressions in the new columns are reset to nil.
 func (s *scope) appendColumns(cols []scopeColumn) {
@@ -947,21 +958,23 @@ func (s *scope) FindSourceMatchingName(
 	// ancestor scopes, we return an error.
 	var source tree.TableName
 	for ; s != nil; s = s.parent {
-		sources := make(map[tree.TableName]struct{})
-		for i := range s.cols {
-			sources[s.cols[i].table] = struct{}{}
-		}
-
 		found := false
-		for src := range sources {
-			if !sourceNameMatches(src, tn) {
+		var last tree.TableName
+		for i := range s.cols {
+			table := s.cols[i].table
+			if table == last || table == source {
+				// Take advantage of the fact that columns from the same table tend to
+				// be adjacent.
+				continue
+			}
+			if !sourceNameMatches(table, tn) {
 				continue
 			}
 			if found {
 				return colinfo.MoreThanOne, nil, s, newAmbiguousSourceError(&tn)
 			}
 			found = true
-			source = src
+			source = table
 		}
 
 		if found {
