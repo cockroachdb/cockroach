@@ -360,6 +360,19 @@ func (l *lexer) ReadIntegerForLoopControl() (plpgsqltree.ForLoopControl, error) 
 	}, err
 }
 
+// makeDoStmt analyzes and parses the options supplied to a DO statement.
+func makeDoStmt(options tree.DoBlockOptions) (*plpgsqltree.DoBlock, error) {
+	doBlockBodyStr, err := tree.AnalyzeDoBlockOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	parsedStmt, err := Parse(string(doBlockBodyStr))
+	if err != nil {
+		return nil, err
+	}
+	return &plpgsqltree.DoBlock{Block: parsedStmt.AST}, nil
+}
+
 func (l *lexer) ReadSqlExpr(
 	terminator1 int, terminators ...int,
 ) (sqlStr string, terminatorMet int, err error) {
@@ -532,6 +545,16 @@ func (l *lexer) setErr(err error) {
 	l.lastError = err
 	lastTok := l.lastToken()
 	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, l.lastError, l.in)
+}
+
+// setErrNoDetails is similar to setErr, but is used for an error that should
+// not be further annotated with details. If there is no candidate code for the
+// error, it is annotated with pgcode.Syntax.
+func (l *lexer) setErrNoDetails(err error) {
+	if !pgerror.HasCandidateCode(err) {
+		err = pgerror.WithCandidateCode(err, pgcode.Syntax)
+	}
+	l.lastError = err
 }
 
 func (l *lexer) Error(e string) {

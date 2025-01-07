@@ -296,7 +296,8 @@ type FmtCtx struct {
 	location             *time.Location
 
 	// NOTE: if you add more flags to this structure, make sure to add
-	// corresponding cleanup code in FmtCtx.Close().
+	// corresponding cleanup code in FmtCtx.Close(), as well as handling in
+	// FmtCtx.Clone().
 
 	// The flags to use for pretty-printing.
 	flags FmtFlags
@@ -391,6 +392,21 @@ func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
 	return ctx
 }
 
+// Clone returns a new FmtCtx with all the same flags and options as the
+// original.
+func (ctx *FmtCtx) Clone() *FmtCtx {
+	newCtx := fmtCtxPool.Get().(*FmtCtx)
+	newCtx.flags = ctx.flags
+	newCtx.ann = ctx.ann
+	newCtx.indexedVarFormat = ctx.indexedVarFormat
+	newCtx.placeholderFormat = ctx.placeholderFormat
+	newCtx.tableNameFormatter = ctx.tableNameFormatter
+	newCtx.indexedTypeFormatter = ctx.indexedTypeFormatter
+	newCtx.dataConversionConfig = ctx.dataConversionConfig
+	newCtx.location = ctx.location
+	return newCtx
+}
+
 // SetDataConversionConfig sets the DataConversionConfig on ctx and returns the
 // old one.
 func (ctx *FmtCtx) SetDataConversionConfig(
@@ -427,6 +443,18 @@ func (ctx *FmtCtx) WithFlags(flags FmtFlags, fn func()) {
 	}
 	oldFlags := ctx.flags
 	ctx.flags = flags
+	defer func() { ctx.flags = oldFlags }()
+
+	fn()
+}
+
+// WithoutConstantRedaction modifies FmtCtx to ensure that constants are
+// displayed rather than being replaced by '_', calls fn, then restores the
+// original flags.
+func (ctx *FmtCtx) WithoutConstantRedaction(fn func()) {
+	oldFlags := ctx.flags
+	ctx.flags &= ^FmtHideConstants
+	ctx.flags &= ^FmtAnonymize
 	defer func() { ctx.flags = oldFlags }()
 
 	fn()

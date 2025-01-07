@@ -1,0 +1,439 @@
+parse
+BEGIN
+DO $$
+  BEGIN
+    SELECT 1;
+    INSERT INTO xy VALUES (1, 2);
+  END
+$$;
+END
+----
+BEGIN
+DO $$
+BEGIN
+SELECT 1;
+INSERT INTO xy VALUES (1, 2);
+END;
+$$;
+END;
+ -- normalized!
+BEGIN
+DO $$
+BEGIN
+SELECT (1);
+INSERT INTO xy VALUES ((1), (2));
+END;
+$$;
+END;
+ -- fully parenthesized
+BEGIN
+DO $$
+BEGIN
+SELECT _;
+INSERT INTO xy VALUES (_, _);
+END;
+$$;
+END;
+ -- literals removed
+BEGIN
+DO $$
+BEGIN
+SELECT 1;
+INSERT INTO _ VALUES (1, 2);
+END;
+$$;
+END;
+ -- identifiers removed
+
+parse
+BEGIN
+DO $$
+  DECLARE
+    a INT := 1;
+    b INT := 2;
+  BEGIN
+    INSERT INTO xy VALUES (a, b);
+  END
+$$;
+END
+----
+BEGIN
+DO $$
+DECLARE
+a INT8 := 1;
+b INT8 := 2;
+BEGIN
+INSERT INTO xy VALUES (a, b);
+END;
+$$;
+END;
+ -- normalized!
+BEGIN
+DO $$
+DECLARE
+a INT8 := (1);
+b INT8 := (2);
+BEGIN
+INSERT INTO xy VALUES ((a), (b));
+END;
+$$;
+END;
+ -- fully parenthesized
+BEGIN
+DO $$
+DECLARE
+a INT8 := _;
+b INT8 := _;
+BEGIN
+INSERT INTO xy VALUES (a, b);
+END;
+$$;
+END;
+ -- literals removed
+BEGIN
+DO $$
+DECLARE
+_ INT8 := 1;
+_ INT8 := 2;
+BEGIN
+INSERT INTO _ VALUES (_, _);
+END;
+$$;
+END;
+ -- identifiers removed
+
+parse
+BEGIN
+DO LANGUAGE PLpgSQL $$
+  BEGIN
+    SELECT 1;
+    INSERT INTO xy VALUES (1, 2);
+  END
+$$;
+END
+----
+BEGIN
+DO $$
+BEGIN
+SELECT 1;
+INSERT INTO xy VALUES (1, 2);
+END;
+$$;
+END;
+ -- normalized!
+BEGIN
+DO $$
+BEGIN
+SELECT (1);
+INSERT INTO xy VALUES ((1), (2));
+END;
+$$;
+END;
+ -- fully parenthesized
+BEGIN
+DO $$
+BEGIN
+SELECT _;
+INSERT INTO xy VALUES (_, _);
+END;
+$$;
+END;
+ -- literals removed
+BEGIN
+DO $$
+BEGIN
+SELECT 1;
+INSERT INTO _ VALUES (1, 2);
+END;
+$$;
+END;
+ -- identifiers removed
+
+parse
+BEGIN
+DO $$
+  BEGIN
+    SELECT 1;
+    INSERT INTO xy VALUES (1, 2);
+  END
+$$ LANGUAGE PLpgSQL;
+END
+----
+BEGIN
+DO $$
+BEGIN
+SELECT 1;
+INSERT INTO xy VALUES (1, 2);
+END;
+$$;
+END;
+ -- normalized!
+BEGIN
+DO $$
+BEGIN
+SELECT (1);
+INSERT INTO xy VALUES ((1), (2));
+END;
+$$;
+END;
+ -- fully parenthesized
+BEGIN
+DO $$
+BEGIN
+SELECT _;
+INSERT INTO xy VALUES (_, _);
+END;
+$$;
+END;
+ -- literals removed
+BEGIN
+DO $$
+BEGIN
+SELECT 1;
+INSERT INTO _ VALUES (1, 2);
+END;
+$$;
+END;
+ -- identifiers removed
+
+# Nested DO block.
+parse
+BEGIN
+DO $$
+  BEGIN
+    RAISE NOTICE 'outer block';
+    DO $foo$
+      BEGIN
+        SELECT 1;
+        INSERT INTO xy VALUES (1, 2);
+      END
+    $foo$;
+    INSERT INTO xy VALUES (3, 4);
+  END
+$$;
+END
+----
+BEGIN
+DO $funcbody$
+BEGIN
+RAISE NOTICE 'outer block';
+DO $$
+BEGIN
+SELECT 1;
+INSERT INTO xy VALUES (1, 2);
+END;
+$$;
+INSERT INTO xy VALUES (3, 4);
+END;
+$funcbody$;
+END;
+ -- normalized!
+BEGIN
+DO $funcbody$
+BEGIN
+RAISE NOTICE 'outer block';
+DO $$
+BEGIN
+SELECT (1);
+INSERT INTO xy VALUES ((1), (2));
+END;
+$$;
+INSERT INTO xy VALUES ((3), (4));
+END;
+$funcbody$;
+END;
+ -- fully parenthesized
+BEGIN
+DO $funcbody$
+BEGIN
+RAISE NOTICE '_';
+DO $$
+BEGIN
+SELECT _;
+INSERT INTO xy VALUES (_, _);
+END;
+$$;
+INSERT INTO xy VALUES (_, _);
+END;
+$funcbody$;
+END;
+ -- literals removed
+BEGIN
+DO $funcbody$
+BEGIN
+RAISE NOTICE 'outer block';
+DO $$
+BEGIN
+SELECT 1;
+INSERT INTO _ VALUES (1, 2);
+END;
+$$;
+INSERT INTO _ VALUES (3, 4);
+END;
+$funcbody$;
+END;
+ -- identifiers removed
+
+# Add another level of nesting.
+parse
+BEGIN
+DO $$
+  BEGIN
+    RAISE NOTICE 'outer block';
+    DO $foo$
+      BEGIN
+        SELECT 1;
+        DO $bar$
+          BEGIN
+            SELECT 2;
+            INSERT INTO xy VALUES (3, 4);
+          END
+        $bar$;
+        INSERT INTO xy VALUES (1, 2);
+      END
+    $foo$;
+    INSERT INTO xy VALUES (3, 4);
+  END
+$$;
+END
+----
+BEGIN
+DO $funcbodyx$
+BEGIN
+RAISE NOTICE 'outer block';
+DO $funcbody$
+BEGIN
+SELECT 1;
+DO $$
+BEGIN
+SELECT 2;
+INSERT INTO xy VALUES (3, 4);
+END;
+$$;
+INSERT INTO xy VALUES (1, 2);
+END;
+$funcbody$;
+INSERT INTO xy VALUES (3, 4);
+END;
+$funcbodyx$;
+END;
+ -- normalized!
+BEGIN
+DO $funcbodyx$
+BEGIN
+RAISE NOTICE 'outer block';
+DO $funcbody$
+BEGIN
+SELECT (1);
+DO $$
+BEGIN
+SELECT (2);
+INSERT INTO xy VALUES ((3), (4));
+END;
+$$;
+INSERT INTO xy VALUES ((1), (2));
+END;
+$funcbody$;
+INSERT INTO xy VALUES ((3), (4));
+END;
+$funcbodyx$;
+END;
+ -- fully parenthesized
+BEGIN
+DO $funcbodyx$
+BEGIN
+RAISE NOTICE '_';
+DO $funcbody$
+BEGIN
+SELECT _;
+DO $$
+BEGIN
+SELECT _;
+INSERT INTO xy VALUES (_, _);
+END;
+$$;
+INSERT INTO xy VALUES (_, _);
+END;
+$funcbody$;
+INSERT INTO xy VALUES (_, _);
+END;
+$funcbodyx$;
+END;
+ -- literals removed
+BEGIN
+DO $funcbodyx$
+BEGIN
+RAISE NOTICE 'outer block';
+DO $funcbody$
+BEGIN
+SELECT 1;
+DO $$
+BEGIN
+SELECT 2;
+INSERT INTO _ VALUES (3, 4);
+END;
+$$;
+INSERT INTO _ VALUES (1, 2);
+END;
+$funcbody$;
+INSERT INTO _ VALUES (3, 4);
+END;
+$funcbodyx$;
+END;
+ -- identifiers removed
+
+error
+BEGIN
+DO LANGUAGE foo $$
+  BEGIN
+    SELECT 1;
+    INSERT INTO xy VALUES (1, 2);
+  END
+$$;
+END
+----
+language "foo" does not exist
+
+error
+BEGIN
+DO LANGUAGE foo;
+END
+----
+no inline code specified
+
+error
+BEGIN
+DO LANGUAGE foo LANGUAGE bar;
+END
+----
+conflicting or redundant options
+
+error
+BEGIN
+DO $$ foo $$ $$ bar $$;
+END
+----
+conflicting or redundant options
+
+error
+BEGIN
+DO;
+END
+----
+at or near ";": syntax error
+DETAIL: source SQL:
+BEGIN
+DO;
+  ^
+
+# For nested DO blocks, the tags must disambiguate the block boundaries.
+error
+BEGIN
+DO $$ BEGIN DO $$ BEGIN END $$; END $$;
+END
+----
+at or near "begin": syntax error
+DETAIL: source SQL:
+BEGIN
+DO $$ BEGIN DO $$ BEGIN END $$; END $$;
+                  ^
