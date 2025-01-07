@@ -1434,10 +1434,11 @@ func (b *changefeedResumer) resumeWithRetries(
 					case <-confPoller:
 						return nil
 					case <-t.C:
-						newDest, err := reloadDest(ctx, jobID, execCfg)
+						newDetails, newDest, err := reloadDetailsAndDest(ctx, jobID, execCfg)
 						if err != nil {
 							log.Warningf(ctx, "failed to check for updated configuration: %v", err)
-						} else if newDest != resolvedDest {
+						} else if !newDetails.Equal(details) || newDest != resolvedDest {
+							details = newDetails
 							resolvedDest = newDest
 							return replanErr
 						}
@@ -1536,13 +1537,16 @@ func resolveDest(ctx context.Context, execCfg *sql.ExecutorConfig, sinkURI strin
 	return resolved, err
 }
 
-func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfig) (string, error) {
+func reloadDetailsAndDest(
+	ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfig,
+) (jobspb.ChangefeedDetails, string, error) {
 	reloadedJob, err := execCfg.JobRegistry.LoadJob(ctx, id)
 	if err != nil {
-		return "", err
+		return jobspb.ChangefeedDetails{}, "", err
 	}
 	newDetails := reloadedJob.Details().(jobspb.ChangefeedDetails)
-	return resolveDest(ctx, execCfg, newDetails.SinkURI)
+	dest, err := resolveDest(ctx, execCfg, newDetails.SinkURI)
+	return newDetails, dest, err
 }
 
 // reconcileJobStateWithLocalState ensures that the job progress information

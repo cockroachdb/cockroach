@@ -1100,10 +1100,13 @@ message SchemaChangeGCProgress {
 }
 
 message ChangefeedTargetTable {
+  option (gogoproto.equal) = true;
   string statement_time_name = 1;
 }
 
 message ChangefeedTargetSpecification {
+  option (gogoproto.equal) = true;
+
   enum TargetType {
     // The primary index of the table with table_id descriptor id.
     // Fail if there are ever multiple column families.
@@ -1129,6 +1132,7 @@ message ChangefeedTargetSpecification {
 }
 
 message ChangefeedDetails {
+  option (gogoproto.equal) = true;
   // Targets contains the user-specified tables to watch, mapping
   // the descriptor id to the name at the time of changefeed creation.
   // The names at resolution time are included so that table and database

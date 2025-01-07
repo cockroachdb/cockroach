@@ -1767,6 +1767,16 @@ func (cf *changeFrontier) checkpointJobProgress(
 			if err = md.CheckRunningOrReverting(); err != nil {
 				return err
 			}
+			// If the current persisted progress no longer has a resolved TS but we
+			// did have one before, this indicates ALTER has cleared it and we should
+			// bail out and replan the job to pick up the alteration, rather than
+			// overwrite it with this progress update.
+			//
+			// TODO(dt): This is currently unused as ALTER require PAUSE/RESUME but
+			// will be useful if/when that changes.
+			if cf.localState.progress.GetHighWater().IsSet() && md.Progress.GetHighWater().IsEmpty() {
+				return replanErr
+			}
 
 			// Advance resolved timestamp.
 			progress := md.Progress
