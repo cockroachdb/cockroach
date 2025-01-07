@@ -762,12 +762,12 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	start := timeutil.Now()
 	ctx := r.raftCtx
 
-	exists, err := r.tick(ctx, livenessMap, ioThresholds)
+	processReady, err := r.tick(ctx, livenessMap, ioThresholds)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
 	}
 	s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(start).Nanoseconds())
-	return exists // ready
+	return processReady
 }
 
 func (s *Store) processRACv2PiggybackedAdmitted(ctx context.Context, rangeID roachpb.RangeID) {

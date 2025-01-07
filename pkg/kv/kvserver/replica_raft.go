@@ -1423,11 +1423,11 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, err error) (removed bool) {
 // be queued for Ready processing; false otherwise.
 func (r *Replica) tick(
 	ctx context.Context, livenessMap livenesspb.IsLiveMap, ioThresholdMap *ioThresholdMap,
-) (exists bool, err error) {
+) (processReady bool, err error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	defer func() {
-		if exists && err == nil {
+		if processReady && err == nil {
 			// NB: since we are returning true, there will be a Ready handling
 			// immediately after this call, so any pings stashed in raft will be sent.
 			// NB: Replica.mu must not be held here.
@@ -1530,7 +1530,9 @@ func (r *Replica) tick(
 		// have been pending for 1 to 2 reproposal timeouts.
 		r.refreshProposalsLocked(ctx, refreshAtDelta, reasonTicks)
 	}
-	return true, nil
+
+	processReady = r.mu.internalRaftGroup.HasReady()
+	return processReady, nil
 }
 
 func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) {
