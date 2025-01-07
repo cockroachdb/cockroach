@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -271,7 +270,7 @@ func checkPrivilegesForBackup(
 					pgcode.InsufficientPrivilege,
 					"only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups")
 			}
-			return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
+			return sql.CheckDestinationPrivileges(ctx, p, to)
 		}
 	}
 
@@ -328,7 +327,7 @@ func checkPrivilegesForBackup(
 	// If a user has the BACKUP privilege on the target databases or tables we can
 	// move on to checking the destination URIs.
 	if hasRequiredBackupPrivileges {
-		return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
+		return sql.CheckDestinationPrivileges(ctx, p, to)
 	}
 
 	// The following checks are to maintain compatability with pre-22.2 privilege
@@ -362,7 +361,7 @@ func checkPrivilegesForBackup(
 		}
 	}
 
-	return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
+	return sql.CheckDestinationPrivileges(ctx, p, to)
 }
 
 func backupTypeCheck(

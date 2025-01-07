@@ -117,6 +117,8 @@ FILES = [
     "create_trigger",
     "create_type",
     "create_view_stmt",
+    "check_stmt",
+    "check_external_connection_stmt",
     "deallocate_stmt",
     "declare_cursor_stmt",
     "default_value_column_level",

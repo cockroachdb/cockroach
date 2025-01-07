@@ -394,6 +394,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&createTypeNode{}):                          "create type",
 	reflect.TypeOf(&CreateRoleNode{}):                          "create user/role",
 	reflect.TypeOf(&createViewNode{}):                          "create view",
+	reflect.TypeOf(&checkExternalConnectionNode{}):             "check external connection",
 	reflect.TypeOf(&delayedNode{}):                             "virtual table",
 	reflect.TypeOf(&deleteNode{}):                              "delete",
 	reflect.TypeOf(&deleteRangeNode{}):                         "delete range",

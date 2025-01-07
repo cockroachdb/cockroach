@@ -97,6 +97,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.columns
 	case *callNode:
 		return n.getResultColumns()
+	case *checkExternalConnectionNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:

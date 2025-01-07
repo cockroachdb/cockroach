@@ -142,33 +142,6 @@ SHOW BACKUP FROM 'latest' IN ('*****', '*****') WITH OPTIONS (incremental_locati
 SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- passwords exposed
 
 parse
-SHOW BACKUP CONNECTION bar'
-----
-SHOW BACKUP CONNECTION '*****' -- normalized!
-SHOW BACKUP CONNECTION ('*****') -- fully parenthesized
-SHOW BACKUP CONNECTION '_' -- literals removed
-SHOW BACKUP CONNECTION '*****' -- identifiers removed
-SHOW BACKUP CONNECTION 'bar' -- passwords exposed
-
-parse
-SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = '1KiB', TIME = '1h', CONCURRENTLY = 3
-----
-SHOW BACKUP CONNECTION '*****' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- normalized!
-SHOW BACKUP CONNECTION ('*****') WITH OPTIONS (CONCURRENTLY = (3), TRANSFER = ('1KiB'), TIME = ('1h')) -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH OPTIONS (CONCURRENTLY = _, TRANSFER = '_', TIME = '_') -- literals removed
-SHOW BACKUP CONNECTION '*****' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- identifiers removed
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- passwords exposed
-
-parse
-SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = $1, CONCURRENTLY = $2, TIME = $3
-----
-SHOW BACKUP CONNECTION '*****' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- normalized!
-SHOW BACKUP CONNECTION ('*****') WITH OPTIONS (CONCURRENTLY = ($2), TRANSFER = ($1), TIME = ($3)) -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH OPTIONS (CONCURRENTLY = $1, TRANSFER = $1, TIME = $1) -- literals removed
-SHOW BACKUP CONNECTION '*****' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- identifiers removed
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- passwords exposed
-
-parse
 SHOW BACKUPS IN 'bar'
 ----
 SHOW BACKUPS IN '*****' -- normalized!
@@ -929,16 +902,6 @@ BACKUP INTO LATEST IN ('*****') -- fully parenthesized
 BACKUP INTO LATEST IN '_' -- literals removed
 BACKUP INTO LATEST IN '*****' -- identifiers removed
 BACKUP INTO LATEST IN 'unlogged' -- passwords exposed
-
-# Regression test for https://github.com/cockroachdb/cockroach/issues/110411.
-parse
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h')
-----
-SHOW BACKUP CONNECTION '*****' WITH OPTIONS (TIME = '1h') -- normalized!
-SHOW BACKUP CONNECTION ('*****') WITH OPTIONS (TIME = ('1h')) -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH OPTIONS (TIME = '_') -- literals removed
-SHOW BACKUP CONNECTION '*****' WITH OPTIONS (TIME = '1h') -- identifiers removed
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h') -- passwords exposed
 
 # Removal of old BACKUP/RESTORE syntax
 error

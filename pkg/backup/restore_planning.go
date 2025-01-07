@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1436,7 +1435,7 @@ func restorePlanHook(
 func checkRestoreDestinationPrivileges(
 	ctx context.Context, p sql.PlanHookState, from []string,
 ) error {
-	return cloudprivilege.CheckDestinationPrivileges(ctx, p, from)
+	return sql.CheckDestinationPrivileges(ctx, p, from)
 }
 
 // checkRestorePrivilegesOnDatabase check that the user has adequate privileges

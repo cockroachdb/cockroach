@@ -32,7 +32,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/cloud/cloudprivilege",
         "//pkg/clusterversion",
         "//pkg/col/coldata",
         "//pkg/crosscluster",
