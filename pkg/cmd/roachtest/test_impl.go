@@ -711,8 +711,13 @@ func (t *testImpl) Go(fn task.Func, opts ...task.Option) {
 }
 
 // NewGroup starts a new task group.
-func (t *testImpl) NewGroup() task.Group {
-	return t.taskManager.NewGroup(defaultTaskOptions()...)
+func (t *testImpl) NewGroup(opts ...task.Option) task.Group {
+	return t.taskManager.NewGroup(task.OptionList(defaultTaskOptions()...), task.OptionList(opts...))
+}
+
+// NewErrorGroup starts a new task error group.
+func (t *testImpl) NewErrorGroup(opts ...task.Option) task.ErrorGroup {
+	return t.taskManager.NewErrorGroup(task.OptionList(defaultTaskOptions()...), task.OptionList(opts...))
 }
 
 // TeamCityEscape escapes a string for use as <value> in a key='<value>' attribute
