@@ -36,17 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/redact"
 )
-
-// FormatAstAsRedactableString implements scbuild.AstFormatter
-func (p *planner) FormatAstAsRedactableString(
-	statement tree.Statement, annotations *tree.Annotations,
-) redact.RedactableString {
-	return formatStmtKeyAsRedactableString(p.getVirtualTabler(),
-		statement,
-		annotations, tree.FmtSimple, p)
-}
 
 // SchemaChange provides the planNode for the new schema changer.
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, error) {

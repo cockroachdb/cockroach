@@ -5,7 +5,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT);
 ALTER TABLE t ALTER COLUMN j SET NOT NULL;
 EXPLAIN (DDL) rollback at post-commit stage 2 of 2;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER COLUMN ‹j› SET NOT NULL;
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER COLUMN j SET NOT NULL;
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT

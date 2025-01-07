@@ -8,7 +8,7 @@ INSERT INTO db.public.tbl VALUES (-1, -1),(-2, -2),(-3, -3), (-7, -7);
 ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL AS (k) STORED CREATE FAMILY bob;
 EXPLAIN (DDL) rollback at post-commit stage 1 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹k›) STORED CREATE FAMILY ‹bob›;
+Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE FAMILY bob;
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 15 elements transitioning toward ABSENT
