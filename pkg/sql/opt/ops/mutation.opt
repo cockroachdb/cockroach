@@ -134,6 +134,24 @@ define MutationPrivate {
     # the index.
     PartialIndexDelCols OptionalColList
 
+    # VectorIndexDelPartitionCols are columns from the Input expression
+    # containing the keys for the partitions that the deleted or updated rows
+    # should be removed from. The length is always equal to the number of vector
+    # indexes on the table.
+    VectorIndexDelPartitionCols OptionalColList
+
+    # VectorIndexPutPartitionCols are columns from the Input expression
+    # containing the keys for the partitions that the inserted or updated rows
+    # should be added to. The length is always equal to the number of vector
+    # indexes on the table.
+    VectorIndexPutPartitionCols OptionalColList
+
+    # VectorIndexPutCentroidCols are columns from the Input expression
+    # containing the centroids of the partitions that the inserted or updated
+    # rows should be added to. The length is always equal to the number of
+    # vector indexes on the table.
+    VectorIndexPutCentroidCols OptionalColList
+
     # CanaryCol is used only with the Upsert operator. It identifies the column
     # that the execution engine uses to decide whether to insert or to update.
     # If the canary column value is null for a particular input row, then a new

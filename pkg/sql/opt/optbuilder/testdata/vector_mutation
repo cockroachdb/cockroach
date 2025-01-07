@@ -1,0 +1,559 @@
+exec-ddl
+CREATE TABLE t (x INT PRIMARY KEY, v VECTOR(3), w VECTOR(2));
+----
+
+exec-ddl
+CREATE VECTOR INDEX ON t (v);
+----
+
+build
+INSERT INTO t VALUES (1, '[1,2,3]'), (2, '[4,5,6]');
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── v_cast:8 => v:2
+ │    └── w_default:9 => w:3
+ ├── vector index put partition columns: vector_index_put_partition1:10
+ ├── vector index put centroid columns: vector_index_put_centroid1:11
+ └── vector-partition-search t@t_v_idx,vector
+      ├── columns: column1:6!null v_cast:8!null w_default:9 vector_index_put_partition1:10 vector_index_put_centroid1:11
+      ├── query vector column: v_cast:8
+      ├── partition col: vector_index_put_partition1:10
+      ├── centroid col: vector_index_put_centroid1:11
+      └── project
+           ├── columns: w_default:9 column1:6!null v_cast:8!null
+           ├── project
+           │    ├── columns: v_cast:8!null column1:6!null
+           │    ├── values
+           │    │    ├── columns: column1:6!null column2:7!null
+           │    │    ├── (1, '[1,2,3]')
+           │    │    └── (2, '[4,5,6]')
+           │    └── projections
+           │         └── assignment-cast: VECTOR(3) [as=v_cast:8]
+           │              └── column2:7
+           └── projections
+                └── NULL::VECTOR(2) [as=w_default:9]
+
+build
+UPDATE t SET v = '[4,5,6]' WHERE x = 1;
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: x:6 v:7 w:8
+ ├── update-mapping:
+ │    └── v_cast:12 => v:2
+ ├── vector index del partition columns: vector_index_del_partition1:13
+ ├── vector index put partition columns: vector_index_put_partition1:14
+ ├── vector index put centroid columns: vector_index_put_centroid1:15
+ └── vector-partition-search t@t_v_idx,vector
+      ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:12!null vector_index_del_partition1:13 vector_index_put_partition1:14 vector_index_put_centroid1:15
+      ├── query vector column: v_cast:12
+      ├── partition col: vector_index_put_partition1:14
+      ├── centroid col: vector_index_put_centroid1:15
+      └── vector-partition-search t@t_v_idx,vector
+           ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:12!null vector_index_del_partition1:13
+           ├── query vector column: v:7
+           ├── primary key columns: (6)
+           ├── partition col: vector_index_del_partition1:13
+           └── project
+                ├── columns: v_cast:12!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                ├── project
+                │    ├── columns: v_new:11!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │    ├── select
+                │    │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │    │    ├── scan t
+                │    │    │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │    │    │    └── flags: avoid-full-scan
+                │    │    └── filters
+                │    │         └── x:6 = 1
+                │    └── projections
+                │         └── '[4,5,6]' [as=v_new:11]
+                └── projections
+                     └── assignment-cast: VECTOR(3) [as=v_cast:12]
+                          └── v_new:11
+
+build
+DELETE FROM t WHERE x = 1;
+----
+delete t
+ ├── columns: <none>
+ ├── fetch columns: x:6 v:7 w:8
+ ├── vector index del partition columns: vector_index_del_partition1:11
+ └── vector-partition-search t@t_v_idx,vector
+      ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 vector_index_del_partition1:11
+      ├── query vector column: v:7
+      ├── primary key columns: (6)
+      ├── partition col: vector_index_del_partition1:11
+      └── select
+           ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+           ├── scan t
+           │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+           │    └── flags: avoid-full-scan
+           └── filters
+                └── x:6 = 1
+
+build
+UPSERT INTO t VALUES (1, '[1,2,3]'), (2, '[4,5,6]');
+----
+upsert t
+ ├── arbiter indexes: t_pkey
+ ├── columns: <none>
+ ├── canary column: x:10
+ ├── fetch columns: x:10 v:11 w:12
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── v_cast:8 => v:2
+ │    └── w_default:9 => w:3
+ ├── update-mapping:
+ │    ├── v_cast:8 => v:2
+ │    └── w_default:9 => w:3
+ ├── vector index del partition columns: vector_index_del_partition1:16
+ ├── vector index put partition columns: vector_index_put_partition1:17
+ ├── vector index put centroid columns: vector_index_put_centroid1:18
+ └── vector-partition-search t@t_v_idx,vector
+      ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 upsert_x:15 vector_index_del_partition1:16 vector_index_put_partition1:17 vector_index_put_centroid1:18
+      ├── query vector column: v_cast:8
+      ├── partition col: vector_index_put_partition1:17
+      ├── centroid col: vector_index_put_centroid1:18
+      └── vector-partition-search t@t_v_idx,vector
+           ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 upsert_x:15 vector_index_del_partition1:16
+           ├── query vector column: v:11
+           ├── primary key columns: (10)
+           ├── partition col: vector_index_del_partition1:16
+           └── project
+                ├── columns: upsert_x:15 column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+                ├── left-join (hash)
+                │    ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+                │    ├── ensure-upsert-distinct-on
+                │    │    ├── columns: column1:6!null v_cast:8!null w_default:9
+                │    │    ├── grouping columns: column1:6!null
+                │    │    ├── project
+                │    │    │    ├── columns: w_default:9 column1:6!null v_cast:8!null
+                │    │    │    ├── project
+                │    │    │    │    ├── columns: v_cast:8!null column1:6!null
+                │    │    │    │    ├── values
+                │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+                │    │    │    │    │    ├── (1, '[1,2,3]')
+                │    │    │    │    │    └── (2, '[4,5,6]')
+                │    │    │    │    └── projections
+                │    │    │    │         └── assignment-cast: VECTOR(3) [as=v_cast:8]
+                │    │    │    │              └── column2:7
+                │    │    │    └── projections
+                │    │    │         └── NULL::VECTOR(2) [as=w_default:9]
+                │    │    └── aggregations
+                │    │         ├── first-agg [as=v_cast:8]
+                │    │         │    └── v_cast:8
+                │    │         └── first-agg [as=w_default:9]
+                │    │              └── w_default:9
+                │    ├── scan t
+                │    │    ├── columns: x:10!null v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── filters
+                │         └── column1:6 = x:10
+                └── projections
+                     └── CASE WHEN x:10 IS NULL THEN column1:6 ELSE x:10 END [as=upsert_x:15]
+
+build
+INSERT INTO t VALUES (1, '[1,2,3]'), (2, '[4,5,6]')
+ON CONFLICT (x) DO UPDATE SET v = '[-4,-5,-6]';
+----
+upsert t
+ ├── arbiter indexes: t_pkey
+ ├── columns: <none>
+ ├── canary column: x:10
+ ├── fetch columns: x:10 v:11 w:12
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── v_cast:8 => v:2
+ │    └── w_default:9 => w:3
+ ├── update-mapping:
+ │    └── upsert_v:18 => v:2
+ ├── vector index del partition columns: vector_index_del_partition1:20
+ ├── vector index put partition columns: vector_index_put_partition1:21
+ ├── vector index put centroid columns: vector_index_put_centroid1:22
+ └── vector-partition-search t@t_v_idx,vector
+      ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 v_cast:16!null upsert_x:17 upsert_v:18!null upsert_w:19 vector_index_del_partition1:20 vector_index_put_partition1:21 vector_index_put_centroid1:22
+      ├── query vector column: upsert_v:18
+      ├── partition col: vector_index_put_partition1:21
+      ├── centroid col: vector_index_put_centroid1:22
+      └── vector-partition-search t@t_v_idx,vector
+           ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 v_cast:16!null upsert_x:17 upsert_v:18!null upsert_w:19 vector_index_del_partition1:20
+           ├── query vector column: v:11
+           ├── primary key columns: (10)
+           ├── partition col: vector_index_del_partition1:20
+           └── project
+                ├── columns: upsert_x:17 upsert_v:18!null upsert_w:19 column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 v_cast:16!null
+                ├── project
+                │    ├── columns: v_cast:16!null column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+                │    ├── project
+                │    │    ├── columns: v_new:15!null column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+                │    │    ├── left-join (hash)
+                │    │    │    ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+                │    │    │    ├── ensure-upsert-distinct-on
+                │    │    │    │    ├── columns: column1:6!null v_cast:8!null w_default:9
+                │    │    │    │    ├── grouping columns: column1:6!null
+                │    │    │    │    ├── project
+                │    │    │    │    │    ├── columns: w_default:9 column1:6!null v_cast:8!null
+                │    │    │    │    │    ├── project
+                │    │    │    │    │    │    ├── columns: v_cast:8!null column1:6!null
+                │    │    │    │    │    │    ├── values
+                │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+                │    │    │    │    │    │    │    ├── (1, '[1,2,3]')
+                │    │    │    │    │    │    │    └── (2, '[4,5,6]')
+                │    │    │    │    │    │    └── projections
+                │    │    │    │    │    │         └── assignment-cast: VECTOR(3) [as=v_cast:8]
+                │    │    │    │    │    │              └── column2:7
+                │    │    │    │    │    └── projections
+                │    │    │    │    │         └── NULL::VECTOR(2) [as=w_default:9]
+                │    │    │    │    └── aggregations
+                │    │    │    │         ├── first-agg [as=v_cast:8]
+                │    │    │    │         │    └── v_cast:8
+                │    │    │    │         └── first-agg [as=w_default:9]
+                │    │    │    │              └── w_default:9
+                │    │    │    ├── scan t
+                │    │    │    │    ├── columns: x:10!null v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+                │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    │    └── filters
+                │    │    │         └── column1:6 = x:10
+                │    │    └── projections
+                │    │         └── '[-4,-5,-6]' [as=v_new:15]
+                │    └── projections
+                │         └── assignment-cast: VECTOR(3) [as=v_cast:16]
+                │              └── v_new:15
+                └── projections
+                     ├── CASE WHEN x:10 IS NULL THEN column1:6 ELSE x:10 END [as=upsert_x:17]
+                     ├── CASE WHEN x:10 IS NULL THEN v_cast:8 ELSE v_cast:16 END [as=upsert_v:18]
+                     └── CASE WHEN x:10 IS NULL THEN w_default:9 ELSE w:12 END [as=upsert_w:19]
+
+# Create another vector index, verify that mutations correctly update both
+# indexes.
+exec-ddl
+CREATE VECTOR INDEX ON t (w);
+----
+
+build
+INSERT INTO t VALUES (1, '[1,2,3]', '[10, 20]'), (2, '[4,5,6]', '[30, 40]');
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── v_cast:9 => v:2
+ │    └── w_cast:10 => w:3
+ ├── vector index put partition columns: vector_index_put_partition1:11 vector_index_put_partition2:13
+ ├── vector index put centroid columns: vector_index_put_centroid1:12 vector_index_put_centroid2:14
+ └── vector-partition-search t@t_w_idx,vector
+      ├── columns: column1:6!null v_cast:9!null w_cast:10!null vector_index_put_partition1:11 vector_index_put_centroid1:12 vector_index_put_partition2:13 vector_index_put_centroid2:14
+      ├── query vector column: w_cast:10
+      ├── partition col: vector_index_put_partition2:13
+      ├── centroid col: vector_index_put_centroid2:14
+      └── vector-partition-search t@t_v_idx,vector
+           ├── columns: column1:6!null v_cast:9!null w_cast:10!null vector_index_put_partition1:11 vector_index_put_centroid1:12
+           ├── query vector column: v_cast:9
+           ├── partition col: vector_index_put_partition1:11
+           ├── centroid col: vector_index_put_centroid1:12
+           └── project
+                ├── columns: v_cast:9!null w_cast:10!null column1:6!null
+                ├── values
+                │    ├── columns: column1:6!null column2:7!null column3:8!null
+                │    ├── (1, '[1,2,3]', '[10,20]')
+                │    └── (2, '[4,5,6]', '[30,40]')
+                └── projections
+                     ├── assignment-cast: VECTOR(3) [as=v_cast:9]
+                     │    └── column2:7
+                     └── assignment-cast: VECTOR(2) [as=w_cast:10]
+                          └── column3:8
+
+build
+UPDATE t SET v = '[4,5,6]', w = '[20, 40]' WHERE x = 1;
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: x:6 v:7 w:8
+ ├── update-mapping:
+ │    ├── v_cast:13 => v:2
+ │    └── w_cast:14 => w:3
+ ├── vector index del partition columns: vector_index_del_partition1:15 vector_index_del_partition2:18
+ ├── vector index put partition columns: vector_index_put_partition1:16 vector_index_put_partition2:19
+ ├── vector index put centroid columns: vector_index_put_centroid1:17 vector_index_put_centroid2:20
+ └── vector-partition-search t@t_w_idx,vector
+      ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:13!null w_cast:14!null vector_index_del_partition1:15 vector_index_put_partition1:16 vector_index_put_centroid1:17 vector_index_del_partition2:18 vector_index_put_partition2:19 vector_index_put_centroid2:20
+      ├── query vector column: w_cast:14
+      ├── partition col: vector_index_put_partition2:19
+      ├── centroid col: vector_index_put_centroid2:20
+      └── vector-partition-search t@t_w_idx,vector
+           ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:13!null w_cast:14!null vector_index_del_partition1:15 vector_index_put_partition1:16 vector_index_put_centroid1:17 vector_index_del_partition2:18
+           ├── query vector column: w:8
+           ├── primary key columns: (6)
+           ├── partition col: vector_index_del_partition2:18
+           └── vector-partition-search t@t_v_idx,vector
+                ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:13!null w_cast:14!null vector_index_del_partition1:15 vector_index_put_partition1:16 vector_index_put_centroid1:17
+                ├── query vector column: v_cast:13
+                ├── partition col: vector_index_put_partition1:16
+                ├── centroid col: vector_index_put_centroid1:17
+                └── vector-partition-search t@t_v_idx,vector
+                     ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:13!null w_cast:14!null vector_index_del_partition1:15
+                     ├── query vector column: v:7
+                     ├── primary key columns: (6)
+                     ├── partition col: vector_index_del_partition1:15
+                     └── project
+                          ├── columns: v_cast:13!null w_cast:14!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                          ├── project
+                          │    ├── columns: v_new:11!null w_new:12!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                          │    ├── select
+                          │    │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                          │    │    ├── scan t
+                          │    │    │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                          │    │    │    └── flags: avoid-full-scan
+                          │    │    └── filters
+                          │    │         └── x:6 = 1
+                          │    └── projections
+                          │         ├── '[4,5,6]' [as=v_new:11]
+                          │         └── '[20,40]' [as=w_new:12]
+                          └── projections
+                               ├── assignment-cast: VECTOR(3) [as=v_cast:13]
+                               │    └── v_new:11
+                               └── assignment-cast: VECTOR(2) [as=w_cast:14]
+                                    └── w_new:12
+
+build
+DELETE FROM t WHERE x = 1;
+----
+delete t
+ ├── columns: <none>
+ ├── fetch columns: x:6 v:7 w:8
+ ├── vector index del partition columns: vector_index_del_partition1:11 vector_index_del_partition2:12
+ └── vector-partition-search t@t_w_idx,vector
+      ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 vector_index_del_partition1:11 vector_index_del_partition2:12
+      ├── query vector column: w:8
+      ├── primary key columns: (6)
+      ├── partition col: vector_index_del_partition2:12
+      └── vector-partition-search t@t_v_idx,vector
+           ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 vector_index_del_partition1:11
+           ├── query vector column: v:7
+           ├── primary key columns: (6)
+           ├── partition col: vector_index_del_partition1:11
+           └── select
+                ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                ├── scan t
+                │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │    └── flags: avoid-full-scan
+                └── filters
+                     └── x:6 = 1
+
+build
+UPSERT INTO t VALUES (1, '[1,2,3]', '[10, 20]'), (2, '[4,5,6]', '[30, 40]');;
+----
+upsert t
+ ├── arbiter indexes: t_pkey
+ ├── columns: <none>
+ ├── canary column: x:11
+ ├── fetch columns: x:11 v:12 w:13
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── v_cast:9 => v:2
+ │    └── w_cast:10 => w:3
+ ├── update-mapping:
+ │    ├── v_cast:9 => v:2
+ │    └── w_cast:10 => w:3
+ ├── vector index del partition columns: vector_index_del_partition1:17 vector_index_del_partition2:20
+ ├── vector index put partition columns: vector_index_put_partition1:18 vector_index_put_partition2:21
+ ├── vector index put centroid columns: vector_index_put_centroid1:19 vector_index_put_centroid2:22
+ └── vector-partition-search t@t_w_idx,vector
+      ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_x:16 vector_index_del_partition1:17 vector_index_put_partition1:18 vector_index_put_centroid1:19 vector_index_del_partition2:20 vector_index_put_partition2:21 vector_index_put_centroid2:22
+      ├── query vector column: w_cast:10
+      ├── partition col: vector_index_put_partition2:21
+      ├── centroid col: vector_index_put_centroid2:22
+      └── vector-partition-search t@t_w_idx,vector
+           ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_x:16 vector_index_del_partition1:17 vector_index_put_partition1:18 vector_index_put_centroid1:19 vector_index_del_partition2:20
+           ├── query vector column: w:13
+           ├── primary key columns: (11)
+           ├── partition col: vector_index_del_partition2:20
+           └── vector-partition-search t@t_v_idx,vector
+                ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_x:16 vector_index_del_partition1:17 vector_index_put_partition1:18 vector_index_put_centroid1:19
+                ├── query vector column: v_cast:9
+                ├── partition col: vector_index_put_partition1:18
+                ├── centroid col: vector_index_put_centroid1:19
+                └── vector-partition-search t@t_v_idx,vector
+                     ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_x:16 vector_index_del_partition1:17
+                     ├── query vector column: v:12
+                     ├── primary key columns: (11)
+                     ├── partition col: vector_index_del_partition1:17
+                     └── project
+                          ├── columns: upsert_x:16 column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+                          ├── left-join (hash)
+                          │    ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+                          │    ├── ensure-upsert-distinct-on
+                          │    │    ├── columns: column1:6!null v_cast:9!null w_cast:10!null
+                          │    │    ├── grouping columns: column1:6!null
+                          │    │    ├── project
+                          │    │    │    ├── columns: v_cast:9!null w_cast:10!null column1:6!null
+                          │    │    │    ├── values
+                          │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+                          │    │    │    │    ├── (1, '[1,2,3]', '[10,20]')
+                          │    │    │    │    └── (2, '[4,5,6]', '[30,40]')
+                          │    │    │    └── projections
+                          │    │    │         ├── assignment-cast: VECTOR(3) [as=v_cast:9]
+                          │    │    │         │    └── column2:7
+                          │    │    │         └── assignment-cast: VECTOR(2) [as=w_cast:10]
+                          │    │    │              └── column3:8
+                          │    │    └── aggregations
+                          │    │         ├── first-agg [as=v_cast:9]
+                          │    │         │    └── v_cast:9
+                          │    │         └── first-agg [as=w_cast:10]
+                          │    │              └── w_cast:10
+                          │    ├── scan t
+                          │    │    ├── columns: x:11!null v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+                          │    │    └── flags: avoid-full-scan disabled not visible index feature
+                          │    └── filters
+                          │         └── column1:6 = x:11
+                          └── projections
+                               └── CASE WHEN x:11 IS NULL THEN column1:6 ELSE x:11 END [as=upsert_x:16]
+
+build
+INSERT INTO t VALUES (1, '[1,2,3]', '[10, 20]'), (2, '[4,5,6]', '[30, 40]')
+ON CONFLICT (x) DO UPDATE SET v = '[-4,-5,-6]', w = '[-40, -30]';
+----
+upsert t
+ ├── arbiter indexes: t_pkey
+ ├── columns: <none>
+ ├── canary column: x:11
+ ├── fetch columns: x:11 v:12 w:13
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── v_cast:9 => v:2
+ │    └── w_cast:10 => w:3
+ ├── update-mapping:
+ │    ├── upsert_v:21 => v:2
+ │    └── upsert_w:22 => w:3
+ ├── vector index del partition columns: vector_index_del_partition1:23 vector_index_del_partition2:26
+ ├── vector index put partition columns: vector_index_put_partition1:24 vector_index_put_partition2:27
+ ├── vector index put centroid columns: vector_index_put_centroid1:25 vector_index_put_centroid2:28
+ └── vector-partition-search t@t_w_idx,vector
+      ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null upsert_x:20 upsert_v:21!null upsert_w:22!null vector_index_del_partition1:23 vector_index_put_partition1:24 vector_index_put_centroid1:25 vector_index_del_partition2:26 vector_index_put_partition2:27 vector_index_put_centroid2:28
+      ├── query vector column: upsert_w:22
+      ├── partition col: vector_index_put_partition2:27
+      ├── centroid col: vector_index_put_centroid2:28
+      └── vector-partition-search t@t_w_idx,vector
+           ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null upsert_x:20 upsert_v:21!null upsert_w:22!null vector_index_del_partition1:23 vector_index_put_partition1:24 vector_index_put_centroid1:25 vector_index_del_partition2:26
+           ├── query vector column: w:13
+           ├── primary key columns: (11)
+           ├── partition col: vector_index_del_partition2:26
+           └── vector-partition-search t@t_v_idx,vector
+                ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null upsert_x:20 upsert_v:21!null upsert_w:22!null vector_index_del_partition1:23 vector_index_put_partition1:24 vector_index_put_centroid1:25
+                ├── query vector column: upsert_v:21
+                ├── partition col: vector_index_put_partition1:24
+                ├── centroid col: vector_index_put_centroid1:25
+                └── vector-partition-search t@t_v_idx,vector
+                     ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null upsert_x:20 upsert_v:21!null upsert_w:22!null vector_index_del_partition1:23
+                     ├── query vector column: v:12
+                     ├── primary key columns: (11)
+                     ├── partition col: vector_index_del_partition1:23
+                     └── project
+                          ├── columns: upsert_x:20 upsert_v:21!null upsert_w:22!null column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null
+                          ├── project
+                          │    ├── columns: v_cast:18!null w_cast:19!null column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+                          │    ├── project
+                          │    │    ├── columns: v_new:16!null w_new:17!null column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+                          │    │    ├── left-join (hash)
+                          │    │    │    ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+                          │    │    │    ├── ensure-upsert-distinct-on
+                          │    │    │    │    ├── columns: column1:6!null v_cast:9!null w_cast:10!null
+                          │    │    │    │    ├── grouping columns: column1:6!null
+                          │    │    │    │    ├── project
+                          │    │    │    │    │    ├── columns: v_cast:9!null w_cast:10!null column1:6!null
+                          │    │    │    │    │    ├── values
+                          │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+                          │    │    │    │    │    │    ├── (1, '[1,2,3]', '[10,20]')
+                          │    │    │    │    │    │    └── (2, '[4,5,6]', '[30,40]')
+                          │    │    │    │    │    └── projections
+                          │    │    │    │    │         ├── assignment-cast: VECTOR(3) [as=v_cast:9]
+                          │    │    │    │    │         │    └── column2:7
+                          │    │    │    │    │         └── assignment-cast: VECTOR(2) [as=w_cast:10]
+                          │    │    │    │    │              └── column3:8
+                          │    │    │    │    └── aggregations
+                          │    │    │    │         ├── first-agg [as=v_cast:9]
+                          │    │    │    │         │    └── v_cast:9
+                          │    │    │    │         └── first-agg [as=w_cast:10]
+                          │    │    │    │              └── w_cast:10
+                          │    │    │    ├── scan t
+                          │    │    │    │    ├── columns: x:11!null v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+                          │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                          │    │    │    └── filters
+                          │    │    │         └── column1:6 = x:11
+                          │    │    └── projections
+                          │    │         ├── '[-4,-5,-6]' [as=v_new:16]
+                          │    │         └── '[-40,-30]' [as=w_new:17]
+                          │    └── projections
+                          │         ├── assignment-cast: VECTOR(3) [as=v_cast:18]
+                          │         │    └── v_new:16
+                          │         └── assignment-cast: VECTOR(2) [as=w_cast:19]
+                          │              └── w_new:17
+                          └── projections
+                               ├── CASE WHEN x:11 IS NULL THEN column1:6 ELSE x:11 END [as=upsert_x:20]
+                               ├── CASE WHEN x:11 IS NULL THEN v_cast:9 ELSE v_cast:18 END [as=upsert_v:21]
+                               └── CASE WHEN x:11 IS NULL THEN w_cast:10 ELSE w_cast:19 END [as=upsert_w:22]
+
+# If the indexed column is not modified, no VectorPartitionSearch is needed for
+# that index.
+build
+UPDATE t SET x = 3, v = '[1,2,3]' WHERE x = 3;
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: x:6 v:7 w:8
+ ├── update-mapping:
+ │    ├── x_new:11 => x:1
+ │    └── v_cast:13 => v:2
+ ├── vector index del partition columns: vector_index_del_partition1:14
+ ├── vector index put partition columns: vector_index_put_partition1:15
+ ├── vector index put centroid columns: vector_index_put_centroid1:16
+ └── vector-partition-search t@t_v_idx,vector
+      ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 x_new:11!null v_cast:13!null vector_index_del_partition1:14 vector_index_put_partition1:15 vector_index_put_centroid1:16
+      ├── query vector column: v_cast:13
+      ├── partition col: vector_index_put_partition1:15
+      ├── centroid col: vector_index_put_centroid1:16
+      └── vector-partition-search t@t_v_idx,vector
+           ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 x_new:11!null v_cast:13!null vector_index_del_partition1:14
+           ├── query vector column: v:7
+           ├── primary key columns: (6)
+           ├── partition col: vector_index_del_partition1:14
+           └── project
+                ├── columns: v_cast:13!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 x_new:11!null
+                ├── project
+                │    ├── columns: x_new:11!null v_new:12!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │    ├── select
+                │    │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │    │    ├── scan t
+                │    │    │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │    │    │    └── flags: avoid-full-scan
+                │    │    └── filters
+                │    │         └── x:6 = 3
+                │    └── projections
+                │         ├── 3 [as=x_new:11]
+                │         └── '[1,2,3]' [as=v_new:12]
+                └── projections
+                     └── assignment-cast: VECTOR(3) [as=v_cast:13]
+                          └── v_new:12
+
+build
+UPDATE t SET x = 3 WHERE x = 3;
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: x:6 v:7 w:8
+ ├── update-mapping:
+ │    └── x_new:11 => x:1
+ └── project
+      ├── columns: x_new:11!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan t
+      │    │    ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── x:6 = 3
+      └── projections
+           └── 3 [as=x_new:11]
