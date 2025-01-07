@@ -52,6 +52,7 @@ go_library(
         "decimal.go",
         "delete.go",
         "discard.go",
+        "do.go",
         "drop.go",
         "drop_owned_by.go",
         "drop_policy.go",
