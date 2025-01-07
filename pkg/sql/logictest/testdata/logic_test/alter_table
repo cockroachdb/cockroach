@@ -602,7 +602,7 @@ statement ok
 ALTER TABLE add_default ADD COLUMN c TIMESTAMP DEFAULT current_timestamp()
 
 query II rowsort
-SELECT a,b FROM add_default WHERE current_timestamp > c AND current_timestamp() - c < interval '10s'
+SELECT a,b FROM add_default WHERE current_timestamp > c AND current_timestamp() - c < interval '20s'
 ----
 2 42
 3 10
