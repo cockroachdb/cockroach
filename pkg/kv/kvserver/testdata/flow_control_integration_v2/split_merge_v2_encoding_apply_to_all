@@ -1,6 +1,11 @@
 echo
 ----
 ----
+SELECT crdb_internal.set_vmodule('replica_raft=1,kvflowcontroller=2,replica_proposal_buf=1,raft_transport=2,kvflowdispatch=1,kvadmission=1,kvflowhandle=1,work_queue=1,replica_flow_control=1,tracker=1,client_raft_helpers_test=1,raft=1,admission=1,replica_flow_control=1,work_queue=1,replica_raft=1,replica_proposal_buf=1,raft_transport=2,kvadmission=1,work_queue=1,replica_flow_control=1,client_raft_helpers_test=1,range_controller=3,token_counter=2,token_tracker=2,processor=2,kvflowhandle=1');
+
+  0  
+
+
 -- Flow token metrics from n1 after issuing + admitting the 1MiB 3x
 -- replicated write to the pre-split range. There should be 3MiB of
 -- {regular,elastic} tokens {deducted,returned}.

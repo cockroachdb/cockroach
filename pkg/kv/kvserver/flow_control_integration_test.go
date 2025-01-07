@@ -2343,6 +2343,9 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 			h.init(mode)
 			defer h.close(makeV2EnabledTestFileName(v2EnabledWhenLeaderLevel, mode, "split_merge"))
 
+			// DNM: set the vmodule to max verbosity.
+			h.query(n1, `SELECT crdb_internal.set_vmodule('replica_raft=1,kvflowcontroller=2,replica_proposal_buf=1,raft_transport=2,kvflowdispatch=1,kvadmission=1,kvflowhandle=1,work_queue=1,replica_flow_control=1,tracker=1,client_raft_helpers_test=1,raft=1,admission=1,replica_flow_control=1,work_queue=1,replica_raft=1,replica_proposal_buf=1,raft_transport=2,kvadmission=1,work_queue=1,replica_flow_control=1,client_raft_helpers_test=1,range_controller=3,token_counter=2,token_tracker=2,processor=2,kvflowhandle=1');`)
+
 			desc, err := tc.LookupRange(k)
 			require.NoError(t, err)
 
