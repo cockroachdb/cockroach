@@ -4044,19 +4044,35 @@ func scrubStmtStatKey(vt VirtualTabler, key string, ns eval.ClientNoticeSender) 
 	return f.CloseAndGetString(), true
 }
 
+var redactNamesInSQLStatementLog = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.log.redact_names.enabled",
+	"if set, schema object identifers are redacted in SQL statements that appear in event logs",
+	false,
+	settings.WithPublic,
+)
+
+// FormatAstAsRedactableString implements scbuild.AstFormatter
+func (p *planner) FormatAstAsRedactableString(
+	statement tree.Statement, annotations *tree.Annotations,
+) redact.RedactableString {
+	fs := tree.FmtSimple | tree.FmtAlwaysQualifyTableNames | tree.FmtMarkRedactionNode
+	if !redactNamesInSQLStatementLog.Get(&p.extendedEvalCtx.Settings.SV) {
+		fs = fs | tree.FmtOmitNameRedaction
+	}
+	return formatStmtKeyAsRedactableString(statement, annotations, fs)
+}
+
 // formatStmtKeyAsRedactableString given an AST node this function will fully
 // qualify names using annotations to format it out into a redactable string.
+// Object names are not redacted, but constants and datums are.
 func formatStmtKeyAsRedactableString(
-	vt VirtualTabler,
-	rootAST tree.Statement,
-	ann *tree.Annotations,
-	fs tree.FmtFlags,
-	ns eval.ClientNoticeSender,
+	rootAST tree.Statement, ann *tree.Annotations, fs tree.FmtFlags,
 ) redact.RedactableString {
 	f := tree.NewFmtCtx(
-		tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode|fs,
+		fs,
 		tree.FmtAnnotations(ann),
-		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, ns)))
+	)
 	f.FormatNode(rootAST)
 	formattedRedactableStatementString := f.CloseAndGetString()
 	return redact.RedactableString(formattedRedactableStatementString)

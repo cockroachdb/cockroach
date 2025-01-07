@@ -355,7 +355,7 @@ func TestReducedAuditConfig(t *testing.T) {
 
 	// Run a query on the new connection. The new connection will cause the reduced audit config to be re-computed.
 	// The user now has a corresponding audit setting. We use a new query here to differentiate.
-	testRunner2.Exec(t, `GRANT SELECT ON TABLE u TO root`)
+	testRunner2.Exec(t, `ALTER TABLE u ADD COLUMN y STRING DEFAULT 'foo'`)
 
 	log.FlushFiles()
 
@@ -363,14 +363,12 @@ func TestReducedAuditConfig(t *testing.T) {
 		0,
 		math.MaxInt64,
 		10000,
-		regexp.MustCompile(`GRANT SELECT ON TABLE ‹u› TO root`),
+		regexp.MustCompile(`ALTER TABLE u ADD COLUMN y STRING DEFAULT ‹'foo'›`),
 		log.WithMarkedSensitiveData,
 	)
-
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if len(entries) != 1 {
 		t.Fatal(errors.Newf("unexpected number of entries; expected: %d found: %d", 1, len(entries)))
 	}
