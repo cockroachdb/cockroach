@@ -747,6 +747,9 @@ func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
 func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
   return u.val.(*tree.ShowBackupOptions)
 }
+func (u *sqlSymUnion) checkExternalConnectionOptions() *tree.CheckExternalConnectionOptions {
+  return u.val.(*tree.CheckExternalConnectionOptions)
+}
 func (u *sqlSymUnion) restoreOptions() *tree.RestoreOptions {
   return u.val.(*tree.RestoreOptions)
 }
@@ -1263,13 +1266,17 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %type <tree.Statement> create_trigger_stmt
 %type <tree.Statement> create_policy_stmt
 
-%type <tree.LogicalReplicationResources> logical_replication_resources, logical_replication_resources_list
+%type <tree.Statement> check_stmt
+%type <tree.Statement> check_external_connection_stmt
+
+%type <tree.LogicalReplicationResources> logical_replication_resources logical_replication_resources_list
 %type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list opt_logical_replication_create_table_options logical_replication_create_table_options logical_replication_create_table_options_list
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
 %type <*tree.CreateStatsOptions> create_stats_option_list
 %type <*tree.CreateStatsOptions> create_stats_option
+%type <*tree.CheckExternalConnectionOptions> opt_with_check_external_connection_options_list check_external_connection_options_list check_external_connection_options
 
 %type <tree.Statement> create_type_stmt
 %type <tree.Statement> delete_stmt
@@ -3811,6 +3818,64 @@ create_external_connection_stmt:
 	}
  | CREATE EXTERNAL CONNECTION error // SHOW HELP: CREATE EXTERNAL CONNECTION
 
+// %Help: CHECK EXTERNAL CONNECTION - check the status of an external connection
+// %Category: Misc
+// %Text:
+// CREATE EXTERNAL CONNECTION <uri> [WITH <options>]
+//
+// Uri:
+//   Uri for the external connection.
+check_external_connection_stmt:
+	CHECK EXTERNAL CONNECTION string_or_placeholder opt_with_check_external_connection_options_list
+	{
+	$$.val = &tree.CheckExternalConnection{
+		URI: $4.expr(),
+		Options: *($5.checkExternalConnectionOptions()),
+	}
+	}
+ | CHECK EXTERNAL CONNECTION error // SHOW HELP: CHECK EXTERNAL CONNECTION
+
+opt_with_check_external_connection_options_list:
+  WITH check_external_connection_options_list
+  {
+    $$.val = $2.checkExternalConnectionOptions()
+  }
+| WITH OPTIONS '(' check_external_connection_options_list ')'
+  {
+    $$.val = $4.checkExternalConnectionOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.CheckExternalConnectionOptions{}
+  }
+
+check_external_connection_options_list:
+  // Require at least one option
+  check_external_connection_options
+  {
+    $$.val = $1.checkExternalConnectionOptions()
+  }
+| check_external_connection_options_list ',' check_external_connection_options
+  {
+    if err := $1.checkExternalConnectionOptions().CombineWith($3.checkExternalConnectionOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+check_external_connection_options:
+  TRANSFER '=' string_or_placeholder
+ {
+  $$.val = &tree.CheckExternalConnectionOptions{TransferSize: $3.expr()}
+ }
+ | TIME '=' string_or_placeholder
+ {
+  $$.val = &tree.CheckExternalConnectionOptions{Duration: $3.expr()}
+ }
+ | CONCURRENTLY '=' a_expr
+ {
+  $$.val = &tree.CheckExternalConnectionOptions{Concurrency: $3.expr()}
+ }
+
 // %Help: DROP EXTERNAL CONNECTION - drop an existing external connection
 // %Category: Misc
 // %Text:
@@ -3821,9 +3886,9 @@ create_external_connection_stmt:
 drop_external_connection_stmt:
 	DROP EXTERNAL CONNECTION string_or_placeholder
 	{
-      $$.val = &tree.DropExternalConnection{
-            ConnectionLabel: $4.expr(),
-      }
+	$$.val = &tree.DropExternalConnection{
+	    ConnectionLabel: $4.expr(),
+	}
 	}
 	| DROP EXTERNAL CONNECTION error // SHOW HELP: DROP EXTERNAL CONNECTION
 
@@ -4641,6 +4706,14 @@ create_stmt:
 | create_schedule_stmt   // help texts in sub-rule
 | create_unsupported     {}
 | CREATE error           // SHOW HELP: CREATE
+
+// %Help: CHECK
+// %Category: Group
+// %Text:
+// CHECK EXTERNAL CONNECTION
+check_stmt:
+  check_external_connection_stmt // EXTEND WITH HELP: CHECK EXTERNAL CONNECTION
+| CHECK ERROR // SHOW HELP: CHECK
 
 // %Help: CREATE LOGICAL REPLICATION STREAM - create a new logical replication stream
 // %Category: Experimental
@@ -6695,6 +6768,7 @@ preparable_stmt:
 | backup_stmt    // EXTEND WITH HELP: BACKUP
 | cancel_stmt    // help texts in sub-rule
 | create_stmt    // help texts in sub-rule
+| check_stmt	 // help texts in sub-rule
 | delete_stmt    // EXTEND WITH HELP: DELETE
 | drop_stmt      // help texts in sub-rule
 | explain_stmt   // EXTEND WITH HELP: EXPLAIN

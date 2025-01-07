@@ -94,6 +94,8 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:cancel_session.bnf",
     "//docs/generated/sql/bnf:cancel_stmt.bnf",
     "//docs/generated/sql/bnf:check_column_level.bnf",
+    "//docs/generated/sql/bnf:check_external_connection_stmt.bnf",
+    "//docs/generated/sql/bnf:check_stmt.bnf",
     "//docs/generated/sql/bnf:check_table_level.bnf",
     "//docs/generated/sql/bnf:close_cursor_stmt.bnf",
     "//docs/generated/sql/bnf:col_qualification.bnf",
