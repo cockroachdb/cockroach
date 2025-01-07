@@ -1616,6 +1616,13 @@ func TestReadCommittedLogic_routine_schema_change(
 	runLogicTest(t, "routine_schema_change")
 }
 
+func TestReadCommittedLogic_row_level_security(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "row_level_security")
+}
+
 func TestReadCommittedLogic_row_level_ttl(
 	t *testing.T,
 ) {

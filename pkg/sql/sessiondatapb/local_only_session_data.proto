@@ -101,9 +101,6 @@ message LocalOnlySessionData {
   // DisallowFullTableScans indicates whether queries that plan full table scans
   // should be rejected.
   bool disallow_full_table_scans = 26;
-  // AvoidFullTableScansInMutations indicates whether mutation queries that plan
-  // full table scans should be avoided.
-  bool avoid_full_table_scans_in_mutations = 151;
   // ImplicitSelectForUpdate is true if FOR UPDATE locking may be used during
   // the row-fetch phase of mutation statements.
   bool implicit_select_for_update = 27;
@@ -589,6 +586,11 @@ message LocalOnlySessionData {
   // mix-typed comparisons with VARCHAR types. See #137837, #133037, and
   // #132268.
   bool legacy_varchar_typing = 150;
+  // AvoidFullTableScansInMutations indicates whether mutation queries that plan
+  // full table scans should be avoided.
+  bool avoid_full_table_scans_in_mutations = 151;
+  // RowLevelSecurityEnabled indicates whether row level security is enabled
+  bool row_level_security_enabled = 152;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
