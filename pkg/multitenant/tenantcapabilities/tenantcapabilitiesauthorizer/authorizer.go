@@ -121,11 +121,12 @@ func (a *Authorizer) HasCapabilityForBatch(
 	}
 
 	entry, mode := a.getMode(ctx, tenID)
+	if entry.ServiceMode == mtinfopb.ServiceModeNone || entry.ServiceMode == mtinfopb.ServiceModeStopping {
+		return errors.Newf("operation not allowed when in service mode %q", entry.ServiceMode)
+	}
+
 	switch mode {
 	case authorizerModeOn:
-		if entry.ServiceMode == mtinfopb.ServiceModeNone || entry.ServiceMode == mtinfopb.ServiceModeStopping {
-			return errors.Newf("operation not allowed when in service mode %q", entry.ServiceMode)
-		}
 		return a.capCheckForBatch(ctx, tenID, ba, entry)
 	case authorizerModeAllowAll:
 		return nil
@@ -404,38 +405,34 @@ func (a *Authorizer) getMode(
 	// We prioritize what the cluster setting tells us.
 	selectedMode = authorizerMode.Get(&a.settings.SV)
 
-	// If the mode is "on", we need to check the capabilities. Are they
-	// available?
-	if selectedMode == authorizerModeOn {
-		a.Lock()
-		reader := a.capabilitiesReader
-		a.Unlock()
-		if reader == nil {
-			// The server has started but the reader hasn't started/bound
-			// yet. Block requests that would need specific capabilities.
-			if a.logEvery.ShouldLog() {
-				log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid)
-			}
+	a.Lock()
+	reader := a.capabilitiesReader
+	a.Unlock()
+	if reader == nil {
+		// The server has started but the reader hasn't started/bound
+		// yet. Block requests that would need specific capabilities.
+		if a.logEvery.ShouldLog() {
+			log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid)
+		}
+		selectedMode = authorizerModeV222
+	} else {
+		// We have a reader. Did we get data from the rangefeed yet?
+		var found bool
+		entry, _, found = reader.GetInfo(tid)
+		if !found {
+			// No data from the rangefeed yet. Assume caps are still
+			// unavailable.
+			log.VInfof(ctx, 2,
+				"no capability information for tenant %s; requests that require capabilities may be denied",
+				tid)
 			selectedMode = authorizerModeV222
-		} else {
-			// We have a reader. Did we get data from the rangefeed yet?
-			var found bool
-			entry, _, found = reader.GetInfo(tid)
-			if !found {
-				// No data from the rangefeed yet. Assume caps are still
-				// unavailable.
-				log.VInfof(ctx, 2,
-					"no capability information for tenant %s; requests that require capabilities may be denied",
-					tid)
-				selectedMode = authorizerModeV222
-			}
-			// Shared service tenants in UA implicitly have all capabilities. If/when
-			// we offer shared service for truly _multi-tenant_ deployments and wish to
-			// restrict some of those tenants, we can add another service mode that is
-			// similar to shared but adds restriction to only granted capabilities.
-			if entry.ServiceMode == mtinfopb.ServiceModeShared {
-				selectedMode = authorizerModeAllowAll
-			}
+		}
+		// Shared service tenants in UA implicitly have all capabilities. If/when
+		// we offer shared service for truly _multi-tenant_ deployments and wish to
+		// restrict some of those tenants, we can add another service mode that is
+		// similar to shared but adds restriction to only granted capabilities.
+		if entry.ServiceMode == mtinfopb.ServiceModeShared {
+			selectedMode = authorizerModeAllowAll
 		}
 	}
 	return entry, selectedMode
