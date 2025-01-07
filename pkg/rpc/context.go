@@ -49,13 +49,17 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"storj.io/drpc/drpcmanager"
+	"storj.io/drpc/drpcmux"
+	"storj.io/drpc/drpcserver"
+	"storj.io/drpc/drpcwire"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
 func NewServer(ctx context.Context, rpcCtx *Context, opts ...ServerOption) (*grpc.Server, error) {
-	srv, _ /* interceptors */, err := NewServerEx(ctx, rpcCtx, opts...)
+	srv, _, _, err := NewServerEx(ctx, rpcCtx, opts...)
 	return srv, err
 }
 
@@ -77,13 +81,19 @@ type ClientInterceptorInfo struct {
 	StreamInterceptors []grpc.StreamClientInterceptor
 }
 
+type DrpcServer struct {
+	Srv    *drpcserver.Server
+	Mux    *drpcmux.Mux
+	TLSCfg *tls.Config
+}
+
 // NewServerEx is like NewServer, but also returns the interceptors that have
 // been registered with gRPC for the server. These interceptors can be used
 // manually when bypassing gRPC to call into the server (like the
 // internalClientAdapter does).
 func NewServerEx(
 	ctx context.Context, rpcCtx *Context, opts ...ServerOption,
-) (s *grpc.Server, sii ServerInterceptorInfo, err error) {
+) (s *grpc.Server, d *DrpcServer, sii ServerInterceptorInfo, err error) {
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -112,7 +122,7 @@ func NewServerEx(
 	if !rpcCtx.ContextOptions.Insecure {
 		tlsConfig, err := rpcCtx.GetServerTLSConfig()
 		if err != nil {
-			return nil, sii, err
+			return nil, nil, sii, err
 		}
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
@@ -184,10 +194,52 @@ func NewServerEx(
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
 	s = grpc.NewServer(grpcOpts...)
+	d, err = newDRPCServer(ctx, rpcCtx)
+	if err != nil {
+		return nil, nil, ServerInterceptorInfo{}, err
+	}
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
-	return s, ServerInterceptorInfo{
+
+	return s, d, ServerInterceptorInfo{
 		UnaryInterceptors:  unaryInterceptor,
 		StreamInterceptors: streamInterceptor,
+	}, nil
+}
+
+func newDRPCServer(ctx context.Context, rpcCtx *Context) (*DrpcServer, error) {
+	dmux := drpcmux.New()
+	// NB: any server middleware (server interceptors in gRPC parlance) would go
+	// here:
+	//     dmux = whateverMiddleware1(dmux)
+	//     dmux = whateverMiddleware2(dmux)
+	//     ...
+	//
+	// Each middleware must implement the Handler interface:
+	//
+	//   HandleRPC(stream Stream, rpc string) error
+	//
+	// where Stream
+	// See here for an example:
+	// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
+
+	dsrv := drpcserver.NewWithOptions(dmux, drpcserver.Options{
+		Log: func(err error) {
+			log.Warningf(context.Background(), "drpc server error %v", err)
+		},
+		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
+		// as happens with AddSSTable) the RPCs fail.
+		Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
+	})
+
+	tlsCfg, err := rpcCtx.GetServerTLSConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return &DrpcServer{
+		Srv:    dsrv,
+		Mux:    dmux,
+		TLSCfg: tlsCfg,
 	}, nil
 }
 
