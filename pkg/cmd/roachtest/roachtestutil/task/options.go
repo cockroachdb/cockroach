@@ -15,10 +15,12 @@ type (
 	// Options is a struct that contains the options that can be passed when
 	// starting a task.
 	Options struct {
-		Name         string
-		L            LogSupplierFunc
-		PanicHandler PanicHandlerFunc
-		ErrorHandler ErrorHandlerFunc
+		Name             string
+		L                LogSupplierFunc
+		PanicHandler     PanicHandlerFunc
+		ErrorHandler     ErrorHandlerFunc
+		DisableReporting bool
+		Context          context.Context
 	}
 
 	// LogSupplierFunc is a function that supplies the task with a logger.
@@ -74,6 +76,22 @@ func PanicHandler(handler PanicHandlerFunc) Option {
 func ErrorHandler(handler ErrorHandlerFunc) Option {
 	return func(result *Options) {
 		result.ErrorHandler = handler
+	}
+}
+
+// DisableReporting is an option that disables reporting errors and panics to the
+// test framework.
+func DisableReporting() Option {
+	return func(result *Options) {
+		result.DisableReporting = true
+	}
+}
+
+// WithContext is an option that sets the context that will be used by the task.
+// It will override the context passed to the task manager.
+func WithContext(ctx context.Context) Option {
+	return func(result *Options) {
+		result.Context = ctx
 	}
 }
 

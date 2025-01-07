@@ -15,6 +15,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/util/ctxgroup",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
