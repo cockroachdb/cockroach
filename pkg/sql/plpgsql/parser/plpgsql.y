@@ -21,6 +21,11 @@ func setErr(plpgsqllex plpgsqlLexer, err error) int {
     return 1
 }
 
+func setErrNoDetails(plpgsqllex plpgsqlLexer, err error) int {
+    plpgsqllex.(*lexer).setErrNoDetails(err)
+    return 1
+}
+
 func unimplemented(plpgsqllex plpgsqlLexer, feature string) int {
     plpgsqllex.(*lexer).Unimplemented(feature)
     return 1
@@ -179,6 +184,14 @@ func (u *plpgsqlSymUnion) forLoopControl() plpgsqltree.ForLoopControl {
 		return u.val.(plpgsqltree.ForLoopControl)
 }
 
+func (u *plpgsqlSymUnion) doBlockOptions() tree.DoBlockOptions {
+    return u.val.(tree.DoBlockOptions)
+}
+
+func (u *plpgsqlSymUnion) doBlockOption() tree.DoBlockOption {
+    return u.val.(tree.DoBlockOption)
+}
+
 %}
 /*
  * Basic non-keyword token types.  These are hard-wired into the core lexer.
@@ -259,6 +272,7 @@ func (u *plpgsqlSymUnion) forLoopControl() plpgsqltree.ForLoopControl {
 %token <str>  INSERT
 %token <str>  INTO
 %token <str>  IS
+%token <str>  LANGUAGE
 %token <str>  LAST
 %token <str>  LOG
 %token <str>  LOOP
@@ -339,6 +353,9 @@ func (u *plpgsqlSymUnion) forLoopControl() plpgsqltree.ForLoopControl {
 
 %type <str> any_identifier opt_block_label opt_loop_label opt_label query_options
 %type <str> opt_error_level option_type
+
+%type <tree.DoBlockOptions> do_stmt_opt_list
+%type <tree.DoBlockOption> do_stmt_opt_item
 
 %type <[]plpgsqltree.Statement> proc_sect
 %type <[]plpgsqltree.ElseIf> stmt_elsifs
@@ -776,9 +793,40 @@ stmt_call: CALL expr_until_semi ';'
   }
 ;
 
-stmt_do: DO expr_until_semi ';'
+stmt_do:
+  DO do_stmt_opt_list ';'
   {
-    return unimplemented(plpgsqllex, "do")
+    doBlock, err := makeDoStmt($2.doBlockOptions())
+    if err != nil {
+      return setErrNoDetails(plpgsqllex, err)
+    }
+    $$.val = doBlock
+  }
+;
+
+do_stmt_opt_list:
+  do_stmt_opt_item
+  {
+    $$.val = tree.DoBlockOptions{$1.doBlockOption()}
+  }
+| do_stmt_opt_list do_stmt_opt_item
+  {
+    $$.val = append($1.doBlockOptions(), $2.doBlockOption())
+  }
+;
+
+do_stmt_opt_item:
+  SCONST
+  {
+    $$.val = tree.RoutineBodyStr($1)
+  }
+| LANGUAGE any_identifier
+  {
+    lang, err := tree.AsRoutineLanguage($2)
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$.val = lang
   }
 ;
 
@@ -1582,11 +1630,8 @@ opt_exitcond: ';'
   }
 ;
 
-/*
- * need to allow DATUM because scanner will have tried to resolve as variable
- */
 any_identifier:
-IDENT
+  IDENT
 | unreserved_keyword
 ;
 
@@ -1631,6 +1676,7 @@ unreserved_keyword:
 | INFO
 | INSERT
 | IS
+| LANGUAGE
 | LAST
 | LOG
 | MERGE
