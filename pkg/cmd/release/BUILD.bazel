@@ -12,7 +12,6 @@ go_library(
         "orchestration.go",
         "pick_sha.go",
         "sender.go",
-        "sentry.go",
         "set_cockroach_version.go",
         "templates.go",
         "update_brew.go",
