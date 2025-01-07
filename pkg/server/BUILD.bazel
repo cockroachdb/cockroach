@@ -368,6 +368,7 @@ go_library(
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@io_storj_drpc//drpcmigrate",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",
