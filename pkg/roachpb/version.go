@@ -112,11 +112,11 @@ func (v Version) IsFence() bool {
 
 // PrettyPrint returns the value in a format that makes it apparent whether or
 // not it is a fence version.
-func (v Version) PrettyPrint() string {
+func (v Version) PrettyPrint() redact.RedactableString {
 	if !v.IsFence() {
-		return v.String()
+		return redact.Sprintf("%v", v)
 	}
-	return fmt.Sprintf("%v(fence)", v)
+	return redact.Sprintf("%v(fence)", v)
 }
 
 // FenceVersion is the fence version -- the internal immediately prior -- for
