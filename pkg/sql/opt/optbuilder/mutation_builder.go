@@ -138,6 +138,22 @@ type mutationBuilder struct {
 	// the table.
 	partialIndexDelColIDs opt.OptionalColList
 
+	// vectorIndexDelPartitionColIDs lists the input column IDs storing the keys
+	// for the partitions that the deleted or updated rows should be removed from.
+	// The length is always equal to the number of vector indexes on the table.
+	vectorIndexDelPartitionColIDs opt.OptionalColList
+
+	// vectorIndexPutPartitionColIDs lists the input column IDs storing the keys
+	// for the partitions that the inserted or updated rows should be added to.
+	// The length is always equal to the number of vector indexes on the table.
+	vectorIndexPutPartitionColIDs opt.OptionalColList
+
+	// vectorIndexPutCentroidColIDs lists the input column IDs storing the
+	// centroids for the partitions that the inserted or updated rows should be
+	// added to. Note that centroids are not needed for deletions. The length is
+	// always equal to the number of vector indexes on the table.
+	vectorIndexPutCentroidColIDs opt.OptionalColList
+
 	// triggerColIDs is the set of column IDs used to project the OLD and NEW rows
 	// for row-level AFTER triggers, and possibly also contains the canary column.
 	// It is only populated if the mutation statement has row-level AFTER
@@ -240,19 +256,31 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 		alias:  alias,
 	}
 
-	n := tab.ColumnCount()
-	mb.targetColList = make(opt.ColList, 0, n)
+	tabCols := tab.ColumnCount()
+	mb.targetColList = make(opt.ColList, 0, tabCols)
 
 	// Allocate segmented array of column IDs.
 	numPartialIndexes := partialIndexCount(tab)
-	colIDs := make(opt.OptionalColList, n*4+tab.CheckCount()+2*numPartialIndexes)
-	mb.insertColIDs = colIDs[:n]
-	mb.fetchColIDs = colIDs[n : n*2]
-	mb.updateColIDs = colIDs[n*2 : n*3]
-	mb.upsertColIDs = colIDs[n*3 : n*4]
-	mb.checkColIDs = colIDs[n*4 : n*4+tab.CheckCount()]
-	mb.partialIndexPutColIDs = colIDs[n*4+tab.CheckCount() : n*4+tab.CheckCount()+numPartialIndexes]
-	mb.partialIndexDelColIDs = colIDs[n*4+tab.CheckCount()+numPartialIndexes:]
+	numVectorIndexes := vectorIndexCount(tab)
+	numChecks := tab.CheckCount()
+	colIDs := make(opt.OptionalColList, 4*tabCols+numChecks+2*numPartialIndexes+3*numVectorIndexes)
+
+	var start int
+	getSlice := func(n int) opt.OptionalColList {
+		slice := colIDs[start : start+n]
+		start += n
+		return slice
+	}
+	mb.insertColIDs = getSlice(tabCols)
+	mb.fetchColIDs = getSlice(tabCols)
+	mb.updateColIDs = getSlice(tabCols)
+	mb.upsertColIDs = getSlice(tabCols)
+	mb.checkColIDs = getSlice(numChecks)
+	mb.partialIndexPutColIDs = getSlice(numPartialIndexes)
+	mb.partialIndexDelColIDs = getSlice(numPartialIndexes)
+	mb.vectorIndexPutPartitionColIDs = getSlice(numVectorIndexes)
+	mb.vectorIndexPutCentroidColIDs = getSlice(numVectorIndexes)
+	mb.vectorIndexDelPartitionColIDs = getSlice(numVectorIndexes)
 
 	// Add the table and its columns (including mutation columns) to metadata.
 	mb.tabID = mb.md.AddTable(tab, &mb.alias)
@@ -950,7 +978,7 @@ func (mb *mutationBuilder) projectPartialIndexPutCols() {
 	mb.projectPartialIndexColsImpl(mb.outScope, nil /* delScope */)
 }
 
-// projectPartialIndexDelCols builds a Project that synthesizes boolean PUT
+// projectPartialIndexDelCols builds a Project that synthesizes boolean DEL
 // columns for each partial index defined on the target table. See
 // partialIndexDelColIDs for more info on these columns.
 func (mb *mutationBuilder) projectPartialIndexDelCols() {
@@ -1022,6 +1050,127 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 	}
 }
 
+// projectVectorIndexCols builds VectorPartitionSearch operators for the input
+// of a non-DELETE mutation. See projectVectorIndexColsImpl for details.
+func (mb *mutationBuilder) projectVectorIndexCols() {
+	mb.projectVectorIndexColsImpl(false /* delete */)
+}
+
+// projectVectorIndexCols builds VectorPartitionSearch operators for the input
+// of a DELETE mutation. See projectVectorIndexColsImpl for details.
+func (mb *mutationBuilder) projectVectorIndexColsForDelete() {
+	mb.projectVectorIndexColsImpl(true /* delete */)
+}
+
+// projectVectorIndexColsImpl builds VectorPartitionSearch operators that
+// project partitions to be the target of index insertions and deletions for
+// each vector index defined on the target table. This is needed because vector
+// indexes must perform a search to determine which partition a given vector
+// belongs to.
+//
+// See the vectorIndexPutPartitionColIDs, vectorIndexPutCentroidColIDs, and
+// vectorIndexDelPartitionColIDs fields for more information.
+func (mb *mutationBuilder) projectVectorIndexColsImpl(delete bool) {
+	if vectorIndexCount(mb.tab) > 0 {
+		var pkCols opt.ColSet
+		getPKCols := func() opt.ColSet {
+			if !pkCols.Empty() {
+				return pkCols
+			}
+			primaryIndex := mb.tab.Index(cat.PrimaryIndex)
+			for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
+				col := primaryIndex.Column(i)
+				pkCols.Add(mb.fetchColIDs[col.Ordinal()])
+			}
+			return pkCols
+		}
+		getPutCol := func(colOrd int) opt.ColumnID {
+			if mb.upsertColIDs[colOrd] != 0 {
+				// If set, the upsert column will have the new value for the column
+				// regardless of whether the row is inserted or updated.
+				return mb.upsertColIDs[colOrd]
+			}
+			if mb.insertColIDs[colOrd] != 0 {
+				// A new value is being inserted for the column.
+				return mb.insertColIDs[colOrd]
+			}
+			// Either the column is being updated, or it does not have a new value.
+			return mb.updateColIDs[colOrd]
+		}
+		getDelCol := func(colOrd int) opt.ColumnID {
+			if !delete && mb.updateColIDs[colOrd] == 0 {
+				// For INSERT, UPDATE, and UPSERT, old index entries are only deleted
+				// for rows where the vector column is being updated.
+				return 0
+			}
+			// If there is an old version of the vector column, delete its entry from
+			// the vector index.
+			return mb.fetchColIDs[colOrd]
+		}
+		addCol := func(name string, typ *types.T) opt.ColumnID {
+			colName := scopeColName("").WithMetadataName(name)
+			sc := mb.b.synthesizeColumn(mb.outScope, colName, typ, nil /* expr */, nil /* expr */)
+			return sc.id
+		}
+		idxOrd := 0
+		for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
+			index := mb.tab.Index(i)
+
+			// Skip non-vector indexes.
+			if !index.IsVector() {
+				continue
+			}
+			vectorColOrd := index.VectorColumn().Ordinal()
+			vectorColTyp := index.VectorColumn().DatumType()
+			if delCol := getDelCol(vectorColOrd); delCol != 0 {
+				partitionCol := addCol(fmt.Sprintf("vector_index_del_partition%d", idxOrd+1), types.Int)
+				outCols := mb.outScope.colSet()
+				outCols.Add(partitionCol)
+				mb.outScope.expr = mb.buildVectorPartitionSearch(
+					mb.outScope.expr, index, delCol, partitionCol, 0 /* centroidCol */, getPKCols(),
+				)
+				mb.vectorIndexDelPartitionColIDs[idxOrd] = partitionCol
+			}
+			if putCol := getPutCol(vectorColOrd); putCol != 0 {
+				partitionCol := addCol(fmt.Sprintf("vector_index_put_partition%d", idxOrd+1), types.Int)
+				centroidCol := addCol(fmt.Sprintf("vector_index_put_centroid%d", idxOrd+1), vectorColTyp)
+				outCols := mb.outScope.colSet()
+				outCols.Add(partitionCol)
+				outCols.Add(centroidCol)
+				mb.outScope.expr = mb.buildVectorPartitionSearch(
+					mb.outScope.expr, index, putCol, partitionCol, centroidCol, opt.ColSet{}, /* pkCols */
+				)
+				mb.vectorIndexPutPartitionColIDs[idxOrd] = partitionCol
+				mb.vectorIndexPutCentroidColIDs[idxOrd] = centroidCol
+			}
+			idxOrd++
+		}
+	}
+}
+
+// buildVectorPartitionSearch builds a VectorPartitionSearch operator that will
+// find the partition (and centroid, if requested) for vectors in the given
+// queryVectorCol.
+//
+// pkCols should only be set for an index del operation. It is used to locate
+// the partition for a specific row in the table.
+func (mb *mutationBuilder) buildVectorPartitionSearch(
+	input memo.RelExpr,
+	index cat.Index,
+	queryVectorCol, partitionCol, centroidCol opt.ColumnID,
+	pkCols opt.ColSet,
+) memo.RelExpr {
+	private := memo.VectorPartitionSearchPrivate{
+		Table:          mb.tabID,
+		Index:          index.Ordinal(),
+		QueryVectorCol: queryVectorCol,
+		PrimaryKeyCols: pkCols,
+		PartitionCol:   partitionCol,
+		CentroidCol:    centroidCol,
+	}
+	return mb.b.factory.ConstructVectorPartitionSearch(input, &private)
+}
+
 // computedColumnScope returns a new scope that can be used to build computed
 // column expressions. Columns will never be ambiguous because each column in
 // the returned scope maps to a single column in the target table.
@@ -1089,20 +1238,23 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	}
 
 	private := &memo.MutationPrivate{
-		Table:                      mb.tabID,
-		InsertCols:                 checkEmptyList(mb.insertColIDs),
-		FetchCols:                  checkEmptyList(mb.fetchColIDs),
-		UpdateCols:                 checkEmptyList(mb.updateColIDs),
-		CanaryCol:                  mb.canaryColID,
-		ArbiterIndexes:             mb.arbiters.IndexOrdinals(),
-		ArbiterConstraints:         mb.arbiters.UniqueConstraintOrdinals(),
-		CheckCols:                  checkEmptyList(mb.checkColIDs),
-		PartialIndexPutCols:        checkEmptyList(mb.partialIndexPutColIDs),
-		PartialIndexDelCols:        checkEmptyList(mb.partialIndexDelColIDs),
-		TriggerCols:                mb.triggerColIDs,
-		FKCascades:                 mb.cascades,
-		AfterTriggers:              mb.afterTriggers,
-		UniqueWithTombstoneIndexes: mb.uniqueWithTombstoneIndexes.Ordered(),
+		Table:                       mb.tabID,
+		InsertCols:                  checkEmptyList(mb.insertColIDs),
+		FetchCols:                   checkEmptyList(mb.fetchColIDs),
+		UpdateCols:                  checkEmptyList(mb.updateColIDs),
+		CanaryCol:                   mb.canaryColID,
+		ArbiterIndexes:              mb.arbiters.IndexOrdinals(),
+		ArbiterConstraints:          mb.arbiters.UniqueConstraintOrdinals(),
+		CheckCols:                   checkEmptyList(mb.checkColIDs),
+		PartialIndexPutCols:         checkEmptyList(mb.partialIndexPutColIDs),
+		PartialIndexDelCols:         checkEmptyList(mb.partialIndexDelColIDs),
+		VectorIndexPutPartitionCols: checkEmptyList(mb.vectorIndexPutPartitionColIDs),
+		VectorIndexPutCentroidCols:  checkEmptyList(mb.vectorIndexPutCentroidColIDs),
+		VectorIndexDelPartitionCols: checkEmptyList(mb.vectorIndexDelPartitionColIDs),
+		TriggerCols:                 mb.triggerColIDs,
+		FKCascades:                  mb.cascades,
+		AfterTriggers:               mb.afterTriggers,
+		UniqueWithTombstoneIndexes:  mb.uniqueWithTombstoneIndexes.Ordered(),
 	}
 
 	// If we didn't actually plan any checks, cascades, or triggers, don't buffer
@@ -1491,6 +1643,16 @@ func partialIndexCount(tab cat.Table) int {
 	count := 0
 	for i, n := 0, tab.DeletableIndexCount(); i < n; i++ {
 		if _, ok := tab.Index(i).Predicate(); ok {
+			count++
+		}
+	}
+	return count
+}
+
+func vectorIndexCount(tab cat.Table) int {
+	count := 0
+	for i, n := 0, tab.DeletableIndexCount(); i < n; i++ {
+		if tab.Index(i).IsVector() {
 			count++
 		}
 	}

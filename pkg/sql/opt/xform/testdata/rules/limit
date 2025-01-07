@@ -48,11 +48,16 @@ CREATE TABLE index_tab
     data1 INT NOT NULL,
     data2 INT NOT NULL,
     geom GEOMETRY,
+    vec1 VECTOR(3),
+    vec2 VECTOR(2),
+    vec3 VECTOR(3),
     INDEX a (id, data1, data2),
     INDEX b (val, data1, data2),
     INDEX c (region, data1, data2),
     INDEX d (latitude, longitude, data1, data2),
-    INVERTED INDEX geomIdx(geom)
+    INVERTED INDEX geomIdx(geom),
+    VECTOR INDEX (vec1),
+    VECTOR INDEX (vec2)
 )
 ----
 
@@ -1227,38 +1232,38 @@ limit
  ├── ordering: +6
  ├── union-all
  │    ├── columns: val:2!null data1:6!null
- │    ├── left columns: val:46 data1:50
- │    ├── right columns: val:35 data1:39
+ │    ├── left columns: val:58 data1:62
+ │    ├── right columns: val:44 data1:48
  │    ├── cardinality: [0 - 30]
  │    ├── ordering: +6
  │    ├── limit hint: 10.00
  │    ├── union-all
- │    │    ├── columns: val:46!null data1:50!null
- │    │    ├── left columns: val:13 data1:17
- │    │    ├── right columns: val:24 data1:28
+ │    │    ├── columns: val:58!null data1:62!null
+ │    │    ├── left columns: val:16 data1:20
+ │    │    ├── right columns: val:30 data1:34
  │    │    ├── cardinality: [0 - 20]
- │    │    ├── ordering: +50
+ │    │    ├── ordering: +62
  │    │    ├── limit hint: 10.00
  │    │    ├── scan index_tab@b
- │    │    │    ├── columns: val:13!null data1:17!null
- │    │    │    ├── constraint: /13/17/18/12: [/1 - /1]
+ │    │    │    ├── columns: val:16!null data1:20!null
+ │    │    │    ├── constraint: /16/20/21/15: [/1 - /1]
  │    │    │    ├── limit: 10
- │    │    │    ├── fd: ()-->(13)
- │    │    │    ├── ordering: +17 opt(13) [actual: +17]
+ │    │    │    ├── fd: ()-->(16)
+ │    │    │    ├── ordering: +20 opt(16) [actual: +20]
  │    │    │    └── limit hint: 10.00
  │    │    └── scan index_tab@b
- │    │         ├── columns: val:24!null data1:28!null
- │    │         ├── constraint: /24/28/29/23: [/2 - /2]
+ │    │         ├── columns: val:30!null data1:34!null
+ │    │         ├── constraint: /30/34/35/29: [/2 - /2]
  │    │         ├── limit: 10
- │    │         ├── fd: ()-->(24)
- │    │         ├── ordering: +28 opt(24) [actual: +28]
+ │    │         ├── fd: ()-->(30)
+ │    │         ├── ordering: +34 opt(30) [actual: +34]
  │    │         └── limit hint: 10.00
  │    └── scan index_tab@b
- │         ├── columns: val:35!null data1:39!null
- │         ├── constraint: /35/39/40/34: [/3 - /3]
+ │         ├── columns: val:44!null data1:48!null
+ │         ├── constraint: /44/48/49/43: [/3 - /3]
  │         ├── limit: 10
- │         ├── fd: ()-->(35)
- │         ├── ordering: +39 opt(35) [actual: +39]
+ │         ├── fd: ()-->(44)
+ │         ├── ordering: +48 opt(44) [actual: +48]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1267,10 +1272,10 @@ opt expect=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE region = 'US_EAST' OR region = 'US_WEST'
 ----
 scalar-group-by
- ├── columns: max:12
+ ├── columns: max:15
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(12)
+ ├── fd: ()-->(15)
  ├── limit
  │    ├── columns: region:3!null data1:6!null
  │    ├── internal-ordering: -6
@@ -1279,28 +1284,28 @@ scalar-group-by
  │    ├── fd: ()-->(3,6)
  │    ├── union-all
  │    │    ├── columns: region:3!null data1:6!null
- │    │    ├── left columns: region:15 data1:18
- │    │    ├── right columns: region:26 data1:29
+ │    │    ├── left columns: region:18 data1:21
+ │    │    ├── right columns: region:32 data1:35
  │    │    ├── cardinality: [0 - 2]
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
  │    │    ├── scan index_tab@c,rev
- │    │    │    ├── columns: region:15!null data1:18!null
- │    │    │    ├── constraint: /15/18/19/13: [/'US_EAST' - /'US_EAST']
+ │    │    │    ├── columns: region:18!null data1:21!null
+ │    │    │    ├── constraint: /18/21/22/16: [/'US_EAST' - /'US_EAST']
  │    │    │    ├── limit: 1(rev)
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(15,18)
+ │    │    │    ├── fd: ()-->(18,21)
  │    │    │    └── limit hint: 1.00
  │    │    └── scan index_tab@c,rev
- │    │         ├── columns: region:26!null data1:29!null
- │    │         ├── constraint: /26/29/30/24: [/'US_WEST' - /'US_WEST']
+ │    │         ├── columns: region:32!null data1:35!null
+ │    │         ├── constraint: /32/35/36/30: [/'US_WEST' - /'US_WEST']
  │    │         ├── limit: 1(rev)
  │    │         ├── key: ()
- │    │         ├── fd: ()-->(26,29)
+ │    │         ├── fd: ()-->(32,35)
  │    │         └── limit hint: 1.00
  │    └── 1
  └── aggregations
-      └── const-agg [as=max:12, outer=(6)]
+      └── const-agg [as=max:15, outer=(6)]
            └── data1:6
 
 # Case with multi-column keys in single-key spans.
@@ -1310,10 +1315,10 @@ FROM index_tab
 WHERE (latitude, longitude) = (1, 2) OR (latitude, longitude) = (4, 5)
 ----
 scalar-group-by
- ├── columns: max:12
+ ├── columns: max:15
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(12)
+ ├── fd: ()-->(15)
  ├── limit
  │    ├── columns: latitude:4!null longitude:5!null data1:6!null
  │    ├── internal-ordering: -6
@@ -1322,28 +1327,28 @@ scalar-group-by
  │    ├── fd: ()-->(4-6)
  │    ├── union-all
  │    │    ├── columns: latitude:4!null longitude:5!null data1:6!null
- │    │    ├── left columns: latitude:16 longitude:17 data1:18
- │    │    ├── right columns: latitude:27 longitude:28 data1:29
+ │    │    ├── left columns: latitude:19 longitude:20 data1:21
+ │    │    ├── right columns: latitude:33 longitude:34 data1:35
  │    │    ├── cardinality: [0 - 2]
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
  │    │    ├── scan index_tab@d,rev
- │    │    │    ├── columns: latitude:16!null longitude:17!null data1:18!null
- │    │    │    ├── constraint: /16/17/18/19/13: [/1/2 - /1/2]
+ │    │    │    ├── columns: latitude:19!null longitude:20!null data1:21!null
+ │    │    │    ├── constraint: /19/20/21/22/16: [/1/2 - /1/2]
  │    │    │    ├── limit: 1(rev)
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(16-18)
+ │    │    │    ├── fd: ()-->(19-21)
  │    │    │    └── limit hint: 1.00
  │    │    └── scan index_tab@d,rev
- │    │         ├── columns: latitude:27!null longitude:28!null data1:29!null
- │    │         ├── constraint: /27/28/29/30/24: [/4/5 - /4/5]
+ │    │         ├── columns: latitude:33!null longitude:34!null data1:35!null
+ │    │         ├── constraint: /33/34/35/36/30: [/4/5 - /4/5]
  │    │         ├── limit: 1(rev)
  │    │         ├── key: ()
- │    │         ├── fd: ()-->(27-29)
+ │    │         ├── fd: ()-->(33-35)
  │    │         └── limit hint: 1.00
  │    └── 1
  └── aggregations
-      └── const-agg [as=max:12, outer=(6)]
+      └── const-agg [as=max:15, outer=(6)]
            └── data1:6
 
 # Case with countable multi-key spans.
@@ -1351,10 +1356,10 @@ opt expect=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 4
 ----
 scalar-group-by
- ├── columns: max:12
+ ├── columns: max:15
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(12)
+ ├── fd: ()-->(15)
  ├── limit
  │    ├── columns: val:2!null data1:6!null
  │    ├── internal-ordering: -6
@@ -1363,42 +1368,42 @@ scalar-group-by
  │    ├── fd: ()-->(2,6)
  │    ├── union-all
  │    │    ├── columns: val:2!null data1:6!null
- │    │    ├── left columns: val:47 data1:51
- │    │    ├── right columns: val:36 data1:40
+ │    │    ├── left columns: val:59 data1:63
+ │    │    ├── right columns: val:45 data1:49
  │    │    ├── cardinality: [0 - 3]
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
  │    │    ├── union-all
- │    │    │    ├── columns: val:47!null data1:51!null
- │    │    │    ├── left columns: val:14 data1:18
- │    │    │    ├── right columns: val:25 data1:29
+ │    │    │    ├── columns: val:59!null data1:63!null
+ │    │    │    ├── left columns: val:17 data1:21
+ │    │    │    ├── right columns: val:31 data1:35
  │    │    │    ├── cardinality: [0 - 2]
- │    │    │    ├── ordering: -51
+ │    │    │    ├── ordering: -63
  │    │    │    ├── limit hint: 1.00
  │    │    │    ├── scan index_tab@b,rev
- │    │    │    │    ├── columns: val:14!null data1:18!null
- │    │    │    │    ├── constraint: /14/18/19/13: [/1 - /1]
+ │    │    │    │    ├── columns: val:17!null data1:21!null
+ │    │    │    │    ├── constraint: /17/21/22/16: [/1 - /1]
  │    │    │    │    ├── limit: 1(rev)
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(14,18)
+ │    │    │    │    ├── fd: ()-->(17,21)
  │    │    │    │    └── limit hint: 1.00
  │    │    │    └── scan index_tab@b,rev
- │    │    │         ├── columns: val:25!null data1:29!null
- │    │    │         ├── constraint: /25/29/30/24: [/2 - /2]
+ │    │    │         ├── columns: val:31!null data1:35!null
+ │    │    │         ├── constraint: /31/35/36/30: [/2 - /2]
  │    │    │         ├── limit: 1(rev)
  │    │    │         ├── key: ()
- │    │    │         ├── fd: ()-->(25,29)
+ │    │    │         ├── fd: ()-->(31,35)
  │    │    │         └── limit hint: 1.00
  │    │    └── scan index_tab@b,rev
- │    │         ├── columns: val:36!null data1:40!null
- │    │         ├── constraint: /36/40/41/35: [/3 - /3]
+ │    │         ├── columns: val:45!null data1:49!null
+ │    │         ├── constraint: /45/49/50/44: [/3 - /3]
  │    │         ├── limit: 1(rev)
  │    │         ├── key: ()
- │    │         ├── fd: ()-->(36,40)
+ │    │         ├── fd: ()-->(45,49)
  │    │         └── limit hint: 1.00
  │    └── 1
  └── aggregations
-      └── const-agg [as=max:12, outer=(6)]
+      └── const-agg [as=max:15, outer=(6)]
            └── data1:6
 
 # Case with limit ordering on more than one column.
@@ -1416,24 +1421,24 @@ limit
  ├── ordering: +6,+7
  ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
- │    ├── left columns: region:14 data1:17 data2:18
- │    ├── right columns: region:25 data1:28 data2:29
+ │    ├── left columns: region:17 data1:20 data2:21
+ │    ├── right columns: region:31 data1:34 data2:35
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
- │    │    ├── columns: region:14!null data1:17!null data2:18!null
- │    │    ├── constraint: /14/17/18/12: [/'US_EAST' - /'US_EAST']
+ │    │    ├── columns: region:17!null data1:20!null data2:21!null
+ │    │    ├── constraint: /17/20/21/15: [/'US_EAST' - /'US_EAST']
  │    │    ├── limit: 10
- │    │    ├── fd: ()-->(14)
- │    │    ├── ordering: +17,+18 opt(14) [actual: +17,+18]
+ │    │    ├── fd: ()-->(17)
+ │    │    ├── ordering: +20,+21 opt(17) [actual: +20,+21]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@c
- │         ├── columns: region:25!null data1:28!null data2:29!null
- │         ├── constraint: /25/28/29/23: [/'US_WEST' - /'US_WEST']
+ │         ├── columns: region:31!null data1:34!null data2:35!null
+ │         ├── constraint: /31/34/35/29: [/'US_WEST' - /'US_WEST']
  │         ├── limit: 10
- │         ├── fd: ()-->(25)
- │         ├── ordering: +28,+29 opt(25) [actual: +28,+29]
+ │         ├── fd: ()-->(31)
+ │         ├── ordering: +34,+35 opt(31) [actual: +34,+35]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1453,24 +1458,24 @@ limit
  ├── ordering: +6,+7
  ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
- │    ├── left columns: region:14 data1:17 data2:18
- │    ├── right columns: region:25 data1:28 data2:29
+ │    ├── left columns: region:17 data1:20 data2:21
+ │    ├── right columns: region:31 data1:34 data2:35
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
- │    │    ├── columns: region:14!null data1:17!null data2:18!null
- │    │    ├── constraint: /14/17/18/12: [/'US_EAST'/4 - /'US_EAST']
+ │    │    ├── columns: region:17!null data1:20!null data2:21!null
+ │    │    ├── constraint: /17/20/21/15: [/'US_EAST'/4 - /'US_EAST']
  │    │    ├── limit: 10
- │    │    ├── fd: ()-->(14)
- │    │    ├── ordering: +17,+18 opt(14) [actual: +17,+18]
+ │    │    ├── fd: ()-->(17)
+ │    │    ├── ordering: +20,+21 opt(17) [actual: +20,+21]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@c
- │         ├── columns: region:25!null data1:28!null data2:29!null
- │         ├── constraint: /25/28/29/23: [/'US_WEST'/4 - /'US_WEST']
+ │         ├── columns: region:31!null data1:34!null data2:35!null
+ │         ├── constraint: /31/34/35/29: [/'US_WEST'/4 - /'US_WEST']
  │         ├── limit: 10
- │         ├── fd: ()-->(25)
- │         ├── ordering: +28,+29 opt(25) [actual: +28,+29]
+ │         ├── fd: ()-->(31)
+ │         ├── ordering: +34,+35 opt(31) [actual: +34,+35]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1490,24 +1495,24 @@ limit
  ├── ordering: +6,+7
  ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
- │    ├── left columns: region:14 data1:17 data2:18
- │    ├── right columns: region:25 data1:28 data2:29
+ │    ├── left columns: region:17 data1:20 data2:21
+ │    ├── right columns: region:31 data1:34 data2:35
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
- │    │    ├── columns: region:14!null data1:17!null data2:18!null
- │    │    ├── constraint: /14/17/18/12: [/'US_EAST' - /'US_EAST'/2]
+ │    │    ├── columns: region:17!null data1:20!null data2:21!null
+ │    │    ├── constraint: /17/20/21/15: [/'US_EAST' - /'US_EAST'/2]
  │    │    ├── limit: 10
- │    │    ├── fd: ()-->(14)
- │    │    ├── ordering: +17,+18 opt(14) [actual: +17,+18]
+ │    │    ├── fd: ()-->(17)
+ │    │    ├── ordering: +20,+21 opt(17) [actual: +20,+21]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@c
- │         ├── columns: region:25!null data1:28!null data2:29!null
- │         ├── constraint: /25/28/29/23: [/'US_WEST' - /'US_WEST'/2]
+ │         ├── columns: region:31!null data1:34!null data2:35!null
+ │         ├── constraint: /31/34/35/29: [/'US_WEST' - /'US_WEST'/2]
  │         ├── limit: 10
- │         ├── fd: ()-->(25)
- │         ├── ordering: +28,+29 opt(25) [actual: +28,+29]
+ │         ├── fd: ()-->(31)
+ │         ├── ordering: +34,+35 opt(31) [actual: +34,+35]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1528,24 +1533,24 @@ limit
  ├── ordering: +6,+7
  ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
- │    ├── left columns: region:14 data1:17 data2:18
- │    ├── right columns: region:25 data1:28 data2:29
+ │    ├── left columns: region:17 data1:20 data2:21
+ │    ├── right columns: region:31 data1:34 data2:35
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
- │    │    ├── columns: region:14!null data1:17!null data2:18!null
- │    │    ├── constraint: /14/17/18/12: [/'US_EAST'/4 - /'US_EAST'/999]
+ │    │    ├── columns: region:17!null data1:20!null data2:21!null
+ │    │    ├── constraint: /17/20/21/15: [/'US_EAST'/4 - /'US_EAST'/999]
  │    │    ├── limit: 10
- │    │    ├── fd: ()-->(14)
- │    │    ├── ordering: +17,+18 opt(14) [actual: +17,+18]
+ │    │    ├── fd: ()-->(17)
+ │    │    ├── ordering: +20,+21 opt(17) [actual: +20,+21]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@c
- │         ├── columns: region:25!null data1:28!null data2:29!null
- │         ├── constraint: /25/28/29/23: [/'US_WEST'/4 - /'US_WEST'/999]
+ │         ├── columns: region:31!null data1:34!null data2:35!null
+ │         ├── constraint: /31/34/35/29: [/'US_WEST'/4 - /'US_WEST'/999]
  │         ├── limit: 10
- │         ├── fd: ()-->(25)
- │         ├── ordering: +28,+29 opt(25) [actual: +28,+29]
+ │         ├── fd: ()-->(31)
+ │         ├── ordering: +34,+35 opt(31) [actual: +34,+35]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1568,36 +1573,36 @@ top-k
  ├── ordering: +6,+7
  └── union-all
       ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
-      ├── left columns: latitude:81 longitude:82 data1:83 data2:84
-      ├── right columns: latitude:92 longitude:93 data1:94 data2:95
+      ├── left columns: latitude:102 longitude:103 data1:104 data2:105
+      ├── right columns: latitude:116 longitude:117 data1:118 data2:119
       ├── union-all
-      │    ├── columns: latitude:81!null longitude:82!null data1:83!null data2:84!null
-      │    ├── left columns: latitude:70 longitude:71 data1:72 data2:73
-      │    ├── right columns: latitude:59 longitude:60 data1:61 data2:62
+      │    ├── columns: latitude:102!null longitude:103!null data1:104!null data2:105!null
+      │    ├── left columns: latitude:88 longitude:89 data1:90 data2:91
+      │    ├── right columns: latitude:74 longitude:75 data1:76 data2:77
       │    ├── cardinality: [0 - 30]
       │    ├── union-all
-      │    │    ├── columns: latitude:70!null longitude:71!null data1:72!null data2:73!null
-      │    │    ├── left columns: latitude:37 longitude:38 data1:39 data2:40
-      │    │    ├── right columns: latitude:48 longitude:49 data1:50 data2:51
+      │    │    ├── columns: latitude:88!null longitude:89!null data1:90!null data2:91!null
+      │    │    ├── left columns: latitude:46 longitude:47 data1:48 data2:49
+      │    │    ├── right columns: latitude:60 longitude:61 data1:62 data2:63
       │    │    ├── cardinality: [0 - 20]
       │    │    ├── scan index_tab@d
-      │    │    │    ├── columns: latitude:37!null longitude:38!null data1:39!null data2:40!null
-      │    │    │    ├── constraint: /37/38/39/40/34: [/10/11 - /10/11]
+      │    │    │    ├── columns: latitude:46!null longitude:47!null data1:48!null data2:49!null
+      │    │    │    ├── constraint: /46/47/48/49/43: [/10/11 - /10/11]
       │    │    │    ├── limit: 10
-      │    │    │    └── fd: ()-->(37,38)
+      │    │    │    └── fd: ()-->(46,47)
       │    │    └── scan index_tab@d
-      │    │         ├── columns: latitude:48!null longitude:49!null data1:50!null data2:51!null
-      │    │         ├── constraint: /48/49/50/51/45: [/10/12 - /10/12]
+      │    │         ├── columns: latitude:60!null longitude:61!null data1:62!null data2:63!null
+      │    │         ├── constraint: /60/61/62/63/57: [/10/12 - /10/12]
       │    │         ├── limit: 10
-      │    │         └── fd: ()-->(48,49)
+      │    │         └── fd: ()-->(60,61)
       │    └── scan index_tab@d
-      │         ├── columns: latitude:59!null longitude:60!null data1:61!null data2:62!null
-      │         ├── constraint: /59/60/61/62/56: [/10/13 - /10/13]
+      │         ├── columns: latitude:74!null longitude:75!null data1:76!null data2:77!null
+      │         ├── constraint: /74/75/76/77/71: [/10/13 - /10/13]
       │         ├── limit: 10
-      │         └── fd: ()-->(59,60)
+      │         └── fd: ()-->(74,75)
       └── scan index_tab@d
-           ├── columns: latitude:92!null longitude:93 data1:94!null data2:95!null
-           └── constraint: /92/93/94/95/89
+           ├── columns: latitude:116!null longitude:117 data1:118!null data2:119!null
+           └── constraint: /116/117/118/119/113
                 ├── [/-5 - /-5]
                 └── [/0 - /0]
 
@@ -1608,10 +1613,10 @@ FROM index_tab WHERE region = 'US_WEST' OR region = 'US_EAST'
 ORDER BY data1 LIMIT 10
 ----
 index-join index_tab
- ├── columns: id:1!null val:2 region:3!null latitude:4 longitude:5 data1:6!null data2:7!null geom:8
+ ├── columns: id:1!null val:2 region:3!null latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
  ├── cardinality: [0 - 10]
  ├── key: (1)
- ├── fd: (1)-->(2-8)
+ ├── fd: (1)-->(2-11)
  ├── ordering: +6
  └── limit
       ├── columns: id:1!null region:3!null data1:6!null data2:7!null
@@ -1622,26 +1627,26 @@ index-join index_tab
       ├── ordering: +6
       ├── union-all
       │    ├── columns: id:1!null region:3!null data1:6!null data2:7!null
-      │    ├── left columns: id:12 region:14 data1:17 data2:18
-      │    ├── right columns: id:23 region:25 data1:28 data2:29
+      │    ├── left columns: id:15 region:17 data1:20 data2:21
+      │    ├── right columns: id:29 region:31 data1:34 data2:35
       │    ├── cardinality: [0 - 20]
       │    ├── ordering: +6
       │    ├── limit hint: 10.00
       │    ├── scan index_tab@c
-      │    │    ├── columns: id:12!null region:14!null data1:17!null data2:18!null
-      │    │    ├── constraint: /14/17/18/12: [/'US_EAST' - /'US_EAST']
+      │    │    ├── columns: id:15!null region:17!null data1:20!null data2:21!null
+      │    │    ├── constraint: /17/20/21/15: [/'US_EAST' - /'US_EAST']
       │    │    ├── limit: 10
-      │    │    ├── key: (12)
-      │    │    ├── fd: ()-->(14), (12)-->(17,18)
-      │    │    ├── ordering: +17 opt(14) [actual: +17]
+      │    │    ├── key: (15)
+      │    │    ├── fd: ()-->(17), (15)-->(20,21)
+      │    │    ├── ordering: +20 opt(17) [actual: +20]
       │    │    └── limit hint: 10.00
       │    └── scan index_tab@c
-      │         ├── columns: id:23!null region:25!null data1:28!null data2:29!null
-      │         ├── constraint: /25/28/29/23: [/'US_WEST' - /'US_WEST']
+      │         ├── columns: id:29!null region:31!null data1:34!null data2:35!null
+      │         ├── constraint: /31/34/35/29: [/'US_WEST' - /'US_WEST']
       │         ├── limit: 10
-      │         ├── key: (23)
-      │         ├── fd: ()-->(25), (23)-->(28,29)
-      │         ├── ordering: +28 opt(25) [actual: +28]
+      │         ├── key: (29)
+      │         ├── fd: ()-->(31), (29)-->(34,35)
+      │         ├── ordering: +34 opt(31) [actual: +34]
       │         └── limit hint: 10.00
       └── 10
 
@@ -1786,26 +1791,26 @@ limit
  ├── ordering: +5
  ├── union-all
  │    ├── columns: id:1!null latitude:4!null longitude:5!null
- │    ├── left columns: id:12 latitude:15 longitude:16
- │    ├── right columns: id:23 latitude:26 longitude:27
+ │    ├── left columns: id:15 latitude:18 longitude:19
+ │    ├── right columns: id:29 latitude:32 longitude:33
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +5
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@d
- │    │    ├── columns: id:12!null latitude:15!null longitude:16!null
- │    │    ├── constraint: /15/16/17/18/12: (/0/NULL - /0]
+ │    │    ├── columns: id:15!null latitude:18!null longitude:19!null
+ │    │    ├── constraint: /18/19/20/21/15: (/0/NULL - /0]
  │    │    ├── limit: 10
- │    │    ├── key: (12)
- │    │    ├── fd: ()-->(15), (12)-->(16)
- │    │    ├── ordering: +16 opt(15) [actual: +16]
+ │    │    ├── key: (15)
+ │    │    ├── fd: ()-->(18), (15)-->(19)
+ │    │    ├── ordering: +19 opt(18) [actual: +19]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@d
- │         ├── columns: id:23!null latitude:26!null longitude:27!null
- │         ├── constraint: /26/27/28/29/23: (/10/NULL - /10]
+ │         ├── columns: id:29!null latitude:32!null longitude:33!null
+ │         ├── constraint: /32/33/34/35/29: (/10/NULL - /10]
  │         ├── limit: 10
- │         ├── key: (23)
- │         ├── fd: ()-->(26), (23)-->(27)
- │         ├── ordering: +27 opt(26) [actual: +27]
+ │         ├── key: (29)
+ │         ├── fd: ()-->(32), (29)-->(33)
+ │         ├── ordering: +33 opt(32) [actual: +33]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1841,7 +1846,7 @@ select
  │    ├── columns: geom:8
  │    └── inverted-filter
  │         ├── columns: id:1!null
- │         ├── inverted expression: /11
+ │         ├── inverted expression: /14
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
  │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1851,8 +1856,8 @@ select
  │         │    └── st_intersects('010100000000000000000008400000000000000840', geom:8)
  │         ├── key: (1)
  │         └── scan index_tab@geomidx,inverted
- │              ├── columns: id:1!null geom_inverted_key:11!null
- │              └── inverted constraint: /11/1
+ │              ├── columns: id:1!null geom_inverted_key:14!null
+ │              └── inverted constraint: /14/1
  │                   └── spans
  │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │                        ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
@@ -1865,15 +1870,15 @@ opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE region > 'US_EAST' AND region < 'US_WEST'
 ----
 scalar-group-by
- ├── columns: max:12
+ ├── columns: max:15
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(12)
+ ├── fd: ()-->(15)
  ├── scan index_tab@c
  │    ├── columns: region:3!null data1:6!null
  │    └── constraint: /3/6/7/1: [/e'US_EAST\x00' - /'US_WEST')
  └── aggregations
-      └── max [as=max:12, outer=(6)]
+      └── max [as=max:15, outer=(6)]
            └── data1:6
 
 # No-op case because the number of keys exceeds maxScanCount.
@@ -1881,15 +1886,15 @@ opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 300
 ----
 scalar-group-by
- ├── columns: max:12
+ ├── columns: max:15
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(12)
+ ├── fd: ()-->(15)
  ├── scan index_tab@b
  │    ├── columns: val:2!null data1:6!null
  │    └── constraint: /2/6/7/1: [/1 - /299]
  └── aggregations
-      └── max [as=max:12, outer=(6)]
+      └── max [as=max:15, outer=(6)]
            └── data1:6
 
 # No-op case because the same number of rows would be scanned by the split-up
@@ -1898,10 +1903,10 @@ opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE id > 0 AND id < 4
 ----
 scalar-group-by
- ├── columns: max:12
+ ├── columns: max:15
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(12)
+ ├── fd: ()-->(15)
  ├── scan index_tab@a
  │    ├── columns: id:1!null data1:6!null
  │    ├── constraint: /1/6/7: [/1 - /3]
@@ -1909,7 +1914,7 @@ scalar-group-by
  │    ├── key: (1)
  │    └── fd: (1)-->(6)
  └── aggregations
-      └── max [as=max:12, outer=(6)]
+      └── max [as=max:15, outer=(6)]
            └── data1:6
 
 # No-op case because the scan is already limited.
@@ -1919,10 +1924,10 @@ FROM (SELECT region, data1 FROM index_tab LIMIT 10)
 WHERE region='ASIA' OR region='AUSTRALIA'
 ----
 scalar-group-by
- ├── columns: max:12
+ ├── columns: max:15
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(12)
+ ├── fd: ()-->(15)
  ├── select
  │    ├── columns: region:3!null data1:6!null
  │    ├── cardinality: [0 - 10]
@@ -1932,7 +1937,7 @@ scalar-group-by
  │    └── filters
  │         └── (region:3 = 'ASIA') OR (region:3 = 'AUSTRALIA') [outer=(3), constraints=(/3: [/'ASIA' - /'ASIA'] [/'AUSTRALIA' - /'AUSTRALIA']; tight)]
  └── aggregations
-      └── max [as=max:12, outer=(6)]
+      └── max [as=max:15, outer=(6)]
            └── data1:6
 
 # No-op case because the limit is negative.
@@ -1964,15 +1969,15 @@ opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab@b
 ----
 scalar-group-by
- ├── columns: max:12
+ ├── columns: max:15
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(12)
+ ├── fd: ()-->(15)
  ├── scan index_tab@b
  │    ├── columns: data1:6!null
  │    └── flags: force-index=b
  └── aggregations
-      └── max [as=max:12, outer=(6)]
+      └── max [as=max:15, outer=(6)]
            └── data1:6
 
 # ---------------------------------------------------
@@ -3479,3 +3484,394 @@ project
       └── array_remove(array_agg:27, NULL) [as=col6s:28, outer=(27), immutable]
 
 # End Regression Test for #93410
+
+# --------------------------------------------------
+# GenerateVectorSearch
+# --------------------------------------------------
+
+opt expect=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 1;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 1
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-11,15)
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (9)-->(15)
+      ├── index-join index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-11)
+      │    └── vector-search index_tab@index_tab_vec1_idx,vector
+      │         ├── columns: id:1!null
+      │         ├── target nearest neighbors: 1
+      │         ├── key: (1)
+      │         └── '[3,1,2]'
+      └── projections
+           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+
+# Case with a limit greater than 1.
+opt expect=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (9)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (9)-->(15)
+      ├── index-join index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-11)
+      │    └── vector-search index_tab@index_tab_vec1_idx,vector
+      │         ├── columns: id:1!null
+      │         ├── target nearest neighbors: 5
+      │         ├── key: (1)
+      │         └── '[3,1,2]'
+      └── projections
+           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+
+# Case with a different vector index.
+opt expect=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY vec2 <-> '[3,1,2]' LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (10)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (10)-->(15)
+      ├── index-join index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-11)
+      │    └── vector-search index_tab@index_tab_vec2_idx,vector
+      │         ├── columns: id:1!null
+      │         ├── target nearest neighbors: 5
+      │         ├── key: (1)
+      │         └── '[3,1,2]'
+      └── projections
+           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
+
+# Case with a subset of table columns requested.
+opt expect=GenerateVectorSearch
+SELECT id, vec1 FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null vec1:9  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(9), (9)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null vec1:9
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(9), (9)-->(15)
+      ├── index-join index_tab
+      │    ├── columns: id:1!null vec1:9
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(9)
+      │    └── vector-search index_tab@index_tab_vec1_idx,vector
+      │         ├── columns: id:1!null
+      │         ├── target nearest neighbors: 5
+      │         ├── key: (1)
+      │         └── '[3,1,2]'
+      └── projections
+           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+
+# Case with a placeholder vector.
+opt expect=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY vec1 <-> $1 LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (9)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable, has-placeholder
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (9)-->(15)
+      ├── index-join index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── has-placeholder
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-11)
+      │    └── vector-search index_tab@index_tab_vec1_idx,vector
+      │         ├── columns: id:1!null
+      │         ├── target nearest neighbors: 5
+      │         ├── has-placeholder
+      │         ├── key: (1)
+      │         └── $1
+      └── projections
+           └── vec1:9 <-> $1 [as=column15:15, outer=(9), immutable]
+
+# The index can be forced.
+opt expect=GenerateVectorSearch
+SELECT * FROM index_tab@index_tab_vec2_idx ORDER BY vec2 <-> '[3,1,2]' LIMIT 500;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 500
+ ├── cardinality: [0 - 500]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (10)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (10)-->(15)
+      ├── index-join index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-11)
+      │    └── vector-search index_tab@index_tab_vec2_idx,vector
+      │         ├── columns: id:1!null
+      │         ├── target nearest neighbors: 500
+      │         ├── key: (1)
+      │         └── '[3,1,2]'
+      └── projections
+           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
+
+# Forcing a different index prevents using the vector index.
+opt expect-not=GenerateVectorSearch
+SELECT * FROM index_tab@primary ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (9)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (9)-->(15)
+      ├── scan index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── flags: force-index=index_tab_pkey
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-11)
+      └── projections
+           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+
+# No-op case with an un-indexed vector column.
+opt expect-not=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY vec3 <-> '[3,1,2]' LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (11)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (11)-->(15)
+      ├── scan index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-11)
+      └── projections
+           └── vec3:11 <-> '[3,1,2]' [as=column15:15, outer=(11), immutable]
+
+# No-op case without a limit.
+opt expect-not=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]';
+----
+sort
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (9)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (9)-->(15)
+      ├── scan index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-11)
+      └── projections
+           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+
+# No-op case without an ordering.
+opt expect-not=GenerateVectorSearch
+SELECT * FROM index_tab LIMIT 5;
+----
+scan index_tab
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+ ├── limit: 5
+ ├── key: (1)
+ └── fd: (1)-->(2-11)
+
+# No-op case with an ordering on a non-vector column.
+opt expect-not=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY id LIMIT 5;
+----
+scan index_tab
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+ ├── limit: 5
+ ├── key: (1)
+ ├── fd: (1)-->(2-11)
+ └── ordering: +1
+
+# No-op case with an ordering on an additional column.
+# TODO(drewk, mw5h): support this case.
+opt expect-not=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]', id LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15,+1
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (9)-->(15)
+ ├── ordering: +15,+1
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (9)-->(15)
+      ├── scan index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-11)
+      └── projections
+           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+
+# The query vector must be a constant or placeholder.
+opt expect-not=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY vec1 <-> (SELECT '[3,1,2]'::VECTOR(3) FROM a LIMIT 1) LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column23:23]
+ ├── internal-ordering: +23
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11,23)
+ ├── ordering: +23
+ └── project
+      ├── columns: column23:23 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11,23)
+      ├── scan index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-11)
+      └── projections
+           └── vector-distance [as=column23:23, outer=(9), immutable, subquery]
+                ├── vec1:9
+                └── subquery
+                     └── project
+                          ├── columns: vector:22!null
+                          ├── cardinality: [0 - 1]
+                          ├── key: ()
+                          ├── fd: ()-->(22)
+                          ├── scan a@s_idx
+                          │    ├── limit: 1
+                          │    └── key: ()
+                          └── projections
+                               └── '[3,1,2]' [as=vector:22]
+
+opt expect-not=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY vec1 <-> vec2 LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (9,10)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (9,10)-->(15)
+      ├── scan index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-11)
+      └── projections
+           └── vec1:9 <-> vec2:10 [as=column15:15, outer=(9,10), immutable]
+
+# Currently, the vector column must be the left argument.
+# TODO(drewk, mw5h): add a normalization rule to flip the args.
+opt expect-not=GenerateVectorSearch
+SELECT * FROM index_tab ORDER BY '[3,1,2]' <-> vec1 LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── internal-ordering: +15
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-11), (9)-->(15)
+ ├── ordering: +15
+ └── project
+      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-11), (9)-->(15)
+      ├── scan index_tab
+      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-11)
+      └── projections
+           └── '[3,1,2]' <-> vec1:9 [as=column15:15, outer=(9), immutable]

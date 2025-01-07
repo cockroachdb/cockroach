@@ -274,10 +274,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *ScanExpr, *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *LockExpr, *SequenceSelectExpr,
-		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
-		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,
-		*AlterTableRelocateExpr, *AlterRangeRelocateExpr, *ControlJobsExpr, *CancelQueriesExpr,
-		*CancelSessionsExpr, *CreateViewExpr, *ExportExpr, *ShowCompletionsExpr:
+		*WindowExpr, *VectorSearchExpr, *VectorPartitionSearchExpr, *OpaqueRelExpr,
+		*OpaqueMutationExpr, *OpaqueDDLExpr, *AlterTableSplitExpr, *AlterTableUnsplitExpr,
+		*AlterTableUnsplitAllExpr, *AlterTableRelocateExpr, *AlterRangeRelocateExpr,
+		*ControlJobsExpr, *CancelQueriesExpr, *CancelSessionsExpr, *CreateViewExpr,
+		*ExportExpr, *ShowCompletionsExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
@@ -648,6 +649,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatMutationCols(e, tp, "return-mapping:", t.ReturnCols, t.Table)
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
+			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put centroid columns:", t.VectorIndexPutCentroidCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventInsert)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -665,6 +668,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put centroid columns:", t.VectorIndexPutCentroidCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventUpdate)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -689,6 +695,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put centroid columns:", t.VectorIndexPutCentroidCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventInsert, tree.TriggerEventUpdate)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -702,6 +711,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatMutationCols(e, tp, "return-mapping:", t.ReturnCols, t.Table)
 			f.formatOptionalColList(e, tp, "passthrough columns", opt.OptionalColList(t.PassthroughCols))
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventDelete)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -730,6 +740,37 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				f.formatCol("" /* label */, t.OutCols[i], opt.ColSet{} /* notNullCols */)
 				child.Child(f.Buffer.String())
 			}
+		}
+
+	case *VectorSearchExpr:
+		if c := t.PrefixConstraint; c != nil {
+			if c.IsContradiction() {
+				tp.Childf("prefix constraint: contradiction")
+			} else if c.Spans.Count() == 1 {
+				tp.Childf(
+					"prefix constraint: %s: %s", c.Columns.String(),
+					cat.MaybeMarkRedactable(c.Spans.Get(0).String(), f.RedactableValues),
+				)
+			} else {
+				n := tp.Childf("prefix constraint: %s", c.Columns.String())
+				for i := 0; i < c.Spans.Count(); i++ {
+					n.Child(cat.MaybeMarkRedactable(c.Spans.Get(i).String(), f.RedactableValues))
+				}
+			}
+		}
+		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
+
+	case *VectorPartitionSearchExpr:
+		if len(t.PrefixKeyCols) > 0 {
+			tp.Childf("prefix key columns: %v", t.PrefixKeyCols)
+		}
+		tp.Childf("query vector column: %s", f.ColumnString(t.QueryVectorCol))
+		if !t.PrimaryKeyCols.Empty() {
+			tp.Childf("primary key columns: %v", t.PrimaryKeyCols)
+		}
+		tp.Childf("partition col: %s", f.ColumnString(t.PartitionCol))
+		if t.CentroidCol != 0 {
+			tp.Childf("centroid col: %s", f.ColumnString(t.CentroidCol))
 		}
 
 	case *CreateTableExpr:
@@ -1435,6 +1476,9 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 	if index.IsInverted() {
 		f.Buffer.WriteString(",inverted")
 	}
+	if index.IsVector() {
+		f.Buffer.WriteString(",vector")
+	}
 	if _, isPartial := index.Predicate(); isPartial {
 		f.Buffer.WriteString(",partial")
 	}
@@ -1873,6 +1917,12 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		if !t.Ordering.Any() {
 			fmt.Fprintf(f.Buffer, " ordering=%s", t.Ordering)
 		}
+
+	case *VectorSearchPrivate:
+		f.formatIndex(t.Table, t.Index, false /* reverse */)
+
+	case *VectorPartitionSearchPrivate:
+		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
 	case *props.OrderingChoice:
 		if !t.Any() {

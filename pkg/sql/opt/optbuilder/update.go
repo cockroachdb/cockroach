@@ -346,6 +346,9 @@ func (mb *mutationBuilder) buildUpdate(returning *tree.ReturningExprs) {
 	// Project partial index PUT and DEL boolean columns.
 	mb.projectPartialIndexPutAndDelCols()
 
+	// Project vector index PUT and DEL columns.
+	mb.projectVectorIndexCols()
+
 	mb.buildUniqueChecksForUpdate()
 
 	mb.buildFKChecksForUpdate()

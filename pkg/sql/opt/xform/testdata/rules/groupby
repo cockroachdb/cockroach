@@ -2365,7 +2365,7 @@ memo (optimized, ~27KB, required=[presentation: w:12] [ordering: +13,+1])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO NOTHING
 ----
-memo (optimized, ~28KB, required=[])
+memo (optimized, ~29KB, required=[])
  ├── G1: (insert G2 G3 G4 G5 xyz)
  │    └── []
  │         ├── best: (insert G2 G3 G4 G5 xyz)

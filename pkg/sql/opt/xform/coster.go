@@ -593,6 +593,12 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.ProjectSetOp:
 		cost = c.computeProjectSetCost(candidate.(*memo.ProjectSetExpr))
 
+	case opt.VectorSearchOp:
+		cost = c.computeVectorSearchCost(candidate.(*memo.VectorSearchExpr))
+
+	case opt.VectorPartitionSearchOp:
+		cost = c.computeVectorPartitionSearchCost(candidate.(*memo.VectorPartitionSearchExpr))
+
 	case opt.InsertOp:
 		insertExpr, _ := candidate.(*memo.InsertExpr)
 		if len(insertExpr.FastPathUniqueChecks) != 0 {
@@ -750,6 +756,18 @@ func (c *coster) computeDistributeCost(
 	//                      estimate of latency overhead, but actual measurements
 	//                      would be useful.
 	return DistributeCost
+}
+
+func (c *coster) computeVectorSearchCost(search *memo.VectorSearchExpr) memo.Cost {
+	// TODO(drewk, mw5h): implement a proper cost function.
+	return memo.Cost{C: cpuCostFactor * search.Relational().Statistics().RowCount}
+}
+
+func (c *coster) computeVectorPartitionSearchCost(
+	search *memo.VectorPartitionSearchExpr,
+) memo.Cost {
+	// TODO(drewk, mw5h): implement a proper cost function.
+	return memo.Cost{C: cpuCostFactor * search.Relational().Statistics().RowCount}
 }
 
 func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Required) memo.Cost {

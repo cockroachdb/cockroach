@@ -1598,6 +1598,102 @@ func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relation
 	}
 }
 
+func (b *logicalPropsBuilder) buildVectorSearchProps(
+	search *VectorSearchExpr, rel *props.Relational,
+) {
+	md := search.Memo().Metadata()
+	BuildSharedProps(search, &rel.Shared, b.evalCtx)
+
+	// Output Columns
+	// --------------
+	// VectorSearch output columns are stored in the definition.
+	rel.OutputCols = search.Cols
+
+	// Not Null Columns
+	// ----------------
+	// Initialize not-NULL columns from the table schema.
+	rel.NotNullCols = makeTableNotNullCols(md, search.Table).Intersection(rel.OutputCols)
+
+	// Outer Columns
+	// -------------
+	// VectorSearch operator never has outer columns.
+
+	// Functional Dependencies
+	// -----------------------
+	// Initialize key FD's from the table schema, including constant columns
+	// from the constraint, minus any columns that are not projected by the
+	// VectorSearch operator.
+	rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, search.Table))
+	if search.PrefixConstraint != nil {
+		rel.FuncDeps.AddConstants(search.PrefixConstraint.ExtractConstCols(b.sb.ctx, b.evalCtx))
+	}
+	rel.FuncDeps.ProjectCols(rel.OutputCols)
+
+	// Cardinality
+	// -----------
+	// Restrict cardinality based on FDs and constraint. Note that we cannot use
+	// TargetNeighborCount to restrict cardinality because it is not a strict
+	// limit.
+	// TODO(drewk, mw5h): we can likely determine a guarantee on the max number of
+	// candidates.
+	rel.Cardinality = props.AnyCardinality
+	if rel.FuncDeps.HasMax1Row() {
+		rel.Cardinality = rel.Cardinality.Limit(1)
+	} else if search.PrefixConstraint != nil {
+		b.updateCardinalityFromConstraint(search.PrefixConstraint, rel)
+	}
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildVectorSearch(search, rel)
+	}
+}
+
+func (b *logicalPropsBuilder) buildVectorPartitionSearchProps(
+	search *VectorPartitionSearchExpr, rel *props.Relational,
+) {
+	BuildSharedProps(search, &rel.Shared, b.evalCtx)
+	inputProps := search.Input.Relational()
+
+	// Output Columns
+	// --------------
+	// VectorPartitionSearch passes through all input columns. It also produces
+	// the partition column, and optionally, the centroid column.
+	rel.OutputCols = inputProps.OutputCols.Copy()
+	rel.OutputCols.Add(search.PartitionCol)
+	if search.CentroidCol != 0 {
+		rel.OutputCols.Add(search.CentroidCol)
+	}
+
+	// Not Null Columns
+	// ----------------
+	// Pass through not-NULL columns from the input.
+	rel.NotNullCols = inputProps.NotNullCols
+
+	// Outer Columns
+	// -------------
+	// Pass through outer columns from the input.
+	rel.OuterCols = inputProps.OuterCols
+
+	// Functional Dependencies
+	// -----------------------
+	// Copy the input FDs. Make sure to add the new output columns to the FDs.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	rel.FuncDeps.ProjectCols(rel.OutputCols)
+
+	// Cardinality
+	// -----------
+	// Pass through input cardinality.
+	rel.Cardinality = inputProps.Cardinality
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildVectorPartitionSearch(search, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildBarrierProps(barrier *BarrierExpr, rel *props.Relational) {
 	BuildSharedProps(barrier, &rel.Shared, b.evalCtx)
 
@@ -1919,6 +2015,11 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 
 		if index.IsInverted() {
 			// Skip inverted indexes for now.
+			continue
+		}
+
+		if index.IsVector() {
+			// Skip vector indexes for now.
 			continue
 		}
 
