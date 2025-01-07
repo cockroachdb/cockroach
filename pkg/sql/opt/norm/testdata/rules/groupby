@@ -1534,14 +1534,14 @@ SELECT min(f) FROM a GROUP BY i, s, k
 project
  ├── columns: min:8
  └── group-by (hash)
-      ├── columns: i:2!null s:4!null min:8
-      ├── grouping columns: i:2!null s:4!null
-      ├── key: (2,4)
-      ├── fd: (2,4)-->(8)
+      ├── columns: k:1!null min:8
+      ├── grouping columns: k:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(8)
       ├── scan a
-      │    ├── columns: i:2!null f:3 s:4!null
-      │    ├── key: (2,4)
-      │    └── fd: (2,4)-->(3), (2,3)~~>(4)
+      │    ├── columns: k:1!null f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3)
       └── aggregations
            └── min [as=min:8, outer=(3)]
                 └── f:3
