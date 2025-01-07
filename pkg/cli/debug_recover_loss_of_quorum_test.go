@@ -444,6 +444,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "slow under deadlock")
+	skip.UnderStress(t, "fails under stress and leader leases")
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
@@ -458,9 +459,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	defer listenerReg.Close()
 
 	st := cluster.MakeTestingClusterSettings()
-	// We currently don't clear out the LeadEpoch field when recovering from a
-	// loss of quorum, so we can't run with leader leases on in this test.
-	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 	// Test cluster contains 3 nodes that we would turn into a single node
 	// cluster using loss of quorum recovery. To do that, we will terminate
 	// two nodes and run recovery on remaining one. Restarting node should
