@@ -144,7 +144,11 @@ func (t testWrapper) Go(_ task.Func, _ ...task.Option) {
 	panic("implement me")
 }
 
-func (t testWrapper) NewGroup() task.Group {
+func (t testWrapper) NewGroup(_ ...task.Option) task.Group {
+	panic("implement me")
+}
+
+func (t testWrapper) NewErrorGroup(_ ...task.Option) task.ErrorGroup {
 	panic("implement me")
 }
 

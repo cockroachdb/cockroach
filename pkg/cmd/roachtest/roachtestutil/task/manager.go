@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 type (
@@ -68,6 +69,7 @@ func NewManager(ctx context.Context, l *logger.Logger) Manager {
 	}
 	m.group = &group{
 		manager:  m,
+		options:  m.defaultOptions(),
 		ctxGroup: ctxgroup.WithContext(ctx),
 	}
 	return m
@@ -83,7 +85,6 @@ func (m *manager) defaultOptions() []Option {
 		return err
 	}
 	return []Option{
-		Name(fmt.Sprintf("task-%d", m.id.Add(1))),
 		Logger(m.logger),
 		PanicHandler(defaultPanicHandlerFn),
 		ErrorHandler(defaultErrorHandlerFn),
@@ -118,6 +119,12 @@ func (m *manager) NewGroup(opts ...Option) Group {
 	return m.group.NewGroup(opts...)
 }
 
+// NewErrorGroup creates a new error group of tasks as a subgroup under the
+// manager's default group.
+func (m *manager) NewErrorGroup(opts ...Option) ErrorGroup {
+	return m.group.NewErrorGroup(opts...)
+}
+
 // GoWithCancel runs GoWithCancel on the manager's default group.
 func (m *manager) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 	return m.group.GoWithCancel(fn, opts...)
@@ -128,11 +135,30 @@ func (m *manager) Go(fn Func, opts ...Option) {
 	_ = m.group.GoWithCancel(fn, opts...)
 }
 
+// NewGroup implements the GroupProvider interface.
 func (t *group) NewGroup(opts ...Option) Group {
+	return t.newGroupInternal(OptionList(opts...))
+}
+
+// NewErrorGroup implements the GroupProvider interface.
+func (t *group) NewErrorGroup(opts ...Option) ErrorGroup {
+	return t.newGroupInternal(OptionList(opts...), DisableReporting())
+}
+
+// newGroupInternal creates a new group with the provided options. The options
+// passed to this function are combined with this group and passed to the new
+// group.
+func (t *group) newGroupInternal(opts ...Option) *group {
+	newOpts := append(t.options, opts...)
+	opt := CombineOptions(newOpts...)
+	ctx := opt.Context
+	if ctx == nil {
+		ctx = t.manager.ctx
+	}
 	subgroup := &group{
 		manager:  t.manager,
-		options:  opts,
-		ctxGroup: ctxgroup.WithContext(t.manager.ctx),
+		options:  newOpts,
+		ctxGroup: ctxgroup.WithContext(ctx),
 	}
 	t.groupMu.Lock()
 	defer t.groupMu.Unlock()
@@ -140,15 +166,21 @@ func (t *group) NewGroup(opts ...Option) Group {
 	return subgroup
 }
 
+// GoWithCancel implements the Tasker interface.
 func (t *group) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 	// Combine options in order of precedence: default options, task options, and
-	// options passed to GoWithCancel.
+	// options passed to GoWithCancel. Always supply a default unique name for the
+	// task, in case the user did not provide one.
 	opt := CombineOptions(
-		OptionList(t.manager.defaultOptions()...),
+		Name(fmt.Sprintf("task-%d", t.manager.id.Add(1))),
 		OptionList(t.options...),
 		OptionList(opts...),
 	)
-	groupCtx, cancel := context.WithCancel(t.manager.ctx)
+	parentCtx := opt.Context
+	if parentCtx == nil {
+		parentCtx = t.manager.ctx
+	}
+	groupCtx, cancel := context.WithCancel(parentCtx)
 	var expectedContextCancellation atomic.Bool
 
 	// internalFunc is a wrapper around the user-provided function that
@@ -190,7 +222,9 @@ func (t *group) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 		if IsContextCanceled(t.manager.ctx) {
 			return nil
 		}
-		t.manager.events <- event
+		if !opt.DisableReporting {
+			t.manager.events <- event
+		}
 		return err
 	})
 
@@ -206,10 +240,12 @@ func (t *group) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 	return taskCancelFn
 }
 
+// Go implements the Tasker interface.
 func (t *group) Go(fn Func, opts ...Option) {
 	_ = t.GoWithCancel(fn, opts...)
 }
 
+// cancelAll cancels all tasks in the group.
 func (t *group) cancelAll() {
 	func() {
 		t.cancelMu.Lock()
@@ -225,11 +261,19 @@ func (t *group) cancelAll() {
 	}
 }
 
+// Wait implements the Group interface.
 func (t *group) Wait() {
+	_ = t.WaitE()
+}
+
+// WaitE implements the ErrorGroup interface.
+func (t *group) WaitE() error {
+	var err error
 	t.groupMu.Lock()
 	defer t.groupMu.Unlock()
-	_ = t.ctxGroup.Wait()
+	err = t.ctxGroup.Wait()
 	for _, g := range t.groupMu.groups {
-		g.Wait()
+		err = errors.CombineErrors(g.WaitE(), err)
 	}
+	return err
 }
