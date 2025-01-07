@@ -206,20 +206,21 @@ const (
 	SinkSchemeWebhookHTTPS          = `webhook-https`
 	SinkSchemePulsar                = `pulsar`
 	SinkSchemeExternalConnection    = `external`
-	SinkParamSASLEnabled            = `sasl_enabled`
-	SinkParamSASLHandshake          = `sasl_handshake`
-	SinkParamSASLUser               = `sasl_user`
-	SinkParamSASLPassword           = `sasl_password`
-	SinkParamSASLMechanism          = `sasl_mechanism`
-	SinkParamSASLClientID           = `sasl_client_id`
-	SinkParamSASLClientSecret       = `sasl_client_secret`
-	SinkParamSASLTokenURL           = `sasl_token_url`
-	SinkParamSASLScopes             = `sasl_scopes`
-	SinkParamSASLGrantType          = `sasl_grant_type`
-	SinkParamSASLAwsIAMRoleArn      = `sasl_aws_iam_role_arn`
-	SinkParamSASLAwsRegion          = `sasl_aws_region`
-	SinkParamSASLAwsIAMSessionName  = `sasl_aws_iam_session_name`
-	SinkParamTableNameAttribute     = `with_table_name_attribute`
+
+	SinkParamSASLEnabled           = `sasl_enabled`
+	SinkParamSASLHandshake         = `sasl_handshake`
+	SinkParamSASLUser              = `sasl_user`
+	SinkParamSASLPassword          = `sasl_password`
+	SinkParamSASLMechanism         = `sasl_mechanism`
+	SinkParamSASLClientID          = `sasl_client_id`
+	SinkParamSASLClientSecret      = `sasl_client_secret`
+	SinkParamSASLTokenURL          = `sasl_token_url`
+	SinkParamSASLScopes            = `sasl_scopes`
+	SinkParamSASLGrantType         = `sasl_grant_type`
+	SinkParamSASLAwsIAMRoleArn     = `sasl_aws_iam_role_arn`
+	SinkParamSASLAwsRegion         = `sasl_aws_region`
+	SinkParamSASLAwsIAMSessionName = `sasl_aws_iam_session_name`
+	SinkParamTableNameAttribute    = `with_table_name_attribute`
 
 	SinkSchemeConfluentKafka    = `confluent-cloud`
 	SinkParamConfluentAPIKey    = `api_key`
