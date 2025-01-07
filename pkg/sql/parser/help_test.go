@@ -215,6 +215,9 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE SCHEMA IF NOT ??`, `CREATE SCHEMA`},
 		{`CREATE SCHEMA bli ??`, `CREATE SCHEMA`},
 
+		{`CHECK ??`, `CHECK`},
+		{`CHECK EXTERNAL CONNECTION ??`, `CHECK EXTERNAL CONNECTION`},
+
 		{`DELETE FROM ??`, `DELETE`},
 		{`DELETE FROM blah ??`, `DELETE`},
 		{`DELETE FROM blah WHERE ??`, `DELETE`},
