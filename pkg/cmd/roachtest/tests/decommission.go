@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 // shudownGracePeriod is the default grace period (in seconds) that we
@@ -179,10 +179,9 @@ func runDrainAndDecommission(
 		require.NoError(t, err)
 	}
 
-	var m *errgroup.Group
-	m, ctx = errgroup.WithContext(ctx)
+	m := t.NewErrorGroup()
 	m.Go(
-		func() error {
+		func(ctx context.Context, _ *logger.Logger) error {
 			return c.RunE(ctx, option.WithNodes(c.Node(pinnedNode)),
 				fmt.Sprintf("./cockroach workload run kv --max-rate 500 --tolerate-errors --duration=%s {pgurl:1-%d}",
 					duration.String(), nodes-4,
@@ -197,7 +196,7 @@ func runDrainAndDecommission(
 	// Drain the last 3 nodes from the cluster.
 	for nodeID := nodes - 2; nodeID <= nodes; nodeID++ {
 		id := nodeID
-		m.Go(func() error {
+		m.Go(func(ctx context.Context, _ *logger.Logger) error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
 				return c.RunE(ctx, option.WithNodes(c.Node(id)), fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport:%d}", install.CockroachNodeCertsDir, id))
@@ -209,7 +208,7 @@ func runDrainAndDecommission(
 	// the draining status of the two nodes we just drained.
 	time.Sleep(30 * time.Second)
 
-	m.Go(func() error {
+	m.Go(func(ctx context.Context, _ *logger.Logger) error {
 		// Decommission the fourth-to-last node from the cluster.
 		id := nodes - 3
 		decom := func(id int) error {
@@ -218,7 +217,7 @@ func runDrainAndDecommission(
 		}
 		return decom(id)
 	})
-	if err := m.Wait(); err != nil {
+	if err := m.WaitE(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -287,18 +286,17 @@ func runDecommission(
 		t.L().Printf("run: %s\n", stmt)
 	}
 
-	var m *errgroup.Group // see comment in version.go
-	m, ctx = errgroup.WithContext(ctx)
+	m := t.NewErrorGroup() // see comment in version.go
 	for _, cmd := range workloads {
 		cmd := cmd // copy is important for goroutine
-		m.Go(func() error {
+		m.Go(func(ctx context.Context, _ *logger.Logger) error {
 			return c.RunE(ctx, option.WithNodes(c.Node(pinnedNode)), cmd)
 		})
 	}
 
 	stopOpts := option.NewStopOpts(option.Graceful(shutdownGracePeriod))
 
-	m.Go(func() error {
+	m.Go(func(ctx context.Context, _ *logger.Logger) error {
 		tBegin, whileDown := timeutil.Now(), true
 		node := nodes
 		for timeutil.Since(tBegin) <= duration {
@@ -377,7 +375,7 @@ func runDecommission(
 		// show spikes in latencies.
 		return nil
 	})
-	if err := m.Wait(); err != nil {
+	if err := m.WaitE(); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -242,15 +241,14 @@ func rebalanceByLoad(
 
 	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, l, db))
 
-	var m *errgroup.Group
-	m, ctx = errgroup.WithContext(ctx)
+	m := t.NewErrorGroup()
 
 	// Enable us to exit out of workload early when we achieve the desired CPU
 	// balance. This drastically shortens the duration of the test in the
 	// common case.
 	ctx, cancel := context.WithCancel(ctx)
 
-	m.Go(func() error {
+	m.Go(func(_ context.Context, _ *logger.Logger) error {
 		l.Printf("starting load generator")
 		err := c.RunE(ctx, option.WithNodes(appNode), fmt.Sprintf(
 			"./cockroach workload run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
@@ -265,7 +263,7 @@ func rebalanceByLoad(
 		return err
 	})
 
-	m.Go(func() error {
+	m.Go(func(_ context.Context, _ *logger.Logger) error {
 		l.Printf("checking for CPU balance")
 
 		storeCPUFn, err := makeStoreCPUFn(ctx, t, l, c, numNodes, numStores)
@@ -306,7 +304,7 @@ func rebalanceByLoad(
 		}
 		return errors.Errorf("CPU not evenly balanced after timeout: %s", reason)
 	})
-	return m.Wait()
+	return m.WaitE()
 }
 
 // makeStoreCPUFn returns a function which can be called to gather the CPU of

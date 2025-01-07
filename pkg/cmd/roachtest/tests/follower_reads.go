@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -38,7 +39,6 @@ import (
 	"github.com/jackc/pgtype"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 func registerFollowerReads(r registry.Registry) {
@@ -279,8 +279,8 @@ func runFollowerReadsTest(
 			return nil
 		}
 	}
-	doSelects := func(ctx context.Context, node int) func() error {
-		return func() error {
+	doSelects := func(node int) task.Func {
+		return func(ctx context.Context, _ *logger.Logger) error {
 			for ctx.Err() == nil {
 				k, v := chooseKV()
 				err := verifySelect(ctx, node, k, v)()
@@ -335,12 +335,14 @@ func runFollowerReadsTest(
 	// 15 seconds to give closed timestamps a chance to propagate and caches time
 	// to warm up.
 	l.Printf("warming up reads")
-	g, gCtx := errgroup.WithContext(ctx)
+	//g, gCtx := errgroup.WithContext(ctx)
+	g := t.NewErrorGroup()
+
 	k, v := chooseKV()
 	until := timeutil.Now().Add(15 * time.Second)
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		fn := verifySelect(gCtx, i, k, v)
-		g.Go(func() error {
+		g.Go(func(gCtx context.Context, _ *logger.Logger) error {
+			fn := verifySelect(gCtx, i, k, v)
 			for {
 				if timeutil.Now().After(until) {
 					return nil
@@ -351,7 +353,7 @@ func runFollowerReadsTest(
 			}
 		})
 	}
-	if err := g.Wait(); err != nil {
+	if err := g.WaitE(); err != nil {
 		t.Fatalf("error verifying node values: %v", err)
 	}
 	// Verify that the follower read count increments on at least two nodes -
@@ -393,19 +395,19 @@ func runFollowerReadsTest(
 		l.Printf("stopping load")
 		cancel()
 	})
-	g, gCtx = errgroup.WithContext(timeoutCtx)
+	g = t.NewErrorGroup(task.WithContext(timeoutCtx))
 	const concurrency = 32
 	var cur int
 	for i := 0; cur < concurrency; i++ {
 		node := i%c.Spec().NodeCount + 1
 		if _, ok := liveNodes[node]; ok {
-			g.Go(doSelects(gCtx, node))
+			g.Go(doSelects(node))
 			cur++
 		}
 	}
 	start := timeutil.Now()
 
-	if err := g.Wait(); err != nil && timeoutCtx.Err() == nil {
+	if err := g.WaitE(); err != nil && timeoutCtx.Err() == nil {
 		t.Fatalf("error reading data: %v", err)
 	}
 	end := timeutil.Now()
@@ -658,10 +660,10 @@ func initFollowerReadsDB(
 	const concurrency = 32
 	sem := make(chan struct{}, concurrency)
 	data = make(map[int]int64)
-	insert := func(ctx context.Context, k int) func() error {
+	insert := func(k int) task.Func {
 		v := rng.Int63()
 		data[k] = v
-		return func() error {
+		return func(ctx context.Context, _ *logger.Logger) error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			_, err := db.ExecContext(ctx, "INSERT INTO mr_db.test VALUES ( $1, $2 )", k, v)
@@ -670,11 +672,11 @@ func initFollowerReadsDB(
 	}
 
 	// Insert the data.
-	g, gCtx := errgroup.WithContext(ctx)
+	g := t.NewErrorGroup()
 	for i := 0; i < rows; i++ {
-		g.Go(insert(gCtx, i))
+		g.Go(insert(i))
 	}
-	if err := g.Wait(); err != nil {
+	if err := g.WaitE(); err != nil {
 		t.Fatalf("failed to insert data: %v", err)
 	}
 
@@ -894,8 +896,8 @@ const followerReadsMetric = "follower_reads_success_count"
 // according to the metric.
 func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) ([]int, error) {
 	followerReadCounts := make([]int, c.Spec().NodeCount)
-	getFollowerReadCount := func(ctx context.Context, node int) func() error {
-		return func() error {
+	getFollowerReadCount := func(node int) task.Func {
+		return func(ctx context.Context, _ *logger.Logger) error {
 			adminUIAddrs, err := c.ExternalAdminUIAddr(
 				ctx, t.L(), c.Node(node), option.VirtualClusterName(install.SystemInterfaceName),
 			)
@@ -932,11 +934,11 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 			return nil
 		}
 	}
-	g, gCtx := errgroup.WithContext(ctx)
+	g := t.NewErrorGroup()
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		g.Go(getFollowerReadCount(gCtx, i))
+		g.Go(getFollowerReadCount(i))
 	}
-	if err := g.Wait(); err != nil {
+	if err := g.WaitE(); err != nil {
 		return nil, err
 	}
 	return followerReadCounts, nil

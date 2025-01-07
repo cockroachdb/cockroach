@@ -16,10 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 func registerHotSpotSplits(r registry.Registry) {
@@ -31,10 +31,9 @@ func registerHotSpotSplits(r registry.Registry) {
 
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload init kv --drop {pgurl:1}`)
 
-		var m *errgroup.Group // see comment in version.go
-		m, ctx = errgroup.WithContext(ctx)
+		m := t.NewErrorGroup()
 
-		m.Go(func() error {
+		m.Go(func(ctx context.Context, _ *logger.Logger) error {
 			t.L().Printf("starting load generator\n")
 
 			const blockSize = 1 << 18 // 256 KB
@@ -44,7 +43,7 @@ func registerHotSpotSplits(r registry.Registry) {
 				concurrency, blockSize, blockSize, duration.String(), c.CRDBNodes()))
 		})
 
-		m.Go(func() error {
+		m.Go(func(ctx context.Context, _ *logger.Logger) error {
 			t.Status("starting checks for range sizes")
 			const sizeLimit = 3 * (1 << 29) // 3*512 MB (512 mb is default size)
 
@@ -74,7 +73,7 @@ func registerHotSpotSplits(r registry.Registry) {
 
 			return nil
 		})
-		if err := m.Wait(); err != nil {
+		if err := m.WaitE(); err != nil {
 			t.Fatal(err)
 		}
 	}
