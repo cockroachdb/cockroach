@@ -1,0 +1,7 @@
+statement ok
+SET enable_row_level_security = on;
+
+query T
+show session enable_row_level_security;
+----
+on
