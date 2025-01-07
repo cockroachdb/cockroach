@@ -97,6 +97,10 @@ type FortificationTracker struct {
 	// exists to reduce the number of times we need to compute LeadSupportUntil by
 	// caching the result.
 	lastComputedLeadSupportUntil hlc.Timestamp
+
+	// supportExpMap is a map that hangs off the fortificationTracker to prevent
+	// allocations on every call to UpdateLastComputedLeadSupportUntil.
+	supportExpMap map[pb.PeerID]hlc.Timestamp
 }
 
 // NewFortificationTracker initializes a FortificationTracker.
@@ -109,6 +113,7 @@ func NewFortificationTracker(
 		fortification: map[pb.PeerID]pb.Epoch{},
 		votersSupport: map[pb.PeerID]bool{},
 		logger:        logger,
+		supportExpMap: map[pb.PeerID]hlc.Timestamp{},
 	}
 	return &st
 }
@@ -208,9 +213,7 @@ func (ft *FortificationTracker) UpdateLastComputedLeadSupportUntil(state pb.Stat
 		return ft.lastComputedLeadSupportUntil // fast-path for no fortification
 	}
 
-	// TODO(ibrahim): avoid this map allocation as we're calling LeadSupportUntil
-	// from hot paths.
-	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
+	clear(ft.supportExpMap)
 	ft.config.Voters.Visit(func(id pb.PeerID) {
 		if supportEpoch, ok := ft.fortification[id]; ok {
 			curEpoch, curExp := ft.storeLiveness.SupportFrom(id)
@@ -220,11 +223,11 @@ func (ft *FortificationTracker) UpdateLastComputedLeadSupportUntil(state pb.Stat
 			// supporting the leader's store at the epoch in the MsgFortifyLeaderResp
 			// message.
 			if curEpoch == supportEpoch {
-				supportExpMap[id] = curExp
+				ft.supportExpMap[id] = curExp
 			}
 		}
 	})
-	ft.lastComputedLeadSupportUntil = ft.config.Voters.LeadSupportExpiration(supportExpMap)
+	ft.lastComputedLeadSupportUntil = ft.config.Voters.LeadSupportExpiration(ft.supportExpMap)
 	return ft.lastComputedLeadSupportUntil
 }
 
