@@ -208,9 +208,6 @@ type StoreSpec struct {
 	// storage engine has been closed. This only applies to in-memory storage
 	// engine.
 	StickyVFSID string
-	// RocksDBOptions contains RocksDB specific options using a semicolon
-	// separated key-value syntax ("key1=value1; key2=value2").
-	RocksDBOptions string
 	// PebbleOptions contains Pebble-specific options in the same format as a
 	// Pebble OPTIONS file. For example:
 	// [Options]
@@ -399,8 +396,6 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			} else {
 				return StoreSpec{}, fmt.Errorf("%s is not a valid store type", value)
 			}
-		case "rocksdb":
-			ss.RocksDBOptions = value
 		case "pebble":
 			// Pebble options are supplied in the Pebble OPTIONS ini-like
 			// format, but allowing any whitespace to delimit lines. Convert
