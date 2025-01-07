@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1263,6 +1265,8 @@ func (b *changefeedResumer) handleChangefeedError(
 	}
 }
 
+var replanErr = errors.New("replan due to detail change")
+
 func (b *changefeedResumer) resumeWithRetries(
 	ctx context.Context,
 	jobExec sql.JobExecContext,
@@ -1305,6 +1309,11 @@ func (b *changefeedResumer) resumeWithRetries(
 	jobExec.ExtendedEvalContext().ChangefeedState = localState
 	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
+	resolvedDest, err := resolveDest(ctx, execCfg, details.SinkURI)
+	if err != nil {
+		log.Warningf(ctx, "failed to resolve destination details for change monitoring: %v", err)
+	}
+
 	for r := getRetry(ctx); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
@@ -1318,9 +1327,42 @@ func (b *changefeedResumer) resumeWithRetries(
 				knobs.BeforeDistChangefeed()
 			}
 
-			flowErr = distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh)
+			confPoller := make(chan struct{})
+			g := ctxgroup.WithContext(ctx)
+			g.GoCtx(func(ctx context.Context) error {
+				defer close(confPoller)
+				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh)
+			})
+			g.GoCtx(func(ctx context.Context) error {
+				t := time.NewTicker(15 * time.Second)
+				defer t.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-confPoller:
+						return nil
+					case <-t.C:
+						newDest, err := reloadDest(ctx, jobID, execCfg)
+						if err != nil {
+							log.Warningf(ctx, "failed to check for updated configuration: %v", err)
+						} else if newDest != resolvedDest {
+							resolvedDest = newDest
+							return replanErr
+						}
+					}
+				}
+			})
+
+			flowErr = g.Wait()
+
 			if flowErr == nil {
 				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
+			}
+
+			if errors.Is(flowErr, replanErr) {
+				log.Infof(ctx, "restarting changefeed due to updated configuration")
+				continue
 			}
 
 			if knobs != nil && knobs.HandleDistChangefeedError != nil {
@@ -1381,6 +1423,35 @@ func (b *changefeedResumer) resumeWithRetries(
 	}
 
 	return errors.Wrap(ctx.Err(), `ran out of retries`)
+}
+
+func resolveDest(ctx context.Context, execCfg *sql.ExecutorConfig, sinkURI string) (string, error) {
+	u, err := url.Parse(sinkURI)
+	if err != nil {
+		return "", err
+	}
+	if u.Scheme != changefeedbase.SinkSchemeExternalConnection {
+		return sinkURI, nil
+	}
+	resolved := ""
+	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		conn, err := externalconn.LoadExternalConnection(ctx, u.Host, txn)
+		if err != nil {
+			return err
+		}
+		resolved = conn.UnredactedConnectionStatement()
+		return nil
+	})
+	return resolved, err
+}
+
+func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfig) (string, error) {
+	reloadedJob, err := execCfg.JobRegistry.LoadJob(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	newDetails := reloadedJob.Details().(jobspb.ChangefeedDetails)
+	return resolveDest(ctx, execCfg, newDetails.SinkURI)
 }
 
 // reconcileJobStateWithLocalState ensures that the job progress information
