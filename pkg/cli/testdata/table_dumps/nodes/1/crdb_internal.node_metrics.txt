@@ -1,0 +1,7 @@
+store_id	name	value
+NULL	gossip.connections.incoming	0
+NULL	jobs.row_level_ttl.select_duration-p99.9	0
+NULL	sql.restart_savepoint.rollback.count.internal	0
+1	leases.transfers.success	0
+1	storage.iterator.category-pebble-ingest.block-load.latency-sum	0
+1	range.snapshots.upreplication.sent-bytes	0
