@@ -51,6 +51,7 @@ const (
 	MetadataNotStale JobStatusMessage = "Not enough time has elapsed since last job run"
 	JobRunning       JobStatusMessage = "Job is already running"
 	JobTriggered     JobStatusMessage = "Job triggered successfully"
+	JobUnclaimed     JobStatusMessage = "Job is unclaimed"
 )
 
 const (
@@ -1042,8 +1043,12 @@ func (a *apiV2Server) triggerTableMetadataUpdateJob(
 	if err != nil {
 		st, ok := status.FromError(err)
 		if ok {
-			if st.Code() == codes.Aborted {
+			switch st.Code() {
+			case codes.Aborted:
 				return tmJobTriggeredResponse{JobTriggered: false, Message: JobRunning}, nil
+			case codes.Unavailable:
+				return tmJobTriggeredResponse{JobTriggered: false, Message: JobUnclaimed}, nil
+			default:
 			}
 		}
 		return tmJobTriggeredResponse{}, err
