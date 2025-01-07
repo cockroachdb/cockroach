@@ -12,18 +12,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSplitPartitionData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 	quantizer := quantize.NewRaBitQuantizer(2, 42)
 	store := vecstore.NewInMemoryStore(2, 42)
 	options := VectorIndexOptions{Seed: 42}
-	index, err := NewVectorIndex(ctx, store, quantizer, &options, nil /* stopper */)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	index, err := NewVectorIndex(ctx, store, quantizer, &options, stopper)
 	require.NoError(t, err)
+	worker := NewFixupWorker(&index.fixups)
 
 	vectors := vector.MakeSetFromRawData([]float32{
 		0, 0,
@@ -129,7 +138,7 @@ func TestSplitPartitionData(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			tempVectors := vector.MakeSet(2)
 			tempVectors.AddSet(&vectors)
-			leftSplit, rightSplit := index.fixups.splitPartitionData(
+			leftSplit, rightSplit := worker.splitPartitionData(
 				ctx, splitPartition, tempVectors, tc.leftOffsets, tc.rightOffsets)
 
 			validate(&leftSplit, tc.expectedLeft)

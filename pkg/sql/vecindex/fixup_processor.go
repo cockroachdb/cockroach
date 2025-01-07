@@ -7,13 +7,13 @@ package vecindex
 
 import (
 	"context"
-	"math/rand"
+	"fmt"
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -34,7 +34,7 @@ const (
 
 // maxFixups specifies the maximum number of pending index fixups that can be
 // enqueued by foreground threads, waiting for processing. Hitting this limit
-// indicates the background goroutine has fallen far behind.
+// indicates the background goroutines have fallen far behind.
 const maxFixups = 100
 
 // fixup describes an index fixup so that it can be enqueued for processing.
@@ -68,20 +68,19 @@ type fixup struct {
 // All entry methods (i.e. capitalized methods) in fixupProcess are thread-safe.
 type fixupProcessor struct {
 	// --------------------------------------------------
-	// These fields can be accessed on any goroutine once the lock is acquired.
+	// These read-only fields can be read on any goroutine.
 	// --------------------------------------------------
-	mu struct {
-		syncutil.Mutex
 
-		// pendingPartitions tracks pending split and merge fixups.
-		pendingPartitions map[vecstore.PartitionKey]bool
-
-		// pendingVectors tracks pending fixups for deleting vectors.
-		pendingVectors map[string]bool
-
-		// waitForFixups broadcasts to any waiters when all fixups are processed.
-		waitForFixups sync.Cond
-	}
+	// initCtx is the context provided to the Init method. It is passed to fixup
+	// workers.
+	initCtx context.Context
+	// stopper is used to create new workers and signal their quiescence.
+	stopper *stop.Stopper
+	// index points back to the vector index to which fixups are applied.
+	index *VectorIndex
+	// seed, if non-zero, specifies that a deterministic random number generator
+	// should be used by the fixup processor. This is useful in testing.
+	seed int64
 
 	// --------------------------------------------------
 	// These fields can be accessed on any goroutine.
@@ -92,40 +91,57 @@ type fixupProcessor struct {
 	// fixupsLimitHit prevents flooding the log with warning messages when the
 	// maxFixups limit has been reached.
 	fixupsLimitHit log.EveryN
+	// cancel can be used to stop background workers even if the stopper has not
+	// quiesced. It is called when the vector index is closed.
+	cancel func()
 
 	// --------------------------------------------------
-	// The following fields should only be accessed on a single background
-	// goroutine (or a single foreground goroutine in deterministic tests).
+	// These fields can be accessed on any goroutine once the lock is acquired.
 	// --------------------------------------------------
+	mu struct {
+		syncutil.Mutex
 
-	// index points back to the vector index to which fixups are applied.
-	index *VectorIndex
-	// rng is a random number generator. If nil, then the global random number
-	// generator will be used.
-	rng *rand.Rand
-	// workspace is used to stack-allocate temporary memory.
-	workspace internal.Workspace
-	// searchCtx is reused to perform index searches and inserts.
-	searchCtx searchContext
-
-	// tempVectorsWithKeys is temporary memory for vectors and their keys.
-	tempVectorsWithKeys []vecstore.VectorWithKey
+		// pendingPartitions tracks pending split and merge fixups.
+		pendingPartitions map[vecstore.PartitionKey]bool
+		// pendingVectors tracks pending fixups for deleting vectors.
+		pendingVectors map[string]bool
+		// totalWorkers is the number of background workers available to process
+		// fixups.
+		totalWorkers int
+		// runningWorkers is the number of background workers that are actively
+		// processing fixups. This is always <= totalWorkers.
+		runningWorkers int
+		// suspended, if non-nil, prevents background workers from processing
+		// fixups. Only once the channel is closed will they begin processing.
+		// This is used for testing.
+		suspended chan struct{}
+		// waitForFixups broadcasts to any waiters when all fixups are processed.
+		// This is used for testing.
+		waitForFixups sync.Cond
+	}
 }
 
-// Init initializes the fixup processor. If "seed" is non-zero, then the fixup
-// processor will use a deterministic random number generator. Otherwise, it
-// will use the global random number generator.
-func (fp *fixupProcessor) Init(index *VectorIndex, seed int64) {
+// Init initializes the fixup processor. The stopper is used to start new
+// background workers. If "seed" is non-zero, then the fixup processor will use
+// a deterministic random number generator. Otherwise, it will use the global
+// random number generator.
+func (fp *fixupProcessor) Init(
+	ctx context.Context, stopper *stop.Stopper, index *VectorIndex, seed int64,
+) {
+	// Background workers should spin down when the stopper begins to quiesce.
+	// Also save the cancel function so that workers can be shut down
+	// independently of the stopper.
+	fp.initCtx, fp.cancel = stopper.WithCancelOnQuiesce(ctx)
+	fp.stopper = stopper
 	fp.index = index
-	if seed != 0 {
-		// Create a random number generator for the background goroutine.
-		fp.rng = rand.New(rand.NewSource(seed))
-	}
+	fp.seed = seed
+
+	fp.fixups = make(chan fixup, maxFixups)
+	fp.fixupsLimitHit = log.Every(time.Second)
+
 	fp.mu.pendingPartitions = make(map[vecstore.PartitionKey]bool, maxFixups)
 	fp.mu.pendingVectors = make(map[string]bool, maxFixups)
 	fp.mu.waitForFixups.L = &fp.mu
-	fp.fixups = make(chan fixup, maxFixups)
-	fp.fixupsLimitHit = log.Every(time.Second)
 }
 
 // AddSplit enqueues a split fixup for later processing.
@@ -161,55 +177,48 @@ func (fp *fixupProcessor) AddDeleteVector(
 	})
 }
 
-// Wait blocks until all pending fixups have been processed by the background
-// goroutine. This is useful in testing.
-func (fp *fixupProcessor) Wait() {
+// Suspend blocks all background workers from processing fixups until Process is
+// called to let them run. This is useful for testing.
+func (fp *fixupProcessor) Suspend() {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
+
+	if fp.mu.suspended != nil {
+		panic(errors.AssertionFailedf("fixup processor was already suspended"))
+	}
+
+	fp.mu.suspended = make(chan struct{})
+}
+
+// Process waits until all pending fixups have been processed by background
+// workers. If background workers have been suspended, they are temporarily
+// allowed to run until all fixups have been processed. This is useful for
+// testing.
+func (fp *fixupProcessor) Process() {
+	fp.mu.Lock()
+	defer fp.mu.Unlock()
+
+	suspended := fp.mu.suspended
+	if suspended != nil {
+		// Signal any waiting background workers that they can process fixups.
+		close(fp.mu.suspended)
+		fp.mu.suspended = nil
+	}
+
+	// Wait for all fixups to be processed.
 	for len(fp.mu.pendingVectors) > 0 || len(fp.mu.pendingPartitions) > 0 {
 		fp.mu.waitForFixups.Wait()
 	}
-}
 
-// runAll processes all fixups in the queue. This should only be called by tests
-// on one foreground goroutine, and only in cases where Start was not called.
-func (fp *fixupProcessor) runAll(ctx context.Context) error {
-	for {
-		ok, err := fp.run(ctx, false /* wait */)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			// No more fixups to process.
-			return nil
-		}
+	// Re-suspend the fixup processor if it was suspended.
+	if suspended != nil {
+		fp.mu.suspended = make(chan struct{})
 	}
-}
-
-// clearPending removes all pending fixups from the processor. This should only
-// be called on one foreground goroutine, and only in cases where Start was not
-// called.
-func (fp *fixupProcessor) clearPending() {
-	fp.mu.Lock()
-	defer fp.mu.Unlock()
-
-	// Clear enqueued fixups.
-	for {
-		select {
-		case <-fp.fixups:
-			continue
-		default:
-		}
-		break
-	}
-
-	// Clear pending fixups.
-	fp.mu.pendingPartitions = make(map[vecstore.PartitionKey]bool)
-	fp.mu.pendingVectors = make(map[string]bool)
 }
 
 // addFixup enqueues the given fixup for later processing, assuming there is not
-// already a duplicate fixup that's pending.
+// already a duplicate fixup that's pending. It also starts a background worker
+// to process the fixup, if needed and allowed.
 func (fp *fixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
@@ -244,4 +253,81 @@ func (fp *fixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	// Note that the channel send operation should never block, since it has
 	// maxFixups capacity.
 	fp.fixups <- fixup
+
+	// If there is an idle worker available, nothing more to do.
+	if fp.mu.runningWorkers < fp.mu.totalWorkers {
+		return
+	}
+
+	// If we've reached the max running worker limit, don't create additional
+	// workers.
+	if fp.mu.totalWorkers >= fp.index.options.MaxWorkers {
+		return
+	}
+
+	// Start another worker.
+	fp.mu.totalWorkers++
+
+	worker := NewFixupWorker(fp)
+	taskName := fmt.Sprintf("vecindex-worker-%d", fp.mu.totalWorkers)
+	err := fp.stopper.RunAsyncTask(fp.initCtx, taskName, worker.Start)
+	if err != nil {
+		// Log error and continue.
+		log.Errorf(ctx, "error starting vector index background worker: %v", err)
+	}
+}
+
+// nextFixup fetches the next fixup in the queue so that it can be processed by
+// a background worker. It blocks until there is a fixup available (ok=true) or
+// until the processor shuts down (ok=false).
+func (fp *fixupProcessor) nextFixup(ctx context.Context) (next fixup, ok bool) {
+	select {
+	case next = <-fp.fixups:
+		// Within the scope of the mutex, increment running workers and check
+		// whether processor is suspended.
+		suspended := func() chan struct{} {
+			fp.mu.Lock()
+			defer fp.mu.Unlock()
+			fp.mu.runningWorkers++
+			return fp.mu.suspended
+		}()
+		if suspended != nil {
+			// Can't process the fixup until the processor is resumed, so wait
+			// until that happens.
+			select {
+			case <-suspended:
+				break
+
+			case <-ctx.Done():
+				return fixup{}, false
+			}
+		}
+
+		return next, true
+
+	case <-ctx.Done():
+		// Context was canceled, abort.
+		return fixup{}, false
+	}
+}
+
+// removeFixup removes a pending fixup that has been processed by a worker.
+func (fp *fixupProcessor) removeFixup(toRemove fixup) {
+	fp.mu.Lock()
+	defer fp.mu.Unlock()
+
+	switch toRemove.Type {
+	case splitOrMergeFixup:
+		delete(fp.mu.pendingPartitions, toRemove.PartitionKey)
+
+	case vectorDeleteFixup:
+		delete(fp.mu.pendingVectors, string(toRemove.VectorKey))
+	}
+
+	fp.mu.runningWorkers--
+
+	// If there are no more pending fixups, notify any waiters.
+	if len(fp.mu.pendingPartitions) == 0 && len(fp.mu.pendingVectors) == 0 {
+		fp.mu.waitForFixups.Broadcast()
+	}
 }
