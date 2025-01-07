@@ -43,6 +43,7 @@ preparable_stmt ::=
 	| backup_stmt
 	| cancel_stmt
 	| create_stmt
+	| check_stmt
 	| delete_stmt
 	| drop_stmt
 	| explain_stmt
@@ -211,6 +212,9 @@ create_stmt ::=
 	| create_external_connection_stmt
 	| create_logical_replication_stream_stmt
 	| create_schedule_stmt
+
+check_stmt ::=
+	check_external_connection_stmt
 
 delete_stmt ::=
 	opt_with_clause 'DELETE' opt_batch_clause 'FROM' table_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -634,6 +638,9 @@ create_logical_replication_stream_stmt ::=
 create_schedule_stmt ::=
 	create_schedule_for_changefeed_stmt
 	| create_schedule_for_backup_stmt
+
+check_external_connection_stmt ::=
+	'CHECK' 'EXTERNAL' 'CONNECTION' string_or_placeholder opt_with_check_external_connection_options_list
 
 opt_with_clause ::=
 	with_clause
@@ -1909,6 +1916,11 @@ create_schedule_for_changefeed_stmt ::=
 create_schedule_for_backup_stmt ::=
 	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'BACKUP' opt_backup_targets 'INTO' string_or_placeholder_opt_list opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
 
+opt_with_check_external_connection_options_list ::=
+	'WITH' check_external_connection_options_list
+	| 'WITH' 'OPTIONS' '(' check_external_connection_options_list ')'
+	| 
+
 with_clause ::=
 	'WITH' cte_list
 	| 'WITH' 'RECURSIVE' cte_list
@@ -2728,6 +2740,9 @@ opt_full_backup_clause ::=
 	| 'FULL' 'BACKUP' 'ALWAYS'
 	| 
 
+check_external_connection_options_list ::=
+	( check_external_connection_options ) ( ( ',' check_external_connection_options ) )*
+
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*
 
@@ -3364,6 +3379,11 @@ logical_replication_create_table_options ::=
 	| 'LABEL' '=' string_or_placeholder
 	| 'UNIDIRECTIONAL'
 	| 'BIDIRECTIONAL' 'ON' string_or_placeholder
+
+check_external_connection_options ::=
+	'TRANSFER' '=' string_or_placeholder
+	| 'TIME' '=' string_or_placeholder
+	| 'CONCURRENTLY' '=' a_expr
 
 common_table_expr ::=
 	table_alias_name opt_col_def_list_no_types 'AS' materialize_clause '(' preparable_stmt ')'

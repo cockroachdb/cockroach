@@ -146,7 +146,7 @@ func (ef *execFactory) ConstructExport(
 		panic(err)
 	}
 	// TODO(adityamaru): Ideally we'd use
-	// `cloudprivilege.CheckDestinationPrivileges privileges here, but because of
+	// `sql.CheckDestinationPrivileges privileges here, but because of
 	// a ciruclar dependancy with `pkg/sql` this is not possible. Consider moving
 	// this file into `pkg/sql/importer` to get around this.
 	hasExternalIOImplicitAccess := ef.planner.CheckPrivilege(
