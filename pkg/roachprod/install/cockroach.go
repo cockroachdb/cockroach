@@ -1307,7 +1307,9 @@ func (c *SyncedCluster) maybeGenerateLicense(l *logger.Logger) string {
 	}
 	if res == "" {
 		res, _ = (&licenseccl.License{
-			Type:              licenseccl.License_Enterprise,
+			Type: licenseccl.License_Enterprise,
+			// OrganizationName needs to be set to preserve backwards compatibility.
+			OrganizationName:  "Cockroach Labs - Production Testing",
 			Environment:       licenseccl.Development,
 			ValidUntilUnixSec: timeutil.Now().AddDate(0, 1, 0).Unix(),
 		}).Encode()
