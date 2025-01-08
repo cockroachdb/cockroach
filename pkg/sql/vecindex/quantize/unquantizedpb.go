@@ -36,6 +36,13 @@ func (vs *UnQuantizedVectorSet) Clone() QuantizedVectorSet {
 	}
 }
 
+// Clear implements the QuantizedVectorSet interface.
+func (vs *UnQuantizedVectorSet) Clear(centroid vector.T) {
+	copy(vs.Centroid, centroid)
+	vs.CentroidDistances = vs.CentroidDistances[:0]
+	vs.Vectors.Clear()
+}
+
 // ComputeSquaredDistances computes the exact squared distances between the
 // given query vector and the vectors in the set, and writes the distances to
 // the "squaredDistances" slice.

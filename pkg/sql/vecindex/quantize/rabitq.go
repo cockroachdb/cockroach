@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// raBitQuantizer quantizes vectors according to the algorithm described in this
+// RaBitQuantizer quantizes vectors according to the algorithm described in this
 // paper:
 //
 //	"RaBitQ: Quantizing High-Dimensional Vectors with a Theoretical Error Bound
@@ -29,11 +29,11 @@ import (
 // accelerated with fast SIMD instructions. RaBitQ quantization codes use only
 // 1 bit per dimension in the original vector.
 //
-// All methods in raBitQuantizer are thread-safe. It is intended to be cached
+// All methods in RaBitQuantizer are thread-safe. It is intended to be cached
 // on a per-process basis and reused across all threads that query the same
 // vector index. This is important, because the ROT matrix is expensive to
 // generate and can use quite a bit of memory.
-type raBitQuantizer struct {
+type RaBitQuantizer struct {
 	// dims is the dimensionality of vectors that can be quantized.
 	dims int
 	// sqrtDims is the precomputed square root of the "dims" field.
@@ -48,7 +48,7 @@ type raBitQuantizer struct {
 	unbias []float32
 }
 
-var _ Quantizer = (*raBitQuantizer)(nil)
+var _ Quantizer = (*RaBitQuantizer)(nil)
 
 // NewRaBitQuantizer returns a new RaBitQ quantizer that quantizes vectors with
 // the given number of dimensions. The provided seed is used to generate the
@@ -94,7 +94,7 @@ func NewRaBitQuantizer(dims int, seed int64) Quantizer {
 	}
 
 	sqrtDims := num32.Sqrt(float32(dims))
-	return &raBitQuantizer{
+	return &RaBitQuantizer{
 		dims:        dims,
 		sqrtDims:    sqrtDims,
 		sqrtDimsInv: 1.0 / sqrtDims,
@@ -104,17 +104,17 @@ func NewRaBitQuantizer(dims int, seed int64) Quantizer {
 }
 
 // GetOriginalDims implements the Quantizer interface.
-func (q *raBitQuantizer) GetOriginalDims() int {
+func (q *RaBitQuantizer) GetOriginalDims() int {
 	return q.dims
 }
 
 // GetRandomDims implements the Quantizer interface.
-func (q *raBitQuantizer) GetRandomDims() int {
+func (q *RaBitQuantizer) GetRandomDims() int {
 	return q.dims
 }
 
 // RandomizeVector implements the Quantizer interface.
-func (q *raBitQuantizer) RandomizeVector(
+func (q *RaBitQuantizer) RandomizeVector(
 	ctx context.Context, input vector.T, output vector.T, invert bool,
 ) {
 	if !invert {
@@ -125,7 +125,7 @@ func (q *raBitQuantizer) RandomizeVector(
 }
 
 // Quantize implements the Quantizer interface.
-func (q *raBitQuantizer) Quantize(ctx context.Context, vectors *vector.Set) QuantizedVectorSet {
+func (q *RaBitQuantizer) Quantize(ctx context.Context, vectors *vector.Set) QuantizedVectorSet {
 	// Allocate slice for the centroid.
 	quantizedSet := &RaBitQuantizedVectorSet{
 		Centroid: vectors.Centroid(make(vector.T, vectors.Dims)),
@@ -136,14 +136,27 @@ func (q *raBitQuantizer) Quantize(ctx context.Context, vectors *vector.Set) Quan
 }
 
 // QuantizeInSet implements the Quantizer interface.
-func (q *raBitQuantizer) QuantizeInSet(
+func (q *RaBitQuantizer) QuantizeInSet(
 	ctx context.Context, quantizedSet QuantizedVectorSet, vectors *vector.Set,
 ) {
 	q.quantizeHelper(ctx, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 }
 
+// NewQuantizedVectorSet implements the Quantizer interface
+func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
+	dataBuffer := make([]uint64, 0, capacity*RaBitQCodeSetWidth(q.GetRandomDims()))
+	raBitQuantizedVectorSet := &RaBitQuantizedVectorSet{
+		Centroid:          centroid,
+		Codes:             MakeRaBitQCodeSetFromRawData(dataBuffer, q.GetRandomDims()),
+		CodeCounts:        make([]uint32, 0, capacity),
+		CentroidDistances: make([]float32, 0, capacity),
+		DotProducts:       make([]float32, 0, capacity),
+	}
+	return raBitQuantizedVectorSet
+}
+
 // EstimateSquaredDistances implements the Quantizer interface.
-func (q *raBitQuantizer) EstimateSquaredDistances(
+func (q *RaBitQuantizer) EstimateSquaredDistances(
 	ctx context.Context,
 	quantizedSet QuantizedVectorSet,
 	queryVector vector.T,
@@ -285,7 +298,7 @@ func (q *raBitQuantizer) EstimateSquaredDistances(
 
 // quantizeHelper quantizes the given set of vectors and adds the quantization
 // information to the provided quantized vector set.
-func (q *raBitQuantizer) quantizeHelper(
+func (q *RaBitQuantizer) quantizeHelper(
 	ctx context.Context, qs *RaBitQuantizedVectorSet, vectors *vector.Set,
 ) {
 	// Extend any existing slices in the vector set.
