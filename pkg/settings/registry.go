@@ -250,6 +250,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"sql.auth.resolve_membership_single_scan.enabled":            {},
 	"storage.single_delete.crash_on_invariant_violation.enabled": {},
 	"storage.single_delete.crash_on_ineffectual.enabled":         {},
+	"bulkio.backup.elide_common_prefix.enabled":                  {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
