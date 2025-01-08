@@ -146,6 +146,12 @@ func (p *MockStreamClient) CreateForTables(
 	return nil, errors.AssertionFailedf("unimplemented")
 }
 
+func (p *MockStreamClient) ExecStatement(
+	ctx context.Context, cmd string, opname string, args ...interface{},
+) error {
+	return errors.AssertionFailedf("unimplemented")
+}
+
 // ErrorStreamClient always returns an error when consuming a partition.
 type ErrorStreamClient struct{ MockStreamClient }
 

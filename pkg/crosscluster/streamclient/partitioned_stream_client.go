@@ -392,6 +392,17 @@ func (p *partitionedStreamClient) CreateForTables(
 	}
 	return spec, nil
 }
+func (p *partitionedStreamClient) ExecStatement(
+	ctx context.Context, cmd string, opname string, args ...interface{},
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, opname)
+	defer sp.Finish()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, err := p.mu.srcConn.Exec(ctx, cmd, args...)
+	return err
+}
 
 // PriorReplicationDetails implements the Client interface.
 func (p *partitionedStreamClient) PriorReplicationDetails(
