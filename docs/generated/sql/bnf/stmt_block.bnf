@@ -1079,6 +1079,7 @@ unreserved_keyword ::=
 	| 'BATCH'
 	| 'BEFORE'
 	| 'BEGIN'
+	| 'BIDIRECTIONAL'
 	| 'BINARY'
 	| 'BUCKET_COUNT'
 	| 'BUNDLE'
@@ -1505,6 +1506,7 @@ unreserved_keyword ::=
 	| 'TYPE'
 	| 'TYPES'
 	| 'THROTTLING'
+	| 'UNIDIRECTIONAL'
 	| 'UNBOUNDED'
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
@@ -3348,6 +3350,8 @@ logical_replication_create_table_options ::=
 	'MODE' '=' string_or_placeholder
 	| 'DISCARD' '=' string_or_placeholder
 	| 'LABEL' '=' string_or_placeholder
+	| 'UNIDIRECTIONAL'
+	| 'BIDIRECTIONAL' 'ON' string_or_placeholder
 
 common_table_expr ::=
 	table_alias_name opt_col_def_list_no_types 'AS' materialize_clause '(' preparable_stmt ')'
@@ -3762,6 +3766,7 @@ bare_label_keywords ::=
 	| 'BEFORE'
 	| 'BEGIN'
 	| 'BETWEEN'
+	| 'BIDIRECTIONAL'
 	| 'BIGINT'
 	| 'BINARY'
 	| 'BIT'
@@ -4290,6 +4295,7 @@ bare_label_keywords ::=
 	| 'TYPES'
 	| 'UNBOUNDED'
 	| 'UNCOMMITTED'
+	| 'UNIDIRECTIONAL'
 	| 'UNIQUE'
 	| 'UNKNOWN'
 	| 'UNLISTEN'
