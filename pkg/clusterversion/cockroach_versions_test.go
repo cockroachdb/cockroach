@@ -147,7 +147,7 @@ func TestClusterVersionPrettyPrint(t *testing.T) {
 		{cv(22, 2, 1, 4), "22.2-upgrading-to-23.1-step-004"},
 	}
 	for _, test := range tests {
-		if actual := test.cv.PrettyPrint(); actual != test.exp {
+		if actual := test.cv.PrettyPrint().StripMarkers(); actual != test.exp {
 			t.Errorf("expected %s, got %q", test.exp, actual)
 		}
 	}
