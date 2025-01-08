@@ -11,7 +11,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/axiomhq/hyperloglog"
+	hyperloglog "github.com/axiomhq/hyperloglog/000"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"

@@ -117,6 +117,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.33.0
 	github.com/aws/smithy-go v1.21.0
 	github.com/axiomhq/hyperloglog v0.2.0
+	github.com/axiomhq/hyperloglog/000 v0.0.0-20181223111420-4b99d0c2c99e
 	github.com/bazelbuild/rules_go v0.26.0
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
 	github.com/blevesearch/snowballstem v0.9.0
@@ -485,3 +486,6 @@ replace github.com/docker/docker => github.com/moby/moby v24.0.6+incompatible
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1
+
+// TODO(138546): hard-code the version that we use for table stats.
+replace github.com/axiomhq/hyperloglog/000 => github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e

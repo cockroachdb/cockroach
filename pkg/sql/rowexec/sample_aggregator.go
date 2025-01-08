@@ -10,7 +10,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/axiomhq/hyperloglog"
+	hyperloglog "github.com/axiomhq/hyperloglog/000"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
