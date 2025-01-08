@@ -47,7 +47,7 @@ func TestSetupFlowAfterDrain(t *testing.T) {
 	)
 
 	// We create some flow; it doesn't matter what.
-	req := execinfrapb.SetupFlowRequest{Version: execversion.Version}
+	req := execinfrapb.SetupFlowRequest{Version: execversion.Latest}
 	req.Flow = execinfrapb.FlowSpec{
 		Processors: []execinfrapb.ProcessorSpec{
 			{
