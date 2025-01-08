@@ -83,7 +83,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	mutableTableDescs := make([]*tabledesc.Mutable, 0, len(req.TableNames))
 	tableIDs := make([]uint32, 0, len(req.TableNames))
 
-	externalCatalog, err := externalcatalog.ExtractExternalCatalog(ctx, r.resolver, r.txn, r.txn.Descriptors(), false /* includeOffline */, req.TableNames...)
+	externalCatalog, err := externalcatalog.ExtractExternalCatalog(ctx, r.resolver, r.txn, r.txn.Descriptors(), req.AllowOffline, req.TableNames...)
 	if err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
