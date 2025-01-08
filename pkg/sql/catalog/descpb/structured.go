@@ -72,6 +72,9 @@ type ConstraintID = catid.ConstraintID
 // TriggerID is a custom type for TableDescriptor trigger IDs.
 type TriggerID = catid.TriggerID
 
+// PolicyID is a custom type for TableDescriptor policy IDs.
+type PolicyID = catid.PolicyID
+
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint64
 

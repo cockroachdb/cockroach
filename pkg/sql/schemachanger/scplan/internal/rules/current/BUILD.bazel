@@ -17,6 +17,7 @@ go_library(
         "dep_drop_index.go",
         "dep_drop_index_and_column.go",
         "dep_drop_object.go",
+        "dep_drop_policy.go",
         "dep_drop_trigger.go",
         "dep_garbage_collection.go",
         "dep_swap_index.go",

@@ -4957,7 +4957,7 @@ alter_policy_stmt:
     /* SKIP DOC */
     $$.val = &tree.AlterPolicy{
       PolicyName: tree.Name($3),
-      TableName: $5.unresolvedObjectName().ToTableName(),
+      TableName: $5.unresolvedObjectName(),
       NewPolicyName: tree.Name($8),
     }
   }
@@ -4966,7 +4966,7 @@ alter_policy_stmt:
     /* SKIP DOC */
     $$.val = &tree.AlterPolicy{
       PolicyName: tree.Name($3),
-      TableName: $5.unresolvedObjectName().ToTableName(),
+      TableName: $5.unresolvedObjectName(),
       Roles: $6.roleSpecList(),
       Exprs: $7.policyExpressions(),
     }
@@ -4990,7 +4990,7 @@ create_policy_stmt:
     /* SKIP DOC */
     $$.val = &tree.CreatePolicy{
       PolicyName: tree.Name($3),
-      TableName: $5.unresolvedObjectName().ToTableName(),
+      TableName: $5.unresolvedObjectName(),
       Type: $6.policyType(),
       Cmd: $7.policyCommand(),
       Roles: $8.roleSpecList(),

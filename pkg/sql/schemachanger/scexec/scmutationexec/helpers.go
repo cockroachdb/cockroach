@@ -137,6 +137,21 @@ func (i *immediateVisitor) checkOutTrigger(
 		triggerID, tbl.GetName(), tbl.GetID()))
 }
 
+func (i *immediateVisitor) checkOutPolicy(
+	ctx context.Context, tableID descpb.ID, policyID catid.PolicyID,
+) (*descpb.PolicyDescriptor, error) {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return nil, err
+	}
+	policy := catalog.FindPolicyByID(tbl, policyID)
+	if policy != nil {
+		return policy, nil
+	}
+	panic(errors.AssertionFailedf("failed to find policy with ID %d in table %q (%d)",
+		policyID, tbl.GetName(), tbl.GetID()))
+}
+
 func mutationStateChange(
 	tbl *tabledesc.Mutable,
 	f MutationSelector,
