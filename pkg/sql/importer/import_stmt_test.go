@@ -2019,6 +2019,8 @@ func TestFailedImportGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t)
+
 	const nodes = 3
 
 	var forceFailure bool
@@ -2759,6 +2761,9 @@ INSERT INTO foo VALUES (1);
 func TestImportObjectLevelRBAC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+
 	const nodes = 3
 
 	ctx := context.Background()
@@ -3838,9 +3843,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 func benchUserUpload(b *testing.B, uploadBaseURI string) {
 	defer log.Scope(b).Close(b)
-	const (
-		nodes = 3
-	)
+	const nodes = 3
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(b)
 	defer cleanup()
@@ -4109,6 +4112,7 @@ func TestImportDefault(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes >1min under race")
+
 	const nodes = 3
 	numFiles := nodes + 2
 	rowsPerFile := 1000
@@ -4534,6 +4538,7 @@ func TestImportDefaultNextVal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer setImportReaderParallelism(1)()
+
 	skip.UnderRace(t, "test hits a timeout before a successful run")
 
 	const nodes = 3
@@ -5420,9 +5425,7 @@ func TestImportMysql(t *testing.T) {
 
 	skip.UnderRace(t)
 
-	const (
-		nodes = 3
-	)
+	const nodes = 3
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
@@ -5550,9 +5553,9 @@ func TestImportIntoMysql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const (
-		nodes = 3
-	)
+	skip.UnderRace(t)
+
+	const nodes = 3
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
@@ -5577,9 +5580,9 @@ func TestImportDelimited(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const (
-		nodes = 3
-	)
+	skip.UnderRace(t)
+
+	const nodes = 3
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "mysqlout")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
@@ -5667,9 +5670,9 @@ func TestImportPgCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const (
-		nodes = 3
-	)
+	skip.UnderRace(t)
+
+	const nodes = 3
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "pgcopy")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
@@ -5753,9 +5756,9 @@ func TestImportPgDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const (
-		nodes = 3
-	)
+	skip.UnderRace(t)
+
+	const nodes = 3
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
@@ -6503,9 +6506,9 @@ func TestImportCockroachDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const (
-		nodes = 3
-	)
+	skip.UnderRace(t)
+
+	const nodes = 3
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
@@ -6602,9 +6605,9 @@ func TestImportAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const (
-		nodes = 3
-	)
+	skip.UnderRace(t)
+
+	const nodes = 3
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
@@ -6929,9 +6932,9 @@ func TestDetachedImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const (
-		nodes = 3
-	)
+	skip.UnderRace(t)
+
+	const nodes = 3
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
@@ -7029,12 +7032,11 @@ func TestImportRowErrorLargeRows(t *testing.T) {
 func TestImportJobEventLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
-
 	defer jobs.TestingSetProgressThresholds()()
 
-	const (
-		nodes = 3
-	)
+	skip.UnderRace(t)
+
+	const nodes = 3
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
