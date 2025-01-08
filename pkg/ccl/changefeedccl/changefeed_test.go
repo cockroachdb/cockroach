@@ -7537,7 +7537,7 @@ func TestCheckpointFrequency(t *testing.T) {
 	// If we also specify minimum amount of time between updates, we would skip updates
 	// until enough time has elapsed.
 	minAdvance := 10 * time.Minute
-	changefeedbase.MinHighWaterMarkCheckpointAdvance.Override(ctx, &js.settings.SV, minAdvance)
+	changefeedbase.HighWaterMinUpdateInterval.Override(ctx, &js.settings.SV, minAdvance)
 
 	require.False(t, js.canCheckpointHighWatermark(frontierAdvanced))
 	ts.Advance(minAdvance)

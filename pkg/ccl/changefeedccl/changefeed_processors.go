@@ -1105,19 +1105,21 @@ func (j *jobState) canCheckpointSpans() bool {
 }
 
 // canCheckpointHighWatermark returns true if we should update job high water mark (i.e. progress).
-// Normally, whenever frontier changes, we update high water mark.
+// Normally, whenever the frontier changes, we update the high water mark.
 // However, if the rate of frontier changes is too high, we want to slow down
-// the frequency of job progress updates.  We do this by skipping some updates
-// if the time to update the job progress is greater than the delta between
-// previous and the current progress update time.
+// the frequency of job progress updates. We do this by enforcing a minimum
+// interval between high water updates, which is the greater of the average time
+// it takes to update the job progress and changefeed.resolved_timestamp.min_update_interval.
 func (j *jobState) canCheckpointHighWatermark(frontierChanged bool) bool {
 	if !(frontierChanged || j.progressUpdatesSkipped) {
 		return false
 	}
 
-	minAdvance := changefeedbase.MinHighWaterMarkCheckpointAdvance.Get(&j.settings.SV)
-	if j.checkpointDuration > 0 &&
-		j.ts.Now().Before(j.lastProgressUpdate.Add(j.checkpointDuration+minAdvance)) {
+	minInterval := max(
+		j.checkpointDuration,
+		changefeedbase.HighWaterMinUpdateInterval.Get(&j.settings.SV),
+	)
+	if j.ts.Now().Before(j.lastProgressUpdate.Add(minInterval)) {
 		// Updates are too rapid; skip some.
 		j.progressUpdatesSkipped = true
 		return false
@@ -1129,16 +1131,15 @@ func (j *jobState) canCheckpointHighWatermark(frontierChanged bool) bool {
 // checkpointCompleted must be called when job checkpoint completes.
 // checkpointDuration indicates how long the checkpoint took.
 func (j *jobState) checkpointCompleted(ctx context.Context, checkpointDuration time.Duration) {
-	minAdvance := changefeedbase.MinHighWaterMarkCheckpointAdvance.Get(&j.settings.SV)
 	if j.progressUpdatesSkipped {
 		// Log message if we skipped updates for some time.
-		warnThreshold := 2 * minAdvance
+		warnThreshold := 2 * changefeedbase.HighWaterMinUpdateInterval.Get(&j.settings.SV)
 		if warnThreshold < 60*time.Second {
 			warnThreshold = 60 * time.Second
 		}
 		behind := j.ts.Now().Sub(j.lastProgressUpdate)
 		if behind > warnThreshold {
-			log.Warningf(ctx, "high water mark update delayed by %s; mean checkpoint duration %s",
+			log.Warningf(ctx, "high water mark update was delayed by %s; mean checkpoint duration %s",
 				behind, j.checkpointDuration)
 		}
 	}

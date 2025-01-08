@@ -165,17 +165,21 @@ func validateSinkThrottleConfig(values *settings.Values, configStr string) error
 	return json.Unmarshal([]byte(configStr), config)
 }
 
-// MinHighWaterMarkCheckpointAdvance specifies the minimum amount of time the
-// changefeed high water mark must advance for it to be eligible for checkpointing.
-var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
+// HighWaterMinUpdateInterval specifies the minimum amount of time that
+// must have elapsed since the last time a changefeed's high water was
+// updated before it is eligible to updated again.
+var HighWaterMinUpdateInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.min_highwater_advance",
-	"minimum amount of time the changefeed high water mark must advance "+
-		"for it to be eligible for checkpointing; Default of 0 will checkpoint every time frontier "+
-		"advances, as long as the rate of checkpointing keeps up with the rate of frontier changes",
+	"minimum amount of time that must have elapsed since the last time "+
+		"a changefeed's high water was updated before it is eligible to be "+
+		"updated again; default of 0 means no minimum interval is enforced but "+
+		"updating will still be limited by the average time it takes to checkpoint progress",
 	0,
 	settings.NonNegativeDuration,
-	settings.WithPublic)
+	settings.WithPublic,
+	settings.WithName("changefeed.resolved_timestamp.min_update_interval"),
+)
 
 // EventMemoryMultiplier is the multiplier for the amount of memory needed to process an event.
 //
