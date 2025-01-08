@@ -35,10 +35,10 @@ fi
 drtprod ssh ${WORKLOAD_CLUSTER} -- "ROACHPROD_GCE_DEFAULT_PROJECT=${ROACHPROD_GCE_DEFAULT_PROJECT} ./roachprod sync"
 
 # the ssh keys of all workload nodes should be setup on the crdb nodes for the operations
-roachprod ssh ${CLUSTER} -- "echo \"$(roachprod run ${WORKLOAD_CLUSTER} -- cat ./.ssh/id_rsa.pub|grep ssh-rsa)\" >> ./.ssh/authorized_keys"
+drtprod ssh ${CLUSTER} -- "echo \"$(drtprod run ${WORKLOAD_CLUSTER} -- cat ./.ssh/id_rsa.pub|grep ssh-rsa)\" >> ./.ssh/authorized_keys"
 
-absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./roachtest-operations")
-pwd=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
+absolute_path=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./roachtest-operations")
+pwd=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
 # Loop over all the passed arguments
 for entry in "$@"; do
   # Split the entry into identifier, cron_config, and operation_regex using IFS and comma
@@ -51,7 +51,7 @@ for entry in "$@"; do
   fi
   filename=run_ops_${identifier}.sh
   # Create a file with the name "run_ops_<identifier>.sh" and add the entry of roachtest run-operation
-  roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee ${pwd}/${filename} > /dev/null << EOF
+  drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee ${pwd}/${filename} > /dev/null << EOF
 #!/bin/bash
 
 export ROACHPROD_GCE_DEFAULT_PROJECT=${ROACHPROD_GCE_DEFAULT_PROJECT}
@@ -60,12 +60,12 @@ ${pwd}/roachtest-operations run-operation ${CLUSTER} \"${operation_regex}\" --da
 --datadog-tags env:development,cluster:${WORKLOAD_CLUSTER},team:drt,service:drt-cockroachdb \
 --datadog-app-key 1 --certs-dir ./certs  | tee -a roachtest_ops_${identifier}.log
 EOF"
-  roachprod ssh "${WORKLOAD_CLUSTER}":1 -- chmod +x "${pwd}"/"${filename}"
+  drtprod ssh "${WORKLOAD_CLUSTER}":1 -- chmod +x "${pwd}"/"${filename}"
   if [ "$cron_config" ]; then
-    roachprod run "${WORKLOAD_CLUSTER}":1 -- "(crontab -l; echo \"${cron_config} /usr/bin/flock -n /tmp/lock_${identifier} ${pwd}/${filename}\") | crontab -"
+    drtprod run "${WORKLOAD_CLUSTER}":1 -- "(crontab -l; echo \"${cron_config} /usr/bin/flock -n /tmp/lock_${identifier} ${pwd}/${filename}\") | crontab -"
   fi
 done
 
 # unmask and start cron
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- sudo systemctl unmask cron
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- sudo systemctl start cron
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- sudo systemctl unmask cron
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- sudo systemctl start cron

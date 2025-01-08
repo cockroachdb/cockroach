@@ -79,15 +79,3 @@ func ExecuteCmdWithPrefix(ctx context.Context, logPrefix string, cmd string, arg
 	// Wait for the command to complete and return any errors encountered.
 	return c.Run()
 }
-
-// ExecuteCmdInteractive runs a shell command with the given arguments and creates an interactive shell.
-func ExecuteCmdInteractive(ctx context.Context, cmd string, args ...string) error {
-	// Create a command with the given context and arguments.
-	c := exec.CommandContext(ctx, cmd, args...)
-
-	// redirect stdin, stdout and stderr
-	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-
-	// Run the command execution
-	return c.Run()
-}
