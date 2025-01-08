@@ -532,27 +532,39 @@ func (p *planTop) savePlanInfo() {
 // Reminder: walkPlan() ensures that subqueries and sub-plans are
 // started before startExec() is called.
 func startExec(params runParams, plan planNode) error {
-	o := planObserver{
-		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
-			switch p.(type) {
-			case *explainVecNode, *explainDDLNode:
-				// Do not recurse: we're not starting the plan if we just show its structure with EXPLAIN.
-				return false, nil
-			case *showTraceNode:
-				// showTrace needs to override the params struct, and does so in its startExec() method.
-				return false, nil
+	var startRec func(planNode) error
+	startRec = func(p planNode) error {
+		recurse := true
+		switch p.(type) {
+		case *explainVecNode, *explainDDLNode:
+			// Do not recurse: we're not starting the plan if we just show its
+			// structure with EXPLAIN.
+			recurse = false
+		case *showTraceNode:
+			// showTrace needs to override the params struct, and does so in its
+			// startExec() method.
+			recurse = false
+		}
+		if recurse {
+			// Start children nodes first. This ensures that subqueries and
+			// sub-plans are started before startExec() is called.
+			for i, n := 0, p.InputCount(); i < n; i++ {
+				child, err := p.Input(i)
+				if err != nil {
+					return err
+				}
+				if err := startRec(child); err != nil {
+					return err
+				}
 			}
-			return true, nil
-		},
-		leaveNode: func(_ string, n planNode) (err error) {
-			if _, ok := n.(planNodeReadingOwnWrites); ok {
-				prevMode := params.p.Txn().ConfigureStepping(params.ctx, kv.SteppingDisabled)
-				defer func() { _ = params.p.Txn().ConfigureStepping(params.ctx, prevMode) }()
-			}
-			return n.startExec(params)
-		},
+		}
+		if _, ok := p.(planNodeReadingOwnWrites); ok {
+			prevMode := params.p.Txn().ConfigureStepping(params.ctx, kv.SteppingDisabled)
+			defer func() { _ = params.p.Txn().ConfigureStepping(params.ctx, prevMode) }()
+		}
+		return p.startExec(params)
 	}
-	return walkPlan(params.ctx, plan, o)
+	return startRec(plan)
 }
 
 func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planNode, error) {
