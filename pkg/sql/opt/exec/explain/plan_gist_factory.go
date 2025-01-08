@@ -119,13 +119,6 @@ func (f *PlanGistFactory) updateHash(data []byte) {
 	}
 }
 
-// NewPlanGistFactory creates a new PlanGistFactory.
-func NewPlanGistFactory(factory exec.Factory) *PlanGistFactory {
-	f := new(PlanGistFactory)
-	f.Init(factory)
-	return f
-}
-
 // Init initializes a PlanGistFactory.
 func (f *PlanGistFactory) Init(factory exec.Factory) {
 	*f = PlanGistFactory{
