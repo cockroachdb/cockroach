@@ -45,7 +45,7 @@ type resolveFlags struct {
 func (p *planner) ResolveMutableTableDescriptor(
 	ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind,
 ) (prefix catalog.ResolvedObjectPrefix, table *tabledesc.Mutable, err error) {
-	prefix, desc, err := resolver.ResolveMutableExistingTableObject(ctx, p, tn, required, requiredType)
+	prefix, desc, err := resolver.ResolveMutableExistingTableObject(ctx, p, tn, required, requiredType, false /* includeOffline */)
 	if err != nil {
 		return prefix, nil, err
 	}
@@ -653,7 +653,7 @@ func expandIndexName(
 	tn = &index.Table
 	if tn.Object() != "" {
 		// The index and its table prefix must exist already. Resolve the table.
-		_, desc, err = resolver.ResolveMutableExistingTableObject(ctx, p, tn, requireTable, tree.ResolveRequireTableOrViewDesc)
+		_, desc, err = resolver.ResolveMutableExistingTableObject(ctx, p, tn, requireTable, tree.ResolveRequireTableOrViewDesc, false /* includeOffline */)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1139,7 +1139,7 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 	requiredType tree.RequiredTableKind,
 ) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, error) {
 	tn := name.ToTableName()
-	prefix, table, err := resolver.ResolveMutableExistingTableObject(ctx, p, &tn, required, requiredType)
+	prefix, table, err := resolver.ResolveMutableExistingTableObject(ctx, p, &tn, required, requiredType, false /* includeOffline */)
 	if err != nil {
 		return catalog.ResolvedObjectPrefix{}, nil, err
 	}

@@ -2498,7 +2498,7 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		)
 		required := true
 		_, desc, err := resolver.ResolveMutableExistingTableObject(
-			ctx, p, &tableName, required, tree.ResolveRequireTableDesc)
+			ctx, p, &tableName, required, tree.ResolveRequireTableDesc, false /* includeOffline */)
 		return desc, err
 	}
 

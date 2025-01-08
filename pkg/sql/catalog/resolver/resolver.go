@@ -121,12 +121,14 @@ func ResolveMutableExistingTableObject(
 	tn *tree.TableName,
 	required bool,
 	requiredType tree.RequiredTableKind,
+	includeOffline bool,
 ) (prefix catalog.ResolvedObjectPrefix, res *tabledesc.Mutable, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		Required:             required,
 		RequireMutable:       true,
 		DesiredObjectKind:    tree.TableObject,
 		DesiredTableDescKind: requiredType,
+		IncludeOffline:       includeOffline,
 	}
 	// TODO: As part of work for #34240, an UnresolvedObjectName should be
 	// passed as an argument to this function.

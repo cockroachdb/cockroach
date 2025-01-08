@@ -37,6 +37,7 @@ func ExtractExternalCatalog(
 	schemaResolver resolver.SchemaResolver,
 	txn isql.Txn,
 	descCol *descs.Collection,
+	includeOffline bool,
 	tableNames ...string,
 ) (externalpb.ExternalCatalog, error) {
 	externalCatalog := externalpb.ExternalCatalog{}
@@ -48,7 +49,7 @@ func ExtractExternalCatalog(
 			return externalpb.ExternalCatalog{}, err
 		}
 		tn := uon.ToTableName()
-		_, td, err := resolver.ResolveMutableExistingTableObject(ctx, schemaResolver, &tn, true, tree.ResolveRequireTableDesc)
+		_, td, err := resolver.ResolveMutableExistingTableObject(ctx, schemaResolver, &tn, true, tree.ResolveRequireTableDesc, includeOffline)
 		if err != nil {
 			return externalpb.ExternalCatalog{}, err
 		}

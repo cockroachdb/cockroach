@@ -780,7 +780,7 @@ func GetSequenceDescFromIdentifier(
 		}
 	} else {
 		// This is only executed via IMPORT which uses its own resolver.
-		_, seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
+		_, seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, tree.ResolveRequireSequenceDesc, false /*requiredType*/)
 		if err != nil {
 			return nil, err
 		}
