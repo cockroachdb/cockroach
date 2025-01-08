@@ -14,13 +14,18 @@ import (
 )
 
 type typeInfo struct {
+	isSafe bool
+	usages typeUsages
+}
+
+type typeUsage struct {
 	location string
 	logFunc  string
 }
 
-type typeInfos []typeInfo
+type typeUsages []typeUsage
 
-func (t typeInfos) String() string {
+func (t typeUsages) String() string {
 	l := []string{}
 	for _, info := range t {
 		l = append(l, fmt.Sprintf("%s(%s)", info.location, info.logFunc))
@@ -36,8 +41,8 @@ var (
 
 	loggedTypes = struct {
 		sync.RWMutex
-		types map[types.Type]typeInfos
-	}{types: make(map[types.Type]typeInfos)}
+		types map[string]*typeInfo
+	}{types: make(map[string]*typeInfo)}
 
 	safeMethodLookup = map[string]struct{}{
 		"SafeFormat": {},
@@ -89,13 +94,21 @@ func main() {
 								}
 
 								for _, arg := range node.Args[1:] {
-									arr, ok := loggedTypes.types[pkg.TypesInfo.TypeOf(arg)]
-									if !ok {
-										arr = []typeInfo{}
+									typ := pkg.TypesInfo.TypeOf(arg)
+									typKey := "nil"
+									if typ != nil {
+										typKey = typ.String()
 									}
 
-									arr = append(arr, typeInfo{location: loc, logFunc: fun.Sel.Name})
-									loggedTypes.types[pkg.TypesInfo.TypeOf(arg)] = arr
+									info, ok := loggedTypes.types[typKey]
+									if !ok {
+										info = &typeInfo{
+											isSafe: checkType(typ),
+										}
+									}
+
+									info.usages = append(info.usages, typeUsage{location: loc, logFunc: fun.Sel.Name})
+									loggedTypes.types[typKey] = info
 								}
 							}
 
@@ -119,31 +132,20 @@ func main() {
 	wg.Wait()
 	close(workChan)
 
-	check := typeChecker()
 	fmt.Println("Type\tRedacted correctly\tUsage")
 	for typ, info := range loggedTypes.types {
-		isSafe := check(typ)
-		fmt.Printf("%s\t%t\t%s\n", typ, isSafe, info)
+		fmt.Printf("%s\t%t\t%s\n", typ, info.isSafe, info.usages)
 	}
 }
 
-func typeChecker() func(types.Type) bool {
-	typeState := make(map[types.Type]bool)
-	return func(typ types.Type) bool {
-		if isSafe, ok := typeState[typ]; ok {
-			return isSafe
-		}
-
-		if named, ok := typ.(*types.Named); ok {
-			for i := 0; i < named.NumMethods(); i++ {
-				if _, ok := safeMethodLookup[named.Method(i).Name()]; ok {
-					typeState[typ] = true
-					return true
-				}
+func checkType(typ types.Type) bool {
+	if named, ok := typ.(*types.Named); ok {
+		for i := 0; i < named.NumMethods(); i++ {
+			if _, ok := safeMethodLookup[named.Method(i).Name()]; ok {
+				return true
 			}
 		}
-
-		typeState[typ] = false
-		return false
 	}
+
+	return false
 }
