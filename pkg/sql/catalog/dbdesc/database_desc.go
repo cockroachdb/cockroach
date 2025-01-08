@@ -318,7 +318,9 @@ func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+func (desc *immutable) GetReferencedDescIDs(
+	catalog.ValidationLevel,
+) (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID())
 	if desc.IsMultiRegion() {
 		id, err := desc.MultiRegionEnumID()
