@@ -648,7 +648,7 @@ func (tc *Collection) finalizeDescriptors(
 		return nil
 	}
 	requiredLevel := validate.MutableRead
-	if !flags.layerFilters.withoutLeased {
+	if !flags.isMutable {
 		requiredLevel = validate.ImmutableRead
 	}
 	var toValidate []catalog.Descriptor
