@@ -638,6 +638,12 @@ func (p *RandomStreamClient) PriorReplicationDetails(
 
 }
 
+func (p *RandomStreamClient) ExecStatement(
+	ctx context.Context, cmd string, opname string, args ...interface{},
+) error {
+	return errors.AssertionFailedf("unimplemented")
+}
+
 type randomStreamSubscription struct {
 	receiveFn func(ctx context.Context) error
 	eventCh   chan crosscluster.Event
