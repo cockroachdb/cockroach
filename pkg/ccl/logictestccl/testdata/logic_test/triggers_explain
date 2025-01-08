@@ -866,7 +866,6 @@ quality of service: regular
         │                           │ actual row count: 1
         │                           │ vectorized batch count: 0
         │                           │ estimated max memory allocated: 0 B
-        │                           │ estimated max sql temp disk usage: 0 B
         │                           │ estimated row count: 3 (missing stats)
         │                           │ equality: (fk) = (k)
         │                           │
