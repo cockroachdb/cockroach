@@ -647,8 +647,10 @@ func (tc *Collection) finalizeDescriptors(
 	if !tc.validationModeProvider.ValidateDescriptorsOnRead() {
 		return nil
 	}
-	requiredLevel := validate.MutableRead
-	if !flags.layerFilters.withoutLeased {
+	var requiredLevel catalog.ValidationLevel
+	if flags.isMutable {
+		requiredLevel = validate.MutableRead
+	} else {
 		requiredLevel = validate.ImmutableRead
 	}
 	var toValidate []catalog.Descriptor

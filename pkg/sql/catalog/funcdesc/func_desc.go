@@ -161,7 +161,9 @@ func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
 }
 
 // GetReferencedDescIDs implements the catalog.Descriptor interface.
-func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+func (desc *immutable) GetReferencedDescIDs(
+	catalog.ValidationLevel,
+) (catalog.DescriptorIDSet, error) {
 	ret := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID(), desc.GetParentSchemaID())
 	for _, id := range desc.DependsOn {
 		ret.Add(id)
