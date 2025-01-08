@@ -23,7 +23,8 @@ import (
 )
 
 func makeGist(ot *opttester.OptTester, t *testing.T) explain.PlanGist {
-	f := explain.NewPlanGistFactory(exec.StubFactory{})
+	var f explain.PlanGistFactory
+	f.Init(exec.StubFactory{})
 	expr, err := ot.Optimize()
 	if err != nil {
 		t.Error(err)
@@ -32,7 +33,7 @@ func makeGist(ot *opttester.OptTester, t *testing.T) explain.PlanGist {
 	if rel, ok := expr.(memo.RelExpr); ok {
 		mem = rel.Memo()
 	}
-	_, err = ot.ExecBuild(f, mem, expr)
+	_, err = ot.ExecBuild(&f, mem, expr)
 	if err != nil {
 		t.Error(err)
 	}
