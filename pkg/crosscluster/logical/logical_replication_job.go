@@ -150,10 +150,6 @@ func (r *logicalReplicationResumer) ingest(
 		replicatedTimeAtStart = progress.ReplicatedTime
 	)
 
-	if err := r.maybePublishCreatedTables(ctx, jobExecCtx, progress, payload); err != nil {
-		return err
-	}
-
 	uris, err := r.getClusterUris(ctx, r.job, execCfg.InternalDB)
 	if err != nil {
 		return err
@@ -169,6 +165,14 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 	defer func() { _ = client.Close(ctx) }()
+
+	if err := r.maybeStartReverseStream(ctx, jobExecCtx, client); err != nil {
+		return err
+	}
+
+	if err := r.maybePublishCreatedTables(ctx, jobExecCtx); err != nil {
+		return err
+	}
 
 	asOf := replicatedTimeAtStart
 	if asOf.IsEmpty() {
@@ -194,6 +198,8 @@ func (r *logicalReplicationResumer) ingest(
 	}); err != nil {
 		return err
 	}
+	// Update the local progress copy as it was just updated.
+	progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 
 	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
 	if !(payload.CreateTable && progress.ReplicatedTime.IsEmpty()) {
@@ -295,14 +301,54 @@ func (r *logicalReplicationResumer) ingest(
 	return err
 }
 
-func (r *logicalReplicationResumer) maybePublishCreatedTables(
-	ctx context.Context,
-	jobExecCtx sql.JobExecContext,
-	progress *jobspb.LogicalReplicationProgress,
-	details jobspb.LogicalReplicationDetails,
+func (r *logicalReplicationResumer) maybeStartReverseStream(
+	ctx context.Context, jobExecCtx sql.JobExecContext, client streamclient.Client,
 ) error {
+
+	// Instantiate a local copy of progress and details as they are gated behind a mutex.
+	progress := r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+	details := r.job.Details().(jobspb.LogicalReplicationDetails)
+
+	if !(details.ReverseStreamCommand != "" && progress.ReplicatedTime.IsSet() && !progress.StartedReverseStream) {
+		return nil
+	}
+
+	// Begin the reverse stream at a system time before source tables have been
+	// published but after they have been created during this job's planning.
+	now := jobExecCtx.ExecCfg().Clock.Now()
+	if err := client.ExecStatement(ctx, details.ReverseStreamCommand, "start-reverse-stream", now.AsOfSystemTime()); err != nil {
+		return errors.Wrapf(err, "failed to start reverse stream")
+	}
+
+	// TODO(msbutler): if the job exits before we write here but after setting up
+	// the reverse stream, we will accidentally create a second reverse stream. To
+	// prevent this, the PARENT option will passed to the reverse stream, then
+	// during ldr stream creation, the planhook checks if any job is already
+	// running with this parent job id.
+	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.StartedReverseStream = true
+		ju.UpdateProgress(md.Progress)
+		return nil
+	}); err != nil {
+		return err
+	}
+	log.Infof(ctx, "started reverse stream")
+	return nil
+}
+
+func (r *logicalReplicationResumer) maybePublishCreatedTables(
+	ctx context.Context, jobExecCtx sql.JobExecContext,
+) error {
+
+	// Instantiate a local copy of progress and details as they are gated behind a mutex.
+	progress := r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+	details := r.job.Details().(jobspb.LogicalReplicationDetails)
+
 	if !(details.CreateTable && progress.ReplicatedTime.IsSet() && !progress.PublishedNewTables) {
 		return nil
+	}
+	if details.ReverseStreamCommand != "" && !progress.StartedReverseStream {
+		return errors.AssertionFailedf("attempting to publish descriptors before starting reverse stream")
 	}
 	return sql.DescsTxn(ctx, jobExecCtx.ExecCfg(), func(ctx context.Context, txn isql.Txn, descCol *descs.Collection) error {
 		b := txn.KV().NewBatch()
