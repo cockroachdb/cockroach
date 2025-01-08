@@ -1,0 +1,99 @@
+subtest in_plpgsql_routine
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'here';
+    DO $inner$
+      BEGIN
+        RAISE NOTICE 'Hello, world!';
+      END
+    $inner$;
+    RAISE NOTICE 'still here';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: here
+NOTICE: Hello, world!
+NOTICE: still here
+
+# Nested DO blocks are allowed.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'here';
+    DO $outer$
+      BEGIN
+        RAISE NOTICE 'outer';
+        DO $inner$
+          BEGIN
+            RAISE NOTICE 'inner';
+          END
+        $inner$;
+        RAISE NOTICE 'outer again';
+      END
+    $outer$;
+    RAISE NOTICE 'still here';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: here
+NOTICE: outer
+NOTICE: inner
+NOTICE: outer again
+NOTICE: still here
+
+# DO blocks are effectively anonymous functions with no arguments, so variables
+# from the outer scope are not visible.
+statement ok
+DROP FUNCTION f;
+
+statement error pgcode 42703 pq: column "x" does not exist
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 100;
+  BEGIN
+    DO $inner$
+      BEGIN
+        RAISE NOTICE 'x: %', x;
+      END
+    $inner$;
+    RETURN 0;
+  END
+$$;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 100;
+  BEGIN
+    RAISE NOTICE 'x := % before DO block', x;
+    DO $inner$
+      DECLARE
+        x INT := 300;
+      BEGIN
+        RAISE NOTICE 'x := % in DO block', x;
+      END
+    $inner$;
+    RAISE NOTICE 'x := % after DO block', x;
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: x := 100 before DO block
+NOTICE: x := 300 in DO block
+NOTICE: x := 100 after DO block
+
+subtest end
