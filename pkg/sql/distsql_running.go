@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -1273,9 +1274,13 @@ func MakeDistSQLReceiver(
 	txn *kv.Txn,
 	clockUpdater clockUpdater,
 	tracing *SessionTracing,
+	st *cluster.Settings,
 ) (*DistSQLReceiver, context.Context) {
-	// TODO: think through this.
-	ctx = execversion.WithVersion(ctx, execversion.Latest)
+	execVersion := execversion.V24_3
+	if st.Version.IsActive(ctx, clusterversion.V25_1) {
+		execVersion = execversion.V25_1
+	}
+	ctx = execversion.WithVersion(ctx, execVersion)
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := receiverSyncPool.Get().(*DistSQLReceiver)
 	// Check whether the result writer supports pushing batches into it directly

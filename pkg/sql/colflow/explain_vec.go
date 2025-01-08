@@ -70,6 +70,7 @@ func convertToVecTree(
 		// explicit EXPLAIN (VEC) is affected.
 		fuseOpt = flowinfra.FuseAggressively
 	}
+	// Exec version here doesn't matter since we won't actually run this flow.
 	ctx = execversion.WithVersion(ctx, execversion.Latest)
 	opChains, _, err = creator.setupFlow(ctx, flow.Processors, fuseOpt)
 	cleanup = func() {

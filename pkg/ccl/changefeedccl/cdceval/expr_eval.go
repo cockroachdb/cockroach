@@ -411,6 +411,7 @@ func (e *familyEvaluator) executePlan(
 		nil,
 		nil, /* clockUpdater */
 		&sql.SessionTracing{},
+		e.execCfg.Settings,
 	)
 
 	// Start execution.

@@ -217,6 +217,7 @@ func startDistIngestion(
 			noTxn,
 			nil, /* clockUpdater */
 			execCtx.ExtendedEvalContext().Tracing,
+			execCtx.ExtendedEvalContext().Settings,
 		)
 		defer recv.Release()
 

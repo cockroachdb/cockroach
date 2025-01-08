@@ -279,6 +279,7 @@ func runPlanInsidePlan(
 		params.p.Txn(),
 		execCfg.Clock,
 		params.p.extendedEvalCtx.Tracing,
+		params.p.extendedEvalCtx.Settings,
 	)
 	defer recv.Release()
 

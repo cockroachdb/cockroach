@@ -615,6 +615,7 @@ FAMILY extra (extra)
 					nil,
 					nil, /* clockUpdater */
 					planner.extendedEvalCtx.Tracing,
+					execCfg.Settings,
 				)
 				defer recv.Release()
 

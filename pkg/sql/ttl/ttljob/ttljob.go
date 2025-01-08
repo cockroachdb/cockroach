@@ -263,6 +263,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 			nil, /* txn */
 			nil, /* clockUpdater */
 			evalCtx.Tracing,
+			evalCtx.Settings,
 		)
 		defer recv.Release()
 

@@ -3160,7 +3160,8 @@ func (ex *connExecutor) execCopyIn(
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
-	// TODO: think through this.
+	// The COPY plan is never distributed, so we can always use the latest exec
+	// version.
 	ctx = execversion.WithVersion(ctx, execversion.Latest)
 	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)

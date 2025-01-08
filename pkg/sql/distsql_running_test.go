@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -164,6 +165,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			txn,
 			execCfg.Clock,
 			p.ExtendedEvalContext().Tracing,
+			p.ExtendedEvalContext().Settings,
 		)
 
 		// We need to re-plan every time, since the plan is closed automatically
@@ -285,6 +287,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			txn,
 			execCfg.Clock,
 			p.ExtendedEvalContext().Tracing,
+			p.ExtendedEvalContext().Settings,
 		)
 
 		p.stmt = makeStatement(stmt, clusterunique.ID{},
@@ -429,6 +432,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		txn,
 		nil, /* clockUpdater */
 		&SessionTracing{},
+		s.ClusterSettings(),
 	)
 
 	retryErr := kvpb.NewErrorWithTxn(
@@ -582,6 +586,7 @@ func TestDistSQLReceiverDrainsOnError(t *testing.T) {
 		nil, /* txn */
 		nil, /* clockUpdater */
 		&SessionTracing{},
+		cluster.MakeTestingClusterSettings(),
 	)
 	status := recv.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.New("some error")})
 	require.Equal(t, execinfra.DrainRequested, status)

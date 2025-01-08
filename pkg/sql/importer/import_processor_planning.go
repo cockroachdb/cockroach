@@ -224,6 +224,7 @@ func distImport(
 		nil, /* txn - the flow does not read or write the database */
 		nil, /* clockUpdater */
 		evalCtx.Tracing,
+		evalCtx.Settings,
 	)
 	defer recv.Release()
 

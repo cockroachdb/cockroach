@@ -598,6 +598,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 	var acc int64
 	numBytesVectors := 0
 	for _, t := range vecTypes {
+		// TODO: this should use the proper context.
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, t.Family()) {
 		case types.BytesFamily, types.JsonFamily:
 			numBytesVectors++

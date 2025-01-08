@@ -235,6 +235,7 @@ func (r *logicalReplicationResumer) ingest(
 			nil, /* txn */
 			nil, /* clockUpdater */
 			evalCtx.Tracing,
+			evalCtx.Settings,
 		)
 		defer distSQLReceiver.Release()
 		// Copy the evalCtx, as dsp.Run() might change it.

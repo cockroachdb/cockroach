@@ -298,6 +298,7 @@ func startDistChangefeed(
 			noTxn,
 			nil, /* clockUpdater */
 			evalCtx.Tracing,
+			evalCtx.Settings,
 		)
 		defer recv.Release()
 

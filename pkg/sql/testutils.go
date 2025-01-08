@@ -146,6 +146,7 @@ func (dsp *DistSQLPlanner) Exec(
 		p.txn,
 		execCfg.Clock,
 		p.ExtendedEvalContext().Tracing,
+		p.ExtendedEvalContext().Settings,
 	)
 	defer recv.Release()
 

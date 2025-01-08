@@ -9,6 +9,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -265,7 +266,11 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 
 	// Build the plan tree.
 	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondatapb.ExperimentalDistSQLPlanningOff {
-		ctx = execversion.WithVersion(ctx, execversion.Latest)
+		execVersion := execversion.V24_3
+		if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_1) {
+			execVersion = execversion.V25_1
+		}
+		ctx = execversion.WithVersion(ctx, execVersion)
 		planningMode := distSQLDefaultPlanning
 		// If this transaction has modified or created any types, it is not safe to
 		// distribute due to limitations around leasing descriptors modified in the

@@ -3268,6 +3268,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		planner.txn,
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
+		ex.server.cfg.Settings,
 	)
 	recv.measureClientTime = planner.instrumentation.ShouldCollectExecStats()
 	recv.progressAtomic = progressAtomic

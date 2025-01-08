@@ -782,6 +782,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		txn,
 		evalCtx.ExecCfg.Clock,
 		evalCtx.Tracing,
+		evalCtx.Settings,
 	)
 	defer recv.Release()
 
