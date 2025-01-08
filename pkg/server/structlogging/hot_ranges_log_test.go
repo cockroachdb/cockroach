@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 type hotRangesLogSpy struct {
@@ -156,10 +157,13 @@ func TestHotRangesStats(t *testing.T) {
 		// We should have gotten 5 distinct range ids, one for each split point above.
 		logs := spy.Logs()[:5]
 		for _, l := range logs {
+			assert.Equal(t, l.Databases, []string{"‹test›"})
+			assert.Equal(t, l.Tables, []string{"‹foo›"})
+			assert.Equal(t, l.Indexes, []string{"‹foo_pkey›"})
 			_, ok := rangeIDs[l.RangeID]
 			if ok {
 				t.Fatalf(`Logged ranges should be unique per node for this test.
-found range on node %d and node %d: %s %s %s %s %d`, i, l.LeaseholderNodeID, l.DatabaseName, l.SchemaName, l.TableName, l.IndexName, l.RangeID)
+found range on node %d and node %d: %s %s %s %s %d`, i, l.LeaseholderNodeID, l.Databases, l.SchemaName, l.Tables, l.Indexes, l.RangeID)
 			}
 			rangeIDs[l.RangeID] = struct{}{}
 		}
