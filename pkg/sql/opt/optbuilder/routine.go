@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -101,7 +102,7 @@ func (b *Builder) buildUDF(
 		b.schemaFunctionDeps.Add(int(o.Oid))
 	}
 
-	return b.finishBuildScalar(f, routine, inScope, outScope, outCol)
+	return b.finishBuildScalar(f, routine, outScope, outCol)
 }
 
 // buildProcedure builds a set of memo groups that represents a procedure
@@ -134,7 +135,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 
 	// Build the routine.
 	routine := b.buildRoutine(proc, def, inScope, outScope, nil /* colRefs */)
-	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
+	routine = b.finishBuildScalar(nil /* texpr */, routine,
 		nil /* outScope */, nil /* outCol */)
 
 	// Build a call expression.
@@ -800,6 +801,49 @@ func (b *Builder) withinNestedPLpgSQLCall(fn func()) {
 }
 
 const doBlockRoutineName = "inline_code_block"
+
+// buildDo builds a SQL DO statement into an anonymous routine that is called
+// from the current scope.
+func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
+	defer func(oldInsideFuncDep bool) { b.insideFuncDef = oldInsideFuncDep }(b.insideFuncDef)
+	b.insideFuncDef = true
+
+	// Build the routine body.
+	var bodyStmts []string
+	if b.verboseTracing {
+		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+		fmtCtx.FormatNode(do.Code)
+		bodyStmts = []string{fmtCtx.CloseAndGetString()}
+	}
+	doBlockImpl, ok := do.Code.(*plpgsqltree.DoBlock)
+	if !ok {
+		panic(errors.AssertionFailedf("expected a plpgsql block"))
+	}
+	body, bodyProps := b.buildPLpgSQLDoBody(doBlockImpl)
+
+	// Build a CALL expression that invokes the routine.
+	outScope := inScope.push()
+	routine := b.factory.ConstructUDFCall(
+		memo.ScalarListExpr{},
+		&memo.UDFCallPrivate{
+			Def: &memo.UDFDefinition{
+				Name:        doBlockRoutineName,
+				Typ:         types.Void,
+				Volatility:  volatility.Volatile,
+				RoutineType: tree.ProcedureRoutine,
+				RoutineLang: tree.RoutineLangPLpgSQL,
+				Body:        []memo.RelExpr{body},
+				BodyProps:   []*physical.Required{bodyProps},
+				BodyStmts:   bodyStmts,
+			},
+		},
+	)
+	routine = b.finishBuildScalar(
+		nil /* texpr */, routine, nil /* outScope */, nil, /* outCol */
+	)
+	outScope.expr = b.factory.ConstructCall(routine, &memo.CallPrivate{})
+	return outScope
+}
 
 // buildDoBody builds the body of the anonymous routine for a DO statement.
 func (b *Builder) buildPLpgSQLDoBody(
