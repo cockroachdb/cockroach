@@ -28,12 +28,21 @@ type testFileTemplateConfig struct {
 	Ccl                           bool
 	ForceProductionValues         bool
 	SkipCclUnderRace              bool
-	UseHeavyPool                  bool
+	UseHeavyPool                  useHeavyPoolCondition
 	Package, TestRuleName, RelDir string
 	ConfigIdx                     int
 	TestCount                     int
 	NumCPU                        int
 }
+
+type useHeavyPoolCondition int
+
+const (
+	useHeavyPoolNever useHeavyPoolCondition = iota
+	// useHeavyPoolForExpensiveConfig is used for tests running under deadlock or race.
+	useHeavyPoolForExpensiveConfig
+	useHeavyPoolAlways
+)
 
 var outDir = flag.String("out-dir", "", "path to the root of the cockroach workspace")
 
@@ -181,12 +190,14 @@ func (t *testdir) dump() error {
 		if cfg.Name == "3node-tenant" || strings.HasPrefix(cfg.Name, "multiregion-") {
 			tplCfg.SkipCclUnderRace = true
 		}
+		tplCfg.UseHeavyPool = useHeavyPoolNever
 		if strings.Contains(cfg.Name, "5node") ||
 			strings.Contains(cfg.Name, "fakedist") ||
-			strings.Contains(cfg.Name, "cockroach-go-testserver") ||
 			(strings.HasPrefix(cfg.Name, "local-") && !tplCfg.Ccl) ||
 			(cfg.Name == "local" && !tplCfg.Ccl) {
-			tplCfg.UseHeavyPool = true
+			tplCfg.UseHeavyPool = useHeavyPoolForExpensiveConfig
+		} else if strings.Contains(cfg.Name, "cockroach-go-testserver") {
+			tplCfg.UseHeavyPool = useHeavyPoolAlways
 		}
 		subdir := filepath.Join(t.dir, cfg.Name)
 		f, buildF, cleanup, err := openTestSubdir(subdir)
