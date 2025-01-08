@@ -268,6 +268,7 @@ func TestMVCCHistories(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			defer func() { _ = r.Close() }()
 			buf.Printf(">> %s:\n", name)
 
 			// Dump point keys.
