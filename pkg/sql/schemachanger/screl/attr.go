@@ -108,6 +108,9 @@ const (
 	// Usage is an attribute for column compute expression to identify why it's
 	// being added.
 	Usage
+	// PolicyID is an attribute for row-level security policies to uniquely
+	// identify a policy within a table.
+	PolicyID
 
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
@@ -359,6 +362,16 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TriggerDeps)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(TriggerID, "TriggerID"),
+	),
+	// Policy elements
+	rel.EntityMapping(t((*scpb.Policy)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+	),
+	rel.EntityMapping(t((*scpb.PolicyName)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+		rel.EntityAttr(Name, "Name"),
 	),
 	// Common elements.
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),

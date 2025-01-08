@@ -1,0 +1,55 @@
+/* setup */
+CREATE TABLE t1 (tenant_id uuid, c1 int);
+----
+...
++object {100 101 t1} -> 104
+
+/* test */
+CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR SELECT TO PUBLIC USING (tenant_id = '01538898-f55c-44db-a306-89078e2c430e');
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE POLICY
+increment telemetry for sql.schema.create_policy
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  +  nextPolicyId: 2
+     parentId: 100
+  +  policies:
+  +  - id: 1
+  +    name: policy 1
+     primaryIndex:
+       constraintId: 1
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  +  nextPolicyId: 2
+     parentId: 100
+  +  policies:
+  +  - id: 1
+  +    name: policy 1
+     primaryIndex:
+       constraintId: 1
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

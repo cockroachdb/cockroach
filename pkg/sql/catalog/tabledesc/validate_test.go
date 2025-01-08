@@ -143,6 +143,9 @@ var validationMap = []struct {
 			"ReplicatedPCRVersion": {status: thisFieldReferencesNoObjects},
 			"Triggers":             {status: iSolemnlySwearThisFieldIsValidated},
 			"NextTriggerID":        {status: thisFieldReferencesNoObjects},
+			// TODO(136696): Add validation once additional fields for policies are implemented.
+			"Policies":     {status: thisFieldReferencesNoObjects},
+			"NextPolicyID": {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
