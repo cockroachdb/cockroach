@@ -14,15 +14,15 @@ source "$dir/teamcity-bazel-support.sh"
 
 tc_start_block "Run compose tests"
 
-bazel build //pkg/cmd/bazci --config=ci
-BAZEL_BIN=$(bazel info bazel-bin --config=ci)
+bazel build //pkg/cmd/bazci
+BAZEL_BIN=$(bazel info bazel-bin)
 BAZCI=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci
 
-bazel build //pkg/cmd/cockroach //pkg/compose/compare/compare:compare_test //c-deps:libgeos --config=ci --config=crosslinux --config=test
-CROSSBIN=$(bazel info bazel-bin --config=ci --config=crosslinux --config=test)
+bazel build //pkg/cmd/cockroach //pkg/compose/compare/compare:compare_test //c-deps:libgeos --config=crosslinux --config=test
+CROSSBIN=$(bazel info bazel-bin --config=crosslinux --config=test)
 COCKROACH=$CROSSBIN/pkg/cmd/cockroach/cockroach_/cockroach
 COMPAREBIN=$CROSSBIN/pkg/compose/compare/compare/compare_test_/compare_test
-LIBGEOSDIR=$(bazel info execution_root --config=crosslinux --config=ci --config=test)/external/archived_cdep_libgeos_linux/lib/
+LIBGEOSDIR=$(bazel info execution_root --config=crosslinux --config=test)/external/archived_cdep_libgeos_linux/lib/
 ARTIFACTS_DIR=$PWD/artifacts
 mkdir -p $ARTIFACTS_DIR
 

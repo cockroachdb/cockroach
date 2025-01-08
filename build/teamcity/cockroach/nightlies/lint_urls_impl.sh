@@ -18,8 +18,8 @@ bazel run //pkg/gen:code
 bazel run //pkg/cmd/generate-cgo:generate-cgo --run_under="cd $root && "
 # generated files requirements -- end
 
-bazel build //pkg/cmd/bazci --config=ci
-$(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- \
+bazel build //pkg/cmd/bazci
+$(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci -- \
     test //pkg/testutils/lint:lint_test \
     --config=ci --define gotags=bazel,gss,nightly,lint \
     --test_filter=TestNightlyLint \

@@ -20,7 +20,7 @@ log_into_gcloud
 
 filename=$(date +"%Y%m%d%H%M%S").pprof
 
-bazel build --config ci //pkg/cmd/run-pgo-build
+bazel build //pkg/cmd/run-pgo-build
 _bazel/bin/pkg/cmd/run-pgo-build/run-pgo-build_/run-pgo-build -out "$filename"
 shasum -a 256 "$filename"
 

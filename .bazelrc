@@ -61,16 +61,15 @@ test:race --heavy
 
 # CI uses a custom timeout for enormous targets.
 test:use_ci_timeouts --test_timeout=60,300,900,900
+
 # CI should always run with `--config=ci`.
-build:cibase --config=lintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
-test:cibase --test_env=GO_TEST_WRAP_TESTV=1
+test:ci --test_env=GO_TEST_WRAP_TESTV=1
 # Dump all output for failed tests to the build log.
 test:ci --test_output=errors
 # Put all tmp artifacts in /artifacts/tmp.
 test:ci --test_tmpdir=/artifacts/tmp
-build:ci --config=cibase
 
 build:cross --stamp
 
@@ -132,7 +131,8 @@ build:engflowbase --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 build:engflowbase --extra_execution_platforms=//build/toolchains:cross_linux
 build:engflowbase --remote_upload_local_results=false
 build:engflowbase --remote_download_toplevel
-build:engflowbase --config=cibase
+build:engflowbase --test_env=GO_TEST_WRAP_TESTV=1
+build:engflowbase --config=lintonbuild
 test:engflowbase --test_env=REMOTE_EXEC=1
 test:engflowbase --test_env=GOTRACEBACK=all
 build:engflow --config=engflowbase
