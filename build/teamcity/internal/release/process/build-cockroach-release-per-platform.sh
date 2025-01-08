@@ -48,8 +48,8 @@ tc_start_block "Make and publish release artifacts"
 # Using publish-provisional-artifacts here is funky. We're directly publishing
 # the official binaries, not provisional ones. Legacy naming. To clean up...
 BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform" run_bazel << 'EOF'
-bazel build --config ci //pkg/cmd/publish-provisional-artifacts
-BAZEL_BIN=$(bazel info bazel-bin --config ci)
+bazel build //pkg/cmd/publish-provisional-artifacts
+BAZEL_BIN=$(bazel info bazel-bin)
 export google_credentials="$gcs_credentials"
 source "build/teamcity-support.sh"  # For log_into_gcloud
 log_into_gcloud
