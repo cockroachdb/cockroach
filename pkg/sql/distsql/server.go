@@ -208,14 +208,15 @@ func (ds *ServerImpl) setupFlow(
 		}
 	}()
 
-	if req.Version < execversion.MinAcceptedVersion || req.Version > execversion.Version {
+	if req.Version < execversion.MinAccepted || req.Version > execversion.Latest {
 		err := errors.Errorf(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
-			req.Version, execversion.MinAcceptedVersion, execversion.Version,
+			req.Version, execversion.MinAccepted, execversion.Latest,
 		)
 		log.Warningf(ctx, "%v", err)
 		return ctx, nil, nil, err
 	}
+	ctx = execversion.WithVersion(ctx, req.Version)
 
 	const opName = "flow"
 	if parentSpan == nil {

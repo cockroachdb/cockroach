@@ -1,18 +1,12 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "execversion",
     srcs = ["version.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execversion",
     visibility = ["//visibility:public"],
-)
-
-go_test(
-    name = "execversion_test",
-    srcs = ["version_test.go"],
-    embed = [":execversion"],
     deps = [
-        "//pkg/util/leaktest",
-        "@com_github_stretchr_testify//require",
+        "//pkg/util/ctxutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

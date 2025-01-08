@@ -125,7 +125,7 @@ func runTestClusterFlow(
 	fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 	req1 := &execinfrapb.SetupFlowRequest{
-		Version:           execversion.Version,
+		Version:           execversion.Latest,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -144,7 +144,7 @@ func runTestClusterFlow(
 	}
 
 	req2 := &execinfrapb.SetupFlowRequest{
-		Version:           execversion.Version,
+		Version:           execversion.Latest,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -170,7 +170,7 @@ func runTestClusterFlow(
 	}
 
 	req3 := &execinfrapb.SetupFlowRequest{
-		Version:           execversion.Version,
+		Version:           execversion.Latest,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -419,7 +419,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	require.NoError(t, err)
 
 	req := execinfrapb.SetupFlowRequest{
-		Version:           execversion.Version,
+		Version:           execversion.Latest,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: execinfrapb.FlowID{UUID: uuid.MakeV4()},
@@ -726,7 +726,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					require.NoError(b, err)
 					for i := range reqs {
 						reqs[i] = execinfrapb.SetupFlowRequest{
-							Version:           execversion.Version,
+							Version:           execversion.Latest,
 							LeafTxnInputState: leafInputState,
 							Flow: execinfrapb.FlowSpec{
 								Processors: []execinfrapb.ProcessorSpec{{

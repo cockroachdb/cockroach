@@ -67,7 +67,7 @@ func runTestFlow(
 		t.Fatal(err)
 	}
 	req := execinfrapb.SetupFlowRequest{
-		Version:           execversion.Version,
+		Version:           execversion.Latest,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID:     execinfrapb.FlowID{UUID: uuid.MakeV4()},
