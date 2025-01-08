@@ -940,6 +940,12 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 func (u *sqlSymUnion) indexType() tree.IndexType {
   return u.val.(tree.IndexType)
 }
+func (u *sqlSymUnion) doBlockOptions() tree.DoBlockOptions {
+    return u.val.(tree.DoBlockOptions)
+}
+func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
+    return u.val.(tree.DoBlockOption)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -1300,6 +1306,7 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %type <tree.Statement> explainable_stmt
 %type <tree.Statement> row_source_extension_stmt
 %type <tree.Statement> copy_to_stmt
+%type <tree.Statement> do_stmt
 %type <tree.Statement> export_stmt
 %type <tree.Statement> execute_stmt
 %type <tree.Statement> deallocate_stmt
@@ -1770,6 +1777,8 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %type <tree.RoutineOption> create_routine_opt_item common_routine_opt_item
 %type <tree.RoutineParamClass> routine_param_class
 %type <*tree.UnresolvedObjectName> routine_create_name
+%type <tree.DoBlockOptions> do_stmt_opt_list
+%type <tree.DoBlockOption> do_stmt_opt_item
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
@@ -1887,6 +1896,7 @@ stmt_without_legacy_transaction:
 | execute_stmt               // EXTEND WITH HELP: EXECUTE
 | deallocate_stmt            // EXTEND WITH HELP: DEALLOCATE
 | discard_stmt               // EXTEND WITH HELP: DISCARD
+| do_stmt                    // EXTEND WITH HELP: DO
 | grant_stmt                 // EXTEND WITH HELP: GRANT
 | prepare_stmt               // EXTEND WITH HELP: PREPARE
 | revoke_stmt                // EXTEND WITH HELP: REVOKE
@@ -5491,6 +5501,45 @@ opt_link_sym:
   {
   }
 
+// %Help: DO - execute an anonymous code block
+// %Category: Misc
+// %Text:
+// DO [LANGUAGE lang_name] code
+do_stmt:
+  DO do_stmt_opt_list
+  {
+    doBlockBody, err := ParseDoBlockFn($2.doBlockOptions())
+    if err != nil {
+      return setErrNoDetails(sqllex, err)
+    }
+    $$.val = &tree.DoBlock{Code: doBlockBody}
+  }
+| DO error // SHOW HELP: DO
+
+do_stmt_opt_list:
+  do_stmt_opt_item
+  {
+    $$.val = tree.DoBlockOptions{$1.doBlockOption()}
+  }
+| do_stmt_opt_list do_stmt_opt_item
+  {
+    $$.val = append($1.doBlockOptions(), $2.doBlockOption())
+  }
+
+do_stmt_opt_item:
+  SCONST
+  {
+    $$.val = tree.RoutineBodyStr($1)
+  }
+| LANGUAGE non_reserved_word_or_sconst
+  {
+    lang, err := tree.AsRoutineLanguage($2)
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = lang
+  }
+
 // %Help: DROP FUNCTION - remove a function
 // %Category: DDL
 // %Text:
@@ -6689,6 +6738,7 @@ explainable_stmt:
 | comment_stmt
 | execute_stmt
 | call_stmt
+| do_stmt
 
 preparable_stmt:
   alter_stmt     // help texts in sub-rule

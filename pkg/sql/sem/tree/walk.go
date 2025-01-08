@@ -1382,6 +1382,17 @@ func (stmt *Delete) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+// walkStmt is part of the walkableStmt interface.
+func (stmt *DoBlock) walkStmt(v Visitor) Statement {
+  body := stmt.Code.VisitBody(v)
+  if body != stmt.Code {
+    stmtCopy := *stmt
+    stmtCopy.Code = body
+    return &stmtCopy
+  }
+  return stmt
+}
+
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Explain) copyNode() *Explain {
 	stmtCopy := *stmt
@@ -2041,6 +2052,7 @@ var _ walkableStmt = &CreateTable{}
 var _ walkableStmt = &CreateTenant{}
 var _ walkableStmt = &CreateTenantFromReplication{}
 var _ walkableStmt = &Delete{}
+var _ walkableStmt = &DoBlock{}
 var _ walkableStmt = &DropTenant{}
 var _ walkableStmt = &Explain{}
 var _ walkableStmt = &Import{}

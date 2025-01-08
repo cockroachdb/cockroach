@@ -294,6 +294,9 @@ func TestContextualHelp(t *testing.T) {
 		{`DECLARE foo BINARY ??`, `DECLARE`},
 		{`DECLARE foo BINARY CURSOR ??`, `DECLARE`},
 
+		{`DO ??`, `DO`},
+		//{`DO LANGUAGE PLpgSQL ??`, `DO`},
+
 		{`CLOSE ??`, `CLOSE`},
 
 		{`FETCH ??`, `FETCH`},
