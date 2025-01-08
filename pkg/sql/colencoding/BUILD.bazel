@@ -10,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/col/typeconv",
         "//pkg/roachpb",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/fetchpb",
@@ -21,6 +22,7 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/intsets",
+        "//pkg/util/ipaddr",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",

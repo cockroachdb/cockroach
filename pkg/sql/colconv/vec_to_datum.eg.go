@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -29,6 +30,7 @@ var (
 	_ pgdate.Date
 	_ = typeconv.DatumVecCanonicalTypeFamily
 	_ uuid.UUID
+	_ ipaddr.IPAddr
 )
 
 // VecToDatumConverter is a helper struct that converts vectors from batches to
@@ -271,7 +273,14 @@ func ColVecToDatumAndDeselect(
 			_ = converted[length-1]
 			_ = sel[length-1]
 			var idx, destIdx, srcIdx int
-			switch ct := col.Type(); ct.Family() {
+			ct := col.Type()
+			family := ct.Family()
+			if family == types.INetFamily && col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+				// Use this trick so that we fall into the default case that handles all
+				// datum-backed types.
+				family = typeconv.DatumVecCanonicalTypeFamily + 1
+			}
+			switch family {
 			case types.StringFamily:
 				// Note that there is no need for a copy since casting to a string will
 				// do that.
@@ -712,6 +721,32 @@ func ColVecToDatumAndDeselect(
 						converted[destIdx] = _converted
 					}
 				}
+			case types.INetFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.INet()
+					_ = true
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
+							converted[destIdx] = tree.DNull
+							continue
+						}
+						_ = true
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDIPAddr(tree.DIPAddr{IPAddr: v})
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 			default:
 				switch ct.Width() {
@@ -745,7 +780,14 @@ func ColVecToDatumAndDeselect(
 			_ = converted[length-1]
 			_ = sel[length-1]
 			var idx, destIdx, srcIdx int
-			switch ct := col.Type(); ct.Family() {
+			ct := col.Type()
+			family := ct.Family()
+			if family == types.INetFamily && col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+				// Use this trick so that we fall into the default case that handles all
+				// datum-backed types.
+				family = typeconv.DatumVecCanonicalTypeFamily + 1
+			}
+			switch family {
 			case types.StringFamily:
 				// Note that there is no need for a copy since casting to a string will
 				// do that.
@@ -1101,6 +1143,27 @@ func ColVecToDatumAndDeselect(
 						converted[destIdx] = _converted
 					}
 				}
+			case types.INetFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.INet()
+					_ = true
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						_ = true
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDIPAddr(tree.DIPAddr{IPAddr: v})
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 			default:
 				switch ct.Width() {
@@ -1143,7 +1206,14 @@ func ColVecToDatum(
 			{
 				_ = sel[length-1]
 				var idx, destIdx, srcIdx int
-				switch ct := col.Type(); ct.Family() {
+				ct := col.Type()
+				family := ct.Family()
+				if family == types.INetFamily && col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+					// Use this trick so that we fall into the default case that handles all
+					// datum-backed types.
+					family = typeconv.DatumVecCanonicalTypeFamily + 1
+				}
+				switch family {
 				case types.StringFamily:
 					// Note that there is no need for a copy since casting to a string will
 					// do that.
@@ -1567,6 +1637,31 @@ func ColVecToDatum(
 							converted[destIdx] = _converted
 						}
 					}
+				case types.INetFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.INet()
+						_ = true
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							if nulls.NullAt(srcIdx) {
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							_ = true
+							v := typedCol.Get(srcIdx)
+							_converted := da.NewDIPAddr(tree.DIPAddr{IPAddr: v})
+							converted[destIdx] = _converted
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 				default:
 					switch ct.Width() {
@@ -1598,7 +1693,14 @@ func ColVecToDatum(
 			{
 				_ = converted[length-1]
 				var idx, destIdx, srcIdx int
-				switch ct := col.Type(); ct.Family() {
+				ct := col.Type()
+				family := ct.Family()
+				if family == types.INetFamily && col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+					// Use this trick so that we fall into the default case that handles all
+					// datum-backed types.
+					family = typeconv.DatumVecCanonicalTypeFamily + 1
+				}
+				switch family {
 				case types.StringFamily:
 					// Note that there is no need for a copy since casting to a string will
 					// do that.
@@ -2042,6 +2144,33 @@ func ColVecToDatum(
 							converted[destIdx] = _converted
 						}
 					}
+				case types.INetFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.INet()
+						_ = true
+						_ = typedCol.Get(length - 1)
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							if nulls.NullAt(srcIdx) {
+								//gcassert:bce
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							_ = true
+							//gcassert:bce
+							v := typedCol.Get(srcIdx)
+							_converted := da.NewDIPAddr(tree.DIPAddr{IPAddr: v})
+							//gcassert:bce
+							converted[destIdx] = _converted
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 				default:
 					switch ct.Width() {
@@ -2075,7 +2204,14 @@ func ColVecToDatum(
 			{
 				_ = sel[length-1]
 				var idx, destIdx, srcIdx int
-				switch ct := col.Type(); ct.Family() {
+				ct := col.Type()
+				family := ct.Family()
+				if family == types.INetFamily && col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+					// Use this trick so that we fall into the default case that handles all
+					// datum-backed types.
+					family = typeconv.DatumVecCanonicalTypeFamily + 1
+				}
+				switch family {
 				case types.StringFamily:
 					// Note that there is no need for a copy since casting to a string will
 					// do that.
@@ -2431,6 +2567,27 @@ func ColVecToDatum(
 							converted[destIdx] = _converted
 						}
 					}
+				case types.INetFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.INet()
+						_ = true
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							_ = true
+							v := typedCol.Get(srcIdx)
+							_converted := da.NewDIPAddr(tree.DIPAddr{IPAddr: v})
+							converted[destIdx] = _converted
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 				default:
 					switch ct.Width() {
@@ -2458,7 +2615,14 @@ func ColVecToDatum(
 			{
 				_ = converted[length-1]
 				var idx, destIdx, srcIdx int
-				switch ct := col.Type(); ct.Family() {
+				ct := col.Type()
+				family := ct.Family()
+				if family == types.INetFamily && col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+					// Use this trick so that we fall into the default case that handles all
+					// datum-backed types.
+					family = typeconv.DatumVecCanonicalTypeFamily + 1
+				}
+				switch family {
 				case types.StringFamily:
 					// Note that there is no need for a copy since casting to a string will
 					// do that.
@@ -2813,6 +2977,28 @@ func ColVecToDatum(
 								colexecerror.InternalError(err)
 							}
 							_converted := da.NewDEnum(e)
+							//gcassert:bce
+							converted[destIdx] = _converted
+						}
+					}
+				case types.INetFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.INet()
+						_ = true
+						_ = typedCol.Get(length - 1)
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							_ = true
+							//gcassert:bce
+							v := typedCol.Get(srcIdx)
+							_converted := da.NewDIPAddr(tree.DIPAddr{IPAddr: v})
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -49,7 +50,8 @@ import (
 // colexecbase.OrderedDistinctColsToOperators. We inject this at test time so
 // that tests can use OrderedDistinctColsToOperators without invoking an import
 // dependency cycle.
-var OrderedDistinctColsToOperators func(input colexecop.Operator, distinctCols []uint32, typs []*types.T, nullsAreDistinct bool,
+var OrderedDistinctColsToOperators func(
+	ctx context.Context, input colexecop.Operator, distinctCols []uint32, typs []*types.T, nullsAreDistinct bool,
 ) (colexecop.ResettableOperator, []bool)
 
 // Tuple represents a row with any-type columns.
@@ -170,6 +172,18 @@ func (t Tuple) less(
 			if lhsTime.Equal(rhsTime) {
 				continue
 			} else if lhsTime.Before(rhsTime) {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		if lhsVal.Type().Name() == "IPAddr" {
+			lhsIPAddr := lhsVal.Interface().(ipaddr.IPAddr)
+			rhsIPAddr := rhsVal.Interface().(ipaddr.IPAddr)
+			if cmp := lhsIPAddr.Compare(&rhsIPAddr); cmp == 0 {
+				continue
+			} else if cmp < 0 {
 				return true
 			} else {
 				return false
@@ -1328,7 +1342,7 @@ func (r *OpTestOutput) VerifyAnyOrder() error {
 func (r *OpTestOutput) VerifyPartialOrder() error {
 	distincterInput := &colexecop.FeedOperator{}
 	distincter, distinctOutput := OrderedDistinctColsToOperators(
-		distincterInput, r.orderedCols, r.typs, false, /* nullsAreDistinct */
+		context.Background(), distincterInput, r.orderedCols, r.typs, false, /* nullsAreDistinct */
 	)
 	var actual, expected Tuples
 	start := 0

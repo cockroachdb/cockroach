@@ -6,12 +6,14 @@
 package coldata
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
@@ -113,8 +115,8 @@ func SetBatchSizeForTests(newBatchSize int) error {
 
 // NewMemBatch allocates a new in-memory Batch.
 // TODO(jordan): pool these allocations.
-func NewMemBatch(typs []*types.T, factory ColumnFactory) Batch {
-	return NewMemBatchWithCapacity(typs, BatchSize(), factory)
+func NewMemBatch(ctx context.Context, typs []*types.T, factory ColumnFactory) Batch {
+	return NewMemBatchWithCapacity(ctx, typs, BatchSize(), factory)
 }
 
 const (
@@ -128,6 +130,7 @@ const (
 	timeAllocIdx
 	intervalAllocIdx
 	jsonAllocIdx
+	inetAllocIdx
 	datumAllocIdx
 	numCanonicalTypes
 )
@@ -160,6 +163,8 @@ func toAllocIdx(canonicalTypeFamily types.Family, width int32) int {
 		return intervalAllocIdx
 	case types.JsonFamily:
 		return jsonAllocIdx
+	case types.INetFamily:
+		return inetAllocIdx
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return datumAllocIdx
 	default:
@@ -176,7 +181,7 @@ var (
 )
 
 func init() {
-	if typeconv.TypeFamilyToCanonicalTypeFamily(datumBackedType.Family()) != typeconv.DatumVecCanonicalTypeFamily {
+	if typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, datumBackedType.Family()) != typeconv.DatumVecCanonicalTypeFamily {
 		panic("update datumBackedType to be actually datum-backed")
 	}
 }
@@ -204,6 +209,8 @@ func toCanonicalType(allocIdx int) *types.T {
 		return types.Interval
 	case jsonAllocIdx:
 		return types.Json
+	case inetAllocIdx:
+		return types.INet
 	case datumAllocIdx:
 		return datumBackedType
 	default:
@@ -213,7 +220,9 @@ func toCanonicalType(allocIdx int) *types.T {
 
 // NewMemBatchWithCapacity allocates a new in-memory Batch with the given
 // column size. Use for operators that have a precisely-sized output batch.
-func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactory) Batch {
+func NewMemBatchWithCapacity(
+	ctx context.Context, typs []*types.T, capacity int, factory ColumnFactory,
+) Batch {
 	b := NewMemBatchNoCols(typs, capacity).(*MemBatch)
 	vecs := make([]Vec, len(typs))
 	// numForCanonicalType will track how many times a particular canonical type
@@ -223,7 +232,7 @@ func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactor
 	var numForCanonicalType [numCanonicalTypes]int
 	for i, t := range typs {
 		vecs[i].t = t
-		vecs[i].canonicalTypeFamily = typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+		vecs[i].canonicalTypeFamily = typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family())
 		b.b[i] = &vecs[i]
 		allocIdx := toAllocIdx(vecs[i].canonicalTypeFamily, vecs[i].t.Width())
 		numForCanonicalType[allocIdx]++
@@ -240,7 +249,7 @@ func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactor
 			if numColumns > 1 {
 				scratch := scratchColumns[:numColumns]
 				t := toCanonicalType(allocIdx)
-				factory.MakeColumns(scratch, t, capacity)
+				factory.MakeColumns(ctx, scratch, t, capacity)
 				for i := range vecs {
 					if toAllocIdx(vecs[i].canonicalTypeFamily, vecs[i].t.Width()) == allocIdx {
 						vecs[i].col = scratch[0]
@@ -264,7 +273,7 @@ func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactor
 	nullsAlloc := make([]byte, len(typs)*nullsCap)
 	for i := range vecs {
 		if vecs[i].col == nil {
-			vecs[i].col = factory.MakeColumn(vecs[i].t, capacity)
+			vecs[i].col = factory.MakeColumn(ctx, vecs[i].t, capacity)
 		}
 		vecs[i].nulls = newNulls(nullsAlloc[:nullsCap:nullsCap])
 		nullsAlloc = nullsAlloc[nullsCap:]
@@ -291,7 +300,7 @@ func NewMemBatchNoCols(typs []*types.T, capacity int) Batch {
 // ZeroBatch is a schema-less Batch of length 0.
 var ZeroBatch = &zeroBatch{
 	MemBatch: NewMemBatchWithCapacity(
-		nil /* typs */, 0 /* capacity */, StandardColumnFactory,
+		context.Background(), nil /* typs */, 0 /* capacity */, StandardColumnFactory,
 	).(*MemBatch),
 }
 
@@ -419,7 +428,7 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 		}
 	}
 	if cannotReuse {
-		*m = *NewMemBatchWithCapacity(typs, length, factory).(*MemBatch)
+		*m = *NewMemBatchWithCapacity(context.Background(), typs, length, factory).(*MemBatch)
 		m.SetLength(length)
 		return
 	}

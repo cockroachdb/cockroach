@@ -137,7 +137,8 @@ func (dsp *DistSQLPlanner) Exec(
 		return nil
 	})
 	execCfg := p.ExecCfg()
-	recv := MakeDistSQLReceiver(
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
 		ctx,
 		rw,
 		stmt.AST.StatementReturnType(),
@@ -145,6 +146,7 @@ func (dsp *DistSQLPlanner) Exec(
 		p.txn,
 		execCfg.Clock,
 		p.ExtendedEvalContext().Tracing,
+		p.ExtendedEvalContext().Settings,
 	)
 	defer recv.Release()
 
@@ -157,6 +159,6 @@ func (dsp *DistSQLPlanner) Exec(
 		distributionType)
 	planCtx.stmtType = recv.stmtType
 
-	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv, nil /* finishedSetupFn */)
+	dsp.PlanAndRun(evalCtx, planCtx, p.txn, p.curPlan.main, recv, nil /* finishedSetupFn */)
 	return rw.Err()
 }

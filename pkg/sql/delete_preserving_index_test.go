@@ -776,7 +776,7 @@ func fetchIndex(
 	}
 
 	var spec fetchpb.IndexFetchSpec
-	require.NoError(t, rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, table, idx, columns))
+	require.NoError(t, rowenc.InitIndexFetchSpec(ctx, &spec, keys.SystemSQLCodec, table, idx, columns))
 
 	spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, idx.GetID())}
 	const reverse = false

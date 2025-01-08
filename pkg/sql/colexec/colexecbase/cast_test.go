@@ -43,7 +43,7 @@ func TestRandomizedCast(t *testing.T) {
 		for {
 			from, to = randgen.RandType(rng), randgen.RandType(rng)
 			if _, ok := cast.LookupCastVolatility(from, to); ok {
-				if colexecbase.IsCastSupported(from, to) {
+				if colexecbase.IsCastSupported(ctx, from, to) {
 					return from, to
 				}
 			}
@@ -57,8 +57,8 @@ func TestRandomizedCast(t *testing.T) {
 		log.Infof(ctx, "%s to %s", from.String(), to.String())
 		input := colexectestutils.Tuples{}
 		output := colexectestutils.Tuples{}
-		fromConverter := colconv.GetDatumToPhysicalFn(from)
-		toConverter := colconv.GetDatumToPhysicalFn(to)
+		fromConverter := colconv.GetDatumToPhysicalFn(ctx, from)
+		toConverter := colconv.GetDatumToPhysicalFn(ctx, to)
 		errorExpected := false
 		for i := 0; i < numRows; i++ {
 			// We don't allow any NULL datums to be generated, so disable this

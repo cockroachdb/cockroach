@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -386,8 +387,21 @@ func (b *writeBuffer) writeTextColumnarElement(
 			b.writeLengthPrefixedString(logical)
 		}
 
+	case types.INetFamily:
+		if vecs.Vecs[vecIdx].CanonicalTypeFamily() == types.INetFamily {
+			b.writeLengthPrefixedString(vecs.INetCols[colIdx].Get(rowIdx).String())
+		} else {
+			if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+				panic(err)
+			}
+			writeTextDatumNotNull(b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), conv, sessionLoc, typ)
+		}
+
 	default:
 		// All other types are represented via the datum-backed vector.
+		if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+			panic(err)
+		}
 		writeTextDatumNotNull(b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), conv, sessionLoc, typ)
 	}
 }
@@ -600,6 +614,42 @@ func writeBinaryJSON(b *writeBuffer, v json.JSON, t *types.T) {
 	b.writeString(s)
 }
 
+func writeBinaryIPAddr(b *writeBuffer, v ipaddr.IPAddr) {
+	// We calculate the Postgres binary format for an IPAddr. For the spec see,
+	// https://github.com/postgres/postgres/blob/81c5e46c490e2426db243eada186995da5bb0ba7/src/backend/utils/adt/network.c#L144
+	// The pgBinary encoding is as follows:
+	//  The int32 length of the following bytes.
+	//  The family byte.
+	//  The mask size byte.
+	//  A 0 byte for is_cidr. It's ignored on the postgres frontend.
+	//  The length of our IP bytes.
+	//  The IP bytes.
+	const pgIPAddrBinaryHeaderSize = 4
+	if v.Family == ipaddr.IPv4family {
+		b.putInt32(net.IPv4len + pgIPAddrBinaryHeaderSize)
+		b.writeByte(pgwirebase.PGBinaryIPv4family)
+		b.writeByte(v.Mask)
+		b.writeByte(0)
+		b.writeByte(byte(net.IPv4len))
+		err := v.Addr.WriteIPv4Bytes(b)
+		if err != nil {
+			b.setError(err)
+		}
+	} else if v.Family == ipaddr.IPv6family {
+		b.putInt32(net.IPv6len + pgIPAddrBinaryHeaderSize)
+		b.writeByte(pgwirebase.PGBinaryIPv6family)
+		b.writeByte(v.Mask)
+		b.writeByte(0)
+		b.writeByte(byte(net.IPv6len))
+		err := v.Addr.WriteIPv6Bytes(b)
+		if err != nil {
+			b.setError(err)
+		}
+	} else {
+		b.setError(errors.Errorf("error encoding inet to pgBinary: %v", v))
+	}
+}
+
 // writeBinaryDatum writes d to the buffer. Type t must be specified for types
 // that have various width encodings (floats, ints, chars). It is ignored
 // (and can be nil) for types with a 1:1 datum:type mapping.
@@ -675,39 +725,7 @@ func writeBinaryDatumNotNull(
 		writeBinaryBytes(b, v.GetBytes(), t)
 
 	case *tree.DIPAddr:
-		// We calculate the Postgres binary format for an IPAddr. For the spec see,
-		// https://github.com/postgres/postgres/blob/81c5e46c490e2426db243eada186995da5bb0ba7/src/backend/utils/adt/network.c#L144
-		// The pgBinary encoding is as follows:
-		//  The int32 length of the following bytes.
-		//  The family byte.
-		//  The mask size byte.
-		//  A 0 byte for is_cidr. It's ignored on the postgres frontend.
-		//  The length of our IP bytes.
-		//  The IP bytes.
-		const pgIPAddrBinaryHeaderSize = 4
-		if v.Family == ipaddr.IPv4family {
-			b.putInt32(net.IPv4len + pgIPAddrBinaryHeaderSize)
-			b.writeByte(pgwirebase.PGBinaryIPv4family)
-			b.writeByte(v.Mask)
-			b.writeByte(0)
-			b.writeByte(byte(net.IPv4len))
-			err := v.Addr.WriteIPv4Bytes(b)
-			if err != nil {
-				b.setError(err)
-			}
-		} else if v.Family == ipaddr.IPv6family {
-			b.putInt32(net.IPv6len + pgIPAddrBinaryHeaderSize)
-			b.writeByte(pgwirebase.PGBinaryIPv6family)
-			b.writeByte(v.Mask)
-			b.writeByte(0)
-			b.writeByte(byte(net.IPv6len))
-			err := v.Addr.WriteIPv6Bytes(b)
-			if err != nil {
-				b.setError(err)
-			}
-		} else {
-			b.setError(errors.Errorf("error encoding inet to pgBinary: %v", v.IPAddr))
-		}
+		writeBinaryIPAddr(b, v.IPAddr)
 
 	case *tree.DEnum:
 		b.writeLengthPrefixedString(v.LogicalRep)
@@ -926,8 +944,21 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 			b.writeLengthPrefixedString(logical)
 		}
 
+	case types.INetFamily:
+		if vecs.Vecs[vecIdx].CanonicalTypeFamily() == types.INetFamily {
+			writeBinaryIPAddr(b, vecs.INetCols[colIdx].Get(rowIdx))
+		} else {
+			if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+				panic(err)
+			}
+			writeBinaryDatumNotNull(ctx, b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), sessionLoc, typ)
+		}
+
 	default:
 		// All other types are represented via the datum-backed vector.
+		if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+			panic(err)
+		}
 		writeBinaryDatumNotNull(ctx, b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), sessionLoc, typ)
 	}
 }

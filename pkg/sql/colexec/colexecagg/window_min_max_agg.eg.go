@@ -18,9 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -33,6 +35,8 @@ var (
 	_ duration.Duration
 	_ json.JSON
 	_ = coldataext.CompareDatum
+	_ execversion.DistSQLVersion
+	_ ipaddr.IPAddr
 )
 
 // Remove unused warning.
@@ -42,7 +46,7 @@ func newMinWindowAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) aggregateFuncAlloc {
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
@@ -94,6 +98,12 @@ func newMinWindowAggAlloc(
 		case -1:
 		default:
 			return &minJSONWindowAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &minINetWindowAggAlloc{aggAllocBase: allocBase}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -1584,6 +1594,133 @@ func (*minJSONWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startId
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minJSONWindowAgg"))
 }
 
+type minINetWindowAgg struct {
+	unorderedAggregateFuncBase
+	// curAgg holds the running min/max, so we can index into the slice once per
+	// group, instead of on each iteration.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
+	curAgg ipaddr.IPAddr
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
+}
+
+var _ AggregateFunc = &minINetWindowAgg{}
+
+func (a *minINetWindowAgg) Compute(
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+) {
+	var oldCurAggSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.INet(), vec.Nulls()
+	// Unnecessary memory accounting can have significant overhead for window
+	// aggregate functions because Compute is called at least once for every row.
+	// For this reason, we do not use PerformOperation here.
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				if a.numNonNull == 0 {
+					val := col.Get(i)
+					a.curAgg = val
+				} else {
+					var cmp bool
+					candidate := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = candidate.Compare(&a.curAgg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						a.curAgg = candidate
+					}
+				}
+				a.numNonNull++
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				if a.numNonNull == 0 {
+					val := col.Get(i)
+					a.curAgg = val
+				} else {
+					var cmp bool
+					candidate := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = candidate.Compare(&a.curAgg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						a.curAgg = candidate
+					}
+				}
+				a.numNonNull++
+			}
+		}
+	}
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *minINetWindowAgg) Flush(outputIdx int) {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should
+	// be null.
+	col := a.vec.INet()
+	if a.numNonNull == 0 {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		col.Set(outputIdx, a.curAgg)
+	}
+}
+
+func (a *minINetWindowAgg) Reset() {
+	a.numNonNull = 0
+}
+
+type minINetWindowAggAlloc struct {
+	aggAllocBase
+	aggFuncs []minINetWindowAgg
+}
+
+var _ aggregateFuncAlloc = &minINetWindowAggAlloc{}
+
+const sizeOfminINetWindowAgg = int64(unsafe.Sizeof(minINetWindowAgg{}))
+const minINetWindowAggSliceOverhead = int64(unsafe.Sizeof([]minINetWindowAgg{}))
+
+func (a *minINetWindowAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(minINetWindowAggSliceOverhead + sizeOfminINetWindowAgg*a.allocSize)
+		a.aggFuncs = make([]minINetWindowAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*minINetWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on minINetWindowAgg"))
+}
+
 type minDatumWindowAgg struct {
 	unorderedAggregateFuncBase
 	// curAgg holds the running min/max, so we can index into the slice once per
@@ -1735,7 +1872,7 @@ func newMaxWindowAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) aggregateFuncAlloc {
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
@@ -1787,6 +1924,12 @@ func newMaxWindowAggAlloc(
 		case -1:
 		default:
 			return &maxJSONWindowAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxINetWindowAggAlloc{aggAllocBase: allocBase}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -3275,6 +3418,133 @@ func (a *maxJSONWindowAggAlloc) newAggFunc() AggregateFunc {
 // a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
 func (*maxJSONWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
 	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxJSONWindowAgg"))
+}
+
+type maxINetWindowAgg struct {
+	unorderedAggregateFuncBase
+	// curAgg holds the running min/max, so we can index into the slice once per
+	// group, instead of on each iteration.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
+	curAgg ipaddr.IPAddr
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
+}
+
+var _ AggregateFunc = &maxINetWindowAgg{}
+
+func (a *maxINetWindowAgg) Compute(
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+) {
+	var oldCurAggSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.INet(), vec.Nulls()
+	// Unnecessary memory accounting can have significant overhead for window
+	// aggregate functions because Compute is called at least once for every row.
+	// For this reason, we do not use PerformOperation here.
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				if a.numNonNull == 0 {
+					val := col.Get(i)
+					a.curAgg = val
+				} else {
+					var cmp bool
+					candidate := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = candidate.Compare(&a.curAgg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						a.curAgg = candidate
+					}
+				}
+				a.numNonNull++
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				if a.numNonNull == 0 {
+					val := col.Get(i)
+					a.curAgg = val
+				} else {
+					var cmp bool
+					candidate := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = candidate.Compare(&a.curAgg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						a.curAgg = candidate
+					}
+				}
+				a.numNonNull++
+			}
+		}
+	}
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *maxINetWindowAgg) Flush(outputIdx int) {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should
+	// be null.
+	col := a.vec.INet()
+	if a.numNonNull == 0 {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		col.Set(outputIdx, a.curAgg)
+	}
+}
+
+func (a *maxINetWindowAgg) Reset() {
+	a.numNonNull = 0
+}
+
+type maxINetWindowAggAlloc struct {
+	aggAllocBase
+	aggFuncs []maxINetWindowAgg
+}
+
+var _ aggregateFuncAlloc = &maxINetWindowAggAlloc{}
+
+const sizeOfmaxINetWindowAgg = int64(unsafe.Sizeof(maxINetWindowAgg{}))
+const maxINetWindowAggSliceOverhead = int64(unsafe.Sizeof([]maxINetWindowAgg{}))
+
+func (a *maxINetWindowAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(maxINetWindowAggSliceOverhead + sizeOfmaxINetWindowAgg*a.allocSize)
+		a.aggFuncs = make([]maxINetWindowAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows min and max operators to be used when
+// the window frame only grows. For the case when the window frame can shrink,
+// a specialized implementation is needed (see min_max_removable_agg_tmpl.go).
+func (*maxINetWindowAgg) Remove(vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+	colexecerror.InternalError(errors.AssertionFailedf("Remove called on maxINetWindowAgg"))
 }
 
 type maxDatumWindowAgg struct {

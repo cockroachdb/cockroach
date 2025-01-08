@@ -604,7 +604,7 @@ func (d *eventDecoder) initForKey(
 		return err
 	}
 
-	fetcher, family, err := d.rfCache.RowFetcherForColumnFamily(desc, familyID, systemColumns, keyOnly)
+	fetcher, family, err := d.rfCache.RowFetcherForColumnFamily(ctx, desc, familyID, systemColumns, keyOnly)
 	if err != nil {
 		return err
 	}

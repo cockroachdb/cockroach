@@ -18,9 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -33,16 +35,19 @@ var (
 	_ duration.Duration
 	_ json.JSON
 	_ = coldataext.CompareDatum
+	_ execversion.DistSQLVersion
+	_ ipaddr.IPAddr
 )
 
 // Remove unused warning.
 var _ = colexecerror.InternalError
 
-const minMaxNumOverloads = 11
+const minMaxNumOverloads = 12
 
 func init() {
 	// Sanity check the hard-coded number of overloads.
 	var numOverloads int
+	numOverloads++
 	numOverloads++
 	numOverloads++
 	numOverloads++
@@ -65,7 +70,7 @@ func init() {
 // within contiguous slice of allocators for this aggregate function.
 func minMaxOverloadOffset(t *types.T) int {
 	var offset int
-	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, t.Family())
 	if canonicalTypeFamily == types.BoolFamily {
 		return offset
 	}
@@ -106,6 +111,10 @@ func minMaxOverloadOffset(t *types.T) int {
 		return offset
 	}
 	offset += 1
+	if canonicalTypeFamily == types.INetFamily {
+		return offset
+	}
+	offset += 1
 	if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 		return offset
 	}
@@ -118,7 +127,7 @@ func newMinOrderedAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) aggregateFuncAlloc {
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
@@ -170,6 +179,12 @@ func newMinOrderedAggAlloc(
 		case -1:
 		default:
 			return &minJSONOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &minINetOrderedAggAlloc{aggAllocBase: allocBase}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -3143,6 +3158,261 @@ func (a *minJSONOrderedAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+type minINetOrderedAgg struct {
+	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.IPAddrs
+	// curAgg holds the running min/max, so we can index into the slice once per
+	// group, instead of on each iteration.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
+	curAgg ipaddr.IPAddr
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
+}
+
+var _ AggregateFunc = &minINetOrderedAgg{}
+
+func (a *minINetOrderedAgg) SetOutput(vec *coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.INet()
+}
+
+func (a *minINetOrderedAgg) Compute(
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+) {
+	var oldCurAggSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.INet(), vec.Nulls()
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		groups := a.groups
+		col := col
+		if sel == nil {
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
+			if nulls.MaybeHasNulls() {
+				for i := startIdx; i < endIdx; i++ {
+
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if a.numNonNull == 0 {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.numNonNull = 0
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if a.numNonNull == 0 {
+							val := col.Get(i)
+							a.curAgg = val
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+								cmpResult = candidate.Compare(&a.curAgg)
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+								a.curAgg = candidate
+							}
+						}
+						a.numNonNull++
+					}
+				}
+			} else {
+				for i := startIdx; i < endIdx; i++ {
+
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if a.numNonNull == 0 {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.numNonNull = 0
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if a.numNonNull == 0 {
+							val := col.Get(i)
+							a.curAgg = val
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+								cmpResult = candidate.Compare(&a.curAgg)
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+								a.curAgg = candidate
+							}
+						}
+						a.numNonNull++
+					}
+				}
+			}
+		} else {
+			sel = sel[startIdx:endIdx]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if a.numNonNull == 0 {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.numNonNull = 0
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if a.numNonNull == 0 {
+							val := col.Get(i)
+							a.curAgg = val
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+								cmpResult = candidate.Compare(&a.curAgg)
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+								a.curAgg = candidate
+							}
+						}
+						a.numNonNull++
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if a.numNonNull == 0 {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.numNonNull = 0
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if a.numNonNull == 0 {
+							val := col.Get(i)
+							a.curAgg = val
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+								cmpResult = candidate.Compare(&a.curAgg)
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+								a.curAgg = candidate
+							}
+						}
+						a.numNonNull++
+					}
+				}
+			}
+		}
+	},
+	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *minINetOrderedAgg) Flush(outputIdx int) {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should
+	// be null.
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	col := a.col
+	if a.numNonNull == 0 {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		col.Set(outputIdx, a.curAgg)
+	}
+}
+
+func (a *minINetOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.numNonNull = 0
+}
+
+type minINetOrderedAggAlloc struct {
+	aggAllocBase
+	aggFuncs []minINetOrderedAgg
+}
+
+var _ aggregateFuncAlloc = &minINetOrderedAggAlloc{}
+
+const sizeOfminINetOrderedAgg = int64(unsafe.Sizeof(minINetOrderedAgg{}))
+const minINetOrderedAggSliceOverhead = int64(unsafe.Sizeof([]minINetOrderedAgg{}))
+
+func (a *minINetOrderedAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(minINetOrderedAggSliceOverhead + sizeOfminINetOrderedAgg*a.allocSize)
+		a.aggFuncs = make([]minINetOrderedAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
 type minDatumOrderedAgg struct {
 	orderedAggregateFuncBase
 	// col points to the output vector we are updating.
@@ -3435,7 +3705,7 @@ func newMaxOrderedAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) aggregateFuncAlloc {
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
@@ -3487,6 +3757,12 @@ func newMaxOrderedAggAlloc(
 		case -1:
 		default:
 			return &maxJSONOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxINetOrderedAggAlloc{aggAllocBase: allocBase}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -6453,6 +6729,261 @@ func (a *maxJSONOrderedAggAlloc) newAggFunc() AggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(maxJSONOrderedAggSliceOverhead + sizeOfmaxJSONOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]maxJSONOrderedAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
+type maxINetOrderedAgg struct {
+	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.IPAddrs
+	// curAgg holds the running min/max, so we can index into the slice once per
+	// group, instead of on each iteration.
+	// NOTE: if numNonNull is zero, curAgg is undefined.
+	curAgg ipaddr.IPAddr
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
+}
+
+var _ AggregateFunc = &maxINetOrderedAgg{}
+
+func (a *maxINetOrderedAgg) SetOutput(vec *coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.INet()
+}
+
+func (a *maxINetOrderedAgg) Compute(
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+) {
+	var oldCurAggSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.INet(), vec.Nulls()
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		groups := a.groups
+		col := col
+		if sel == nil {
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
+			if nulls.MaybeHasNulls() {
+				for i := startIdx; i < endIdx; i++ {
+
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if a.numNonNull == 0 {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.numNonNull = 0
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if a.numNonNull == 0 {
+							val := col.Get(i)
+							a.curAgg = val
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+								cmpResult = candidate.Compare(&a.curAgg)
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+								a.curAgg = candidate
+							}
+						}
+						a.numNonNull++
+					}
+				}
+			} else {
+				for i := startIdx; i < endIdx; i++ {
+
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if a.numNonNull == 0 {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.numNonNull = 0
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if a.numNonNull == 0 {
+							val := col.Get(i)
+							a.curAgg = val
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+								cmpResult = candidate.Compare(&a.curAgg)
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+								a.curAgg = candidate
+							}
+						}
+						a.numNonNull++
+					}
+				}
+			}
+		} else {
+			sel = sel[startIdx:endIdx]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if a.numNonNull == 0 {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.numNonNull = 0
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if a.numNonNull == 0 {
+							val := col.Get(i)
+							a.curAgg = val
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+								cmpResult = candidate.Compare(&a.curAgg)
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+								a.curAgg = candidate
+							}
+						}
+						a.numNonNull++
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if a.numNonNull == 0 {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.numNonNull = 0
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if a.numNonNull == 0 {
+							val := col.Get(i)
+							a.curAgg = val
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+								cmpResult = candidate.Compare(&a.curAgg)
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+								a.curAgg = candidate
+							}
+						}
+						a.numNonNull++
+					}
+				}
+			}
+		}
+	},
+	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *maxINetOrderedAgg) Flush(outputIdx int) {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should
+	// be null.
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	col := a.col
+	if a.numNonNull == 0 {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		col.Set(outputIdx, a.curAgg)
+	}
+}
+
+func (a *maxINetOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.numNonNull = 0
+}
+
+type maxINetOrderedAggAlloc struct {
+	aggAllocBase
+	aggFuncs []maxINetOrderedAgg
+}
+
+var _ aggregateFuncAlloc = &maxINetOrderedAggAlloc{}
+
+const sizeOfmaxINetOrderedAgg = int64(unsafe.Sizeof(maxINetOrderedAgg{}))
+const maxINetOrderedAggSliceOverhead = int64(unsafe.Sizeof([]maxINetOrderedAgg{}))
+
+func (a *maxINetOrderedAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(maxINetOrderedAggSliceOverhead + sizeOfmaxINetOrderedAgg*a.allocSize)
+		a.aggFuncs = make([]maxINetOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator

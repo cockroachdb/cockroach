@@ -89,7 +89,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	// fetch kvs.
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, params.ExecCfg().Codec, d.desc, d.desc.GetPrimaryIndex(), nil, /* columnIDs */
+		params.ctx, &spec, params.ExecCfg().Codec, d.desc, d.desc.GetPrimaryIndex(), nil, /* columnIDs */
 	); err != nil {
 		return err
 	}

@@ -35,6 +35,7 @@ var comparableCanonicalTypeFamilies = map[types.Family][]types.Family{
 	types.TimestampTZFamily:              {types.TimestampTZFamily},
 	types.IntervalFamily:                 {types.IntervalFamily},
 	types.JsonFamily:                     {types.JsonFamily},
+	types.INetFamily:                     {types.INetFamily},
 	typeconv.DatumVecCanonicalTypeFamily: {typeconv.DatumVecCanonicalTypeFamily},
 }
 
@@ -336,6 +337,12 @@ if err != nil {
   colexecerror.ExpectedError(err)
 }
 `, targetElem, leftElem, rightElem)
+	}
+}
+
+func (c inetCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
+		return fmt.Sprintf("%s = %s.Compare(&%s)", targetElem, leftElem, rightElem)
 	}
 }
 

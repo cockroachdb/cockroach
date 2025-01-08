@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -54,8 +54,7 @@ func TestServer(t *testing.T) {
 		Spans:   []roachpb.Span{td.PrimaryIndexSpan(s.Codec())},
 	}
 	if err := rowenc.InitIndexFetchSpec(
-		&ts.FetchSpec, s.Codec(), td, td.GetPrimaryIndex(),
-		[]descpb.ColumnID{1, 2}, // a b
+		ctx, &ts.FetchSpec, s.Codec(), td, td.GetPrimaryIndex(), []descpb.ColumnID{1, 2}, // a b
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +66,7 @@ func TestServer(t *testing.T) {
 	}
 
 	req := &execinfrapb.SetupFlowRequest{
-		Version:           execinfra.Version,
+		Version:           execversion.Latest,
 		LeafTxnInputState: leafInputState,
 	}
 	req.Flow = execinfrapb.FlowSpec{
@@ -94,15 +93,15 @@ func TestServer(t *testing.T) {
 	// Verify version handling.
 	t.Run("version", func(t *testing.T) {
 		testCases := []struct {
-			version     execinfrapb.DistSQLVersion
+			version     execversion.DistSQLVersion
 			expectedErr string
 		}{
 			{
-				version:     execinfra.Version + 1,
+				version:     execversion.Latest + 1,
 				expectedErr: "version mismatch",
 			},
 			{
-				version:     execinfra.MinAcceptedVersion - 1,
+				version:     execversion.MinAccepted - 1,
 				expectedErr: "version mismatch",
 			},
 			// TODO(yuzefovich): figure out what setup to perform to simulate
@@ -111,7 +110,7 @@ func TestServer(t *testing.T) {
 			// panic in a separate goroutine because there is no RowReceiver set
 			// up for the table reader.
 			//{
-			//	version:     execinfra.MinAcceptedVersion,
+			//	version:     execversion.MinAccepted,
 			//	expectedErr: "",
 			//},
 		}

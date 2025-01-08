@@ -73,7 +73,7 @@ func TestInitIndexFetchSpec(t *testing.T) {
 				}
 
 				var spec fetchpb.IndexFetchSpec
-				if err := rowenc.InitIndexFetchSpec(&spec, codec, table, index, fetchColumnIDs); err != nil {
+				if err := rowenc.InitIndexFetchSpec(context.Background(), &spec, codec, table, index, fetchColumnIDs); err != nil {
 					d.Fatalf(t, "%+v", err)
 				}
 				res, err := json.MarshalIndent(&spec, "", "  ")

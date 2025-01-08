@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -46,6 +47,7 @@ var (
 	_ = coldataext.CompareDatum
 	_ = colexecerror.InternalError
 	_ = memsize.Uint32
+	_ ipaddr.IPAddr
 )
 
 // {{/*
@@ -133,7 +135,7 @@ func new_AGG_TITLERemovableAggregator(
 		queue:        newMinMaxQueue(maxQueueLength),
 		omittedIndex: -1,
 	}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(argTyp.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(args.BufferAllocator.Ctx, argTyp.Family()) {
 	// {{range .Overloads}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch argTyp.Width() {

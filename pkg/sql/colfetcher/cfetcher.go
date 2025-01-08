@@ -380,7 +380,7 @@ func (cf *cFetcher) resetBatch() {
 func (cf *cFetcher) Init(
 	allocator *colmem.Allocator, nextKVer storage.NextKVer, tableArgs *cFetcherTableArgs,
 ) error {
-	if tableArgs.spec.Version != fetchpb.IndexFetchSpecVersionInitial {
+	if tableArgs.spec.Version > fetchpb.IndexFetchSpecLatestVersion {
 		return errors.AssertionFailedf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
 	}
 	table := newCTableInfo()
@@ -786,6 +786,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// previous KV or a different row.
 				checkAllColsForNull := cf.table.spec.IsSecondaryIndex && cf.table.spec.IsUniqueIndex && cf.table.spec.MaxKeysPerRow != 1
 				key, foundNull, cf.scratch.decoding, err = colencoding.DecodeKeyValsToCols(
+					ctx,
 					&cf.table.da,
 					&cf.machine.colvecs,
 					cf.machine.rowIdx,
@@ -1170,6 +1171,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 				// This is a unique secondary index; decode the extra
 				// column values from the value.
 				valueBytes, _, cf.scratch.decoding, err = colencoding.DecodeKeyValsToCols(
+					ctx,
 					&table.da,
 					&cf.machine.colvecs,
 					cf.machine.rowIdx,
@@ -1232,7 +1234,7 @@ func (cf *cFetcher) processValueSingle(
 		}
 		typ := cf.table.spec.FetchedColumns[idx].Type
 		err := colencoding.UnmarshalColumnValueToCol(
-			&table.da, &cf.machine.colvecs, idx, cf.machine.rowIdx, typ, val,
+			ctx, &table.da, &cf.machine.colvecs, idx, cf.machine.rowIdx, typ, val,
 		)
 		if err != nil {
 			return "", "", err
@@ -1326,7 +1328,7 @@ func (cf *cFetcher) processValueBytes(
 		}
 
 		valueBytes, err = colencoding.DecodeTableValueToCol(
-			&table.da, &cf.machine.colvecs, vecIdx, cf.machine.rowIdx, typ,
+			ctx, &table.da, &cf.machine.colvecs, vecIdx, cf.machine.rowIdx, typ,
 			dataOffset, cf.table.typs[vecIdx], valueBytes,
 		)
 		if err != nil {

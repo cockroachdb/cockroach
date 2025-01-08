@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -60,7 +61,8 @@ type testUtils struct {
 	testDiskAcc     *mon.BoundAccount
 }
 
-func newTestUtils(ctx context.Context) *testUtils {
+func newTestUtils() (context.Context, *testUtils) {
+	ctx := execversion.TestingWithLatestCtx
 	st := cluster.MakeTestingClusterSettings()
 	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
 	allocatorMemAcc, testMemAcc := testMemMonitor.MakeBoundAccount(), testMemMonitor.MakeBoundAccount()
@@ -69,7 +71,7 @@ func newTestUtils(ctx context.Context) *testUtils {
 	testAllocator := colmem.NewAllocator(ctx, &allocatorMemAcc, testColumnFactory)
 	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	diskAcc := testDiskMonitor.MakeBoundAccount()
-	return &testUtils{
+	return ctx, &testUtils{
 		testAllocator:     testAllocator,
 		allocatorMemAcc:   &allocatorMemAcc,
 		testColumnFactory: testColumnFactory,
@@ -154,7 +156,6 @@ func pushSelectionIntoBatch(b coldata.Batch, selection []int) {
 func TestRouterOutputAddBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
 	data, typs, fullSelection := getDataAndFullSelection()
 
@@ -206,7 +207,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
 	defer cleanup()
-	tu := newTestUtils(ctx)
+	ctx, tu := newTestUtils()
 	defer tu.cleanup(ctx)
 
 	for _, tc := range testCases {
@@ -267,8 +268,9 @@ func TestRouterOutputAddBatch(t *testing.T) {
 func TestRouterOutputNext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
+	ctx, tu := newTestUtils()
+	defer tu.cleanup(ctx)
 	data, typs, fullSelection := getDataAndFullSelection()
 
 	testCases := []struct {
@@ -319,8 +321,6 @@ func TestRouterOutputNext(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
 	defer cleanup()
-	tu := newTestUtils(ctx)
-	defer tu.cleanup(ctx)
 
 	for _, mtc := range memoryTestCases {
 		for _, tc := range testCases {
@@ -504,7 +504,6 @@ func TestRouterOutputNext(t *testing.T) {
 func TestRouterOutputRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
 	rng, _ := randutil.NewTestRand()
 
@@ -526,7 +525,7 @@ func TestRouterOutputRandom(t *testing.T) {
 
 	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
 	defer cleanup()
-	tu := newTestUtils(ctx)
+	ctx, tu := newTestUtils()
 	defer tu.cleanup(ctx)
 
 	testName := fmt.Sprintf(
@@ -691,8 +690,8 @@ func (o *callbackRouterOutput) resetForTests(context.Context) {
 func TestHashRouterComputesDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tu := newTestUtils(ctx)
+
+	ctx, tu := newTestUtils()
 	defer tu.cleanup(ctx)
 
 	// We have precomputed expectedNumVals only for the default batch size, so we
@@ -788,8 +787,8 @@ func TestHashRouterCancellation(t *testing.T) {
 	}
 
 	typs := []*types.T{types.Int}
-	tu := newTestUtils(context.Background())
-	defer tu.cleanup(context.Background())
+	ctx, tu := newTestUtils()
+	defer tu.cleanup(ctx)
 	// Never-ending input of 0s.
 	batch := tu.testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batch.SetLength(coldata.BatchSize())
@@ -804,7 +803,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	)
 
 	t.Run("BeforeRun", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(ctx)
 		r.resetForTests(ctx)
 		cancel()
 		r.Run(ctx)
@@ -837,7 +836,7 @@ func TestHashRouterCancellation(t *testing.T) {
 			numCancels = 0
 			numAddBatches = 0
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(ctx)
 			r.resetForTests(ctx)
 
 			if tc.blocked {
@@ -878,12 +877,9 @@ func TestHashRouterCancellation(t *testing.T) {
 func TestHashRouterOneOutput(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
 	rng, _ := randutil.NewTestRand()
-
 	sel := coldatatestutils.RandomSel(rng, coldata.BatchSize(), rng.Float64())
-
 	data, typs, _ := getDataAndFullSelection()
 
 	expected := make(colexectestutils.Tuples, 0, len(data))
@@ -893,7 +889,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
 	defer cleanup()
-	tu := newTestUtils(ctx)
+	ctx, tu := newTestUtils()
 	defer tu.cleanup(ctx)
 
 	for _, mtc := range memoryTestCases {
@@ -957,7 +953,6 @@ func TestHashRouterOneOutput(t *testing.T) {
 func TestHashRouterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
 	rng, _ := randutil.NewTestRand()
 
@@ -1034,7 +1029,7 @@ func TestHashRouterRandom(t *testing.T) {
 
 	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
 	defer cleanup()
-	tu := newTestUtils(ctx)
+	ctx, tu := newTestUtils()
 	defer tu.cleanup(ctx)
 
 	// expectedDistribution is set after the first run and used to verify that the
@@ -1164,7 +1159,7 @@ func TestHashRouterRandom(t *testing.T) {
 					}(i)
 				}
 
-				ctx, cancelFunc := context.WithCancel(context.Background())
+				ctx, cancelFunc := context.WithCancel(ctx)
 				wg.Add(1)
 				go func() {
 					if terminationScenario == hashRouterContextCanceled || terminationScenario == hashRouterChaos {
@@ -1309,8 +1304,8 @@ func TestHashRouterRandom(t *testing.T) {
 func BenchmarkHashRouter(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	tu := newTestUtils(ctx)
+
+	ctx, tu := newTestUtils()
 	defer tu.cleanup(ctx)
 
 	// Use only one type. Note: the more types you use, the more you inflate the

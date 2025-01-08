@@ -147,6 +147,18 @@ func (c jsonCustomizer) getHashFunc() hashFunc {
 	}
 }
 
+func (c inetCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, vElem, _, _ string) string {
+		return fmt.Sprintf(`
+		  family, mask, hi, lo := uint64(%[2]s.Family), uint64(%[2]s.Mask), uint64(%[2]s.Addr.Hi), uint64(%[2]s.Addr.Lo)
+		  %[1]s = memhash64(noescape(unsafe.Pointer(&family)), %[1]s)
+		  %[1]s = memhash64(noescape(unsafe.Pointer(&mask)), %[1]s)
+		  %[1]s = memhash64(noescape(unsafe.Pointer(&hi)), %[1]s)
+		  %[1]s = memhash64(noescape(unsafe.Pointer(&lo)), %[1]s)
+		`, targetElem, vElem)
+	}
+}
+
 func (c datumCustomizer) getHashFunc() hashFunc {
 	return func(targetElem, vElem, _, _ string) string {
 		// Note that this overload assumes that there exists

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -27,6 +28,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ = typeconv.TypeFamilyToCanonicalTypeFamily
+	_ execversion.DistSQLVersion
 )
 
 const sumIntNumOverloads = 3
@@ -48,7 +50,7 @@ func init() {
 // within contiguous slice of allocators for this aggregate function.
 func sumIntOverloadOffset(t *types.T) int {
 	var offset int
-	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, t.Family())
 	if canonicalTypeFamily == types.IntFamily {
 		if t.Width() == 16 {
 			return offset

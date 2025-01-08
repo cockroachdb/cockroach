@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -27,6 +28,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ json.JSON
+	_ ipaddr.IPAddr
 )
 
 // NewConstOp creates a new operator that produces a constant value constVal of
@@ -39,7 +41,7 @@ func NewConstOp(
 	outputIdx int,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, t, outputIdx)
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
@@ -140,6 +142,17 @@ func NewConstOp(
 				allocator:      allocator,
 				outputIdx:      outputIdx,
 				constVal:       constVal.(json.JSON),
+			}, nil
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &constINetOp{
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
+				allocator:      allocator,
+				outputIdx:      outputIdx,
+				constVal:       constVal.(ipaddr.IPAddr),
 			}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -537,6 +550,45 @@ func (c constJSONOp) Next() coldata.Batch {
 			} else {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					col.Set(i, c.constVal)
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type constINetOp struct {
+	colexecop.OneInputHelper
+
+	allocator *colmem.Allocator
+	outputIdx int
+	constVal  ipaddr.IPAddr
+}
+
+func (c constINetOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(c.outputIdx)
+	col := vec.INet()
+	c.allocator.PerformOperation(
+		[]*coldata.Vec{vec},
+		func() {
+			// Shallow copy col to work around Go issue
+			// https://github.com/golang/go/issues/39756 which prevents bound check
+			// elimination from working in this case.
+			col := col
+			if sel := batch.Selection(); sel != nil {
+				for _, i := range sel[:n] {
+					col.Set(i, c.constVal)
+				}
+			} else {
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
 					col.Set(i, c.constVal)
 				}
 			}

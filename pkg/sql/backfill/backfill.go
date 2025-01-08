@@ -147,7 +147,7 @@ func (cb *ColumnBackfiller) init(
 
 	cb.colIdxMap = catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
 	var spec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&spec, evalCtx.Codec, desc, desc.GetPrimaryIndex(), cb.fetcherCols); err != nil {
+	if err := rowenc.InitIndexFetchSpec(ctx, &spec, evalCtx.Codec, desc, desc.GetPrimaryIndex(), cb.fetcherCols); err != nil {
 		return err
 	}
 
@@ -844,7 +844,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// read or used
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
+		ctx, &spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
 	); err != nil {
 		return nil, nil, memUsedPerChunk, err
 	}

@@ -94,7 +94,7 @@ func checkAllNodesForIngestingJob(
 
 	res := sql.NewMetadataOnlyMetadataCallbackWriter()
 
-	recv := sql.MakeDistSQLReceiver(
+	recv, _ := sql.MakeDistSQLReceiver(
 		ctx,
 		res,
 		tree.Ack,
@@ -102,10 +102,11 @@ func checkAllNodesForIngestingJob(
 		nil, /* txn - the flow does not read or write the database */
 		nil, /* clockUpdater */
 		evalCtx.Tracing,
+		evalCtx.Settings,
 	)
 	defer recv.Release()
 
 	evalCtxCopy := *evalCtx
-	dsp.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	return res.Err()
 }

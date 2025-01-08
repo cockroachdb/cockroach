@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
@@ -70,7 +71,7 @@ func rangeOffsetHandlerGenerator(inputFileContents string, wr io.Writer) error {
 			for _, isOrdColAsc := range []bool{true, false} {
 				ordColDirInfo := windowFrameOrdDirInfo{IsOrdColAsc: isOrdColAsc}
 				for _, typeFamily := range rangeOrderColTypeFamilies {
-					canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)
+					canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, typeFamily)
 					typeFamilyStr := familyToString(typeFamily)
 					typeFamilyInfo := windowFrameOrderTypeFamilyInfo{
 						TypeFamily: typeFamilyStr,
@@ -192,7 +193,7 @@ func getAssignFunc(typeFamily types.Family) assignFunc {
 		var c datumCustomizer
 		return c.getBinOpAssignFunc()
 	}
-	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, typeFamily)
 	var overload *oneArgOverload
 	for _, o := range sameTypeBinaryOpToOverloads[treebin.Plus] {
 		if o.CanonicalTypeFamily == canonicalTypeFamily {
@@ -241,7 +242,7 @@ func getCmpFunc(typeFamily types.Family) compareFunc {
 		var c datumCustomizer
 		return c.getCmpOpCompareFunc()
 	}
-	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, typeFamily)
 	var overload *oneArgOverload
 	for _, o := range sameTypeComparisonOpToOverloads[treecmp.EQ] {
 		if o.CanonicalTypeFamily == canonicalTypeFamily {
@@ -279,7 +280,7 @@ func getOffsetGoType(orderColFamily types.Family, orderColWidth int32) string {
 		return "tree.Datum"
 	}
 	return toPhysicalRepresentation(
-		typeconv.TypeFamilyToCanonicalTypeFamily(orderColFamily), orderColWidth)
+		typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, orderColFamily), orderColWidth)
 }
 
 func getCmpGoType(typeFamily types.Family) string {
@@ -289,7 +290,7 @@ func getCmpGoType(typeFamily types.Family) string {
 	case types.TimeFamily, types.TimeTZFamily:
 		return "tree.Datum"
 	}
-	return toPhysicalRepresentation(typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily), anyWidth)
+	return toPhysicalRepresentation(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, typeFamily), anyWidth)
 }
 
 func typeName(typeFamily types.Family, typeWidth int32) string {
@@ -297,7 +298,7 @@ func typeName(typeFamily types.Family, typeWidth int32) string {
 	case types.DateFamily:
 		return "Date"
 	}
-	return toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily), typeWidth)
+	return toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, typeFamily), typeWidth)
 }
 
 // This format string should be used with the left operand of the binary

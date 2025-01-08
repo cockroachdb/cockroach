@@ -70,6 +70,8 @@ const IPv4mask = uint64(0xFFFFFFFF)
 const IPv4max = IPv4mask
 
 // ToBuffer appends the IPAddr encoding to a buffer and returns the final buffer.
+// TODO(yuzefovich): most callers of this method currently pass nil, see whether
+// they reuse scratch space instead.
 func (ipAddr *IPAddr) ToBuffer(appendTo []byte) []byte {
 	// Record the family as the first byte and the mask size as the second byte.
 	appendTo = append(appendTo, byte(ipAddr.Family), ipAddr.Mask)

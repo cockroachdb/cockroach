@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -30,7 +31,7 @@ import (
 //
 // In the future this can also be used to pool coldata.Vec allocations.
 type Allocator struct {
-	ctx context.Context
+	Ctx context.Context
 	acc *mon.BoundAccount
 	// unlimitedAcc might be nil and is only used in some cases when the
 	// allocation is denied by acc.
@@ -120,7 +121,7 @@ func NewAllocator(
 	ctx context.Context, unlimitedAcc *mon.BoundAccount, factory coldata.ColumnFactory,
 ) *Allocator {
 	return &Allocator{
-		ctx:     ctx,
+		Ctx:     ctx,
 		acc:     unlimitedAcc,
 		factory: factory,
 	}
@@ -136,7 +137,7 @@ func NewLimitedAllocator(
 	ctx context.Context, limitedAcc, unlimitedAcc *mon.BoundAccount, factory coldata.ColumnFactory,
 ) *Allocator {
 	return &Allocator{
-		ctx:          ctx,
+		Ctx:          ctx,
 		acc:          limitedAcc,
 		unlimitedAcc: unlimitedAcc,
 		factory:      factory,
@@ -149,10 +150,10 @@ func NewLimitedAllocator(
 // case you should be using ResetMaybeReallocate).
 func (a *Allocator) NewMemBatchWithFixedCapacity(typs []*types.T, capacity int) coldata.Batch {
 	estimatedMemoryUsage := SelVectorSize(capacity) + EstimateBatchSizeBytes(typs, capacity)
-	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
+	if err := a.acc.Grow(a.Ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewMemBatchWithCapacity(typs, capacity, a.factory)
+	return coldata.NewMemBatchWithCapacity(a.Ctx, typs, capacity, a.factory)
 }
 
 // NewMemBatchWithMaxCapacity is a convenience shortcut of
@@ -167,7 +168,7 @@ func (a *Allocator) NewMemBatchWithMaxCapacity(typs []*types.T) coldata.Batch {
 // for the column vectors - those will have to be added separately.
 func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Batch {
 	estimatedMemoryUsage := SelVectorSize(capacity)
-	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
+	if err := a.acc.Grow(a.Ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
 	return coldata.NewMemBatchNoCols(typs, capacity)
@@ -349,10 +350,10 @@ func (a *Allocator) ResetMaybeReallocateNoMemLimit(
 // NewMemBatchWith*, or ResetMaybeReallocate methods.
 func (a *Allocator) NewVec(t *types.T, capacity int) *coldata.Vec {
 	estimatedMemoryUsage := EstimateBatchSizeBytes([]*types.T{t}, capacity)
-	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
+	if err := a.acc.Grow(a.Ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewVec(t, capacity, a.factory)
+	return coldata.NewVec(a.Ctx, t, capacity, a.factory)
 }
 
 // MaybeAppendColumn might append a newly allocated coldata.Vec of the given
@@ -399,7 +400,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				// capacity, so we need to replace it.
 				oldMemUsage := getVecMemoryFootprint(presentVec)
 				newEstimatedMemoryUsage := EstimateBatchSizeBytes([]*types.T{t}, desiredCapacity)
-				if err := a.acc.Grow(a.ctx, newEstimatedMemoryUsage-oldMemUsage); err != nil {
+				if err := a.acc.Grow(a.Ctx, newEstimatedMemoryUsage-oldMemUsage); err != nil {
 					colexecerror.InternalError(err)
 				}
 				b.ReplaceCol(a.NewVec(t, desiredCapacity), colIdx)
@@ -425,7 +426,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 		))
 	}
 	estimatedMemoryUsage := EstimateBatchSizeBytes([]*types.T{t}, desiredCapacity)
-	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
+	if err := a.acc.Grow(a.Ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
 	b.AppendCol(a.NewVec(t, desiredCapacity))
@@ -503,12 +504,12 @@ func (a *Allocator) Acc() *mon.BoundAccount {
 // thrown.
 func (a *Allocator) adjustMemoryUsage(delta int64, afterAllocation bool) {
 	if delta > 0 {
-		if err := a.acc.Grow(a.ctx, delta); err != nil {
+		if err := a.acc.Grow(a.Ctx, delta); err != nil {
 			// If we were given a separate unlimited account and the adjustment
 			// is performed after the allocation has already occurred, then grow
 			// the unlimited account.
 			if a.unlimitedAcc != nil && afterAllocation {
-				if newErr := a.unlimitedAcc.Grow(a.ctx, delta); newErr != nil {
+				if newErr := a.unlimitedAcc.Grow(a.Ctx, delta); newErr != nil {
 					// Prefer the error from the unlimited account since it
 					// indicates that --max-sql-memory pool has been used up.
 					colexecerror.InternalError(newErr)
@@ -548,7 +549,7 @@ func (a *Allocator) ReleaseMemory(size int64) {
 	if size > a.acc.Used() {
 		size = a.acc.Used()
 	}
-	a.acc.Shrink(a.ctx, size)
+	a.acc.Shrink(a.Ctx, size)
 }
 
 // ReleaseAll releases all of the reservations from the allocator. The usage of
@@ -557,7 +558,7 @@ func (a *Allocator) ReleaseMemory(size int64) {
 func (a *Allocator) ReleaseAll() {
 	a.ReleaseMemory(a.Used())
 	if a.unlimitedAcc != nil {
-		a.unlimitedAcc.Shrink(a.ctx, a.unlimitedAcc.Used())
+		a.unlimitedAcc.Shrink(a.Ctx, a.unlimitedAcc.Used())
 	}
 }
 
@@ -597,7 +598,8 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 	var acc int64
 	numBytesVectors := 0
 	for _, t := range vecTypes {
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+		// TODO: this should use the proper context.
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, t.Family()) {
 		case types.BytesFamily, types.JsonFamily:
 			numBytesVectors++
 		case types.DecimalFamily:
@@ -623,9 +625,10 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 			types.IntFamily,
 			types.FloatFamily,
 			types.TimestampTZFamily,
-			types.IntervalFamily:
+			types.IntervalFamily,
+			types.INetFamily:
 			// Types that have a statically known size.
-			acc += GetFixedSizeTypeSize(t)
+			acc += GetFixedSizeTypeSize(execversion.TestingWithLatestCtx, t)
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t.SQLStringForError()))
 		}
@@ -641,8 +644,8 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 
 // GetFixedSizeTypeSize returns the size of a type that is not variable in size;
 // e.g. its size is known statically.
-func GetFixedSizeTypeSize(t *types.T) (size int64) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+func GetFixedSizeTypeSize(ctx context.Context, t *types.T) (size int64) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	case types.BoolFamily:
 		size = memsize.Bool
 	case types.IntFamily:
@@ -667,6 +670,8 @@ func GetFixedSizeTypeSize(t *types.T) (size int64) {
 		size = memsize.Time
 	case types.IntervalFamily:
 		size = memsize.Duration
+	case types.INetFamily:
+		size = memsize.IPAddr
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t.SQLStringForError()))
 	}
@@ -889,7 +894,7 @@ func (h *SetAccountingHelper) Init(
 
 	numDecimalVecs := 0
 	for vecIdx, typ := range typs {
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, typ.Family()) {
 		case types.BytesFamily, types.JsonFamily:
 			h.bytesLikeVecIdxs.Add(vecIdx)
 		case types.DecimalFamily:

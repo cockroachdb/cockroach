@@ -60,7 +60,7 @@ func TestPlanDiagramTableReaderWrapColumns(t *testing.T) {
 
 	var tr execinfrapb.TableReaderSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&tr.FetchSpec, keys.SystemSQLCodec, desc, desc.GetPrimaryIndex(),
+		context.Background(), &tr.FetchSpec, keys.SystemSQLCodec, desc, desc.GetPrimaryIndex(),
 		[]descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
 	); err != nil {
 		t.Fatal(err)

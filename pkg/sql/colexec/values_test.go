@@ -39,7 +39,7 @@ func typeConvFn(t *types.T) (fn func(tree.Datum) interface{}) {
 			fn = nil //nolint:returnerrcheck
 		}
 	}()
-	return colconv.GetDatumToPhysicalFn(t)
+	return colconv.GetDatumToPhysicalFn(context.Background(), t)
 }
 
 func randTypes(rng *rand.Rand, numCols int) ([]*types.T, []func(tree.Datum) interface{}) {

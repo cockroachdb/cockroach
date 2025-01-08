@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -28,6 +29,7 @@ var (
 	_ json.JSON
 	_ = colexecerror.InternalError
 	_ = errors.AssertionFailedf
+	_ ipaddr.IPAddr
 )
 
 // TypedVecs represents a slice of Vecs that have been converted into the typed
@@ -50,6 +52,7 @@ type TypedVecs struct {
 	TimestampCols []Times
 	IntervalCols  []Durations
 	JSONCols      []*JSONs
+	INetCols      []IPAddrs
 	DatumCols     []DatumVec
 	// ColsMap contains the positions of the corresponding vectors in the slice
 	// for the same types. For example, if we have a batch with
@@ -87,6 +90,7 @@ func (v *TypedVecs) SetBatch(batch Batch) {
 	v.TimestampCols = v.TimestampCols[:0]
 	v.IntervalCols = v.IntervalCols[:0]
 	v.JSONCols = v.JSONCols[:0]
+	v.INetCols = v.INetCols[:0]
 	v.DatumCols = v.DatumCols[:0]
 	for i, vec := range v.Vecs {
 		v.Nulls[i] = vec.Nulls()
@@ -153,6 +157,13 @@ func (v *TypedVecs) SetBatch(batch Batch) {
 				v.ColsMap[i] = len(v.JSONCols)
 				v.JSONCols = append(v.JSONCols, vec.JSON())
 			}
+		case types.INetFamily:
+			switch vec.Type().Width() {
+			case -1:
+			default:
+				v.ColsMap[i] = len(v.INetCols)
+				v.INetCols = append(v.INetCols, vec.INet())
+			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch vec.Type().Width() {
 			case -1:
@@ -201,6 +212,9 @@ func (v *TypedVecs) Reset() {
 	}
 	for i := range v.JSONCols {
 		v.JSONCols[i] = nil
+	}
+	for i := range v.INetCols {
+		v.INetCols[i] = nil
 	}
 	for i := range v.DatumCols {
 		v.DatumCols[i] = nil
@@ -449,6 +463,29 @@ func (v *Vec) Append(args SliceArgs) {
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				toCol.appendSliceWithSel(fromCol, args.DestIdx, sel)
+			}
+			v.nulls.set(args)
+			v.col = toCol
+		}
+	case types.INetFamily:
+		switch v.t.Width() {
+		case -1:
+		default:
+			fromCol := args.Src.INet()
+			toCol := v.INet()
+			// NOTE: it is unfortunate that we always append whole slice without paying
+			// attention to whether the values are NULL. However, if we do start paying
+			// attention, the performance suffers dramatically, so we choose to copy
+			// over "actual" as well as "garbage" values.
+			if args.Sel == nil {
+				toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
+			} else {
+				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
+				toCol = toCol.Window(0, args.DestIdx)
+				for _, selIdx := range sel {
+					val := fromCol.Get(selIdx)
+					toCol = append(toCol, val)
+				}
 			}
 			v.nulls.set(args)
 			v.col = toCol
@@ -878,6 +915,46 @@ func (v *Vec) Copy(args SliceArgs) {
 			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			v.nulls.set(args)
 		}
+	case types.INetFamily:
+		switch v.t.Width() {
+		case -1:
+		default:
+			fromCol := args.Src.INet()
+			toCol := v.INet()
+			if args.Sel != nil {
+				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
+				n := len(sel)
+				toCol = toCol[args.DestIdx:]
+				_ = toCol[n-1]
+				if args.Src.MaybeHasNulls() {
+					nulls := args.Src.Nulls()
+					for i := 0; i < n; i++ {
+						//gcassert:bce
+						selIdx := sel[i]
+						if nulls.NullAt(selIdx) {
+							v.nulls.SetNull(i + args.DestIdx)
+						} else {
+							v := fromCol.Get(selIdx)
+							//gcassert:bce
+							toCol.Set(i, v)
+						}
+					}
+					return
+				}
+				// No Nulls.
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					selIdx := sel[i]
+					v := fromCol.Get(selIdx)
+					//gcassert:bce
+					toCol.Set(i, v)
+				}
+				return
+			}
+			// No Sel.
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
+			v.nulls.set(args)
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch v.t.Width() {
 		case -1:
@@ -1249,6 +1326,39 @@ func (v *Vec) CopyWithReorderedSource(src *Vec, sel, order []int) {
 				}
 			}
 		}
+	case types.INetFamily:
+		switch v.t.Width() {
+		case -1:
+		default:
+			fromCol := src.INet()
+			toCol := v.INet()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						v.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch v.t.Width() {
 		case -1:
@@ -1405,6 +1515,18 @@ func (v *Vec) Window(start int, end int) *Vec {
 				nulls:               v.nulls.Slice(start, end),
 			}
 		}
+	case types.INetFamily:
+		switch v.t.Width() {
+		case -1:
+		default:
+			col := v.INet()
+			return &Vec{
+				t:                   v.t,
+				canonicalTypeFamily: v.canonicalTypeFamily,
+				col:                 col.Window(start, end),
+				nulls:               v.nulls.Slice(start, end),
+			}
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch v.t.Width() {
 		case -1:
@@ -1497,6 +1619,14 @@ func SetValueAt(v *Vec, elem interface{}, rowIdx int) {
 			newVal := elem.(json.JSON)
 			target.Set(rowIdx, newVal)
 		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			target := v.INet()
+			newVal := elem.(ipaddr.IPAddr)
+			target.Set(rowIdx, newVal)
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -1578,6 +1708,13 @@ func GetValueAt(v *Vec, rowIdx int) interface{} {
 		case -1:
 		default:
 			target := v.JSON()
+			return target.Get(rowIdx)
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			target := v.INet()
 			return target.Get(rowIdx)
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:

@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -2439,8 +2440,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				}
 				copyRes := ex.clientComm.CreateCopyOutResult(copyCmd, pos)
 				res = copyRes
-				stmtCtx := withStatement(ctx, copyTo)
-				ev, payload = ex.execCopyOut(stmtCtx, copyCmd, copyRes)
+				ev, payload = ex.execCopyOut(ctx, copyCmd, copyRes)
 				return nil
 			}
 
@@ -2516,8 +2516,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	case PrepareStmt:
 		ex.curStmtAST = tcmd.AST
 		res = ex.clientComm.CreatePrepareResult(pos)
-		stmtCtx := withStatement(ctx, ex.curStmtAST)
-		ev, payload = ex.execPrepare(stmtCtx, tcmd)
+		ev, payload = ex.execPrepare(ctx, tcmd)
 	case DescribeStmt:
 		descRes := ex.clientComm.CreateDescribeResult(pos)
 		res = descRes
@@ -2566,8 +2565,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 
 		copyRes := ex.clientComm.CreateCopyInResult(tcmd, pos)
 		res = copyRes
-		stmtCtx := withStatement(ctx, tcmd.Stmt)
-		ev, payload = ex.execCopyIn(stmtCtx, tcmd, copyRes)
+		ev, payload = ex.execCopyIn(ctx, tcmd, copyRes)
 
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
 		// because:
@@ -2582,8 +2580,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, tcmd.ParseEnd)
 		copyRes := ex.clientComm.CreateCopyOutResult(tcmd, pos)
 		res = copyRes
-		stmtCtx := withStatement(ctx, tcmd.Stmt)
-		ev, payload = ex.execCopyOut(stmtCtx, tcmd, copyRes)
+		ev, payload = ex.execCopyOut(ctx, tcmd, copyRes)
 
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
 		// because:
@@ -3163,6 +3160,9 @@ func (ex *connExecutor) execCopyIn(
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
+	// The COPY plan is never distributed, so we can always use the latest exec
+	// version.
+	ctx = execversion.WithVersion(ctx, execversion.Latest)
 	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
@@ -3952,7 +3952,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	err := func() error {
 		ex.mu.Lock()
 		defer ex.mu.Unlock()
-		return ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmtAST), ev, payload)
+		return ex.machine.ApplyWithPayload(ex.Ctx(), ev, payload)
 	}()
 	if err != nil {
 		if errors.HasType(err, (*fsm.TransitionNotFoundError)(nil)) {
@@ -4738,23 +4738,6 @@ func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
 	)
 }
 
-var contextStatementKey = ctxutil.RegisterFastValueKey()
-
-// withStatement adds a SQL statement to the provided context. The statement
-// will then be included in crash reports which use that context.
-func withStatement(ctx context.Context, stmt tree.Statement) context.Context {
-	return ctxutil.WithFastValue(ctx, contextStatementKey, stmt)
-}
-
-// statementFromCtx returns the statement value from a context, or nil if unset.
-func statementFromCtx(ctx context.Context) tree.Statement {
-	stmt := ctxutil.FastValue(ctx, contextStatementKey)
-	if stmt == nil {
-		return nil
-	}
-	return stmt.(tree.Statement)
-}
-
 var contextPlanGistKey = ctxutil.RegisterFastValueKey()
 
 func withPlanGist(ctx context.Context, gist string) context.Context {
@@ -4773,15 +4756,7 @@ func planGistFromCtx(ctx context.Context) string {
 }
 
 func init() {
-	// Register a function to include the anonymized statement in crash reports.
-	logcrash.RegisterTagFn("statement", func(ctx context.Context) string {
-		stmt := statementFromCtx(ctx)
-		if stmt == nil {
-			return ""
-		}
-		// Anonymize the statement for reporting.
-		return anonymizeStmtAndConstants(stmt, nil /* VirtualTabler */, nil /* ClientNoticeSender */)
-	})
+	// Register a function to include the plan gist in crash reports.
 	logcrash.RegisterTagFn("gist", func(ctx context.Context) string {
 		return planGistFromCtx(ctx)
 	})

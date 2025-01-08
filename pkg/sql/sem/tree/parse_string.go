@@ -6,6 +6,7 @@
 package tree
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -179,6 +181,7 @@ type ValueHandler interface {
 	JSON(j json.JSON)
 	String(s string)
 	TimestampTZ(t time.Time)
+	INet(i ipaddr.IPAddr)
 	Reset()
 }
 
@@ -186,7 +189,12 @@ type ValueHandler interface {
 // supported by the vector engine directly to a ValueHandler. Other types are
 // handled by ParseAndRequireString.
 func ParseAndRequireStringHandler(
-	t *types.T, s string, ctx ParseContext, vh ValueHandler, ph *pgdate.ParseHelper,
+	ctx context.Context,
+	t *types.T,
+	s string,
+	parseCtx ParseContext,
+	vh ValueHandler,
+	ph *pgdate.ParseHelper,
 ) (err error) {
 	switch t.Family() {
 	case types.BoolFamily:
@@ -202,9 +210,9 @@ func ParseAndRequireStringHandler(
 			err = MakeParseError(s, types.Bytes, err)
 		}
 	case types.DateFamily:
-		now := relativeParseTime(ctx)
+		now := relativeParseTime(parseCtx)
 		var t pgdate.Date
-		if t, _, err = pgdate.ParseDate(now, dateStyle(ctx), s, ph); err == nil {
+		if t, _, err = pgdate.ParseDate(now, dateStyle(parseCtx), s, ph); err == nil {
 			vh.Date(t)
 		}
 	case types.DecimalFamily:
@@ -255,15 +263,15 @@ func ParseAndRequireStringHandler(
 		vh.String(s)
 	case types.TimestampTZFamily:
 		var ts time.Time
-		if ts, _, err = ParseTimestampTZ(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
+		if ts, _, err = ParseTimestampTZ(parseCtx, s, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
 			vh.TimestampTZ(ts)
 		}
 	case types.TimestampFamily:
 		// TODO(yuzefovich): can we refactor the next 2 case arms to be simpler
 		// and avoid code duplication?
-		now := relativeParseTime(ctx)
+		now := relativeParseTime(parseCtx)
 		var ts time.Time
-		if ts, _, err = pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s, dateParseHelper(ctx)); err == nil {
+		if ts, _, err = pgdate.ParseTimestampWithoutTimezone(now, dateStyle(parseCtx), s, dateParseHelper(parseCtx)); err == nil {
 			// Always normalize time to the current location.
 			if ts, err = roundAndCheck(ts, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
 				vh.TimestampTZ(ts)
@@ -274,7 +282,7 @@ func ParseAndRequireStringHandler(
 		itm, err = t.IntervalTypeMetadata()
 		if err == nil {
 			var d duration.Duration
-			d, err = ParseIntervalWithTypeMetadata(intervalStyle(ctx), s, itm)
+			d, err = ParseIntervalWithTypeMetadata(intervalStyle(parseCtx), s, itm)
 			if err == nil {
 				vh.Duration(d)
 			}
@@ -293,12 +301,18 @@ func ParseAndRequireStringHandler(
 		if err == nil {
 			vh.Bytes(d.PhysicalRep)
 		}
+	case types.INetFamily:
+		var i ipaddr.IPAddr
+		err = ipaddr.ParseINet(s, &i)
+		if err == nil {
+			vh.INet(i)
+		}
 	default:
-		if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) != typeconv.DatumVecCanonicalTypeFamily {
-			return errors.AssertionFailedf("unexpected type %v in datum case arm, does a new type need to be handled?", t)
+		if err = typeconv.AssertDatumBacked(ctx, t); err != nil {
+			return err
 		}
 		var d Datum
-		if d, _, err = ParseAndRequireString(t, s, ctx); err == nil {
+		if d, _, err = ParseAndRequireString(t, s, parseCtx); err == nil {
 			vh.Datum(d)
 		}
 	}

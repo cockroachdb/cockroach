@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -36,6 +37,7 @@ var (
 	_ duration.Duration
 	_ = coldataext.CompareDatum
 	_ json.JSON
+	_ ipaddr.IPAddr
 )
 
 // Remove unused warnings.
@@ -64,7 +66,7 @@ func GetInProjectionOperator(
 	negate bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
@@ -197,6 +199,20 @@ func GetInProjectionOperator(
 			obj.filterRow, obj.hasNulls = fillDatumRowJSON(ctx, evalCtx, t, datumTuple)
 			return obj, nil
 		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			obj := &projectInOpINet{
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
+				allocator:      allocator,
+				colIdx:         colIdx,
+				outputIdx:      resultIdx,
+				negate:         negate,
+			}
+			obj.filterRow, obj.hasNulls = fillDatumRowINet(ctx, evalCtx, t, datumTuple)
+			return obj, nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -224,7 +240,7 @@ func GetInOperator(
 	datumTuple *tree.DTuple,
 	negate bool,
 ) (colexecop.Operator, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
@@ -337,6 +353,18 @@ func GetInOperator(
 			obj.filterRow, obj.hasNulls = fillDatumRowJSON(ctx, evalCtx, t, datumTuple)
 			return obj, nil
 		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			obj := &selectInOpINet{
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
+				colIdx:         colIdx,
+				negate:         negate,
+			}
+			obj.filterRow, obj.hasNulls = fillDatumRowINet(ctx, evalCtx, t, datumTuple)
+			return obj, nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -381,7 +409,7 @@ func fillDatumRowBool(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []bool
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -615,7 +643,7 @@ func fillDatumRowBytes(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result [][]byte
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -837,7 +865,7 @@ func fillDatumRowDecimal(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []apd.Decimal
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -1064,7 +1092,7 @@ func fillDatumRowInt16(
 	datumTuple.Normalize(ctx, evalCtx)
 
 	// Ensure that we always upcast all integer types.
-	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	conv := colconv.GetDatumToPhysicalFn(ctx, types.Int)
 	var result []int64
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -1302,7 +1330,7 @@ func fillDatumRowInt32(
 	datumTuple.Normalize(ctx, evalCtx)
 
 	// Ensure that we always upcast all integer types.
-	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	conv := colconv.GetDatumToPhysicalFn(ctx, types.Int)
 	var result []int64
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -1539,7 +1567,7 @@ func fillDatumRowInt64(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []int64
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -1776,7 +1804,7 @@ func fillDatumRowFloat64(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []float64
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -2021,7 +2049,7 @@ func fillDatumRowTimestamp(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []time.Time
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -2254,7 +2282,7 @@ func fillDatumRowInterval(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []duration.Duration
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -2480,7 +2508,7 @@ func fillDatumRowJSON(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []json.JSON
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -2680,6 +2708,232 @@ func (pi *projectInOpJSON) Next() coldata.Batch {
 	return batch
 }
 
+type selectInOpINet struct {
+	colexecop.OneInputHelper
+	filterRow []ipaddr.IPAddr
+	colIdx    int
+	hasNulls  bool
+	negate    bool
+}
+
+var _ colexecop.Operator = &selectInOpINet{}
+
+type projectInOpINet struct {
+	colexecop.OneInputHelper
+	allocator *colmem.Allocator
+	filterRow []ipaddr.IPAddr
+	colIdx    int
+	outputIdx int
+	hasNulls  bool
+	negate    bool
+}
+
+var _ colexecop.Operator = &projectInOpINet{}
+
+func fillDatumRowINet(
+	ctx context.Context, evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
+) ([]ipaddr.IPAddr, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(ctx, evalCtx)
+
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
+	var result []ipaddr.IPAddr
+	hasNulls := false
+	for _, d := range datumTuple.D {
+		if d == tree.DNull {
+			hasNulls = true
+		} else {
+			convRaw := conv(d)
+			converted := convRaw.(ipaddr.IPAddr)
+			result = append(result, converted)
+		}
+	}
+	return result, hasNulls
+}
+
+func cmpInINet(
+	targetElem ipaddr.IPAddr, targetCol coldata.IPAddrs, filterRow []ipaddr.IPAddr, hasNulls bool,
+) comparisonResult {
+	// Filter row input was already sorted in fillDatumRowINet, so we can
+	// perform a binary search.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
+		cmpResult = targetElem.Compare(&filterRow[i])
+		if cmpResult == 0 {
+			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
+		}
+	}
+
+	if hasNulls {
+		return siNull
+	} else {
+		return siFalse
+	}
+}
+
+func (si *selectInOpINet) Next() coldata.Batch {
+	for {
+		batch := si.Input.Next()
+		if batch.Length() == 0 {
+			return coldata.ZeroBatch
+		}
+
+		vec := batch.ColVec(si.colIdx)
+		col := vec.INet()
+		var idx int
+		n := batch.Length()
+
+		compVal := siTrue
+		if si.negate {
+			compVal = siFalse
+		}
+
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					v := col.Get(i)
+					if !nulls.NullAt(i) && cmpInINet(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					v := col.Get(i)
+					if !nulls.NullAt(i) && cmpInINet(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					v := col.Get(i)
+					if cmpInINet(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					v := col.Get(i)
+					if cmpInINet(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (pi *projectInOpINet) Next() coldata.Batch {
+	batch := pi.Input.Next()
+	if batch.Length() == 0 {
+		return coldata.ZeroBatch
+	}
+
+	vec := batch.ColVec(pi.colIdx)
+	col := vec.INet()
+
+	projVec := batch.ColVec(pi.outputIdx)
+	projCol := projVec.Bool()
+	projNulls := projVec.Nulls()
+
+	n := batch.Length()
+
+	cmpVal := siTrue
+	if pi.negate {
+		cmpVal = siFalse
+	}
+
+	if vec.MaybeHasNulls() {
+		nulls := vec.Nulls()
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, i := range sel {
+				if nulls.NullAt(i) {
+					projNulls.SetNull(i)
+				} else {
+					v := col.Get(i)
+					cmpRes := cmpInINet(v, col, pi.filterRow, pi.hasNulls)
+					if cmpRes == siNull {
+						projNulls.SetNull(i)
+					} else {
+						projCol[i] = cmpRes == cmpVal
+					}
+				}
+			}
+		} else {
+			_ = col.Get(n - 1)
+			for i := 0; i < n; i++ {
+				if nulls.NullAt(i) {
+					projNulls.SetNull(i)
+				} else {
+					//gcassert:bce
+					v := col.Get(i)
+					cmpRes := cmpInINet(v, col, pi.filterRow, pi.hasNulls)
+					if cmpRes == siNull {
+						projNulls.SetNull(i)
+					} else {
+						projCol[i] = cmpRes == cmpVal
+					}
+				}
+			}
+		}
+	} else {
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, i := range sel {
+				v := col.Get(i)
+				cmpRes := cmpInINet(v, col, pi.filterRow, pi.hasNulls)
+				if cmpRes == siNull {
+					projNulls.SetNull(i)
+				} else {
+					projCol[i] = cmpRes == cmpVal
+				}
+			}
+		} else {
+			_ = col.Get(n - 1)
+			for i := 0; i < n; i++ {
+				//gcassert:bce
+				v := col.Get(i)
+				cmpRes := cmpInINet(v, col, pi.filterRow, pi.hasNulls)
+				if cmpRes == siNull {
+					projNulls.SetNull(i)
+				} else {
+					projCol[i] = cmpRes == cmpVal
+				}
+			}
+		}
+	}
+	return batch
+}
+
 type selectInOpDatum struct {
 	colexecop.OneInputHelper
 	filterRow []interface{}
@@ -2708,7 +2962,7 @@ func fillDatumRowDatum(
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(ctx, evalCtx)
 
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	var result []interface{}
 	hasNulls := false
 	for _, d := range datumTuple.D {

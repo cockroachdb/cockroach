@@ -6,7 +6,6 @@
 package colflow_test
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -46,6 +46,8 @@ var (
 	// and a disk account bound to it for use in tests.
 	testDiskMonitor *mon.BytesMonitor
 	testDiskAcc     *mon.BoundAccount
+
+	ctx = execversion.TestingWithLatestCtx
 )
 
 func TestMain(m *testing.M) {
@@ -54,7 +56,6 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(func() int {
-		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
 		testMemMonitor = execinfra.NewTestMemMonitor(ctx, st)
 		defer testMemMonitor.Stop(ctx)

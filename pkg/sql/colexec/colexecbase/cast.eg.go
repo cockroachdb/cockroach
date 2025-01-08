@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -51,6 +52,7 @@ var (
 	_ = pgcode.Syntax
 	_ = pgdate.ParseTimestamp
 	_ = pgerror.Wrapf
+	_ ipaddr.IPAddr
 )
 
 func isIdentityCast(fromType, toType *types.T) bool {
@@ -105,8 +107,8 @@ func GetCastOperator(
 			return &castIdentityOp{castOpBase: base}, nil
 		}
 	}
-	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	if isFromDatum {
 		if isToDatum {
 			return &castDatumDatumOp{castOpBase: base}, nil
@@ -181,6 +183,12 @@ func GetCastOperator(
 			case -1:
 			default:
 				return &castDatumUuidOp{castOpBase: base}, nil
+			}
+		case types.INetFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return &castDatumInetOp{castOpBase: base}, nil
 			}
 		case types.JsonFamily:
 			switch toType.Width() {
@@ -474,6 +482,19 @@ func GetCastOperator(
 					}
 				}
 			}
+		case types.INetFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInetStringOp{castOpBase: base}, nil
+					}
+				}
+			}
 		case types.IntervalFamily:
 			switch fromType.Width() {
 			case -1:
@@ -540,6 +561,12 @@ func GetCastOperator(
 					case -1:
 					default:
 						return &castStringFloatOp{castOpBase: base}, nil
+					}
+				case types.INetFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringInetOp{castOpBase: base}, nil
 					}
 				case types.IntFamily:
 					switch toType.Width() {
@@ -637,15 +664,15 @@ func GetCastOperator(
 	return nil, err
 }
 
-func IsCastSupported(fromType, toType *types.T) bool {
+func IsCastSupported(ctx context.Context, fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
 	if isIdentityCast(fromType, toType) {
 		return true
 	}
-	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	if isFromDatum {
 		if isToDatum {
 			return true
@@ -716,6 +743,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 				return true
 			}
 		case types.UuidFamily:
+			switch toType.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.INetFamily:
 			switch toType.Width() {
 			case -1:
 			default:
@@ -1013,6 +1046,19 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					}
 				}
 			}
+		case types.INetFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
 		case types.IntervalFamily:
 			switch fromType.Width() {
 			case -1:
@@ -1075,6 +1121,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 						return true
 					}
 				case types.FloatFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.INetFamily:
 					switch toType.Width() {
 					case -1:
 					default:
@@ -8930,6 +8982,246 @@ func (c *castIntStringOp) Next() coldata.Batch {
 	return batch
 }
 
+type castInetStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInetStringOp{}
+var _ colexecop.ClosableOperator = &castInetStringOp{}
+
+func (c *castInetStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]*coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.INet()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_s := v.String()
+							// Ensure the string has a "/mask" suffix.
+							if strings.IndexByte(_s, '/') == -1 {
+								_s += "/" + strconv.Itoa(int(v.Mask))
+							}
+							r = []byte(_s)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_s := v.String()
+							// Ensure the string has a "/mask" suffix.
+							if strings.IndexByte(_s, '/') == -1 {
+								_s += "/" + strconv.Itoa(int(v.Mask))
+							}
+							r = []byte(_s)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_s := v.String()
+							// Ensure the string has a "/mask" suffix.
+							if strings.IndexByte(_s, '/') == -1 {
+								_s += "/" + strconv.Itoa(int(v.Mask))
+							}
+							r = []byte(_s)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_s := v.String()
+							// Ensure the string has a "/mask" suffix.
+							if strings.IndexByte(_s, '/') == -1 {
+								_s += "/" + strconv.Itoa(int(v.Mask))
+							}
+							r = []byte(_s)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
 type castIntervalStringOp struct {
 	castOpBase
 }
@@ -10321,6 +10613,150 @@ func (c *castStringFloatOp) Next() coldata.Batch {
 							r, _err = strconv.ParseFloat(strings.TrimSpace(_s), 64)
 							if _err != nil {
 								colexecerror.ExpectedError(tree.MakeParseError(_s, toType, _err))
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castStringInetOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringInetOp{}
+var _ colexecop.ClosableOperator = &castStringInetOp{}
+
+func (c *castStringInetOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]*coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.INet()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r ipaddr.IPAddr
+
+							_err := ipaddr.ParseINet(string(v), &r)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r ipaddr.IPAddr
+
+							_err := ipaddr.ParseINet(string(v), &r)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r ipaddr.IPAddr
+
+							_err := ipaddr.ParseINet(string(v), &r)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r ipaddr.IPAddr
+
+							_err := ipaddr.ParseINet(string(v), &r)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
 							}
 
 							//gcassert:bce
@@ -12611,7 +13047,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bool()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -12768,7 +13204,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int16()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -12925,7 +13361,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int32()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13082,7 +13518,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13239,7 +13675,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Float64()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13396,7 +13832,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Decimal()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13553,7 +13989,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Int64()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13710,7 +14146,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Timestamp()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -13867,7 +14303,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Interval()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14024,7 +14460,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14177,7 +14613,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14330,7 +14766,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Timestamp()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14487,7 +14923,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
@@ -14615,6 +15051,163 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 	return batch
 }
 
+type castDatumInetOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDatumInetOp{}
+var _ colexecop.ClosableOperator = &castDatumInetOp{}
+
+func (c *castDatumInetOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]*coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.INet()
+			outputNulls := outputVec.Nulls()
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r ipaddr.IPAddr
+
+							{
+								_castedDatum, err := eval.PerformCast(c.Ctx, evalCtx, v.(tree.Datum), toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(ipaddr.IPAddr)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r ipaddr.IPAddr
+
+							{
+								_castedDatum, err := eval.PerformCast(c.Ctx, evalCtx, v.(tree.Datum), toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(ipaddr.IPAddr)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r ipaddr.IPAddr
+
+							{
+								_castedDatum, err := eval.PerformCast(c.Ctx, evalCtx, v.(tree.Datum), toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(ipaddr.IPAddr)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = outputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r ipaddr.IPAddr
+
+							{
+								_castedDatum, err := eval.PerformCast(c.Ctx, evalCtx, v.(tree.Datum), toType)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = converter(_castedDatum).(ipaddr.IPAddr)
+							}
+
+							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
 type castDatumJsonbOp struct {
 	castOpBase
 }
@@ -14640,7 +15233,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.JSON()
 			outputNulls := outputVec.Nulls()
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {

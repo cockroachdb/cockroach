@@ -38,7 +38,7 @@ func TestEncDatumRowToColVecsBool(t *testing.T) {
 	var vecs coldata.TypedVecs
 	vecs.SetBatch(batch)
 	for rowIdx, row := range rows {
-		EncDatumRowToColVecs(row, rowIdx, vecs, typs, &alloc)
+		EncDatumRowToColVecs(row, rowIdx, vecs, &alloc)
 	}
 	expected := testAllocator.NewMemBatchWithFixedCapacity(typs, len(rows))
 	expected.ColVec(0).Bool()[0] = false
@@ -62,7 +62,7 @@ func TestEncDatumRowToColVecsInt16(t *testing.T) {
 	var vecs coldata.TypedVecs
 	vecs.SetBatch(batch)
 	for rowIdx, row := range rows {
-		EncDatumRowToColVecs(row, rowIdx, vecs, typs, &alloc)
+		EncDatumRowToColVecs(row, rowIdx, vecs, &alloc)
 	}
 	expected := testAllocator.NewMemBatchWithFixedCapacity(typs, len(rows))
 	expected.ColVec(0).Int16()[0] = 17
@@ -85,7 +85,7 @@ func TestEncDatumRowToColVecsString(t *testing.T) {
 		var vecs coldata.TypedVecs
 		vecs.SetBatch(batch)
 		for rowIdx, row := range rows {
-			EncDatumRowToColVecs(row, rowIdx, vecs, typs, &alloc)
+			EncDatumRowToColVecs(row, rowIdx, vecs, &alloc)
 		}
 		expected := testAllocator.NewMemBatchWithFixedCapacity(typs, len(rows))
 		expected.ColVec(0).Bytes().Set(0, []byte("foo"))
@@ -116,7 +116,7 @@ func TestEncDatumRowToColVecsDecimal(t *testing.T) {
 	var vecs coldata.TypedVecs
 	vecs.SetBatch(batch)
 	for rowIdx, row := range rows {
-		EncDatumRowToColVecs(row, rowIdx, vecs, typs, &alloc)
+		EncDatumRowToColVecs(row, rowIdx, vecs, &alloc)
 	}
 	if !reflect.DeepEqual(expected, batch) {
 		t.Errorf("expected batch %+v, got %+v", expected, batch)

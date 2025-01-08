@@ -61,6 +61,7 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 	types.IntFamily: append(
 		numericCanonicalTypeFamilies,
 		types.IntervalFamily,
+		types.INetFamily,
 		typeconv.DatumVecCanonicalTypeFamily,
 	),
 	types.FloatFamily: append(
@@ -84,6 +85,10 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 		types.JsonFamily,
 		typeconv.DatumVecCanonicalTypeFamily,
 	),
+	types.INetFamily: {
+		types.INetFamily,
+		types.IntFamily,
+	},
 	typeconv.DatumVecCanonicalTypeFamily: append(
 		[]types.Family{
 			typeconv.DatumVecCanonicalTypeFamily,
@@ -114,6 +119,9 @@ func registerBinOpOutputTypes() {
 	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.Bitand, treebin.Bitor, treebin.Bitxor} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
+		if binOp != treebin.Bitxor {
+			binOpOutputTypes[binOp][typePair{types.INetFamily, anyWidth, types.INetFamily, anyWidth}] = types.INet
+		}
 		binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
 	}
 
@@ -129,6 +137,12 @@ func registerBinOpOutputTypes() {
 			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.DecimalFamily, anyWidth}] = types.Decimal
 		}
 	}
+	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		binOpOutputTypes[treebin.Plus][typePair{types.INetFamily, anyWidth, types.IntFamily, intWidth}] = types.INet
+		binOpOutputTypes[treebin.Plus][typePair{types.IntFamily, intWidth, types.INetFamily, anyWidth}] = types.INet
+		binOpOutputTypes[treebin.Minus][typePair{types.INetFamily, anyWidth, types.IntFamily, intWidth}] = types.INet
+	}
+
 	// There is a special case for division with integers; it should have a
 	// decimal result.
 	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -139,6 +153,7 @@ func registerBinOpOutputTypes() {
 	binOpOutputTypes[treebin.Minus][typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.Interval
 	binOpOutputTypes[treebin.Plus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
 	binOpOutputTypes[treebin.Minus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
+	binOpOutputTypes[treebin.Minus][typePair{types.INetFamily, anyWidth, types.INetFamily, anyWidth}] = types.Int
 	for _, numberTypeFamily := range numericCanonicalTypeFamilies {
 		for _, numberTypeWidth := range supportedWidthsByCanonicalTypeFamily[numberTypeFamily] {
 			binOpOutputTypes[treebin.Mult][typePair{numberTypeFamily, numberTypeWidth, types.IntervalFamily, anyWidth}] = types.Interval
@@ -195,6 +210,7 @@ func registerBinOpOutputTypes() {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			binOpOutputTypes[binOp][typePair{types.INetFamily, anyWidth, types.INetFamily, anyWidth}] = types.Bool
 			binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, intWidth}] = types.Any
 		}
 	}
@@ -946,6 +962,73 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 		  %[1]s = %[3]s.MulFloat(f)`,
 				targetElem, leftElem, rightElem)
 
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c inetCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		switch op.overloadBase.BinOp {
+		case treebin.Bitand, treebin.Bitor, treebin.Minus:
+			fn := "And"
+			if op.overloadBase.BinOp == treebin.Bitor {
+				fn = "Or"
+			} else if op.overloadBase.BinOp == treebin.Minus {
+				fn = "SubIPAddr"
+			}
+			return fmt.Sprintf(`
+		  var err error
+		  %[1]s, err = %[2]s.%[4]s(&%[3]s)
+		  if err != nil {
+		    colexecerror.ExpectedError(err)
+		  }`, targetElem, leftElem, rightElem, fn)
+		case treebin.LShift, treebin.RShift:
+			fn := "ContainedBy"
+			if op.overloadBase.BinOp == treebin.RShift {
+				fn = "Contains"
+			}
+			return fmt.Sprintf(`%[1]s = %[2]s.%[4]s(&%[3]s)`, targetElem, leftElem, rightElem, fn)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c inetIntCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		switch op.overloadBase.BinOp {
+		case treebin.Plus, treebin.Minus:
+			fn := "Add"
+			if op.overloadBase.BinOp == treebin.Minus {
+				fn = "Sub"
+			}
+			return fmt.Sprintf(`
+		  var err error
+		  %[1]s, err = %[2]s.%[4]s(int64(%[3]s))
+		  if err != nil {
+		    colexecerror.ExpectedError(err)
+		  }`, targetElem, leftElem, rightElem, fn)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c intINetCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		switch op.overloadBase.BinOp {
+		case treebin.Plus:
+			return fmt.Sprintf(`
+		  var err error
+		  %[1]s, err = %[3]s.Add(int64(%[2]s))
+		  if err != nil {
+		    colexecerror.ExpectedError(err)
+		  }`, targetElem, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}

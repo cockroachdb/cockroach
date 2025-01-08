@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -276,7 +277,7 @@ type lastArgWidthOverload struct {
 func newLastArgWidthOverload(
 	typeOverload *lastArgTypeOverload, width int32, retType *types.T,
 ) *lastArgWidthOverload {
-	retCanonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(retType.Family())
+	retCanonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, retType.Family())
 	lawo := &lastArgWidthOverload{
 		lastArgTypeOverload:  typeOverload,
 		argWidthOverloadBase: newArgWidthOverloadBase(typeOverload.argTypeOverloadBase, width),
@@ -442,6 +443,8 @@ func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
 		return "coldata.Float64s"
 	case types.TimestampTZFamily:
 		return "coldata.Times"
+	case types.INetFamily:
+		return "coldata.IPAddrs"
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "coldata.DatumVec"
 	}
@@ -702,6 +705,9 @@ type intervalCustomizer struct{}
 // jsonCustomizer is necessary since json.JSON doesn't have infix operators.
 type jsonCustomizer struct{}
 
+// inetCustomizer is necessary since ipaddr.IPAddr doesn't have infix operators.
+type inetCustomizer struct{}
+
 // timestampIntervalCustomizer supports mixed type expression with a timestamp
 // left-hand side and an interval right-hand side.
 type timestampIntervalCustomizer struct{}
@@ -746,6 +752,14 @@ type intervalDecimalCustomizer struct{}
 // left-hand side and an interval right-hand side.
 type decimalIntervalCustomizer struct{}
 
+// inetIntCustomizer supports mixed type expression with an INet left-hand side
+// and an int right-hand side.
+type inetIntCustomizer struct{}
+
+// intINetCustomizer supports mixed type expression with an int left-hand side
+// and an INet right-hand side.
+type intINetCustomizer struct{}
+
 // datumCustomizer supports overloads on tree.Datums.
 type datumCustomizer struct{}
 
@@ -771,6 +785,7 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}, timestampCustomizer{})
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}, intervalCustomizer{})
 	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, types.JsonFamily, anyWidth}, jsonCustomizer{})
+	registerTypeCustomizer(typePair{types.INetFamily, anyWidth, types.INetFamily, anyWidth}, inetCustomizer{})
 	registerTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, datumCustomizer{})
 	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -789,6 +804,7 @@ func registerTypeCustomizers() {
 		registerTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.IntFamily, rightIntWidth}, floatIntCustomizer{})
 		registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.IntFamily, rightIntWidth}, intervalIntCustomizer{})
 		registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, types.IntFamily, rightIntWidth}, jsonIntCustomizer{})
+		registerTypeCustomizer(typePair{types.INetFamily, anyWidth, types.IntFamily, rightIntWidth}, inetIntCustomizer{})
 	}
 	registerTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.DecimalFamily, anyWidth}, floatDecimalCustomizer{})
 	registerTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.IntervalFamily, anyWidth}, floatIntervalCustomizer{})
@@ -796,6 +812,7 @@ func registerTypeCustomizers() {
 		registerTypeCustomizer(typePair{types.IntFamily, leftIntWidth, types.DecimalFamily, anyWidth}, intDecimalCustomizer{})
 		registerTypeCustomizer(typePair{types.IntFamily, leftIntWidth, types.FloatFamily, anyWidth}, intFloatCustomizer{})
 		registerTypeCustomizer(typePair{types.IntFamily, leftIntWidth, types.IntervalFamily, anyWidth}, intIntervalCustomizer{})
+		registerTypeCustomizer(typePair{types.IntFamily, leftIntWidth, types.INetFamily, anyWidth}, intINetCustomizer{})
 	}
 	registerTypeCustomizer(typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}, timestampIntervalCustomizer{})
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}, intervalTimestampCustomizer{})
@@ -823,6 +840,7 @@ var supportedCanonicalTypeFamilies = []types.Family{
 	types.TimestampTZFamily,
 	types.IntervalFamily,
 	types.JsonFamily,
+	types.INetFamily,
 	typeconv.DatumVecCanonicalTypeFamily,
 }
 
@@ -845,6 +863,7 @@ var supportedWidthsByCanonicalTypeFamily = map[types.Family][]int32{
 	types.TimestampTZFamily:              {anyWidth},
 	types.IntervalFamily:                 {anyWidth},
 	types.JsonFamily:                     {anyWidth},
+	types.INetFamily:                     {anyWidth},
 	typeconv.DatumVecCanonicalTypeFamily: {anyWidth},
 }
 
@@ -879,6 +898,8 @@ func toVecMethod(canonicalTypeFamily types.Family, width int32) string {
 		return "Interval"
 	case types.JsonFamily:
 		return "JSON"
+	case types.INetFamily:
+		return "INet"
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "Datum"
 	default:
@@ -918,6 +939,8 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 		return "duration.Duration"
 	case types.JsonFamily:
 		return "json.JSON"
+	case types.INetFamily:
+		return "ipaddr.IPAddr"
 	case typeconv.DatumVecCanonicalTypeFamily:
 		// This is somewhat unfortunate, but we can neither use coldata.Datum
 		// nor tree.Datum because we have generated files living in two

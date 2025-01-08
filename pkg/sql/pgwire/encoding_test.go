@@ -163,8 +163,8 @@ func TestEncodings(t *testing.T) {
 		buf.writeBinaryDatum(ctx, d, time.UTC, t)
 	}
 	convertToVec := func(d tree.Datum, t *types.T) *coldata.TypedVecs {
-		batch := coldata.NewMemBatchWithCapacity([]*types.T{t}, 1 /* capacity */, coldataext.NewExtendedColumnFactory(&evalCtx))
-		converter := colconv.GetDatumToPhysicalFn(t)
+		batch := coldata.NewMemBatchWithCapacity(ctx, []*types.T{t}, 1 /* capacity */, coldataext.NewExtendedColumnFactory(&evalCtx))
+		converter := colconv.GetDatumToPhysicalFn(ctx, t)
 		coldata.SetValueAt(batch.ColVec(0), converter(d), 0 /* rowIdx */)
 		var vecs coldata.TypedVecs
 		vecs.SetBatch(batch)

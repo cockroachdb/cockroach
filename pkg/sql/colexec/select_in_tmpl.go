@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -43,6 +44,7 @@ var (
 	_ duration.Duration
 	_ = coldataext.CompareDatum
 	_ json.JSON
+	_ ipaddr.IPAddr
 )
 
 // Remove unused warnings.
@@ -90,7 +92,7 @@ func GetInProjectionOperator(
 	negate bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
@@ -121,7 +123,7 @@ func GetInOperator(
 	datumTuple *tree.DTuple,
 	negate bool,
 ) (colexecop.Operator, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
@@ -174,9 +176,9 @@ func fillDatumRow_TYPE(
 
 	// {{if or (eq .VecMethod "Int16") (eq .VecMethod "Int32")}}
 	// Ensure that we always upcast all integer types.
-	conv := colconv.GetDatumToPhysicalFn(types.Int)
+	conv := colconv.GetDatumToPhysicalFn(ctx, types.Int)
 	//{{else}}
-	conv := colconv.GetDatumToPhysicalFn(t)
+	conv := colconv.GetDatumToPhysicalFn(ctx, t)
 	// {{end}}
 	var result []_GOTYPE_UPCAST_INT
 	hasNulls := false

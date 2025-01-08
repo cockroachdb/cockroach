@@ -368,6 +368,33 @@ func valuesDiffer(
 
 			return unique
 		}
+	case types.INetFamily:
+		switch aColVec.Type().Width() {
+		case -1:
+		default:
+			aCol := aColVec.INet()
+			bCol := bColVec.INet()
+			aNulls := aColVec.Nulls()
+			bNulls := bColVec.Nulls()
+			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
+			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
+			if aNull && bNull {
+				return nullsAreDistinct
+			} else if aNull || bNull {
+				return true
+			}
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
+			var unique bool
+
+			{
+				var cmpResult int
+				cmpResult = arg1.Compare(&arg2)
+				unique = cmpResult != 0
+			}
+
+			return unique
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch aColVec.Type().Width() {
 		case -1:

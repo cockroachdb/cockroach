@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -57,6 +58,7 @@ var (
 	_ = pgcode.Syntax
 	_ = pgdate.ParseTimestamp
 	_ = pgerror.Wrapf
+	_ ipaddr.IPAddr
 )
 
 // {{/*
@@ -135,8 +137,13 @@ func GetCastOperator(
 			return &castIdentityOp{castOpBase: base}, nil
 		}
 	}
-	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	// {{/*
+	//     Note that because we handle datum-backed vectors separately and check
+	//     whether either of the types is datum-backed, we don't need to have
+	//     special logic for handling INet type in mixed-version clusters.
+	// */}}
+	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	if isFromDatum {
 		if isToDatum {
 			return &castDatumDatumOp{castOpBase: base}, nil
@@ -187,15 +194,15 @@ func GetCastOperator(
 	return nil, err
 }
 
-func IsCastSupported(fromType, toType *types.T) bool {
+func IsCastSupported(ctx context.Context, fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
 	if isIdentityCast(fromType, toType) {
 		return true
 	}
-	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	if isFromDatum {
 		if isToDatum {
 			return true
@@ -522,7 +529,7 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 			outputCol := outputVec._TO_TYPE()
 			outputNulls := outputVec.Nulls()
 			// {{if and (eq $fromFamily "DatumVecCanonicalTypeFamily") (not (eq $toFamily "DatumVecCanonicalTypeFamily"))}}
-			converter := colconv.GetDatumToPhysicalFn(toType)
+			converter := colconv.GetDatumToPhysicalFn(c.Ctx, toType)
 			// {{end}}
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)

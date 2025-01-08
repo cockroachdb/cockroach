@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
@@ -27,6 +28,7 @@ var (
 	_ duration.Duration
 	_ encoding.Direction
 	_ json.JSON
+	_ ipaddr.IPAddr
 )
 
 // EncDatumRowToColVecs converts the provided rowenc.EncDatumRow to the columnar
@@ -34,15 +36,11 @@ var (
 // vecs.
 // Note: it is the caller's responsibility to perform the memory accounting.
 func EncDatumRowToColVecs(
-	row rowenc.EncDatumRow,
-	rowIdx int,
-	vecs coldata.TypedVecs,
-	typs []*types.T,
-	alloc *tree.DatumAlloc,
+	row rowenc.EncDatumRow, rowIdx int, vecs coldata.TypedVecs, alloc *tree.DatumAlloc,
 ) {
-	for vecIdx, t := range typs {
+	for vecIdx, vec := range vecs.Vecs {
 		if row[vecIdx].Datum == nil {
-			if err := row[vecIdx].EnsureDecoded(t, alloc); err != nil {
+			if err := row[vecIdx].EnsureDecoded(vec.Type(), alloc); err != nil {
 				colexecerror.InternalError(err)
 			}
 		}
@@ -50,7 +48,14 @@ func EncDatumRowToColVecs(
 		if datum == tree.DNull {
 			vecs.Nulls[vecIdx].SetNull(rowIdx)
 		} else {
-			switch t.Family() {
+			t := vec.Type()
+			family := t.Family()
+			if family == types.INetFamily && vec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+				// Use this trick so that we fall into the default case that
+				// handles all datum-backed types.
+				family = typeconv.DatumVecCanonicalTypeFamily + 1
+			}
+			switch family {
 			case types.BoolFamily:
 				switch t.Width() {
 				case -1:
@@ -150,6 +155,14 @@ func EncDatumRowToColVecs(
 
 					v := datum.(*tree.DUuid).UUID.GetBytesMut()
 					vecs.BytesCols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
+				}
+			case types.INetFamily:
+				switch t.Width() {
+				case -1:
+				default:
+
+					v := datum.(*tree.DIPAddr).IPAddr
+					vecs.INetCols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
 				}
 			case types.JsonFamily:
 				switch t.Width() {

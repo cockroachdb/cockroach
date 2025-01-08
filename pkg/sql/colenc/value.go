@@ -6,7 +6,10 @@
 package colenc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -17,7 +20,7 @@ import (
 
 // valuesideEncodeCol is the vector version of valueside.Encode.
 func valuesideEncodeCol(
-	appendTo []byte, colID valueside.ColumnIDDelta, vec *coldata.Vec, row int,
+	ctx context.Context, appendTo []byte, colID valueside.ColumnIDDelta, vec *coldata.Vec, row int,
 ) ([]byte, error) {
 	if vec.Nulls().NullAt(row) {
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
@@ -69,7 +72,20 @@ func valuesideEncodeCol(
 			return nil, err
 		}
 		return encoding.EncodeUUIDValue(appendTo, uint32(colID), u), nil
+	case types.INetFamily:
+		if vec.CanonicalTypeFamily() == types.INetFamily {
+			i := vec.INet().Get(row)
+			return encoding.EncodeIPAddrValue(appendTo, uint32(colID), i), nil
+		} else {
+			if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+				return nil, err
+			}
+			return valueside.Encode(appendTo, colID, vec.Datum().Get(row).(tree.Datum))
+		}
 	default:
+		if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
+			return nil, err
+		}
 		return valueside.Encode(appendTo, colID, vec.Datum().Get(row).(tree.Datum))
 	}
 }

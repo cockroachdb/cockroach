@@ -22,6 +22,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/encoding",
+        "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/timeutil/pgdate",
         "@com_github_cockroachdb_apd_v3//:apd",

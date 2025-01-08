@@ -6,13 +6,17 @@
 package typeconv
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
 )
 
 // DatumVecCanonicalTypeFamily is the "canonical" type family of all types that
@@ -27,7 +31,12 @@ var DatumVecCanonicalTypeFamily = types.Family(1000000)
 // All type families that do not have an optimized physical representation are
 // handled by using tree.Datums, and such types are mapped to
 // DatumVecCanonicalTypeFamily.
-func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
+func TypeFamilyToCanonicalTypeFamily(ctx context.Context, family types.Family) types.Family {
+	if buildutil.CrdbTestBuild {
+		if ctx != context.Background() {
+			_ = execversion.FromContext(ctx)
+		}
+	}
 	switch family {
 	case types.BoolFamily:
 		return types.BoolFamily
@@ -51,6 +60,13 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 		return types.TimestampTZFamily
 	case types.IntervalFamily:
 		return types.IntervalFamily
+	case types.INetFamily:
+		if ctx != context.Background() {
+			if execversion.FromContext(ctx) < execversion.V25_1 {
+				return DatumVecCanonicalTypeFamily
+			}
+		}
+		return types.INetFamily
 	default:
 		// TODO(yuzefovich): consider adding native support for
 		// types.UnknownFamily.
@@ -60,10 +76,10 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 
 // ToCanonicalTypeFamilies converts typs to the corresponding canonical type
 // families.
-func ToCanonicalTypeFamilies(typs []*types.T) []types.Family {
+func ToCanonicalTypeFamilies(ctx context.Context, typs []*types.T) []types.Family {
 	families := make([]types.Family, len(typs))
 	for i := range typs {
-		families[i] = TypeFamilyToCanonicalTypeFamily(typs[i].Family())
+		families[i] = TypeFamilyToCanonicalTypeFamily(ctx, typs[i].Family())
 	}
 	return families
 }
@@ -107,7 +123,7 @@ var TypesSupportedNatively []*types.T
 
 func init() {
 	for _, t := range types.Scalar {
-		if TypeFamilyToCanonicalTypeFamily(t.Family()) == DatumVecCanonicalTypeFamily {
+		if TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, t.Family()) == DatumVecCanonicalTypeFamily {
 			continue
 		}
 		if t.Family() == types.IntFamily {
@@ -116,4 +132,14 @@ func init() {
 		}
 		TypesSupportedNatively = append(TypesSupportedNatively, t)
 	}
+}
+
+// AssertDatumBacked returns an error if typ is not datum-backed type.
+func AssertDatumBacked(ctx context.Context, typ *types.T) error {
+	if buildutil.CrdbTestBuild {
+		if TypeFamilyToCanonicalTypeFamily(ctx, typ.Family()) != DatumVecCanonicalTypeFamily {
+			return errors.AssertionFailedf("type %v isn't a datum backed type, maybe new type was added?", typ)
+		}
+	}
+	return nil
 }

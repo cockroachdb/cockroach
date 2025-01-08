@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -1116,6 +1117,7 @@ func TestJoinReader(t *testing.T) {
 							}
 							var fetchSpec fetchpb.IndexFetchSpec
 							if err := rowenc.InitIndexFetchSpec(
+								ctx,
 								&fetchSpec,
 								keys.SystemSQLCodec,
 								td, index, fetchColIDs,
@@ -1276,6 +1278,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	}
 	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
+		ctx,
 		&fetchSpec,
 		keys.SystemSQLCodec,
 		td,
@@ -1385,6 +1388,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
+		execversion.WithVersion(ctx, execversion.Latest),
 		&fetchSpec,
 		keys.SystemSQLCodec,
 		td, td.GetPrimaryIndex(), []descpb.ColumnID{1},
@@ -1558,6 +1562,7 @@ func TestIndexJoiner(t *testing.T) {
 		t.Run(c.description, func(t *testing.T) {
 			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
+				context.Background(),
 				&fetchSpec,
 				keys.SystemSQLCodec,
 				c.desc, c.desc.GetPrimaryIndex(),
@@ -1804,6 +1809,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 
 								var fetchSpec fetchpb.IndexFetchSpec
 								if err := rowenc.InitIndexFetchSpec(
+									ctx,
 									&fetchSpec,
 									keys.SystemSQLCodec,
 									tableDesc, tableDesc.ActiveIndexes()[indexIdx],
@@ -2018,6 +2024,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 
 			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
+				ctx,
 				&fetchSpec,
 				keys.SystemSQLCodec,
 				tableDesc, tableDesc.ActiveIndexes()[indexIdx],

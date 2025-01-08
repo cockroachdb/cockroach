@@ -6,6 +6,7 @@
 package workload_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -51,7 +52,7 @@ func benchmarkInitialData(b *testing.B, gen workload.Generator) {
 	for i := 0; i < b.N; i++ {
 		// Share the Batch and ByteAllocator across tables but not across benchmark
 		// iterations.
-		cb := coldata.NewMemBatch(nil /* types */, coldata.StandardColumnFactory)
+		cb := coldata.NewMemBatch(context.Background(), nil /* types */, coldata.StandardColumnFactory)
 		var a bufalloc.ByteAllocator
 		for _, table := range tables {
 			for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; rowIdx++ {

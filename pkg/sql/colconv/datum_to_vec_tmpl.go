@@ -17,6 +17,8 @@
 package colconv
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,8 +40,14 @@ var (
 // must succeed. If for some reason it fails, a panic will be emitted and will
 // be caught by the panic-catcher mechanism of the vectorized engine and will
 // be propagated as an error accordingly.
-func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
-	switch ct.Family() {
+func GetDatumToPhysicalFn(ctx context.Context, ct *types.T) func(tree.Datum) interface{} {
+	family := ct.Family()
+	if family == types.INetFamily && typeconv.TypeFamilyToCanonicalTypeFamily(ctx, family) == typeconv.DatumVecCanonicalTypeFamily {
+		// Use this trick so that we fall into the default case that handles all
+		// datum-backed types.
+		family = typeconv.DatumVecCanonicalTypeFamily + 1
+	}
+	switch family {
 	// {{range .}}
 	case _TYPE_FAMILY:
 		switch ct.Width() {

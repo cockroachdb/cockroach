@@ -249,7 +249,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		Reverse:                         params.Reverse,
 		TableDescriptorModificationTime: tabDesc.GetModificationTime(),
 	}
-	if err := rowenc.InitIndexFetchSpec(&trSpec.FetchSpec, e.planner.ExecCfg().Codec, tabDesc, idx, columnIDs); err != nil {
+	if err := rowenc.InitIndexFetchSpec(e.ctx, &trSpec.FetchSpec, e.planner.ExecCfg().Codec, tabDesc, idx, columnIDs); err != nil {
 		return nil, err
 	}
 	trSpec.LockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)

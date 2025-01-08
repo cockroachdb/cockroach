@@ -93,13 +93,12 @@ func NewOrderedSynchronizer(
 	tuplesToMerge int64,
 ) *OrderedSynchronizer {
 	os := &OrderedSynchronizer{
-		flowCtx:               flowCtx,
-		processorID:           processorID,
-		inputs:                inputs,
-		ordering:              ordering,
-		typs:                  typs,
-		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
-		tuplesToMerge:         tuplesToMerge,
+		flowCtx:       flowCtx,
+		processorID:   processorID,
+		inputs:        inputs,
+		ordering:      ordering,
+		typs:          typs,
+		tuplesToMerge: tuplesToMerge,
 	}
 	os.accountingHelper.Init(allocator, memoryLimit, typs, false /* alwaysReallocate */)
 	return os
@@ -239,6 +238,15 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						outCol := o.outVecs.JSONCols[o.outVecs.ColsMap[i]]
 						outCol.Copy(srcCol, outputIdx, srcRowIdx)
 					}
+				case types.INetFamily:
+					switch o.typs[i].Width() {
+					case -1:
+					default:
+						srcCol := vec.INet()
+						outCol := o.outVecs.INetCols[o.outVecs.ColsMap[i]]
+						v := srcCol.Get(srcRowIdx)
+						outCol.Set(outputIdx, v)
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch o.typs[i].Width() {
 					case -1:
@@ -286,6 +294,7 @@ func (o *OrderedSynchronizer) Init(ctx context.Context) {
 		return
 	}
 	o.Ctx, o.span = execinfra.ProcessorSpan(o.Ctx, o.flowCtx, "ordered sync", o.processorID)
+	o.canonicalTypeFamilies = typeconv.ToCanonicalTypeFamilies(o.Ctx, o.typs)
 	o.inputIndices = make([]int, len(o.inputs))
 	for i := range o.inputs {
 		o.inputs[i].Root.Init(o.Ctx)
@@ -293,7 +302,7 @@ func (o *OrderedSynchronizer) Init(ctx context.Context) {
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {
 		typ := o.typs[o.ordering[i].ColIdx]
-		o.comparators[i] = GetVecComparator(typ, len(o.inputs))
+		o.comparators[i] = GetVecComparator(o.Ctx, typ, len(o.inputs))
 	}
 }
 

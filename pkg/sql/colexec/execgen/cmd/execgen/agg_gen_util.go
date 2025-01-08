@@ -51,7 +51,7 @@ func init() {
 // within contiguous slice of allocators for this aggregate function. 
 func _AGGNAMEOverloadOffset(t *types.T) int {
 	var offset int
-	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, t.Family())
 	// {{range .}}
 	if canonicalTypeFamily == _CANONICAL_TYPE_FAMILY {
 		// {{range .WidthOverloads}}

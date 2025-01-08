@@ -27,7 +27,8 @@ func NewFirstValueOperator(
 	ordering *execinfrapb.Ordering,
 	argIdxs []int,
 ) (colexecop.ClosableOperator, error) {
-	framer := newWindowFramer(args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
+	ctx := args.BufferAllocator.Ctx
+	framer := newWindowFramer(ctx, args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
 	colsToStore := framer.getColsToStore([]int{argIdxs[0]})
 
 	// Allow the direct-access buffer 10% of the available memory. The rest will
@@ -51,7 +52,7 @@ func NewFirstValueOperator(
 		bufferArgIdx: 0, // The arg column is the first column in the buffer.
 	}
 	argType := args.InputTypes[argIdxs[0]]
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, argType.Family()) {
 	case types.BoolFamily:
 		switch argType.Width() {
 		case -1:
@@ -112,6 +113,13 @@ func NewFirstValueOperator(
 		case -1:
 		default:
 			windower := &firstValueJSONWindow{firstValueBase: base}
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
+		}
+	case types.INetFamily:
+		switch argType.Width() {
+		case -1:
+		default:
+			windower := &firstValueINetWindow{firstValueBase: base}
 			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -505,6 +513,44 @@ func (w *firstValueJSONWindow) processBatch(batch coldata.Batch, startIdx, endId
 		}
 		col := vec.JSON()
 		outputCol.Copy(col, i, idx)
+	}
+}
+
+type firstValueINetWindow struct {
+	firstValueBase
+}
+
+var _ bufferedWindower = &firstValueINetWindow{}
+
+// processBatch implements the bufferedWindower interface.
+func (w *firstValueINetWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) {
+	if startIdx >= endIdx {
+		// No processing needs to be done for this portion of the current partition.
+		return
+	}
+	outputVec := batch.ColVec(w.outputColIdx)
+	outputCol := outputVec.INet()
+	outputNulls := outputVec.Nulls()
+	_, _ = outputCol.Get(startIdx), outputCol.Get(endIdx-1)
+
+	for i := startIdx; i < endIdx; i++ {
+		w.framer.next(w.Ctx)
+		requestedIdx := w.framer.frameFirstIdx()
+		if requestedIdx == -1 {
+			// The requested row does not exist.
+			outputNulls.SetNull(i)
+			continue
+		}
+
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, w.bufferArgIdx, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+			outputNulls.SetNull(i)
+			continue
+		}
+		col := vec.INet()
+		val := col.Get(idx)
+		//gcassert:bce
+		outputCol.Set(i, val)
 	}
 }
 

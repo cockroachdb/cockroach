@@ -84,7 +84,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, s.Codec(),
+		ctx, &spec, s.Codec(),
 		desc, desc.GetPrimaryIndex(),
 		[]descpb.ColumnID{desc.PublicColumns()[0].GetID()},
 	); err != nil {

@@ -5345,6 +5345,273 @@ func (ht *HashTable) checkCol(
 				}
 			}
 		}
+	case types.INetFamily:
+		switch probeVec.Type().Width() {
+		case -1:
+		default:
+			switch buildVec.CanonicalTypeFamily() {
+			case types.INetFamily:
+				switch buildVec.Type().Width() {
+				case -1:
+				default:
+					probeKeys := probeVec.INet()
+					buildKeys := buildVec.INet()
+					if probeSel != nil {
+						if probeVec.MaybeHasNulls() {
+							if buildVec.MaybeHasNulls() {
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
+								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
+									probeIdx = probeSel[toCheck]
+									buildIdx = int(keyID - 1)
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if probeIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.differs[toCheck] = true
+											ht.ProbeScratch.foundNull[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(&buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = unique
+								}
+							} else {
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
+									probeIdx = probeSel[toCheck]
+									buildIdx = int(keyID - 1)
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									if probeIsNull {
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.differs[toCheck] = true
+											ht.ProbeScratch.foundNull[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(&buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = unique
+								}
+							}
+						} else {
+							if buildVec.MaybeHasNulls() {
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
+								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
+									probeIdx = probeSel[toCheck]
+									buildIdx = int(keyID - 1)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(&buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = unique
+								}
+							} else {
+								var probeIdx, buildIdx int
+								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
+									probeIdx = probeSel[toCheck]
+									buildIdx = int(keyID - 1)
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(&buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = unique
+								}
+							}
+						}
+					} else {
+						if probeVec.MaybeHasNulls() {
+							if buildVec.MaybeHasNulls() {
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
+								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
+									probeIdx = int(toCheck)
+									buildIdx = int(keyID - 1)
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if probeIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.differs[toCheck] = true
+											ht.ProbeScratch.foundNull[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(&buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = unique
+								}
+							} else {
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
+									probeIdx = int(toCheck)
+									buildIdx = int(keyID - 1)
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									if probeIsNull {
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.differs[toCheck] = true
+											ht.ProbeScratch.foundNull[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(&buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = unique
+								}
+							}
+						} else {
+							if buildVec.MaybeHasNulls() {
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
+								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
+									probeIdx = int(toCheck)
+									buildIdx = int(keyID - 1)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(&buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = unique
+								}
+							} else {
+								var probeIdx, buildIdx int
+								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
+									probeIdx = int(toCheck)
+									buildIdx = int(keyID - 1)
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(&buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = unique
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch probeVec.Type().Width() {
 		case -1:

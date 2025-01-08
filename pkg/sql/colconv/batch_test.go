@@ -6,6 +6,7 @@
 package colconv
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -17,7 +18,7 @@ import (
 func TestVecsToStringWithRowPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	vec := coldata.NewVec(types.String, coldata.BatchSize(), coldata.StandardColumnFactory)
+	vec := coldata.NewVec(context.Background(), types.String, coldata.BatchSize(), coldata.StandardColumnFactory)
 	input := []string{"one", "two", "three"}
 	for i := range input {
 		vec.Bytes().Set(i, []byte(input[i]))

@@ -15,9 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -30,13 +32,16 @@ var (
 	_ duration.Duration
 	_ json.JSON
 	_ colexecerror.StorageError
+	_ execversion.DistSQLVersion
+	_ ipaddr.IPAddr
 )
 
-const anyNotNullNumOverloads = 11
+const anyNotNullNumOverloads = 12
 
 func init() {
 	// Sanity check the hard-coded number of overloads.
 	var numOverloads int
+	numOverloads++
 	numOverloads++
 	numOverloads++
 	numOverloads++
@@ -59,7 +64,7 @@ func init() {
 // within contiguous slice of allocators for this aggregate function.
 func anyNotNullOverloadOffset(t *types.T) int {
 	var offset int
-	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family())
+	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, t.Family())
 	if canonicalTypeFamily == types.BoolFamily {
 		return offset
 	}
@@ -100,6 +105,10 @@ func anyNotNullOverloadOffset(t *types.T) int {
 		return offset
 	}
 	offset += 1
+	if canonicalTypeFamily == types.INetFamily {
+		return offset
+	}
+	offset += 1
 	if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 		return offset
 	}
@@ -112,7 +121,7 @@ func newAnyNotNullOrderedAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) (aggregateFuncAlloc, error) {
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
@@ -164,6 +173,12 @@ func newAnyNotNullOrderedAggAlloc(
 		case -1:
 		default:
 			return &anyNotNullJSONOrderedAggAlloc{aggAllocBase: allocBase}, nil
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &anyNotNullINetOrderedAggAlloc{aggAllocBase: allocBase}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -2219,6 +2234,205 @@ func (a *anyNotNullJSONOrderedAggAlloc) newAggFunc() AggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(anyNotNullJSONOrderedAggSliceOverhead + sizeOfAnyNotNullJSONOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullJSONOrderedAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
+// anyNotNullINetOrderedAgg implements the ANY_NOT_NULL aggregate, returning the
+// first non-null value in the input column.
+type anyNotNullINetOrderedAgg struct {
+	orderedAggregateFuncBase
+	col                         coldata.IPAddrs
+	curAgg                      ipaddr.IPAddr
+	foundNonNullForCurrentGroup bool
+}
+
+var _ AggregateFunc = &anyNotNullINetOrderedAgg{}
+
+func (a *anyNotNullINetOrderedAgg) SetOutput(vec *coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.INet()
+}
+
+func (a *anyNotNullINetOrderedAgg) Compute(
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+) {
+
+	var oldCurAggSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.INet(), vec.Nulls()
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		groups := a.groups
+		col := col
+		if sel == nil {
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
+			if nulls.MaybeHasNulls() {
+				for i := startIdx; i < endIdx; i++ {
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If this is a new group, check if any non-nulls have been found for the
+							// current group.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = val
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for i := startIdx; i < endIdx; i++ {
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If this is a new group, check if any non-nulls have been found for the
+							// current group.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = val
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			}
+		} else {
+			sel = sel[startIdx:endIdx]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If this is a new group, check if any non-nulls have been found for the
+							// current group.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = val
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for _, i := range sel {
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If this is a new group, check if any non-nulls have been found for the
+							// current group.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = val
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			}
+		}
+	},
+	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *anyNotNullINetOrderedAgg) Flush(outputIdx int) {
+	// If we haven't found any non-nulls for this group so far, the output for
+	// this group should be null.
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	col := a.col
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		col.Set(outputIdx, a.curAgg)
+	}
+}
+
+func (a *anyNotNullINetOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
+type anyNotNullINetOrderedAggAlloc struct {
+	aggAllocBase
+	aggFuncs []anyNotNullINetOrderedAgg
+}
+
+var _ aggregateFuncAlloc = &anyNotNullINetOrderedAggAlloc{}
+
+const sizeOfAnyNotNullINetOrderedAgg = int64(unsafe.Sizeof(anyNotNullINetOrderedAgg{}))
+const anyNotNullINetOrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullINetOrderedAgg{}))
+
+func (a *anyNotNullINetOrderedAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(anyNotNullINetOrderedAggSliceOverhead + sizeOfAnyNotNullINetOrderedAgg*a.allocSize)
+		a.aggFuncs = make([]anyNotNullINetOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator

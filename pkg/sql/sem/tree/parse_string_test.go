@@ -6,6 +6,7 @@
 package tree_test
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -46,6 +48,8 @@ func vecRow(v *coldata.Vec, i int) any {
 		return v.Timestamp()[i]
 	case types.IntervalFamily:
 		return v.Interval().Get(i)
+	case types.INetFamily:
+		return v.INet().Get(i)
 	default:
 		return v.Datum().Get(i)
 	}
@@ -59,7 +63,7 @@ func TestParseStringTypeGamut(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	factory := coldataext.NewExtendedColumnFactory(evalCtx)
-	b := coldata.NewMemBatchWithCapacity(types.Scalar, 2, factory)
+	b := coldata.NewMemBatchWithCapacity(context.Background(), types.Scalar, 2, factory)
 	vecHandlers := make([]tree.ValueHandler, len(types.Scalar))
 	rng, _ := randutil.NewTestRand()
 	for i, typ := range types.Scalar {
@@ -72,7 +76,7 @@ func TestParseStringTypeGamut(t *testing.T) {
 		}
 		d, _, err1 := tree.ParseAndRequireString(typ, s, evalCtx)
 		vecHandlers[i] = coldataext.MakeVecHandler(b.ColVec(i))
-		err2 := tree.ParseAndRequireStringHandler(typ, s, evalCtx, vecHandlers[i], &evalCtx.ParseHelper)
+		err2 := tree.ParseAndRequireStringHandler(context.Background(), typ, s, evalCtx, vecHandlers[i], &evalCtx.ParseHelper)
 		require.Equal(t, err1, err2)
 		if err1 == nil {
 			if d.ResolvedType().Family() == types.FloatFamily {
@@ -81,7 +85,7 @@ func TestParseStringTypeGamut(t *testing.T) {
 					continue
 				}
 			}
-			converter := colconv.GetDatumToPhysicalFn(typ)
+			converter := colconv.GetDatumToPhysicalFn(context.Background(), typ)
 			coldata.SetValueAt(b.ColVec(i), converter(d), 1 /* rowIdx */)
 			// ParseAndRequireStringHandler set the first row and second was converted datum,
 			// test that they are equal.
@@ -126,7 +130,7 @@ func TestParseStringHandlerErrors(t *testing.T) {
 		_, _, err1 := tree.ParseAndRequireString(tc.t, tc.val, evalCtx)
 		require.Errorf(t, err1, "parsing `%s` as `%v` didn't error as expected", tc.val, tc.t)
 		vh := &anyHandler{}
-		err2 := tree.ParseAndRequireStringHandler(tc.t, tc.val, evalCtx, vh, &evalCtx.ParseHelper)
+		err2 := tree.ParseAndRequireStringHandler(context.Background(), tc.t, tc.val, evalCtx, vh, &evalCtx.ParseHelper)
 		require.Equal(t, err1.Error(), err2.Error())
 	}
 }
@@ -153,6 +157,7 @@ func (a *anyHandler) Duration(d duration.Duration) { a.val = d }
 func (a *anyHandler) JSON(j json.JSON)             { a.val = j }
 func (a *anyHandler) String(s string)              { a.val = s }
 func (a *anyHandler) TimestampTZ(t time.Time)      { a.val = t }
+func (a *anyHandler) INet(i ipaddr.IPAddr)         { a.val = i }
 func (a *anyHandler) Reset()                       {}
 
 type benchCase struct {
@@ -191,14 +196,14 @@ func BenchmarkParseString(b *testing.B) {
 	for col, tc := range benchCases {
 		b.Run("vec/"+tc.typ.Name(), func(b *testing.B) {
 			var vhs = make([]tree.ValueHandler, len(benchCases))
-			ba := coldata.NewMemBatchWithCapacity(typs, numRows, factory)
+			ba := coldata.NewMemBatchWithCapacity(context.Background(), typs, numRows, factory)
 			for i := range benchCases {
 				vhs[i] = coldataext.MakeVecHandler(ba.ColVec(i))
 			}
 			b.ResetTimer()
 			rowCount := 0
 			for i := 0; i < b.N; i++ {
-				err := tree.ParseAndRequireStringHandler(tc.typ, tc.str, evalCtx, vhs[col], &evalCtx.ParseHelper)
+				err := tree.ParseAndRequireStringHandler(context.Background(), tc.typ, tc.str, evalCtx, vhs[col], &evalCtx.ParseHelper)
 				require.NoError(b, err)
 				rowCount++
 				if rowCount == numRows {

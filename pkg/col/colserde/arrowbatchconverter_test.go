@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,7 +44,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	typs, b := randomBatch(testAllocator)
-	c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
+	c, err := colserde.NewArrowBatchConverter(context.Background(), typs, colserde.BiDirectional, testMemAcc)
 	require.NoError(t, err)
 	defer c.Close(context.Background())
 
@@ -54,7 +55,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	arrowData, err := c.BatchToArrow(context.Background(), b)
 	require.NoError(t, err)
 	actual := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
-	require.NoError(t, c.ArrowToBatch(arrowData, b.Length(), actual))
+	require.NoError(t, c.ArrowToBatch(context.Background(), arrowData, b.Length(), actual))
 
 	coldata.AssertEquivalentBatches(t, expected, actual)
 }
@@ -79,7 +80,7 @@ func roundTripBatch(
 	if err != nil {
 		return err
 	}
-	return c.ArrowToBatch(arrowDataOut, batchLength, dest)
+	return c.ArrowToBatch(context.Background(), arrowDataOut, batchLength, dest)
 }
 
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
@@ -97,10 +98,10 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 			typs, src = randomBatch(testAllocator)
 		}
 		dest := testAllocator.NewMemBatchWithMaxCapacity(typs)
-		c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
+		c, err := colserde.NewArrowBatchConverter(context.Background(), typs, colserde.BiDirectional, testMemAcc)
 		require.NoError(t, err)
 		defer c.Close(context.Background())
-		r, err := colserde.NewRecordBatchSerializer(typs)
+		r, err := colserde.NewRecordBatchSerializer(context.Background(), typs)
 		require.NoError(t, err)
 
 		// Reuse the same destination batch as well as the ArrowBatchConverter
@@ -164,6 +165,7 @@ func runConversionBenchmarks(
 		{t: types.Int, numBytes: 8 * int64(coldata.BatchSize())},
 		{t: types.Timestamp, numBytes: 3 * 8 * int64(coldata.BatchSize())},
 		{t: types.Interval, numBytes: 3 * 8 * int64(coldata.BatchSize())},
+		{t: types.INet, numBytes: memsize.IPAddr * int64(coldata.BatchSize())},
 	} {
 		typ := tc.t
 		args := coldatatestutils.RandomVecArgs{Rand: rng, BytesFixedLength: tc.bytesFixedLength}
@@ -218,7 +220,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		b,
 		"BatchToArrow",
 		func(b *testing.B, batch coldata.Batch, typ *types.T) {
-			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional, testMemAcc)
+			c, err := colserde.NewArrowBatchConverter(ctx, []*types.T{typ}, colserde.BiDirectional, testMemAcc)
 			require.NoError(b, err)
 			defer c.Close(ctx)
 			var data []array.Data
@@ -235,7 +237,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		},
 		"ArrowToBatch",
 		func(b *testing.B, batch coldata.Batch, typ *types.T) {
-			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional, testMemAcc)
+			c, err := colserde.NewArrowBatchConverter(ctx, []*types.T{typ}, colserde.BiDirectional, testMemAcc)
 			require.NoError(b, err)
 			defer c.Close(ctx)
 			data, err := c.BatchToArrow(ctx, batch)
@@ -249,7 +251,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 				copy(dataCopy, data)
 				// Using require.NoError here causes large enough allocations to
 				// affect the result.
-				if err := c.ArrowToBatch(dataCopy, batch.Length(), result); err != nil {
+				if err := c.ArrowToBatch(ctx, dataCopy, batch.Length(), result); err != nil {
 					b.Fatal(err)
 				}
 				if result.Width() != 1 {

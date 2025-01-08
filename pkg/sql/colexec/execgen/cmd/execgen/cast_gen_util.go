@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -88,6 +89,8 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Int, types.Int4, getIntToIntCastFunc(anyWidth, 32)},
 	{types.Int, types.String, intToString},
 
+	{types.INet, types.String, inetToString},
+
 	{types.Interval, types.String, intervalToString},
 
 	{types.Jsonb, types.String, jsonToString},
@@ -98,6 +101,7 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.String, types.Decimal, stringToDecimal},
 	{types.String, types.AnyEnum, stringToEnum},
 	{types.String, types.Float, stringToFloat},
+	{types.String, types.INet, stringToINet},
 	{types.String, types.Int2, getStringToIntCastFunc(16)},
 	{types.String, types.Int4, getStringToIntCastFunc(32)},
 	{types.String, types.Int, getStringToIntCastFunc(anyWidth)},
@@ -114,6 +118,10 @@ var nativeCastInfos = []supportedNativeCastInfo{
 
 	{types.Uuid, types.String, uuidToString},
 }
+
+// TODO(yuzefovich): we could optimize casts to the String type by avoiding some
+// copies - we often operate on 'string' value, but '[]byte' value is stored in
+// the vector, and a copy is made when setting the value on the vector.
 
 type supportedNativeCastInfo struct {
 	from *types.T
@@ -364,6 +372,18 @@ func intToString(to, from, _, toType, _ string) string {
 	return toString(fmt.Sprintf(convStr, to, from, toType), to, toType)
 }
 
+func inetToString(to, from, _, toType, _ string) string {
+	convStr := `
+		_s := %[2]s.String()
+		// Ensure the string has a "/mask" suffix.
+		if strings.IndexByte(_s, '/') == -1 {
+			_s += "/" + strconv.Itoa(int(%[2]s.Mask))
+		}
+		%[1]s = []byte(_s)
+`
+	return toString(fmt.Sprintf(convStr, to, from), to, toType)
+}
+
 func intervalToString(to, from, evalCtx, toType, buf string) string {
 	convStr := `
 		dcc := %[3]s.SessionData().DataConversionConfig
@@ -459,6 +479,16 @@ func stringToFloat(to, from, _, toType, _ string) string {
 		}
 	`
 	return fmt.Sprintf(convStr, to, from, toType)
+}
+
+func stringToINet(to, from, _, _, _ string) string {
+	convStr := `
+		_err := ipaddr.ParseINet(string(%[2]s), &%[1]s)
+		if _err != nil {
+			colexecerror.ExpectedError(_err)
+		}
+`
+	return fmt.Sprintf(convStr, to, from)
 }
 
 func getStringToIntCastFunc(toIntWidth int32) castFunc {
@@ -750,7 +780,7 @@ type castBetweenDatumsTmplInfo struct {
 }
 
 func (i castFromWidthTmplInfo) VecMethod() string {
-	return toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(i.fromType.Family()), i.Width)
+	return toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, i.fromType.Family()), i.Width)
 }
 
 func getTypeName(typ *types.T) string {
@@ -772,7 +802,7 @@ func (i castFromWidthTmplInfo) TypeName() string {
 }
 
 func (i castFromWidthTmplInfo) Sliceable() bool {
-	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.fromType.Family()))
+	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, i.fromType.Family()))
 }
 
 func (i castToWidthTmplInfo) TypeName() string {
@@ -784,7 +814,7 @@ func (i castToWidthTmplInfo) Cast(to, from, evalCtx, toType, buf string) string 
 }
 
 func (i castToWidthTmplInfo) Sliceable() bool {
-	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.toType.Family()))
+	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, i.toType.Family()))
 }
 
 func (i castDatumTmplInfo) VecMethod() string {
@@ -808,7 +838,7 @@ func (i castDatumToWidthTmplInfo) Cast(to, from, evalCtx, toType, buf string) st
 }
 
 func (i castDatumToWidthTmplInfo) Sliceable() bool {
-	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(i.toType.Family()))
+	return sliceable(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, i.toType.Family()))
 }
 
 func (i castBetweenDatumsTmplInfo) TypeName() string {
@@ -929,8 +959,8 @@ func getCastFromTmplInfos() castTmplInfo {
 					toFamilyTmplInfo.Widths = append(toFamilyTmplInfo.Widths, castToWidthTmplInfo{
 						toType:    castInfo.to,
 						Width:     getWidth(castInfo.to),
-						VecMethod: toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(castInfo.to.Family()), getWidth(castInfo.to)),
-						GoType:    toPhysicalRepresentation(typeconv.TypeFamilyToCanonicalTypeFamily(castInfo.to.Family()), getWidth(castInfo.to)),
+						VecMethod: toVecMethod(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, castInfo.to.Family()), getWidth(castInfo.to)),
+						GoType:    toPhysicalRepresentation(typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, castInfo.to.Family()), getWidth(castInfo.to)),
 						CastFn:    castInfo.cast,
 					})
 				}
@@ -975,7 +1005,7 @@ func getCastFromTmplInfos() castTmplInfo {
 		for toTypeIdx := toFamilyStartIdx; toTypeIdx < toFamilyEndIdx; toTypeIdx++ {
 			toType := nativeTypes[toTypeIdx]
 			width := getWidth(toType)
-			canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family())
+			canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, toType.Family())
 			physicalRepresentation := toPhysicalRepresentation(canonicalTypeFamily, width)
 			datumTmplInfo.Widths = append(datumTmplInfo.Widths, castDatumToWidthTmplInfo{
 				toType:    toType,

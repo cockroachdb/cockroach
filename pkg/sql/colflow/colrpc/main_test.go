@@ -6,7 +6,6 @@
 package colrpc
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -26,12 +26,13 @@ var (
 	// and a memory account bound to it for use in tests.
 	testMemMonitor *mon.BytesMonitor
 	testMemAcc     *mon.BoundAccount
+
+	ctx = execversion.TestingWithLatestCtx
 )
 
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	os.Exit(func() int {
-		ctx := context.Background()
 		testMemMonitor = execinfra.NewTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()

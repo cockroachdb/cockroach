@@ -22,7 +22,7 @@ columns:
   - c
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 106,
   "table_name": "t",
   "index_id": 1,
@@ -79,7 +79,7 @@ columns:
   - b
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 106,
   "table_name": "t",
   "index_id": 1,
@@ -124,7 +124,7 @@ columns:
   - b
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 106,
   "table_name": "t",
   "index_id": 2,
@@ -186,7 +186,7 @@ columns:
   - d
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 106,
   "table_name": "t",
   "index_id": 3,
@@ -250,7 +250,7 @@ columns:
   - c
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 106,
   "table_name": "t",
   "index_id": 4,
@@ -324,7 +324,7 @@ columns:
   - d
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 106,
   "table_name": "t",
   "index_id": 5,
@@ -425,7 +425,7 @@ columns:
   - a
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 107,
   "table_name": "fam",
   "index_id": 1,
@@ -479,7 +479,7 @@ columns:
   - a
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 107,
   "table_name": "fam",
   "index_id": 2,
@@ -544,7 +544,7 @@ columns:
   - a
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 107,
   "table_name": "fam",
   "index_id": 3,
@@ -609,7 +609,7 @@ columns:
   - a
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 107,
   "table_name": "fam",
   "index_id": 4,
@@ -674,7 +674,7 @@ columns:
   - a
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 107,
   "table_name": "fam",
   "index_id": 5,
@@ -750,7 +750,7 @@ columns:
  - k
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 108,
   "table_name": "inv",
   "index_id": 2,
@@ -813,7 +813,7 @@ columns:
  - k
 ----
 {
-  "version": 1,
+  "version": 2,
   "table_id": 108,
   "table_name": "inv",
   "index_id": 3,

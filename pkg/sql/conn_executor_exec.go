@@ -314,7 +314,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx, sp = tracing.ChildSpan(ctx, "sql query")
 	// TODO(andrei): Consider adding the placeholders as tags too.
 	sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
-	ctx = withStatement(ctx, ast)
 	defer sp.Finish()
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
@@ -1224,7 +1223,6 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		ctx, sp = tracing.ChildSpan(ctx, "sql query")
 		// TODO(andrei): Consider adding the placeholders as tags too.
 		sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
-		ctx = withStatement(ctx, vars.ast)
 		if portal.isPausable() {
 			portal.pauseInfo.execStmtInOpenState.spCtx = ctx
 		}
@@ -3261,12 +3259,16 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	distSQLProhibitedErr error,
 ) (topLevelQueryStats, error) {
 	defer planner.curPlan.savePlanInfo()
-	recv := MakeDistSQLReceiver(
-		ctx, res, stmtType,
+	var recv *DistSQLReceiver
+	recv, ctx = MakeDistSQLReceiver(
+		ctx,
+		res,
+		stmtType,
 		ex.server.cfg.RangeDescriptorCache,
 		planner.txn,
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
+		ex.server.cfg.Settings,
 	)
 	recv.measureClientTime = planner.instrumentation.ShouldCollectExecStats()
 	recv.progressAtomic = progressAtomic
@@ -3306,7 +3308,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 				return factoryEvalCtx
 			}
 		}
-		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
+		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(evalCtx, planCtx, planner, recv, evalCtxFactory)
 	}
 	return recv.stats, err
 }

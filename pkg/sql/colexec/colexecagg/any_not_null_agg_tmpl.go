@@ -25,9 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -40,6 +42,8 @@ var (
 	_ duration.Duration
 	_ json.JSON
 	_ colexecerror.StorageError
+	_ execversion.DistSQLVersion
+	_ ipaddr.IPAddr
 )
 
 // {{/*
@@ -63,7 +67,7 @@ const _ALLOC_CODE = 0
 
 // {{if eq "_AGGKIND" "Ordered"}}
 
-const anyNotNullNumOverloads = 11
+const anyNotNullNumOverloads = 12
 
 // {{end}}
 
@@ -73,7 +77,7 @@ func newAnyNotNull_AGGKINDAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) (aggregateFuncAlloc, error) {
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {

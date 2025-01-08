@@ -58,7 +58,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 	}
 
 	var builder array.Builder
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(context.Background(), t.Family()) {
 	case types.BoolFamily:
 		builder = array.NewBooleanBuilder(memory.DefaultAllocator)
 		data := make([]bool, n)
@@ -218,6 +218,11 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			data[i] = bytes
 		}
 		builder.(*array.BinaryBuilder).AppendValues(data, valid)
+	case types.INetFamily:
+		panic(
+			"INetFamily type is unsupported because it has custom serialization " +
+				"logic that we can't easily replicate with array builders",
+		)
 	case typeconv.DatumVecCanonicalTypeFamily:
 		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
 		data := make([][]byte, n)
@@ -247,7 +252,7 @@ func TestRecordBatchSerializer(t *testing.T) {
 	// Serializing and Deserializing an invalid schema is undefined.
 
 	t.Run("SerializeDifferentColumnLengths", func(t *testing.T) {
-		s, err := colserde.NewRecordBatchSerializer([]*types.T{types.Int, types.Int})
+		s, err := colserde.NewRecordBatchSerializer(context.Background(), []*types.T{types.Int, types.Int})
 		require.NoError(t, err)
 		b := array.NewInt64Builder(memory.DefaultAllocator)
 		b.AppendValues([]int64{1, 2}, nil /* valid */)
@@ -279,10 +284,15 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 
 	for i := range typs {
 		typs[i] = randgen.RandType(rng)
+		// Skip INetFamily because it has custom serialization logic that we
+		// can't easily replicate with array builders.
+		for typs[i].Family() == types.INetFamily {
+			typs[i] = randgen.RandType(rng)
+		}
 		data[i] = *randomDataFromType(rng, typs[i], dataLen, nullProbability)
 	}
 
-	s, err := colserde.NewRecordBatchSerializer(typs)
+	s, err := colserde.NewRecordBatchSerializer(context.Background(), typs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,10 +354,10 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 	}
 	src.SetLength(coldata.BatchSize())
 
-	c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
+	c, err := colserde.NewArrowBatchConverter(context.Background(), typs, colserde.BiDirectional, testMemAcc)
 	require.NoError(t, err)
 	defer c.Close(context.Background())
-	r, err := colserde.NewRecordBatchSerializer(typs)
+	r, err := colserde.NewRecordBatchSerializer(context.Background(), typs)
 	require.NoError(t, err)
 	require.NoError(t, roundTripBatch(src, dest, c, r))
 
@@ -375,7 +385,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 		deserializedData []array.Data
 	)
 
-	s, err := colserde.NewRecordBatchSerializer(typs)
+	s, err := colserde.NewRecordBatchSerializer(context.Background(), typs)
 	require.NoError(b, err)
 
 	for _, dataLen := range []int{1, 16, 256, 2048, 4096} {

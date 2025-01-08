@@ -17,6 +17,8 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 import "sql/catalog/descpb/structured.proto";
 import "gogoproto/gogo.proto";
 
+// TODO(yuzefovich): this can be removed once compatibility with 24.3 is no
+// longer needed.
 enum SketchType {
   // This is the github.com/axiomhq/hyperloglog binary format (as of commit
   // 730eea1) for a sketch with precision 14. Values are encoded using their key

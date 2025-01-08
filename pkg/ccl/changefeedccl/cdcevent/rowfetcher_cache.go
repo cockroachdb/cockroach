@@ -241,6 +241,7 @@ var ErrUnwatchedFamily = errors.New("watched table but unwatched family")
 // RowFetcherForColumnFamily returns row.Fetcher for the specified column family.
 // Returns ErrUnwatchedFamily error if family is not watched.
 func (c *rowFetcherCache) RowFetcherForColumnFamily(
+	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	family descpb.FamilyID,
 	sysCols []descpb.ColumnDescriptor,
@@ -297,7 +298,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	}
 
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), relevantColumns,
+		ctx, &spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), relevantColumns,
 	); err != nil {
 		return nil, nil, err
 	}

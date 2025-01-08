@@ -627,6 +627,64 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									}
 								}
 							}
+						case types.INetFamily:
+							switch b.left.types[colIdx].Width() {
+							case -1:
+							default:
+								srcCol := src.INet()
+								outCol := out.INet()
+								if leftNumRepeats == 1 {
+									// Loop over every tuple in the current batch.
+									for bs.curSrcStartIdx < leftSrcEndIdx && outStartIdx < outputCapacity {
+										// Repeat each tuple one time.
+										_ = true
+										srcStartIdx = sel[bs.curSrcStartIdx]
+										if srcNulls.NullAt(srcStartIdx) {
+											outNulls.SetNull(outStartIdx)
+										} else {
+											val := srcCol.Get(srcStartIdx)
+											outCol.Set(outStartIdx, val)
+										}
+										outStartIdx++
+										bs.curSrcStartIdx++
+									}
+								} else {
+									// Loop over every tuple in the current batch.
+									for bs.curSrcStartIdx < leftSrcEndIdx && outStartIdx < outputCapacity {
+										// Repeat each row leftNumRepeats times.
+										_ = true
+										srcStartIdx = sel[bs.curSrcStartIdx]
+										toAppend := leftNumRepeats - bs.numRepeatsIdx
+										if outStartIdx+toAppend > outputCapacity {
+											// We don't have enough space to repeat the current
+											// value the required number of times, so we'll have
+											// to continue from here on the next call.
+											toAppend = outputCapacity - outStartIdx
+											bs.numRepeatsIdx += toAppend
+										} else {
+											// We fully processed the current tuple for the
+											// current column, and before moving on to the next
+											// one, we need to reset numRepeatsIdx (so that the
+											// next tuple would be repeated leftNumRepeats
+											// times).
+											bs.curSrcStartIdx++
+											bs.numRepeatsIdx = 0
+										}
+										if srcNulls.NullAt(srcStartIdx) {
+											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
+											for i := 0; i < toAppend; i++ {
+												//gcassert:bce
+												outCol.Set(i, val)
+											}
+										}
+										outStartIdx += toAppend
+									}
+								}
+							}
 						case typeconv.DatumVecCanonicalTypeFamily:
 							switch b.left.types[colIdx].Width() {
 							case -1:
@@ -1300,6 +1358,64 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									}
 								}
 							}
+						case types.INetFamily:
+							switch b.left.types[colIdx].Width() {
+							case -1:
+							default:
+								srcCol := src.INet()
+								outCol := out.INet()
+								if leftNumRepeats == 1 {
+									// Loop over every tuple in the current batch.
+									for bs.curSrcStartIdx < leftSrcEndIdx && outStartIdx < outputCapacity {
+										// Repeat each tuple one time.
+										_ = true
+										srcStartIdx = bs.curSrcStartIdx
+										if srcNulls.NullAt(srcStartIdx) {
+											outNulls.SetNull(outStartIdx)
+										} else {
+											val := srcCol.Get(srcStartIdx)
+											outCol.Set(outStartIdx, val)
+										}
+										outStartIdx++
+										bs.curSrcStartIdx++
+									}
+								} else {
+									// Loop over every tuple in the current batch.
+									for bs.curSrcStartIdx < leftSrcEndIdx && outStartIdx < outputCapacity {
+										// Repeat each row leftNumRepeats times.
+										_ = true
+										srcStartIdx = bs.curSrcStartIdx
+										toAppend := leftNumRepeats - bs.numRepeatsIdx
+										if outStartIdx+toAppend > outputCapacity {
+											// We don't have enough space to repeat the current
+											// value the required number of times, so we'll have
+											// to continue from here on the next call.
+											toAppend = outputCapacity - outStartIdx
+											bs.numRepeatsIdx += toAppend
+										} else {
+											// We fully processed the current tuple for the
+											// current column, and before moving on to the next
+											// one, we need to reset numRepeatsIdx (so that the
+											// next tuple would be repeated leftNumRepeats
+											// times).
+											bs.curSrcStartIdx++
+											bs.numRepeatsIdx = 0
+										}
+										if srcNulls.NullAt(srcStartIdx) {
+											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
+											for i := 0; i < toAppend; i++ {
+												//gcassert:bce
+												outCol.Set(i, val)
+											}
+										}
+										outStartIdx += toAppend
+									}
+								}
+							}
 						case typeconv.DatumVecCanonicalTypeFamily:
 							switch b.left.types[colIdx].Width() {
 							case -1:
@@ -1681,6 +1797,33 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										outCol.Copy(srcCol, outStartIdx, bs.curSrcStartIdx)
+									}
+								} else {
+									out.Copy(
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: bs.curSrcStartIdx,
+											SrcEndIdx:   bs.curSrcStartIdx + toAppend,
+										},
+									)
+								}
+							}
+						case types.INetFamily:
+							switch b.right.types[colIdx].Width() {
+							case -1:
+							default:
+								srcCol := src.INet()
+								outCol := out.INet()
+
+								// Optimization in the case that group length is 1, use assign
+								// instead of copy.
+								if toAppend == 1 {
+									if srcNulls.NullAt(bs.curSrcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										v := srcCol.Get(bs.curSrcStartIdx)
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(

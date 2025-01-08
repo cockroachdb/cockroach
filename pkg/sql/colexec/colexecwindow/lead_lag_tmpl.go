@@ -67,7 +67,7 @@ func New_UPPERCASE_NAMEOperator(
 		defaultIdx:   defaultIdx,
 	}
 	argType := args.InputTypes[argIdx]
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(args.BufferAllocator.Ctx, argType.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch argType.Width() {

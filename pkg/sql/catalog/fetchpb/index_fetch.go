@@ -17,8 +17,9 @@ import (
 // probably make keyside and valueside not depend on sql/catalog and then pull
 // them out of the sql tree altogether.
 
-// IndexFetchSpecVersionInitial is the initial IndexFetchSpec version.
-const IndexFetchSpecVersionInitial = 1
+const IndexFetchSpecLatestVersion = IndexFetchSpecNativeINetVersion
+
+const IndexFetchSpecNativeINetVersion = 2
 
 // KeyColumns returns the key columns in the index, excluding any key suffix
 // columns.

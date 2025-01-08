@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -44,6 +45,8 @@ var (
 	_ telemetry.Counter
 	_ json.JSON
 	_ = coldataext.CompareDatum
+	_ = encoding.UnsafeConvertStringToBytes
+	_ ipaddr.IPAddr
 )
 
 type projBitandInt16Int16ConstOp struct {
@@ -705,6 +708,92 @@ func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
 
 					projCol[i] = int64(arg) & int64(p.constArg)
 
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projBitandINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projBitandINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.And(&p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.And(&p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.And(&p.constArg)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.And(&p.constArg)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
 				}
 			}
 		}
@@ -1482,6 +1571,92 @@ func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
 
 					projCol[i] = int64(arg) | int64(p.constArg)
 
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projBitorINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projBitorINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Or(&p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Or(&p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Or(&p.constArg)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Or(&p.constArg)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
 				}
 			}
 		}
@@ -3189,6 +3364,92 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 	return batch
 }
 
+type projPlusInt16INetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projPlusInt16INetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Int16s
+	col = vec.Int16()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = p.constArg.Add(int64(arg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = p.constArg.Add(int64(arg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = p.constArg.Add(int64(arg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = p.constArg.Add(int64(arg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			}
+		}
+	})
+	return batch
+}
+
 type projPlusInt16DatumConstOp struct {
 	colexecutils.BinaryOverloadHelper
 	projConstOpBase
@@ -3712,6 +3973,92 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 	return batch
 }
 
+type projPlusInt32INetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projPlusInt32INetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Int32s
+	col = vec.Int32()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = p.constArg.Add(int64(arg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = p.constArg.Add(int64(arg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = p.constArg.Add(int64(arg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = p.constArg.Add(int64(arg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			}
+		}
+	})
+	return batch
+}
+
 type projPlusInt32DatumConstOp struct {
 	colexecutils.BinaryOverloadHelper
 	projConstOpBase
@@ -4228,6 +4575,92 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 
 					}
 
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projPlusInt64INetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projPlusInt64INetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Int64s
+	col = vec.Int64()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = p.constArg.Add(int64(arg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = p.constArg.Add(int64(arg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = p.constArg.Add(int64(arg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = p.constArg.Add(int64(arg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
 				}
 			}
 		}
@@ -4790,6 +5223,264 @@ func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
 					}
 					projCol.Set(i, _res)
 
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projPlusINetInt16ConstOp struct {
+	projConstOpBase
+	constArg int16
+}
+
+func (p projPlusINetInt16ConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Add(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Add(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Add(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Add(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projPlusINetInt32ConstOp struct {
+	projConstOpBase
+	constArg int32
+}
+
+func (p projPlusINetInt32ConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Add(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Add(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Add(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Add(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projPlusINetInt64ConstOp struct {
+	projConstOpBase
+	constArg int64
+}
+
+func (p projPlusINetInt64ConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Add(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Add(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Add(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Add(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
 				}
 			}
 		}
@@ -8044,6 +8735,350 @@ func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
 						colexecerror.ExpectedError(_err)
 					}
 					projCol.Set(i, _j)
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projMinusINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projMinusINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Int64()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.SubIPAddr(&p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.SubIPAddr(&p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.SubIPAddr(&p.constArg)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.SubIPAddr(&p.constArg)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projMinusINetInt16ConstOp struct {
+	projConstOpBase
+	constArg int16
+}
+
+func (p projMinusINetInt16ConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Sub(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Sub(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Sub(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Sub(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projMinusINetInt32ConstOp struct {
+	projConstOpBase
+	constArg int32
+}
+
+func (p projMinusINetInt32ConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Sub(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Sub(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Sub(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Sub(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projMinusINetInt64ConstOp struct {
+	projConstOpBase
+	constArg int64
+}
+
+func (p projMinusINetInt64ConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.INet()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Sub(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						var err error
+						projCol[i], err = arg.Sub(int64(p.constArg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Sub(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					var err error
+					projCol[i], err = arg.Sub(int64(p.constArg))
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
 				}
 			}
 		}
@@ -20584,6 +21619,72 @@ func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
 	return batch
 }
 
+type projLShiftINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projLShiftINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Bool()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = arg.ContainedBy(&p.constArg)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+						projCol[i] = arg.ContainedBy(&p.constArg)
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = arg.ContainedBy(&p.constArg)
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+					projCol[i] = arg.ContainedBy(&p.constArg)
+				}
+			}
+		}
+	})
+	return batch
+}
+
 type projLShiftDatumInt16ConstOp struct {
 	colexecutils.BinaryOverloadHelper
 	projConstOpBase
@@ -21822,6 +22923,72 @@ func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
 						projCol[i] = int64(arg) >> int64(p.constArg)
 					}
 
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projRShiftINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projRShiftINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Bool()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = arg.Contains(&p.constArg)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+						projCol[i] = arg.Contains(&p.constArg)
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+					projCol[i] = arg.Contains(&p.constArg)
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+					projCol[i] = arg.Contains(&p.constArg)
 				}
 			}
 		}
@@ -27328,6 +28495,96 @@ func (p projEQJSONJSONConstOp) Next() coldata.Batch {
 	return batch
 }
 
+type projEQINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projEQINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Bool()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult == 0
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult == 0
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult == 0
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult == 0
+					}
+
+				}
+			}
+		}
+	})
+	return batch
+}
+
 type projEQDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
@@ -31338,6 +32595,96 @@ func (p projNEJSONJSONConstOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
+						projCol[i] = cmpResult != 0
+					}
+
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projNEINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projNEINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Bool()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult != 0
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult != 0
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult != 0
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
 						projCol[i] = cmpResult != 0
 					}
 
@@ -35368,6 +36715,96 @@ func (p projLTJSONJSONConstOp) Next() coldata.Batch {
 	return batch
 }
 
+type projLTINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projLTINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Bool()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult < 0
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult < 0
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult < 0
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult < 0
+					}
+
+				}
+			}
+		}
+	})
+	return batch
+}
+
 type projLTDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
@@ -39378,6 +40815,96 @@ func (p projLEJSONJSONConstOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
+						projCol[i] = cmpResult <= 0
+					}
+
+				}
+			}
+		}
+	})
+	return batch
+}
+
+type projLEINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projLEINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Bool()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult <= 0
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult <= 0
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult <= 0
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
 						projCol[i] = cmpResult <= 0
 					}
 
@@ -43408,6 +44935,96 @@ func (p projGTJSONJSONConstOp) Next() coldata.Batch {
 	return batch
 }
 
+type projGTINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projGTINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Bool()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult > 0
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult > 0
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult > 0
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult > 0
+					}
+
+				}
+			}
+		}
+	})
+	return batch
+}
+
 type projGTDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
@@ -47428,6 +49045,96 @@ func (p projGEJSONJSONConstOp) Next() coldata.Batch {
 	return batch
 }
 
+type projGEINetINetConstOp struct {
+	projConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p projGEINetINetConstOp) Next() coldata.Batch {
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.IPAddrs
+	col = vec.INet()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		projCol := projVec.Bool()
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult >= 0
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						{
+							var cmpResult int
+							cmpResult = arg.Compare(&p.constArg)
+							projCol[i] = cmpResult >= 0
+						}
+
+					}
+				}
+			}
+			projVec.SetNulls(_outNulls.Or(*colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult >= 0
+					}
+
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						projCol[i] = cmpResult >= 0
+					}
+
+				}
+			}
+		}
+	})
+	return batch
+}
+
 type projGEDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
@@ -47557,17 +49264,17 @@ func GetProjectionRConstOperator(
 		outputIdx:         outputIdx,
 		calledOnNullInput: calledOnNullInput,
 	}
-	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
+	c := colconv.GetDatumToPhysicalFn(allocator.Ctx, constType)(constArg)
 	leftType, rightType := inputTypes[colIdx], constType
 	switch op := op.(type) {
 	case treebin.BinaryOperator:
 		switch op.Symbol {
 		case treebin.Bitand:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47592,7 +49299,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47618,7 +49325,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47643,11 +49350,28 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projBitandINetINetConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(ipaddr.IPAddr),
+							}
+							return op, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -47663,11 +49387,11 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.Bitor:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47692,7 +49416,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47718,7 +49442,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47743,11 +49467,28 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projBitorINetINetConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(ipaddr.IPAddr),
+							}
+							return op, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -47763,11 +49504,11 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.Bitxor:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47792,7 +49533,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47818,7 +49559,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47847,7 +49588,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -47863,12 +49604,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.Plus:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47906,7 +49647,7 @@ func GetProjectionRConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47939,6 +49680,16 @@ func GetProjectionRConstOperator(
 							}
 							return op, nil
 						}
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projPlusInt16INetConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(ipaddr.IPAddr),
+							}
+							return op, nil
+						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -47952,7 +49703,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -47985,6 +49736,16 @@ func GetProjectionRConstOperator(
 							}
 							return op, nil
 						}
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projPlusInt32INetConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(ipaddr.IPAddr),
+							}
+							return op, nil
+						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -47999,7 +49760,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48032,6 +49793,16 @@ func GetProjectionRConstOperator(
 							}
 							return op, nil
 						}
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projPlusInt64INetConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(ipaddr.IPAddr),
+							}
+							return op, nil
+						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48049,7 +49820,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48066,7 +49837,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48083,7 +49854,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.TimestampTZFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48117,11 +49888,40 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projPlusINetInt16ConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(int16),
+							}
+							return op, nil
+						case 32:
+							op := &projPlusINetInt32ConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(int32),
+							}
+							return op, nil
+						case -1:
+						default:
+							op := &projPlusINetInt64ConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(int64),
+							}
+							return op, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48162,12 +49962,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.Minus:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48205,7 +50005,7 @@ func GetProjectionRConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48251,7 +50051,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48298,7 +50098,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48348,7 +50148,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48365,7 +50165,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.TimestampTZFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48392,7 +50192,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48420,7 +50220,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48455,11 +50255,50 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projMinusINetINetConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(ipaddr.IPAddr),
+							}
+							return op, nil
+						}
+					case types.IntFamily:
+						switch rightType.Width() {
+						case 16:
+							op := &projMinusINetInt16ConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(int16),
+							}
+							return op, nil
+						case 32:
+							op := &projMinusINetInt32ConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(int32),
+							}
+							return op, nil
+						case -1:
+						default:
+							op := &projMinusINetInt64ConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(int64),
+							}
+							return op, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48522,12 +50361,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.Mult:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48575,7 +50414,7 @@ func GetProjectionRConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48620,7 +50459,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48666,7 +50505,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48715,7 +50554,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48742,7 +50581,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48789,12 +50628,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.Div:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48832,7 +50671,7 @@ func GetProjectionRConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48867,7 +50706,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48903,7 +50742,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48942,7 +50781,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -48959,7 +50798,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -48996,12 +50835,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.FloorDiv:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49039,7 +50878,7 @@ func GetProjectionRConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49074,7 +50913,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49110,7 +50949,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49149,7 +50988,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49164,12 +51003,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.Mod:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49207,7 +51046,7 @@ func GetProjectionRConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49242,7 +51081,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49278,7 +51117,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49317,7 +51156,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49332,12 +51171,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.Pow:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49375,7 +51214,7 @@ func GetProjectionRConstOperator(
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49410,7 +51249,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49446,7 +51285,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49485,7 +51324,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49500,12 +51339,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.Concat:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.BytesFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49522,7 +51361,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.JsonFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49539,7 +51378,7 @@ func GetProjectionRConstOperator(
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49555,11 +51394,11 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.LShift:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49584,7 +51423,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49610,7 +51449,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49635,11 +51474,28 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projLShiftINetINetConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(ipaddr.IPAddr),
+							}
+							return op, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49669,11 +51525,11 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.RShift:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
 				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49698,7 +51554,7 @@ func GetProjectionRConstOperator(
 						}
 					}
 				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49724,7 +51580,7 @@ func GetProjectionRConstOperator(
 					}
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49749,11 +51605,28 @@ func GetProjectionRConstOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							op := &projRShiftINetINetConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(ipaddr.IPAddr),
+							}
+							return op, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
@@ -49783,12 +51656,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.JSONFetchVal:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49825,12 +51698,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.JSONFetchText:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49867,12 +51740,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.JSONFetchValPath:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49887,12 +51760,12 @@ func GetProjectionRConstOperator(
 				}
 			}
 		case treebin.JSONFetchTextPath:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
@@ -49914,12 +51787,12 @@ func GetProjectionRConstOperator(
 			// input vectors is of a tuple type.
 			switch op.Symbol {
 			case treecmp.EQ:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BoolFamily:
 							switch rightType.Width() {
 							case -1:
@@ -49935,7 +51808,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BytesFamily:
 							switch rightType.Width() {
 							case -1:
@@ -49951,7 +51824,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -49994,7 +51867,7 @@ func GetProjectionRConstOperator(
 				case types.IntFamily:
 					switch leftType.Width() {
 					case 16:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50034,7 +51907,7 @@ func GetProjectionRConstOperator(
 							}
 						}
 					case 32:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50075,7 +51948,7 @@ func GetProjectionRConstOperator(
 						}
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50119,7 +51992,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50163,7 +52036,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.TimestampTZFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50179,7 +52052,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntervalFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50195,7 +52068,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.JsonFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50207,11 +52080,27 @@ func GetProjectionRConstOperator(
 							}
 						}
 					}
+				case types.INetFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+						case types.INetFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQINetINetConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(ipaddr.IPAddr),
+								}, nil
+							}
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case typeconv.DatumVecCanonicalTypeFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50225,12 +52114,12 @@ func GetProjectionRConstOperator(
 					}
 				}
 			case treecmp.NE:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BoolFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50246,7 +52135,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BytesFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50262,7 +52151,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50305,7 +52194,7 @@ func GetProjectionRConstOperator(
 				case types.IntFamily:
 					switch leftType.Width() {
 					case 16:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50345,7 +52234,7 @@ func GetProjectionRConstOperator(
 							}
 						}
 					case 32:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50386,7 +52275,7 @@ func GetProjectionRConstOperator(
 						}
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50430,7 +52319,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50474,7 +52363,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.TimestampTZFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50490,7 +52379,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntervalFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50506,7 +52395,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.JsonFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50518,11 +52407,27 @@ func GetProjectionRConstOperator(
 							}
 						}
 					}
+				case types.INetFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+						case types.INetFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEINetINetConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(ipaddr.IPAddr),
+								}, nil
+							}
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case typeconv.DatumVecCanonicalTypeFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50536,12 +52441,12 @@ func GetProjectionRConstOperator(
 					}
 				}
 			case treecmp.LT:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BoolFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50557,7 +52462,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BytesFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50573,7 +52478,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50616,7 +52521,7 @@ func GetProjectionRConstOperator(
 				case types.IntFamily:
 					switch leftType.Width() {
 					case 16:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50656,7 +52561,7 @@ func GetProjectionRConstOperator(
 							}
 						}
 					case 32:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50697,7 +52602,7 @@ func GetProjectionRConstOperator(
 						}
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50741,7 +52646,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50785,7 +52690,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.TimestampTZFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50801,7 +52706,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntervalFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50817,7 +52722,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.JsonFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50829,11 +52734,27 @@ func GetProjectionRConstOperator(
 							}
 						}
 					}
+				case types.INetFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+						case types.INetFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTINetINetConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(ipaddr.IPAddr),
+								}, nil
+							}
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case typeconv.DatumVecCanonicalTypeFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50847,12 +52768,12 @@ func GetProjectionRConstOperator(
 					}
 				}
 			case treecmp.LE:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BoolFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50868,7 +52789,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BytesFamily:
 							switch rightType.Width() {
 							case -1:
@@ -50884,7 +52805,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50927,7 +52848,7 @@ func GetProjectionRConstOperator(
 				case types.IntFamily:
 					switch leftType.Width() {
 					case 16:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -50967,7 +52888,7 @@ func GetProjectionRConstOperator(
 							}
 						}
 					case 32:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51008,7 +52929,7 @@ func GetProjectionRConstOperator(
 						}
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51052,7 +52973,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51096,7 +53017,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.TimestampTZFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51112,7 +53033,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntervalFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51128,7 +53049,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.JsonFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51140,11 +53061,27 @@ func GetProjectionRConstOperator(
 							}
 						}
 					}
+				case types.INetFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+						case types.INetFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEINetINetConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(ipaddr.IPAddr),
+								}, nil
+							}
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case typeconv.DatumVecCanonicalTypeFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51158,12 +53095,12 @@ func GetProjectionRConstOperator(
 					}
 				}
 			case treecmp.GT:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BoolFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51179,7 +53116,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BytesFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51195,7 +53132,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51238,7 +53175,7 @@ func GetProjectionRConstOperator(
 				case types.IntFamily:
 					switch leftType.Width() {
 					case 16:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51278,7 +53215,7 @@ func GetProjectionRConstOperator(
 							}
 						}
 					case 32:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51319,7 +53256,7 @@ func GetProjectionRConstOperator(
 						}
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51363,7 +53300,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51407,7 +53344,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.TimestampTZFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51423,7 +53360,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntervalFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51439,7 +53376,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.JsonFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51451,11 +53388,27 @@ func GetProjectionRConstOperator(
 							}
 						}
 					}
+				case types.INetFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+						case types.INetFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTINetINetConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(ipaddr.IPAddr),
+								}, nil
+							}
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case typeconv.DatumVecCanonicalTypeFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51469,12 +53422,12 @@ func GetProjectionRConstOperator(
 					}
 				}
 			case treecmp.GE:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BoolFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51490,7 +53443,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.BytesFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51506,7 +53459,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51549,7 +53502,7 @@ func GetProjectionRConstOperator(
 				case types.IntFamily:
 					switch leftType.Width() {
 					case 16:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51589,7 +53542,7 @@ func GetProjectionRConstOperator(
 							}
 						}
 					case 32:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51630,7 +53583,7 @@ func GetProjectionRConstOperator(
 						}
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51674,7 +53627,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntFamily:
 							switch rightType.Width() {
 							case 16:
@@ -51718,7 +53671,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.TimestampTZFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51734,7 +53687,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.IntervalFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51750,7 +53703,7 @@ func GetProjectionRConstOperator(
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case types.JsonFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51762,11 +53715,27 @@ func GetProjectionRConstOperator(
 							}
 						}
 					}
+				case types.INetFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
+						case types.INetFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEINetINetConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(ipaddr.IPAddr),
+								}, nil
+							}
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch leftType.Width() {
 					case -1:
 					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(allocator.Ctx, rightType.Family()) {
 						case typeconv.DatumVecCanonicalTypeFamily:
 							switch rightType.Width() {
 							case -1:
@@ -51786,7 +53755,7 @@ func GetProjectionRConstOperator(
 			adapter:             colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 			constArg:            constArg,
 			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}, true /* willRelease */),
-			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
+			datumToVecConverter: colconv.GetDatumToPhysicalFn(allocator.Ctx, outputType),
 		}, nil
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())

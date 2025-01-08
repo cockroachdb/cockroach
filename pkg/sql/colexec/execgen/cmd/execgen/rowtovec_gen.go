@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -94,6 +95,7 @@ var rowToVecConversionTmpls = map[familyWidthPair]string{
 	{types.TimestampTZFamily, anyWidth}:              `%[1]s.(*tree.DTimestampTZ).Time`,
 	{types.IntervalFamily, anyWidth}:                 `%[1]s.(*tree.DInterval).Duration`,
 	{types.EnumFamily, anyWidth}:                     `%[1]s.(*tree.DEnum).PhysicalRep`,
+	{types.INetFamily, anyWidth}:                     `%[1]s.(*tree.DIPAddr).IPAddr`,
 	{typeconv.DatumVecCanonicalTypeFamily, anyWidth}: `%[1]s`,
 }
 
@@ -124,7 +126,7 @@ func genRowToVec(inputFileContents string, wr io.Writer) error {
 func getRowToVecTmplInfos() []rowToVecTmplInfo {
 	var tmplInfos []rowToVecTmplInfo
 	for typeFamily := types.Family(0); typeFamily < types.AnyFamily; typeFamily++ {
-		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)
+		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.TestingWithLatestCtx, typeFamily)
 		if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 			// Datum-backed type families are handled below.
 			continue

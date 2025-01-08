@@ -207,7 +207,7 @@ func RunCDCEvaluation(
 	}
 
 	p.DistSQLPlanner().PlanAndRun(
-		ctx, &p.extendedEvalCtx, cdcPlan.PlanCtx, p.txn, cdcPlan.Plan, receiver, finishedSetupFn,
+		&p.extendedEvalCtx, cdcPlan.PlanCtx, p.txn, cdcPlan.Plan, receiver, finishedSetupFn,
 	)
 	return nil
 }

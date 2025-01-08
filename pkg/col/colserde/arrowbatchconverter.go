@@ -77,7 +77,7 @@ type ArrowBatchConverter struct {
 // responsibility to close the account.
 // NOTE: Release can only be called before the account is closed.
 func NewArrowBatchConverter(
-	typs []*types.T, mode ConversionMode, acc *mon.BoundAccount,
+	ctx context.Context, typs []*types.T, mode ConversionMode, acc *mon.BoundAccount,
 ) (*ArrowBatchConverter, error) {
 	c := &ArrowBatchConverter{typs: typs, acc: acc}
 	if mode == ArrowToBatchOnly {
@@ -95,7 +95,7 @@ func NewArrowBatchConverter(
 	var numBuffersTotal int
 	var needOffsets bool
 	for _, t := range typs {
-		n := numBuffersForType(t)
+		n := numBuffersForType(ctx, t)
 		numBuffersTotal += n
 		needOffsets = needOffsets || n == 3
 	}
@@ -103,7 +103,7 @@ func NewArrowBatchConverter(
 	buffers := make([]memory.Buffer, numBuffersTotal)
 	var buffersIdx int
 	for i, t := range typs {
-		n := numBuffersForType(t)
+		n := numBuffersForType(ctx, t)
 		c.scratch.buffers[i] = slicesOfBuffers[:n:n]
 		slicesOfBuffers = slicesOfBuffers[n:]
 		for j := range c.scratch.buffers[i] {
@@ -145,13 +145,14 @@ func (c *ArrowBatchConverter) BatchToArrow(
 			offsetsBytes []byte
 		)
 
-		if f := typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()); f == types.IntFamily ||
-			f == types.FloatFamily || f == types.BoolFamily {
+		if f := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, typ.Family()); f == types.IntFamily ||
+			f == types.FloatFamily || f == types.BoolFamily || f == types.INetFamily {
 			// For ints and floats we have a fast path where we cast the
 			// underlying slice directly to the arrow format. Bools are handled
 			// in a special manner by casting to []byte since []byte and []bool
 			// have exactly the same structure (only a single bit of each byte
 			// is addressable).
+			// TODO(XXX): comment.
 			//
 			// dataHeader is the reflect.SliceHeader of the coldata.Vec's
 			// underlying data slice that we are casting to bytes.
@@ -191,6 +192,11 @@ func (c *ArrowBatchConverter) BatchToArrow(
 				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
 				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
 				datumSize = memsize.Float64
+			case types.INetFamily:
+				ipaddrs := vec.INet()[:n]
+				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ipaddrs))
+				datumSize = memsize.IPAddr
 			}
 			// Update values to point to the underlying slices while keeping the
 			// offsetBytes unset.
@@ -384,7 +390,7 @@ func (c *ArrowBatchConverter) accountForScratch(ctx context.Context) error {
 // The passed in data is also mutated (we store nulls differently than arrow and
 // the adjustment is done in place).
 func (c *ArrowBatchConverter) ArrowToBatch(
-	data []array.Data, batchLength int, b coldata.Batch,
+	ctx context.Context, data []array.Data, batchLength int, b coldata.Batch,
 ) error {
 	if len(data) != len(c.typs) {
 		return errors.Errorf("mismatched data and schema length: %d != %d", len(data), len(c.typs))
@@ -394,7 +400,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 		vec := b.ColVec(i)
 		d := &data[i]
 
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+		switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, typ.Family()) {
 		case types.BytesFamily:
 			valueBytes, offsets := getValueBytesAndOffsets(d, vec.Nulls(), batchLength)
 			vec.Bytes().Deserialize(valueBytes, offsets)
@@ -493,7 +499,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			// from corruption in case the slice will be appended to in the
 			// future.
 			var col coldata.Column
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, typ.Family()) {
 			case types.BoolFamily:
 				buffers := d.Buffers()
 				// Nulls are always stored in the first buffer whereas the
@@ -536,6 +542,22 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				vec.Nulls().SetNullBitmap(floatArr.NullBitmapBytes(), batchLength)
 				float64s := coldata.Float64s(floatArr.Float64Values())
 				col = float64s[:len(float64s):len(float64s)]
+			case types.INetFamily:
+				buffers := d.Buffers()
+				// Nulls are always stored in the first buffer whereas the
+				// second one is the byte representation of the IPAddr vector,
+				// so we need to unsafely cast from []byte to []ipaddr.IPAddr.
+				nullsBitmap, bytes := buffers[0].Bytes(), buffers[1].Bytes()
+				vec.Nulls().SetNullBitmap(nullsBitmap, batchLength)
+				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+				bytesHeader := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
+				var ipaddrs coldata.IPAddrs
+				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+				ipaddrsHeader := (*reflect.SliceHeader)(unsafe.Pointer(&ipaddrs))
+				ipaddrsHeader.Data = bytesHeader.Data
+				ipaddrsHeader.Len = batchLength
+				ipaddrsHeader.Cap = batchLength
+				col = ipaddrs[:batchLength:batchLength]
 			default:
 				panic(
 					fmt.Sprintf("unsupported type for conversion to column batch %s", d.DataType().Name()),

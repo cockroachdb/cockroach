@@ -290,7 +290,7 @@ func startDistChangefeed(
 			},
 		)
 
-		recv := sql.MakeDistSQLReceiver(
+		recv, _ := sql.MakeDistSQLReceiver(
 			ctx,
 			resultRows,
 			tree.Rows,
@@ -298,6 +298,7 @@ func startDistChangefeed(
 			noTxn,
 			nil, /* clockUpdater */
 			evalCtx.Tracing,
+			evalCtx.Settings,
 		)
 		defer recv.Release()
 
@@ -324,7 +325,7 @@ func startDistChangefeed(
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
 		// p is the physical plan, recv is the DistSQLReceiver.
-		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)
+		dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)
 		return resultRows.Err()
 	}
 

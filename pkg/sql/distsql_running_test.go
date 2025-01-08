@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -155,7 +156,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
-		recv := MakeDistSQLReceiver(
+		var recv *DistSQLReceiver
+		recv, ctx = MakeDistSQLReceiver(
 			ctx,
 			rw,
 			stmt.AST.StatementReturnType(),
@@ -163,6 +165,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			txn,
 			execCfg.Clock,
 			p.ExtendedEvalContext().Tracing,
+			p.ExtendedEvalContext().Settings,
 		)
 
 		// We need to re-plan every time, since the plan is closed automatically
@@ -182,7 +185,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		planCtx.stmtType = recv.stmtType
 
 		execCfg.DistSQLPlanner.PlanAndRun(
-			ctx, evalCtx, planCtx, txn, p.curPlan.main, recv, nil, /* finishedSetupFn */
+			evalCtx, planCtx, txn, p.curPlan.main, recv, nil, /* finishedSetupFn */
 		)
 		return rw.Err()
 	})
@@ -275,7 +278,8 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
-		recv := MakeDistSQLReceiver(
+		var recv *DistSQLReceiver
+		recv, ctx = MakeDistSQLReceiver(
 			ctx,
 			rw,
 			stmt.AST.StatementReturnType(),
@@ -283,6 +287,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			txn,
 			execCfg.Clock,
 			p.ExtendedEvalContext().Tracing,
+			p.ExtendedEvalContext().Settings,
 		)
 
 		p.stmt = makeStatement(stmt, clusterunique.ID{},
@@ -301,7 +306,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			factoryEvalCtx.Context = evalCtx.Context
 			return &factoryEvalCtx
 		}
-		err = execCfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, p, recv, evalCtxFactory)
+		err = execCfg.DistSQLPlanner.PlanAndRunAll(evalCtx, planCtx, p, recv, evalCtxFactory)
 		if err != nil {
 			return err
 		}
@@ -419,7 +424,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	txn := kv.NewTxn(ctx, db, s.NodeID())
 
 	rw := &errOnlyResultWriter{}
-	recv := MakeDistSQLReceiver(
+	recv, _ := MakeDistSQLReceiver(
 		ctx,
 		rw,
 		tree.Rows, /* StatementReturnType */
@@ -427,6 +432,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		txn,
 		nil, /* clockUpdater */
 		&SessionTracing{},
+		s.ClusterSettings(),
 	)
 
 	retryErr := kvpb.NewErrorWithTxn(
@@ -572,7 +578,7 @@ func TestDistSQLReceiverDrainsOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	recv := MakeDistSQLReceiver(
+	recv, _ := MakeDistSQLReceiver(
 		context.Background(),
 		&errOnlyResultWriter{},
 		tree.Rows,
@@ -580,6 +586,7 @@ func TestDistSQLReceiverDrainsOnError(t *testing.T) {
 		nil, /* txn */
 		nil, /* clockUpdater */
 		&SessionTracing{},
+		cluster.MakeTestingClusterSettings(),
 	)
 	status := recv.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.New("some error")})
 	require.Equal(t, execinfra.DrainRequested, status)

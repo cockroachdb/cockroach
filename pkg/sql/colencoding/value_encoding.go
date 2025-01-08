@@ -6,14 +6,17 @@
 package colencoding
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -22,6 +25,7 @@ import (
 // coldata.TypedVecs.
 // See the analog in rowenc/column_type_encoding.go.
 func DecodeTableValueToCol(
+	ctx context.Context,
 	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
 	vecIdx int,
@@ -103,8 +107,27 @@ func DecodeTableValueToCol(
 		var d duration.Duration
 		buf, d, err = encoding.DecodeUntaggedDurationValue(buf)
 		vecs.IntervalCols[colIdx][rowIdx] = d
+	case types.INetFamily:
+		if vecs.Vecs[vecIdx].CanonicalTypeFamily() == types.INetFamily {
+			var i ipaddr.IPAddr
+			buf, i, err = encoding.DecodeUntaggedIPAddrValue(buf)
+			vecs.INetCols[colIdx][rowIdx] = i
+		} else {
+			if err = typeconv.AssertDatumBacked(ctx, valTyp); err != nil {
+				return buf, err
+			}
+			var d tree.Datum
+			d, buf, err = valueside.DecodeUntaggedDatum(da, valTyp, buf)
+			if err != nil {
+				return buf, err
+			}
+			vecs.DatumCols[colIdx].Set(rowIdx, d)
+		}
 	// Types backed by tree.Datums.
 	default:
+		if err = typeconv.AssertDatumBacked(ctx, valTyp); err != nil {
+			return buf, err
+		}
 		var d tree.Datum
 		d, buf, err = valueside.DecodeUntaggedDatum(da, valTyp, buf)
 		if err != nil {

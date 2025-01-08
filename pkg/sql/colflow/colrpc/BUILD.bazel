@@ -61,6 +61,7 @@ go_test(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/execversion",
         "//pkg/sql/flowinfra",
         "//pkg/sql/types",
         "//pkg/testutils",

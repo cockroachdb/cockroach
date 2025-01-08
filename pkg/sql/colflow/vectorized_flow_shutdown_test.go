@@ -106,7 +106,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	_, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx,
@@ -238,6 +237,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxMetadataSources []colexecop.MetadataSource,
 				) {
 					outbox, err := colrpc.NewOutbox(
+						ctx,
 						&execinfra.FlowCtx{Gateway: false},
 						0, /* processorID */
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),

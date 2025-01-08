@@ -421,7 +421,8 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			res.Add(counts)
 			return nil
 		})
-		recv := MakeDistSQLReceiver(
+		var recv *DistSQLReceiver
+		recv, ctx = MakeDistSQLReceiver(
 			ctx,
 			rw,
 			tree.Rows,
@@ -432,6 +433,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			// because it sets "enabled: false" and thus none of the
 			// other fields are used.
 			&SessionTracing{},
+			sc.execCfg.Settings,
 		)
 		defer recv.Release()
 
@@ -446,7 +448,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				subqueryResultMemAcc := localPlanner.Mon().MakeBoundAccount()
 				defer subqueryResultMemAcc.Close(ctx)
 				if !sc.distSQLPlanner.PlanAndRunSubqueries(
-					ctx, localPlanner, localPlanner.ExtendedEvalContextCopy,
+					localPlanner, localPlanner.ExtendedEvalContextCopy,
 					localPlanner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
 					false, /* skipDistSQLDiagramGeneration */
 					false, /* mustUseLeafTxn */

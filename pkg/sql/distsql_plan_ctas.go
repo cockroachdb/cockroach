@@ -52,5 +52,5 @@ func PlanAndRunCTAS(
 	FinalizePlan(ctx, planCtx, physPlan)
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
 	defer cleanup()
-	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtxCopy, finishedSetupFn)
+	dsp.Run(planCtx, txn, physPlan, recv, evalCtxCopy, finishedSetupFn)
 }
