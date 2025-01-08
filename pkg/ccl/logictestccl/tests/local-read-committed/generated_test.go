@@ -678,6 +678,13 @@ func TestReadCommittedLogic_distsql_srfs(
 	runLogicTest(t, "distsql_srfs")
 }
 
+func TestReadCommittedLogic_do(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "do")
+}
+
 func TestReadCommittedLogic_drop_database(
 	t *testing.T,
 ) {
