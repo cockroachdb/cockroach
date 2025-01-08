@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/axiomhq/hyperloglog"
+	hyperloglog "github.com/axiomhq/hyperloglog/000"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
