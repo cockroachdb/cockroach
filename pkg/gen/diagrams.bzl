@@ -122,6 +122,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:default_value_column_level.html",
     "//docs/generated/sql/bnf:delete.html",
     "//docs/generated/sql/bnf:discard.html",
+    "//docs/generated/sql/bnf:do.html",
     "//docs/generated/sql/bnf:drop.html",
     "//docs/generated/sql/bnf:drop_column.html",
     "//docs/generated/sql/bnf:drop_constraint.html",
