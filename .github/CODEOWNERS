@@ -75,6 +75,7 @@
 /pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 
 /pkg/sql/importer/           @cockroachdb/sql-queries-prs
+/pkg/sql/importer/export*    @cockroachdb/cdc-prs
 /pkg/ccl/importerccl/        @cockroachdb/sql-queries-prs
 
 /pkg/sql/appstatspb           @cockroachdb/obs-prs
