@@ -567,21 +567,29 @@ SELECT * FROM h@a_b_foo_idx WHERE b = 'foo'
 # in the same transaction. Use a high priority to make it less likely for the
 # transaction to be aborted.
 
+# Skip 3node-tenant config since it's prone to hitting a txn retry error
+# (#126763).
+skipif config 3node-tenant
 statement ok
 BEGIN PRIORITY HIGH
 
+skipif config 3node-tenant
 statement ok
 CREATE TABLE i (a INT, b enum)
 
+skipif config 3node-tenant
 statement ok
 INSERT INTO i VALUES (1, 'foo'), (2, 'bar')
 
+skipif config 3node-tenant
 statement ok
 CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
 
+skipif config 3node-tenant
 statement ok
 COMMIT
 
+skipif config 3node-tenant
 query IT rowsort
 SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
 ----
