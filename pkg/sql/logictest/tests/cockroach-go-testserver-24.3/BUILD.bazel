@@ -10,9 +10,12 @@ go_test(
         "//pkg/sql/logictest:cockroach_predecessor_version",  # keep
         "//pkg/sql/logictest:testdata",  # keep
     ],
-    exec_properties = {"test.Pool": "large"},
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "large"},
+    }),
     shard_count = 6,
-    tags = ["cpu:2"],
+    tags = ["cpu:3"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",

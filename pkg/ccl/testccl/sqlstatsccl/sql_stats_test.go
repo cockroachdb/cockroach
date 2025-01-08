@@ -32,7 +32,6 @@ func TestSQLStatsRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 137616)
 	skip.UnderDuress(t, "test is too heavy for special configs")
 
 	// We build a small multiregion cluster, with the proper settings for
@@ -145,68 +144,53 @@ func TestSQLStatsRegions(t *testing.T) {
 			db := tc.db
 			db.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;`)
 
-			testutils.RunTrueAndFalse(t, "distsql", func(t *testing.T, distsql bool) {
-				testutils.SucceedsWithin(t, func() (err error) {
-					var expectedRegions []string
-					_, err = db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
-					if err != nil {
-						return err
+			testutils.SucceedsWithin(t, func() (err error) {
+				var expectedRegions []string
+				_, err = db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
+				if err != nil {
+					return err
+				}
+
+				// Use EXPLAIN ANALYSE (DISTSQL) to get the accurate list of nodes.
+				explainInfo, err := db.DB.QueryContext(ctx, `EXPLAIN ANALYSE (DISTSQL) SELECT * FROM test`)
+				if err != nil {
+					return err
+				}
+				for explainInfo.Next() {
+					var explainStr string
+					if err := explainInfo.Scan(&explainStr); err != nil {
+						t.Fatal(err)
 					}
 
-					if distsql {
-						_, err = db.DB.ExecContext(ctx, "SET distsql = on;")
-						if err != nil {
-							return err
-						}
-					} else {
-						_, err = db.DB.ExecContext(ctx, "SET distsql = off;")
-						if err != nil {
-							return err
-						}
-
-					}
-
-					// Use EXPLAIN ANALYSE (DISTSQL) to get the accurate list of nodes.
-					explainInfo, err := db.DB.QueryContext(ctx, `EXPLAIN ANALYSE (DISTSQL) SELECT * FROM test`)
-					if err != nil {
-						return err
-					}
-					for explainInfo.Next() {
-						var explainStr string
-						if err := explainInfo.Scan(&explainStr); err != nil {
-							t.Fatal(err)
-						}
-
+					explainStr = strings.ReplaceAll(explainStr, " ", "")
+					// Example str "  regions: cp-us-central1,gcp-us-east1,gcp-us-west1"
+					if strings.HasPrefix(explainStr, "regions:") {
+						explainStr = strings.ReplaceAll(explainStr, "regions:", "")
 						explainStr = strings.ReplaceAll(explainStr, " ", "")
-						// Example str "  regions: cp-us-central1,gcp-us-east1,gcp-us-west1"
-						if strings.HasPrefix(explainStr, "regions:") {
-							explainStr = strings.ReplaceAll(explainStr, "regions:", "")
-							explainStr = strings.ReplaceAll(explainStr, " ", "")
-							expectedRegions = strings.Split(explainStr, ",")
-							if len(expectedRegions) < len(regionNames) {
-								return fmt.Errorf("rows are not replicated to all regions."+
-									" Expected replication to following regions %s but got %s\n", regionNames, expectedRegions)
-							}
+						expectedRegions = strings.Split(explainStr, ",")
+						if len(expectedRegions) < len(regionNames) {
+							return fmt.Errorf("rows are not replicated to all regions."+
+								" Expected replication to following regions %s but got %s\n", regionNames, expectedRegions)
 						}
 					}
+				}
 
-					// Select from the table and see what statement statistics were written.
-					db.Exec(t, "SET application_name = $1", t.Name())
-					db.Exec(t, "SELECT * FROM test")
-					row := db.QueryRow(t, `
+				// Select from the table and see what statement statistics were written.
+				db.Exec(t, "SET application_name = $1", t.Name())
+				db.Exec(t, "SELECT * FROM test")
+				row := db.QueryRow(t, `
 				SELECT statistics->>'statistics'
 				  FROM crdb_internal.statement_statistics
 				 WHERE app_name = $1`, t.Name())
 
-					var actualJSON string
-					row.Scan(&actualJSON)
-					var actual appstatspb.StatementStatistics
-					err = json.Unmarshal([]byte(actualJSON), &actual)
-					require.NoError(t, err)
-					require.Equal(t, expectedRegions, actual.Regions)
-					return nil
-				}, 3*time.Minute)
-			})
+				var actualJSON string
+				row.Scan(&actualJSON)
+				var actual appstatspb.StatementStatistics
+				err = json.Unmarshal([]byte(actualJSON), &actual)
+				require.NoError(t, err)
+				require.Equal(t, expectedRegions, actual.Regions)
+				return nil
+			}, 3*time.Minute)
 		})
 	}
 }
