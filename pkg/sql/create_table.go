@@ -909,7 +909,7 @@ func ResolveFK(
 		originCols[i] = col
 	}
 
-	_, target, err := resolver.ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, tree.ResolveRequireTableDesc)
+	_, target, err := resolver.ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, tree.ResolveRequireTableDesc, false /* includeOffline */)
 	if err != nil {
 		return err
 	}

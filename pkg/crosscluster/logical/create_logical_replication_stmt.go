@@ -331,7 +331,7 @@ func resolveDestinationObjects(
 			} else if resolved.ParentSchemaID != resPrefix.Schema.GetID() {
 				return resolved, errors.Newf("destination tables must all be in the same schema")
 			}
-			if _, _, err := resolver.ResolveMutableExistingTableObject(ctx, r, &dstTableName, true, tree.ResolveRequireTableDesc); err == nil {
+			if _, _, err := resolver.ResolveMutableExistingTableObject(ctx, r, &dstTableName, true, tree.ResolveRequireTableDesc, false /* includeOffline */); err == nil {
 				return resolved, errors.Newf("destination table %s already exists", destResources.Tables[i])
 			}
 			tbNameWithSchema := tree.MakeTableNameWithSchema(
@@ -341,7 +341,7 @@ func resolveDestinationObjects(
 			)
 			resolved.TableNames = append(resolved.TableNames, tbNameWithSchema)
 		} else {
-			prefix, td, err := resolver.ResolveMutableExistingTableObject(ctx, r, &dstTableName, true, tree.ResolveRequireTableDesc)
+			prefix, td, err := resolver.ResolveMutableExistingTableObject(ctx, r, &dstTableName, true, tree.ResolveRequireTableDesc, false /* includeOffline */)
 			if err != nil {
 				return resolved, errors.Wrapf(err, "failed to find existing destination table %s", destResources.Tables[i])
 			}
