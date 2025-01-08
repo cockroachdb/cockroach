@@ -196,3 +196,81 @@ NOTICE: x := 300 in DO block
 NOTICE: x := 100 after DO block
 
 subtest end
+
+subtest in_sql_routine
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  DO $inner$ BEGIN RAISE NOTICE 'Hello, world!'; END $inner$;
+  SELECT 100;
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: Hello, world!
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  DO $outer$
+  BEGIN
+    RAISE NOTICE 'outer';
+    DO $inner$ BEGIN RAISE NOTICE 'inner'; END $inner$;
+    RAISE NOTICE 'outer again';
+  END
+  $outer$;
+  SELECT 100;
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: outer
+NOTICE: inner
+NOTICE: outer again
+
+statement ok
+DROP FUNCTION f;
+
+# The function parameter should not be visible in the DO block.
+statement error pgcode 42703 pq: column "x" does not exist
+CREATE FUNCTION f(x INT) RETURNS INT LANGUAGE SQL AS $$
+  DO $inner$ BEGIN RAISE NOTICE 'x: %', x; END $inner$;
+  SELECT x;
+$$;
+
+statement ok
+CREATE FUNCTION f(x INT) RETURNS INT LANGUAGE SQL AS $$
+  DO $inner$ DECLARE x INT := 200; BEGIN RAISE NOTICE 'x: %', x; END $inner$;
+  SELECT x;
+$$;
+
+query T noticetrace
+SELECT f(100);
+----
+NOTICE: x: 200
+
+statement ok
+DROP FUNCTION f;
+
+# DO statements can't be used as the last body statement for a function, but
+# they can be used as the last body statement for a procedure.
+statement error pgcode 42P13 pq: return type mismatch in function declared to return int
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  DO $inner$ DECLARE x INT := 200; BEGIN RAISE NOTICE 'x: %', x; END $inner$;
+$$;
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE SQL AS $$
+  DO $inner$ BEGIN RAISE NOTICE 'Hello, world!'; END $inner$;
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: Hello, world!
+
+subtest end
