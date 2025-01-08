@@ -39,6 +39,10 @@ func WithVersion(ctx context.Context, version DistSQLVersion) context.Context {
 	return ctxutil.WithFastValue(ctx, contextVersionKey, version)
 }
 
+// TestingWithLatestCtx is a context that has the latest exec version installed.
+// It should only be used in tests.
+var TestingWithLatestCtx = WithVersion(context.Background(), Latest)
+
 // FromContext returns the version stored in the context. It panics if the
 // version is not found.
 func FromContext(ctx context.Context) DistSQLVersion {
@@ -49,6 +53,3 @@ func FromContext(ctx context.Context) DistSQLVersion {
 		return v
 	}
 }
-
-// Silence the unused linter for now.
-var _ = FromContext

@@ -487,5 +487,6 @@ replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.202305251236
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1
 
-// TODO(138546): hard-code the version that we use for table stats.
+// TODO(yuzefovich): remove this version once compatibility with 24.3 is no
+// longer needed.
 replace github.com/axiomhq/hyperloglog/000 => github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e

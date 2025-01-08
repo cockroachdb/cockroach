@@ -10,10 +10,11 @@ import (
 	"fmt"
 	"testing"
 
-	hyperloglog "github.com/axiomhq/hyperloglog/000"
+	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -69,10 +70,10 @@ func runSampler(
 	// non-zero, the processor will hit this limit and disable sampling.
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memLimitBytes
 
+	ctx := execversion.TestingWithLatestCtx
 	spec := &execinfrapb.SamplerSpec{
 		Sketches: []execinfrapb.SketchSpec{
 			{
-				SketchType:        execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:           []uint32{0},
 				GenerateHistogram: true,
 			},
@@ -81,12 +82,12 @@ func runSampler(
 		MinSampleSize: uint32(minNumSamples),
 	}
 	p, err := newSamplerProcessor(
-		context.Background(), &flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{},
+		ctx, &flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Run(context.Background(), out)
+	p.Run(ctx, out)
 
 	// Verify we have expectedSamples distinct rows.
 	res := make([]int, 0, numSamples)
@@ -359,34 +360,32 @@ func TestSamplerSketch(t *testing.T) {
 			Mon:     evalCtx.TestingMon,
 		}
 
+		ctx := execversion.TestingWithLatestCtx
 		spec := &execinfrapb.SamplerSpec{
 			SampleSize: uint32(1),
 			Sketches: []execinfrapb.SketchSpec{
 				{
-					SketchType: execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 					Columns: []uint32{
 						0,
 					},
 				},
 				{
-					SketchType: execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 					Columns: []uint32{
 						1,
 					},
 				},
 				{
-					SketchType: execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 					Columns: []uint32{
 						0, 1,
 					},
 				},
 			},
 		}
-		p, err := newSamplerProcessor(context.Background(), &flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{})
+		p, err := newSamplerProcessor(ctx, &flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Run(context.Background(), out)
+		p.Run(ctx, out)
 
 		// Collect the rows, excluding metadata.
 		rows = rows[:0]
