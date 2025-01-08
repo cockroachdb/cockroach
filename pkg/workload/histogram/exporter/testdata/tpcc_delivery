@@ -11,6 +11,10 @@ delivery_sum 0.0 1.71924406379e+09
 delivery_count 24 1.71924406379e+09
 # TYPE delivery_elapsed gauge
 delivery_elapsed 992.0 1.71924406379e+09
+# TYPE delivery_max gauge
+delivery_max 4.6137343e+07 1.71924406379e+09
+# TYPE delivery_mean gauge
+delivery_mean 3.6918613333333336e+07 1.71924406379e+09
 # TYPE delivery_highest_trackable_value gauge
 delivery_highest_trackable_value 1e+11 1.71924406379e+09
 # EOF
