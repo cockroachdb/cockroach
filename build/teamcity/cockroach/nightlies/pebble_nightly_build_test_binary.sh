@@ -25,7 +25,7 @@ RESTORE_COMMIT=$(git rev-parse HEAD)
 git fetch origin "$CRDB_BRANCH"
 git checkout "origin/$CRDB_BRANCH"
 
-BAZEL_BIN=$(bazel info bazel-bin --config ci)
+BAZEL_BIN=$(bazel info bazel-bin)
 
 bazel run @go_sdk//:bin/go get "github.com/cockroachdb/pebble@$PEBBLE_BRANCH"
 

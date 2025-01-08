@@ -116,8 +116,8 @@ esac
 
 echo "Building $os/$arch/$component..."
 
-bazel build --config $config --config ci -c opt "${bazel_args[@]}"
-BAZEL_BIN=$(bazel info bazel-bin --config $config --config ci -c opt)
+bazel build --config $config -c opt "${bazel_args[@]}"
+BAZEL_BIN=$(bazel info bazel-bin --config $config -c opt)
 for artifact in "${artifacts[@]}"; do
   src=${artifact%%:*}
   dst=${artifact#*:}
