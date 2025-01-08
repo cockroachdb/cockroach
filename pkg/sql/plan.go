@@ -522,37 +522,38 @@ func (p *planTop) savePlanInfo() {
 }
 
 // startExec calls startExec() on each planNode using a depth-first, post-order
-// traversal.  The subqueries, if any, are also started.
+// traversal. The subqueries, if any, are also started.
 //
 // If the planNode also implements the nodeReadingOwnWrites interface,
 // the txn is temporarily reconfigured to use read-your-own-writes for
 // the duration of the call to startExec. This is used e.g. by
 // DDL statements.
-//
-// Reminder: walkPlan() ensures that subqueries and sub-plans are
-// started before startExec() is called.
 func startExec(params runParams, plan planNode) error {
-	o := planObserver{
-		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
-			switch p.(type) {
-			case *explainVecNode, *explainDDLNode:
-				// Do not recurse: we're not starting the plan if we just show its structure with EXPLAIN.
-				return false, nil
-			case *showTraceNode:
-				// showTrace needs to override the params struct, and does so in its startExec() method.
-				return false, nil
+	switch plan.(type) {
+	case *explainVecNode, *explainDDLNode:
+		// Do not recurse: we're not starting the plan if we just show its
+		// structure with EXPLAIN.
+	case *showTraceNode:
+		// showTrace needs to override the params struct, and does so in its
+		// startExec() method.
+	default:
+		// Start children nodes first. This ensures that subqueries and
+		// sub-plans are started before startExec() is called.
+		for i, n := 0, plan.InputCount(); i < n; i++ {
+			child, err := plan.Input(i)
+			if err != nil {
+				return err
 			}
-			return true, nil
-		},
-		leaveNode: func(_ string, n planNode) (err error) {
-			if _, ok := n.(planNodeReadingOwnWrites); ok {
-				prevMode := params.p.Txn().ConfigureStepping(params.ctx, kv.SteppingDisabled)
-				defer func() { _ = params.p.Txn().ConfigureStepping(params.ctx, prevMode) }()
+			if err := startExec(params, child); err != nil {
+				return err
 			}
-			return n.startExec(params)
-		},
+		}
 	}
-	return walkPlan(params.ctx, plan, o)
+	if _, ok := plan.(planNodeReadingOwnWrites); ok {
+		prevMode := params.p.Txn().ConfigureStepping(params.ctx, kv.SteppingDisabled)
+		defer func() { _ = params.p.Txn().ConfigureStepping(params.ctx, prevMode) }()
+	}
+	return plan.startExec(params)
 }
 
 func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planNode, error) {
