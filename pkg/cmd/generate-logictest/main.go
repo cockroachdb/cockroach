@@ -175,11 +175,15 @@ func (t *testdir) dump() error {
 		// allocate the tests which use 3-node clusters 2 vCPUs, and
 		// the ones which use more a bit more.
 		tplCfg.NumCPU = (cfg.NumNodes / 2) + 1
+		if strings.Contains(cfg.Name, "cockroach-go-testserver") {
+			tplCfg.NumCPU = 3
+		}
 		if cfg.Name == "3node-tenant" || strings.HasPrefix(cfg.Name, "multiregion-") {
 			tplCfg.SkipCclUnderRace = true
 		}
 		if strings.Contains(cfg.Name, "5node") ||
 			strings.Contains(cfg.Name, "fakedist") ||
+			strings.Contains(cfg.Name, "cockroach-go-testserver") ||
 			(strings.HasPrefix(cfg.Name, "local-") && !tplCfg.Ccl) ||
 			(cfg.Name == "local" && !tplCfg.Ccl) {
 			tplCfg.UseHeavyPool = true
