@@ -126,7 +126,7 @@ DROP TABLE tab
 query TTTT
 SELECT database_name, schema_name, descriptor_name, create_statement FROM crdb_internal.create_type_statements
 ----
-test  public  t  CREATE TYPE test.public.t AS (a INT8, b INT8)
+test  public  t   CREATE TYPE public.t AS (a INT8, b INT8)
 
 ## Can't drop type t because t2 depends on it
 #statement error cannot drop type \"t\" because other objects .* still depend on it
