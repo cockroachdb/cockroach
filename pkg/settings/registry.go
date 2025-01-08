@@ -247,7 +247,9 @@ var retiredSettings = map[InternalKey]struct{}{
 	"kvadmission.low_pri_read_elastic_control.enabled": {},
 
 	// removed as of 25.1
-	"sql.auth.resolve_membership_single_scan.enabled": {},
+	"sql.auth.resolve_membership_single_scan.enabled":            {},
+	"storage.single_delete.crash_on_invariant_violation.enabled": {},
+	"storage.single_delete.crash_on_ineffectual.enabled":         {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
