@@ -25,13 +25,13 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
   exit 1
 fi
 
-absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
-pwd=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
-PGURLS=$(roachprod pgurl "${CLUSTER}":1)
+absolute_path=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
+pwd=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
+PGURLS=$(drtprod pgurl "${CLUSTER}":1)
 
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpch_run_${suffix}.sh > /dev/null << 'EOF'
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpch_run_${suffix}.sh > /dev/null << 'EOF'
 #!/bin/bash
 
 ${pwd}/cockroach workload run tpch $@ --verbose --prometheus-port 2113 $PGURLS
 EOF"
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpch_run_${suffix}.sh"
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpch_run_${suffix}.sh"

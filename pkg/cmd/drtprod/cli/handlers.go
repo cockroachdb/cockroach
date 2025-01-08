@@ -8,10 +8,9 @@ package cli
 import (
 	"context"
 	"os"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/cli/commands"
-	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/helpers"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cli"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/spf13/cobra"
 )
@@ -32,18 +31,7 @@ func Initialize(ctx context.Context) {
 	// Create the root command and add subcommands.
 	rootCommand := commands.GetRootCommand(ctx)
 	rootCommand.AddCommand(register(ctx)...)
-
-	// Check if the command is found in drtprod; if not, redirect to roachprod.
-	_, _, err := rootCommand.Find(os.Args[1:])
-	if err != nil {
-		if strings.Contains(err.Error(), "unknown command") {
-			// Command not found, execute it in roachprod instead.
-			_ = helpers.ExecuteCmdInteractive(ctx, "roachprod", os.Args[1:]...)
-			return
-		}
-		// If another error occurs, exit with a failure status.
-		os.Exit(1)
-	}
+	cli.Initialize(rootCommand)
 
 	// Execute the root command, exit if an error occurs.
 	if err := rootCommand.Execute(); err != nil {
