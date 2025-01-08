@@ -26,14 +26,6 @@ func isQuoteChar(ch byte) bool {
 	return ch == '"'
 }
 
-func isControlChar(ch byte) bool {
-	return ch == '{' || ch == '}' || ch == ',' || ch == '"'
-}
-
-func isElementChar(r rune) bool {
-	return r != '{' && r != '}' && r != ','
-}
-
 // isSpaceInParseArray returns true if the rune is a space. To match Postgres,
 // 0x85 and 0xA0 are not treated as whitespace.
 func isSpaceInParseArray(r rune) bool {
@@ -79,6 +71,16 @@ func trimSpaceInParseArray(s string) string {
 	// non-space bytes, so we're done. Non-ASCII cases have already
 	// been handled above.
 	return s[start:stop]
+}
+
+func (p *parseState) isControlChar(ch byte) bool {
+	delim := p.t.Delimiter()[0]
+	return ch == '{' || ch == '}' || ch == delim || ch == '"'
+}
+
+func (p *parseState) isElementChar(r rune) bool {
+	delim, _ := utf8.DecodeRuneInString(p.t.Delimiter())
+	return r != '{' && r != '}' && r != delim
 }
 
 // gobbleString advances the parser for the remainder of the current string
@@ -145,7 +147,7 @@ func (p *parseState) parseQuotedString() (string, error) {
 }
 
 func (p *parseState) parseUnquotedString() (string, error) {
-	out, err := p.gobbleString(isControlChar)
+	out, err := p.gobbleString(p.isControlChar)
 	if err != nil {
 		return "", err
 	}
@@ -167,7 +169,7 @@ func (p *parseState) parseElement() error {
 		}
 		p.advance()
 	default:
-		if !isElementChar(r) {
+		if !p.isElementChar(r) {
 			return malformedError
 		}
 		next, err = p.parseUnquotedString()
