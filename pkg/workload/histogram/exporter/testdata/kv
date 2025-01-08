@@ -10,6 +10,10 @@ write_sum 0.0 1.719236333446e+09
 write_count 16379 1.719236333446e+09
 # TYPE write_elapsed gauge
 write_elapsed 5031.0 1.719236333446e+09
+# TYPE write_max gauge
+write_max 4.294967295e+09 1.719236333446e+09
+# TYPE write_mean gauge
+write_mean 1.940055858062153e+07 1.719236333446e+09
 # TYPE write_highest_trackable_value gauge
 write_highest_trackable_value 1e+11 1.719236333446e+09
 # EOF
