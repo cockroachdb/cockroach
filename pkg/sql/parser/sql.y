@@ -969,7 +969,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AS_JSON AT_AT
 %token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY AVOID_FULL_SCAN
 
-%token <str> BACKUP BACKUPS BACKWARD BATCH BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
+%token <str> BACKUP BACKUPS BACKWARD BATCH BEFORE BEGIN BETWEEN BIDIRECTIONAL BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY BYPASSRLS
 
@@ -1066,7 +1066,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> TRUNCATE TRUSTED TYPE TYPES
 %token <str> TRACING
 
-%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
+%token <str> UNBOUNDED UNCOMMITTED UNIDIRECTIONAL UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
 %token <str> UPDATE UPDATES_CLUSTER_MONITORING_METRICS UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VECTOR VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
@@ -4811,6 +4811,12 @@ logical_replication_options:
   {
     $$.val = &tree.LogicalReplicationOptions{MetricsLabel: $3.expr()}
   }
+| PARENT '=' string_or_placeholder
+  /* SKIP DOC */
+  {
+    $$.val = &tree.LogicalReplicationOptions{ParentID: $3.expr()}
+  }
+
 
 logical_replication_create_table_options:
   MODE '=' string_or_placeholder
@@ -4825,6 +4831,15 @@ logical_replication_create_table_options:
   {
     $$.val = &tree.LogicalReplicationOptions{MetricsLabel: $3.expr()}
   }
+| UNIDIRECTIONAL
+  {
+   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)} 
+  }
+| BIDIRECTIONAL ON string_or_placeholder
+  {
+   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()} 
+  }
+
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
@@ -18009,6 +18024,7 @@ unreserved_keyword:
 | BATCH
 | BEFORE
 | BEGIN
+| BIDIRECTIONAL
 | BINARY
 | BUCKET_COUNT
 | BUNDLE
@@ -18435,6 +18451,7 @@ unreserved_keyword:
 | TYPE
 | TYPES
 | THROTTLING
+| UNIDIRECTIONAL
 | UNBOUNDED
 | UNCOMMITTED
 | UNKNOWN
@@ -18512,6 +18529,7 @@ bare_label_keywords:
 | BEFORE
 | BEGIN
 | BETWEEN
+| BIDIRECTIONAL
 | BIGINT
 | BINARY
 | BIT
@@ -19040,6 +19058,7 @@ bare_label_keywords:
 | TYPES
 | UNBOUNDED
 | UNCOMMITTED
+| UNIDIRECTIONAL
 | UNIQUE
 | UNKNOWN
 | UNLISTEN
