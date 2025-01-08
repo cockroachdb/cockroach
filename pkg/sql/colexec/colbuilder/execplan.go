@@ -328,7 +328,7 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 // operator, then pass in empty struct.
 // - diskBackedReuseMode indicates whether this disk-backed sort can be used
 // multiple times.
-func (r opResult) createDiskBackedSort(
+func createDiskBackedSort(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
@@ -432,7 +432,6 @@ func (r opResult) createDiskBackedSort(
 			sortUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 			mergeUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[1], factory)
 			outputUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[2], factory)
-			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
 			es := colexecdisk.NewExternalSorter(
 				flowCtx,
 				processorID,
@@ -447,17 +446,17 @@ func (r opResult) createDiskBackedSort(
 				args.TestingKnobs.DelegateFDAcquisitions,
 				args.DiskQueueCfg,
 				args.FDSemaphore,
-				diskAccount,
+				args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID),
 				accounts[3],
 				flowCtx.TestingKnobs().VecFDsToAcquire,
 			)
-			r.ToClose = append(r.ToClose, es.(colexecop.Closer))
+			args.CloserRegistry.AddCloser(es.(colexecop.Closer))
 			return es
 		},
 		diskBackedReuseMode,
 		args.TestingKnobs.SpillingCallbackFn,
 	)
-	r.ToClose = append(r.ToClose, diskSpiller)
+	args.CloserRegistry.AddCloser(diskSpiller)
 	return diskSpiller
 }
 
@@ -465,7 +464,7 @@ func (r opResult) createDiskBackedSort(
 // that can be used by the hash-based partitioner.
 // NOTE: unless DelegateFDAcquisitions testing knob is set to true, it is up to
 // the caller to acquire the necessary file descriptors up front.
-func (r opResult) makeDiskBackedSorterConstructor(
+func makeDiskBackedSorterConstructor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
@@ -489,7 +488,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 		// of the hash-based partitioner, it can be reused multiple times (in
 		// the worst case, for each partition).
 		const reuseMode = colexecop.BufferingOpCanReuse
-		return r.createDiskBackedSort(
+		return createDiskBackedSort(
 			ctx, flowCtx, &sortArgs, input, inputTypes,
 			execinfrapb.Ordering{Columns: orderingCols}, 0, /* limit */
 			0 /* matchLen */, maxNumberPartitions, args.Spec.ProcessorID,
@@ -589,7 +588,7 @@ func (r opResult) createAndWrapRowSource(
 	}
 	takeOverMetaInfo(&r.OpWithMetaInfo, inputs)
 	r.MetadataSources = append(r.MetadataSources, r.Root.(colexecop.MetadataSource))
-	r.ToClose = append(r.ToClose, r.Root.(colexecop.Closer))
+	args.CloserRegistry.AddCloser(r.Root.(colexecop.Closer))
 	r.Releasables = append(r.Releasables, c)
 	return nil
 }
@@ -750,6 +749,9 @@ func NewColOperator(
 	}
 	if args.MonitorRegistry == nil {
 		args.MonitorRegistry = &colexecargs.MonitorRegistry{}
+	}
+	if args.CloserRegistry == nil {
+		args.CloserRegistry = &colexecargs.CloserRegistry{}
 	}
 
 	core := &spec.Core
@@ -913,7 +915,7 @@ func NewColOperator(
 					return r, err
 				}
 			}
-			result.finishScanPlanning(scanOp, resultTypes)
+			result.finishScanPlanning(scanOp, resultTypes, args.CloserRegistry)
 
 		case core.JoinReader != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -945,7 +947,7 @@ func NewColOperator(
 			if err != nil {
 				return r, err
 			}
-			result.finishScanPlanning(indexJoinOp, indexJoinOp.ResultTypes)
+			result.finishScanPlanning(indexJoinOp, indexJoinOp.ResultTypes, args.CloserRegistry)
 
 		case core.Filterer != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -1024,7 +1026,7 @@ func NewColOperator(
 					result.Root = colexec.NewHashAggregator(
 						ctx, newHashAggArgs, nil, /* newSpillingQueueArgs */
 					)
-					result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
+					args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
 				} else {
 					newHashAggArgs, sqArgs, hashAggregatorMemMonitorName := makeNewHashAggregatorArgs(
 						ctx, flowCtx, args, opName, newAggArgs, factory,
@@ -1066,25 +1068,25 @@ func NewColOperator(
 									OutputUnlimitedAllocator: colmem.NewAllocator(ctx, ehaAccounts[2], factory),
 									MaxOutputBatchMemSize:    newHashAggArgs.MaxOutputBatchMemSize,
 								},
-								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
+								makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
 								args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
 								ehaAccounts[3],
 								spec.Core.Aggregator.OutputOrdering,
 							)
-							result.ToClose = append(result.ToClose, toClose)
+							args.CloserRegistry.AddCloser(toClose)
 							return eha
 						},
 						colexecop.BufferingOpNoReuse,
 						args.TestingKnobs.SpillingCallbackFn,
 					)
 					result.Root = diskSpiller
-					result.ToClose = append(result.ToClose, diskSpiller)
+					args.CloserRegistry.AddCloser(diskSpiller)
 				}
 			} else {
 				evalCtx.SingleDatumAggMemAccount = getStreamingMemAccount(args, flowCtx)
 				newAggArgs.Allocator = getStreamingAllocator(ctx, args, flowCtx)
 				result.Root = colexec.NewOrderedAggregator(ctx, newAggArgs)
-				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
+				args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
 			}
 
 		case core.Distinct != nil:
@@ -1117,12 +1119,15 @@ func NewColOperator(
 					allocator, inputs[0].Root, core.Distinct.DistinctColumns, result.ColumnTypes,
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
-				edOpName := redact.SafeString("external-distinct")
-				diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
+				// Capture the current input type schema since the spilling to
+				// disk might occur during the execution time, at which point
+				// result.ColumnTypes might point to something different.
+				inputTypes := result.ColumnTypes
 				diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
 					distinctMemMonitorName,
 					func(input colexecop.Operator) colexecop.Operator {
+						edOpName := redact.SafeString("external-distinct")
 						accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 							ctx, flowCtx, edOpName, spec.ProcessorID, 2, /* numAccounts */
 						)
@@ -1132,20 +1137,20 @@ func NewColOperator(
 							flowCtx,
 							args,
 							input,
-							result.ColumnTypes,
-							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, edOpName, factory),
+							inputTypes,
+							makeDiskBackedSorterConstructor(ctx, flowCtx, args, edOpName, factory),
 							inMemoryUnorderedDistinct,
-							diskAccount,
+							args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID),
 							accounts[1],
 						)
-						result.ToClose = append(result.ToClose, toClose)
+						args.CloserRegistry.AddCloser(toClose)
 						return ed
 					},
 					colexecop.BufferingOpNoReuse,
 					args.TestingKnobs.SpillingCallbackFn,
 				)
 				result.Root = diskSpiller
-				result.ToClose = append(result.ToClose, diskSpiller)
+				args.CloserRegistry.AddCloser(diskSpiller)
 			}
 
 		case core.Ordinality != nil:
@@ -1182,7 +1187,7 @@ func NewColOperator(
 					crossJoinerDiskAcc,
 					accounts[1],
 				)
-				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
+				args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
 			} else {
 				opName := redact.SafeString("hash-joiner")
 				hjArgs, hashJoinerMemMonitorName := makeNewHashJoinerArgs(
@@ -1200,12 +1205,11 @@ func NewColOperator(
 					// in-memory hash joiner.
 					result.Root = inMemoryHashJoiner
 				} else {
-					opName := redact.SafeString("external-hash-joiner")
-					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
 						[]redact.SafeString{hashJoinerMemMonitorName},
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
+							opName := redact.SafeString("external-hash-joiner")
 							accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 								ctx, flowCtx, opName, spec.ProcessorID, 2, /* numAccounts */
 							)
@@ -1217,17 +1221,17 @@ func NewColOperator(
 								args,
 								hjArgs.Spec,
 								inputOne, inputTwo,
-								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, opName, factory),
-								diskAccount,
+								makeDiskBackedSorterConstructor(ctx, flowCtx, args, opName, factory),
+								args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID),
 								accounts[1],
 							)
-							result.ToClose = append(result.ToClose, ehj)
+							args.CloserRegistry.AddCloser(ehj)
 							return ehj
 						},
 						args.TestingKnobs.SpillingCallbackFn,
 					)
 					result.Root = diskSpiller
-					result.ToClose = append(result.ToClose, diskSpiller)
+					args.CloserRegistry.AddCloser(diskSpiller)
 				}
 			}
 
@@ -1275,7 +1279,7 @@ func NewColOperator(
 			)
 
 			result.Root = mj
-			result.ToClose = append(result.ToClose, mj.(colexecop.Closer))
+			args.CloserRegistry.AddCloser(mj.(colexecop.Closer))
 			result.ColumnTypes = core.MergeJoiner.Type.MakeOutputTypes(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes)
 
 			if onExpr != nil {
@@ -1353,7 +1357,7 @@ func NewColOperator(
 				newHashAggArgs,
 				sqArgs,
 			)
-			result.ToClose = append(result.ToClose, hgj.(colexecop.Closer))
+			args.CloserRegistry.AddCloser(hgj.(colexecop.Closer))
 
 			ehgjOpName := redact.SafeString("external-hash-group-joiner")
 			ehgjAccounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
@@ -1381,11 +1385,11 @@ func NewColOperator(
 						args,
 						hjArgs.Spec,
 						inputOne, inputTwo,
-						result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-join", factory),
+						makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-join", factory),
 						args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehgjOpName+"-join", spec.ProcessorID),
 						ehgjAccounts[2],
 					)
-					result.ToClose = append(result.ToClose, ehj)
+					args.CloserRegistry.AddCloser(ehj)
 
 					aggInput := ehj.(colexecop.Operator)
 					if len(hgjSpec.JoinOutputColumns) > 0 {
@@ -1408,20 +1412,20 @@ func NewColOperator(
 							OutputUnlimitedAllocator: colmem.NewAllocator(ctx, ehgjAccounts[4], factory),
 							MaxOutputBatchMemSize:    newHashAggArgs.MaxOutputBatchMemSize,
 						},
-						result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-agg", factory),
+						makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-agg", factory),
 						args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehgjOpName+"-agg", spec.ProcessorID),
 						ehgjAccounts[5],
 						// TODO(yuzefovich): think through whether the hash
 						// group-join needs to maintain the ordering.
 						execinfrapb.Ordering{}, /* outputOrdering */
 					)
-					result.ToClose = append(result.ToClose, toClose)
+					args.CloserRegistry.AddCloser(toClose)
 					return eha
 				},
 				args.TestingKnobs.SpillingCallbackFn,
 			)
 			result.Root = diskSpiller
-			result.ToClose = append(result.ToClose, diskSpiller)
+			args.CloserRegistry.AddCloser(diskSpiller)
 
 		case core.Sorter != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -1432,7 +1436,7 @@ func NewColOperator(
 			ordering := core.Sorter.OutputOrdering
 			matchLen := core.Sorter.OrderingMatchLen
 			limit := core.Sorter.Limit
-			result.Root = result.createDiskBackedSort(
+			result.Root = createDiskBackedSort(
 				ctx, flowCtx, args, input, result.ColumnTypes, ordering, limit, matchLen, 0, /* maxNumberPartitions */
 				spec.ProcessorID, "" /* opNamePrefix */, factory, colexecop.BufferingOpNoReuse,
 			)
@@ -1490,7 +1494,7 @@ func NewColOperator(
 						getStreamingAllocator(ctx, args, flowCtx), input, result.ColumnTypes,
 						core.Windower.PartitionBy, wf.Ordering.Columns, partitionColIdx,
 						func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) colexecop.Operator {
-							return result.createDiskBackedSort(
+							return createDiskBackedSort(
 								ctx, flowCtx, args, input, inputTypes,
 								execinfrapb.Ordering{Columns: orderingCols}, 0 /*limit */, 0, /* matchLen */
 								0 /* maxNumberPartitions */, spec.ProcessorID,
@@ -1502,7 +1506,7 @@ func NewColOperator(
 					result.ColumnTypes = append(result.ColumnTypes, types.Bool)
 				} else {
 					if len(wf.Ordering.Columns) > 0 {
-						input = result.createDiskBackedSort(
+						input = createDiskBackedSort(
 							ctx, flowCtx, args, input, result.ColumnTypes,
 							wf.Ordering, 0 /* limit */, 0 /* matchLen */, 0, /* maxNumberPartitions */
 							spec.ProcessorID, opNamePrefix, factory, colexecop.BufferingOpNoReuse,
@@ -1666,14 +1670,14 @@ func NewColOperator(
 							windowArgs, aggType, wf.Frame, &wf.Ordering, argIdxs,
 							aggArgs.OutputTypes[0], aggFnsAlloc,
 						)
-						result.ToClose = append(result.ToClose, toClose...)
+						args.CloserRegistry.AddClosers(toClose)
 						returnType = aggArgs.OutputTypes[0]
 					}
 				} else {
 					colexecerror.InternalError(errors.AssertionFailedf("window function spec is nil"))
 				}
 				if c, ok := result.Root.(colexecop.Closer); ok {
-					result.ToClose = append(result.ToClose, c)
+					args.CloserRegistry.AddCloser(c)
 				}
 
 				result.ColumnTypes = append(result.ColumnTypes, returnType)
@@ -2024,7 +2028,9 @@ func (r opResult) finishBufferedWindowerArgs(
 	args.MainAllocator = colmem.NewAllocator(ctx, mainAcc, factory)
 }
 
-func (r opResult) finishScanPlanning(op colfetcher.ScanOperator, resultTypes []*types.T) {
+func (r opResult) finishScanPlanning(
+	op colfetcher.ScanOperator, resultTypes []*types.T, closerRegistry *colexecargs.CloserRegistry,
+) {
 	r.Root = op
 	if buildutil.CrdbTestBuild {
 		r.Root = colexec.NewInvariantsChecker(r.Root)
@@ -2041,7 +2047,7 @@ func (r opResult) finishScanPlanning(op colfetcher.ScanOperator, resultTypes []*
 	// cancellation check on their own while performing long operations.
 	r.Root = colexecutils.NewCancelChecker(r.Root)
 	r.ColumnTypes = resultTypes
-	r.ToClose = append(r.ToClose, op)
+	closerRegistry.AddCloser(op)
 }
 
 // planFilterExpr creates all operators to implement filter expression.

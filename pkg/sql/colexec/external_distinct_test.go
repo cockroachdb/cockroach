@@ -51,6 +51,8 @@ func TestExternalDistinct(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
@@ -63,16 +65,9 @@ func TestExternalDistinct(t *testing.T) {
 			var semsToCheck []semaphore.Semaphore
 			var outputOrdering execinfrapb.Ordering
 			verifier := colexectestutils.UnorderedVerifier
-			// Check that the disk spiller, the external distinct, and the
-			// disk-backed sort (which includes both the disk spiller and the
-			// sort) were added as Closers.
-			numExpectedClosers := 4
 			if tc.isOrderedOnDistinctCols {
 				outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
 				verifier = colexectestutils.OrderedVerifier
-				// The disk spiller and the sort included in the final
-				// disk-backed sort must also be added as Closers.
-				numExpectedClosers += 2
 			}
 			tc.runTests(t, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 				// A sorter should never exceed ExternalSorterMinPartitions, even
@@ -80,14 +75,16 @@ func TestExternalDistinct(t *testing.T) {
 				// more than this number of file descriptors.
 				sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 				semsToCheck = append(semsToCheck, sem)
-				distinct, closers, err := createExternalDistinct(
+				return createExternalDistinct(
 					ctx, flowCtx, input, tc.typs, tc.distinctCols, tc.nullsAreDistinct, tc.errorOnDup,
 					outputOrdering, queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
-					&monitorRegistry,
+					&monitorRegistry, &closerRegistry,
 				)
-				require.Equal(t, numExpectedClosers, len(closers))
-				return distinct, err
 			})
+			// Close all closers manually (in production this is done on the
+			// flow cleanup).
+			closerRegistry.Close(ctx)
+			closerRegistry.Reset()
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
@@ -118,6 +115,8 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	rng, _ := randutil.NewTestRand()
 	nCols := 1 + rng.Intn(3)
@@ -181,21 +180,17 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			// of file descriptors.
 			sem := colexecop.NewTestingSemaphore(0 /* limit */)
 			semsToCheck = append(semsToCheck, sem)
-			var outputOrdering execinfrapb.Ordering
-			distinct, closers, err := createExternalDistinct(
-				ctx, flowCtx, input, typs, distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
-				outputOrdering, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
-				&monitorRegistry,
-			)
-			require.NoError(t, err)
-			// Check that the disk spiller, the external distinct, and the
-			// disk-backed sort (which accounts for two) were added as Closers.
-			numExpectedClosers := 4
-			require.Equal(t, numExpectedClosers, len(closers))
 			numRuns++
-			return distinct, nil
+			return createExternalDistinct(
+				ctx, flowCtx, input, typs, distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
+				execinfrapb.Ordering{}, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
+				&monitorRegistry, &closerRegistry,
+			)
 		},
 	)
+	// We expect to see the disk spiller for each run, and the external distinct
+	// and the disk-backed sort for every time we spilled.
+	require.Equal(t, numRuns+2*numSpills, closerRegistry.NumClosers())
 	for i, sem := range semsToCheck {
 		require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 	}
@@ -273,6 +268,8 @@ func BenchmarkExternalDistinct(b *testing.B) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	for _, spillForced := range []bool{false, true} {
 		for _, maintainOrdering := range []bool{false, true} {
@@ -293,14 +290,13 @@ func BenchmarkExternalDistinct(b *testing.B) {
 					if maintainOrdering {
 						outputOrdering = convertDistinctColsToOrdering(distinctCols)
 					}
-					op, _, err := createExternalDistinct(
+					return createExternalDistinct(
 						ctx, flowCtx, []colexecop.Operator{input}, typs,
 						distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
 						outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
 						nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
-						&monitorRegistry,
+						&monitorRegistry, &closerRegistry,
 					)
-					return op, err
 				},
 				func(nCols int) int {
 					return 0
@@ -329,7 +325,8 @@ func createExternalDistinct(
 	spillingCallbackFn func(),
 	numForcedRepartitions int,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, []colexecop.Closer, error) {
+	closerRegistry *colexecargs.CloserRegistry,
+) (colexecop.Operator, error) {
 	distinctSpec := &execinfrapb.DistinctSpec{
 		DistinctColumns:  distinctCols,
 		NullsAreDistinct: nullsAreDistinct,
@@ -345,15 +342,15 @@ func createExternalDistinct(
 		ResultTypes: typs,
 	}
 	args := &colexecargs.NewColOperatorArgs{
-		Spec:                spec,
-		Inputs:              colexectestutils.MakeInputs(sources),
-		StreamingMemAccount: testMemAcc,
-		DiskQueueCfg:        diskQueueCfg,
-		FDSemaphore:         testingSemaphore,
-		MonitorRegistry:     monitorRegistry,
+		Spec:            spec,
+		Inputs:          colexectestutils.MakeInputs(sources),
+		DiskQueueCfg:    diskQueueCfg,
+		FDSemaphore:     testingSemaphore,
+		MonitorRegistry: monitorRegistry,
+		CloserRegistry:  closerRegistry,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, result.ToClose, err
+	return result.Root, err
 }

@@ -1015,6 +1015,8 @@ func TestHashJoiner(t *testing.T) {
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	for _, tcs := range [][]*joinTestCase{getHJTestCases(), getMJTestCases()} {
@@ -1023,10 +1025,10 @@ func TestHashJoiner(t *testing.T) {
 				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
-						Spec:                spec,
-						StreamingMemAccount: monitorRegistry.NewStreamingMemAccount(flowCtx),
-						Inputs:              colexectestutils.MakeInputs(sources),
-						MonitorRegistry:     &monitorRegistry,
+						Spec:            spec,
+						Inputs:          colexectestutils.MakeInputs(sources),
+						MonitorRegistry: &monitorRegistry,
+						CloserRegistry:  &closerRegistry,
 					}
 					args.TestingKnobs.DiskSpillingDisabled = true
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
@@ -1175,6 +1177,8 @@ func TestHashJoinerProjection(t *testing.T) {
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	leftTypes := []*types.T{types.Bool, types.Int, types.Bytes}
 	rightTypes := []*types.T{types.Int, types.Float, types.Decimal}
@@ -1209,6 +1213,7 @@ func TestHashJoinerProjection(t *testing.T) {
 		Spec:            spec,
 		Inputs:          []colexecargs.OpWithMetaInfo{{Root: leftSource}, {Root: rightSource}},
 		MonitorRegistry: &monitorRegistry,
+		CloserRegistry:  &closerRegistry,
 	}
 	args.TestingKnobs.DiskSpillingDisabled = true
 	hjOp, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
