@@ -119,7 +119,12 @@ var walFailoverUnlimitedTokens = settings.RegisterBoolSetting(
 	"when true, during WAL failover, unlimited admission tokens are allocated",
 	false)
 
-// Experimental observations:
+// The following experimental observations were used to guide the initial
+// implementation, which aimed to maintain a sub-level count of 20 with token
+// calculation every 60s. Since then, the code has evolved to calculate tokens
+// every 15s and to aim for regular work maintaining a sub-level count of
+// l0SubLevelCountOverloadThreshold/2. So this commentary should be
+// interpreted in that context:
 //   - Sub-level count of ~40 caused a node heartbeat latency p90, p99 of 2.5s,
 //     4s. With a setting that limits sub-level count to 10, before the system
 //     is considered overloaded, and adjustmentInterval = 60, we see the actual
@@ -133,9 +138,35 @@ var walFailoverUnlimitedTokens = settings.RegisterBoolSetting(
 //     then we run the risk of having 100+ sub-levels when we hit a file count
 //     of 1000. Instead we use a sub-level overload threshold of 20.
 //
-// We've set these overload thresholds in a way that allows the system to
-// absorb short durations (say a few minutes) of heavy write load.
-const l0FileCountOverloadThreshold = 1000
+// A sub-level count of l0SubLevelCountOverloadThreshold results in the same
+// score as a file count of l0FileCountOverloadThreshold. Exceptions: a small
+// L0 in terms of bytes (see IOThreshold.Score); these constants being
+// overridden in the cluster settings
+// admission.l0_sub_level_count_overload_threshold and
+// admission.l0_file_count_overload_threshold. We ignore these exceptions in
+// the discussion here. Hence, 20 sub-levels is equivalent in score to 4000 L0
+// files, i.e., 1 sub-level is equivalent to 200 files.
+//
+// Ideally, equivalence here should match equivalence in how L0 is scored for
+// compactions. CockroachDB sets Pebble's L0CompactionThreshold to a constant
+// value of 2, which results in a compaction score of 1.0 with 1 sub-level.
+// CockroachDB does not override Pebble's L0CompactionFileThreshold, which
+// defaults to 500, so 500 files cause a compaction score of 1.0. So in
+// Pebble's compaction scoring logic, 1 sub-level is equivalent to 500 L0
+// files.
+//
+// So admission control is more sensitive to higher file count than Pebble's
+// compaction scoring. l0FileCountOverloadThreshold used to be 1000 up to
+// v24.3, and increasing it to 4000 was considered significant enough --
+// increasing to 10000, to make Pebble's compaction logic and admission
+// control equivalent was considered too risky. Note that admission control
+// tries to maintain a score of 0.5 when admitting regular work, which if
+// caused by file count represent 2000 files. With 2000 files, the L0
+// compaction score is 2000/500 = 4.0, which is significantly above the
+// compaction threshold of 1.0 (at which a level is eligible for compaction).
+// So one could argue that this inconsistency between admission control and
+// Pebble is potentially harmless.
+const l0FileCountOverloadThreshold = 4000
 const l0SubLevelCountOverloadThreshold = 20
 
 // ioLoadListener adjusts tokens in kvStoreTokenGranter for IO, specifically due to
