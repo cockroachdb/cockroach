@@ -405,6 +405,9 @@ func (b *Builder) buildStmt(
 	case *tree.Call:
 		return b.buildProcedure(stmt, inScope)
 
+	case *tree.DoBlock:
+		return b.buildDo(stmt, inScope)
+
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
 

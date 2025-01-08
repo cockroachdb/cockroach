@@ -1,8 +1,105 @@
 # LogicTest: !local-mixed-24.3
 
+statement ok
+CREATE TABLE t (x INT);
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'f()'; RETURN 1; END $$;
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'p()'; END $$;
+
+subtest sql
+
+query T noticetrace
+DO $$ BEGIN RAISE NOTICE 'Hello, world!'; END $$;
+----
+NOTICE: Hello, world!
+
+# DO block with branching and a RETURN statement.
+query T noticetrace
+DO $$ BEGIN IF (SELECT max(x) FROM t) > 3 THEN RETURN; END IF; RAISE NOTICE 'HERE'; RETURN; RAISE NOTICE 'STILL HERE'; END $$;
+----
+NOTICE: HERE
+
+# DO block with a loop.
+query T noticetrace
+DO $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    FOR i IN 1..3 LOOP
+      x := x + i;
+      RAISE NOTICE 'i = %, x = %', i, x;
+    END LOOP;
+  END
+$$;
+----
+NOTICE: i = 1, x = 1
+NOTICE: i = 2, x = 3
+NOTICE: i = 3, x = 6
+
+# DO block that calls a function and procedure;
+query T noticetrace
+DO $$
+  BEGIN
+    RAISE NOTICE 'f() returned: %', f();
+    RAISE NOTICE 'calling p()';
+    CALL p();
+  END
+$$;
+----
+NOTICE: f()
+NOTICE: f() returned: 1
+NOTICE: calling p()
+NOTICE: p()
+
+# Nested DO statement.
+query T noticetrace
+DO $$ BEGIN RAISE NOTICE 'here'; DO $inner$ BEGIN RAISE NOTICE 'hello world!'; END $inner$; RAISE NOTICE 'still here'; END $$;
+----
+NOTICE: here
+NOTICE: hello world!
+NOTICE: still here
+
+# Nested DO statement with inserts.
+query T noticetrace
+DO $$
+  BEGIN
+    INSERT INTO t VALUES (1);
+    RAISE NOTICE 'outer block inserted 1: max=%', (SELECT max(x) FROM t);
+    DO $inner$
+      BEGIN
+        RAISE NOTICE 'inner block: max=%', (SELECT max(x) FROM t);
+        INSERT INTO t VALUES (2);
+        RAISE NOTICE 'inner block inserted 2: max=%', (SELECT max(x) FROM t);
+      END
+    $inner$;
+    RAISE NOTICE 'after inner block: max=%', (SELECT max(x) FROM t);
+  END
+$$;
+----
+NOTICE: outer block inserted 1: max=1
+NOTICE: inner block: max=1
+NOTICE: inner block inserted 2: max=2
+NOTICE: after inner block: max=2
+
+statement error pgcode 42601 pq: RETURN cannot have a parameter in a procedure
+DO $$ BEGIN RETURN 1; END $$;
+
+# DO statements can only be top-level statements.
+statement error pgcode 42601 pq: at or near "do": syntax error
+WITH foo AS (DO $$ BEGIN RAISE NOTICE 'Hello, world!'; END $$) SELECT 1;
+
+statement error pgcode 42601 pq: at or near "do": syntax error
+SELECT * FROM (DO $$ BEGIN RAISE NOTICE 'Hello, world!'; END $$);
+
+subtest end
+
 subtest in_plpgsql_routine
 
 statement ok
+DROP FUNCTION f;
 CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
   BEGIN
     RAISE NOTICE 'here';
