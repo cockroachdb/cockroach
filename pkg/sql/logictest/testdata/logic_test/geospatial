@@ -6333,3 +6333,19 @@ SELECT st_asgeojson(tbl.*, 'g', 4)::JSONB->'geometry'->'coordinates'
   FROM (VALUES ('SRID=4326;POINT (-123.45678901234 12.3456789012)'::GEOMETRY)) tbl(g);
 ----
 [-123.4568, 12.3457]
+
+# Regression test for parsing arrays of spatial types. Arrays for these types
+# are special since they use ':' as a delimiter instead of ','.
+subtest array_delimiter
+
+query T
+SELECT '{0101000020e6100000cdcccccccc4c1b40cdcccccccc8c4740:0101000020e6100000333333333333fd3fcdcccccccc0c4640}'::geometry[];
+----
+{0101000020E6100000CDCCCCCCCC4C1B40CDCCCCCCCC8C4740:0101000020E6100000333333333333FD3FCDCCCCCCCC0C4640}
+
+query T
+SELECT '{0101000020e6100000cdcccccccc4c1b40cdcccccccc8c4740:0101000020e6100000333333333333fd3fcdcccccccc0c4640}'::geography[];
+----
+{0101000020E6100000CDCCCCCCCC4C1B40CDCCCCCCCC8C4740:0101000020E6100000333333333333FD3FCDCCCCCCCC0C4640}
+
+subtest end
