@@ -67,7 +67,7 @@ func TestServer(t *testing.T) {
 	}
 
 	req := &execinfrapb.SetupFlowRequest{
-		Version:           execversion.Version,
+		Version:           execversion.Latest,
 		LeafTxnInputState: leafInputState,
 	}
 	req.Flow = execinfrapb.FlowSpec{
@@ -98,11 +98,11 @@ func TestServer(t *testing.T) {
 			expectedErr string
 		}{
 			{
-				version:     execversion.Version + 1,
+				version:     execversion.Latest + 1,
 				expectedErr: "version mismatch",
 			},
 			{
-				version:     execversion.MinAcceptedVersion - 1,
+				version:     execversion.MinAccepted - 1,
 				expectedErr: "version mismatch",
 			},
 			// TODO(yuzefovich): figure out what setup to perform to simulate
@@ -111,7 +111,7 @@ func TestServer(t *testing.T) {
 			// panic in a separate goroutine because there is no RowReceiver set
 			// up for the table reader.
 			//{
-			//	version:     execversion.MinAcceptedVersion,
+			//	version:     execversion.MinAccepted,
 			//	expectedErr: "",
 			//},
 		}
