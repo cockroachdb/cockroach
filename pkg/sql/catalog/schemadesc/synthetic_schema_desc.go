@@ -76,7 +76,7 @@ func (p synthetic) NewBuilder() catalog.DescriptorBuilder {
 		"%s schema cannot create a builder", p.kindName())
 	return nil // unreachable
 }
-func (p synthetic) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+func (p synthetic) GetReferencedDescIDs(catalog.ValidationLevel) (catalog.DescriptorIDSet, error) {
 	return catalog.DescriptorIDSet{}, nil
 }
 func (p synthetic) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
