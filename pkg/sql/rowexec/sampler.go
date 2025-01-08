@@ -11,10 +11,12 @@ import (
 	"math/rand"
 	"time"
 
-	hyperloglog "github.com/axiomhq/hyperloglog/000"
+	hllNew "github.com/axiomhq/hyperloglog"
+	hllOld "github.com/axiomhq/hyperloglog/000"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -31,11 +33,13 @@ import (
 
 // sketchInfo contains the specification and run-time state for each sketch.
 type sketchInfo struct {
-	spec     execinfrapb.SketchSpec
-	sketch   *hyperloglog.Sketch
-	numNulls int64
-	numRows  int64
-	size     int64
+	spec execinfrapb.SketchSpec
+	// Exactly one of sketchOld and sketchNew will be set.
+	sketchOld *hllOld.Sketch
+	sketchNew *hllNew.Sketch
+	numNulls  int64
+	numRows   int64
+	size      int64
 }
 
 // A sampler processor returns a random sample of rows, as well as "global"
@@ -75,12 +79,6 @@ const samplerProcName = "sampler"
 // for testing.
 var SamplerProgressInterval = 10000
 
-var supportedSketchTypes = map[execinfrapb.SketchType]struct{}{
-	// The code currently hardcodes the use of this single type of sketch
-	// (which avoids the extra complexity until we actually have multiple types).
-	execinfrapb.SketchType_HLL_PLUS_PLUS_V1: {},
-}
-
 // maxIdleSleepTime is the maximum amount of time we sleep for throttling
 // (we sleep once every SamplerProgressInterval rows).
 const maxIdleSleepTime = 10 * time.Second
@@ -101,11 +99,7 @@ func newSamplerProcessor(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 ) (*samplerProcessor, error) {
-	for _, s := range spec.Sketches {
-		if _, ok := supportedSketchTypes[s.SketchType]; !ok {
-			return nil, errors.Errorf("unsupported sketch type %s", s.SketchType)
-		}
-	}
+	useNewHLL := execversion.FromContext(ctx) >= execversion.V25_1
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
@@ -134,9 +128,13 @@ func newSamplerProcessor(
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
 			spec:     spec.Sketches[i],
-			sketch:   hyperloglog.New14(),
 			numNulls: 0,
 			numRows:  0,
+		}
+		if useNewHLL {
+			s.sketches[i].sketchNew = hllNew.New14()
+		} else {
+			s.sketches[i].sketchOld = hllOld.New14()
 		}
 		if spec.Sketches[i].GenerateHistogram {
 			sampleCols.Add(int(spec.Sketches[i].Columns[0]))
@@ -156,9 +154,13 @@ func newSamplerProcessor(
 		sketchSpec.Columns = []uint32{0}
 		s.invSketch[col] = &sketchInfo{
 			spec:     sketchSpec,
-			sketch:   hyperloglog.New14(),
 			numNulls: 0,
 			numRows:  0,
+		}
+		if useNewHLL {
+			s.invSketch[col].sketchNew = hllNew.New14()
+		} else {
+			s.invSketch[col].sketchOld = hllOld.New14()
 		}
 	}
 
@@ -430,7 +432,12 @@ func (s *samplerProcessor) emitSketchRow(
 	outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numRows))}
 	outRow[s.numNullsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numNulls))}
 	outRow[s.sizeCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.size))}
-	data, err := si.sketch.MarshalBinary()
+	var data []byte
+	if si.sketchNew != nil {
+		data, err = si.sketchNew.MarshalBinary()
+	} else {
+		data, err = si.sketchOld.MarshalBinary()
+	}
 	if err != nil {
 		return false, err
 	}
@@ -545,7 +552,11 @@ func (s *sketchInfo) addRow(
 		// be uniformly distributed in the 2^64 range). Experiments (on tpcc
 		// order_line) with simplistic functions yielded bad results.
 		binary.LittleEndian.PutUint64(*buf, uint64(val))
-		s.sketch.Insert(*buf)
+		if s.sketchNew != nil {
+			s.sketchNew.Insert(*buf)
+		} else {
+			s.sketchOld.Insert(*buf)
+		}
 		return nil
 	}
 	isNull := true
@@ -578,6 +589,10 @@ func (s *sketchInfo) addRow(
 	if isNull {
 		s.numNulls++
 	}
-	s.sketch.Insert(*buf)
+	if s.sketchNew != nil {
+		s.sketchNew.Insert(*buf)
+	} else {
+		s.sketchOld.Insert(*buf)
+	}
 	return nil
 }
