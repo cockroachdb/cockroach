@@ -957,3 +957,153 @@ func TestSchemaChangerFailsOnMissingDesc(t *testing.T) {
 	tdb.CheckQueryResults(t, "SELECT status FROM crdb_internal.jobs WHERE statement LIKE '%ADD COLUMN%'",
 		[][]string{{"failed"}})
 }
+
+// TestCreateObjectConcurrency validates that concurrent create object with
+// independent references never hit txn retry errors. All objects are created
+// under the same schema.
+func TestCreateObjectConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Validate concurrency behaviour for objects under a schema
+	tests := []struct {
+		name       string
+		setupStmt  string
+		firstStmt  string
+		secondStmt string
+	}{
+		{
+			name: "create table with function references",
+			setupStmt: `
+CREATE FUNCTION public.fn1 (input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT input::INT8;
+                                $$;
+CREATE FUNCTION public.wrap(input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT public.fn1(input);
+                                $$;
+CREATE FUNCTION public.wrap2(input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT public.fn1(input);
+                                $$;
+`,
+			firstStmt:  "CREATE TABLE t1(n int default public.wrap(10))",
+			secondStmt: "CREATE TABLE t2(n int default public.wrap2(10))",
+		},
+		{
+			name: "create table with type reference",
+			setupStmt: `
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+CREATE TYPE status1 AS ENUM ('open', 'closed', 'inactive');
+`,
+			firstStmt:  "CREATE TABLE t1(n status)",
+			secondStmt: "CREATE TABLE t2(n status1)",
+		},
+		{
+			name: "create view with type references",
+			setupStmt: `
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+CREATE TYPE status1 AS ENUM ('open', 'closed', 'inactive');
+CREATE FUNCTION public.fn1 (input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT input::INT8;
+                                $$;
+CREATE FUNCTION public.wrap(input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT public.fn1(input);
+                                $$;
+CREATE FUNCTION public.wrap2(input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT public.fn1(input);
+                                $$;
+CREATE TABLE t1(n int default public.wrap(10));
+CREATE TABLE t2(n int default public.wrap2(10));
+`,
+			// Note: Views cannot invoke UDFs directly yet.
+			firstStmt:  "CREATE VIEW v1 AS (SELECT n, 'open'::status FROM public.t1)",
+			secondStmt: "CREATE VIEW v2 AS (SELECT n, 'open'::status1 FROM public.t2)",
+		},
+		{
+			name: "create sequence with ownership",
+			setupStmt: `
+CREATE TABLE t1(n int);
+CREATE TABLE t2(n int);
+`,
+			firstStmt:  "CREATE SEQUENCE sq1 OWNED BY t1.n",
+			secondStmt: "CREATE SEQUENCE sq2 OWNED BY t2.n",
+		},
+		{
+			name:       "create type",
+			firstStmt:  "CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');",
+			secondStmt: "CREATE TYPE status1 AS ENUM ('open', 'closed', 'inactive');",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+				// This would work with secondary tenants as well, but the span config
+				// limited logic can hit transaction retries on the span_count table.
+				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(138733),
+			})
+			defer s.Stopper().Stop(ctx)
+
+			runner := sqlutils.MakeSQLRunner(sqlDB)
+			firstConn, err := sqlDB.Conn(ctx)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, firstConn.Close())
+			}()
+			secondConn, err := sqlDB.Conn(ctx)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, secondConn.Close())
+			}()
+
+			firstConnReady := make(chan struct{})
+			secondConnReady := make(chan struct{})
+
+			runner.Exec(t, test.setupStmt)
+
+			grp := ctxgroup.WithContext(ctx)
+
+			grp.Go(func() error {
+				defer close(firstConnReady)
+				tx, err := firstConn.BeginTx(ctx, nil)
+				if err != nil {
+					return err
+				}
+				_, err = tx.Exec(test.firstStmt)
+				if err != nil {
+					return err
+				}
+				firstConnReady <- struct{}{}
+				<-secondConnReady
+				return tx.Commit()
+			})
+			grp.Go(func() error {
+				defer close(secondConnReady)
+				tx, err := secondConn.BeginTx(ctx, nil)
+				if err != nil {
+					return err
+				}
+				_, err = tx.Exec(test.secondStmt)
+				if err != nil {
+					return err
+				}
+				<-firstConnReady
+				secondConnReady <- struct{}{}
+				return tx.Commit()
+			})
+			require.NoError(t, grp.Wait())
+		})
+	}
+}
