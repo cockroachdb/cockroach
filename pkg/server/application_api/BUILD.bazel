@@ -54,6 +54,7 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/apiconstants",
+        "//pkg/server/authserver",
         "//pkg/server/diagnostics",
         "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/license",
@@ -99,6 +100,8 @@ go_test(
         "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
         "@org_golang_x_sync//errgroup",
     ],
 )

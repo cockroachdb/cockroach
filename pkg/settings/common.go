@@ -172,3 +172,22 @@ type internalSetting interface {
 	// are not run against the decoded value.
 	decodeAndSetDefaultOverride(ctx context.Context, sv *Values, encoded string) error
 }
+
+// TestingIsReportable is used in testing for reportability.
+func TestingIsReportable(s Setting) bool {
+	if _, ok := s.(*MaskedSetting); ok {
+		return false
+	}
+	if e, ok := s.(internalSetting); ok {
+		return e.isReportable()
+	}
+	return true
+}
+
+// TestingIsSensitive is used in testing for sensitivity.
+func TestingIsSensitive(s Setting) bool {
+	if e, ok := s.(internalSetting); ok {
+		return e.isSensitive()
+	}
+	return false
+}

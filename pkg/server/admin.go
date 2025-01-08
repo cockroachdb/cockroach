@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,6 +49,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
@@ -1934,74 +1936,15 @@ func (s *adminServer) GetUIData(
 func (s *adminServer) Settings(
 	ctx context.Context, req *serverpb.SettingsRequest,
 ) (*serverpb.SettingsResponse, error) {
-	ctx = s.AnnotateCtx(ctx)
-
-	_, isAdmin, err := s.privilegeChecker.GetUserAndRole(ctx)
+	userName, err := authserver.UserFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
-	redactValues := true
-	// Only returns non-sensitive settings that are required
-	// for features on DB Console.
-	consoleSettingsOnly := false
-	if isAdmin {
-		// Root accesses can customize the purpose.
-		// This is used by the UI to see all values (local access)
-		// and `cockroach zip` to redact the values (telemetry).
-		if req.UnredactedValues {
-			redactValues = false
-		}
-	} else {
-		// Non-root access cannot see the values.
-		// Exception: users with VIEWACTIVITY and VIEWACTIVITYREDACTED can see cluster
-		// settings used by the UI Console.
-		if err := s.privilegeChecker.RequireViewClusterSettingOrModifyClusterSettingPermission(ctx); err != nil {
-			if err2 := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err2 != nil {
-				// The check for VIEWACTIVITY or VIEWATIVITYREDACTED is a special case so cluster settings from
-				// the console can be returned, but if the user doesn't have them (i.e. err2 != nil), we don't want
-				// to share this error message, so only return `err`.
-				return nil, err
-			}
-			consoleSettingsOnly = true
-		}
+	keyFilter := make(map[string]bool)
+	for _, key := range req.Keys {
+		keyFilter[key] = true
 	}
-
-	showSystem := s.sqlServer.execCfg.Codec.ForSystemTenant()
-	target := settings.ForVirtualCluster
-	if showSystem {
-		target = settings.ForSystemTenant
-	}
-
-	// settingsKeys is the list of setting keys to retrieve.
-	settingsKeys := make([]settings.InternalKey, 0, len(req.Keys))
-	for _, desiredSetting := range req.Keys {
-		// The API client can pass either names or internal keys through the API.
-		key, ok, _ := settings.NameToKey(settings.SettingName(desiredSetting))
-		if ok {
-			settingsKeys = append(settingsKeys, key)
-		} else {
-			settingsKeys = append(settingsKeys, settings.InternalKey(desiredSetting))
-		}
-	}
-	if !consoleSettingsOnly {
-		if len(settingsKeys) == 0 {
-			settingsKeys = settings.Keys(target)
-		}
-	} else {
-		if len(settingsKeys) == 0 {
-			settingsKeys = settings.ConsoleKeys()
-		} else {
-			newSettingsKeys := make([]settings.InternalKey, 0, len(settings.ConsoleKeys()))
-			for _, k := range settingsKeys {
-				if slices.Contains(settings.ConsoleKeys(), k) {
-					newSettingsKeys = append(newSettingsKeys, k)
-				}
-			}
-			settingsKeys = newSettingsKeys
-		}
-	}
-
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd only need the non-defaults for comparison.
@@ -2027,33 +1970,80 @@ func (s *adminServer) Settings(
 		}
 	}
 
-	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
-	for _, k := range settingsKeys {
-		var v settings.Setting
-		var ok bool
-		if redactValues {
-			v, ok = settings.LookupForReportingByKey(k, target)
-		} else {
-			v, ok = settings.LookupForLocalAccessByKey(k, target)
-		}
-		if !ok {
-			continue
-		}
+	// Get cluster settings
+	it, err := s.internalExecutor.QueryIteratorEx(
+		ctx, "get-cluster-settings", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: userName},
+		"SELECT variable, value, type, description, public from crdb_internal.cluster_settings",
+	)
 
-		var altered *time.Time
-		if val, ok := alteredSettings[k]; ok {
-			altered = val
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	scanner := makeResultScanner(it.Types())
+	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
+	respSettings := make(map[string]serverpb.SettingsResponse_Value)
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
+		var responseValue serverpb.SettingsResponse_Value
+		if scanErr := scanner.ScanAll(
+			row,
+			&responseValue.Name,
+			&responseValue.Value,
+			&responseValue.Type,
+			&responseValue.Description,
+			&responseValue.Public); scanErr != nil {
+			return nil, srverrors.ServerError(ctx, scanErr)
 		}
-		resp.KeyValues[string(k)] = serverpb.SettingsResponse_Value{
-			Type: v.Typ(),
-			Name: string(v.Name()),
-			// Note: v.String() redacts the values if the purpose is not "LocalAccess".
-			Value:       v.String(&s.st.SV),
-			Description: v.Description(),
-			Public:      v.Visibility() == settings.Public,
-			LastUpdated: altered,
+		internalKey, found, _ := settings.NameToKey(settings.SettingName(responseValue.Name))
+
+		if found && (len(keyFilter) == 0 || keyFilter[string(internalKey)]) {
+			if lastUpdated, found := alteredSettings[internalKey]; found {
+				responseValue.LastUpdated = lastUpdated
+			}
+			respSettings[string(internalKey)] = responseValue
 		}
 	}
+
+	// Users without MODIFYCLUSTERSETTINGS or VIEWCLUSTERSETTINGS access cannot see the values.
+	// Exception: users with VIEWACTIVITY and VIEWACTIVITYREDACTED can see cluster
+	// settings used by the UI Console.
+	if err != nil {
+		if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+			return nil, srverrors.ServerError(ctx, err)
+		}
+		if err2 := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err2 != nil {
+			// The check for VIEWACTIVITY or VIEWATIVITYREDACTED is a special case so cluster settings from
+			// the console can be returned, but if the user doesn't have them (i.e. err2 != nil), we don't want
+			// to share this error message.
+			return nil, grpcstatus.Errorf(
+				codes.PermissionDenied, "this operation requires the %s or %s system privileges",
+				privilege.VIEWCLUSTERSETTING.DisplayName(), privilege.MODIFYCLUSTERSETTING.DisplayName())
+		}
+		consoleKeys := settings.ConsoleKeys()
+		for _, k := range consoleKeys {
+			if consoleSetting, ok := settings.LookupForLocalAccessByKey(k, s.sqlServer.execCfg.Codec.ForSystemTenant()); ok {
+				if internalKey, found, _ := settings.NameToKey(consoleSetting.Name()); found &&
+					(len(keyFilter) == 0 || keyFilter[string(internalKey)]) {
+					var responseValue serverpb.SettingsResponse_Value
+					responseValue.Name = string(consoleSetting.Name())
+					responseValue.Value = consoleSetting.String(&s.st.SV)
+					responseValue.Type = consoleSetting.Typ()
+					responseValue.Description = consoleSetting.Description()
+					responseValue.Public = consoleSetting.Visibility() == settings.Public
+					if lastUpdated, found := alteredSettings[internalKey]; found {
+						responseValue.LastUpdated = lastUpdated
+					}
+					respSettings[string(internalKey)] = responseValue
+				}
+			}
+		}
+
+	}
+
+	resp.KeyValues = respSettings
 	return &resp, nil
 }
 
