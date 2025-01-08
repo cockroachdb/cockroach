@@ -671,6 +671,13 @@ func TestRepeatableReadLogic_distsql_srfs(
 	runLogicTest(t, "distsql_srfs")
 }
 
+func TestRepeatableReadLogic_do(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "do")
+}
+
 func TestRepeatableReadLogic_drop_database(
 	t *testing.T,
 ) {

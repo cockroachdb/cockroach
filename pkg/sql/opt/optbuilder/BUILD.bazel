@@ -53,6 +53,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/clusterversion",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/security/username",
         "//pkg/server/telemetry",
