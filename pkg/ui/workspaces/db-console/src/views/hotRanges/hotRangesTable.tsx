@@ -245,7 +245,7 @@ const HotRangesTable = ({
           </Tooltip>
         ),
         cell: val => val.tables.join(", "),
-        sort: val => val.table_name,
+        sort: val => val.tables.join(", "),
       },
       {
         name: "index",

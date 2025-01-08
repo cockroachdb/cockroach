@@ -436,9 +436,9 @@ type hotRangeInfo struct {
 	ReadBytesPerSecond  float64          `json:"read_bytes_per_second"`
 	CPUTimePerSecond    float64          `json:"cpu_time_per_second"`
 	LeaseholderNodeID   roachpb.NodeID   `json:"leaseholder_node_id"`
-	TableName           string           `json:"table_name"`
-	DatabaseName        string           `json:"database_name"`
-	IndexName           string           `json:"index_name"`
+	Databases           []string         `json:"databases"`
+	Tables              []string         `json:"tables"`
+	Indexes             []string         `json:"indexes"`
 	SchemaName          string           `json:"schema_name"`
 	ReplicaNodeIDs      []roachpb.NodeID `json:"replica_node_ids"`
 	StoreID             roachpb.StoreID  `json:"store_id"`
@@ -516,9 +516,9 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 				ReadBytesPerSecond:  r.ReadBytesPerSecond,
 				CPUTimePerSecond:    r.CPUTimePerSecond,
 				LeaseholderNodeID:   r.LeaseholderNodeID,
-				TableName:           r.TableName,
-				DatabaseName:        r.DatabaseName,
-				IndexName:           r.IndexName,
+				Databases:           r.Databases,
+				Tables:              r.Tables,
+				Indexes:             r.Indexes,
 				ReplicaNodeIDs:      r.ReplicaNodeIds,
 				SchemaName:          r.SchemaName,
 				StoreID:             r.StoreID,

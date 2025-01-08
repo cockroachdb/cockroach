@@ -109,10 +109,10 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 					hrEvent := &eventpb.HotRangesStats{
 						RangeID:             int64(r.RangeID),
 						Qps:                 r.QPS,
-						DatabaseName:        r.DatabaseName,
+						Databases:           r.Databases,
+						Tables:              r.Tables,
+						Indexes:             r.Indexes,
 						SchemaName:          r.SchemaName,
-						TableName:           r.TableName,
-						IndexName:           r.IndexName,
 						CPUTimePerSecond:    r.CPUTimePerSecond,
 						ReadBytesPerSecond:  r.ReadBytesPerSecond,
 						WriteBytesPerSecond: r.WriteBytesPerSecond,
