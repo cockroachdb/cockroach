@@ -1086,6 +1086,7 @@ type DoBlock struct {
 }
 
 var _ Statement = (*DoBlock)(nil)
+var _ tree.DoBlockBody = (*DoBlock)(nil)
 
 func (s *DoBlock) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("DO ")
@@ -1102,6 +1103,17 @@ func (s *DoBlock) Format(ctx *tree.FmtCtx) {
 		ctx.FormatStringDollarQuotes(bodyStr)
 	})
 	ctx.WriteString(";\n")
+}
+
+func (s *DoBlock) IsDoBlockBody() {}
+
+func (s *DoBlock) VisitBody(v tree.Visitor) tree.DoBlockBody {
+	plVisitor := SQLStmtVisitor{Visitor: v}
+	newBlock := Walk(&plVisitor, s.Block)
+	if newBlock != s.Block {
+		return &DoBlock{Block: newBlock.(*Block)}
+	}
+	return s
 }
 
 func (s *DoBlock) CopyNode() *DoBlock {

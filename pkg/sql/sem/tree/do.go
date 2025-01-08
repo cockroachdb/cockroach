@@ -11,6 +11,27 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// DoBlock represents a SQL DO statement. It can only exist as a top-level
+// statement.
+type DoBlock struct {
+	Code DoBlockBody
+}
+
+// DoBlockBody represents the fully parsed code body of a DO statement.
+// It currently maps to plpgsqltree.DoBlock.
+type DoBlockBody interface {
+	NodeFormatter
+	VisitBody(v Visitor) DoBlockBody
+	IsDoBlockBody()
+}
+
+var _ Statement = &DoBlock{}
+
+// Format implements the NodeFormatter interface.
+func (n *DoBlock) Format(ctx *FmtCtx) {
+	ctx.FormatNode(n.Code)
+}
+
 // DoBlockOptions represent a list of options for a DO statement.
 type DoBlockOptions []DoBlockOption
 
