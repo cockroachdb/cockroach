@@ -132,6 +132,12 @@ func (sc testStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bo
 	return nil
 }
 
+func (sc testStreamClient) SetupReverseStream(
+	_ context.Context, _ string, _ hlc.Timestamp,
+) (int, error) {
+	return 0, nil
+}
+
 // PriorReplicationDetails implements the streamclient.Client interface.
 func (sc testStreamClient) PriorReplicationDetails(
 	_ context.Context, _ roachpb.TenantName,

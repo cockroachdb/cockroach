@@ -406,6 +406,26 @@ func (p *partitionedStreamClient) CreateForTables(
 	return spec, nil
 }
 
+func (p *partitionedStreamClient) SetupReverseStream(
+	ctx context.Context, cmd string, cursorTime hlc.Timestamp,
+) (int, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.ReverseStream")
+	defer sp.Finish()
+
+	if !p.logical {
+		return 0, errors.New("cannot create a reverse stream without logical replication flag")
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	r := p.mu.srcConn.QueryRow(ctx, cmd, cursorTime.AsOfSystemTime())
+	var jobID int
+	if err := r.Scan(&jobID); err != nil {
+		return 0, err
+	}
+	return jobID, nil
+}
+
 // PriorReplicationDetails implements the streamclient.Client interface.
 func (p *partitionedStreamClient) PriorReplicationDetails(
 	ctx context.Context, tenant roachpb.TenantName,

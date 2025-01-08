@@ -100,6 +100,7 @@ type Client interface {
 
 	PlanLogicalReplication(ctx context.Context, req streampb.LogicalReplicationPlanRequest) (LogicalReplicationPlan, error)
 	CreateForTables(ctx context.Context, req *streampb.ReplicationProducerRequest) (*streampb.ReplicationProducerSpec, error)
+	SetupReverseStream(ctx context.Context, cmd string, cursorTime hlc.Timestamp) (int, error)
 
 	// Close releases all the resources used by this client.
 	Close(ctx context.Context) error

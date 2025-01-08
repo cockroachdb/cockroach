@@ -635,6 +635,12 @@ func (p *RandomStreamClient) PriorReplicationDetails(
 
 }
 
+func (p *RandomStreamClient) SetupReverseStream(
+	ctx context.Context, cmd string, cursorTime hlc.Timestamp,
+) (int, error) {
+	return 0, errors.AssertionFailedf("unimplemented")
+}
+
 type randomStreamSubscription struct {
 	receiveFn func(ctx context.Context) error
 	eventCh   chan crosscluster.Event
