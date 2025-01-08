@@ -288,9 +288,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		contentCheck := func(name, contents string) error {
 			if name == "schema.sql" {
 				for _, tableName := range tableNames {
-					if regexp.MustCompile("CREATE TABLE defaultdb.public."+tableName).FindString(contents) == "" {
+					if regexp.MustCompile("USE defaultdb;\nCREATE TABLE public."+tableName).FindString(contents) == "" {
 						return errors.Newf(
-							"could not find 'CREATE TABLE defaultdb.public.%s' in schema.sql:\n%s", tableName, contents)
+							"could not find 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", tableName, contents)
 					}
 				}
 			}
@@ -563,12 +563,30 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		r.Exec(t, "CREATE TABLE db2.s2.t2 (pk INT PRIMARY KEY);")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM db1.t1, db2.s2.t2;")
 		checkBundle(
-			t, fmt.Sprint(rows), "db1.public.t1", nil, false, /* expectErrors */
+			t, fmt.Sprint(rows), "public.t1", nil, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
 		)
 		checkBundle(
-			t, fmt.Sprint(rows), "db2.s2.t2", nil, false, /* expectErrors */
+			t, fmt.Sprint(rows), "s2.t2", nil, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
+		)
+	})
+
+	t.Run("multiple databases and special characters", func(t *testing.T) {
+		r.Exec(t, `CREATE DATABASE "db.name";`)
+		r.Exec(t, `CREATE DATABASE "db'name";`)
+		r.Exec(t, `CREATE SCHEMA "db.name"."sc.name"`)
+		r.Exec(t, `CREATE SCHEMA "db'name"."sc'name"`)
+		r.Exec(t, `CREATE TABLE "db.name"."sc.name".t (pk INT PRIMARY KEY);`)
+		r.Exec(t, `CREATE TABLE "db'name"."sc'name".t (pk INT PRIMARY KEY);`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db.name"."sc.name".t, "db'name"."sc'name".t;`)
+		checkBundle(
+			t, fmt.Sprint(rows), `"sc.name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
+		)
+		checkBundle(
+			t, fmt.Sprint(rows), `"sc'name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
 		)
 	})
 
@@ -673,8 +691,8 @@ func readUnzippedFile(t *testing.T, f *zip.File) string {
 // arbitrary number of strings; each string contains one or more filenames
 // separated by a space.
 // - tableName: if non-empty, checkBundle asserts that the substring equal to
-// tableName is present in schema.sql. It doesn't have to be a fully qualified
-// name, but that is encouraged.
+// tableName is present in schema.sql. It is expected to be either
+// schema-qualified or just the table name.
 // - expectErrors: if set, indicates that non-critical errors might have
 // occurred during the bundle collection and shouldn't fail the test.
 func checkBundle(
@@ -929,7 +947,7 @@ func TestExplainBundleEnv(t *testing.T) {
 		_, err := sqlDB.ExecContext(ctx, line)
 		if err != nil {
 			words := strings.Split(line, " ")
-			t.Fatalf("%v: probably need to add %q into 'sessionVarNeedsQuotes' map", err, words[1])
+			t.Fatalf("%s\n%v: probably need to add %q into 'sessionVarNeedsEscaping' map", line, err, words[1])
 		}
 	}
 

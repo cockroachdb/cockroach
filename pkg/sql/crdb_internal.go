@@ -407,7 +407,6 @@ CREATE TABLE crdb_internal.databases (
 						createNode.Placement = tree.DataPlacementUnspecified
 					}
 
-					createNode.SurvivalGoal = tree.SurvivalGoalDefault
 					switch db.GetRegionConfig().SurvivalGoal {
 					case descpb.SurvivalGoal_ZONE_FAILURE:
 						survivalGoal = tree.NewDString("zone")
@@ -3495,7 +3494,7 @@ func writeCreateTypeDescRow(
 		return false, errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind())
 	}
 
-	name, err := tree.NewUnresolvedObjectName(3, [3]string{typeDesc.GetName(), sc.GetName(), db.GetName()}, 0)
+	name, err := tree.NewUnresolvedObjectName(2, [3]string{typeDesc.GetName(), sc.GetName()}, 0)
 	if err != nil {
 		return false, err
 	}
