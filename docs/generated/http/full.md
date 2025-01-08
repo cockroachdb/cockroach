@@ -6402,7 +6402,6 @@ SettingsRequest inquires what are the current settings in the cluster.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | keys | [string](#cockroach.server.serverpb.SettingsRequest-string) | repeated | The array of setting keys or names to retrieve. An empty keys array means "all". | [reserved](#support-status) |
-| unredacted_values | [bool](#cockroach.server.serverpb.SettingsRequest-bool) |  | Indicate whether to see unredacted setting values. This is opt-in so that a previous version `cockroach zip` does not start reporting values when this becomes active. For good security, the server only obeys this after it checks that the logger-in user has admin privilege. | [reserved](#support-status) |
 
 
 
