@@ -813,6 +813,7 @@ type harness struct {
 	prepMemo  *memo.Memo
 	testCat   *testcat.Catalog
 	optimizer xform.Optimizer
+	gf        explain.PlanGistFactory
 }
 
 func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
@@ -943,12 +944,11 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 		tb.Fatalf("invalid phase %s for Simple", phase)
 	}
 
-	var gf explain.PlanGistFactory
-	gf.Init(exec.StubFactory{})
+	h.gf.Init(exec.StubFactory{})
 	root := execMemo.RootExpr()
 	eb := execbuilder.New(
 		context.Background(),
-		&gf,
+		&h.gf,
 		&h.optimizer,
 		execMemo,
 		nil, /* catalog */
@@ -1001,12 +1001,11 @@ func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 		tb.Fatalf("invalid phase %s for Prepared", phase)
 	}
 
-	var gf explain.PlanGistFactory
-	gf.Init(exec.StubFactory{})
+	h.gf.Init(exec.StubFactory{})
 	root := execMemo.RootExpr()
 	eb := execbuilder.New(
 		context.Background(),
-		&gf,
+		&h.gf,
 		&h.optimizer,
 		execMemo,
 		nil, /* catalog */
@@ -1779,9 +1778,9 @@ func BenchmarkExecBuild(b *testing.B) {
 		execMemo := h.optimizer.Memo()
 		root := execMemo.RootExpr()
 
+		var gf explain.PlanGistFactory
 		b.Run(tc.query.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				var gf explain.PlanGistFactory
 				gf.Init(exec.StubFactory{})
 				eb := execbuilder.New(
 					context.Background(),
