@@ -1002,8 +1002,10 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	assert.True(t, ok)
 	require.NoError(t, nl.Heartbeat(context.Background(), l))
 
-	// Verify that the error was injected exactly twice.
-	require.Equal(t, int32(2), injectedErrorCount.Load())
+	// Verify that the error was injected at least twice.
+	// We mostly expect exactly twice but it's been tricky to actually make this
+	// be true in all cases (see #126040, which didn't manage).
+	require.LessOrEqual(t, int32(2), injectedErrorCount.Load())
 }
 
 // This tests the create code path for node liveness, for that we need to create
