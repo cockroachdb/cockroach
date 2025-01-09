@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -61,6 +62,9 @@ type VectorIndexOptions struct {
 	// testing purposes. If this is zero, then the global random number generator
 	// is used intead.
 	Seed int64
+	// MaxWorkers specifies the maximum number of background workers that can be
+	// created to process fixups for this vector index instance.
+	MaxWorkers int
 }
 
 // SearchOptions specifies options that apply to a particular search operation
@@ -137,8 +141,6 @@ type VectorIndex struct {
 	// fixups runs index maintenance operations like split and merge on a
 	// background goroutine.
 	fixups fixupProcessor
-	// cancel stops the background fixup processing goroutine.
-	cancel func()
 	// stats maintains locally-cached statistics about the vector index that are
 	// used by adaptive search to improve search accuracy.
 	stats statsManager
@@ -182,20 +184,15 @@ func NewVectorIndex(
 		return nil, errors.Errorf(
 			"QualitySamples option %d exceeds max allowed value", vi.options.QualitySamples)
 	}
+	if vi.options.MaxWorkers == 0 {
+		// Default to a max of one worker per processor.
+		vi.options.MaxWorkers = runtime.GOMAXPROCS(-1)
+	}
 
-	vi.fixups.Init(vi, options.Seed)
+	vi.fixups.Init(ctx, stopper, vi, options.Seed)
 
 	if err := vi.stats.Init(ctx, store); err != nil {
 		return nil, err
-	}
-
-	if stopper != nil {
-		// Start the background goroutine.
-		ctx, vi.cancel = stopper.WithCancelOnQuiesce(ctx)
-		err := stopper.RunAsyncTask(ctx, "vecindex-fixups", vi.fixups.Start)
-		if err != nil {
-			return nil, errors.Wrap(err, "starting fixup processor")
-		}
 	}
 
 	return vi, nil
@@ -212,11 +209,11 @@ func (vi *VectorIndex) FormatStats() string {
 	return vi.stats.Format()
 }
 
-// Close cancels the background goroutine, if it's running.
+// Close shuts down any background fixup workers. While this also happens when
+// the Init context is closed or the stopper is quiesced, this method can be
+// used to perform the shutdown independently of those mechanisms.
 func (vi *VectorIndex) Close() {
-	if vi.cancel != nil {
-		vi.cancel()
-	}
+	vi.fixups.cancel()
 }
 
 // Insert adds a new vector with the given primary key to the index. This is
@@ -347,14 +344,16 @@ func (vi *VectorIndex) Search(
 	return vi.searchHelper(&searchCtx, searchSet)
 }
 
-// ProcessFixups waits until all pending fixups have been processed by the
-// background goroutine.
+// SuspendFixups suspends background fixup processing until ProcessFixups is
+// explicitly called. It is used for testing.
+func (vi *VectorIndex) SuspendFixups() {
+	vi.fixups.Suspend()
+}
+
+// ProcessFixups waits until all pending fixups have been processed by
+// background workers. It is used for testing.
 func (vi *VectorIndex) ProcessFixups() {
-	if vi.cancel == nil {
-		panic(errors.AssertionFailedf(
-			"ProcessFixups cannot be called without a background goroutine running"))
-	}
-	vi.fixups.Wait()
+	vi.fixups.Process()
 }
 
 // ForceSplit enqueues a split fixup. It is used for testing.
