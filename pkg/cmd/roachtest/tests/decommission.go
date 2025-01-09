@@ -1056,7 +1056,7 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 			return err
 		}
 
-		// Check to see if the node has been drained or decomissioned.
+		// Check to see if the node has been drained or decommissioned.
 		// If not, queries should not fail.
 		if err = run(decommNodeDB, `SHOW DATABASES`); err != nil {
 			if strings.Contains(err.Error(), "not accepting clients") || // drained
