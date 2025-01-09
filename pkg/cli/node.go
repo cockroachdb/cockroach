@@ -8,6 +8,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"reflect"
@@ -605,9 +606,22 @@ func runDecommissionNodeImpl(
 					DoDrain:  true,
 					NodeId:   targetNode.String(),
 				}
-				if _, err = c.Drain(ctx, drainReq); err != nil {
+				stream, err := c.Drain(ctx, drainReq)
+				if err != nil {
 					fmt.Fprintln(stderr)
 					return errors.Wrapf(err, "while trying to drain n%d", targetNode)
+				}
+
+				for {
+					_, err := stream.Recv()
+					if err == io.EOF {
+						// Done.
+						break
+					}
+					if err != nil {
+						fmt.Fprintln(stderr)
+						return errors.Wrapf(err, "while trying to drain n%d", targetNode)
+					}
 				}
 			}
 
