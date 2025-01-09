@@ -58,8 +58,8 @@ export SANITIZED_BENCH_PACKAGE=${SANITIZED_BENCH_PACKAGE/.../all}
 
 # Build rochprod and roachprod-microbench
 run_bazel <<'EOF'
-bazel build --config ci --config crosslinux //pkg/cmd/roachprod //pkg/cmd/roachprod-microbench
-BAZEL_BIN=$(bazel info bazel-bin --config ci --config crosslinux)
+bazel build --config crosslinux //pkg/cmd/roachprod //pkg/cmd/roachprod-microbench
+BAZEL_BIN=$(bazel info bazel-bin --config crosslinux)
 mkdir -p bin
 cp $BAZEL_BIN/pkg/cmd/roachprod/roachprod_/roachprod bin
 cp $BAZEL_BIN/pkg/cmd/roachprod-microbench/roachprod-microbench_/roachprod-microbench bin

@@ -18,9 +18,9 @@ ls -l "/test-bin"
 
 echo "TC_SERVER_URL is $TC_SERVER_URL"
 
-bazel build //pkg/cmd/bazci --config=ci
+bazel build //pkg/cmd/bazci
 
-BAZEL_BIN=$(bazel info bazel-bin --config ci)
+BAZEL_BIN=$(bazel info bazel-bin)
 
 # The script accepts the arguments accepted by TestMetaCrossVersion. It should
 # look like:
