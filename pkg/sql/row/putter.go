@@ -22,7 +22,7 @@ type Putter interface {
 	CPut(key, value interface{}, expValue []byte)
 	CPutWithOriginTimestamp(key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool)
 	Put(key, value interface{})
-	InitPut(key, value interface{}, failOnTombstones bool)
+	InitPut(key, value interface{})
 	Del(key ...interface{})
 
 	CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value)
@@ -57,7 +57,7 @@ func (t *TracePutter) Put(key, value interface{}) {
 	log.VEventfDepth(t.Ctx, 1, 2, "Put %v -> %v", key, value)
 	t.Putter.Put(key, value)
 }
-func (t *TracePutter) InitPut(key, value interface{}, failOnTombstones bool) {
+func (t *TracePutter) InitPut(key, value interface{}) {
 	log.VEventfDepth(t.Ctx, 1, 2, "InitPut %v -> %v", key, value)
 	t.Putter.Put(key, value)
 
@@ -196,8 +196,8 @@ func (s *SortingPutter) CPutWithOriginTimestamp(
 func (s *SortingPutter) Put(key, value interface{}) {
 	s.Putter.Put(key, value)
 }
-func (s *SortingPutter) InitPut(key, value interface{}, failOnTombstones bool) {
-	s.Putter.InitPut(key, value, failOnTombstones)
+func (s *SortingPutter) InitPut(key, value interface{}) {
+	s.Putter.InitPut(key, value)
 
 }
 func (s *SortingPutter) Del(key ...interface{}) {
@@ -298,8 +298,8 @@ func (k *KVBatchAdapter) CPut(key, value interface{}, expValue []byte) {
 func (k *KVBatchAdapter) Put(key, value interface{}) {
 	k.Batch.Put(key, value)
 }
-func (k *KVBatchAdapter) InitPut(key, value interface{}, failOnTombstones bool) {
-	k.Batch.InitPut(key, value, failOnTombstones)
+func (k *KVBatchAdapter) InitPut(key, value interface{}) {
+	k.Batch.InitPut(key, value)
 
 }
 func (k *KVBatchAdapter) Del(key ...interface{}) {

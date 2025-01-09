@@ -679,13 +679,12 @@ func (b *Batch) CPutValuesEmpty(bs BulkSource[roachpb.Value]) {
 
 // InitPut sets the first value for a key to value. An ConditionFailedError is
 // reported if a value already exists for the key and it's not equal to the
-// value passed in. If failOnTombstones is set to true, tombstones will return
-// a ConditionFailedError just like a mismatched value.
+// value passed in.
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc). It is illegal
 // to set value to nil.
-func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
+func (b *Batch) InitPut(key, value interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -696,7 +695,7 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(kvpb.NewInitPut(k, v, failOnTombstones))
+	b.appendReqs(kvpb.NewInitPut(k, v))
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
 }

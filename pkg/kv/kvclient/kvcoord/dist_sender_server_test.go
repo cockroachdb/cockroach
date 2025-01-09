@@ -2140,7 +2140,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "a", "put", false /* failOnTombstones */) // put to advance txn ts
+				return txn.InitPut(ctx, "a", "put") // put to advance txn ts
 			},
 			perIsoLevel: map[isolation.Level]*expect{
 				// No retry, preemptive (no-op) refresh before commit.
@@ -2896,7 +2896,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "iput", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
+				return txn.InitPut(ctx, "iput", "put")
 			},
 			allIsoLevels: &expect{
 				expServerRefresh: true,
@@ -2908,7 +2908,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "iput", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
+				return txn.InitPut(ctx, "iput", "put")
 			},
 			priorReads: true,
 			perIsoLevel: map[isolation.Level]*expect{
@@ -2938,7 +2938,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "iput", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
+				return txn.InitPut(ctx, "iput", "put")
 			},
 			allIsoLevels: &expect{
 				expServerRefresh: true,
@@ -2953,7 +2953,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "iput", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
+				return txn.InitPut(ctx, "iput", "put")
 			},
 			priorReads: true,
 			perIsoLevel: map[isolation.Level]*expect{
@@ -2983,7 +2983,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "iput", "put2")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put1", false)
+				return txn.InitPut(ctx, "iput", "put1")
 			},
 			allIsoLevels: &expect{
 				expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
@@ -2999,47 +2999,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "iput", "put2")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put2", false)
+				return txn.InitPut(ctx, "iput", "put2")
 			},
 			// The transaction performs a server-side refresh due to the write-write
 			// conflict and then succeeds during its InitPut.
 			allIsoLevels: &expect{
 				expServerRefresh: true,
-			},
-		},
-		{
-			name: "write too old with initput failing on tombstone before",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Del(ctx, "iput")
-				return err
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put2")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put2", true)
-			},
-			// The transaction performs a server-side refresh due to the write-write
-			// conflict and then succeeds during its InitPut.
-			allIsoLevels: &expect{
-				expServerRefresh: true,
-			},
-		},
-		{
-			name: "write too old with initput failing on tombstone after",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Del(ctx, "iput")
-				return err
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", true)
-			},
-			allIsoLevels: &expect{
-				expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
-				expFailure:       "unexpected value", // condition failed error when failing on tombstones
 			},
 		},
 		{

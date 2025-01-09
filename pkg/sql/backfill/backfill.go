@@ -1048,7 +1048,7 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 		if traceKV {
 			log.VEventf(ctx, 2, "InitPut %s -> %s", entry.Key, entry.Value.PrettyPrint())
 		}
-		batch.InitPut(entry.Key, &entry.Value, false /* failOnTombstones */)
+		batch.InitPut(entry.Key, &entry.Value)
 	}
 	writeBatch := txn.Run
 	if alsoCommit {

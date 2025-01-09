@@ -476,15 +476,14 @@ func (db *DB) CPutInline(ctx context.Context, key, value interface{}, expValue [
 
 // InitPut sets the first value for a key to value. A ConditionFailedError is
 // reported if a value already exists for the key and it's not equal to the
-// value passed in. If failOnTombstones is set to true, tombstones count as
-// mismatched values and will cause a ConditionFailedError.
+// value passed in.
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc). It is illegal to
 // set value to nil.
-func (db *DB) InitPut(ctx context.Context, key, value interface{}, failOnTombstones bool) error {
+func (db *DB) InitPut(ctx context.Context, key, value interface{}) error {
 	b := &Batch{}
-	b.InitPut(key, value, failOnTombstones)
+	b.InitPut(key, value)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

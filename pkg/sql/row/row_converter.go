@@ -62,7 +62,7 @@ func (i KVInserter) Put(key, value interface{}) {
 }
 
 // InitPut method of the putter interface.
-func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
+func (i KVInserter) InitPut(key, value interface{}) {
 	i(roachpb.KeyValue{
 		Key:   *key.(*roachpb.Key),
 		Value: *value.(*roachpb.Value),

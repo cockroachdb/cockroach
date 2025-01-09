@@ -145,7 +145,7 @@ func TestInitPut(t *testing.T) {
 	}), clock, stopper)
 
 	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
-	if pErr := txn.InitPut(ctx, "a", "b", false); pErr != nil {
+	if pErr := txn.InitPut(ctx, "a", "b"); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
