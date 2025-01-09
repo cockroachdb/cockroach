@@ -23,13 +23,13 @@ import (
 // SpanConfigClient provides methods to interact with a stream of span
 // config updates of a specific application tenant.
 type SpanConfigClient interface {
-	Dialer
-
 	// SetupSpanConfigsStream creates a stream for the span configs
 	// that apply to the passed in tenant, and returns the subscriptions the
 	// client can subscribe to. No protected timestamp or job is persisted to the
 	// source cluster.
 	SetupSpanConfigsStream(tenant roachpb.TenantName) (Subscription, error)
+
+	Close(ctx context.Context) error
 }
 
 type spanConfigClient struct {
@@ -64,10 +64,16 @@ func NewSpanConfigStreamClient(
 	if err != nil {
 		return nil, err
 	}
-	return &spanConfigClient{
+	client := &spanConfigClient{
 		pgxConfig: config,
 		srcConn:   conn,
-	}, nil
+	}
+
+	if err := client.dial(ctx); err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 // GetFirstActiveSpanConfigClient iterates through each provided stream address
@@ -76,22 +82,17 @@ func GetFirstActiveSpanConfigClient(
 	ctx context.Context, streamAddresses []string, db isql.DB, opts ...Option,
 ) (SpanConfigClient, error) {
 
-	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (Dialer, error) {
+	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (SpanConfigClient, error) {
 		streamURL, err := address.URL()
 		if err != nil {
 			return nil, err
 		}
 		return NewSpanConfigStreamClient(ctx, streamURL, db, opts...)
 	}
-	dialer, err := getFirstDialer(ctx, streamAddresses, newClient)
-	if err != nil {
-		return nil, err
-	}
-	return dialer.(SpanConfigClient), err
+	return getFirstClient(ctx, streamAddresses, newClient)
 }
 
-// Dial implements Client interface.
-func (p *spanConfigClient) Dial(ctx context.Context) error {
+func (p *spanConfigClient) dial(ctx context.Context) error {
 	err := p.srcConn.Ping(ctx)
 	return errors.Wrap(err, "failed to dial client")
 }
