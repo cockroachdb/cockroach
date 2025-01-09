@@ -1041,6 +1041,8 @@ type unreplicatedLockHolderInfo struct {
 	ts hlc.Timestamp
 }
 
+const notHeldSentinel = -1
+
 // Fixed length slice for all supported lock strengths for unreplicated locks.
 // May be used to iterate supported lock strengths in strength order (strongest
 // to weakest).
@@ -1057,7 +1059,7 @@ var unreplicatedLockHolderStrengthToIndexMap = func() [lock.MaxStrength + 1]int 
 	var m [lock.MaxStrength + 1]int
 	// Initialize all to -1.
 	for str := range m {
-		m[str] = -1
+		m[str] = notHeldSentinel
 	}
 	// Set the indices of the valid strengths.
 	for i, str := range unreplicatedHolderStrengths {
@@ -1086,7 +1088,7 @@ func (ulh *unreplicatedLockHolderInfo) epochBumped() {
 
 func (ulh *unreplicatedLockHolderInfo) resetStrengths() {
 	for strIdx := range ulh.strengths {
-		ulh.strengths[strIdx] = -1
+		ulh.strengths[strIdx] = notHeldSentinel
 	}
 }
 
@@ -1120,7 +1122,7 @@ func (ulh *unreplicatedLockHolderInfo) acquire(str lock.Strength, seqNum enginep
 
 // held returns true if the receiver is held with the supplied lock strength.
 func (ulh *unreplicatedLockHolderInfo) held(str lock.Strength) bool {
-	return ulh.minSeqNumber(str) != -1
+	return ulh.minSeqNumber(str) != notHeldSentinel
 }
 
 // rollbackIgnoredSeqNumbers mutates the receiver to rollback any locks that are
@@ -4336,6 +4338,58 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 			}
 		}
 	}
+	t.clearLocksMuLocked(locksToClear)
+	t.locks.mu.Unlock()
+}
+
+// tryClearLockGE attempts to clear all locks greater or equal to given key.
+//
+// Waiters of removed locks are told to wait elsewhere or that they are done
+// waiting.
+func (t *lockTableImpl) tryClearLocksGE(key roachpb.Key) []roachpb.LockAcquisition {
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
+
+	var locksToClear []*keyLocks
+	var lockAcquisitionsToReturn []roachpb.LockAcquisition
+	iter := t.locks.MakeIter()
+	for iter.SeekGE(&keyLocks{key: key}); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+
+		// Add any held locks to the slice of returned LockAcquisitions that the RHS
+		// should attempt.
+		for hl := l.holders.Front(); hl != nil; hl = hl.Next() {
+			tl := hl.Value
+			// The returned locks are used to populate a new
+			// in-memory lock table. We only return unreplicated
+			// locks because replicated locks already exist on disk.
+			if tl == nil || tl.unreplicatedInfo.isEmpty() {
+				continue
+			}
+
+			for _, str := range unreplicatedHolderStrengths {
+				if tl.unreplicatedInfo.held(str) {
+					lockAcquisitionsToReturn = append(lockAcquisitionsToReturn, roachpb.LockAcquisition{
+						Span: roachpb.Span{
+							Key: l.key,
+						},
+						Txn:        *hl.Value.txn,
+						Durability: lock.Unreplicated,
+						Strength:   str,
+					})
+				}
+			}
+		}
+
+		if l.tryClearLock(true) {
+			locksToClear = append(locksToClear, l)
+		}
+	}
+	t.clearLocksMuLocked(locksToClear)
+	return lockAcquisitionsToReturn
+}
+
+func (t *lockTableImpl) clearLocksMuLocked(locksToClear []*keyLocks) {
 	t.locks.numKeysLocked.Add(int64(-len(locksToClear)))
 	if t.locks.Len() == len(locksToClear) {
 		// Fast-path full clear.
@@ -4345,7 +4399,6 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 			t.locks.Delete(l)
 		}
 	}
-	t.locks.mu.Unlock()
 }
 
 // findHighestLockStrengthInSpans returns the highest lock strength specified
@@ -4503,6 +4556,11 @@ func (t *lockTableImpl) Clear(disable bool) {
 	// Also clear the txn status cache, since it won't be needed any time
 	// soon and consumes memory.
 	t.txnStatusCache.clear()
+}
+
+// ClearGE implements the lockTable interface.
+func (t *lockTableImpl) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
+	return t.tryClearLocksGE(key)
 }
 
 // QueryLockTableState implements the lockTable interface.
