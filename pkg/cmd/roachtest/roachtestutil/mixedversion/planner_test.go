@@ -296,6 +296,53 @@ func Test_upgradeTimeout(t *testing.T) {
 	assertTimeout(30*time.Minute, UpgradeTimeout(30*time.Minute)) // custom timeout applies.
 }
 
+// Test_maxNumPlanSteps tests the behaviour of plan generation in
+// mixedversion tests. If no custom value is passed, the default
+// should yield a (valid) test plan. Otherwise, the length of a test plan
+// should be <= `maxNumPlanSteps`. If maxNumPlanSteps is too low, an error
+// should be returned.
+func Test_maxNumPlanSteps(t *testing.T) {
+	mvt := newBasicUpgradeTest()
+	plan, err := mvt.plan()
+	require.NoError(t, err)
+	// N.B. the upper bound is very conservative; largest "basic upgrade" plan is well below it.
+	require.LessOrEqual(t, plan.length, 100)
+
+	mvt = newBasicUpgradeTest(MaxNumPlanSteps(15))
+	plan, err = mvt.plan()
+	require.NoError(t, err)
+	require.LessOrEqual(t, plan.length, 15)
+
+	// There is in fact no "basic upgrade" test plan with fewer than 15 steps.
+	// The smallest plan is,
+	//planner_test.go:314: Seed:               12345
+	//Upgrades:           v24.1.1 → <current>
+	//Deployment mode:    system-only
+	//Mutators:           preserve_downgrade_option_randomizer
+	//Plan:
+	//	├── install fixtures for version "v24.1.1" (1)
+	//	├── start cluster at version "v24.1.1" (2)
+	//	├── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on system tenant (3)
+	//	└── upgrade cluster from "v24.1.1" to "<current>"
+	//	├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4)
+	//	├── upgrade nodes :1-4 from "v24.1.1" to "<current>"
+	//	│   ├── restart node 3 with binary version <current> (5)
+	//	│   ├── run "mixed-version 1" (6)
+	//	│   ├── restart node 2 with binary version <current> (7)
+	//	│   ├── run "on startup 1" (8)
+	//	│   ├── restart node 1 with binary version <current> (9)
+	//	│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (10)
+	//	│   ├── run "mixed-version 2" (11)
+	//	│   └── restart node 4 with binary version <current> (12)
+	//	├── run "mixed-version 2" (13)
+	//	├── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (14)
+	//	└── run "after finalization" (15)
+	mvt = newBasicUpgradeTest(MaxNumPlanSteps(5))
+	plan, err = mvt.plan()
+	require.ErrorContains(t, err, "unable to generate a test plan")
+	require.Nil(t, plan)
+}
+
 // setDefaultVersions overrides the test's view of the current build
 // as well as the oldest supported version. This allows the test
 // output to remain stable as new versions are released and/or we bump

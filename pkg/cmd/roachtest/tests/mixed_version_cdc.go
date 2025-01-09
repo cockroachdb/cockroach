@@ -500,9 +500,9 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// 23.1. That mistake was then fixed (#110676) but, to simplify
 		// this test, we only create changefeeds in more recent versions.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
-		// We limit the number of upgrades to be performed in the test run because
-		// the test takes a significant amount of time to complete.
-		mixedversion.MaxUpgrades(3),
+		// We limit the total number of plan steps to 80, which is roughly 60% of all plan lengths.
+		// See https://github.com/cockroachdb/cockroach/pull/137963#discussion_r1906256740 for more details.
+		mixedversion.MaxNumPlanSteps(80),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
