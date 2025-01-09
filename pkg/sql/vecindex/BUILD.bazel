@@ -10,6 +10,7 @@ go_library(
     name = "vecindex",
     srcs = [
         "fixup_processor.go",
+        "fixup_worker.go",
         "index_stats.go",
         "kmeans.go",
         "split_data.go",
@@ -27,7 +28,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
-        "@org_golang_x_exp//slices",
         "@org_gonum_v1_gonum//stat",
     ],
 )
@@ -35,7 +35,7 @@ go_library(
 go_test(
     name = "vecindex_test",
     srcs = [
-        "fixup_processor_test.go",
+        "fixup_worker_test.go",
         "index_stats_test.go",
         "kmeans_test.go",
         "vector_index_test.go",

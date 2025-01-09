@@ -390,6 +390,9 @@ force-split partition-key=3
 # Suppress fixups to enable partition to grow larger than max-partition-size.
 insert no-fixups
 vec6: (3, 2)
+vec7: (-1, 0)
+vec8: (-2, 2)
+vec9: (1, 1)
 ----
 • 1 (1.25, 4.75)
 │
@@ -403,8 +406,12 @@ vec6: (3, 2)
     ├───• vec1 (0, -1)
     ├───• vec4 (4, 3)
     ├───• vec5 (2, 2)
-    └───• vec6 (3, 2)
+    ├───• vec6 (3, 2)
+    ├───• vec7 (-1, 0)
+    ├───• vec8 (-2, 2)
+    └───• vec9 (1, 1)
 
+# Even split partition is greater than max-partition-size.
 force-split partition-key=3 parent-partition-key=2
 ----
 • 1 (1.25, 4.75)
@@ -414,9 +421,15 @@ force-split partition-key=3 parent-partition-key=2
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-└───• 3 (2, 1)
+├───• 4 (-0.5, 0.5)
+│   │
+│   ├───• vec1 (0, -1)
+│   ├───• vec9 (1, 1)
+│   ├───• vec8 (-2, 2)
+│   └───• vec7 (-1, 0)
+│
+└───• 5 (3, 2.3333)
     │
-    ├───• vec1 (0, -1)
-    ├───• vec4 (4, 3)
+    ├───• vec6 (3, 2)
     ├───• vec5 (2, 2)
-    └───• vec6 (3, 2)
+    └───• vec4 (4, 3)
