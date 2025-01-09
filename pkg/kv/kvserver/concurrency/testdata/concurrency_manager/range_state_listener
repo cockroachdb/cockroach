@@ -413,7 +413,8 @@ num=1
    queued locking requests:
     active: true req: 6, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
 
-on-split
+# Split with all keys on the RHS
+on-split key=a
 ----
 [-] split range: complete
 [2] sequence req2: lock wait-queue event: done waiting

@@ -290,9 +290,12 @@ type RangeStateListener interface {
 	// replica is the leaseholder going forward.
 	OnRangeLeaseUpdated(_ roachpb.LeaseSequence, isLeaseholder bool)
 
-	// OnRangeSplit informs the concurrency manager that its range has split off
-	// a new range to its RHS.
-	OnRangeSplit()
+	// OnRangeSplit informs the concurrency manager that its range
+	// has split off a new range to its RHS. The provided key
+	// should be the new LHS EndKey (RHS StartKey). The returned
+	// LockAcquistion structs represent locks that we may want to
+	// acquire on the RHS replica before it is serving requests.
+	OnRangeSplit(roachpb.Key) []roachpb.LockAcquisition
 
 	// OnRangeMerge informs the concurrency manager that its range has merged
 	// into its LHS neighbor. This is not called on the LHS range being merged
@@ -1029,4 +1032,8 @@ type requestQueuer interface {
 	// Clear empties the queue(s) and causes all waiting requests to
 	// return. If disable is true, future requests must not be enqueued.
 	Clear(disable bool)
+
+	// ClearRHS empties the queue(s) for any keys less than the
+	// end key.
+	ClearRHS(endKey roachpb.Key) []roachpb.LockAcquisition
 }

@@ -618,7 +618,11 @@ func TestLockTableBasic(t *testing.T) {
 			case "clear":
 				lt.Clear(d.HasArg("disable"))
 				return lt.String()
-
+			case "clear-rhs":
+				var endKeyStr string
+				d.ScanArgs(t, "key", &endKeyStr)
+				lt.ClearRHS(roachpb.Key(endKeyStr))
+				return lt.String()
 			case "print":
 				return lt.String()
 

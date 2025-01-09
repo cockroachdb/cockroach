@@ -562,7 +562,9 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 			case "on-split":
 				mon.runSync("split range", func(ctx context.Context) {
 					log.Event(ctx, "complete")
-					m.OnRangeSplit()
+					var endKeyStr string
+					d.ScanArgs(t, "key", &endKeyStr)
+					m.OnRangeSplit(roachpb.Key(endKeyStr))
 				})
 				return c.waitAndCollect(t, mon)
 
