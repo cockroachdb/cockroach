@@ -112,7 +112,7 @@ func insertInvertedPutFn(
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "InitPut %s -> %s", *key, value.PrettyPrint())
 	}
-	b.InitPut(key, value, false)
+	b.InitPut(key, value)
 }
 
 func writeTombstones(

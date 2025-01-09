@@ -275,22 +275,16 @@ func TestDB_InitPut(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
 
-	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
+	if err := db.InitPut(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
+	if err := db.InitPut(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.InitPut(ctx, "aa", "2", false); err == nil {
+	if err := db.InitPut(ctx, "aa", "2"); err == nil {
 		t.Fatal("expected error from init put")
 	}
-	if _, err := db.Del(ctx, "aa"); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.InitPut(ctx, "aa", "2", true); err == nil {
-		t.Fatal("expected error from init put")
-	}
-	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
+	if err := db.InitPut(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
 	}
 	result, err := db.Get(ctx, "aa")

@@ -720,7 +720,7 @@ func (c *capturePutter) Put(key, value interface{}) {
 	c.kvs.values = append(c.kvs.values, copyBytes(v.RawBytes))
 }
 
-func (c *capturePutter) InitPut(key, value interface{}, failOnTombstones bool) {
+func (c *capturePutter) InitPut(key, value interface{}) {
 	k := key.(*roachpb.Key)
 	c.kvs.keys = append(c.kvs.keys, *k)
 	v := value.(*roachpb.Value)
