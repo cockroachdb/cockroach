@@ -58,7 +58,7 @@ func makeClusterWideZipRequests(
 	if zipCtx.files.shouldIncludeFile(rangeLogFile) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Events(ctx, &serverpb.EventsRequest{})
+				return admin.RangeLog(ctx, &serverpb.RangeLogRequest{})
 			},
 			pathName: prefix + rangelogName,
 		})
@@ -69,7 +69,7 @@ func makeClusterWideZipRequests(
 	if zipCtx.files.shouldIncludeFile(settingsFile) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Events(ctx, &serverpb.EventsRequest{})
+				return admin.Settings(ctx, &serverpb.SettingsRequest{})
 			},
 			pathName: prefix + settingsName,
 		})
