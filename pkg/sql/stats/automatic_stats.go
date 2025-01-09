@@ -381,6 +381,11 @@ func (r *Refresher) autoStatsEnabled(desc catalog.TableDescriptor) bool {
 	return enabledForTable == catpb.AutoStatsCollectionEnabled
 }
 
+// autoPartialStatsEnabled returns true if the
+// sql_stats_automatic_partial_collection_enabled setting of the table
+// descriptor set to true. If the table descriptor is nil or the table-level
+// setting is not set, the function returns true if the automatic partial stats
+// cluster setting is enabled.
 func (r *Refresher) autoPartialStatsEnabled(desc catalog.TableDescriptor) bool {
 	if desc == nil {
 		// If the descriptor could not be accessed, defer to the cluster setting.
@@ -848,7 +853,7 @@ func (r *Refresher) maybeRefreshStats(
 	explicitSettings *catpb.AutoStatsSettings,
 	rowsAffected int64,
 	asOf time.Duration,
-	maybeRefreshPartialStats bool,
+	partialStatsEnabled bool,
 ) {
 	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */)
 	if err != nil {
@@ -900,8 +905,8 @@ func (r *Refresher) maybeRefreshStats(
 		(r.knobs != nil && r.knobs.DisableFullStatsRefresh) {
 		// No full statistics refresh is happening this time. Let's try a partial
 		// stats refresh.
-		if !maybeRefreshPartialStats {
-			// No refresh is happening this time, full or partial
+		if !partialStatsEnabled {
+			// No refresh is happening this time, full or partial.
 			return
 		}
 
