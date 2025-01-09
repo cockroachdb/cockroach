@@ -583,9 +583,11 @@ func runDecommissionNodeImpl(
 
 		anyActive := false
 		var replicaCount int64
+		statusByNodeID := map[roachpb.NodeID]serverpb.DecommissionStatusResponse_Status{}
 		for _, status := range resp.Status {
 			anyActive = anyActive || status.Membership.Active()
 			replicaCount += status.ReplicaCount
+			statusByNodeID[status.NodeID] = status
 		}
 
 		if !anyActive && replicaCount == 0 {
@@ -598,6 +600,13 @@ func runDecommissionNodeImpl(
 					log.Warningf(ctx,
 						"skipping drain step for node n%d; it is decommissioning and serving the request",
 						localNodeID,
+					)
+					continue
+				}
+				if status, ok := statusByNodeID[targetNode]; !ok || !status.IsLive {
+					// Skip the draining step for the node serving the request, if it is a target node.
+					_, _ = fmt.Fprintf(stderr,
+						"skipping drain step for node n%d; it is not live\n", targetNode,
 					)
 					continue
 				}
