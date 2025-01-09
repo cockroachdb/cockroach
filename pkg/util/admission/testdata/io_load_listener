@@ -426,6 +426,23 @@ store-request-estimates: writeTokens: 10000
 tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.37x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1 write-amp-lm: 50.50x+1
 setAvailableTokens: io-tokens=417(elastic 1) elastic-disk-bw-tokens=unlimited read-bw-tokens=0 max-byte-tokens=417(elastic 1) max-disk-bw-tokens=unlimited lastTick=false
 
+prep-admission-stats admitted=10 write-bytes=200000
+----
+{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:200000 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
+
+# Compactions remove 700,000 bytes from L0. Even though WAL failover is still
+# active, this higher compaction rate is incorporated into giving out more
+# regular tokens. Specifically, the smoothed interval compacted rate increases
+# to 391 KiB, and the regular tokens increase to 208 KiB.
+set-state l0-bytes=101000 l0-added-write=1001000 l0-files=10 l0-sublevels=10 print-only-first-tick=true wal-secondary-write-sec=1 flush-bytes=1000 flush-work-sec=8 flush-idle-sec=10 write-stall-count=0
+----
+compaction score 0.500 (10 ssts, 10 sub-levels), L0 growth 195 KiB (write 195 KiB (ignored 0 B) ingest 0 B (ignored 0 B)): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + 195 KiB adjusted-LSM-writes + 0 B adjusted-disk-writes + write-model 0.00x+0 B (smoothed 1.37x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + write-amp-model 0.00x+0 B (smoothed 50.50x+1 B) + at-admission-tokens 9.8 KiB, compacted 684 KiB [≈391 KiB], flushed 366 KiB [≈0 B] (mult 1.00); admitting (WAL failover) 208 KiB (rate 14 KiB/s) (elastic 1 B rate 0 B/s) due to L0 growth (used total: 0 B elastic 0 B); write stalls -4
+diskBandwidthLimiter (tokenUtilization 0.00, tokensUsed (elastic 0 B, snapshot 0 B, regular 0 B) tokens (write 0 B (prev 0 B), read 0 B (prev 0 B)), writeBW 0 B/s, readBW 0 B/s, provisioned 0 B/s)
+{ioLoadListenerState:{cumL0AddedBytes:1001000 curL0Bytes:101000 cumWriteStallCount:0 cumFlushWriteThroughput:{Bytes:1001000 WorkDuration:20000000000 IdleDuration:420000000000} diskBW:{bytesRead:0 bytesWritten:0} cumCompactionStats:{writeBytes:0 numOutLevelsGauge:1} cumWALSecondaryWriteDuration:4000000000 smoothedIntL0CompactedBytes:400000 smoothedCompactionByteTokens:212500 smoothedNumFlushTokens:0 flushUtilTargetFraction:1 totalNumByteTokens:212500 byteTokensAllocated:0 byteTokensUsed:0 byteTokensUsedByElasticWork:0 totalNumElasticByteTokens:1 elasticByteTokensAllocated:0 diskWriteTokens:9223372036854775807 diskWriteTokensAllocated:0 diskReadTokens:0 diskReadTokensAllocated:0} requestEstimates:{writeTokens:10000} l0WriteLM:{multiplier:1.374975 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} writeAmpLM:{multiplier:50.5 constant:1} aux:{intL0AddedBytes:200000 intL0CompactedBytes:700000 intFlushTokens:375000 intFlushUtilization:0.4444444444444444 intWriteStalls:-4 intWALFailover:true prevTokensUsed:0 prevTokensUsedByElasticWork:0 tokenKind:0 usedCompactionTokensLowerBound:false perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:200000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:200000 intAdjustedDiskWriteBytes:0} doLogFlush:true} ioThreshold:<nil>}
+store-request-estimates: writeTokens: 10000
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.37x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1 write-amp-lm: 50.50x+1
+setAvailableTokens: io-tokens=3542(elastic 1) elastic-disk-bw-tokens=unlimited read-bw-tokens=0 max-byte-tokens=3542(elastic 1) max-disk-bw-tokens=unlimited lastTick=false
+
 # Test case with flush tokens.
 init
 ----

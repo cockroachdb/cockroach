@@ -860,37 +860,45 @@ func (io *ioLoadListener) adjustTokensInner(
 	// primary WAL location, which is also the location to which the store
 	// flushes and compacts, may be unhealthy. If it is unhealthy, flushes and
 	// compactions can stall, which can result in artificially low token counts
-	// for flushes and compactions, which can unnecessarily throttle work.
+	// for flushes and compactions, which can unnecessarily throttle work. It is
+	// also possible that the primary WAL location was transiently observed to
+	// be slow, and flushes and compactions are mostly unaffected, and may even
+	// be increasing in their rate, during WAL failover, if the workload is
+	// increasing its write rate.
 	//
 	// We make the assumption that failover will be very aggressive compared to
 	// the interval at which this token computation is happening (15s). An
-	// UnhealthyOperationLatencyThreshold of 1s or lower means that an interval
-	// in which intWALFailover was false could at worst have had its last 1s
-	// have stalled flushes/compactions. So the throughput observed here will be
-	// 93.3% of what would have been possible with a healthy primary, which is
-	// considered acceptable.
+	// UnhealthyOperationLatencyThreshold of 100ms (the default) means that an
+	// interval in which intWALFailover was false could at worst have had its
+	// last 100ms have stalled flushes/compactions. So the throughput observed
+	// here will be 99.3% of what would have been possible with a healthy
+	// primary, which is considered acceptable.
 	//
 	// We also make the assumption that failback will be reasonably aggressive
-	// once the primary is considered healthy, say within 10s. So a disk stall
-	// in the primary that lasts 30s, will cause WAL failover for ~40s, and a
-	// disk stall for 1s will cause failover for ~11s. The latter (11s) is short
-	// enough that we could potentially allow unlimited tokens during failover.
-	// The concern is the former case, where unlimited tokens could result in
-	// excessive admission into L0. So the default behavior when intWALFailover
-	// is true is to (a) continue using the compaction tokens from before the
-	// failover, (b) not constrain flush tokens, (c) constrain elastic traffic
+	// once the primary is considered healthy (HealthyInterval uses the default
+	// of 15s). So a disk stall in the primary that lasts 30s, will cause WAL
+	// failover for ~45s, and a disk stall for 1s will cause failover for ~16s.
+	// The latter (16s) is short enough that we could potentially allow
+	// unlimited tokens during failover. The concern is the former case, where
+	// unlimited tokens could result in excessive admission into L0. So the
+	// default behavior when intWALFailover is true is to (a) continue using the
+	// compaction tokens from before the failover, unless the compaction rate is
+	// increasing (b) not constrain flush tokens, (c) constrain elastic traffic
 	// to effectively 0 tokens. We allow this behavior to be overridden to have
 	// unlimited tokens.
 	intWALFailover := cumWALSecondaryWriteDuration-io.cumWALSecondaryWriteDuration > 0
 	var smoothedIntL0CompactedBytes int64
-	if intWALFailover {
-		// Reuse previous smoothed value.
+	var updatedSmoothedIntL0CompactedBytes bool
+	if intWALFailover && intL0CompactedBytes < prev.smoothedIntL0CompactedBytes {
+		// Reuse previous smoothed value since the decrease in compaction bytes
+		// could be due to an unhealthy primary WAL location.
 		smoothedIntL0CompactedBytes = prev.smoothedIntL0CompactedBytes
 	} else {
 		// Compaction scheduling can be uneven in prioritizing L0 for compactions,
 		// so smooth out what is being removed by compactions.
 		smoothedIntL0CompactedBytes = int64(alpha*float64(intL0CompactedBytes) +
 			(1-alpha)*float64(prev.smoothedIntL0CompactedBytes))
+		updatedSmoothedIntL0CompactedBytes = true
 	}
 
 	// Flush tokens:
@@ -1105,7 +1113,7 @@ func (io *ioLoadListener) adjustTokensInner(
 	// Overload: Score is >= 2. We limit compaction tokens, and limit tokens to
 	// at most C/2 tokens.
 	if score < 0.5 {
-		if intWALFailover {
+		if !updatedSmoothedIntL0CompactedBytes {
 			smoothedCompactionByteTokens = prev.smoothedCompactionByteTokens
 		} else {
 			// Underload. Maintain a smoothedCompactionByteTokens based on what was
@@ -1121,7 +1129,7 @@ func (io *ioLoadListener) adjustTokensInner(
 		totalNumByteTokens = unlimitedTokens
 	} else {
 		doLogFlush = true
-		if intWALFailover {
+		if !updatedSmoothedIntL0CompactedBytes {
 			smoothedCompactionByteTokens = prev.smoothedCompactionByteTokens
 		} else {
 			var fTotalNumByteTokens float64
