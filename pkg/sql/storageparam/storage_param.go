@@ -130,7 +130,12 @@ func storageParamPreChecks(
 	}
 
 	var keys []string
+	params := make(map[string]struct{})
 	for _, param := range setParams {
+		if _, exists := params[param.Key]; exists {
+			return pgerror.Newf(pgcode.InvalidParameterValue, "parameter %q specified more than once", param.Key)
+		}
+		params[param.Key] = struct{}{}
 		keys = append(keys, param.Key)
 	}
 	keys = append(keys, resetParams...)
