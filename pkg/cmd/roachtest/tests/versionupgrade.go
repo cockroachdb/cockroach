@@ -14,6 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -108,6 +111,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	mvt := mixedversion.NewTest(testCtx, t, t.L(), c, c.All(), opts...)
+
 	mvt.InMixedVersion(
 		"maybe run backup",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
@@ -286,4 +290,93 @@ for i in 1 2 3 4; do
      pkg/cmd/roachtest/fixtures/${i}/
 done
 `)
+}
+
+// This is a regression test for a race detailed in
+// https://github.com/cockroachdb/cockroach/issues/138342, where it became
+// possible for an HTTP request to cause a fatal error if the sql server
+// did not initialize the cluster version in time.
+func registerHTTPRestart(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:             "http-register-routes/mixed-version",
+		Owner:            registry.OwnerObservability,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Randomized:       true,
+		Run:              runHTTPRestart,
+		Timeout:          1 * time.Hour,
+	})
+}
+
+func runHTTPRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c,
+		c.CRDBNodes(),
+		mixedversion.AlwaysUseLatestPredecessors,
+	)
+
+	// Any http request requiring auth will do.
+	httpReq := tspb.TimeSeriesQueryRequest{
+		StartNanos: timeutil.Now().UnixNano() - 10*time.Second.Nanoseconds(),
+		EndNanos:   timeutil.Now().UnixNano(),
+		// Ask for 10s intervals.
+		SampleNanos: (10 * time.Second).Nanoseconds(),
+		Queries: []tspb.Query{{
+			Name:             "cr.node.sql.service.latency-p90",
+			SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+		}},
+	}
+
+	httpCall := func(ctx context.Context, node int, l *logger.Logger, useSystemTenant bool) {
+		logEvery := roachtestutil.Every(1 * time.Second)
+		var clientOpts []func(opts *roachtestutil.RoachtestHTTPOptions)
+		var urlOpts []option.OptionFunc
+		if useSystemTenant {
+			clientOpts = append(clientOpts, roachtestutil.VirtualCluster(install.SystemInterfaceName))
+			urlOpts = append(urlOpts, option.VirtualClusterName(install.SystemInterfaceName))
+		}
+		client := roachtestutil.DefaultHTTPClient(c, l, clientOpts...)
+		adminUrls, err := c.ExternalAdminUIAddr(ctx, l, c.Node(node), urlOpts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		url := "https://" + adminUrls[0] + "/ts/query"
+		l.Printf("Sending requests to %s", url)
+
+		var response tspb.TimeSeriesQueryResponse
+		// Eventually we should see a successful request.
+		reqSuccess := false
+		for {
+			select {
+			case <-ctx.Done():
+				if !reqSuccess {
+					t.Fatalf("n%d: No successful http requests made.", node)
+				}
+				return
+			default:
+			}
+			if err := client.PostProtobuf(ctx, url, &httpReq, &response); err != nil {
+				if logEvery.ShouldLog() {
+					l.Printf("n%d: Error posting protobuf: %s", node, err)
+				}
+				continue
+			}
+			reqSuccess = true
+		}
+	}
+
+	for _, n := range c.CRDBNodes() {
+		mvt.BackgroundFunc("HTTP requests to system tenant", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			httpCall(ctx, n, l, true /* useSystemTenant */)
+			return nil
+		})
+		mvt.BackgroundFunc("HTTP requests to secondary tenant", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			if h.DeploymentMode() == mixedversion.SystemOnlyDeployment {
+				return nil
+			}
+			httpCall(ctx, n, l, false /* useSystemTenant */)
+			return nil
+		})
+	}
+	mvt.Run()
 }
