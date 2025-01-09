@@ -87,8 +87,8 @@ var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 	settings.WithPublic)
 
-// FrontierCheckpointMaxBytes controls the maximum number of key bytes that will be added
-// to the checkpoint record.
+// SpanCheckpointMaxBytes controls the maximum number of key bytes that will be added
+// to a span-level checkpoint record.
 // Checkpoint record could be fairly large.
 // Assume we have a 10T table, and a 1/2G max range size: 20K spans.
 // Span frontier merges adjacent spans, so worst case we have 10K spans.
@@ -101,11 +101,12 @@ var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 //
 // Therefore, we should write at most 6 MB of checkpoint/hour; OR, based on the default
 // FrontierCheckpointFrequency setting, 1 MB per checkpoint.
-var FrontierCheckpointMaxBytes = settings.RegisterByteSizeSetting(
+var SpanCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_max_bytes",
-	"controls the maximum size of the checkpoint as a total size of key bytes",
+	"the maximum size of a changefeed span-level checkpoint as measured by the total size of key bytes",
 	1<<20, // 1 MiB
+	settings.WithName("changefeed.span_checkpoint.max_bytes"),
 )
 
 // ScanRequestLimit is the number of Scan requests that can run at once.

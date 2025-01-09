@@ -2338,7 +2338,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// reduce the lag threshold to allow lag checkpointing to trigger
 	changefeedbase.FrontierCheckpointFrequency.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
-	changefeedbase.FrontierCheckpointMaxBytes.Override(
+	changefeedbase.SpanCheckpointMaxBytes.Override(
 		context.Background(), &s.ClusterSettings().SV, 100<<20)
 	changefeedbase.FrontierHighwaterLagCheckpointThreshold.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
@@ -2524,7 +2524,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		// Checkpoint progress frequently, and set the checkpoint size limit.
 		changefeedbase.FrontierCheckpointFrequency.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
-		changefeedbase.FrontierCheckpointMaxBytes.Override(
+		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
 		var tableSpan roachpb.Span
@@ -7343,7 +7343,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// Checkpoint progress frequently, and set the checkpoint size limit.
 		changefeedbase.FrontierCheckpointFrequency.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
-		changefeedbase.FrontierCheckpointMaxBytes.Override(
+		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
@@ -7494,7 +7494,7 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 		}
 		changefeedbase.FrontierCheckpointFrequency.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
-		changefeedbase.FrontierCheckpointMaxBytes.Override(
+		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 100<<20)
 
 		emittedCount := 0
