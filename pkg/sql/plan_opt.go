@@ -360,6 +360,8 @@ type optPlanningCtx struct {
 	useCache bool
 
 	flags planFlags
+
+	gf explain.PlanGistFactory
 }
 
 // init performs one-time initialization of the planning context; reset() must
@@ -882,10 +884,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 	allowAutoCommit bool,
 ) error {
 	var result *planComponents
-	var gf *explain.PlanGistFactory
 	if !opc.p.SessionData().DisablePlanGists {
-		gf = explain.NewPlanGistFactory(f)
-		f = gf
+		opc.gf.Init(f)
+		defer opc.gf.Reset()
+		f = &opc.gf
 	}
 	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
@@ -923,8 +925,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	planTop.instrumentation.scanCounts = bld.ScanCounts
 	planTop.instrumentation.indexesUsed = bld.IndexesUsed
 
-	if gf != nil {
-		planTop.instrumentation.planGist = gf.PlanGist()
+	if opc.gf.Initialized() {
+		planTop.instrumentation.planGist = opc.gf.PlanGist()
 	}
 	planTop.instrumentation.costEstimate = mem.RootExpr().(memo.RelExpr).Cost().C
 	available := mem.RootExpr().(memo.RelExpr).Relational().Statistics().Available

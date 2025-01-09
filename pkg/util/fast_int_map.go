@@ -8,10 +8,9 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"math/bits"
 	"sort"
-
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // FastIntMap is a replacement for map[int]int which is more efficient when both
@@ -131,7 +130,7 @@ func (m FastIntMap) MaxKey() (_ int, ok bool) {
 	if len(m.large) == 0 {
 		return 0, false
 	}
-	max := intsets.MinInt
+	max := math.MinInt
 	for k := range m.large {
 		if max < k {
 			max = k
@@ -168,7 +167,7 @@ func (m FastIntMap) MaxValue() (_ int, ok bool) {
 	if len(m.large) == 0 {
 		return 0, false
 	}
-	max := intsets.MinInt
+	max := math.MinInt
 	for _, v := range m.large {
 		if max < v {
 			max = v
