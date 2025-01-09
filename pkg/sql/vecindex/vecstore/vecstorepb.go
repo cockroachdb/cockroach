@@ -58,3 +58,8 @@ func (k ChildKey) Compare(other ChildKey) int {
 	}
 	return 0
 }
+
+// Equal returns true if this config is equal to the given config.
+func (c *Config) Equal(other *Config) bool {
+	return c.Dims == other.Dims && c.Seed == other.Seed
+}
