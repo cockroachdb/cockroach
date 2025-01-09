@@ -8,9 +8,9 @@
 
 set -xeuo pipefail
 
-bazel build //pkg/cmd/bazci --config=ci
+bazel build //pkg/cmd/bazci
 
-$(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- \
+$(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci -- \
   coverage \
   --config=ci --config=use_ci_timeouts -c fastbuild \
   --@io_bazel_rules_go//go/config:cover_format=lcov --combined_report=lcov \

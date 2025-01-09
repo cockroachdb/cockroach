@@ -66,17 +66,17 @@ artifacts=()
 case "$component" in
   cockroach)
     # Cockroach binary.
-    bazel_args=(--config force_build_cdeps //pkg/cmd/cockroach $crdb_extra_flags)
+    bazel_args=(--config force_build_cdeps --config pgo --norun_validations //pkg/cmd/cockroach $crdb_extra_flags)
     artifacts=("pkg/cmd/cockroach/cockroach_/cockroach:bin/cockroach.$os-$arch")
     ;;
   cockroach-ea)
     # Cockroach binary with enabled assertions (EA).
-    bazel_args=(--config force_build_cdeps //pkg/cmd/cockroach --crdb_test $crdb_extra_flags)
+    bazel_args=(--config force_build_cdeps --config pgo --norun_validations //pkg/cmd/cockroach --crdb_test $crdb_extra_flags)
     artifacts=("pkg/cmd/cockroach/cockroach_/cockroach:bin/cockroach-ea.$os-$arch")
     ;;
   workload)
     # Workload binary.
-    bazel_args=(--config force_build_cdeps //pkg/cmd/workload)
+    bazel_args=(--config force_build_cdeps --norun_validations //pkg/cmd/workload)
     artifacts=("pkg/cmd/workload/workload_/workload:bin/workload.$os-$arch")
     ;;
   libgeos)
@@ -116,8 +116,8 @@ esac
 
 echo "Building $os/$arch/$component..."
 
-bazel build --config $config --config ci -c opt "${bazel_args[@]}"
-BAZEL_BIN=$(bazel info bazel-bin --config $config --config ci -c opt)
+bazel build --config $config -c opt "${bazel_args[@]}"
+BAZEL_BIN=$(bazel info bazel-bin --config $config -c opt)
 for artifact in "${artifacts[@]}"; do
   src=${artifact%%:*}
   dst=${artifact#*:}

@@ -24,7 +24,7 @@ function build_and_upload_binaries() {
     return
   fi
 
-  config_args="--config=crosslinux --config=ci --crdb_test_off"
+  config_args="--config=crosslinux --crdb_test_off"
   bazel clean
   go_test_targets=$(bazel query kind\(go_test, //$BENCH_PACKAGE:all\))
   bazel build $config_args $go_test_targets

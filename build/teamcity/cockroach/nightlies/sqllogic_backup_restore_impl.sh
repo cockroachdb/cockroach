@@ -12,8 +12,8 @@ dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-bazel-support.sh"  # For process_test_json
 source "$dir/teamcity-support.sh"
 
-bazel build //pkg/cmd/bazci --config=ci
-BAZEL_BIN=$(bazel info bazel-bin --config=ci)
+bazel build //pkg/cmd/bazci
+BAZEL_BIN=$(bazel info bazel-bin)
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 
 log_into_gcloud
