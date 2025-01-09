@@ -4888,7 +4888,7 @@ func TestErrorIndexOnRangeSplit(t *testing.T) {
 		case 2:
 			// We'll receive a few batches, all with 1 Get. Find the one
 			// targeting keyB and simulate it encountering an error (that could
-			// occur for InitPuts).
+			// occur for CPuts).
 			if len(ba.Requests) != 1 {
 				require.Fail(t, "unexpected number of requests in a batch")
 			}

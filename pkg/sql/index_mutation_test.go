@@ -105,7 +105,6 @@ func getKVTrace(t *testing.T, db *gosql.DB) string {
 	allowedKVOpTypes := []string{
 		"CPut",
 		"Put",
-		"InitPut",
 		"Del",
 		"DelRange",
 		"ClearRange",

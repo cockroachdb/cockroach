@@ -1690,19 +1690,6 @@ func NewConditionalPutInline(
 	}
 }
 
-// NewInitPut returns a Request initialized to put the value at key, as long as
-// the key doesn't exist, returning a ConditionFailedError if the key exists and
-// the existing value is different from value.
-func NewInitPut(key roachpb.Key, value roachpb.Value) Request {
-	value.InitChecksum(key)
-	return &InitPutRequest{
-		RequestHeader: RequestHeader{
-			Key: key,
-		},
-		Value: value,
-	}
-}
-
 // NewDelete returns a Request initialized to delete the value at key.
 func NewDelete(key roachpb.Key) Request {
 	return &DeleteRequest{
