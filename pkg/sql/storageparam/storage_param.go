@@ -129,8 +129,13 @@ func storageParamPreChecks(
 		return errors.AssertionFailedf("only one of setParams and resetParams should be non-nil.")
 	}
 
-	var keys []string
+	keys := make([]string, 0, len(setParams)+len(resetParams))
+	params := make(map[string]struct{}, len(setParams))
 	for _, param := range setParams {
+		if _, exists := params[param.Key]; exists {
+			return pgerror.Newf(pgcode.InvalidParameterValue, "parameter %q specified more than once", param.Key)
+		}
+		params[param.Key] = struct{}{}
 		keys = append(keys, param.Key)
 	}
 	keys = append(keys, resetParams...)
