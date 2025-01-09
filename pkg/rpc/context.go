@@ -81,7 +81,7 @@ type ClientInterceptorInfo struct {
 	StreamInterceptors []grpc.StreamClientInterceptor
 }
 
-type DrpcServer struct {
+type DRPCServer struct {
 	Srv    *drpcserver.Server
 	Mux    *drpcmux.Mux
 	TLSCfg *tls.Config
@@ -93,7 +93,7 @@ type DrpcServer struct {
 // internalClientAdapter does).
 func NewServerEx(
 	ctx context.Context, rpcCtx *Context, opts ...ServerOption,
-) (s *grpc.Server, d *DrpcServer, sii ServerInterceptorInfo, err error) {
+) (s *grpc.Server, d *DRPCServer, sii ServerInterceptorInfo, err error) {
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -206,7 +206,7 @@ func NewServerEx(
 	}, nil
 }
 
-func newDRPCServer(ctx context.Context, rpcCtx *Context) (*DrpcServer, error) {
+func newDRPCServer(ctx context.Context, rpcCtx *Context) (*DRPCServer, error) {
 	dmux := drpcmux.New()
 	// NB: any server middleware (server interceptors in gRPC parlance) would go
 	// here:
@@ -236,7 +236,7 @@ func newDRPCServer(ctx context.Context, rpcCtx *Context) (*DrpcServer, error) {
 		return nil, err
 	}
 
-	return &DrpcServer{
+	return &DRPCServer{
 		Srv:    dsrv,
 		Mux:    dmux,
 		TLSCfg: tlsCfg,

@@ -22,7 +22,7 @@ import (
 // RPCs.
 type grpcServer struct {
 	*grpc.Server
-	drpc                   *rpc.DrpcServer
+	drpc                   *rpc.DRPCServer
 	serverInterceptorsInfo rpc.ServerInterceptorInfo
 	mode                   serveMode
 }
