@@ -1595,7 +1595,6 @@ def go_deps():
         name = "com_github_chromedp_cdproto",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/chromedp/cdproto",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:aPflPkRFkVwbW6dmcVqfgwp1i+UWGFH6VgR1Jim5Ygc=",
         version = "v0.0.0-20230802225258-3cf4e6d46a89",
     )
@@ -1603,7 +1602,6 @@ def go_deps():
         name = "com_github_chromedp_chromedp",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/chromedp/chromedp",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:dKtNz4kApb06KuSXoTQIyUC2TrA0fhGDwNZf3bcgfKw=",
         version = "v0.9.2",
     )
@@ -1611,7 +1609,6 @@ def go_deps():
         name = "com_github_chromedp_sysutil",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/chromedp/sysutil",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:+ZxhTpfpZlmchB58ih/LBHX52ky7w2VhQVKQMucy3Ic=",
         version = "v1.0.0",
     )
@@ -1619,7 +1616,6 @@ def go_deps():
         name = "com_github_chzyer_logex",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/chzyer/logex",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:XHDu3E6q+gdHgsdTPH6ImJMIp436vR6MPtH8gP05QzM=",
         version = "v1.2.1",
     )
@@ -1627,7 +1623,6 @@ def go_deps():
         name = "com_github_chzyer_readline",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/chzyer/readline",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:upd/6fQk4src78LMRzh5vItIt361/o4uq553V8B5sGI=",
         version = "v1.5.1",
     )
@@ -1635,7 +1630,6 @@ def go_deps():
         name = "com_github_chzyer_test",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/chzyer/test",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:p3BQDXSxOhOG0P9z6/hGnII4LGiEPOYBhs8asl/fC04=",
         version = "v1.0.0",
     )
@@ -3024,7 +3018,6 @@ def go_deps():
         name = "com_github_felixge_fgprof",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/felixge/fgprof",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:8+vR6yu2vvSKn08urWyEuxx75NWPEvybbkBirEpsbVY=",
         version = "v0.9.5",
     )
@@ -3802,7 +3795,6 @@ def go_deps():
         name = "com_github_gobwas_httphead",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gobwas/httphead",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:exrUm0f4YX0L7EBwZHuCF4GDp8aJfVeBrlLQrs6NqWU=",
         version = "v0.1.0",
     )
@@ -3810,7 +3802,6 @@ def go_deps():
         name = "com_github_gobwas_pool",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gobwas/pool",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:xfeeEhW7pwmX8nuLVlqbzVc7udMDrwetjEv+TZIz1og=",
         version = "v0.2.1",
     )
@@ -3818,7 +3809,6 @@ def go_deps():
         name = "com_github_gobwas_ws",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gobwas/ws",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:F2aeBZrm2NDsc7vbovKrWSogd4wvfAxg0FQ89/iqOTk=",
         version = "v1.2.1",
     )
@@ -4230,7 +4220,6 @@ def go_deps():
         name = "com_github_google_pprof",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/pprof",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:y3N7Bm7Y9/CtpiVkw/ZWj6lSlDF3F74SfKwfTCer72Q=",
         version = "v0.0.0-20240227163752-401108e1b7e7",
     )
@@ -4853,7 +4842,6 @@ def go_deps():
         name = "com_github_ianlancetaylor_demangle",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/ianlancetaylor/demangle",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:BA4a7pe6ZTd9F8kXETBoijjFJ/ntaa//1wiH9BZu4zU=",
         version = "v0.0.0-20230524184225-eabc099b10ab",
     )
@@ -5935,7 +5923,6 @@ def go_deps():
         name = "com_github_ledongthuc_pdf",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/ledongthuc/pdf",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:6Yzfa6GP0rIo/kULo2bwGEkFvCePZ3qHDDTC3/J9Swo=",
         version = "v0.0.0-20220302134840-0c2507a12d80",
     )
@@ -7383,7 +7370,6 @@ def go_deps():
         name = "com_github_orisano_pixelmatch",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/orisano/pixelmatch",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:x0TT0RDC7UhAVbbWWBzr41ElhJx5tXPWkIHA2HWPRuw=",
         version = "v0.0.0-20220722002657-fb0b55479cde",
     )
