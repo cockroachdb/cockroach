@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,6 +77,64 @@ func TestRetryOfIndexEntryBatch(t *testing.T) {
 				require.ErrorIs(t, err, tc.expectedErr)
 			}
 			require.Equal(t, tc.expectedChunkSize, br.nextChunkSize)
+		})
+	}
+}
+
+func BenchmarkIndexBackfill(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	srv, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				// Disable the randomization of some batch sizes to get more
+				// consistent results.
+				ForceProductionValues: true,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	for _, tc := range []struct {
+		desc    string
+		numRows int
+	}{
+		{"100 rows", 100},
+		{"10,000 rows", 10000},
+		{"1,000,000 rows", 1000000},
+	} {
+		b.Run(tc.desc, func(b *testing.B) {
+			_, err := sqlDB.Exec("CREATE TABLE t (k INT PRIMARY KEY, v INT)")
+			if err != nil {
+				b.Fatal(err)
+			}
+			_, err = sqlDB.Exec("INSERT INTO t SELECT generate_series(1, $1), 1", tc.numRows)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				b.StartTimer()
+				_, err = sqlDB.Exec("CREATE INDEX idx ON t (v)")
+				if err != nil {
+					b.Fatal(err)
+				}
+				b.StopTimer()
+				_, err = sqlDB.Exec("DROP INDEX idx")
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			_, err = sqlDB.Exec("DROP TABLE t")
+			if err != nil {
+				b.Fatal(err)
+			}
 		})
 	}
 }
