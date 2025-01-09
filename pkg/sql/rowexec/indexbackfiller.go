@@ -37,8 +37,6 @@ import (
 type indexBackfiller struct {
 	backfill.IndexBackfiller
 
-	adder kvserverbase.BulkAdder
-
 	desc catalog.TableDescriptor
 
 	spec execinfrapb.BackfillerSpec
@@ -53,12 +51,29 @@ var _ execinfra.Processor = &indexBackfiller{}
 
 var backfillerBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
-	"schemachanger.backfiller.buffer_size", "the initial size of the BulkAdder buffer handling index backfills", 32<<20,
+	"schemachanger.backfiller.buffer_size",
+	"the initial size of the BulkAdder buffer handling index backfills",
+	32<<20,
 )
 
 var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
-	"schemachanger.backfiller.max_buffer_size", "the maximum size of the BulkAdder buffer handling index backfills", 512<<20,
+	"schemachanger.backfiller.max_buffer_size",
+	"the maximum size of the BulkAdder buffer handling index backfills",
+	512<<20,
+)
+
+// indexBackfillIngestConcurrency is the number of goroutines to use for
+// the ingestion step of the index backfiller; these are the goroutines
+// that write the index entries in bulk. Since that is mostly I/O bound,
+// adding concurrency allows some of the computational work to occur in
+// parallel.
+var indexBackfillIngestConcurrency = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.ingest_concurrency",
+	"the number of goroutines to use for bulk adding index entries",
+	2,
+	settings.PositiveInt, /* validateFn */
 )
 
 func newIndexBackfiller(
@@ -185,8 +200,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	if err != nil {
 		return err
 	}
-	ib.adder = adder
-	defer ib.adder.Close(ctx)
+	defer adder.Close(ctx)
 
 	// Synchronizes read and write access on completedSpans which is updated on a
 	// BulkAdder flush, but is read when progress is being sent back to the
@@ -241,7 +255,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 		for indexBatch := range indexEntryCh {
 			for _, indexEntry := range indexBatch.indexEntries {
-				if err := ib.adder.Add(ctx, indexEntry.Key, indexEntry.Value.RawBytes); err != nil {
+				if err := adder.Add(ctx, indexEntry.Key, indexEntry.Value.RawBytes); err != nil {
 					return ib.wrapDupError(ctx, err)
 				}
 			}
@@ -261,7 +275,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 			knobs := &ib.flowCtx.Cfg.TestingKnobs
 			if knobs.BulkAdderFlushesEveryBatch {
-				if err := ib.adder.Flush(ctx); err != nil {
+				if err := adder.Flush(ctx); err != nil {
 					return ib.wrapDupError(ctx, err)
 				}
 				pushProgress()
@@ -283,7 +297,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		return err
 	}
 
-	if err := ib.adder.Flush(ctx); err != nil {
+	if err := adder.Flush(ctx); err != nil {
 		return ib.wrapDupError(ctx, err)
 	}
 
@@ -296,8 +310,11 @@ func (ib *indexBackfiller) ingestIndexEntries(
 func (ib *indexBackfiller) runBackfill(
 	ctx context.Context, progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
+	const indexEntriesChBufferSize = 10
+	ingestConcurrency := indexBackfillIngestConcurrency.Get(&ib.flowCtx.Cfg.Settings.SV)
+
 	// Used to send index entries to the KV layer.
-	indexEntriesCh := make(chan indexEntryBatch, 10)
+	indexEntriesCh := make(chan indexEntryBatch, indexEntriesChBufferSize)
 
 	// This group holds the go routines that are responsible for producing index
 	// entries and ingesting the KVs into storage.
@@ -315,14 +332,18 @@ func (ib *indexBackfiller) runBackfill(
 		return nil
 	})
 
-	// Ingest the index entries that are emitted to the chan.
-	group.GoCtx(func(ctx context.Context) error {
-		err := ib.ingestIndexEntries(ctx, indexEntriesCh, progCh)
-		if err != nil {
-			return errors.Wrap(err, "failed to ingest index entries during backfill")
-		}
-		return nil
-	})
+	// Ingest the index entries that are emitted to the chan. We use multiple
+	// goroutines since ingestion is mostly I/O bound, making it easier to
+	// perform the computational work concurrently.
+	for range ingestConcurrency {
+		group.GoCtx(func(ctx context.Context) error {
+			err := ib.ingestIndexEntries(ctx, indexEntriesCh, progCh)
+			if err != nil {
+				return errors.Wrap(err, "failed to ingest index entries during backfill")
+			}
+			return nil
+		})
+	}
 
 	if err := group.Wait(); err != nil {
 		return err
