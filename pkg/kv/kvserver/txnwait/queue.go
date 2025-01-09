@@ -324,6 +324,7 @@ func (q *Queue) Enable(_ roachpb.LeaseSequence) {
 // acquired by the replica.
 func (q *Queue) Clear(disable bool) {
 	q.mu.Lock()
+
 	waitingPushesLists := make([]*list.List, 0, len(q.mu.txns))
 	waitingPushesCount := 0
 	for _, pt := range q.mu.txns {
@@ -334,7 +335,7 @@ func (q *Queue) Clear(disable bool) {
 
 	waitingQueriesMap := q.mu.queries
 	waitingQueriesCount := 0
-	for _, waitingQueries := range waitingQueriesMap {
+	for _, waitingQueries := range q.mu.queries {
 		waitingQueriesCount += waitingQueries.count
 	}
 
@@ -358,16 +359,71 @@ func (q *Queue) Clear(disable bool) {
 		q.mu.queries = map[uuid.UUID]*waitingQueries{}
 	}
 	q.mu.Unlock()
+	// Notify wait channels outside of the mutex lock.
+	q.notifyingWaitingPushesAndQueries(waitingPushesLists, waitingQueriesMap)
 
-	// Send on the pending push waiter channels outside of the mutex lock.
-	for _, w := range waitingPushesLists {
+}
+
+// ClearGE removes anyone waiting on a key greater or equal to the
+// given key.
+//
+// This method is invoked as part of range split handling.
+func (q *Queue) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
+	q.mu.Lock()
+
+	txnsToClear := make(map[uuid.UUID]struct{}, len(q.mu.txns))
+	waitingPushesLists := make([]*list.List, 0, len(q.mu.txns))
+	waitingPushesCount := 0
+	for uuid, pt := range q.mu.txns {
+		if roachpb.Key(pt.getTxn().Key).Less(key) {
+			continue
+		}
+		txnsToClear[uuid] = struct{}{}
+		waitingPushes := pt.takeWaitingPushes()
+		waitingPushesLists = append(waitingPushesLists, waitingPushes)
+		waitingPushesCount += waitingPushes.Len()
+	}
+
+	waitingQueriesMap := make(map[uuid.UUID]*waitingQueries, len(q.mu.txns))
+	waitingQueriesCount := 0
+	for uuid, waitingQueries := range q.mu.queries {
+		if _, ok := txnsToClear[uuid]; ok {
+			waitingQueriesMap[uuid] = waitingQueries
+			waitingQueriesCount += waitingQueries.count
+		}
+	}
+
+	if log.V(1) {
+		log.Infof(
+			context.Background(),
+			"clearing %d push waiters and %d query waiters",
+			waitingPushesCount,
+			waitingQueriesCount,
+		)
+	}
+
+	metrics := q.cfg.Metrics
+	metrics.PusheeWaiting.Dec(int64(len(txnsToClear)))
+	for uuid := range txnsToClear {
+		delete(q.mu.txns, uuid)
+		delete(q.mu.queries, uuid)
+	}
+	q.mu.Unlock()
+	// Notify wait channels outside of the mutex lock.
+	q.notifyingWaitingPushesAndQueries(waitingPushesLists, waitingQueriesMap)
+	return nil
+}
+
+func (q *Queue) notifyingWaitingPushesAndQueries(
+	pushes []*list.List, queries map[uuid.UUID]*waitingQueries,
+) {
+	for _, w := range pushes {
 		for e := w.Front(); e != nil; e = e.Next() {
 			push := e.Value.(*waitingPush)
 			push.pending <- nil
 		}
 	}
-	// Close query waiters outside of the mutex lock.
-	for _, w := range waitingQueriesMap {
+	for _, w := range queries {
 		close(w.pending)
 	}
 }
