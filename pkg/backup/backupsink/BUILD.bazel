@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "file_sst_sink.go",
         "sink_utils.go",
+        "sst_sink_key_writer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/backup/backupsink",
     visibility = ["//visibility:public"],
@@ -31,7 +32,10 @@ go_library(
 
 go_test(
     name = "backupsink_test",
-    srcs = ["file_sst_sink_test.go"],
+    srcs = [
+        "file_sst_sink_test.go",
+        "sst_sink_key_writer_test.go",
+    ],
     embed = [":backupsink"],
     deps = [
         "//pkg/backup/backuppb",
@@ -44,6 +48,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/execinfrapb",
         "//pkg/storage",
+        "//pkg/testutils",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
