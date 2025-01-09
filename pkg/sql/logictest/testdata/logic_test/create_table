@@ -1130,3 +1130,77 @@ CREATE TABLE t2 AS SELECT * FROM t1;
 NOTICE: CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
 
 subtest end
+
+subtest create_table_with_duplicate_storage_params
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE TABLE create_table_with_duplicate_storage_params_a (
+  a INT PRIMARY KEY,
+  b TEXT NOT NULL
+) WITH (fillfactor=10, fillfactor=15);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE TABLE IF NOT EXISTS create_table_with_duplicate_storage_params_b (
+  a INT
+) WITH (fillfactor=10, fillfactor=20);
+
+subtest end
+
+subtest create_table_with_as_duplicate_storage_params
+
+statement ok
+CREATE TABLE create_table_with_as_duplicate_storage_params_a (a INT);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE TABLE create_table_with_as_duplicate_storage_params_b (a) WITH (fillfactor=10, fillfactor=20) AS (SELECT * FROM create_table_with_as_duplicate_storage_params_a);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE TABLE IF NOT EXISTS create_table_with_as_duplicate_storage_params_c (a) WITH (fillfactor=10, fillfactor=20) AS (SELECT * FROM create_table_with_as_duplicate_storage_params_a);
+
+subtest end
+
+subtest create_table_primary_key_with_duplicate_storage_params
+
+# only bucket_count is a valid storage param, so USING HASH must be added
+statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
+CREATE TABLE create_table_primary_key_with_duplicate_storage_params_a (a INT PRIMARY KEY USING HASH WITH (bucket_count=10, bucket_count=20));
+
+subtest end
+
+subtest create_table_index_elem_duplicate_storage_params
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE TABLE create_table_index_elem_duplicate_storage_params_a (
+  a INT PRIMARY KEY,
+  b INT,
+  INDEX (b) WITH (fillfactor=10, fillfactor=20)
+);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE TABLE create_table_index_elem_duplicate_storage_params_b (
+  a INT PRIMARY KEY,
+  b INT,
+  INDEX b_idx (b) WITH (fillfactor=10, fillfactor=20)
+);
+
+statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
+CREATE TABLE create_table_index_elem_duplicate_storage_params_c (
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE INDEX (b) USING HASH WITH (bucket_count=10, bucket_count=20)
+);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE TABLE create_table_index_elem_duplicate_storage_params_d (
+  a INT PRIMARY KEY,
+  b JSONB,
+  INVERTED INDEX (b) WITH (fillfactor=10, fillfactor=20)
+);
+
+statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
+CREATE TABLE create_table_index_elem_duplicate_storage_params_e (
+  a INT,
+  PRIMARY KEY (a) USING HASH WITH (bucket_count=10, bucket_count=20)
+);
+
+subtest end

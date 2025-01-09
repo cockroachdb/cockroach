@@ -179,7 +179,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	maybeAddIndexPredicate(b, n, &idxSpec)
 	// Picks up any geoconfig parameters, hash sharded one are
 	// picked independently.
-	maybeApplyStorageParameters(b, n, &idxSpec)
+	maybeApplyStorageParameters(b, n.StorageParams, &idxSpec)
 	// Assign the secondary constraint ID now, since we may have added a check
 	// constraint earlier.
 	if idxSpec.secondary.IsUnique {
@@ -921,24 +921,24 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 
 // maybeApplyStorageParameters apply any storage parameters into the index spec,
 // this is only used for GeoConfig today.
-func maybeApplyStorageParameters(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec) {
-	if len(n.StorageParams) == 0 {
+func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, idxSpec *indexSpec) {
+	if len(storageParams) == 0 {
 		return
 	}
 	dummyIndexDesc := &descpb.IndexDescriptor{}
-	if idxSpec.secondary.GeoConfig != nil {
+	if idxSpec.secondary != nil && idxSpec.secondary.GeoConfig != nil {
 		dummyIndexDesc.GeoConfig = *idxSpec.secondary.GeoConfig
 	}
 	storageParamSetter := &indexstorageparam.Setter{
 		IndexDesc: dummyIndexDesc,
 	}
-	err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), n.StorageParams, storageParamSetter)
+	err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), storageParams, storageParamSetter)
 	if err != nil {
 		panic(err)
 	}
-	if !dummyIndexDesc.GeoConfig.IsEmpty() {
+	if idxSpec.secondary != nil && !dummyIndexDesc.GeoConfig.IsEmpty() {
 		idxSpec.secondary.GeoConfig = &dummyIndexDesc.GeoConfig
-	} else {
+	} else if idxSpec.secondary != nil {
 		idxSpec.secondary.GeoConfig = nil
 	}
 }
