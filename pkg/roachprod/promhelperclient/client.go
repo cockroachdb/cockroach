@@ -31,6 +31,11 @@ import (
 const (
 	resourceName    = "instance-configs"
 	resourceVersion = "v1"
+
+	// ErrorMessage is the generic error message used to return an error
+	// when a requests to the prometheus helper service yields a non 200 status.
+	ErrorMessage       = ErrorMessagePrefix + ` on url %s and error %s`
+	ErrorMessagePrefix = "request failed with status %d"
 )
 
 // SupportedPromProjects are the projects supported for prometheus target
@@ -63,6 +68,10 @@ type PromClient struct {
 // DefaultPromClient is the default instance of PromClient. This instance should
 // be used unless custom configuration is needed.
 var DefaultPromClient = NewPromClient()
+
+func IsNotFoundError(err error) bool {
+	return strings.Contains(err.Error(), fmt.Sprintf(ErrorMessagePrefix, http.StatusNotFound))
+}
 
 // NewPromClient returns a new instance of PromClient
 func NewPromClient() *PromClient {
@@ -129,8 +138,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 		if err != nil {
 			return err
 		}
-		return errors.Newf("request failed with status %d and error %s", response.StatusCode,
-			string(body))
+		return errors.Newf(ErrorMessage, response.StatusCode, url, string(body))
 	}
 	return nil
 }
@@ -166,8 +174,7 @@ func (c *PromClient) DeleteClusterConfig(
 		if err != nil {
 			return err
 		}
-		return errors.Newf("request failed with url %s status %d and error %s", url, response.StatusCode,
-			string(body))
+		return errors.Newf(ErrorMessage, response.StatusCode, url, string(body))
 	}
 	return nil
 }
