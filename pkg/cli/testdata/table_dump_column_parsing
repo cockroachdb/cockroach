@@ -1,0 +1,25 @@
+# format:
+#
+# <table dump name>
+# <column>\t<encoded value>
+# ...
+# ----
+# <decoded value>
+# ...
+# claim_session_id  NULL
+# claim_session_id  \x010180b3c8d31b42174175aeca685a7b0ac5e5
+
+crdb_internal.system_jobs.txt
+progress  \x10bdb9a5929b9f8a03aa0200
+progress  \x10f5d5f4949b9f8a03b2010c0a0a08c098af8786ec838818
+progress  \x10effdc3929b9f8a030d0000803fa8019984a0c1e09cd9e3486a0d1204000000002a010032003a00
+----
+{"Progress":null,"modified_micros":1733902763383997,"Details":{"table_metadata_cache":{}},"trace_id":0}
+{"Progress":null,"modified_micros":1733902768876277,"Details":{"AutoSpanConfigReconciliation":{"checkpoint":{"wall_time":1733902763154984000}}},"trace_id":0}
+{"Progress":{"fraction_completed":1},"modified_micros":1733902763884271,"Details":{"import":{"read_progress":[0],"span_progress":null,"resume_pos":[0],"sequence_details":[{}],"summary":{}}},"trace_id":5244271230238327321}
+
+
+system.tenants.txt
+info  \x080110001a0020002a004200
+----
+{"deprecated_id":1,"deprecated_data_state":0,"dropped_name":"","physical_replication_consumer_job_id":0,"capabilities":{},"last_revert_tenant_timestamp":{}}
