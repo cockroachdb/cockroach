@@ -64,6 +64,12 @@ const (
 var providerInstance = &Provider{}
 
 var (
+	defaultDefaultProject, defaultMetadataProject, defaultDNSProject, defaultDefaultServiceAccount string
+	// projects for which a cron GC job exists.
+	projectsWithGC []string
+)
+
+func initGCEProjectDefaults() {
 	defaultDefaultProject = config.EnvOrDefaultString(
 		"ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-ephemeral",
 	)
@@ -80,7 +86,8 @@ var (
 		"ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT",
 		"21965078311-compute@developer.gserviceaccount.com",
 	)
-)
+	projectsWithGC = []string{defaultDefaultProject}
+}
 
 // DefaultProject returns the default GCE project. This is used to determine whether
 // certain features, such as DNS names are enabled.
@@ -93,9 +100,6 @@ func DefaultProject() string {
 	return defaultDefaultProject
 }
 
-// projects for which a cron GC job exists.
-var projectsWithGC = []string{defaultDefaultProject}
-
 // Denotes if this provider was successfully initialized.
 var initialized = false
 
@@ -107,6 +111,9 @@ var initialized = false
 // Note that, when roachprod is used as a binary, the defaults for
 // providerInstance properties initialized here can be overriden by flags.
 func Init() error {
+	initGCEProjectDefaults()
+	initDNSDefault()
+
 	providerInstance.Projects = []string{defaultDefaultProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
