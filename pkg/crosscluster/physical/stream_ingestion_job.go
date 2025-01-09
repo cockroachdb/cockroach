@@ -664,7 +664,7 @@ func (s *streamIngestionResumer) CollectProfile(ctx context.Context, execCtx int
 	return combinedErr
 }
 
-func closeAndLog(ctx context.Context, d streamclient.Dialer) {
+func closeAndLog(ctx context.Context, d streamclient.Client) {
 	if err := d.Close(ctx); err != nil {
 		log.Warningf(ctx, "error closing stream client: %s", err.Error())
 	}
