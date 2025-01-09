@@ -19,7 +19,7 @@ set -euo pipefail
 PEBBLE_BRANCH="$1"
 DEST="$2"
 
-BAZEL_BIN=$(bazel info bazel-bin --config ci)
+BAZEL_BIN=$(bazel info bazel-bin)
 
 bazel run @go_sdk//:bin/go get "github.com/cockroachdb/pebble@$PEBBLE_BRANCH"
 
