@@ -943,10 +943,12 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 		tb.Fatalf("invalid phase %s for Simple", phase)
 	}
 
+	var gf explain.PlanGistFactory
+	gf.Init(exec.StubFactory{})
 	root := execMemo.RootExpr()
 	eb := execbuilder.New(
 		context.Background(),
-		explain.NewPlanGistFactory(exec.StubFactory{}),
+		&gf,
 		&h.optimizer,
 		execMemo,
 		nil, /* catalog */
@@ -999,10 +1001,12 @@ func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 		tb.Fatalf("invalid phase %s for Prepared", phase)
 	}
 
+	var gf explain.PlanGistFactory
+	gf.Init(exec.StubFactory{})
 	root := execMemo.RootExpr()
 	eb := execbuilder.New(
 		context.Background(),
-		explain.NewPlanGistFactory(exec.StubFactory{}),
+		&gf,
 		&h.optimizer,
 		execMemo,
 		nil, /* catalog */
@@ -1777,9 +1781,11 @@ func BenchmarkExecBuild(b *testing.B) {
 
 		b.Run(tc.query.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
+				var gf explain.PlanGistFactory
+				gf.Init(exec.StubFactory{})
 				eb := execbuilder.New(
 					context.Background(),
-					explain.NewPlanGistFactory(exec.StubFactory{}),
+					&gf,
 					&h.optimizer,
 					execMemo,
 					nil, /* catalog */

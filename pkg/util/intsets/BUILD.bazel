@@ -14,7 +14,11 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/intsets",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/base64",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 go_test(
@@ -25,5 +29,9 @@ go_test(
         "sparse_test.go",
     ],
     embed = [":intsets"],
-    deps = ["//pkg/util/randutil"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/base64",
+        "//pkg/util/randutil",
+    ],
 )

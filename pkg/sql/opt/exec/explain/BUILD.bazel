@@ -36,6 +36,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/base64",
         "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/intsets",
