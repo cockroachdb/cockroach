@@ -77,6 +77,7 @@ PROTOBUF_SRCS = [
     "//pkg/sql/stats:stats_go_proto",
     "//pkg/sql/types:types_go_proto",
     "//pkg/sql/vecindex/quantize:quantize_go_proto",
+    "//pkg/sql/vecindex/vecdesc:vecdesc_go_proto",
     "//pkg/sql/vecindex/vecstore:vecstore_go_proto",
     "//pkg/storage/enginepb:enginepb_go_proto",
     "//pkg/testutils/grpcutils:grpcutils_go_proto",

@@ -1,0 +1,20 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.vecindex.vecdesc;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecdesc";
+
+import "gogoproto/gogo.proto";
+
+option (gogoproto.goproto_getters_all) = false;
+
+// Config encapsulates the information needed to search and maintain a vector
+// index. This includes the dimensions of the vectors and the random seed,
+// neither of which should change after the index is created.
+message Config {
+  int64 dims = 1;
+  int64 seed = 2;
+}
