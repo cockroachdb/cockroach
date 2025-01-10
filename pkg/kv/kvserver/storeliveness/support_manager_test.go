@@ -124,6 +124,12 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
 	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
+	cb := func(supportWithdrawn map[roachpb.StoreID]struct{}) {
+		require.Equal(t, 1, len(supportWithdrawn))
+		_, ok := supportWithdrawn[roachpb.StoreID(2)]
+		require.True(t, ok)
+	}
+	sm.RegisterSupportWithdrawalCallback(cb)
 	require.NoError(t, sm.Start(ctx))
 
 	// Pause the clock so support is not withdrawn before calling SupportFor.
