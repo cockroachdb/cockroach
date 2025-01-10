@@ -1181,7 +1181,7 @@ CREATE TABLE tval (val int primary key);
 statement ok
 CREATE VIEW rv as select val from tval;
 
-statement ok;
+statement ok
 USE DB2;
 
 # Cross-database type references are not allowed.

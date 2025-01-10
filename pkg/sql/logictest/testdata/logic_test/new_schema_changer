@@ -553,7 +553,7 @@ CREATE TABLE defaultdb.ttyp (id INT PRIMARY KEY, name varchar(256), x defaultdb.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
-statement ok;
+statement ok
 DROP TABLE defaultdb.ttyp;
 
 statement ok
