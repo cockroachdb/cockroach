@@ -1021,10 +1021,6 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		require.NoError(t, err)
 	}
 
-	// Connect to node 4 (the target node of the decommission).
-	decommNodeDB := c.Conn(ctx, t.L(), decommNodeID)
-	defer decommNodeDB.Close()
-
 	// Decommission node 4 and poll its status during the decommission.
 	var (
 		maxAttempts = 50
@@ -1058,6 +1054,9 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 
 		// Check to see if the node has been drained or decommissioned.
 		// If not, queries should not fail.
+		// Connect to node 4 (the target node of the decommission).
+		decommNodeDB := c.Conn(ctx, t.L(), decommNodeID)
+		defer decommNodeDB.Close()
 		if err = run(decommNodeDB, `SHOW DATABASES`); err != nil {
 			if strings.Contains(err.Error(), "not accepting clients") || // drained
 				strings.Contains(err.Error(), "node is decommissioned") { // decommissioned
