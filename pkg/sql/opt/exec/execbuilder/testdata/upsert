@@ -1099,7 +1099,7 @@ colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
 colbatchscan  fetched: /kv/kv_pkey/2/v -> /3
 count         Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
 count         Del /Table/120/2/3/0
-count         CPut /Table/120/2/2/0 -> /BYTES/0x8a (expecting does not exist)
+count         CPut /Table/120/2/2/0 -> /BYTES/0x8a
 sql query     execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 # Test that implicit SELECT FOR UPDATE doesn't spread to subqueries.
