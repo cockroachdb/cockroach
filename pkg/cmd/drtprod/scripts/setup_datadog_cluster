@@ -36,7 +36,7 @@ pipeline:
    apikey: ${dd_api_key}
    dd_source: audit
    dd_service: drt-cockroachdb
-   dd_tags: env:development,cluster:${cluster%:*},service:drt-cockroachdb,team:drt
+   dd_tags: env:development,cluster:${CLUSTER%:*},service:drt-cockroachdb,team:drt
    alias: audit
    storage.total_limit_size: 25MB
 EOF"
