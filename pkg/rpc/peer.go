@@ -596,6 +596,7 @@ func (p *peer) onInitialHeartbeatSucceeded(
 	// ahead of signaling the connFuture, so that the stream pool is ready for use
 	// by the time the connFuture is resolved.
 	p.mu.c.batchStreamPool.Bind(ctx, cc)
+	p.mu.c.drpcBatchStreamPool.Bind(ctx, dc)
 
 	// Close the channel last which is helpful for unit tests that
 	// first waitOrDefault for a healthy conn to then check metrics.

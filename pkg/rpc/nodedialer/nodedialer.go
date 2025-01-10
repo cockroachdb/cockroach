@@ -155,7 +155,7 @@ func (n *Dialer) DialInternalClient(
 	client := newBaseInternalClient(conn)
 
 	if rpc.ExperimentalDRPCEnabled.Get(&n.rpcContext.Settings.SV) {
-		// TODO(server) gRPC version of batch stream pool implements
+		// TODO(server): gRPC version of batch stream pool implements
 		// rpc.RestrictedInternalClient and is allocation-optimized,
 		// whereas here we allocate a new throw-away
 		// unaryDRPCBatchServiceToInternalAdapter.
