@@ -16,7 +16,7 @@ import (
 var (
 	metaObjects = metric.Metadata{
 		Name:        "sql.schema_changer.object_count",
-		Help:        "Couner of the number of objects in the cluster",
+		Help:        "Counter of the number of objects in the cluster",
 		Measurement: "Objects",
 		Unit:        metric.Unit_COUNT,
 	}
