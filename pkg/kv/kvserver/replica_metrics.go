@@ -107,7 +107,7 @@ func (r *Replica) Metrics(
 		storeAttrs:               storeAttrs,
 		nodeAttrs:                nodeAttrs,
 		nodeLocality:             nodeLocality,
-		quiescent:                r.mu.quiescent,
+		quiescent:                r.mu.quiescent || r.mu.asleep,
 		ticking:                  ticking,
 		latchMetrics:             latchMetrics,
 		lockTableMetrics:         lockTableMetrics,
