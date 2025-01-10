@@ -1938,6 +1938,7 @@ GO_TARGETS = [
     "//pkg/sql/execinfrapb:execinfrapb_test",
     "//pkg/sql/execstats:execstats",
     "//pkg/sql/execstats:execstats_test",
+    "//pkg/sql/execversion:execversion",
     "//pkg/sql/exprutil:evalexpr",
     "//pkg/sql/exprutil:exprutil",
     "//pkg/sql/exprutil:exprutil_test",

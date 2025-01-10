@@ -15,7 +15,6 @@ go_library(
         "server_config.go",
         "testutils.go",
         "utils.go",
-        "version.go",
         ":gen-consumerstatus-stringer",  # keep
         ":gen-procstate-stringer",  # keep
     ],
@@ -90,7 +89,6 @@ go_test(
     srcs = [
         "base_test.go",
         "main_test.go",
-        "version_test.go",
     ],
     embed = [":execinfra"],
     deps = [
@@ -106,7 +104,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

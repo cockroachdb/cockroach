@@ -138,6 +138,7 @@ go_proto_library(
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/fetchpb",
+        "//pkg/sql/execversion",  # keep
         "//pkg/sql/inverted",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
