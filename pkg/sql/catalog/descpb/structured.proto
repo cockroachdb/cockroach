@@ -765,8 +765,8 @@ message DescriptorMutation {
     // this state is a programming error.
     //
     // Index: INSERT, UPDATE and DELETE treat this index like a
-    // WRITE_ONLY index, but use Put in instead of CPut or
-    // InitPut, effectively ignoring unique constraints.
+    // WRITE_ONLY index, but use Put in instead of CPut, effectively
+    // ignoring unique constraints.
     MERGING = 4;
 
   }

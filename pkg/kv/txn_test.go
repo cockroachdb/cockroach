@@ -129,27 +129,6 @@ func newTestTxnFactory(
 		})
 }
 
-func TestInitPut(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	// This test is mostly an excuse to exercise otherwise unused code.
-	// TODO(vivekmenezes): update test or remove when InitPut is being
-	// considered sufficiently tested and this path exercised.
-	clock := hlc.NewClockForTesting(nil)
-	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		br := ba.CreateReply()
-		return br, nil
-	}), clock, stopper)
-
-	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
-	if pErr := txn.InitPut(ctx, "a", "b", false); pErr != nil {
-		t.Fatal(pErr)
-	}
-}
-
 // TestTransactionConfig verifies the proper unwrapping and re-wrapping of the
 // client's sender when starting a transaction. Also verifies that the
 // UserPriority is propagated to the transactional client and that the admission

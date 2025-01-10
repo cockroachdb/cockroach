@@ -50,7 +50,7 @@ type Batch struct {
 	reqs            []kvpb.RequestUnion
 
 	// approxMutationReqBytes tracks the approximate size of keys and values in
-	// mutations added to this batch via Put, CPut, InitPut, Del, etc.
+	// mutations added to this batch via Put, CPut, Del, etc.
 	approxMutationReqBytes int
 	// Set when AddRawRequest is used, in which case using the "other"
 	// operations renders the batch unusable.
@@ -88,8 +88,8 @@ type BulkSourceIterator[T GValue] interface {
 }
 
 // ApproximateMutationBytes returns the approximate byte size of the mutations
-// added to this batch via Put, CPut, InitPut, Del, etc methods. Mutations added
-// via AddRawRequest are not tracked.
+// added to this batch via Put, CPut, Del, etc methods. Mutations added via
+// AddRawRequest are not tracked.
 func (b *Batch) ApproximateMutationBytes() int {
 	return b.approxMutationReqBytes
 }
@@ -625,6 +625,32 @@ func (b *Batch) cputInternal(
 	b.initResult(1, 1, notRaw, nil)
 }
 
+// CPutBytesEmpty allows multiple []byte value type CPut requests to be added to
+// the batch using BulkSource interface. The values for these keys are
+// expected to be empty.
+func (b *Batch) CPutBytesEmpty(bs BulkSource[[]byte]) {
+	numKeys := bs.Len()
+	reqs := make([]struct {
+		req   kvpb.ConditionalPutRequest
+		union kvpb.RequestUnion_ConditionalPut
+	}, numKeys)
+	i := 0
+	bsi := bs.Iter()
+	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
+		pr := &reqs[i].req
+		union := &reqs[i].union
+		union.ConditionalPut = pr
+		pr.AllowIfDoesNotExist = false
+		pr.ExpBytes = nil
+		i++
+		k, v := bsi.Next()
+		pr.Key = k
+		pr.Value.SetBytes(v)
+		pr.Value.InitChecksum(k)
+		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
+	})
+}
+
 // CPutTuplesEmpty allows multiple CPut tuple requests to be added to the batch
 // as tuples using the BulkSource interface. The values for these keys are
 // expected to be empty.
@@ -672,76 +698,6 @@ func (b *Batch) CPutValuesEmpty(bs BulkSource[roachpb.Value]) {
 		k, v := bsi.Next()
 		pr.Key = k
 		pr.Value = v
-		pr.Value.InitChecksum(k)
-		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
-	})
-}
-
-// InitPut sets the first value for a key to value. An ConditionFailedError is
-// reported if a value already exists for the key and it's not equal to the
-// value passed in. If failOnTombstones is set to true, tombstones will return
-// a ConditionFailedError just like a mismatched value.
-//
-// key can be either a byte slice or a string. value can be any key type, a
-// protoutil.Message or any Go primitive type (bool, int, etc). It is illegal
-// to set value to nil.
-func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
-	k, err := marshalKey(key)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	v, err := marshalValue(value)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	b.appendReqs(kvpb.NewInitPut(k, v, failOnTombstones))
-	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
-	b.initResult(1, 1, notRaw, nil)
-}
-
-// InitPutBytes allows multiple []byte value type InitPut requests to be added to
-// the batch using BulkSource interface.
-func (b *Batch) InitPutBytes(bs BulkSource[[]byte]) {
-	numKeys := bs.Len()
-	reqs := make([]struct {
-		req   kvpb.InitPutRequest
-		union kvpb.RequestUnion_InitPut
-	}, numKeys)
-	i := 0
-	bsi := bs.Iter()
-	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
-		pr := &reqs[i].req
-		union := &reqs[i].union
-		union.InitPut = pr
-		i++
-		k, v := bsi.Next()
-		pr.Key = k
-		pr.Value.SetBytes(v)
-		pr.Value.InitChecksum(k)
-		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
-	})
-}
-
-// InitPutTuples allows multiple tuple value type InitPut to be added to the
-// batch using BulkSource interface.
-func (b *Batch) InitPutTuples(bs BulkSource[[]byte]) {
-	numKeys := bs.Len()
-	reqs := make([]struct {
-		req   kvpb.InitPutRequest
-		union kvpb.RequestUnion_InitPut
-	}, numKeys)
-	i := 0
-	bsi := bs.Iter()
-	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
-		pr := &reqs[i].req
-		union := &reqs[i].union
-		union.InitPut = pr
-		i++
-		k, v := bsi.Next()
-		pr.Key = k
-		pr.Value.SetTuple(v)
 		pr.Value.InitChecksum(k)
 		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
 	})

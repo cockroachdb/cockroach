@@ -720,15 +720,20 @@ func (c *capturePutter) Put(key, value interface{}) {
 	c.kvs.values = append(c.kvs.values, copyBytes(v.RawBytes))
 }
 
-func (c *capturePutter) InitPut(key, value interface{}, failOnTombstones bool) {
-	k := key.(*roachpb.Key)
-	c.kvs.keys = append(c.kvs.keys, *k)
-	v := value.(*roachpb.Value)
-	c.kvs.values = append(c.kvs.values, copyBytes(v.RawBytes))
-}
-
 func (c *capturePutter) Del(key ...interface{}) {
 	colexecerror.InternalError(errors.New("unimplemented"))
+}
+
+func (c *capturePutter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte) {
+	for i, k := range kys {
+		if len(k) == 0 {
+			continue
+		}
+		c.kvs.keys = append(c.kvs.keys, k)
+		var kvValue roachpb.Value
+		kvValue.SetBytes(values[i])
+		c.kvs.values = append(c.kvs.values, kvValue.RawBytes)
+	}
 }
 
 func (c *capturePutter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte) {
@@ -757,32 +762,10 @@ func (c *capturePutter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Valu
 func (c *capturePutter) PutBytes(kys []roachpb.Key, values [][]byte) {
 	colexecerror.InternalError(errors.New("unimplemented"))
 }
-func (c *capturePutter) InitPutBytes(kys []roachpb.Key, values [][]byte) {
-	for i, k := range kys {
-		if len(k) == 0 {
-			continue
-		}
-		c.kvs.keys = append(c.kvs.keys, k)
-		var kvValue roachpb.Value
-		kvValue.SetBytes(values[i])
-		c.kvs.values = append(c.kvs.values, kvValue.RawBytes)
-	}
-}
 
 // we don't call this
 func (c *capturePutter) PutTuples(kys []roachpb.Key, values [][]byte) {
 	colexecerror.InternalError(errors.New("unimplemented"))
-}
-func (c *capturePutter) InitPutTuples(kys []roachpb.Key, values [][]byte) {
-	for i, k := range kys {
-		if len(k) == 0 {
-			continue
-		}
-		c.kvs.keys = append(c.kvs.keys, k)
-		var kvValue roachpb.Value
-		kvValue.SetTuple(values[i])
-		c.kvs.values = append(c.kvs.values, kvValue.RawBytes)
-	}
 }
 
 type kvs struct {

@@ -268,38 +268,6 @@ func TestDB_CPutInline(t *testing.T) {
 	}
 }
 
-func TestDB_InitPut(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
-	ctx := context.Background()
-
-	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.InitPut(ctx, "aa", "2", false); err == nil {
-		t.Fatal("expected error from init put")
-	}
-	if _, err := db.Del(ctx, "aa"); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.InitPut(ctx, "aa", "2", true); err == nil {
-		t.Fatal("expected error from init put")
-	}
-	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
-		t.Fatal(err)
-	}
-	result, err := db.Get(ctx, "aa")
-	if err != nil {
-		t.Fatal(err)
-	}
-	checkResult(t, []byte("1"), result.ValueBytes())
-}
-
 func TestDB_Inc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1138,8 +1106,7 @@ func TestBulkBatchAPI(t *testing.T) {
 
 	testF(func(b *kv.Batch) { b.PutBytes(&byteSliceBulkSource[[]byte]{kys, vals}) })
 	testF(func(b *kv.Batch) { b.PutTuples(&byteSliceBulkSource[[]byte]{kys, vals}) })
-	testF(func(b *kv.Batch) { b.InitPutBytes(&byteSliceBulkSource[[]byte]{kys, vals}) })
-	testF(func(b *kv.Batch) { b.InitPutTuples(&byteSliceBulkSource[[]byte]{kys, vals}) })
+	testF(func(b *kv.Batch) { b.CPutBytesEmpty(&byteSliceBulkSource[[]byte]{kys, vals}) })
 	testF(func(b *kv.Batch) { b.CPutTuplesEmpty(&byteSliceBulkSource[[]byte]{kys, vals}) })
 
 	values := make([]roachpb.Value, len(kys))

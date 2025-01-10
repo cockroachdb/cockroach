@@ -385,6 +385,8 @@ message ConditionalPutResponse {
 // - If key exists, returns a ConditionFailedError if value != existing value
 //   If failOnTombstones is set to true, tombstone values count as mismatched
 //   values and will cause a ConditionFailedError.
+// TODO(yuzefovich): this can be removed once the compatibility with 24.3 is no
+// longer needed.
 message InitPutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Value value = 2 [(gogoproto.nullable) = false];

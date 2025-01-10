@@ -234,7 +234,7 @@ type Index interface {
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 	UseDeletePreservingEncoding() bool
-	// ForcePut forces all writes to use Put rather than CPut or InitPut.
+	// ForcePut forces all writes to use Put rather than CPut.
 	//
 	// Users of this options should take great care as it
 	// effectively mean unique constraints are not respected.
