@@ -6,7 +6,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"io"
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	"storj.io/drpc/drpcmigrate"
 )
 
 type RPCListenerFactory func(
@@ -140,8 +138,9 @@ func startListenRPCAndSQL(
 	hostDRPC := rpc.ExperimentalDRPCEnabled.Validate(nil /* not used */, true) == nil ||
 		rpc.ExperimentalDRPCEnabled.Get(&cfg.Settings.SV)
 
-	// Make a listener that doesn't actually do anything. We will start the dRPC
-	// server all the same; it barely consumes any resources.
+	// If we're not hosting drpc, make a listener that never accepts anything.
+	// We will start the dRPC server all the same; it barely consumes any
+	// resources.
 	var drpcL net.Listener = &noopListener{make(chan struct{})}
 	if hostDRPC {
 		// Throw away the header before passing the conn to the drpc server. This
@@ -223,56 +222,4 @@ func startListenRPCAndSQL(
 	}
 
 	return pgL, sqlLoopbackL, rpcLoopbackL.Connect, startRPCServer, nil
-}
-
-var drpcMatcher = func(reader io.Reader) bool {
-	buf := make([]byte, len(drpcmigrate.DRPCHeader))
-	if _, err := io.ReadFull(reader, buf); err != nil {
-		return false
-	}
-	return bytes.Equal(buf, []byte(drpcmigrate.DRPCHeader))
-}
-
-type dropDRPCHeaderListener struct {
-	wrapped net.Listener
-}
-
-func (ln *dropDRPCHeaderListener) Accept() (net.Conn, error) {
-	conn, err := ln.wrapped.Accept()
-	if err != nil {
-		return nil, err
-	}
-	buf := make([]byte, len(drpcmigrate.DRPCHeader))
-	if _, err := io.ReadFull(conn, buf); err != nil {
-		return nil, err
-	}
-	return conn, nil
-}
-
-func (ln *dropDRPCHeaderListener) Close() error {
-	return ln.wrapped.Close()
-}
-
-func (ln *dropDRPCHeaderListener) Addr() net.Addr {
-	return ln.wrapped.Addr()
-}
-
-type noopListener struct{ done chan struct{} }
-
-func (l *noopListener) Accept() (net.Conn, error) {
-	<-l.done
-	return nil, net.ErrClosed
-}
-
-func (l *noopListener) Close() error {
-	if l.done == nil {
-		return nil
-	}
-	close(l.done)
-	l.done = nil
-	return nil
-}
-
-func (l *noopListener) Addr() net.Addr {
-	return nil
 }
