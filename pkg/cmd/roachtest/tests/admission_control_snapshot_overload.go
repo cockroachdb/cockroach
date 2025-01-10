@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	prometheus "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus/prominstaller"
 )
 
 // This test sets up a 3-node CRDB cluster on 8vCPU machines, loads

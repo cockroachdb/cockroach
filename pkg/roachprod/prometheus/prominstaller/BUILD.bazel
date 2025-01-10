@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "prominstaller",
+    srcs = ["prometheus.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus/prominstaller",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "@com_github_cockroachdb_errors//:errors",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "prominstaller_test",
+    srcs = ["prometheus_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":prominstaller"],
+    deps = [
+        "//pkg/roachprod/install",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

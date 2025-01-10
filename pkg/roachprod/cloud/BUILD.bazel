@@ -13,7 +13,7 @@ go_library(
         "//pkg/cloud/amazon",
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
-        "//pkg/roachprod/promhelperclient",
+        "//pkg/roachprod/prometheus/promhelperclient",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/aws",

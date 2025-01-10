@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "promhelperclient",
     srcs = ["client.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient",
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus/promhelperclient",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachprod/config",

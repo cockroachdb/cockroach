@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	prominstaller "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus/prominstaller"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -82,7 +83,7 @@ type c2cSetup struct {
 	// workloadNode identifies the node in the roachprod cluster that runs the workload.
 	workloadNode option.NodeListOption
 
-	promCfg *prometheus.Config
+	promCfg *prominstaller.Config
 }
 
 const maxExpectedLatencyDefault = 2 * time.Minute
@@ -98,7 +99,7 @@ var c2cPromMetrics = map[string]clusterstats.ClusterStat{
 		Query:     "capacity_used / 1e6"},
 }
 
-func sumOverLabel(stats map[string]map[string]clusterstats.StatPoint, label string) float64 {
+func sumOverLabel(stats map[string]map[string]prometheus.StatPoint, label string) float64 {
 	var mean float64
 	for _, stat := range stats[label] {
 		mean += stat.Value
@@ -618,7 +619,7 @@ func (rd *replicationDriver) setupC2C(
 	if !c.IsLocal() {
 		// TODO(msbutler): pass a proper cluster replication dashboard and figure out why we need to
 		// pass a grafana dashboard for this to work
-		rd.setup.promCfg = (&prometheus.Config{}).
+		rd.setup.promCfg = (&prominstaller.Config{}).
 			WithPrometheusNode(rd.setup.workloadNode.InstallNodes()[0]).
 			WithCluster(rd.setup.dst.nodes.InstallNodes()).
 			WithNodeExporter(rd.setup.dst.nodes.InstallNodes()).
