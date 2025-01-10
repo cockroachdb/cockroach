@@ -1,0 +1,8 @@
+/* setup */
+CREATE TABLE t1 (tenant_id uuid, c1 int);
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR SELECT TO PUBLIC USING (tenant_id = '01538898-f55c-44db-a306-89078e2c430e');
+----
+Schema change plan for CREATE POLICY ‹"policy 1"› ON ‹t1› AS PERMISSIVE FOR SELECT TO public USING (‹tenant_id› = ‹'01538898-f55c-44db-a306-89078e2c430e'›);
+ └── execute 1 system table mutations transaction

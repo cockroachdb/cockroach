@@ -1,0 +1,11 @@
+/* setup */
+CREATE TABLE t1 (tenant_id uuid, c1 int);
+SET enable_row_level_security = true;
+CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR ALL TO PUBLIC USING (true);
+CREATE POLICY "policy 2" on t1 AS PERMISSIVE FOR INSERT TO PUBLIC WITH CHECK (true);
+
+/* test */
+EXPLAIN (DDL, SHAPE) DROP POLICY "policy 2" on t1;
+----
+Schema change plan for DROP POLICY ‹"policy 2"› ON ‹t1›;
+ └── execute 1 system table mutations transaction

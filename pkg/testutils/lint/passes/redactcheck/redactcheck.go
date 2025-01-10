@@ -226,6 +226,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"IndexID":        {},
 						"PGAttributeNum": {},
 						"TriggerID":      {},
+						"PolicyID":       {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/tree": {
 						"IsolationLevel": {},

@@ -105,6 +105,7 @@ go_library(
         "//pkg/sql/storageparam/indexstorageparam",
         "//pkg/sql/types",
         "//pkg/util/encoding",
+        "//pkg/util/envutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",

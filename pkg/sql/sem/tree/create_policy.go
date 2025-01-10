@@ -79,7 +79,7 @@ func (node *PolicyExpressions) Format(ctx *FmtCtx) {
 // CreatePolicy is a tree struct for the CREATE POLICY DDL statement
 type CreatePolicy struct {
 	PolicyName Name
-	TableName  TableName
+	TableName  *UnresolvedObjectName
 	Type       PolicyType
 	Cmd        PolicyCommand
 	Roles      RoleSpecList
@@ -91,7 +91,7 @@ func (node *CreatePolicy) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE POLICY ")
 	ctx.FormatNode(&node.PolicyName)
 	ctx.WriteString(" ON ")
-	ctx.FormatNode(&node.TableName)
+	ctx.FormatNode(node.TableName)
 	if node.Type != PolicyTypeDefault {
 		ctx.WriteString(" AS ")
 		ctx.WriteString(node.Type.String())
