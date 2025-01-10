@@ -799,13 +799,15 @@ type IOThresholdConsumer interface {
 	UpdateIOThreshold(roachpb.StoreID, *admissionpb.IOThreshold)
 }
 
-// StoreMetrics are the metrics for a store.
+// StoreMetrics are the metrics and some config information for a store.
 type StoreMetrics struct {
 	StoreID roachpb.StoreID
 	*pebble.Metrics
 	WriteStallCount int64
 	// Optional.
 	DiskStats DiskStats
+	// Config.
+	MemTableSizeForStopWrites uint64
 }
 
 // DiskStats provide low-level stats about the disk resources used for a

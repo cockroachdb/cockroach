@@ -2137,6 +2137,11 @@ func (p *Pebble) GetMetrics() Metrics {
 	return m
 }
 
+// GetPebbleOptions implements the Engine interface.
+func (p *Pebble) GetPebbleOptions() *pebble.Options {
+	return p.cfg.opts
+}
+
 // GetEncryptionRegistries implements the Engine interface.
 func (p *Pebble) GetEncryptionRegistries() (*fs.EncryptionRegistries, error) {
 	rv := &fs.EncryptionRegistries{}
