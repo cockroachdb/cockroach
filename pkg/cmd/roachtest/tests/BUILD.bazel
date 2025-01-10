@@ -168,6 +168,7 @@ go_library(
         "rust_postgres_blocklist.go",
         "s3_clone_backup_restore.go",
         "s3_microceph.go",
+        "s3_minio.go",
         "schemachange.go",
         "schemachange_random_load.go",
         "scrub.go",
