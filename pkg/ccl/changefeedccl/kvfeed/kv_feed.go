@@ -90,6 +90,12 @@ type Config struct {
 	// enables filtering out any transactional writes with that flag set to true.
 	WithFiltering bool
 
+	// WithFrontierQuantize specifies the resolved timestamp quantization
+	// granularity. If non-zero, resolved timestamps from rangefeed checkpoint
+	// events will be rounded down to the nearest multiple of the quantization
+	// granularity.
+	WithFrontierQuantize time.Duration
+
 	// Knobs are kvfeed testing knobs.
 	Knobs TestingKnobs
 
@@ -126,6 +132,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
+		cfg.WithFrontierQuantize,
 		cfg.ConsumerID,
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
@@ -246,17 +253,18 @@ func (e schemaChangeDetectedError) Error() string {
 }
 
 type kvFeed struct {
-	spans               []roachpb.Span
-	checkpoint          []roachpb.Span
-	checkpointTimestamp hlc.Timestamp
-	withDiff            bool
-	withFiltering       bool
-	withInitialBackfill bool
-	consumerID          int64
-	initialHighWater    hlc.Timestamp
-	endTime             hlc.Timestamp
-	writer              kvevent.Writer
-	codec               keys.SQLCodec
+	spans                []roachpb.Span
+	checkpoint           []roachpb.Span
+	checkpointTimestamp  hlc.Timestamp
+	withFrontierQuantize time.Duration
+	withDiff             bool
+	withFiltering        bool
+	withInitialBackfill  bool
+	consumerID           int64
+	initialHighWater     hlc.Timestamp
+	endTime              hlc.Timestamp
+	writer               kvevent.Writer
+	codec                keys.SQLCodec
 
 	onBackfillCallback func() func()
 	rangeObserver      kvcoord.RangeObserver
@@ -283,6 +291,7 @@ func newKVFeed(
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
 	withInitialBackfill, withDiff, withFiltering bool,
+	withFrontierQuantize time.Duration,
 	consumerID int64,
 	initialHighWater hlc.Timestamp,
 	endTime hlc.Timestamp,
@@ -296,26 +305,27 @@ func newKVFeed(
 	knobs TestingKnobs,
 ) *kvFeed {
 	return &kvFeed{
-		writer:              writer,
-		spans:               spans,
-		checkpoint:          checkpoint,
-		checkpointTimestamp: checkpointTimestamp,
-		withInitialBackfill: withInitialBackfill,
-		withDiff:            withDiff,
-		withFiltering:       withFiltering,
-		consumerID:          consumerID,
-		initialHighWater:    initialHighWater,
-		endTime:             endTime,
-		schemaChangeEvents:  schemaChangeEvents,
-		schemaChangePolicy:  schemaChangePolicy,
-		codec:               codec,
-		tableFeed:           tf,
-		scanner:             sc,
-		physicalFeed:        pff,
-		bufferFactory:       bf,
-		targets:             targets,
-		timers:              ts,
-		knobs:               knobs,
+		writer:               writer,
+		spans:                spans,
+		checkpoint:           checkpoint,
+		checkpointTimestamp:  checkpointTimestamp,
+		withInitialBackfill:  withInitialBackfill,
+		withDiff:             withDiff,
+		withFiltering:        withFiltering,
+		withFrontierQuantize: withFrontierQuantize,
+		consumerID:           consumerID,
+		initialHighWater:     initialHighWater,
+		endTime:              endTime,
+		schemaChangeEvents:   schemaChangeEvents,
+		schemaChangePolicy:   schemaChangePolicy,
+		codec:                codec,
+		tableFeed:            tf,
+		scanner:              sc,
+		physicalFeed:         pff,
+		bufferFactory:        bf,
+		targets:              targets,
+		timers:               ts,
+		knobs:                knobs,
 	}
 }
 
@@ -598,14 +608,15 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 
 	g := ctxgroup.WithContext(ctx)
 	physicalCfg := rangeFeedConfig{
-		Spans:         stps,
-		Frontier:      resumeFrontier.Frontier(),
-		WithDiff:      f.withDiff,
-		WithFiltering: f.withFiltering,
-		ConsumerID:    f.consumerID,
-		Knobs:         f.knobs,
-		Timers:        f.timers,
-		RangeObserver: f.rangeObserver,
+		Spans:                stps,
+		Frontier:             resumeFrontier.Frontier(),
+		WithDiff:             f.withDiff,
+		WithFiltering:        f.withFiltering,
+		WithFrontierQuantize: f.withFrontierQuantize,
+		ConsumerID:           f.consumerID,
+		Knobs:                f.knobs,
+		Timers:               f.timers,
+		RangeObserver:        f.rangeObserver,
 	}
 
 	// The following two synchronous calls works as follows:
