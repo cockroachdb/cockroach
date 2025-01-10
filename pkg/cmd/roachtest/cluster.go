@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,6 +58,9 @@ import (
 func init() {
 	_ = roachprod.InitProviders()
 }
+
+//go:embed tsdump-run.sh
+var tsdumpRunSh string
 
 var (
 	// maps cpuArch to the corresponding crdb binary's absolute path
@@ -1358,10 +1362,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger)
 		if err := os.WriteFile(tsDumpGob+".yaml", buf.Bytes(), 0644); err != nil {
 			return err
 		}
-		return os.WriteFile(tsDumpGob+"-run.sh", []byte(`#!/usr/bin/env bash
-
-COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure $*
-`), 0755)
+		return os.WriteFile(tsDumpGob+"-run.sh", []byte(tsdumpRunSh), 0755)
 	})
 }
 
