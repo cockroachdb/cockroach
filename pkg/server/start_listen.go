@@ -135,10 +135,9 @@ func startListenRPCAndSQL(
 	}
 
 	// Host drpc only if it's _possible_ to turn it on (this requires a test build
-	// or env var). If the setting _is_ on, but it should not be possible for it
-	// to be, then it was overridden in testing and we want to host the server
-	// too.
-	hostDRPC := rpc.ExperimentalDRPCEnabled.Validate(nil, true) == nil ||
+	// or env var). If the setting _is_ on, then it was overridden in testing and
+	// we want to host the server too.
+	hostDRPC := rpc.ExperimentalDRPCEnabled.Validate(nil /* not used */, true) == nil ||
 		rpc.ExperimentalDRPCEnabled.Get(&cfg.Settings.SV)
 
 	// Make a listener that doesn't actually do anything. We will start the dRPC
