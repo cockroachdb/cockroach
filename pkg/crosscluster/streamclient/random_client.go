@@ -25,7 +25,7 @@ type InterceptFn func(event crosscluster.Event, spec SubscriptionToken)
 
 // DialInterceptFn is a function that will intercept Dial calls made to an
 // InterceptableStreamClient
-type DialInterceptFn func(streamURL *url.URL) error
+type DialInterceptFn func(streamURL url.URL) error
 
 // HeartbeatInterceptFn is a function that will intercept calls to a client's
 // Heartbeat.
@@ -57,11 +57,11 @@ type RandomClient interface {
 	// ClearInterceptors clears all registered interceptors on the client.
 	ClearInterceptors()
 
-	URL() string
+	URL() ClusterUri
 }
 
 var (
-	RandomGenClientBuilder func(*url.URL, descs.DB) (Client, error) = func(*url.URL, descs.DB) (Client, error) {
+	RandomGenClientBuilder func(ClusterUri, descs.DB) (Client, error) = func(ClusterUri, descs.DB) (Client, error) {
 		return nil, errors.AssertionFailedf("to use the randomgen scheme include pkg/crosscluster/streamclient/randclient")
 	}
 

@@ -31,7 +31,7 @@ const (
 )
 
 func newPGConnForClient(
-	ctx context.Context, remote *url.URL, options *options,
+	ctx context.Context, remote url.URL, options *options,
 ) (*pgx.Conn, *pgx.ConnConfig, error) {
 	config, err := setupPGXConfig(remote, options)
 	if err != nil {
@@ -44,7 +44,7 @@ func newPGConnForClient(
 	return conn, config, nil
 }
 
-func setupPGXConfig(remote *url.URL, options *options) (*pgx.ConnConfig, error) {
+func setupPGXConfig(remote url.URL, options *options) (*pgx.ConnConfig, error) {
 	noInlineCertURI, tlsInfo, err := uriWithInlineTLSCertsRemoved(remote)
 	if err != nil {
 		return nil, err
@@ -78,26 +78,26 @@ type tlsCerts struct {
 // option. The returned URL can be passed to pgx. The returned
 // tlsCerts struct can be used to apply the certificate data to the
 // tls.Config produced by pgx.
-func uriWithInlineTLSCertsRemoved(remote *url.URL) (*url.URL, *tlsCerts, error) {
+func uriWithInlineTLSCertsRemoved(remote url.URL) (url.URL, *tlsCerts, error) {
 	if remote.Query().Get(SslInlineURLParam) != "true" {
 		return remote, nil, nil
 	}
 
-	retURL := *remote
+	retURL := remote
 	v := retURL.Query()
 	cert := v.Get(sslCertURLParam)
 	key := v.Get(sslKeyURLParam)
 	rootcert := v.Get(sslRootCertURLParam)
 
 	if (cert != "" && key == "") || (cert == "" && key != "") {
-		return nil, nil, errors.New(`both "sslcert" and "sslkey" are required`)
+		return url.URL{}, nil, errors.New(`both "sslcert" and "sslkey" are required`)
 	}
 
 	tlsInfo := &tlsCerts{}
 	if rootcert != "" {
 		caCertPool := x509.NewCertPool()
 		if !caCertPool.AppendCertsFromPEM([]byte(rootcert)) {
-			return nil, nil, errors.New("unable to add CA to cert pool")
+			return url.URL{}, nil, errors.New("unable to add CA to cert pool")
 		}
 		tlsInfo.rootCertPool = caCertPool
 	}
@@ -110,7 +110,7 @@ func uriWithInlineTLSCertsRemoved(remote *url.URL) (*url.URL, *tlsCerts, error) 
 		pemKey := pem.EncodeToMemory(block)
 		keyPair, err := tls.X509KeyPair([]byte(cert), pemKey)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "unable to construct x509 key pair")
+			return url.URL{}, nil, errors.Wrap(err, "unable to construct x509 key pair")
 		}
 		tlsInfo.certs = []tls.Certificate{keyPair}
 	}
@@ -131,7 +131,7 @@ func uriWithInlineTLSCertsRemoved(remote *url.URL) (*url.URL, *tlsCerts, error) 
 	v.Del(sslRootCertURLParam)
 	v.Del(SslInlineURLParam)
 	retURL.RawQuery = v.Encode()
-	return &retURL, tlsInfo, nil
+	return retURL, tlsInfo, nil
 }
 
 func (c *tlsCerts) addTLSCertsToConfig(tlsConfig *tls.Config) {

@@ -1030,13 +1030,13 @@ func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
 			ret.Cutover.Timestamp = e
 		}
 	}
-	if n.ReplicationSourceAddress != nil {
-		e, changed := WalkExpr(v, n.ReplicationSourceAddress)
+	if n.ReplicationSourceConnUri != nil {
+		e, changed := WalkExpr(v, n.ReplicationSourceConnUri)
 		if changed {
 			if ret == n {
 				ret = n.copyNode()
 			}
-			ret.ReplicationSourceAddress = e
+			ret.ReplicationSourceConnUri = e
 		}
 	}
 	if n.ReplicationSourceTenantName != nil {
@@ -1111,12 +1111,12 @@ func (n *CreateTenantFromReplication) walkStmt(v Visitor) Statement {
 		}
 		ret.ReplicationSourceTenantName = &TenantSpec{IsName: true, Expr: e}
 	}
-	e, changed = WalkExpr(v, n.ReplicationSourceAddress)
+	e, changed = WalkExpr(v, n.ReplicationSourceConnUri)
 	if changed {
 		if ret == n {
 			ret = n.copyNode()
 		}
-		ret.ReplicationSourceAddress = e
+		ret.ReplicationSourceConnUri = e
 	}
 	if n.Options.Retention != nil {
 		e, changed := WalkExpr(v, n.Options.Retention)

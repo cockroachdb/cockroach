@@ -53,26 +53,39 @@ type streamIngestionResumer struct {
 	}
 }
 
-func getStreamAddresses(ctx context.Context, ingestionJob *jobs.Job) []string {
+func getClusterUris(
+	ctx context.Context, ingestionJob *jobs.Job, db descs.DB,
+) ([]streamclient.ClusterUri, error) {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
-	progress := ingestionJob.Progress()
-	streamAddresses := progress.GetStreamIngest().StreamAddresses
-
-	if len(streamAddresses) > 0 {
-		return streamAddresses
+	sourceUri, err := streamclient.LookupClusterUri(ctx, details.SourceClusterConnUri, db)
+	if err != nil {
+		return nil, err
 	}
-	// Without a list of addresses from existing progress, we use the stream
-	// address from the creation statement. This could happen if no progress has
-	// been reported.
-	log.Infof(ctx, "no stream addresses in progress. using stream address found during planning")
-	return []string{details.StreamAddress}
+
+	// Always use the configured URI as the the first conneciton target. It may
+	// be a load balancer or an external connection.
+	uris := []streamclient.ClusterUri{sourceUri}
+
+	progress := ingestionJob.Progress()
+	for _, uri := range progress.GetStreamIngest().PartitionConnUris {
+		parsed, err := streamclient.ParseClusterUri(uri)
+		if err != nil {
+			return nil, err
+		}
+		uris = append(uris, parsed)
+	}
+
+	return uris, nil
 }
 
 func connectToActiveClient(
 	ctx context.Context, ingestionJob *jobs.Job, db descs.DB, opts ...streamclient.Option,
 ) (streamclient.Client, error) {
-	streamAddresses := getStreamAddresses(ctx, ingestionJob)
-	client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses, db, opts...)
+	clusterUris, err := getClusterUris(ctx, ingestionJob, db)
+	if err != nil {
+		return nil, err
+	}
+	client, err := streamclient.GetFirstActiveClient(ctx, clusterUris, db, opts...)
 	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
 }
 

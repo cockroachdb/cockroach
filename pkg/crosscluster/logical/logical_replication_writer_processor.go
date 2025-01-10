@@ -302,25 +302,24 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	// Start the subscription for our partition.
 	partitionSpec := lrw.spec.PartitionSpec
 	token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
-	addr := partitionSpec.Address
-	redactedAddr, redactedErr := streamclient.RedactSourceURI(addr)
-	if redactedErr != nil {
-		log.Warning(lrw.Ctx(), "could not redact stream address")
+	uri, err := streamclient.ParseClusterUri(partitionSpec.PartitionConnUri)
+	if err != nil {
+		lrw.MoveToDrainingAndLogError(errors.Wrap(err, "parsing partition uri uri"))
 	}
-	streamClient, err := streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(addr), db,
+	streamClient, err := streamclient.NewStreamClient(ctx, uri, db,
 		streamclient.WithStreamID(streampb.StreamID(lrw.spec.StreamID)),
 		streamclient.WithCompression(true),
 		streamclient.WithLogical(),
 	)
 	if err != nil {
-		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr))
+		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, uri.Redacted()))
 		return
 	}
 	lrw.streamPartitionClient = streamClient
 
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-			streamingKnobs.BeforeClientSubscribe(addr, string(token), lrw.frontier, lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes)
+			streamingKnobs.BeforeClientSubscribe(uri.Serialize(), string(token), lrw.frontier, lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes)
 		}
 	}
 	sub, err := streamClient.Subscribe(ctx,
@@ -335,7 +334,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 		streamclient.WithBatchSize(batchSizeSetting.Get(&lrw.FlowCtx.Cfg.Settings.SV)),
 	)
 	if err != nil {
-		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "subscribing to partition from %s", redactedAddr))
+		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "subscribing to partition from %s", uri.Redacted()))
 		return
 	}
 
