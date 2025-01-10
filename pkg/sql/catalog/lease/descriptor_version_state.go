@@ -36,7 +36,7 @@ func (s *storedLease) String() string {
 var _ redact.SafeFormatter = (*storedLease)(nil)
 
 // SafeFormat implements redact.SafeFormatter.
-func (s *storedLease) SafeFormat(w redact.SafePrinter, _ rune) {
+func (s storedLease) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("ID=%d ver=%d expiration=%s", s.id, s.version, s.expiration)
 }
 
