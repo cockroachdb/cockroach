@@ -28,10 +28,10 @@ import (
 	"storj.io/drpc/drpcmigrate"
 )
 
-// TestTestClusterDRPC verifies that CRDB nodes can host a drpc server that
+// TestDRPCBatchServer verifies that CRDB nodes can host a drpc server that
 // serves BatchRequest. It doesn't verify that nodes use drpc to communiate with
 // each other.
-func TestTestClusterDRPC(t *testing.T) {
+func TestDRPCBatchServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -59,12 +59,8 @@ func TestTestClusterDRPC(t *testing.T) {
 			cm, err := c.Server(0).RPCContext().GetCertificateManager()
 			require.NoError(t, err)
 			tlsCfg, err := cm.GetNodeClientTLSConfig()
-
-			// manager closed: tls: either ServerName or InsecureSkipVerify must be
-			// specified in the tls.Config
-			// storj.io/drpc/drpcmanager.(*Manager).manageReader:234
 			tlsCfg = tlsCfg.Clone()
-			tlsCfg.InsecureSkipVerify = true
+			tlsCfg.ServerName = "*.local"
 			tlsConn := tls.Client(rawconn, tlsCfg)
 			conn = drpcconn.New(tlsConn)
 		} else {
