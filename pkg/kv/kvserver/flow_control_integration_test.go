@@ -595,7 +595,7 @@ func TestFlowControlCrashedNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	const numNodes = 2
+	const numNodes = 3
 	var maintainStreamsForBrokenRaftTransport atomic.Bool
 
 	st := cluster.MakeTestingClusterSettings()
@@ -646,7 +646,7 @@ func TestFlowControlCrashedNode(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	k := tc.ScratchRange(t)
-	tc.AddVotersOrFatal(t, k, tc.Targets(1)...)
+	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
 
 	n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
@@ -657,9 +657,9 @@ func TestFlowControlCrashedNode(t *testing.T) {
 	desc, err := tc.LookupRange(k)
 	require.NoError(t, err)
 	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(0))
-	h.waitForConnectedStreams(ctx, desc.RangeID, 2, 0 /* serverIdx */)
+	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
 
-	h.comment(`-- (Issuing regular 5x1MiB, 2x replicated writes that are not admitted.)`)
+	h.comment(`-- (Issuing regular 5x1MiB, 3x replicated writes that are not admitted.)`)
 	h.log("sending put requests")
 	for i := 0; i < 5; i++ {
 		h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
@@ -667,8 +667,8 @@ func TestFlowControlCrashedNode(t *testing.T) {
 	h.log("sent put requests")
 
 	h.comment(`
--- Flow token metrics from n1 after issuing 5 regular 1MiB 2x replicated writes
--- that are yet to get admitted. We see 5*1MiB*2=10MiB deductions of
+-- Flow token metrics from n1 after issuing 5 regular 1MiB 3x replicated writes
+-- that are yet to get admitted. We see 5*1MiB*3=15MiB deductions of
 -- {regular,elastic} tokens with no corresponding returns.
 `)
 	h.query(n1, v1FlowTokensQueryStr)
@@ -688,7 +688,7 @@ func TestFlowControlCrashedNode(t *testing.T) {
 
 	h.comment(`-- (Crashing n2 but disabling the raft-transport-break token return mechanism.)`)
 	tc.StopServer(1)
-	h.waitForConnectedStreams(ctx, desc.RangeID, 1, 0 /* serverIdx */)
+	h.waitForConnectedStreams(ctx, desc.RangeID, 2, 0 /* serverIdx */)
 
 	h.comment(`
 -- Observe the per-stream tracked tokens on n1, after n2 crashed. We're no
@@ -2719,16 +2719,12 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 			// This test doesn't want leadership changing hands, and leader leases (by
 			// virtue of raft fortification) help ensure this. Override to disable any
 			// metamorphosis.
-			// TODO(arulajmani): Re-enable leader leases on this test, see #136292.
-			kvserver.OverrideLeaderLeaseMetamorphism(ctx, &settings.SV)
-			tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
 					Settings: settings,
 					RaftConfig: base.RaftConfig{
-						// Suppress timeout-based elections. This test doesn't want to
-						// deal with leadership changing hands.
-						RaftElectionTimeoutTicks: 1000000,
 						// Reduce the RangeLeaseDuration to speeds up failure detection
 						// below.
 						RangeLeaseDuration: time.Second,
@@ -2754,7 +2750,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 			defer tc.Stopper().Stop(ctx)
 
 			k := tc.ScratchRange(t)
-			tc.AddVotersOrFatal(t, k, tc.Targets(1)...)
+			tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
 
 			n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
@@ -2765,13 +2761,13 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 			desc, err := tc.LookupRange(k)
 			require.NoError(t, err)
 			tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(0))
-			h.waitForConnectedStreams(ctx, desc.RangeID, 2, 0 /* serverIdx */)
+			h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
 			// Reset the token metrics, since a send queue may have instantly
 			// formed when adding one of the replicas, before being quickly
 			// drained.
 			h.resetV2TokenMetrics(ctx)
 
-			h.comment(`-- (Issuing 5x1MiB, 2x replicated writes that are not admitted.)`)
+			h.comment(`-- (Issuing 5x1MiB, 3x replicated writes that are not admitted.)`)
 			h.log("sending put requests")
 			for i := 0; i < 5; i++ {
 				h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
@@ -2779,8 +2775,8 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 			h.log("sent put requests")
 
 			h.comment(`
--- Flow token metrics from n1 after issuing 5 1MiB 2x replicated writes
--- that are yet to get admitted. We see 5*1MiB*2=10MiB deductions of
+-- Flow token metrics from n1 after issuing 5 1MiB 3x replicated writes
+-- that are yet to get admitted. We see 5*1MiB*3=15MiB deductions of
 -- {regular,elastic} tokens with no corresponding returns.
 `)
 			h.query(n1, v2FlowTokensQueryStr)
@@ -2792,7 +2788,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 
 			h.comment(`-- (Crashing n2)`)
 			tc.StopServer(1)
-			h.waitForConnectedStreams(ctx, desc.RangeID, 1, 0 /* serverIdx */)
+			h.waitForConnectedStreams(ctx, desc.RangeID, 2, 0 /* serverIdx */)
 
 			h.comment(`
 -- Observe the per-stream tracked tokens on n1, after n2 crashed. We're no
