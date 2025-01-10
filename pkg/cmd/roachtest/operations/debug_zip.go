@@ -18,14 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-type cleanupDebugZip struct {
-	nodes option.NodeListOption
-}
-
-func (cl *cleanupDebugZip) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
-	// No cleanup necessary
-}
-
 func debugZipRunner() func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 	return func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 		return runDebugZip(ctx, o, c)
@@ -54,17 +46,11 @@ func runDebugZip(
 
 	o.Status(fmt.Sprintf("running %q on node %s", debugZipCmd.String(), node.NodeIDsString()))
 	err = c.RunE(ctx, option.WithNodes(node), debugZipCmd.String())
-	//result, err := c.RunWithDetailsSingleNode(ctx, o.L(), option.WithNodes(node), debugZipCmd.String())
 	if err != nil {
 		o.Fatal(err)
 	}
 
-	//_ = result
-	//o.L().Printf("stdout: %s\nstderr: %s\n", result.Stdout, result.Stderr)
-
-	return &cleanupDebugZip{
-		nodes: node,
-	}
+	return nil
 }
 
 func registerDebugZip(r registry.Registry) {
