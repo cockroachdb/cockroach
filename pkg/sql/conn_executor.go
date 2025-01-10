@@ -4074,7 +4074,12 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs); err != nil {
 			return advanceInfo{}, err
 		}
-
+		if ex.extraTxnState.descCollection.HasUncommittedNewOrDroppedDescriptors() {
+			execCfg := ex.planner.ExecCfg()
+			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {
+				log.Warningf(ex.Ctx(), "failed to scan descriptor table: %v", err)
+			}
+		}
 		fallthrough
 	case txnRollback, txnPrepare:
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)

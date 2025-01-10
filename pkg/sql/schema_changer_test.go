@@ -5856,7 +5856,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 		require.NoError(t, sqlDB.QueryRow(`
 SELECT value
   FROM crdb_internal.node_metrics
- WHERE name = 'sql.schema_changer.permanent_errors';
+ WHERE name = 'jobs.schema_change.resume_failed';
 `).Scan(&permanentErrors))
 		require.Equal(t, 1, permanentErrors)
 		var userErrors int
