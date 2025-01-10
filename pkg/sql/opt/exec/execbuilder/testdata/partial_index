@@ -343,8 +343,8 @@ UPDATE t SET b = 11 WHERE a = 5
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/baz
 Del /Table/112/2/4/5/0
-CPut /Table/112/2/11/5/0 -> /BYTES/ (expecting does not exist)
-CPut /Table/112/3/11/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/11/5/0 -> /BYTES/
+CPut /Table/112/3/11/5/0 -> /BYTES/
 
 # Update a row that matches the first partial index before and after the update
 # and the index entry does not change.
@@ -362,9 +362,9 @@ UPDATE t SET b = 12 WHERE a = 6
 Scan /Table/112/1/6/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/6/0 -> /TUPLE/2:2:Int/12/1:3:Bytes/baz
 Del /Table/112/2/11/6/0
-CPut /Table/112/2/12/6/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/12/6/0 -> /BYTES/
 Del /Table/112/3/11/6/0
-CPut /Table/112/3/12/6/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/3/12/6/0 -> /BYTES/
 
 # Update a row that matches the first partial index before the update, but does
 # not match after the update.
@@ -374,7 +374,7 @@ UPDATE t SET b = 9 WHERE a = 6
 Scan /Table/112/1/6/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/6/0 -> /TUPLE/2:2:Int/9/1:3:Bytes/baz
 Del /Table/112/2/12/6/0
-CPut /Table/112/2/9/6/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/9/6/0 -> /BYTES/
 Del /Table/112/3/12/6/0
 
 # Update a row that matches both partial indexes before the update, the first
@@ -385,9 +385,9 @@ UPDATE t SET c = 'baz', b = 12 WHERE a = 13
 Scan /Table/112/1/13/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/13/0 -> /TUPLE/2:2:Int/12/1:3:Bytes/baz
 Del /Table/112/2/11/13/0
-CPut /Table/112/2/12/13/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/12/13/0 -> /BYTES/
 Del /Table/112/3/11/13/0
-CPut /Table/112/3/12/13/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/3/12/13/0 -> /BYTES/
 Del /Table/112/4/"foo"/13/0
 
 # Reversing the previous update should reverse the partial index changes.
@@ -397,10 +397,10 @@ UPDATE t SET c = 'foo', b = 11 WHERE a = 13
 Scan /Table/112/1/13/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/13/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
 Del /Table/112/2/12/13/0
-CPut /Table/112/2/11/13/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/11/13/0 -> /BYTES/
 Del /Table/112/3/12/13/0
-CPut /Table/112/3/11/13/0 -> /BYTES/ (expecting does not exist)
-CPut /Table/112/4/"foo"/13/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/3/11/13/0 -> /BYTES/
+CPut /Table/112/4/"foo"/13/0 -> /BYTES/
 
 # Update a row to match a partial index that does not index the column
 # referenced in predicate.
@@ -412,7 +412,7 @@ UPDATE u SET v = 11 WHERE k = 1
 ----
 Scan /Table/113/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/113/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/11
-CPut /Table/113/2/2/1/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/113/2/2/1/0 -> /BYTES/
 
 # Update a row to no longer match a partial index that does not index the column
 # referenced in predicate.
@@ -572,7 +572,7 @@ INSERT INTO t VALUES (5, 3, 'foo') ON CONFLICT (a) DO UPDATE SET b = 3
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/bar
 Del /Table/112/2/4/5/0
-CPut /Table/112/2/3/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/3/5/0 -> /BYTES/
 
 # Insert a conflicting row that does not match the first partial index
 # before the update, but does match after the update.
@@ -582,8 +582,8 @@ INSERT INTO t VALUES (5, 7, 'foo') ON CONFLICT (a) DO UPDATE SET b = 11
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
 Del /Table/112/2/3/5/0
-CPut /Table/112/2/11/5/0 -> /BYTES/ (expecting does not exist)
-CPut /Table/112/3/11/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/11/5/0 -> /BYTES/
+CPut /Table/112/3/11/5/0 -> /BYTES/
 
 # Insert a conflicting row that currently matches the first partial index before
 # the update. Update the row so that the row no longer matches the first partial
@@ -594,9 +594,9 @@ INSERT INTO t VALUES (5, 11, 'bar') ON CONFLICT (a) DO UPDATE SET b = 4, c = 'fo
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foo
 Del /Table/112/2/11/5/0
-CPut /Table/112/2/4/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/4/5/0 -> /BYTES/
 Del /Table/112/3/11/5/0
-CPut /Table/112/4/"foo"/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/4/"foo"/5/0 -> /BYTES/
 
 # Insert a conflicting row that that matches the second partial index before and
 # after the update and the index entry does not change.
@@ -606,7 +606,7 @@ INSERT INTO t VALUES (5, 11, 'bar') ON CONFLICT (a) DO UPDATE SET b = 3
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/foo
 Del /Table/112/2/4/5/0
-CPut /Table/112/2/3/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/3/5/0 -> /BYTES/
 
 # Insert a conflicting row that that matches the second partial index before and
 # after the update and the index entry changes.
@@ -616,7 +616,7 @@ INSERT INTO t VALUES (5, 11, 'bar') ON CONFLICT (a) DO UPDATE SET c = 'foobar'
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/foobar
 Del /Table/112/4/"foo"/5/0
-CPut /Table/112/4/"foobar"/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/4/"foobar"/5/0 -> /BYTES/
 
 # Insert a non-conflicting row that matches the first partial index.
 query T kvtrace
@@ -660,7 +660,7 @@ INSERT INTO u VALUES (2, 3, 11) ON CONFLICT (k) DO UPDATE SET u = 4, v = 12
 Scan /Table/113/1/2/0 lock Exclusive (Block, Unreplicated)
 Put /Table/113/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/12
 Del /Table/113/2/3/2/0
-CPut /Table/113/2/4/2/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/113/2/4/2/0 -> /BYTES/
 
 # ---------------------------------------------------------
 # INSERT ON CONFLICT DO UPDATE primary key
@@ -758,7 +758,7 @@ UPSERT INTO t VALUES (5, 3, 'bar')
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/bar
 Del /Table/112/2/4/5/0
-CPut /Table/112/2/3/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/3/5/0 -> /BYTES/
 
 # Upsert a conflicting row that does not match the first partial index before
 # the update, but does match after the update.
@@ -768,8 +768,8 @@ UPSERT INTO t VALUES (5, 11, 'bar')
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
 Del /Table/112/2/3/5/0
-CPut /Table/112/2/11/5/0 -> /BYTES/ (expecting does not exist)
-CPut /Table/112/3/11/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/11/5/0 -> /BYTES/
+CPut /Table/112/3/11/5/0 -> /BYTES/
 
 # Upsert a conflicting row that currently matches the first partial index before
 # the update. Update the row so that the row no longer matches the first partial
@@ -780,9 +780,9 @@ UPSERT INTO t VALUES (5, 3, 'foo')
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/foo
 Del /Table/112/2/11/5/0
-CPut /Table/112/2/3/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/3/5/0 -> /BYTES/
 Del /Table/112/3/11/5/0
-CPut /Table/112/4/"foo"/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/4/"foo"/5/0 -> /BYTES/
 
 # Upsert a conflicting row that that matches the second partial index before and
 # after the update and the index entry does not change.
@@ -792,7 +792,7 @@ UPSERT INTO t VALUES (5, 4, 'foo')
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foo
 Del /Table/112/2/3/5/0
-CPut /Table/112/2/4/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/2/4/5/0 -> /BYTES/
 
 # Upsert a conflicting row that that matches the second partial index before and
 # after the update and the index entry changes.
@@ -802,7 +802,7 @@ UPSERT INTO t VALUES (5, 4, 'foobar')
 Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/112/1/5/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foobar
 Del /Table/112/4/"foo"/5/0
-CPut /Table/112/4/"foobar"/5/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/112/4/"foobar"/5/0 -> /BYTES/
 
 # Upsert a non-conflicting row that matches the first partial index.
 query T kvtrace
@@ -846,7 +846,7 @@ UPSERT INTO u VALUES (2, 4, 12)
 Scan /Table/113/1/2/0 lock Exclusive (Block, Unreplicated)
 Put /Table/113/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/12
 Del /Table/113/2/3/2/0
-CPut /Table/113/2/4/2/0 -> /BYTES/ (expecting does not exist)
+CPut /Table/113/2/4/2/0 -> /BYTES/
 
 # Tests for partial inverted indexes.
 
