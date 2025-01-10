@@ -37,6 +37,7 @@ func ExtractExternalCatalog(
 	schemaResolver resolver.SchemaResolver,
 	txn isql.Txn,
 	descCol *descs.Collection,
+	includeOffline bool,
 	tableNames ...string,
 ) (externalpb.ExternalCatalog, error) {
 	externalCatalog := externalpb.ExternalCatalog{}
@@ -47,16 +48,25 @@ func ExtractExternalCatalog(
 		if err != nil {
 			return externalpb.ExternalCatalog{}, err
 		}
-		tn := uon.ToTableName()
-		_, td, err := resolver.ResolveMutableExistingTableObject(ctx, schemaResolver, &tn, true, tree.ResolveRequireTableDesc)
+		lookupFlags := tree.ObjectLookupFlags{
+			Required:          true,
+			DesiredObjectKind: tree.TableObject,
+			IncludeOffline:    includeOffline,
+		}
+		d, _, err := resolver.ResolveExistingObject(ctx, schemaResolver, uon, lookupFlags)
 		if err != nil {
 			return externalpb.ExternalCatalog{}, err
 		}
-		externalCatalog.Types, foundTypeDescriptors, err = getUDTsForTable(ctx, txn, descCol, externalCatalog.Types, foundTypeDescriptors, td)
+		td, ok := d.(catalog.TableDescriptor)
+		if !ok {
+			return externalpb.ExternalCatalog{}, errors.New("expected table descriptor")
+		}
+		tableDesc := td.TableDesc()
+		externalCatalog.Types, foundTypeDescriptors, err = getUDTsForTable(ctx, txn, descCol, externalCatalog.Types, foundTypeDescriptors, td, tableDesc.ParentID)
 		if err != nil {
 			return externalpb.ExternalCatalog{}, err
 		}
-		externalCatalog.Tables = append(externalCatalog.Tables, td.TableDescriptor)
+		externalCatalog.Tables = append(externalCatalog.Tables, *tableDesc)
 	}
 	return externalCatalog, nil
 }
@@ -67,9 +77,10 @@ func getUDTsForTable(
 	descsCol *descs.Collection,
 	typeDescriptors []descpb.TypeDescriptor,
 	foundTypeDescriptors map[descpb.ID]struct{},
-	td *tabledesc.Mutable,
+	td catalog.TableDescriptor,
+	parentID descpb.ID,
 ) ([]descpb.TypeDescriptor, map[descpb.ID]struct{}, error) {
-	dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, td.GetParentID())
+	dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, parentID)
 	if err != nil {
 		return nil, nil, err
 	}
