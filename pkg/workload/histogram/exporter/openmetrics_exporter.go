@@ -2,6 +2,7 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
+
 package exporter
 
 import (
@@ -57,6 +58,16 @@ func (o *OpenMetricsExporter) SnapshotAndWrite(
 
 	// emit elapsed metric for this run
 	if err := o.emitGaugeMetric(*name+"_elapsed", float64(elapsed.Milliseconds()), now); err != nil {
+		return err
+	}
+
+	// emit max metric for this run
+	if err := o.emitGaugeMetric(*name+"_max", float64(hist.Max()), now); err != nil {
+		return err
+	}
+
+	// emit mean metric for this run
+	if err := o.emitGaugeMetric(*name+"_mean", hist.Mean(), now); err != nil {
 		return err
 	}
 
