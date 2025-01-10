@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -486,7 +485,7 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 				// TODO(bhaskar): Obtain secure cluster information.
 				// Cluster does not have the information on secure or not. So, we retry as insecure
 				// if delete fails with cluster as secure
-				if strings.Contains(err.Error(), "request failed with status 404") {
+				if promhelperclient.IsNotFoundError(err) {
 					if err = promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
 						c.Name, false, true /* insecure */, l); err != nil {
 						l.Errorf("Failed to delete the cluster config with cluster as insecure and secure: %v", err)
