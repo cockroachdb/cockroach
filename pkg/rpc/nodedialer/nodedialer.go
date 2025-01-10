@@ -155,9 +155,13 @@ func (n *Dialer) DialInternalClient(
 	client := newBaseInternalClient(conn)
 
 	if rpc.ExperimentalDRPCEnabled.Get(&n.rpcContext.Settings.SV) {
+		// TODO(server) gRPC version of batch stream pool implements
+		// rpc.RestrictedInternalClient and is allocation-optimized,
+		// whereas here we allocate a new throw-away
+		// unaryDRPCBatchServiceToInternalAdapter.
 		client = &unaryDRPCBatchServiceToInternalAdapter{
 			RestrictedInternalClient: client, // for RangeFeed only
-			drpcClient:               kvpb.NewDRPCInternalClient(dconn),
+			drpcClient:               kvpb.NewDRPCBatchClient(dconn),
 			drpcStreamPool:           drpcBatchStreamPool,
 		}
 		return client, nil
@@ -168,24 +172,6 @@ func (n *Dialer) DialInternalClient(
 	}
 	client = maybeWrapInTracingClient(ctx, client)
 	return client, nil
-}
-
-type unaryDRPCBatchServiceToInternalAdapter struct {
-	rpc.RestrictedInternalClient
-	drpcClient     kvpb.DRPCInternalClient
-	drpcStreamPool *rpc.DRPCBatchStreamPool
-}
-
-func (a *unaryDRPCBatchServiceToInternalAdapter) Batch(
-	ctx context.Context, in *kvpb.BatchRequest, opts ...grpc.CallOption,
-) (*kvpb.BatchResponse, error) {
-	if len(opts) > 0 {
-		return nil, errors.New("CallOptions unsupported")
-	}
-	if a.drpcStreamPool != nil {
-		return a.drpcStreamPool.Send(ctx, in)
-	}
-	return a.drpcClient.Batch(ctx, in)
 }
 
 // dial performs the dialing of the remote connection. If checkBreaker
