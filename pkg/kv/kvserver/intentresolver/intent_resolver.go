@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -34,85 +35,109 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// defaultTaskLimit is the maximum number of asynchronous tasks
-	// that may be started by intentResolver. When this limit is reached
-	// asynchronous tasks will start to block to apply backpressure.  This is a
-	// last line of defense against issues like #4925.
-	// TODO(bdarnell): how to determine best value?
-	defaultTaskLimit = 1000
-
-	// asyncIntentResolutionTimeout is the timeout when processing a group of
-	// intents asynchronously. The timeout prevents async intent resolution from
-	// getting stuck. Since processing intents is best effort, we'd rather give
-	// up than wait too long (this helps avoid deadlocks during test shutdown).
-	asyncIntentResolutionTimeout = 30 * time.Second
-
-	// gcBatchSize is the maximum number of transaction records that will be
-	// GCed in a single batch. Batches that span many ranges (which is possible
-	// for the transaction records that spans many ranges) will be split into
-	// many batches by the DistSender.
-	gcBatchSize = 1024
-
-	// intentResolverBatchSize is the maximum number of single-intent resolution
-	// requests that will be sent in a single batch. Batches that span many
-	// ranges (which is possible for the commit of a transaction that spans many
-	// ranges) will be split into many batches by the DistSender.
-	// TODO(ajwerner): justify this value
-	intentResolverBatchSize = 100
-
-	// intentResolverRangeBatchSize is the maximum number of ranged intent
-	// resolutions requests that will be sent in a single batch.  It is set
-	// lower that intentResolverBatchSize since each request can fan out to a
-	// large number of intents.
-	intentResolverRangeBatchSize = 10
-
-	// intentResolverRangeRequestSize is the maximum number of intents a single
-	// range request can resolve. When exceeded, the response will include a
-	// ResumeSpan and the batcher will send a new range request.
-	intentResolverRangeRequestSize = 200
-
-	// intentResolverRequestTargetBytes is the target number of bytes of the
-	// write batch resulting from an intent resolution request. When exceeded,
-	// the response will include a ResumeSpan and the batcher will send a new
-	// intent resolution request.
-	intentResolverRequestTargetBytes = 4 << 20 // 4 MB.
-
-	// intentResolverSendBatchTimeout is the maximum amount of time an intent
-	// resolution batch request can run for before timeout.
-	intentResolverSendBatchTimeout = 1 * time.Minute
-
-	// MaxTxnsPerIntentCleanupBatch is the number of transactions whose
-	// corresponding intents will be resolved at a time. Intents are batched
-	// by transaction to avoid timeouts while resolving intents and ensure that
-	// progress is made.
-	MaxTxnsPerIntentCleanupBatch = 100
-
-	// defaultGCBatchIdle is the default duration which the gc request batcher
-	// will wait between requests for a range before sending it.
-	defaultGCBatchIdle = -1 // disabled
-
-	// defaultGCBatchWait is the default duration which the gc request batcher
-	// will wait between requests for a range before sending it.
-	defaultGCBatchWait = time.Second
-
-	// intentResolutionBatchWait is used to configure the RequestBatcher which
-	// batches intent resolution requests across transactions. Intent resolution
-	// needs to occur in a relatively short period of time after the completion
-	// of a transaction in order to minimize the contention footprint of the write
-	// for other contending reads or writes. The chosen value was selected based
-	// on some light experimentation to ensure that performance does not degrade
-	// in the face of highly contended workloads.
-	defaultIntentResolutionBatchWait = 10 * time.Millisecond
-
-	// intentResolutionBatchIdle is similar to the above setting but is used when
-	// when no additional traffic hits the batch.
-	defaultIntentResolutionBatchIdle = 5 * time.Millisecond
-
-	// gcTxnRecordTimeout is the timeout for asynchronous txn record removal
-	// during cleanupFinishedTxnIntents.
-	gcTxnRecordTimeout = 20 * time.Second
+// defaultTaskLimit is the maximum number of asynchronous tasks that may be
+// started by intentResolver. When this limit is reached asynchronous tasks will
+// start to block to apply backpressure.  This is a last line of defense against
+// issues like #4925.
+//
+// TODO(bdarnell): how to determine best value?
+var defaultTaskLimit = envutil.EnvOrDefaultInt(
+	"COCKROACH_ASYNC_INTENT_RESOLVER_TASK_LIMIT", 1000,
 )
+
+// asyncIntentResolutionTimeout is the timeout when processing a group of
+// intents asynchronously. The timeout prevents async intent resolution from
+// getting stuck. Since processing intents is best effort, we'd rather give
+// up than wait too long (this helps avoid deadlocks during test shutdown).
+var asyncIntentResolutionTimeout = envutil.EnvOrDefaultDuration(
+	"COCKROACH_ASYNC_INTENT_RESOLUTION_TIMEOUT", 30*time.Second,
+)
+
+// gcBatchSize is the maximum number of transaction records that will be GCed
+// in a single batch. Batches that span many ranges (which is possible for the
+// transaction records that spans many ranges) will be split into many batches
+// by the DistSender.
+var gcBatchSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_TXN_RECORD_GC_BATCH_SIZE", 1024,
+)
+
+// intentResolverBatchSize is the maximum number of single-intent resolution
+// requests that will be sent in a single batch. Batches that span many
+// ranges (which is possible for the commit of a transaction that spans many
+// ranges) will be split into many batches by the DistSender.
+//
+// TODO(ajwerner): justify this value
+var intentResolverBatchSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_INTENT_RESOLVER_BATCH_SIZE", 100,
+)
+
+// intentResolverRangeBatchSize is the maximum number of ranged intent
+// resolutions requests that will be sent in a single batch.  It is set
+// lower that intentResolverBatchSize since each request can fan out to a
+// large number of intents.
+var intentResolverRangeBatchSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGED_INTENT_RESOLVER_BATCH_SIZE", 10,
+)
+
+// intentResolverRangeRequestSize is the maximum number of intents a single
+// range request can resolve. When exceeded, the response will include a
+// ResumeSpan and the batcher will send a new range request.
+var intentResolverRangeRequestSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGED_INTENT_RESOLVER_REQUEST_SIZE", 200,
+)
+
+// intentResolverRequestTargetBytes is the target number of bytes of the
+// write batch resulting from an intent resolution request. When exceeded,
+// the response will include a ResumeSpan and the batcher will send a new
+// intent resolution request.
+var intentResolverRequestTargetBytes = envutil.EnvOrDefaultBytes(
+	"COCKROACH_INTENT_RESOLVER_REQUEST_TARGET_BYTES", 4<<20, // 4 MB
+)
+
+// intentResolverSendBatchTimeout is the maximum amount of time an intent
+// resolution batch request can run for before timeout.
+var intentResolverSendBatchTimeout = envutil.EnvOrDefaultDuration(
+	"COCKROACH_INTENT_RESOLVER_SEND_BATCH_TIMEOUT", 1*time.Minute,
+)
+
+// MaxTxnsPerIntentCleanupBatch is the number of transactions whose
+// corresponding intents will be resolved at a time. Intents are batched
+// by transaction to avoid timeouts while resolving intents and ensure that
+// progress is made.
+var MaxTxnsPerIntentCleanupBatch = envutil.EnvOrDefaultInt64(
+	"COCKROACH_MAX_TXNS_PER_INTENT_CLEANUP_BATCH", 100,
+)
+
+// defaultGCBatchIdle is the default duration which the gc request batcher
+// will wait between requests for a range before sending it.
+var defaultGCBatchIdle = envutil.EnvOrDefaultDuration(
+	"COCKROACH_GC_BATCH_IDLE", -1, // disabled
+)
+
+// defaultGCBatchWait is the default duration which the gc request batcher
+// will wait between requests for a range before sending it.
+var defaultGCBatchWait = envutil.EnvOrDefaultDuration("COCKROACH_GC_BATCH_WAIT_TIME", time.Second)
+
+// intentResolutionBatchWait is used to configure the RequestBatcher which
+// batches intent resolution requests across transactions. Intent resolution
+// needs to occur in a relatively short period of time after the completion
+// of a transaction in order to minimize the contention footprint of the write
+// for other contending reads or writes. The chosen value was selected based
+// on some light experimentation to ensure that performance does not degrade
+// in the face of highly contended workloads.
+var defaultIntentResolutionBatchWait = envutil.EnvOrDefaultDuration(
+	"COCKROACH_INTENT_RESOLVER_BATCH_WAIT", 10*time.Millisecond,
+)
+
+// intentResolutionBatchIdle is similar to the above setting but is used when
+// when no additional traffic hits the batch.
+var defaultIntentResolutionBatchIdle = envutil.EnvOrDefaultDuration(
+	"COCKROACH_INTENT_RESOLVER_BATCH_IDLE", 5*time.Millisecond,
+)
+
+// gcTxnRecordTimeout is the timeout for asynchronous txn record removal
+// during cleanupFinishedTxnIntents.
+var gcTxnRecordTimeout = envutil.EnvOrDefaultDuration("COCKROACH_GC_TXN_RECORD_TIMEOUT", 20*time.Second)
 
 // Config contains the dependencies to construct an IntentResolver.
 type Config struct {
@@ -559,7 +584,7 @@ func (ir *IntentResolver) CleanupIntents(
 		var i int
 		for i = 0; i < len(unpushed); i++ {
 			if curTxn := &unpushed[i].Txn; curTxn.ID != prevTxnID {
-				if len(pushTxns) >= MaxTxnsPerIntentCleanupBatch {
+				if len(pushTxns) >= int(MaxTxnsPerIntentCleanupBatch) {
 					break
 				}
 				prevTxnID = curTxn.ID
