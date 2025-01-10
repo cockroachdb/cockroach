@@ -973,6 +973,15 @@ func (*CreateLogicalReplicationStream) StatementTag() string {
 func (*CreateLogicalReplicationStream) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
+func (*DoBlock) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*DoBlock) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DoBlock) StatementTag() string { return "DO" }
+
+// StatementReturnType implements the Statement interface.
 func (*DropExternalConnection) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
@@ -2514,6 +2523,7 @@ func (n *CreateView) String() string                          { return AsString(
 func (n *Deallocate) String() string                          { return AsString(n) }
 func (n *Delete) String() string                              { return AsString(n) }
 func (n *DeclareCursor) String() string                       { return AsString(n) }
+func (n *DoBlock) String() string                             { return AsString(n) }
 func (n *DropDatabase) String() string                        { return AsString(n) }
 func (n *DropPolicy) String() string                          { return AsString(n) }
 func (n *DropRoutine) String() string                         { return AsString(n) }

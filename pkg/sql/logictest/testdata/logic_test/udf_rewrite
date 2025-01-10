@@ -181,7 +181,7 @@ DROP PROCEDURE p_rewrite;
 
 subtest end
 
-subtest rewrite_udf_calling_duf
+subtest rewrite_udf_calling_udf
 
 statement ok
 CREATE FUNCTION nested_func() RETURNS INT AS $$
@@ -199,5 +199,31 @@ query T
 SELECT get_body_str('p_rewrite');
 ----
 "SELECT public.nested_func();\nSELECT nested_func FROM ROWS FROM (public.nested_func());"
+
+subtest end
+
+subtest rewrite_udf_do_block
+
+skipif config local-mixed-24.3
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS $$
+  DO $foo$
+    BEGIN
+      INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
+      DO $bar$
+        BEGIN
+          INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
+        END;
+      $bar$;
+    END
+  $foo$;
+  SELECT 1;
+$$ LANGUAGE SQL
+
+skipif config local-mixed-24.3
+query T
+SELECT get_body_str('f_rewrite');
+----
+"DO $funcbody$\nBEGIN\nINSERT INTO test.public.t_rewrite(v) VALUES (nextval(106:::REGCLASS)) RETURNING v;\nDO $$\nBEGIN\nINSERT INTO test.public.t_rewrite(v) VALUES (nextval(106:::REGCLASS)) RETURNING v;\nEND;\n$$;\nEND;\n$funcbody$;\n;\nSELECT 1;"
 
 subtest end

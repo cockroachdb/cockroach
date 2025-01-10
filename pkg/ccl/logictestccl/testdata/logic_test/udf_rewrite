@@ -582,3 +582,120 @@ statement ok
 DROP PROCEDURE p_rewrite;
 
 subtest end
+
+subtest do_block
+
+skipif config local-mixed-24.3
+statement ok
+CREATE FUNCTION f_rewrite() RETURNS INT AS $$
+  BEGIN
+    DO $foo$
+      BEGIN
+        SELECT nextval('seq');
+        SELECT 'wednesday'::weekday;
+        RAISE NOTICE 'foo';
+        DO $bar$
+          BEGIN
+            RAISE NOTICE 'bar';
+            SELECT nextval('seq');
+            SELECT 'wednesday'::weekday;
+          END;
+        $bar$;
+      END
+    $foo$;
+    RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+skipif config local-mixed-24.3
+query T
+SELECT get_body_str('f_rewrite');
+----
+"BEGIN\nDO $funcbody$\nBEGIN\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'foo';\nDO $$\nBEGIN\nRAISE NOTICE 'bar';\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nEND;\n$$;\nEND;\n$funcbody$;\nRETURN 100;\nEND;\n"
+
+skipif config local-mixed-24.3
+query TT
+SHOW CREATE FUNCTION f_rewrite;
+----
+f_rewrite  CREATE FUNCTION public.f_rewrite()
+             RETURNS INT8
+             VOLATILE
+             NOT LEAKPROOF
+             CALLED ON NULL INPUT
+             LANGUAGE plpgsql
+             SECURITY INVOKER
+             AS $funcbodyx$
+             BEGIN
+             DO $funcbody$
+             BEGIN
+             SELECT nextval('public.seq'::REGCLASS);
+             SELECT 'wednesday':::public.weekday;
+             RAISE NOTICE 'foo';
+             DO $$
+             BEGIN
+             RAISE NOTICE 'bar';
+             SELECT nextval('public.seq'::REGCLASS);
+             SELECT 'wednesday':::public.weekday;
+             END;
+             $$;
+             END;
+             $funcbody$;
+             RETURN 100;
+             END;
+           $funcbodyx$
+
+statement ok
+ALTER TYPE weekday RENAME VALUE 'friday' TO 'humpday';
+
+statement ok
+ALTER TYPE weekday RENAME TO workday;
+
+skipif config local-mixed-24.3
+query T
+SELECT get_body_str('f_rewrite');
+----
+"BEGIN\nDO $funcbody$\nBEGIN\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'foo';\nDO $$\nBEGIN\nRAISE NOTICE 'bar';\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nEND;\n$$;\nEND;\n$funcbody$;\nRETURN 100;\nEND;\n"
+
+skipif config local-mixed-24.3
+query TT
+SHOW CREATE FUNCTION f_rewrite;
+----
+f_rewrite  CREATE FUNCTION public.f_rewrite()
+             RETURNS INT8
+             VOLATILE
+             NOT LEAKPROOF
+             CALLED ON NULL INPUT
+             LANGUAGE plpgsql
+             SECURITY INVOKER
+             AS $funcbodyx$
+             BEGIN
+             DO $funcbody$
+             BEGIN
+             SELECT nextval('public.seq'::REGCLASS);
+             SELECT 'wednesday':::public.workday;
+             RAISE NOTICE 'foo';
+             DO $$
+             BEGIN
+             RAISE NOTICE 'bar';
+             SELECT nextval('public.seq'::REGCLASS);
+             SELECT 'wednesday':::public.workday;
+             END;
+             $$;
+             END;
+             $funcbody$;
+             RETURN 100;
+             END;
+           $funcbodyx$
+
+# Reset types for subtest.
+statement ok
+ALTER TYPE workday RENAME TO weekday;
+
+statement ok
+ALTER TYPE weekday RENAME VALUE 'humpday' TO 'friday';
+
+skipif config local-mixed-24.3
+statement ok
+DROP FUNCTION f_rewrite;
+
+subtest end
