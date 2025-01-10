@@ -14,11 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
-var envExperimentalDRPCEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_DRPC_ENABLED", true)
+var envExperimentalDRPCEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_DRPC_ENABLED", false)
 
 // ExperimentalDRPCEnabled determines whether a drpc server accepting BatchRequest
 // is enabled. This server is experimental and completely unsuitable to production
@@ -27,7 +26,7 @@ var ExperimentalDRPCEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"rpc.experimental_drpc.enabled",
 	"if true, use drpc to execute Batch RPCs (instead of gRPC)",
-	metamorphic.ConstantWithTestBool("rpc.experimental_drpc.enabled", envExperimentalDRPCEnabled),
+	envExperimentalDRPCEnabled,
 	settings.WithValidateBool(func(values *settings.Values, b bool) error {
 		// drpc support is highly experimental and should not be enabled in production.
 		// Since authorization is not implemented, we only even host the server if the
