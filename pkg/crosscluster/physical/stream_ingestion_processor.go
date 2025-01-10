@@ -427,22 +427,22 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	for _, partitionSpec := range sip.spec.PartitionSpecs {
 		id := partitionSpec.PartitionID
 		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
-		addr := partitionSpec.Address
-		redactedAddr, redactedErr := streamclient.RedactSourceURI(addr)
-		if redactedErr != nil {
-			log.Warning(sip.Ctx(), "could not redact stream address")
+		uri, err := streamclient.ParseClusterUri(partitionSpec.PartitionConnUri)
+		if err != nil {
+			sip.MoveToDrainingAndLogError(errors.Wrap(err, "parsing partition uri"))
+			return
 		}
 		var streamClient streamclient.Client
 		if sip.forceClientForTests != nil {
 			streamClient = sip.forceClientForTests
 			log.Infof(ctx, "using testing client")
 		} else {
-			streamClient, err = streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(addr), db,
+			streamClient, err = streamclient.NewStreamClient(ctx, uri, db,
 				streamclient.WithStreamID(streampb.StreamID(sip.spec.StreamID)),
 				streamclient.WithCompression(compress.Get(&st.SV)))
 			if err != nil {
 
-				sip.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr))
+				sip.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, uri.Redacted()))
 				return
 			}
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
@@ -450,7 +450,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), sip.frontier, false)
+				streamingKnobs.BeforeClientSubscribe(uri.Serialize(), string(token), sip.frontier, false)
 			}
 		}
 
@@ -460,7 +460,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.spec.InitialScanTimestamp, sip.frontier)
 
 		if err != nil {
-			sip.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", redactedAddr))
+			sip.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", uri.Redacted()))
 			return
 		}
 		subscriptions[id] = sub

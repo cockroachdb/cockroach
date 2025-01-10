@@ -9,7 +9,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -72,13 +71,13 @@ func main() {
 		fatalf("tenant name required")
 	}
 
-	streamAddr, err := url.Parse(*uri)
+	uri, err := streamclient.ParseClusterUri(*uri)
 	if err != nil {
 		fatalf("parse: %s", err)
 	}
 
 	ctx := cancelOnShutdown(context.Background())
-	if err := streamPartition(ctx, streamAddr); err != nil {
+	if err := streamPartition(ctx, uri); err != nil {
 		if errors.Is(err, context.Canceled) {
 			exit.WithCode(exit.Interrupted())
 		} else {
@@ -87,9 +86,9 @@ func main() {
 	}
 }
 
-func streamPartition(ctx context.Context, streamAddr *url.URL) error {
+func streamPartition(ctx context.Context, uri streamclient.ClusterUri) error {
 	fmt.Println("creating producer stream")
-	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr)
+	client, err := streamclient.NewPartitionedStreamClient(ctx, uri)
 	if err != nil {
 		return err
 	}
@@ -132,7 +131,7 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 
 	fmt.Printf("streaming %s (%s) as of %s\n", *tenant, tenantSpan, sps.InitialScanTimestamp)
 	if *noParse {
-		return rawStream(ctx, streamAddr, replicationProducerSpec.StreamID, spsBytes)
+		return rawStream(ctx, uri, replicationProducerSpec.StreamID, spsBytes)
 	}
 
 	sub, err := client.Subscribe(ctx, replicationProducerSpec.StreamID, 1, 1,
@@ -151,11 +150,11 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 
 func rawStream(
 	ctx context.Context,
-	uri *url.URL,
+	uri streamclient.ClusterUri,
 	streamID streampb.StreamID,
 	spec streamclient.SubscriptionToken,
 ) error {
-	config, err := pgx.ParseConfig(uri.String())
+	config, err := pgx.ParseConfig(uri.Serialize())
 	if err != nil {
 		return err
 	}

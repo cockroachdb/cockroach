@@ -4855,7 +4855,7 @@ create_virtual_cluster_stmt:
     $$.val = &tree.CreateTenantFromReplication{
       TenantSpec: $3.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
-      ReplicationSourceAddress: $9.expr(),
+      ReplicationSourceConnUri: $9.expr(),
       Options: *$10.tenantReplicationOptions(),
     }
   }
@@ -4866,7 +4866,7 @@ create_virtual_cluster_stmt:
       IfNotExists: true,
       TenantSpec: $6.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $10.expr()},
-      ReplicationSourceAddress: $12.expr(),
+      ReplicationSourceConnUri: $12.expr(),
       Options: *$13.tenantReplicationOptions(),
     }
   }
@@ -7795,7 +7795,7 @@ alter_virtual_cluster_replication_stmt:
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
-      ReplicationSourceAddress: $9.expr(),
+      ReplicationSourceConnUri: $9.expr(),
       Options: *$10.tenantReplicationOptions(),
     }
   }

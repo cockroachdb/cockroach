@@ -108,9 +108,18 @@ func newStreamIngestionFrontierProcessor(
 		}
 	}
 
+	var uris []streamclient.ClusterUri
+	for _, uri := range spec.ConnectionUris {
+		parsed, err := streamclient.ParseClusterUri(uri)
+		if err != nil {
+			return nil, err
+		}
+		uris = append(uris, parsed)
+	}
+
 	streamID := streampb.StreamID(spec.StreamID)
 	streamClient, err := streamclient.GetFirstActiveClient(ctx,
-		spec.StreamAddresses,
+		uris,
 		flowCtx.Cfg.DB,
 		streamclient.WithStreamID(streamID))
 	if err != nil {

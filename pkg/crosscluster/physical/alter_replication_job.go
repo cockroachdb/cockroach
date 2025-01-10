@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -133,7 +132,7 @@ func alterReplicationJobTypeCheck(
 		ctx, alterReplicationJobOp, p.SemaCtx(),
 		exprutil.TenantSpec{TenantSpec: alterStmt.TenantSpec},
 		exprutil.TenantSpec{TenantSpec: alterStmt.ReplicationSourceTenantName},
-		exprutil.Strings{alterStmt.Options.Retention, alterStmt.ReplicationSourceAddress},
+		exprutil.Strings{alterStmt.Options.Retention, alterStmt.ReplicationSourceConnUri},
 	); err != nil {
 		return false, nil, err
 	}
@@ -187,9 +186,9 @@ func alterReplicationJobHook(
 		return nil, nil, false, err
 	}
 
-	var srcAddr, srcTenant string
-	if alterTenantStmt.ReplicationSourceAddress != nil {
-		srcAddr, err = exprEval.String(ctx, alterTenantStmt.ReplicationSourceAddress)
+	var srcUri, srcTenant string
+	if alterTenantStmt.ReplicationSourceConnUri != nil {
+		srcUri, err = exprEval.String(ctx, alterTenantStmt.ReplicationSourceConnUri)
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -228,17 +227,17 @@ func alterReplicationJobHook(
 			return err
 		}
 
-		// If a source address is being provided, we're enabling replication into an
+		// If a source uri is being provided, we're enabling replication into an
 		// existing virtual cluster. It must be inactive, and we'll verify that it
 		// was the cluster from which the one it will replicate was replicated, i.e.
 		// that we're reversing the direction of replication. We will then revert it
 		// to the time they diverged and pick up from there.
-		if alterTenantStmt.ReplicationSourceAddress != nil {
+		if alterTenantStmt.ReplicationSourceConnUri != nil {
 			return alterTenantRestartReplication(
 				ctx,
 				p,
 				tenInfo,
-				srcAddr,
+				srcUri,
 				srcTenant,
 				retentionTTLSeconds,
 				alterTenantStmt,
@@ -321,7 +320,7 @@ func alterTenantRestartReplication(
 	ctx context.Context,
 	p sql.PlanHookState,
 	tenInfo *mtinfopb.TenantInfo,
-	srcAddr string,
+	srcUri string,
 	srcTenant string,
 	retentionTTLSeconds int32,
 	alterTenantStmt *tree.AlterTenantReplication,
@@ -357,14 +356,17 @@ func alterTenantRestartReplication(
 		return CannotSetExpirationWindowErr
 	}
 
-	streamAddress := crosscluster.StreamAddress(srcAddr)
-	streamURL, err := streamAddress.URL()
+	configUri, err := streamclient.ParseConfigUri(srcUri)
 	if err != nil {
 		return errors.Wrap(err, "url")
 	}
-	streamAddress = crosscluster.StreamAddress(streamURL.String())
 
-	client, err := streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(srcAddr), p.ExecCfg().InternalDB)
+	clusterUri, err := configUri.AsClusterUri(ctx, p.ExecCfg().InternalDB)
+	if err != nil {
+		return err
+	}
+
+	client, err := streamclient.NewStreamClient(ctx, clusterUri, p.ExecCfg().InternalDB)
 	if err != nil {
 		return errors.Wrap(err, "creating client")
 	}
@@ -412,7 +414,7 @@ func alterTenantRestartReplication(
 	return errors.Wrap(createReplicationJob(
 		ctx,
 		p,
-		streamAddress,
+		configUri,
 		srcTenant,
 		dstTenantID,
 		retentionTTLSeconds,
@@ -423,7 +425,7 @@ func alterTenantRestartReplication(
 		&tree.CreateTenantFromReplication{
 			TenantSpec:                  alterTenantStmt.TenantSpec,
 			ReplicationSourceTenantName: alterTenantStmt.ReplicationSourceTenantName,
-			ReplicationSourceAddress:    alterTenantStmt.ReplicationSourceAddress,
+			ReplicationSourceConnUri:    alterTenantStmt.ReplicationSourceConnUri,
 			Options:                     alterTenantStmt.Options,
 		},
 		readerID,

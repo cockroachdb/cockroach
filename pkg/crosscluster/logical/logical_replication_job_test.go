@@ -1145,7 +1145,7 @@ func TestLogicalJobResiliency(t *testing.T) {
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 
 	progress := jobutils.GetJobProgress(t, dbA, jobAID)
-	addresses := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.StreamAddresses
+	addresses := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.PartitionConnUris
 
 	require.Greaterf(t, len(addresses), 1, "Less than 2 addresses were persisted in system.job_info")
 }

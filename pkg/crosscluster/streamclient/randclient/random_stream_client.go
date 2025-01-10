@@ -135,7 +135,7 @@ func (c randomStreamConfig) randomEvent(rng *rand.Rand) (randomEvent, error) {
 	}
 }
 
-func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
+func parseRandomStreamConfig(streamURL url.URL) (randomStreamConfig, error) {
 	c := randomStreamConfig{
 		eventFrequency:      10 * time.Microsecond,
 		eventsPerCheckpoint: 30,
@@ -223,8 +223,10 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 	return c, nil
 }
 
-func (c randomStreamConfig) URL(table int, startsTenant, finishesTenant bool) string {
-	u := &url.URL{
+func (c randomStreamConfig) URL(
+	table int, startsTenant, finishesTenant bool,
+) streamclient.ClusterUri {
+	u := url.URL{
 		Scheme: streamclient.RandomGenScheme,
 		Host:   strconv.Itoa(table),
 	}
@@ -240,7 +242,7 @@ func (c randomStreamConfig) URL(table int, startsTenant, finishesTenant bool) st
 	q.Add(TenantSpanEnd, strconv.FormatBool(finishesTenant))
 	q.Add(TenantID, strconv.Itoa(int(c.tenantID.ToUint64())))
 	u.RawQuery = q.Encode()
-	return u.String()
+	return streamclient.MakeTestClusterUri(u)
 }
 
 type randomEventGenerator struct {
@@ -333,7 +335,6 @@ func (r *randomEventGenerator) generateNewEvent() (crosscluster.Event, error) {
 	default:
 		return nil, errors.AssertionFailedf("unknown event type: %d", eventType)
 	}
-
 }
 
 // RandomStreamClient is a temporary stream client implementation that generates
@@ -344,7 +345,7 @@ func (r *randomEventGenerator) generateNewEvent() (crosscluster.Event, error) {
 type RandomStreamClient struct {
 	config    randomStreamConfig
 	tableDesc catalog.TableDescriptor
-	streamURL *url.URL
+	streamURL streamclient.ClusterUri
 
 	// mu is used to provide a threadsafe interface to interceptors.
 	mu struct {
@@ -365,9 +366,11 @@ var _ streamclient.Client = &RandomStreamClient{}
 // newRandomStreamClient returns a stream client that generates a random set of
 // events on a table with an integer key and integer value for the table with
 // the given ID.
-func newRandomStreamClient(streamURL *url.URL, db descs.DB) (streamclient.Client, error) {
+func newRandomStreamClient(
+	streamURL streamclient.ClusterUri, db descs.DB,
+) (streamclient.Client, error) {
 	c := randomStreamClientSingleton
-	streamConfig, err := parseRandomStreamConfig(streamURL)
+	streamConfig, err := parseRandomStreamConfig(streamURL.URL())
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +416,7 @@ func (m *RandomStreamClient) dial() error {
 		if interceptor == nil {
 			continue
 		}
-		if err := interceptor(m.streamURL); err != nil {
+		if err := interceptor(m.streamURL.URL()); err != nil {
 			return err
 		}
 	}
@@ -432,7 +435,7 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 	tenantSpan := keys.MakeTenantSpan(m.config.tenantID)
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
-	// Allocate table IDs and return one per partition address in the topology.
+	// Allocate table IDs and return one per partition uri in the topology.
 	srcCodec := keys.MakeSQLCodec(m.config.tenantID)
 	for i := 0; i < m.config.numPartitions; i++ {
 		tableID := m.getNextTableID()
@@ -442,13 +445,13 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 		}
 
 		partitionURI := m.config.URL(tableID, i == 0, i == m.config.numPartitions-1)
-		log.Infof(ctx, "planning random stream partition %d for tenant %d: %q", i, m.config.tenantID, partitionURI)
+		log.Infof(ctx, "planning random stream partition %d for tenant %d: %q", i, m.config.tenantID, partitionURI.Serialize())
 
 		topology.Partitions = append(topology.Partitions,
 			streamclient.PartitionInfo{
 				ID:                strconv.Itoa(i),
-				SrcAddr:           crosscluster.PartitionAddress(partitionURI),
-				SubscriptionToken: []byte(partitionURI),
+				ConnUri:           partitionURI,
+				SubscriptionToken: []byte(partitionURI.Serialize()),
 				Spans:             []roachpb.Span{tableDesc.TableSpan(srcCodec)},
 			})
 	}
@@ -550,7 +553,7 @@ func (m *RandomStreamClient) Subscribe(
 		return nil, err
 	}
 	// add option for sst probability
-	config, err := parseRandomStreamConfig(partitionURL)
+	config, err := parseRandomStreamConfig(*partitionURL)
 	if err != nil {
 		return nil, err
 	}
@@ -803,12 +806,12 @@ func (m *RandomStreamClient) PlanLogicalReplication(
 
 	srcCodec := keys.MakeSQLCodec(m.config.tenantID)
 	tableSpan := m.tableDesc.TableSpan(srcCodec)
-	partitionURI := m.config.URL(int(m.tableDesc.GetID()), false, false)
+	partitionUri := m.config.URL(int(m.tableDesc.GetID()), false, false)
 	topology.Partitions = append(topology.Partitions,
 		streamclient.PartitionInfo{
 			ID:                strconv.Itoa(1),
-			SrcAddr:           crosscluster.PartitionAddress(partitionURI),
-			SubscriptionToken: []byte(partitionURI),
+			ConnUri:           partitionUri,
+			SubscriptionToken: []byte(partitionUri.Serialize()),
 			Spans:             []roachpb.Span{m.tableDesc.TableSpan(srcCodec)},
 		})
 	return streamclient.LogicalReplicationPlan{
@@ -838,4 +841,4 @@ func (m *RandomStreamClient) CreateForTables(
 	}, nil
 }
 
-func (m *RandomStreamClient) URL() string { return m.streamURL.String() }
+func (m *RandomStreamClient) URL() streamclient.ClusterUri { return m.streamURL }

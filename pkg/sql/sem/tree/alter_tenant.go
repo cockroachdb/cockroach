@@ -17,9 +17,9 @@ type AlterTenantReplication struct {
 	Command                     JobCommand
 	Cutover                     *ReplicationCutoverTime
 	ReplicationSourceTenantName *TenantSpec
-	// ReplicationSourceAddress is the address of the source cluster that we are
-	// replicating data from.
-	ReplicationSourceAddress Expr
+	// ReplicationSourceConnUri is a connection uri of the source cluster that we
+	// are replicating data from.
+	ReplicationSourceConnUri Expr
 
 	Options TenantReplicationOptions
 }
@@ -43,11 +43,11 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 		ctx.WriteString("START REPLICATION OF ")
 		ctx.FormatNode(n.ReplicationSourceTenantName)
 		ctx.WriteString(" ON ")
-		_, canOmitParentheses := n.ReplicationSourceAddress.(alreadyDelimitedAsSyntacticDExpr)
+		_, canOmitParentheses := n.ReplicationSourceConnUri.(alreadyDelimitedAsSyntacticDExpr)
 		if !canOmitParentheses {
 			ctx.WriteByte('(')
 		}
-		ctx.FormatNode(n.ReplicationSourceAddress)
+		ctx.FormatNode(n.ReplicationSourceConnUri)
 		if !canOmitParentheses {
 			ctx.WriteByte(')')
 		}

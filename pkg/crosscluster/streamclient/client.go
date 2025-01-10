@@ -8,14 +8,11 @@ package streamclient
 import (
 	"context"
 	"fmt"
-	"net/url"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -69,7 +66,7 @@ type Client interface {
 	PlanPhysicalReplication(ctx context.Context, streamID streampb.StreamID) (Topology, error)
 
 	// Subscribe opens and returns a subscription for the specified partition from
-	// the specified remote address. This is used by each consumer processor to
+	// the specified remote stream. This is used by each consumer processor to
 	// open its subscription to its partition of a larger stream.
 	// TODO(dt): ts -> checkpointToken.
 	Subscribe(
@@ -152,7 +149,8 @@ func WithBatchSize(bytes int64) SubscribeOption {
 }
 
 // Topology is a configuration of stream partitions. These are particular to a
-// stream. It specifies the number and addresses of partitions of the stream.
+// stream. It specifies the number and connection uris of partitions of the
+// stream.
 //
 // The topology also contains the tenant ID of the tenant whose keys are being
 // streamed over the partitions.
@@ -161,13 +159,21 @@ type Topology struct {
 	SourceTenantID roachpb.TenantID
 }
 
-// StreamAddresses returns the list of source addresses in a topology
-func (t Topology) StreamAddresses() []string {
-	var addresses []string
+// PartitionConnUris returns the list of cluster uris in a topology
+func (t Topology) PartitionConnUris() []ClusterUri {
+	var uris []ClusterUri
 	for _, partition := range t.Partitions {
-		addresses = append(addresses, string(partition.SrcAddr))
+		uris = append(uris, partition.ConnUri)
 	}
-	return addresses
+	return uris
+}
+
+func (t Topology) SerializedClusterUris() []string {
+	var uris []string
+	for _, partition := range t.Partitions {
+		uris = append(uris, partition.ConnUri.Serialize())
+	}
+	return uris
 }
 
 // PartitionInfo describes a partition of a replication stream, i.e. a set of key
@@ -177,7 +183,7 @@ type PartitionInfo struct {
 	ID string
 	SubscriptionToken
 	SrcInstanceID int
-	SrcAddr       crosscluster.PartitionAddress
+	ConnUri       ClusterUri
 	SrcLocality   roachpb.Locality
 	Spans         []roachpb.Span
 }
@@ -207,91 +213,54 @@ type Subscription interface {
 
 // NewStreamClient creates a new stream client based on the stream address.
 func NewStreamClient(
-	ctx context.Context, streamAddress crosscluster.StreamAddress, db descs.DB, opts ...Option,
+	ctx context.Context, uri ClusterUri, db descs.DB, opts ...Option,
 ) (Client, error) {
-	var streamClient Client
-	streamURL, err := streamAddress.URL()
-	if err != nil {
-		return streamClient, err
-	}
-
-	switch streamURL.Scheme {
+	switch scheme := uri.URL().Scheme; scheme {
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
-		return NewPartitionedStreamClient(ctx, streamURL, opts...)
-	case "external":
-		if db == nil {
-			return nil, errors.AssertionFailedf("nil db handle can't be used to dereference external URI")
-		}
-		addr, err := lookupExternalConnection(ctx, streamURL.Host, db)
-		if err != nil {
-			return nil, err
-		}
-		return NewStreamClient(ctx, addr, db, opts...)
+		return NewPartitionedStreamClient(ctx, uri, opts...)
 	case RandomGenScheme:
-		streamClient, err = RandomGenClientBuilder(streamURL, db)
-		if err != nil {
-			return streamClient, err
-		}
+		// TODO(jeffswenson): inject a dialer in tests so we can get rid of support
+		// for the "random" prefix in the ClusterConn.
+		return RandomGenClientBuilder(uri, db)
 	default:
-		return nil, errors.Newf("stream replication from scheme %q is unsupported", streamURL.Scheme)
+		return nil, errors.Newf("stream replication from scheme %q is unsupported", scheme)
 	}
-
-	return streamClient, nil
 }
 
-func lookupExternalConnection(
-	ctx context.Context, name string, localDB isql.DB,
-) (crosscluster.StreamAddress, error) {
-	// Retrieve the external connection object from the system table.
-	var ec externalconn.ExternalConnection
-	if err := localDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		ec, err = externalconn.LoadExternalConnection(ctx, name, txn)
-		return err
-	}); err != nil {
-		return "", errors.Wrap(err, "failed to load external connection object")
-	}
-	return crosscluster.StreamAddress(ec.ConnectionProto().UnredactedURI()), nil
-}
-
-// GetFirstActiveClient iterates through each provided stream address
+// GetFirstActiveClient iterates through each provided stream uri
 // and returns the first client it's able to successfully dial.
 func GetFirstActiveClient(
-	ctx context.Context, streamAddresses []string, db descs.DB, opts ...Option,
+	ctx context.Context, connectionUris []ClusterUri, db descs.DB, opts ...Option,
 ) (Client, error) {
-	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (Client, error) {
-		return NewStreamClient(ctx, address, db, opts...)
+	newClient := func(ctx context.Context, uri ClusterUri) (Client, error) {
+		return NewStreamClient(ctx, uri, db, opts...)
 	}
-	return getFirstClient(ctx, streamAddresses, newClient)
+	return getFirstClient(ctx, connectionUris, newClient)
 }
 
-type clientFactory[T any] func(ctx context.Context, address crosscluster.StreamAddress) (T, error)
+type clientFactory[T any] func(ctx context.Context, uri ClusterUri) (T, error)
 
 func getFirstClient[T any](
-	ctx context.Context, streamAddresses []string, getNewClient clientFactory[T],
+	ctx context.Context, connectionUri []ClusterUri, getNewClient clientFactory[T],
 ) (T, error) {
 	var zero T
-	if len(streamAddresses) == 0 {
-		return zero, errors.Newf("failed to connect, no addresses")
+	if len(connectionUri) == 0 {
+		return zero, errors.Newf("failed to connect, no connection uris")
 	}
+
 	var combinedError error = nil
-	for _, address := range streamAddresses {
-		streamAddress := crosscluster.StreamAddress(address)
-		clientCandidate, err := getNewClient(ctx, streamAddress)
+	for _, uri := range connectionUri {
+		clientCandidate, err := getNewClient(ctx, uri)
 		if err == nil {
 			return clientCandidate, nil
 		}
-		// Note the failure and attempt the next address
-		redactedAddress, errRedact := RedactSourceURI(streamAddress.String())
-		if errRedact != nil {
-			log.Warning(ctx, "failed to redact stream address")
-		}
-		log.Errorf(ctx, "failed to connect to address %s: %s", redactedAddress, err.Error())
+		// Note the failure and attempt the next uri
+		log.Warningf(ctx, "failed to connect to uri %s: %s", uri.Redacted(), err.Error())
 		combinedError = errors.CombineErrors(combinedError, err)
 	}
-	return zero, errors.Wrap(combinedError, "failed to connect to any address")
+	return zero, errors.Wrap(combinedError, "failed to connect to any connection uri")
 }
 
 type options struct {
@@ -339,20 +308,6 @@ func processOptions(opts []Option) *options {
 		o(ret)
 	}
 	return ret
-}
-
-func RedactSourceURI(addr string) (string, error) {
-	uri, err := url.Parse(addr)
-	if err != nil {
-		return "", err
-	}
-	if uri.User != nil {
-		if _, passwordSet := uri.User.Password(); passwordSet {
-			uri.User = url.UserPassword(uri.User.Username(), "redacted")
-		}
-	}
-	uri.RawQuery = "redacted"
-	return uri.String(), nil
 }
 
 /*

@@ -126,11 +126,14 @@ func startDistIngestion(
 
 	err = ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		// Persist the initial Stream Addresses to the jobs table before execution begins.
-		if len(planner.initialStreamAddresses) == 0 {
+		if len(planner.initialPartitionPgUrls) == 0 {
 			return jobs.MarkAsPermanentJobError(errors.AssertionFailedf(
-				"attempted to persist an empty list of stream addresses"))
+				"attempted to persist an empty list of partition connection uris"))
 		}
-		md.Progress.GetStreamIngest().StreamAddresses = planner.initialStreamAddresses
+		md.Progress.GetStreamIngest().PartitionConnUris = make([]string, len(planner.initialPartitionPgUrls))
+		for i := range planner.initialPartitionPgUrls {
+			md.Progress.GetStreamIngest().PartitionConnUris[i] = planner.initialPartitionPgUrls[i].Serialize()
+		}
 		ju.UpdateProgress(md.Progress)
 		return nil
 	})
@@ -474,7 +477,7 @@ type replicationFlowPlanner struct {
 
 	initialPlanCtx *sql.PlanningCtx
 
-	initialStreamAddresses  []string
+	initialPartitionPgUrls  []streamclient.ClusterUri
 	initialTopology         streamclient.Topology
 	initialDestinationNodes []base.SQLInstanceID
 
@@ -569,9 +572,8 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 
 		if !p.createdInitialPlan() {
 			p.initialTopology = topology
-			p.initialStreamAddresses = topology.StreamAddresses()
+			p.initialPartitionPgUrls = topology.PartitionConnUris()
 			p.initialDestinationNodes = sqlInstanceIDs
-
 		}
 
 		destNodeLocalities, err := GetDestNodeLocalities(ctx, dsp, sqlInstanceIDs)
@@ -829,7 +831,7 @@ func constructStreamIngestionPlanSpecs(
 			partition.ID: {
 				PartitionID:       partition.ID,
 				SubscriptionToken: string(partition.SubscriptionToken),
-				Address:           string(partition.SrcAddr),
+				PartitionConnUri:  partition.ConnUri.Serialize(),
 				Spans:             partition.Spans,
 				SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
 				DestInstanceID:    destID,
@@ -851,7 +853,7 @@ func constructStreamIngestionPlanSpecs(
 		TrackedSpans:          []roachpb.Span{tenantSpan},
 		JobID:                 int64(jobID),
 		StreamID:              uint64(streamID),
-		StreamAddresses:       topology.StreamAddresses(),
+		ConnectionUris:        topology.SerializedClusterUris(),
 		Checkpoint:            checkpoint,
 		PartitionSpecs:        repackagePartitionSpecs(streamIngestionSpecs),
 	}
