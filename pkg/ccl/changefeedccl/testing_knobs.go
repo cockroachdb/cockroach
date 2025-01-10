@@ -84,6 +84,10 @@ type TestingKnobs struct {
 	// its PTS record from the deprecated style to the new style.
 	PreserveDeprecatedPts func() bool
 
+	// PreservePTSTargets is used to prevent a changefeed from upgrading
+	// its PTS record to include all required targets.
+	PreservePTSTargets func() bool
+
 	// PulsarClientSkipCreation skips creating the sink client when
 	// dialing.
 	PulsarClientSkipCreation bool

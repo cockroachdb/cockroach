@@ -312,6 +312,7 @@ go_test(
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
