@@ -9,8 +9,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
@@ -38,7 +36,7 @@ for l in  a b c; do
   sudo microceph disk add --wipe "/dev/sdi${l}"
 done`
 
-// cephCleanup remove microceph and the loop devices.
+// cephCleanup removes microceph and the loop devices.
 const cephCleanup = `
 #!/bin/bash
 sudo microceph disable rgw
@@ -147,29 +145,7 @@ func (m cephManager) maybeInstallCa(ctx context.Context) error {
 	if !m.secure {
 		return nil
 	}
-	localCertsDir, err := os.MkdirTemp("", "roachtest-certs")
-	if err != nil {
-		return err
-	}
-	// get the ca file from one of the nodes.
-	caFile := path.Join(localCertsDir, "ca.crt")
-	conn := m.c.Conn(ctx, m.t.L(), 1)
-	defer conn.Close()
-	if err := m.c.Get(ctx, m.t.L(), "certs/ca.crt", caFile, m.c.Node(1)); err != nil {
-		return err
-	}
-	caCert, err := os.ReadFile(caFile)
-	if err != nil {
-		return err
-	}
-	// Disabling caching for Custom CA, see https://github.com/cockroachdb/cockroach/issues/125051.
-	if _, err := conn.ExecContext(ctx, "set cluster setting cloudstorage.s3.session_reuse.enabled = false"); err != nil {
-		return err
-	}
-	if _, err := conn.ExecContext(ctx, "set cluster setting cloudstorage.http.custom_ca=$1", caCert); err != nil {
-		return err
-	}
-	return nil
+	return installCa(ctx, m.t, m.c)
 }
 
 // put creates a file in the ceph node with the given content.
