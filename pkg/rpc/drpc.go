@@ -88,14 +88,6 @@ func dialDRPC(rpcCtx *Context) func(ctx context.Context, target string) (drpcpoo
 				if err != nil {
 					return nil, err
 				}
-				// TODO(server): at least with testing certs, we get: manager closed:
-				// tls: either ServerName or InsecureSkipVerify must be specified in
-				// the tls.Config from drpcmanager.(*Manager).manageReader:234
-				//
-				// This is possibly avoided in gRPC by setting ServerName in
-				// (*tlsCreds).ClientHandshake.
-				tlsConfig = tlsConfig.Clone()
-				tlsConfig.InsecureSkipVerify = true // HACK
 				tlsConn := tls.Client(netConn, tlsConfig)
 				conn = drpcconn.NewWithOptions(tlsConn, opts)
 			}
