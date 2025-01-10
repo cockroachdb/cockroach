@@ -431,13 +431,13 @@ func (ru *Updater) UpdateRow(
 							if sameKey {
 								log.VEventf(ctx, 2, "Put %s -> %v", k, v)
 							} else {
-								log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+								log.VEventf(ctx, 2, "CPut %s -> %v", k, v)
 							}
 						}
 						if sameKey {
 							batch.Put(newEntry.Key, &newEntry.Value)
 						} else {
-							batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, nil /* expValue */)
+							batch.CPut(newEntry.Key, &newEntry.Value, nil /* expValue */)
 						}
 					}
 					writtenIndexes.Add(i)
@@ -472,7 +472,7 @@ func (ru *Updater) UpdateRow(
 						if traceKV {
 							k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
 							v := newEntry.Value.PrettyPrint()
-							log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+							log.VEventf(ctx, 2, "CPut %s -> %v", k, v)
 						}
 						batch.CPut(newEntry.Key, &newEntry.Value, nil)
 					}
@@ -506,7 +506,7 @@ func (ru *Updater) UpdateRow(
 					if traceKV {
 						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
 						v := newEntry.Value.PrettyPrint()
-						log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+						log.VEventf(ctx, 2, "CPut %s -> %v", k, v)
 					}
 					batch.CPut(newEntry.Key, &newEntry.Value, nil)
 				}

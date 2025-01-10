@@ -446,7 +446,7 @@ CPut /Table/110/1/"@"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\x80"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\xc0"/1/0 -> nil (tombstone)
 CPut /Table/110/2/"\xa0"/6/0 -> /BYTES/0x89
-CPut /Table/110/2/"\xa0"/4/0 -> /BYTES/0x8a (expecting does not exist)
+CPut /Table/110/2/"\xa0"/4/0 -> /BYTES/0x8a
 CPut /Table/110/2/" "/4/0 -> nil (tombstone)
 CPut /Table/110/2/"@"/4/0 -> nil (tombstone)
 CPut /Table/110/2/"\x80"/4/0 -> nil (tombstone)
