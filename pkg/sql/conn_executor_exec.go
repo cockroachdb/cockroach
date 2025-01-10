@@ -314,7 +314,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx, sp = tracing.ChildSpan(ctx, "sql query")
 	// TODO(andrei): Consider adding the placeholders as tags too.
 	sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
-	ctx = withStatement(ctx, ast)
 	defer sp.Finish()
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
@@ -1224,7 +1223,6 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		ctx, sp = tracing.ChildSpan(ctx, "sql query")
 		// TODO(andrei): Consider adding the placeholders as tags too.
 		sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
-		ctx = withStatement(ctx, vars.ast)
 		if portal.isPausable() {
 			portal.pauseInfo.execStmtInOpenState.spCtx = ctx
 		}

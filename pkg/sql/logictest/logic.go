@@ -2735,8 +2735,8 @@ func (t *logicTest) processSubtest(
 			} else if len(fields) < 2 {
 				return errors.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
-				// Parse "query empty"
-				if len(fields) == 2 && fields[1] == "empty" {
+				// Parse "query empty <options>"
+				if fields[1] == "empty" {
 					query.empty = true
 				} else {
 					// Parse "query <type-string> <options> <label>"

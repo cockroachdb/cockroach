@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
@@ -207,14 +208,15 @@ func (ds *ServerImpl) setupFlow(
 		}
 	}()
 
-	if req.Version < execinfra.MinAcceptedVersion || req.Version > execinfra.Version {
+	if req.Version < execversion.MinAccepted || req.Version > execversion.Latest {
 		err := errors.Errorf(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
-			req.Version, execinfra.MinAcceptedVersion, execinfra.Version,
+			req.Version, execversion.MinAccepted, execversion.Latest,
 		)
 		log.Warningf(ctx, "%v", err)
 		return ctx, nil, nil, err
 	}
+	ctx = execversion.WithVersion(ctx, req.Version)
 
 	const opName = "flow"
 	if parentSpan == nil {

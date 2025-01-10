@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	pebbletool "github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/felixge/fgprof"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 	"github.com/spf13/cobra"
@@ -133,6 +134,12 @@ func setupProcessWideRoutes(
 		_ = dump.HTML(w)
 	}))
 
+	// WARNING: The /debug/pprof/fgprof endpoint provides wall-clock profiling for
+	// both On-CPU and Off-CPU time. While it is safe to use in production, note
+	// that profiling can introduce performance overhead, especially in
+	// applications with a large number of goroutines (>10k). Use this endpoint
+	// judiciously and monitor its impact on system performance.
+	mux.HandleFunc("/debug/pprof/fgprof", authzFunc(fgprof.Handler().ServeHTTP))
 }
 
 // NewServer sets up a debug server.
