@@ -90,7 +90,7 @@ query TT
 $trace_query
 ----
 count      CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
-count      InitPut /Table/108/2/2/0 -> /BYTES/0x89
+count      CPut /Table/108/2/2/0 -> /BYTES/0x89
 count      fast path completed
 sql query  rows affected: 1
 
@@ -103,7 +103,7 @@ set tracing=off;
 $trace_query
 ----
 count      CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
-count      InitPut /Table/108/2/2/0 -> /BYTES/0x89
+count      CPut /Table/108/2/2/0 -> /BYTES/0x89
 sql query  execution failed after 0 rows: duplicate key value violates unique constraint "kv_pkey"
 
 statement error duplicate key value
@@ -114,7 +114,7 @@ set tracing=off;
 $trace_query
 ----
 count      CPut /Table/108/1/2/0 -> /TUPLE/2:2:Int/2
-count      InitPut /Table/108/2/2/0 -> /BYTES/0x8a
+count      CPut /Table/108/2/2/0 -> /BYTES/0x8a
 sql query  execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 statement ok

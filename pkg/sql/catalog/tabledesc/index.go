@@ -391,7 +391,7 @@ func (w index) UseDeletePreservingEncoding() bool {
 	return w.desc.UseDeletePreservingEncoding && !w.maybeMutation.DeleteOnly()
 }
 
-// ForcePut forces all writes to use Put rather than CPut or InitPut.
+// ForcePut forces all writes to use Put rather than CPut.
 //
 // Users of this options should take great care as it
 // effectively mean unique constraints are not respected.
