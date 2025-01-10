@@ -119,7 +119,9 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	return cc, err
 }
 
-func (c *Connection) Connect2(ctx context.Context) (*grpc.ClientConn, drpcpool.Conn, error) {
+// ConnectEx is similar to Connect but it addition to gRPC connection, it also
+// returns underlying drpc connection after it has been validated.
+func (c *Connection) ConnectEx(ctx context.Context) (*grpc.ClientConn, drpcpool.Conn, error) {
 	return c.waitOrDefault(ctx, nil /* defErr */, c.breakerSignalFn())
 }
 

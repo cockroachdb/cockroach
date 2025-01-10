@@ -376,7 +376,6 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 	}
 }
 
-// TODO(chandrat) Check if this works in mixed mode?
 func (p *peer) runOnce(ctx context.Context, report func(error)) error {
 	cc, err := p.dial(ctx, p.k.TargetAddr, p.k.Class)
 	if err != nil {
