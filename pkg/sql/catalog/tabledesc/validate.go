@@ -899,6 +899,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			desc.validateUniqueWithoutIndexConstraints(columnsByID),
 			desc.validateTableIndexes(columnsByID, vea.IsActive),
 			desc.validatePartitioning(),
+			desc.validatePolicies(),
 		}
 		hasErrs := false
 		for _, err := range newErrs {
@@ -2047,6 +2048,41 @@ func (desc *wrapper) validatePartitioning() error {
 			a, idx, idx.GetPartitioning(), 0 /* colOffset */, partitionNames,
 		)
 	})
+}
+
+func (desc *wrapper) validatePolicies() error {
+	if !desc.IsTable() {
+		return nil
+	}
+	policies := desc.GetPolicies()
+	names := make(map[string]descpb.PolicyID, len(policies))
+	idToName := make(map[descpb.PolicyID]string, len(policies))
+	for _, p := range policies {
+		if p.ID == 0 {
+			return errors.AssertionFailedf(
+				"policy ID was missing for policy %q",
+				p.Name)
+		} else if p.ID >= desc.NextPolicyID {
+			return errors.AssertionFailedf(
+				"policy %q has ID %d, which is not less than the NextPolicyID value %d for the table",
+				p.Name, p.ID, desc.NextPolicyID)
+		}
+		if p.Name == "" {
+			return pgerror.Newf(pgcode.Syntax, "empty policy name")
+		}
+		if otherID, found := names[p.Name]; found && p.ID != otherID {
+			return pgerror.Newf(pgcode.DuplicateObject,
+				"duplicate policy name: %q", p.Name)
+		}
+		names[p.Name] = p.ID
+		if other, found := idToName[p.ID]; found {
+			return pgerror.Newf(pgcode.DuplicateObject,
+				"policy ID %d in policy %q already in use by %q",
+				p.ID, p.Name, other)
+		}
+		idToName[p.ID] = p.Name
+	}
+	return nil
 }
 
 // validateAutoStatsSettings validates that any new settings in
