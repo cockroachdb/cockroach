@@ -80,7 +80,7 @@ CREATE DATABASE d2
 statement ok
 CREATE TABLE d1.t1 (k STRING PRIMARY KEY, v STRING)
 
-statement OK
+statement ok
 CREATE TABLE d2.t1 (k STRING PRIMARY KEY, v STRING)
 
 statement ok
@@ -269,16 +269,16 @@ statement ok
 DROP DATABASE foo
 
 # Check that the default databases can be dropped and re-created like any other.
-statement OK
+statement ok
 DROP DATABASE defaultdb;
 
-statement OK
+statement ok
 DROP DATABASE postgres
 
 statement ok
 CREATE DATABASE defaultdb;
 
-statement OK
+statement ok
 CREATE DATABASE postgres
 
 # Test that an empty database doesn't get a GC job.

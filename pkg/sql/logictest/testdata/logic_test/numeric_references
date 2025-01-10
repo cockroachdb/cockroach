@@ -128,10 +128,10 @@ col1  col2  col3
 2     20    200
 3     30    300
 
-statement OK
+statement ok
 UPSERT INTO [$num_ref_id AS num_ref_alias] VALUES (4, 40, 400)
 
-statement OK
+statement ok
 INSERT INTO [$num_ref_id(1) AS num_ref_alias] VALUES (5)
 
 query III rowsort
@@ -143,7 +143,7 @@ SELECT * FROM [$num_ref_id as num_ref_alias]
 4     40    400
 5     NULL  NULL
 
-statement OK
+statement ok
 DELETE FROM [$num_ref_id AS num_ref_alias]@bc WHERE p=5
 
 query I
@@ -158,7 +158,7 @@ SELECT * FROM [$num_ref_id AS num_ref_alias]
 2     20    200
 3     30    300
 
-statement OK
+statement ok
 INSERT INTO [$num_ref_id AS num_ref_alias] (p, c) VALUES (4, 400)
 
 query I

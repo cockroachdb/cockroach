@@ -706,13 +706,13 @@ vectorized: true
             └── • virtual table
                   table: pg_namespace@primary
 
-statement OK
+statement ok
 ANALYZE system.users
 
-statement OK
+statement ok
 ANALYZE system.role_options
 
-statement OK
+statement ok
 ANALYZE system.role_members
 
 query T retry
