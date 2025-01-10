@@ -260,7 +260,7 @@ func makePostCommitPlan(
 			// Revert the schema change and write about it in the event log.
 			state.Rollback()
 			return logSchemaChangeEvents(ctx, eventLogger, state, &eventpb.ReverseSchemaChange{
-				Error:        fmt.Sprintf("%v", rollbackCause),
+				Error:        redact.Sprintf("%+v", rollbackCause),
 				SQLSTATE:     pgerror.GetPGCode(rollbackCause).String(),
 				LatencyNanos: timeutil.Since(jobStartTime).Nanoseconds(),
 			})

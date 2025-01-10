@@ -2782,7 +2782,7 @@ PreCommitPhase stage 2 of 2 with 313 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops pending
       Statements:
       - statement: DROP DATABASE db1 CASCADE
-        redactedstatement: DROP DATABASE ‹db1› CASCADE
+        redactedstatement: DROP DATABASE db1 CASCADE
         statementtag: DROP DATABASE
 PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
   transitions:

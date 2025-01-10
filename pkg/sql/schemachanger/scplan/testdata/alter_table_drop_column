@@ -386,7 +386,7 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v1› CASCADE
+        redactedstatement: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 7 with 6 MutationType ops
   transitions:
@@ -1864,7 +1864,7 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v2› CASCADE
+        redactedstatement: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 7 with 7 MutationType ops
   transitions:
@@ -3213,7 +3213,7 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo DROP COLUMN udfcol
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹udfcol›
+        redactedstatement: ALTER TABLE defaultdb.public.foo DROP COLUMN udfcol
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 7 with 4 MutationType ops
   transitions:
