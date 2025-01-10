@@ -13,6 +13,7 @@ go_library(
         "//pkg/cmd/drtprod/helpers",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@org_golang_x_exp//maps",
     ],
 )
 

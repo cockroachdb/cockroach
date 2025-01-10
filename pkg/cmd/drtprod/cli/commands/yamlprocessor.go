@@ -9,11 +9,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/helpers"
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v2"
 )
 
@@ -56,10 +58,10 @@ type step struct {
 	Command string `yaml:"command"` // The command to execute
 	Script  string `yaml:"script"`  // The script to execute
 
-	Args              []string          `yaml:"args"`                // Arguments to pass to the command or script
-	Flags             map[string]string `yaml:"flags"`               // Flags to pass to the command or script
-	ContinueOnFailure bool              `yaml:"continue_on_failure"` // Whether to continue on failure
-	OnRollback        []step            `yaml:"on_rollback"`         // Steps to execute if rollback is needed
+	Args              []string               `yaml:"args"`                // Arguments to pass to the command or script
+	Flags             map[string]interface{} `yaml:"flags"`               // Flags to pass to the command or script
+	ContinueOnFailure bool                   `yaml:"continue_on_failure"` // Whether to continue on failure
+	OnRollback        []step                 `yaml:"on_rollback"`         // Steps to execute if rollback is needed
 }
 
 // target defines a target cluster with associated steps to be executed.
@@ -355,9 +357,26 @@ func getCommand(step step, name string) (*command, error) {
 		args = append(args, os.ExpandEnv(arg))
 	}
 
-	// Append flags to the command arguments
-	for key, value := range step.Flags {
-		args = append(args, fmt.Sprintf("--%s=%s", key, os.ExpandEnv(value)))
+	keys := maps.Keys(step.Flags)
+	slices.Sort(keys)
+
+	// Append flags to the command arguments, flags are added in alphabetical order
+	for _, key := range keys {
+		value := step.Flags[key]
+		switch v := value.(type) {
+		case string:
+			args = append(args, fmt.Sprintf("--%s=%s", key, os.ExpandEnv(v)))
+		case []interface{}:
+			for _, val := range v {
+				if valStr, ok := val.(string); ok {
+					args = append(args, fmt.Sprintf("--%s=%s", key, os.ExpandEnv(valStr)))
+					continue
+				}
+				args = append(args, fmt.Sprintf("--%s=%v", key, val))
+			}
+		default:
+			args = append(args, fmt.Sprintf("--%s=%v", key, v))
+		}
 	}
 
 	return &command{

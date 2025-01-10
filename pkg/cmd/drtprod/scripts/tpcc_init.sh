@@ -48,6 +48,11 @@ ${pwd}/cockroach workload fixtures import tpcc $PGURLS $@ --checks=false
 EOF"
 drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpcc_init_${suffix}.sh"
 
+WARNING="DISABLE VALIDATION CONSTRAINT CHECK BEFORE RUNNING IMPORT. TO DISABLE SET THIS CLUSTER SETTING:
+SET CLUSTER SETTING bulkio.import.constraint_validation.unsafe.enabled=false;"
+# Print the warning message in capital bold letters and highlighted in red
+echo -e "\033[1;31m$WARNING\033[0m"
+
 if [ "$execute_script" = "true" ]; then
   drtprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh"
 else
