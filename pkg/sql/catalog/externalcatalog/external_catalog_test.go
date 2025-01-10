@@ -73,7 +73,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 			)
 			defer close()
 
-			catalog, err = ExtractExternalCatalog(ctx, planner.(resolver.SchemaResolver), txn, col, tableNames...)
+			catalog, err = ExtractExternalCatalog(ctx, planner.(resolver.SchemaResolver), txn, col, false, tableNames...)
 			return err
 		})
 		return catalog, err
