@@ -1377,16 +1377,20 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 	}
 	var metrics []admission.StoreMetrics
 	_ = pmp.n.stores.VisitStores(func(store *kvserver.Store) error {
-		m := store.TODOEngine().GetMetrics()
+		eng := store.TODOEngine()
+		m := eng.GetMetrics()
+		opts := eng.GetPebbleOptions()
+		memTableSizeForStopWrites := opts.MemTableSize * uint64(opts.MemTableStopWritesThreshold)
 		diskStats := admission.DiskStats{ProvisionedBandwidth: clusterProvisionedBandwidth}
 		if s, ok := storeIDToDiskStats[store.StoreID()]; ok {
 			diskStats = s
 		}
 		metrics = append(metrics, admission.StoreMetrics{
-			StoreID:         store.StoreID(),
-			Metrics:         m.Metrics,
-			WriteStallCount: m.WriteStallCount,
-			DiskStats:       diskStats,
+			StoreID:                   store.StoreID(),
+			Metrics:                   m.Metrics,
+			WriteStallCount:           m.WriteStallCount,
+			DiskStats:                 diskStats,
+			MemTableSizeForStopWrites: memTableSizeForStopWrites,
 		})
 		return nil
 	})
