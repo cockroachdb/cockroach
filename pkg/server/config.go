@@ -691,6 +691,26 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
+type sepEngine struct {
+	storage.Engine
+	logEng storage.Engine
+}
+
+var _ kvserver.SeparatedEngine = (*sepEngine)(nil)
+
+// LogEngine implements kvserver.SeparatedEngine.
+func (e *sepEngine) LogEngine() storage.Engine {
+	return e.logEng
+}
+
+// Close closes both wrapped engines.
+func (e *sepEngine) Close() {
+	e.Engine.Close()
+	if e.logEng != e.Engine {
+		e.logEng.Close()
+	}
+}
+
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	var engines Engines
@@ -764,18 +784,23 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
-		storageConfigOpts := []storage.ConfigOption{
+		// For now, we apply, as much as possible, identical options to state and
+		// log engine.
+		// TODO(sep-raft-log): these needs to be made configurable.
+		// See: https://github.com/cockroachdb/cockroach/issues/97610
+		var storageConfigOpts []storage.ConfigOption
+		var logStorageConfigOpts []storage.ConfigOption
+		addCfgOpt := func(opt ...storage.ConfigOption) {
+			storageConfigOpts = append(storageConfigOpts, opt...)
+			logStorageConfigOpts = append(logStorageConfigOpts, opt...)
+		}
+		addCfgOpt(
 			walFailoverConfig,
 			storage.Attributes(spec.Attributes),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
-		}
-		if len(storeKnobs.EngineKnobs) > 0 {
-			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
-		}
-		addCfgOpt := func(opt storage.ConfigOption) {
-			storageConfigOpts = append(storageConfigOpts, opt)
-		}
+		)
+		addCfgOpt(storeKnobs.EngineKnobs...)
 
 		if spec.InMemory {
 			var sizeInBytes = spec.Size.InBytes

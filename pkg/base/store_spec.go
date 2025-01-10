@@ -198,11 +198,12 @@ func newStoreProvisionedRateSpec(
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec struct {
-	Path        string
-	Size        SizeSpec
-	BallastSize *SizeSpec
-	InMemory    bool
-	Attributes  roachpb.Attributes
+	Path             string
+	StateMachinePath string
+	Size             SizeSpec
+	BallastSize      *SizeSpec
+	InMemory         bool
+	Attributes       roachpb.Attributes
 	// StickyVFSID is a unique identifier associated with a given store which
 	// will preserve the in-memory virtual file system (VFS) even after the
 	// storage engine has been closed. This only applies to in-memory storage
