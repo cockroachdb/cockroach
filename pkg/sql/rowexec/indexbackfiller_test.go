@@ -13,6 +13,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,6 +80,107 @@ func TestRetryOfIndexEntryBatch(t *testing.T) {
 				require.ErrorIs(t, err, tc.expectedErr)
 			}
 			require.Equal(t, tc.expectedChunkSize, br.nextChunkSize)
+		})
+	}
+}
+
+func BenchmarkIndexBackfill(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	stopTimer := func() {}
+	startTimer := func() {}
+
+	srv, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				// Disable the randomization of some batch sizes to get more
+				// consistent results.
+				ForceProductionValues: true,
+			},
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					s := p.Stages[stageIdx]
+					if s.Phase == scop.PostCommitPhase && s.Type() == scop.BackfillType {
+						if _, ok := s.Ops()[0].(*scop.BackfillIndex); ok {
+							startTimer()
+						}
+					}
+					return nil
+				},
+				AfterStage: func(p scplan.Plan, stageIdx int) error {
+					s := p.Stages[stageIdx]
+					if s.Phase == scop.PostCommitPhase && s.Type() == scop.BackfillType {
+						if _, ok := s.Ops()[0].(*scop.BackfillIndex); ok {
+							stopTimer()
+						}
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	for _, tc := range []struct {
+		desc    string
+		numRows int
+	}{
+		{"100 rows", 100},
+		{"10,000 rows", 10000},
+		{"1,000,000 rows", 1000000},
+	} {
+		b.Run(tc.desc, func(b *testing.B) {
+			_, err := sqlDB.Exec("CREATE TABLE t (k INT PRIMARY KEY, v INT)")
+			if err != nil {
+				b.Fatal(err)
+			}
+			_, err = sqlDB.Exec("INSERT INTO t SELECT generate_series(1, $1), 1", tc.numRows)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+
+			runningCreateIndex := false
+			timerStopped := 0
+			startTimer = func() {
+				if runningCreateIndex {
+					b.StartTimer()
+				}
+			}
+			stopTimer = func() {
+				if runningCreateIndex {
+					b.StopTimer()
+					timerStopped++
+				}
+			}
+
+			for i := 0; i < b.N; i++ {
+				runningCreateIndex = true
+				_, err = sqlDB.Exec("CREATE INDEX idx ON t (v)")
+				if err != nil {
+					b.Fatal(err)
+				}
+				runningCreateIndex = false
+				_, err = sqlDB.Exec("DROP INDEX idx")
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			// Sanity check that we called startTimer and stopTimer the correct
+			// number of times.
+			if timerStopped != b.N {
+				b.Fatalf("expected %d calls to stopTimer, got %d", b.N, timerStopped)
+			}
+
+			_, err = sqlDB.Exec("DROP TABLE t")
+			if err != nil {
+				b.Fatal(err)
+			}
 		})
 	}
 }
