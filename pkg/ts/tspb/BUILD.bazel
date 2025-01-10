@@ -1,8 +1,8 @@
 # gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler,  @com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway
 
-load("@rules_proto//proto:defs.bzl", "proto_library")
-load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 
 go_library(
     name = "tspb",
@@ -38,6 +38,6 @@ go_proto_library(
         "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
         "@com_github_golang_protobuf//descriptor:go_default_library_gen",  # keep
-        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
+        "@org_golang_google_genproto_googleapis_api//annotations:go_default_library",
     ],
 )
