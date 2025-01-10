@@ -814,6 +814,31 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	})
 }
 
+// supportWithdrawnCallback is called every time the local store withdraws
+// support form other stores in store liveness. The goal of this callback is to
+// unquiesce any replicas on the local store that have leaders on any of the
+// remote stores.
+func (s *Store) supportWithdrawnCallback(supportWithdrawnForStoreIDs map[roachpb.StoreID]struct{}) {
+	// TODO(mira): Is it expensive to iterate over all replicas? This callback
+	// will be called at most every SupportExpiryInterval (100ms). The
+	// nodeIsLiveCallback above uses the same pattern. Alternatively, we'd have to
+	// maintain a map from remote store to a list of replicas that have leaders on
+	// that remote store. And we'd have to serialize access to it and keep it in
+	// sync with store.unquiescedReplicas.
+	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		leader, err := r.getReplicaDescriptorByIDRLocked(r.mu.leaderID, roachpb.ReplicaDescriptor{})
+		_, ok := supportWithdrawnForStoreIDs[leader.StoreID]
+		// If a replica is asleep, and we just withdrew support for its leader,
+		// wake it up. If we couldn't locate the leader, also wake it up.
+		if ok || err != nil {
+			r.maybeWakeUpRMuLocked()
+		}
+		return true
+	})
+}
+
 func (s *Store) processRaft(ctx context.Context) {
 	s.scheduler.Start(s.stopper)
 	// Wait for the scheduler worker goroutines to finish.

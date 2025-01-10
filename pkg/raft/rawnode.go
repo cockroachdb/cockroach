@@ -623,6 +623,11 @@ func (rn *RawNode) LeadSupportStatus() LeadSupportStatus {
 	return getLeadSupportStatus(rn.raft)
 }
 
+// SupportingFortifiedLeader indicates if this peer supports a fortified leader.
+func (rn *RawNode) SupportingFortifiedLeader() bool {
+	return rn.raft.supportingFortifiedLeader()
+}
+
 // ProgressType indicates the type of replica a Progress corresponds to.
 type ProgressType byte
 
