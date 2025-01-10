@@ -406,16 +406,16 @@ SET application_name = 'test_max_retry'
 
 # Make the statement retry, to ensure max_retries increases to
 # become different from 0.
-statement OK
+statement ok
 CREATE SEQUENCE s;
 
-statement OK
+statement ok
 SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h'::INTERVAL), 0);
 
-statement OK
+statement ok
 DROP SEQUENCE s
 
-statement OK
+statement ok
 RESET application_name
 
 # Note: in the following test, three rows of output are expected:

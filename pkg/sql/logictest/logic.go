@@ -2677,9 +2677,8 @@ func (t *logicTest) processSubtest(
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
 				fullyConsumed = true
-			} else if len(fields) == 2 && strings.ToLower(fields[1]) == "ok" {
-				// Match 'ok' case-insensitively only if there are no options
-				// after it.
+			} else if len(fields) == 2 && fields[1] == "ok" {
+				// Match 'ok' only if there are no options after it.
 				fullyConsumed = true
 			}
 			if !fullyConsumed {
