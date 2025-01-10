@@ -9,6 +9,7 @@ go_library(
         "add_index.go",
         "backup_restore.go",
         "cluster_settings.go",
+        "debug_zip.go",
         "disk_stall.go",
         "grant_revoke_all.go",
         "license_throttle.go",
