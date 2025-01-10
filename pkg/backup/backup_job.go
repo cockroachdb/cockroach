@@ -92,12 +92,6 @@ var useBulkOracle = settings.RegisterBoolSetting(
 	"randomize the selection of which replica backs up each range",
 	true)
 
-var elidePrefixes = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.backup.elide_common_prefix.enabled",
-	"remove common prefixes from backup file",
-	true)
-
 func countRows(raw kvpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
 	res := roachpb.RowCount{DataSize: raw.DataSize}
 	for id, count := range raw.EntryCounts {
@@ -1672,7 +1666,7 @@ func createBackupManifest(
 	elide := execinfrapb.ElidePrefix_None
 	if len(prevBackups) > 0 {
 		elide = prevBackups[0].ElidedPrefix
-	} else if elidePrefixes.Get(&execCfg.Settings.SV) {
+	} else {
 		if len(tenants) > 0 {
 			elide = execinfrapb.ElidePrefix_Tenant
 		} else {
