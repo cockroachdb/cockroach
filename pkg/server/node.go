@@ -1915,7 +1915,7 @@ func (n *Node) batchStreamImpl(
 	}
 }
 
-func (n *Node) AsDRPCBatchServer() kvpb.DRPCInternalServer {
+func (n *Node) AsDRPCBatchServer() kvpb.DRPCBatchServer {
 	return (*drpcNode)(n)
 }
 
@@ -1927,7 +1927,7 @@ func (n *drpcNode) Batch(
 	return (*Node)(n).Batch(ctx, request)
 }
 
-func (n *drpcNode) BatchStream(stream kvpb.DRPCInternal_BatchStreamStream) error {
+func (n *drpcNode) BatchStream(stream kvpb.DRPCBatch_BatchStreamStream) error {
 	return (*Node)(n).batchStreamImpl(stream, func(ba *kvpb.BatchRequest) error {
 		return stream.(interface {
 			RecvMsg(request *kvpb.BatchRequest) error

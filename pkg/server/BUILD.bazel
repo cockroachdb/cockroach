@@ -64,6 +64,7 @@ go_library(
         "span_download.go",
         "span_stats_server.go",
         "sql_stats.go",
+        "start_drpc_listener.go",
         "start_listen.go",
         "statement_details.go",
         "statement_diagnostics_requests.go",
