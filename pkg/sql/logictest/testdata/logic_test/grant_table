@@ -1611,7 +1611,7 @@ a  public  t  test-user  TRIGGER     false
 a  public  t  test-user  UPDATE      false
 a  public  t  test-user  ZONECONFIG  false
 
-statement ok rowsort
+statement ok
 REVOKE SELECT ON t FROM "test-user"
 
 query TTTTTB rowsort

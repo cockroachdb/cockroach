@@ -416,9 +416,8 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslN1u2zYUx-_3F
 
 # Regression test for #74890. Code should not panic due to distribution already
 # provided by input.
-statement ok nodeidx=3
-USE multi_region_test_db; CREATE TABLE t74890 AS
-SELECT generate_series(1, 5) AS g
+query empty nodeidx=3
+CREATE TABLE multi_region_test_db.public.t74890 AS SELECT generate_series(1, 5) AS g
 
 query I nodeidx=3
 USE multi_region_test_db; SELECT g FROM t74890 ORDER BY g

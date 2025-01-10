@@ -4706,7 +4706,7 @@ testuser2  false        true           true        true         3022-01-01 00:00
 
 # Testing users that have admin role
 
-statement ok;
+statement ok
 CREATE USER super_user;
 GRANT admin TO super_user;
 CREATE USER regular_user;

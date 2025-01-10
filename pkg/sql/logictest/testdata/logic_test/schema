@@ -773,16 +773,16 @@ subtest show_tables
 statement ok
 CREATE DATABASE for_show;
 
-statement ok;
+statement ok
 USE for_show;
 
-statement ok;
+statement ok
 CREATE TABLE t1 (i INT PRIMARY KEY);
 
-statement ok;
+statement ok
 CREATE SCHEMA sc1;
 
-statement ok;
+statement ok
 CREATE TABLE sc1.t1 (i INT PRIMARY KEY);
 
 query TT rowsort

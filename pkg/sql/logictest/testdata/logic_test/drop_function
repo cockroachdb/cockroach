@@ -178,7 +178,7 @@ CREATE FUNCTION sc1.f_test_drop()
   SELECT 1;
 $$
 
-statement ok;
+statement ok
 BEGIN;
 DROP FUNCTION f_test_drop();
 DROP FUNCTION f_test_drop();
@@ -271,7 +271,7 @@ CREATE FUNCTION f_called_by_b() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 statement ok
 CREATE FUNCTION f_called_by_b2() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 + f_called_by_b() $$;
 
-statement ok;
+statement ok
 CREATE FUNCTION f_b()  RETURNS INT LANGUAGE SQL AS $$ SELECT (f_called_by_b2()) /f_called_by_b2() FROM f_called_by_b() $$;
 
 statement error pgcode 2BP01 cannot drop function \"f_called_by_b\" because other objects \(\[test.public.f_called_by_b2, test.public.f_b\]\) still depend on it
