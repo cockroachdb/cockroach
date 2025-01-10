@@ -258,6 +258,7 @@ func runCDCBenchScan(
 		`./cockroach workload init kv --splits %d {pgurl:%d}`, numRanges, nData[0]))
 	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
+	time.Sleep(1 * time.Second)
 	cursor := timeutil.Now() // before data is ingested
 
 	// Ingest data. init allows us to import into the existing table. However,
