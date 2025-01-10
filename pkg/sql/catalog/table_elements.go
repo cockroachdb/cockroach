@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -174,6 +175,7 @@ type Index interface {
 	GetPredicate() string
 	GetType() idxtype.T
 	GetGeoConfig() geopb.Config
+	GetVecConfig() vecpb.Config
 	GetVersion() descpb.IndexDescriptorVersion
 	GetEncodingType() catenumpb.IndexDescriptorEncodingType
 
