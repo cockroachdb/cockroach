@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -190,6 +191,7 @@ type plpgsqlBuilder struct {
 
 	routineName  string
 	isProcedure  bool
+	isDoBlock    bool
 	buildSQL     bool
 	identCounter int
 }
@@ -207,8 +209,7 @@ func newPLpgSQLBuilder(
 	colRefs *opt.ColSet,
 	routineParams []routineParam,
 	returnType *types.T,
-	isProcedure bool,
-	buildSQL bool,
+	isProcedure, isDoBlock, buildSQL bool,
 	outScope *scope,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
@@ -219,6 +220,7 @@ func newPLpgSQLBuilder(
 		blocks:      make([]plBlock, 0, initialBlocksCap),
 		routineName: routineName,
 		isProcedure: isProcedure,
+		isDoBlock:   isDoBlock,
 		buildSQL:    buildSQL,
 		outScope:    outScope,
 	}
@@ -327,6 +329,12 @@ func (b *plpgsqlBuilder) buildRootBlock(
 				// when all ancestors are procedures or DO blocks.
 				panic(unimplemented.NewWithIssue(122266,
 					"transaction control statements in nested routines",
+				))
+			}
+			if b.isDoBlock {
+				// Disallow transaction control statements in DO blocks for now.
+				panic(unimplemented.NewWithIssue(138704,
+					"transaction control statements in DO blocks",
 				))
 			}
 			// Disable stable folding, since different parts of the routine can be run
@@ -755,7 +763,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// crdb_internal.plpgsql_raise builtin function.
 			con := b.makeContinuation("_stmt_raise")
 			con.def.Volatility = volatility.Volatile
-			b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, b.getRaiseArgs(con.s, t)))
+			b.appendBodyStmtFromScope(&con, b.buildPLpgSQLRaise(con.s, b.getRaiseArgs(con.s, t)))
 			b.appendPlpgSQLStmts(&con, stmts[i+1:])
 			return b.callContinuation(&con, s)
 
@@ -776,7 +784,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			if len(t.Target) == 0 {
 				// When there is no INTO target, build the SQL statement into a body
 				// statement that is only executed for its side effects.
-				b.appendBodyStmt(&execCon, stmtScope)
+				b.appendBodyStmtFromScope(&execCon, stmtScope)
 				b.appendPlpgSQLStmts(&execCon, stmts[i+1:])
 				return b.callContinuation(&execCon, s)
 			}
@@ -834,7 +842,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			intoScope = b.callContinuation(&retCon, intoScope)
 
 			// Step 3: call the INTO continuation from the parent scope.
-			b.appendBodyStmt(&execCon, intoScope)
+			b.appendBodyStmtFromScope(&execCon, intoScope)
 			return b.callContinuation(&execCon, s)
 
 		case *ast.Open:
@@ -874,7 +882,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				// Cursors with mutations are invalid.
 				panic(cursorMutationErr)
 			}
-			b.appendBodyStmt(&openCon, openScope)
+			b.appendBodyStmtFromScope(&openCon, openScope)
 			b.appendPlpgSQLStmts(&openCon, stmts[i+1:])
 
 			// Build a statement to generate a unique name for the cursor if one
@@ -884,7 +892,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			nameCon := b.makeContinuation("_gen_cursor_name")
 			nameCon.def.Volatility = volatility.Volatile
 			nameScope := b.buildCursorNameGen(&nameCon, t.CurVar)
-			b.appendBodyStmt(&nameCon, b.callContinuation(&openCon, nameScope))
+			b.appendBodyStmtFromScope(&nameCon, b.callContinuation(&openCon, nameScope))
 			return b.callContinuation(&nameCon, s)
 
 		case *ast.Close:
@@ -924,7 +932,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			closeScope := closeCon.s.push()
 			b.ob.synthesizeColumn(closeScope, closeColName, types.Int, nil /* expr */, closeCall)
 			b.ob.constructProjectForScope(closeCon.s, closeScope)
-			b.appendBodyStmt(&closeCon, closeScope)
+			b.appendBodyStmtFromScope(&closeCon, closeScope)
 			b.appendPlpgSQLStmts(&closeCon, stmts[i+1:])
 			return b.callContinuation(&closeCon, s)
 
@@ -948,7 +956,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			fetchCon.def.Volatility = volatility.Volatile
 			fetchScope := b.buildFetch(fetchCon.s, t)
 			if t.IsMove {
-				b.appendBodyStmt(&fetchCon, fetchScope)
+				b.appendBodyStmtFromScope(&fetchCon, fetchScope)
 				b.appendPlpgSQLStmts(&fetchCon, stmts[i+1:])
 				return b.callContinuation(&fetchCon, s)
 			}
@@ -971,7 +979,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			intoScope = b.callContinuation(&retCon, intoScope)
 
 			// Add the built statement to the FETCH continuation.
-			b.appendBodyStmt(&fetchCon, intoScope)
+			b.appendBodyStmtFromScope(&fetchCon, intoScope)
 			return b.callContinuation(&fetchCon, s)
 
 		case *ast.Null:
@@ -1070,7 +1078,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			if len(target) == 0 {
 				// When there is no INTO target, build the nested procedure call into a
 				// body statement that is only executed for its side effects.
-				b.appendBodyStmt(&callCon, callScope)
+				b.appendBodyStmtFromScope(&callCon, callScope)
 				b.appendPlpgSQLStmts(&callCon, stmts[i+1:])
 				return b.callContinuation(&callCon, s)
 			}
@@ -1085,8 +1093,25 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			intoScope = b.callContinuation(&retCon, intoScope)
 
 			// Add the built statement to the CALL continuation.
-			b.appendBodyStmt(&callCon, intoScope)
+			b.appendBodyStmtFromScope(&callCon, intoScope)
 			return b.callContinuation(&callCon, s)
+
+		case *ast.DoBlock:
+			if !b.ob.evalCtx.Settings.Version.ActiveVersion(b.ob.ctx).IsActive(clusterversion.V25_1) {
+				panic(doBlockVersionErr)
+			}
+			// DO statements are used to execute an anonymous code block. They are
+			// handled by building the statements in the block into a routine that is
+			// executed immediately.
+			//
+			// Build a continuation that will execute the routine in the first body
+			// statement, and then the following PL/pgSQL statements in the second.
+			doCon := b.makeContinuation("_stmt_do")
+			doCon.def.Volatility = volatility.Volatile
+			body, bodyProps := b.ob.buildPLpgSQLDoBody(t)
+			b.appendBodyStmt(&doCon, body, bodyProps)
+			b.appendPlpgSQLStmts(&doCon, stmts[i+1:])
+			return b.callContinuation(&doCon, s)
 
 		default:
 			panic(errors.WithDetailf(unsupportedPLStmtErr,
@@ -1239,7 +1264,7 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 	)
 	// Call recursively into the loop body continuation.
 	incScope = b.callContinuation(&loopCon, incScope)
-	b.appendBodyStmt(&incrementCon, incScope)
+	b.appendBodyStmtFromScope(&incrementCon, incScope)
 
 	// Notably, we call the loop body continuation here, rather than the
 	// increment continuation, because the counter should not be incremented
@@ -1790,7 +1815,7 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(con *continuation) {
 		pgcode.RoutineExceptionFunctionExecutedNoReturnStatement.String(), /* code */
 	)
 	con.def.Volatility = volatility.Volatile
-	b.appendBodyStmt(con, b.buildPLpgSQLRaise(con.s, args))
+	b.appendBodyStmtFromScope(con, b.buildPLpgSQLRaise(con.s, args))
 
 	// Build a dummy statement that returns NULL. It won't be executed, but
 	// ensures that the continuation routine's return type is correct.
@@ -1799,7 +1824,7 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(con *continuation) {
 	typedNull := b.ob.factory.ConstructNull(b.returnType)
 	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, typedNull)
 	b.ob.constructProjectForScope(con.s, eofScope)
-	b.appendBodyStmt(con, eofScope)
+	b.appendBodyStmtFromScope(con, eofScope)
 }
 
 // addOneRowCheck handles INTO STRICT, where a SQL statement is required to
@@ -2032,22 +2057,31 @@ func (b *plpgsqlBuilder) makeContinuationWithTyp(
 	return con
 }
 
-// appendBodyStmt adds a body statement to the definition of a continuation
-// function. Only the last body statement will return results; all others will
-// only be executed for their side effects (e.g. RAISE statement).
+// appendBodyStmt adds the given body statement and its required properties to
+// the definition of a continuation function. Only the last body statement will
+// return results; all others will only be executed for their side effects
+// (e.g. RAISE statement).
 //
 // appendBodyStmt is separate from makeContinuation to allow recursive routine
 // definitions, which need to push the continuation before it is finished. The
 // separation also allows for appending multiple body statements.
-func (b *plpgsqlBuilder) appendBodyStmt(con *continuation, bodyScope *scope) {
+func (b *plpgsqlBuilder) appendBodyStmt(
+	con *continuation, body memo.RelExpr, bodyProps *physical.Required,
+) {
 	// Set the volatility of the continuation routine to the least restrictive
 	// volatility level in the Relational properties of the body statements.
-	vol := bodyScope.expr.Relational().VolatilitySet.ToVolatility()
+	vol := body.Relational().VolatilitySet.ToVolatility()
 	if con.def.Volatility < vol {
 		con.def.Volatility = vol
 	}
-	con.def.Body = append(con.def.Body, bodyScope.expr)
-	con.def.BodyProps = append(con.def.BodyProps, bodyScope.makePhysicalProps())
+	con.def.Body = append(con.def.Body, body)
+	con.def.BodyProps = append(con.def.BodyProps, bodyProps)
+}
+
+// appendBodyStmtFromScope is similar to appendBodyStmt, but retrieves the body
+// statement its required properties from the given scope for convenience.
+func (b *plpgsqlBuilder) appendBodyStmtFromScope(con *continuation, bodyScope *scope) {
+	b.appendBodyStmt(con, bodyScope.expr, bodyScope.makePhysicalProps())
 }
 
 // appendPlpgSQLStmts builds the given PLpgSQL statements into a relational
@@ -2057,7 +2091,7 @@ func (b *plpgsqlBuilder) appendPlpgSQLStmts(con *continuation, stmts []ast.State
 	// Make sure to push s before constructing the continuation scope to ensure
 	// that the parameter columns are not projected.
 	continuationScope := b.buildPLpgSQLStatements(stmts, con.s.push())
-	b.appendBodyStmt(con, continuationScope)
+	b.appendBodyStmtFromScope(con, continuationScope)
 }
 
 // callContinuation adds a column that projects the result of calling the
@@ -2682,5 +2716,8 @@ var (
 	)
 	intForLoopTargetErr = pgerror.New(pgcode.Syntax,
 		"integer FOR loop must have only one target variable",
+	)
+	doBlockVersionErr = unimplemented.Newf("do blocks",
+		"DO statement usage inside a routine definition is not supported until version 25.1",
 	)
 )

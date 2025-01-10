@@ -16,6 +16,7 @@ stmt_without_legacy_transaction ::=
 	| execute_stmt
 	| deallocate_stmt
 	| discard_stmt
+	| do_stmt
 	| grant_stmt
 	| prepare_stmt
 	| revoke_stmt
@@ -95,6 +96,9 @@ discard_stmt ::=
 	| 'DISCARD' 'SEQUENCES'
 	| 'DISCARD' 'TEMP'
 	| 'DISCARD' 'TEMPORARY'
+
+do_stmt ::=
+	'DO' do_stmt_opt_list
 
 grant_stmt ::=
 	'GRANT' privileges 'ON' grant_targets 'TO' role_spec_list opt_with_grant_option
@@ -392,6 +396,9 @@ name ::=
 	| unreserved_keyword
 	| col_name_keyword
 
+do_stmt_opt_list ::=
+	( do_stmt_opt_item ) ( ( do_stmt_opt_item ) )*
+
 privileges ::=
 	'ALL' opt_privileges_clause
 	| privilege_list
@@ -687,6 +694,7 @@ explainable_stmt ::=
 	| comment_stmt
 	| execute_stmt
 	| call_stmt
+	| do_stmt
 
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
@@ -1599,6 +1607,10 @@ col_name_keyword ::=
 	| 'VECTOR'
 	| 'VIRTUAL'
 	| 'WORK'
+
+do_stmt_opt_item ::=
+	'SCONST'
+	| 'LANGUAGE' non_reserved_word_or_sconst
 
 opt_privileges_clause ::=
 	'PRIVILEGES'

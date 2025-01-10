@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -100,7 +102,7 @@ func (b *Builder) buildUDF(
 		b.schemaFunctionDeps.Add(int(o.Oid))
 	}
 
-	return b.finishBuildScalar(f, routine, inScope, outScope, outCol)
+	return b.finishBuildScalar(f, routine, outScope, outCol)
 }
 
 // buildProcedure builds a set of memo groups that represents a procedure
@@ -133,7 +135,7 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 
 	// Build the routine.
 	routine := b.buildRoutine(proc, def, inScope, outScope, nil /* colRefs */)
-	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
+	routine = b.finishBuildScalar(nil /* texpr */, routine,
 		nil /* outScope */, nil /* outCol */)
 
 	// Build a call expression.
@@ -407,8 +409,9 @@ func (b *Builder) buildRoutine(
 
 			// The last statement produces the output of the UDF.
 			if i == len(stmts)-1 {
+				rTyp := b.finalizeRoutineReturnType(f, stmtScope, inScope, oldInsideDataSource)
 				expr, physProps = b.finishBuildLastStmt(
-					stmtScope, bodyScope, inScope, isSetReturning, oldInsideDataSource, f,
+					stmtScope, bodyScope, isSetReturning, oldInsideDataSource, rTyp,
 				)
 			}
 			body[i] = expr
@@ -444,11 +447,12 @@ func (b *Builder) buildRoutine(
 		var physProps *physical.Required
 		plBuilder := newPLpgSQLBuilder(
 			b, def.Name, stmt.AST.Label, colRefs, routineParams, f.ResolvedType(),
-			isProc, true /* buildSQL */, outScope,
+			isProc, false /* isDoBlock */, true /* buildSQL */, outScope,
 		)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
+		rTyp := b.finalizeRoutineReturnType(f, stmtScope, inScope, oldInsideDataSource)
 		expr, physProps = b.finishBuildLastStmt(
-			stmtScope, bodyScope, inScope, isSetReturning, oldInsideDataSource, f,
+			stmtScope, bodyScope, isSetReturning, oldInsideDataSource, rTyp,
 		)
 		body = []memo.RelExpr{expr}
 		bodyProps = []*physical.Required{physProps}
@@ -486,23 +490,14 @@ func (b *Builder) buildRoutine(
 // routine. Depending on the context and return type of the routine, this may
 // mean expanding a tuple into multiple columns, or combining multiple columns
 // into a tuple.
-//
-// finishBuildLastStmt also determines the final return type for the routine
-// based on the last statement's result columns, and updates the type annotation
-// for the FuncExpr accordingly.
 func (b *Builder) finishBuildLastStmt(
-	stmtScope, bodyScope, inScope *scope, isSetReturning, insideDataSource bool, f *tree.FuncExpr,
+	stmtScope, bodyScope *scope, isSetReturning, insideDataSource bool, rTyp *types.T,
 ) (expr memo.RelExpr, physProps *physical.Required) {
-	// After this call to finalizeRoutineReturnType, the type annotation will
-	// reflect the final resolved type of the function.
-	//
-	// NOTE: the result columns of the last statement may not reflect this type
-	// until after the call to maybeAddRoutineAssignmentCasts. Therefore, the
+	// NOTE: the result columns of the last statement may not reflect the return
+	// type until after the call to maybeAddRoutineAssignmentCasts. Therefore, the
 	// logic below must take care in distinguishing the resolved return type from
 	// the result column type(s).
-	b.finalizeRoutineReturnType(f, stmtScope, inScope, insideDataSource)
 	expr, physProps = stmtScope.expr, stmtScope.makePhysicalProps()
-	rTyp := f.ResolvedType()
 
 	// Add a LIMIT 1 to the last statement if the UDF is not
 	// set-returning. This is valid because any other rows after the
@@ -554,10 +549,11 @@ func (b *Builder) finishBuildLastStmt(
 
 // finalizeRoutineReturnType updates the routine's return type, taking into
 // account the result columns of the last statement, as well as the column
-// definition list if one was specified.
+// definition list if one was specified. It returns the final resolved type of
+// the function.
 func (b *Builder) finalizeRoutineReturnType(
 	f *tree.FuncExpr, stmtScope, inScope *scope, insideDataSource bool,
-) {
+) *types.T {
 	// If the function was defined using the wildcard RETURNS RECORD option with
 	// no OUT-parameters, its actual return type is inferred either from a
 	// column-definition list or from the types of the columns in the last
@@ -598,6 +594,7 @@ func (b *Builder) finalizeRoutineReturnType(
 		}
 	}
 	f.SetTypeAnnotation(rTyp)
+	return rTyp
 }
 
 // combineRoutineColsIntoTuple is a helper to combine individual result columns
@@ -801,4 +798,74 @@ func (b *Builder) withinNestedPLpgSQLCall(fn func()) {
 	}(b.insideNestedPLpgSQLCall)
 	b.insideNestedPLpgSQLCall = true
 	fn()
+}
+
+const doBlockRoutineName = "inline_code_block"
+
+// buildDo builds a SQL DO statement into an anonymous routine that is called
+// from the current scope.
+func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
+	// Disable memo reuse. Note that this is not strictly necessary because
+	// optPlanningCtx does not attempt to reuse tree.DoBlock statements, but
+	// exists for explicitness.
+	//
+	// TODO(drewk): Enable memo reuse with DO statements.
+	b.DisableMemoReuse = true
+
+	defer func(oldInsideFuncDep bool) { b.insideFuncDef = oldInsideFuncDep }(b.insideFuncDef)
+	b.insideFuncDef = true
+
+	// Build the routine body.
+	var bodyStmts []string
+	if b.verboseTracing {
+		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+		fmtCtx.FormatNode(do.Code)
+		bodyStmts = []string{fmtCtx.CloseAndGetString()}
+	}
+	doBlockImpl, ok := do.Code.(*plpgsqltree.DoBlock)
+	if !ok {
+		panic(errors.AssertionFailedf("expected a plpgsql block"))
+	}
+	body, bodyProps := b.buildPLpgSQLDoBody(doBlockImpl)
+
+	// Build a CALL expression that invokes the routine.
+	outScope := inScope.push()
+	routine := b.factory.ConstructUDFCall(
+		memo.ScalarListExpr{},
+		&memo.UDFCallPrivate{
+			Def: &memo.UDFDefinition{
+				Name:        doBlockRoutineName,
+				Typ:         types.Void,
+				Volatility:  volatility.Volatile,
+				RoutineType: tree.ProcedureRoutine,
+				RoutineLang: tree.RoutineLangPLpgSQL,
+				Body:        []memo.RelExpr{body},
+				BodyProps:   []*physical.Required{bodyProps},
+				BodyStmts:   bodyStmts,
+			},
+		},
+	)
+	routine = b.finishBuildScalar(
+		nil /* texpr */, routine, nil /* outScope */, nil, /* outCol */
+	)
+	outScope.expr = b.factory.ConstructCall(routine, &memo.CallPrivate{})
+	return outScope
+}
+
+// buildDoBody builds the body of the anonymous routine for a DO statement.
+func (b *Builder) buildPLpgSQLDoBody(
+	do *plpgsqltree.DoBlock,
+) (body memo.RelExpr, bodyProps *physical.Required) {
+	// Build an expression for each statement in the function body.
+	plBuilder := newPLpgSQLBuilder(
+		b, doBlockRoutineName, do.Block.Label, nil /* colRefs */, nil /* routineParams */, types.Void,
+		true /* isProc */, true /* isDoBlock */, true /* buildSQL */, nil, /* outScope */
+	)
+	// Allocate a fresh scope, since DO blocks do not take parameters or reference
+	// variables or columns from the calling context.
+	bodyScope := b.allocScope()
+	stmtScope := plBuilder.buildRootBlock(do.Block, bodyScope, nil /* routineParams */)
+	return b.finishBuildLastStmt(
+		stmtScope, bodyScope, false /* isSetReturning */, false /* insideDataSource */, types.Void,
+	)
 }

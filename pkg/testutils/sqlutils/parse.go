@@ -46,7 +46,13 @@ func parseOne(t *testing.T, input string, plpgsql bool) (tree.NodeFormatter, err
 // VerifyParseFormat is used in the SQL and PL/pgSQL datadriven parser tests to
 // check that a successfully parsed expression round trips and correctly handles
 // formatting flags.
-func VerifyParseFormat(t *testing.T, input, pos string, plpgsql bool) string {
+//
+// -reParseWithoutLiterals indicates whether the statement should be re-parsed
+// after constants are removed. This can be needed to handle cases where quotes
+// are formatted differently depending on the string content.
+func VerifyParseFormat(
+	t *testing.T, input, pos string, plpgsql, reParseWithoutLiterals bool,
+) string {
 	t.Helper()
 
 	// Check parse.
@@ -76,20 +82,22 @@ func VerifyParseFormat(t *testing.T, input, pos string, plpgsql bool) string {
 	constantsHidden := stmts.StringWithFlags(tree.FmtHideConstants)
 	fmt.Fprintln(&buf, constantsHidden, "-- literals removed")
 
-	// As of this writing, the SQL statement stats proceed as follows:
-	// first the literals are removed from statement to form a stat key,
-	// then the stat key is re-parsed, to undergo the anonymization stage.
-	// We also want to check the re-parsing is fine.
-	reparsedStmts, err := parse(t, constantsHidden, plpgsql)
-	if err != nil {
-		t.Fatalf("%s\nunexpected error when reparsing without literals: %+v", pos, err)
-	} else {
-		reparsedStmtsS := reparsedStmts.String()
-		if reparsedStmtsS != constantsHidden {
-			t.Fatalf(
-				"%s\nmismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
-				pos, input, constantsHidden, reparsedStmtsS,
-			)
+	if reParseWithoutLiterals {
+		// As of this writing, the SQL statement stats proceed as follows:
+		// first the literals are removed from statement to form a stat key,
+		// then the stat key is re-parsed, to undergo the anonymization stage.
+		// We also want to check the re-parsing is fine.
+		reparsedStmts, err := parse(t, constantsHidden, plpgsql)
+		if err != nil {
+			t.Fatalf("%s\nunexpected error when reparsing without literals: %+v", pos, err)
+		} else {
+			reparsedStmtsS := reparsedStmts.String()
+			if reparsedStmtsS != constantsHidden {
+				t.Fatalf(
+					"%s\nmismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
+					pos, input, constantsHidden, reparsedStmtsS,
+				)
+			}
 		}
 	}
 

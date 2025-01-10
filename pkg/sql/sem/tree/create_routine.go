@@ -339,21 +339,7 @@ type RoutineBodyStr string
 // Format implements the NodeFormatter interface.
 func (node RoutineBodyStr) Format(ctx *FmtCtx) {
 	ctx.WriteString("AS ")
-	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
-		ctx.WriteString("$funcbody$")
-	} else {
-		ctx.WriteString("$$")
-	}
-	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
-		ctx.WriteString("_")
-	} else {
-		ctx.WriteString(string(node))
-	}
-	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
-		ctx.WriteString("$funcbody$")
-	} else {
-		ctx.WriteString("$$")
-	}
+	ctx.FormatStringDollarQuotes(string(node))
 }
 
 // RoutineParams represents a list of RoutineParam.

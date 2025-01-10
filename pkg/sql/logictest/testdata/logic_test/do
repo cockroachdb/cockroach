@@ -1,0 +1,276 @@
+# LogicTest: !local-mixed-24.3
+
+statement ok
+CREATE TABLE t (x INT);
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'f()'; RETURN 1; END $$;
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'p()'; END $$;
+
+subtest sql
+
+query T noticetrace
+DO $$ BEGIN RAISE NOTICE 'Hello, world!'; END $$;
+----
+NOTICE: Hello, world!
+
+# DO block with branching and a RETURN statement.
+query T noticetrace
+DO $$ BEGIN IF (SELECT max(x) FROM t) > 3 THEN RETURN; END IF; RAISE NOTICE 'HERE'; RETURN; RAISE NOTICE 'STILL HERE'; END $$;
+----
+NOTICE: HERE
+
+# DO block with a loop.
+query T noticetrace
+DO $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    FOR i IN 1..3 LOOP
+      x := x + i;
+      RAISE NOTICE 'i = %, x = %', i, x;
+    END LOOP;
+  END
+$$;
+----
+NOTICE: i = 1, x = 1
+NOTICE: i = 2, x = 3
+NOTICE: i = 3, x = 6
+
+# DO block that calls a function and procedure;
+query T noticetrace
+DO $$
+  BEGIN
+    RAISE NOTICE 'f() returned: %', f();
+    RAISE NOTICE 'calling p()';
+    CALL p();
+  END
+$$;
+----
+NOTICE: f()
+NOTICE: f() returned: 1
+NOTICE: calling p()
+NOTICE: p()
+
+# Nested DO statement.
+query T noticetrace
+DO $$ BEGIN RAISE NOTICE 'here'; DO $inner$ BEGIN RAISE NOTICE 'hello world!'; END $inner$; RAISE NOTICE 'still here'; END $$;
+----
+NOTICE: here
+NOTICE: hello world!
+NOTICE: still here
+
+# Nested DO statement with inserts.
+query T noticetrace
+DO $$
+  BEGIN
+    INSERT INTO t VALUES (1);
+    RAISE NOTICE 'outer block inserted 1: max=%', (SELECT max(x) FROM t);
+    DO $inner$
+      BEGIN
+        RAISE NOTICE 'inner block: max=%', (SELECT max(x) FROM t);
+        INSERT INTO t VALUES (2);
+        RAISE NOTICE 'inner block inserted 2: max=%', (SELECT max(x) FROM t);
+      END
+    $inner$;
+    RAISE NOTICE 'after inner block: max=%', (SELECT max(x) FROM t);
+  END
+$$;
+----
+NOTICE: outer block inserted 1: max=1
+NOTICE: inner block: max=1
+NOTICE: inner block inserted 2: max=2
+NOTICE: after inner block: max=2
+
+statement error pgcode 42601 pq: RETURN cannot have a parameter in a procedure
+DO $$ BEGIN RETURN 1; END $$;
+
+# DO statements can only be top-level statements.
+statement error pgcode 42601 pq: at or near "do": syntax error
+WITH foo AS (DO $$ BEGIN RAISE NOTICE 'Hello, world!'; END $$) SELECT 1;
+
+statement error pgcode 42601 pq: at or near "do": syntax error
+SELECT * FROM (DO $$ BEGIN RAISE NOTICE 'Hello, world!'; END $$);
+
+subtest end
+
+subtest in_plpgsql_routine
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'here';
+    DO $inner$
+      BEGIN
+        RAISE NOTICE 'Hello, world!';
+      END
+    $inner$;
+    RAISE NOTICE 'still here';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: here
+NOTICE: Hello, world!
+NOTICE: still here
+
+# Nested DO blocks are allowed.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'here';
+    DO $outer$
+      BEGIN
+        RAISE NOTICE 'outer';
+        DO $inner$
+          BEGIN
+            RAISE NOTICE 'inner';
+          END
+        $inner$;
+        RAISE NOTICE 'outer again';
+      END
+    $outer$;
+    RAISE NOTICE 'still here';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: here
+NOTICE: outer
+NOTICE: inner
+NOTICE: outer again
+NOTICE: still here
+
+# DO blocks are effectively anonymous functions with no arguments, so variables
+# from the outer scope are not visible.
+statement ok
+DROP FUNCTION f;
+
+statement error pgcode 42703 pq: column "x" does not exist
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 100;
+  BEGIN
+    DO $inner$
+      BEGIN
+        RAISE NOTICE 'x: %', x;
+      END
+    $inner$;
+    RETURN 0;
+  END
+$$;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 100;
+  BEGIN
+    RAISE NOTICE 'x := % before DO block', x;
+    DO $inner$
+      DECLARE
+        x INT := 300;
+      BEGIN
+        RAISE NOTICE 'x := % in DO block', x;
+      END
+    $inner$;
+    RAISE NOTICE 'x := % after DO block', x;
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: x := 100 before DO block
+NOTICE: x := 300 in DO block
+NOTICE: x := 100 after DO block
+
+subtest end
+
+subtest in_sql_routine
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  DO $inner$ BEGIN RAISE NOTICE 'Hello, world!'; END $inner$;
+  SELECT 100;
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: Hello, world!
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  DO $outer$
+  BEGIN
+    RAISE NOTICE 'outer';
+    DO $inner$ BEGIN RAISE NOTICE 'inner'; END $inner$;
+    RAISE NOTICE 'outer again';
+  END
+  $outer$;
+  SELECT 100;
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: outer
+NOTICE: inner
+NOTICE: outer again
+
+statement ok
+DROP FUNCTION f;
+
+# The function parameter should not be visible in the DO block.
+statement error pgcode 42703 pq: column "x" does not exist
+CREATE FUNCTION f(x INT) RETURNS INT LANGUAGE SQL AS $$
+  DO $inner$ BEGIN RAISE NOTICE 'x: %', x; END $inner$;
+  SELECT x;
+$$;
+
+statement ok
+CREATE FUNCTION f(x INT) RETURNS INT LANGUAGE SQL AS $$
+  DO $inner$ DECLARE x INT := 200; BEGIN RAISE NOTICE 'x: %', x; END $inner$;
+  SELECT x;
+$$;
+
+query T noticetrace
+SELECT f(100);
+----
+NOTICE: x: 200
+
+statement ok
+DROP FUNCTION f;
+
+# DO statements can't be used as the last body statement for a function, but
+# they can be used as the last body statement for a procedure.
+statement error pgcode 42P13 pq: return type mismatch in function declared to return int
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  DO $inner$ DECLARE x INT := 200; BEGIN RAISE NOTICE 'x: %', x; END $inner$;
+$$;
+
+statement ok
+DROP PROCEDURE p;
+CREATE PROCEDURE p() LANGUAGE SQL AS $$
+  DO $inner$ BEGIN RAISE NOTICE 'Hello, world!'; END $inner$;
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: Hello, world!
+
+subtest end

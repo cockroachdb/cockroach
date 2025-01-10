@@ -737,3 +737,62 @@ func TestFmtCollapseListsFormatFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatStringDollarQuotes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		input string
+		delim string
+	}{
+		{
+			input: ``,
+			delim: `$$`,
+		},
+		{
+			input: `foo`,
+			delim: `$$`,
+		},
+		{
+			input: `foo $ bar`,
+			delim: `$$`,
+		},
+		{
+			input: `foo $bar$ baz`,
+			delim: `$$`,
+		},
+		{
+			input: `foo $$ bar`,
+			delim: `$funcbody$`,
+		},
+		{
+			input: `foo $$ $funcbody$ bar`,
+			delim: `$funcbodyx$`,
+		},
+		{
+			input: `foo $$ $funcbody$ $funcbodyx$ bar`,
+			delim: `$funcbodyxx$`,
+		},
+		{
+			input: `foo $funcbody$ bar`,
+			delim: `$$`,
+		},
+		{
+			input: `foo $$ $funcbodyx$ bar`,
+			delim: `$funcbody$`,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d %s", i, test.input), func(t *testing.T) {
+			f := tree.NewFmtCtx(tree.FmtSimple)
+			f.FormatStringDollarQuotes(test.input)
+			res := f.CloseAndGetString()
+			expected := test.delim + test.input + test.delim
+			if res != expected {
+				t.Fatalf("expected %q, got %q", expected, res)
+			}
+		})
+	}
+}

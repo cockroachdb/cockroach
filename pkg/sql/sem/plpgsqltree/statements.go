@@ -1077,6 +1077,67 @@ func (s *Call) WalkStmt(visitor StatementVisitor) Statement {
 	return newStmt
 }
 
+// stmt_do
+type DoBlock struct {
+	StatementImpl
+
+	// Block is the code block that defines the logic of the DO statement.
+	Block *Block
+}
+
+var _ Statement = (*DoBlock)(nil)
+var _ tree.DoBlockBody = (*DoBlock)(nil)
+
+func (s *DoBlock) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("DO ")
+
+	// Format the body of the DO block separately so that FormatStringDollarQuotes
+	// can examine the resulting string and determine how to quote the block.
+	bodyCtx := ctx.Clone()
+	bodyCtx.FormatNode(s.Block)
+	bodyStr := "\n" + bodyCtx.CloseAndGetString()
+
+	// Avoid replacing the entire formatted string with '_' if any redaction flags
+	// are set. They will have already been applied when the body was formatted.
+	ctx.WithoutConstantRedaction(func() {
+		ctx.FormatStringDollarQuotes(bodyStr)
+	})
+	ctx.WriteString(";\n")
+}
+
+func (s *DoBlock) IsDoBlockBody() {}
+
+func (s *DoBlock) VisitBody(v tree.Visitor) tree.DoBlockBody {
+	plVisitor := SQLStmtVisitor{Visitor: v}
+	newBlock := Walk(&plVisitor, s.Block)
+	if newBlock != s.Block {
+		return &DoBlock{Block: newBlock.(*Block)}
+	}
+	return s
+}
+
+func (s *DoBlock) CopyNode() *DoBlock {
+	copyNode := *s
+	copyNode.Block = s.Block.CopyNode()
+	return &copyNode
+}
+
+func (s *DoBlock) PlpgSQLStatementTag() string {
+	return "stmt_do"
+}
+
+func (s *DoBlock) WalkStmt(visitor StatementVisitor) Statement {
+	newStmt, _ := visitor.Visit(s)
+	newBlock := s.Block.WalkStmt(visitor)
+	if newBlock != s.Block {
+		if newStmt == s {
+			newStmt = s.CopyNode()
+		}
+		newStmt.(*DoBlock).Block = newBlock.(*Block)
+	}
+	return newStmt
+}
+
 // stmt_getdiag
 type GetDiagnostics struct {
 	StatementImpl
