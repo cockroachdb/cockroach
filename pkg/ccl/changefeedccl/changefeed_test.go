@@ -1182,21 +1182,40 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
-				code := pgerror.GetPGCode(err)
 				// Skip errors that may come up during SQL execution. If the SQL query
 				// didn't fail with these errors, it's likely because the query was built in
 				// a way that did not have to execute on the row that caused the error, but
 				// the CDC query did.
-				switch code {
-				case pgcode.ConfigFile,
-					pgcode.DatetimeFieldOverflow,
-					pgcode.InvalidEscapeCharacter,
-					pgcode.InvalidEscapeSequence,
-					pgcode.InvalidParameterValue,
-					pgcode.InvalidRegularExpression:
-					t.Logf("Skipping statement %s because it encountered pgerror %s: %s", createStmt, code, err)
+				// Since we get the error that caused the changefeed job to
+				// fail from scraping the job status and creating a new
+				// error, we unfortunately don't have the pgcode and have to
+				// rely on known strings.
+				validPgErrs := []string{
+					"cannot subtract infinite dates",
+					"regexp compilation failed",
+					"invalid regular expression",
+					"error parsing GeoJSON",
+					"error parsing EWKT",
+					"geometry type is unsupported",
+					"should be of length",
+					"dwithin distance cannot be less than zero",
+					"parameter has to be of type Point",
+					"expected LineString",
+					"no locations to init GEOS",
+				}
+				containsKnownPgErr := func(e error) (interface{}, bool) {
+					for _, v := range validPgErrs {
+						if strings.Contains(e.Error(), v) {
+							return nil, true
+						}
+					}
+					return nil, false
+				}
+				if _, contains := errors.If(err, containsKnownPgErr); contains {
+					t.Logf("Skipping statement %s because it encountered pgerror %s", createStmt, err)
 					continue
 				}
+
 				t.Fatal(err)
 			}
 			numNonTrivialTestRuns++
