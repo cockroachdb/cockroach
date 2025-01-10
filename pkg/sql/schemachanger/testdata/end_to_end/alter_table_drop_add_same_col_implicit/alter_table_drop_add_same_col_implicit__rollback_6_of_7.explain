@@ -5,7 +5,7 @@ create table t(i int);
 alter table t drop column i, add column i bool;
 EXPLAIN (DDL) rollback at post-commit stage 6 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹i›, ADD COLUMN ‹i› BOOL;
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t DROP COLUMN i, ADD COLUMN i BOOL;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC

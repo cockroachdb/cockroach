@@ -10,7 +10,7 @@ INSERT INTO t VALUES(-3);
 ALTER TABLE t DROP COLUMN j;
 EXPLAIN (DDL) rollback at post-commit stage 7 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j›;
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t DROP COLUMN j;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 3 elements transitioning toward PUBLIC
