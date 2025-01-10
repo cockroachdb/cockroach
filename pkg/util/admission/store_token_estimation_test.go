@@ -95,7 +95,12 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 					d.ScanArgs(t, "disk-writes", &diskWrites)
 					cumDiskWrites += uint64(diskWrites)
 				}
-				estimator.updateEstimates(l0Metrics, cumLSMIngestedBytes, cumDiskWrites, admissionStats)
+				unflushedTooLarge := false
+				if d.HasArg("unflushed-too-large") {
+					unflushedTooLarge = true
+				}
+				estimator.updateEstimates(
+					l0Metrics, cumLSMIngestedBytes, cumDiskWrites, admissionStats, unflushedTooLarge)
 				wL0lm, iL0lm, ilm, wamplm := estimator.getModelsAtDone()
 				require.Equal(t, wL0lm, estimator.atDoneL0WriteTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, iL0lm, estimator.atDoneL0IngestTokensLinearModel.smoothedLinearModel)
