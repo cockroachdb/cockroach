@@ -617,6 +617,12 @@ func (r *Replica) ticksSinceLastProposalRLocked() int64 {
 	return r.mu.ticks - r.mu.lastProposalAtTicks
 }
 
+// ticksSinceLastMessageRLocked returns the number of ticks since the last
+// received message.
+func (r *Replica) ticksSinceLastMessageRLocked() int64 {
+	return r.mu.ticks - r.mu.lastMessageAtTicks
+}
+
 // isRaftLeader returns true if this replica believes it is the current
 // Raft leader.
 //
@@ -671,6 +677,7 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 			wakeLeader := hasLeader && !fromLeader
 			r.maybeUnquiesceLocked(wakeLeader, false /* mayCampaign */)
 		}
+		r.maybeWakeUpRMuLocked()
 
 		{
 			// Update the lastUpdateTimes map, unless configured not to by a testing
@@ -685,6 +692,8 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 				r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, r.Clock().PhysicalTime())
 			}
 		}
+
+		r.mu.lastMessageAtTicks = r.mu.ticks
 
 		switch req.Message.Type {
 		case raftpb.MsgPreVote, raftpb.MsgVote:
@@ -1442,7 +1451,7 @@ func (r *Replica) tick(
 	if r.mu.internalRaftGroup == nil {
 		return false, nil
 	}
-	if r.mu.quiescent {
+	if r.mu.quiescent || r.mu.asleep {
 		return false, nil
 	}
 
@@ -1462,9 +1471,12 @@ func (r *Replica) tick(
 
 	storeClockTimestamp := r.store.Clock().NowAsClockTimestamp()
 	leaseStatus := r.leaseStatusAtRLocked(ctx, storeClockTimestamp)
-	// TODO(pav-kv): modify the quiescence criterion so that we don't quiesce if
-	// RACv2 holds some send tokens.
+	// TODO(pav-kv): modify the quiescence and sleep criteria so that we don't
+	// quiesce or fall asleep if RACv2 holds some send tokens.
 	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, leaseStatus, livenessMap) {
+		return false, nil
+	}
+	if r.maybeFallAsleepRMuLocked(leaseStatus) {
 		return false, nil
 	}
 
