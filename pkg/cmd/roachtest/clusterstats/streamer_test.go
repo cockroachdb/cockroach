@@ -43,10 +43,10 @@ func TestClusterStatsStreamer(t *testing.T) {
 			next := make([]StatEvent, len(stats))
 			for j, stat := range stats {
 				queryTime := ts[j].startTime.Add(ts[j].interval * time.Duration(i))
-				nextStat := StatEvent{Stat: stat, Value: make(map[string]StatPoint)}
+				nextStat := StatEvent{Stat: stat, Value: make(map[string]prometheus.StatPoint)}
 				for _, tg := range tags {
 					// NB: We expect the result to be in unix nano seconds.
-					nextStat.Value[tg] = StatPoint{Value: ts[j].values[tg][i], Time: queryTime.UnixNano()}
+					nextStat.Value[tg] = prometheus.StatPoint{Value: ts[j].values[tg][i], Time: queryTime.UnixNano()}
 				}
 				next[j] = nextStat
 			}
@@ -145,11 +145,11 @@ func TestClusterStatsStreamer(t *testing.T) {
 
 			// To avoid a long test run, we set the testingZeroTime to true so
 			// that the delay between stat events is 0. The query time for each
-			// scrape run will still be incremented by the default scrape
+			// scrape run will still be incremented by the scrape
 			// interval (10s).
 			statStreamer := newClusterStatStreamer(&c, processTickFn)
 			statStreamer.testingZeroTime = true
-			statStreamer.SetInterval(defaultScrapeInterval)
+			statStreamer.SetInterval(10 * time.Second)
 			statStreamer.Register(tc.trackedStats...)
 
 			var wg sync.WaitGroup

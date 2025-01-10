@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	prominstaller "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus/prominstaller"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
@@ -114,11 +115,11 @@ func (ep *tpccChaosEventProcessor) checkMetrics(
 ) error {
 	// Add an extra interval to fromTime to account for the first data point
 	// which may include a node not being fully shutdown or restarted.
-	fromTime = fromTime.Add(prometheus.DefaultScrapeInterval)
+	fromTime = fromTime.Add(prominstaller.DefaultScrapeInterval)
 	// Similarly, scale back the toTime to account for the data point
 	// potentially already having data of a node which may have already
 	// started restarting or shutting down.
-	toTime = toTime.Add(-prometheus.DefaultScrapeInterval)
+	toTime = toTime.Add(-prominstaller.DefaultScrapeInterval)
 	if !toTime.After(fromTime) {
 		l.PrintfCtx(
 			ctx,

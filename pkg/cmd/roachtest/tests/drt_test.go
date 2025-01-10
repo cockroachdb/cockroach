@@ -31,21 +31,22 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 	makeMetric := func(op string, errorOrSuccess string, port int) string {
 		return fmt.Sprintf(`workload_tpcc_%s_%s_total{instance=":%d"}`, op, errorOrSuccess, port)
 	}
+	scrapeInterval := 10 * time.Second
 
 	firstPreShutdown := startTime.Add(90 * time.Second)
 	firstShutdownComplete := startTime.Add(95 * time.Second)
-	scrapeAfterFirstShutdownComplete := firstShutdownComplete.Add(prometheus.DefaultScrapeInterval)
+	scrapeAfterFirstShutdownComplete := firstShutdownComplete.Add(scrapeInterval)
 	firstPreStartup := startTime.Add(180 * time.Second)
-	scrapeBeforeFirstPreStartup := firstPreStartup.Add(-prometheus.DefaultScrapeInterval)
+	scrapeBeforeFirstPreStartup := firstPreStartup.Add(-scrapeInterval)
 	firstStartupComplete := startTime.Add(185 * time.Second)
-	scrapeAfterFirstStartupComplete := firstStartupComplete.Add(prometheus.DefaultScrapeInterval)
+	scrapeAfterFirstStartupComplete := firstStartupComplete.Add(scrapeInterval)
 
 	secondPreShutdown := startTime.Add(390 * time.Second)
-	scrapeBeforeSecondPreShutdown := secondPreShutdown.Add(-prometheus.DefaultScrapeInterval)
+	scrapeBeforeSecondPreShutdown := secondPreShutdown.Add(-scrapeInterval)
 	secondShutdownComplete := startTime.Add(395 * time.Second)
-	scrapeAfterSecondShutdownComplete := secondShutdownComplete.Add(prometheus.DefaultScrapeInterval)
+	scrapeAfterSecondShutdownComplete := secondShutdownComplete.Add(scrapeInterval)
 	secondPreStartup := startTime.Add(480 * time.Second)
-	scrapeBeforeSecondPreStartup := secondPreStartup.Add(-prometheus.DefaultScrapeInterval)
+	scrapeBeforeSecondPreStartup := secondPreStartup.Add(-scrapeInterval)
 	secondStartupComplete := startTime.Add(490 * time.Second)
 
 	metricA := "newOtan"

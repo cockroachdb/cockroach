@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -62,7 +63,7 @@ func newClusterStatStreamer(
 		statCollector:      statCollector,
 		registered:         make([]ClusterStat, 0, 1),
 		processStatEventFn: processStatEventFn,
-		interval:           defaultScrapeInterval,
+		interval:           prometheus.DefaultScrapeInterval,
 		errs:               make([]error, 0, 1),
 	}
 }
@@ -82,7 +83,7 @@ func (css *clusterStatStreamer) Register(stats ...ClusterStat) {
 // query.
 type StatEvent struct {
 	Stat  ClusterStat
-	Value map[string]StatPoint
+	Value map[string]prometheus.StatPoint
 }
 
 // Run collects cluster statistics, attributable to by nodes in the cluster.

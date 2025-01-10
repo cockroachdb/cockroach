@@ -43,6 +43,7 @@ var (
 	grafanaDumpDir        string
 	jaegerConfigNodes     string
 	listCost              bool
+	listSparkline         bool
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
@@ -199,6 +200,10 @@ func initListCmdFlags(listCmd *cobra.Command) {
 	listCmd.Flags().BoolVarP(&listCost,
 		"cost", "c", os.Getenv("ROACHPROD_COST_ESTIMATES") == "true",
 		"Show cost estimates",
+	)
+	listCmd.Flags().BoolVarP(&listSparkline,
+		"spark", "s", os.Getenv("ROACHPROD_SPARK_LINE") == "true",
+		"Show sparkline",
 	)
 	listCmd.Flags().BoolVarP(&listDetails,
 		"details", "d", false, "Show cluster details")
