@@ -887,6 +887,7 @@ func (f *cloudStorageSinkFile) flushToStorage(
 		if err := f.codec.Close(); err != nil {
 			return err
 		}
+		f.codec = nil // Set to nil to prevent double close
 	}
 
 	compressedBytes := f.buf.Len()
