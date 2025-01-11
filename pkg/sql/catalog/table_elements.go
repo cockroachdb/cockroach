@@ -208,6 +208,12 @@ type Index interface {
 	// Panics if the index is not inverted.
 	InvertedColumnID() descpb.ColumnID
 
+	// VectorColumnID returns the ColumnID of the vector column of the vector
+  // index.
+	//
+	// Panics if the index is not a vector index.
+	VectorColumnID() descpb.ColumnID
+
 	// InvertedColumnName returns the name of the inverted column of the inverted
 	// index.
 	//

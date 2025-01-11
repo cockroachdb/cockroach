@@ -1299,14 +1299,19 @@ func EncodeSecondaryIndexKey(
 	var containsNull = false
 	var secondaryKeys [][]byte
 	var err error
-	if secondaryIndex.GetType() == descpb.IndexDescriptor_INVERTED {
-		secondaryKeys, err = EncodeInvertedIndexKeys(ctx, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
-	} else {
+	switch secondaryIndex.GetType() {
+	case descpb.IndexDescriptor_FORWARD:
 		var secondaryIndexKey []byte
 		secondaryIndexKey, containsNull, err = EncodeIndexKey(
 			tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 
 		secondaryKeys = [][]byte{secondaryIndexKey}
+	case descpb.IndexDescriptor_INVERTED:
+		secondaryKeys, err = EncodeInvertedIndexKeys(ctx, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+	case descpb.IndexDescriptor_VECTOR:
+    // TODO(drewk): Implement vector index encoding.
+	default:
+		return nil, false, errors.AssertionFailedf("unknown index type %s", secondaryIndex.GetType())
 	}
 	return secondaryKeys, containsNull, err
 }
@@ -1361,6 +1366,7 @@ func EncodeSecondaryIndex(
 
 		if tableDesc.NumFamilies() == 1 ||
 			secondaryIndex.GetType() == descpb.IndexDescriptor_INVERTED ||
+			secondaryIndex.GetType() == descpb.IndexDescriptor_VECTOR ||
 			secondaryIndex.GetVersion() == descpb.BaseIndexFormatVersion {
 			// We do all computation that affects indexes with families in a separate code path to avoid performance
 			// regression for tables without column families.

@@ -143,9 +143,6 @@ func makeIndexDescriptor(
 			`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
 		)
 	}
-	if n.Vector {
-		return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
-	}
 	// Since we mutate the columns below, we make copies of them
 	// here so that on retry we do not attempt to validate the
 	// mutated columns.
@@ -173,6 +170,7 @@ func makeIndexDescriptor(
 		tn,
 		columns,
 		n.Inverted,
+		n.Vector,
 		false, /* isNewTable */
 		params.p.SemaCtx(),
 		activeVersion,
@@ -231,6 +229,26 @@ func makeIndexDescriptor(
 			params.ctx, params.ExecCfg().Settings, column, &indexDesc, invCol); err != nil {
 			return nil, err
 		}
+	}
+
+	if n.Vector {
+		if n.Sharded != nil {
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "vector indexes don't support hash sharding")
+		}
+		if len(indexDesc.StoreColumnNames) > 0 {
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "vector indexes don't support stored columns")
+		}
+		if n.Unique {
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "vector indexes can't be unique")
+		}
+		indexDesc.Type = descpb.IndexDescriptor_VECTOR
+		vecCol := columns[len(columns)-1]
+		column, err := catalog.MustFindColumnByTreeName(tableDesc, vecCol.Column)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(drewk): populate the random seed as well.
+		indexDesc.VecConfig.Dims = int64(column.GetType().Width())
 	}
 
 	if n.Sharded != nil {
@@ -301,6 +319,12 @@ func makeIndexDescriptor(
 		}
 		if len(indexDesc.KeyColumnNames) > 1 {
 			telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
+		}
+	}
+	if indexDesc.Type == descpb.IndexDescriptor_VECTOR {
+		telemetry.Inc(sqltelemetry.VectorIndexCounter)
+		if len(indexDesc.KeyColumnNames) > 1 {
+			telemetry.Inc(sqltelemetry.MultiColumnVectorIndexCounter)
 		}
 	}
 	if indexDesc.IsSharded() {
@@ -479,6 +503,7 @@ func replaceExpressionElemsWithVirtualCols(
 	tn *tree.TableName,
 	elems tree.IndexElemList,
 	isInverted bool,
+	isVector bool,
 	isNewTable bool,
 	semaCtx *tree.SemaContext,
 	version clusterversion.ClusterVersion,
@@ -585,6 +610,37 @@ func replaceExpressionElemsWithVirtualCols(
 						),
 						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
 					)
+				}
+			}
+
+			if isVector {
+				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
+					return pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						"index element %s of type %s is not allowed as a prefix column in a vector index",
+						elem.Expr.String(),
+						typ.Name(),
+					)
+				}
+				if i == lastColumnIdx {
+					if typ.Family() != types.PGVectorFamily {
+						return pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							"index element %s of type %s is not allowed as the last column in a vector index",
+							elem.Expr.String(),
+							typ.Name(),
+						)
+					} else if typ.Width() <= 0 {
+						return errors.WithDetail(
+							pgerror.Newf(
+								pgcode.InvalidTableDefinition,
+								"index element %s of type %s is not allowed as the last column in a vector index",
+								elem.Expr.String(),
+								typ.Name(),
+							),
+							"the vector index column must have a fixed positive number of dimensions",
+						)
+					}
 				}
 			}
 

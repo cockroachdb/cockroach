@@ -1661,8 +1661,7 @@ func (oi *optIndex) IsInverted() bool {
 
 // IsVector is part of the cat.Index interface.
 func (oi *optIndex) IsVector() bool {
-	// TODO(#137370): check the index type.
-	return false
+	return oi.idx.GetType() == descpb.IndexDescriptor_VECTOR
 }
 
 // GetInvisibility is part of the cat.Index interface.

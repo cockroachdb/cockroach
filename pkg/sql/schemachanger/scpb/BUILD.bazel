@@ -44,6 +44,7 @@ go_proto_library(
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/semenumpb",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecstore",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
@@ -63,6 +64,7 @@ proto_library(
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/sem/semenumpb:semenumpb_proto",
         "//pkg/sql/types:types_proto",
+        "//pkg/sql/vecindex/vecstore:vecstore_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )

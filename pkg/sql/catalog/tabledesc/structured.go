@@ -744,16 +744,19 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 
 		// KeySuffixColumnIDs is only populated for indexes using the secondary
 		// index encoding. It is the set difference of the primary key minus the
-		// non-inverted columns in the index's key.
+		// non-inverted, non-vector columns in the index's key.
 		colIDs := idx.CollectKeyColumnIDs()
 		isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED
+		isVector := idx.GetType() == descpb.IndexDescriptor_VECTOR
 		invID := catid.ColumnID(0)
 		if isInverted {
 			invID = idx.InvertedColumnID()
 		}
 		var extraColumnIDs []descpb.ColumnID
 		for _, primaryColID := range desc.PrimaryIndex.KeyColumnIDs {
-			if !colIDs.Contains(primaryColID) {
+			if !colIDs.Contains(primaryColID) || (isVector && primaryColID == idx.VectorColumnID()) {
+				// Similar to inverted indexes, a vector index doesn't actually contain
+				// values for the indexed column.
 				extraColumnIDs = append(extraColumnIDs, primaryColID)
 				colIDs.Add(primaryColID)
 			} else if invID == primaryColID {
@@ -1116,6 +1119,43 @@ func checkColumnsValidForInvertedIndex(
 	return nil
 }
 
+func checkColumnsValidForVectorIndex(
+	tableDesc *Mutable, indexColNames []string, colDirs []catenumpb.IndexColumn_Direction,
+) error {
+	lastCol := len(indexColNames) - 1
+	for i, indexCol := range indexColNames {
+		for _, col := range tableDesc.NonDropColumns() {
+			if col.GetName() == indexCol {
+				// The last column indexed by a vector index must be of type PGVector.
+				if i == lastCol {
+					if col.GetType().Family() != types.PGVectorFamily {
+						return NewInvalidVectorColumnError(col.GetName(), col.GetType().String())
+					} else if col.GetType().Width() <= 0 {
+						return NewInvalidVectorColumnWidthError(col.GetName())
+					}
+				}
+				if i == lastCol && colDirs[i] == catenumpb.IndexColumn_DESC {
+					return pgerror.New(pgcode.FeatureNotSupported,
+						"the last column in an inverted index cannot have the DESC option")
+				}
+				// Any preceding columns must be forward-indexable.
+				if i < lastCol && !colinfo.ColumnTypeIsIndexable(col.GetType()) {
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.FeatureNotSupported,
+							"column %s of type %s is only allowed as the last column in an inverted index",
+							col.GetName(),
+							col.GetType().Name(),
+						),
+						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
+					)
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // NewInvalidInvertedColumnError returns an error for a column that's not
 // inverted indexable.
 func NewInvalidInvertedColumnError(colName, colType string) error {
@@ -1126,6 +1166,29 @@ func NewInvalidInvertedColumnError(colName, colType string) error {
 			colName, colType,
 		),
 		"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
+	)
+}
+
+// NewInvalidVectorColumnError returns an error for a column that cannot be
+// indexed by a vector index.
+func NewInvalidVectorColumnError(colName, colType string) error {
+	return pgerror.Newf(
+		pgcode.FeatureNotSupported,
+		"column %s of type %s is not allowed as the last column in a vector index",
+		colName, colType,
+	)
+}
+
+// NewInvalidVectorColumnWidthError returns an error for a vector column that
+// cannot be indexed by a vector index due to invalid type width.
+func NewInvalidVectorColumnWidthError(colName string) error {
+	return errors.WithDetail(
+		pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"column %s is not allowed as the last column in a vector index",
+			colName,
+		),
+		"the vector index column must have a fixed positive number of dimensions",
 	)
 }
 
@@ -1144,6 +1207,9 @@ func (desc *Mutable) AddFamily(fam descpb.ColumnFamilyDescriptor) {
 func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 	if idx.Type == descpb.IndexDescriptor_INVERTED {
 		return fmt.Errorf("primary index cannot be inverted")
+	}
+	if idx.Type == descpb.IndexDescriptor_VECTOR {
+		return fmt.Errorf("primary index cannot be a vector index")
 	}
 	if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
 		return err
@@ -1182,16 +1248,25 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 
 // AddSecondaryIndex adds a secondary index to a mutable table descriptor.
 func (desc *Mutable) AddSecondaryIndex(idx descpb.IndexDescriptor) error {
-	if idx.Type == descpb.IndexDescriptor_FORWARD {
+	switch idx.Type {
+	case descpb.IndexDescriptor_FORWARD:
 		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
 		}
-	} else {
+	case descpb.IndexDescriptor_INVERTED:
 		if err := checkColumnsValidForInvertedIndex(
 			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
 		); err != nil {
 			return err
 		}
+	case descpb.IndexDescriptor_VECTOR:
+		if err := checkColumnsValidForVectorIndex(
+			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
+		); err != nil {
+			return err
+		}
+	default:
+		return errors.AssertionFailedf("unknown index type %v", idx.Type)
 	}
 	desc.AddPublicNonPrimaryIndex(idx)
 	return nil
@@ -2041,17 +2116,14 @@ func (desc *Mutable) AddIndexMutation(
 func (desc *Mutable) checkValidIndex(idx *descpb.IndexDescriptor) error {
 	switch idx.Type {
 	case descpb.IndexDescriptor_FORWARD:
-		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
-			return err
-		}
+		return checkColumnsValidForIndex(desc, idx.KeyColumnNames)
 	case descpb.IndexDescriptor_INVERTED:
-		if err := checkColumnsValidForInvertedIndex(
-			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
-		); err != nil {
-			return err
-		}
+		return checkColumnsValidForInvertedIndex(desc, idx.KeyColumnNames, idx.KeyColumnDirections)
+	case descpb.IndexDescriptor_VECTOR:
+		return checkColumnsValidForVectorIndex(desc, idx.KeyColumnNames, idx.KeyColumnDirections)
+	default:
+		return errors.AssertionFailedf("unknown index type %v", idx.Type)
 	}
-	return nil
 }
 
 // AddPrimaryKeySwapMutation adds a PrimaryKeySwap mutation to the table descriptor.

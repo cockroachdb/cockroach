@@ -1470,6 +1470,11 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 			forwardIndexes = append(forwardIndexes, idx)
 		case descpb.IndexDescriptor_INVERTED:
 			invertedIndexes = append(invertedIndexes, idx)
+		case descpb.IndexDescriptor_VECTOR:
+			// TODO(drewk): consider whether we can perform useful validation for
+			// vector indexes.
+		default:
+			return errors.AssertionFailedf("unknown index type %d", idx.GetType())
 		}
 	}
 	if len(forwardIndexes) == 0 && len(invertedIndexes) == 0 {

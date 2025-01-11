@@ -34,10 +34,16 @@ func executeValidateUniqueIndex(
 	}
 	// Execute the validation operation as a node user.
 	execOverride := sessiondata.NodeUserSessionDataOverride
-	if index.GetType() == descpb.IndexDescriptor_FORWARD {
+	switch index.GetType() {
+	case descpb.IndexDescriptor_FORWARD:
 		err = deps.Validator().ValidateForwardIndexes(ctx, deps.TransactionalJobRegistry().CurrentJob(), table, []catalog.Index{index}, execOverride)
-	} else {
+	case descpb.IndexDescriptor_INVERTED:
 		err = deps.Validator().ValidateInvertedIndexes(ctx, deps.TransactionalJobRegistry().CurrentJob(), table, []catalog.Index{index}, execOverride)
+	case descpb.IndexDescriptor_VECTOR:
+		// TODO(drewk): consider whether we can perform useful validation for
+    // vector indexes.
+	default:
+		return errors.AssertionFailedf("unexpected index type %v", index.GetType())
 	}
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)

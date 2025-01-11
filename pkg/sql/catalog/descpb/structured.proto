@@ -327,6 +327,7 @@ message IndexDescriptor {
   enum Type {
     FORWARD = 0;
     INVERTED = 1;
+    VECTOR = 2;
   }
 
   optional string name = 1 [(gogoproto.nullable) = false];

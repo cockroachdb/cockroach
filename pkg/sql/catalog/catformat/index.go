@@ -101,8 +101,12 @@ func indexForDisplay(
 	if index.Unique {
 		f.WriteString("UNIQUE ")
 	}
-	if !f.HasFlags(tree.FmtPGCatalog) && index.Type == descpb.IndexDescriptor_INVERTED {
-		f.WriteString("INVERTED ")
+	if !f.HasFlags(tree.FmtPGCatalog) {
+		if index.Type == descpb.IndexDescriptor_INVERTED {
+			f.WriteString("INVERTED ")
+		} else if index.Type == descpb.IndexDescriptor_VECTOR {
+			f.WriteString("VECTOR ")
+		}
 	}
 	f.WriteString("INDEX ")
 	f.FormatNameP(&index.Name)
@@ -115,6 +119,8 @@ func indexForDisplay(
 		f.WriteString(" USING")
 		if index.Type == descpb.IndexDescriptor_INVERTED {
 			f.WriteString(" gin")
+		} else if index.Type == descpb.IndexDescriptor_VECTOR {
+			f.WriteString(" cspann")
 		} else {
 			f.WriteString(" btree")
 		}
@@ -239,6 +245,8 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
+		// TODO(drewk): we might need to print something like "vector_l2_ops" for
+		// vector indexes.
 		if index.Type == descpb.IndexDescriptor_INVERTED &&
 			col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
 			switch index.InvertedColumnKinds[0] {
@@ -246,10 +254,10 @@ func FormatIndexElements(
 				f.WriteString(" gin_trgm_ops")
 			}
 		}
-		// The last column of an inverted index cannot have a DESC direction.
-		// Since the default direction is ASC, we omit the direction entirely
-		// for inverted index columns.
-		if i < n-1 || index.Type != descpb.IndexDescriptor_INVERTED {
+		// The last column of an inverted or vector index cannot have a DESC
+		// direction. Since the default direction is ASC, we omit the direction
+		// entirely for inverted/vector index columns.
+		if i < n-1 || index.Type == descpb.IndexDescriptor_VECTOR {
 			f.WriteByte(' ')
 			f.WriteString(index.KeyColumnDirections[i].String())
 		}
