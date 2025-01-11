@@ -2551,13 +2551,6 @@ func TestLogic_vectorize_unsupported(
 	runLogicTest(t, "vectorize_unsupported")
 }
 
-func TestLogic_vectoross(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "vectoross")
-}
-
 func TestLogic_views(
 	t *testing.T,
 ) {
