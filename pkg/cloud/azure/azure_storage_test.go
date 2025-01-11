@@ -109,11 +109,11 @@ func TestAzure(t *testing.T) {
 	testPath := fmt.Sprintf("backup-test-%d", testID)
 	testListPath := fmt.Sprintf("listing-test-%d", testID)
 
-	cloudtestutils.CheckExportStore(t, cfg.filePath(testPath),
-		false, username.RootUserName(),
-		nil, /* db */
-		testSettings,
-	)
+	info := cloudtestutils.StoreInfo{
+		URI:  cfg.filePath(testPath),
+		User: username.RootUserName(),
+	}
+	cloudtestutils.CheckExportStore(t, info)
 	cloudtestutils.CheckListFiles(t, cfg.filePath(testListPath),
 		username.RootUserName(),
 		nil, /* db */
@@ -121,11 +121,8 @@ func TestAzure(t *testing.T) {
 	)
 
 	// Client Secret auth
-	cloudtestutils.CheckExportStore(t, cfg.filePathClientAuth(testPath),
-		false, username.RootUserName(),
-		nil, /* db */
-		testSettings,
-	)
+	info.URI = cfg.filePathClientAuth(testPath)
+	cloudtestutils.CheckExportStore(t, info)
 	cloudtestutils.CheckListFiles(t, cfg.filePathClientAuth(testListPath),
 		username.RootUserName(),
 		nil, /* db */
@@ -133,11 +130,8 @@ func TestAzure(t *testing.T) {
 	)
 
 	// Implicit auth
-	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth(testPath),
-		false, username.RootUserName(),
-		nil, /* db */
-		testSettings,
-	)
+	info.URI = cfg.filePathImplicitAuth(testPath)
+	cloudtestutils.CheckExportStore(t, info)
 	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),
 		username.RootUserName(),
 		nil, /* db */
@@ -300,11 +294,12 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 	cleanup3 := envutil.TestSetEnv(t, "COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE", credFile)
 	defer cleanup3()
 
-	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth(testPath),
-		false, username.RootUserName(),
-		nil, /* db */
-		testSettings,
-	)
+	info := cloudtestutils.StoreInfo{
+		URI:  cfg.filePathImplicitAuth(testPath),
+		User: username.RootUserName(),
+	}
+
+	cloudtestutils.CheckExportStore(t, info)
 	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),
 		username.RootUserName(),
 		nil, /* db */

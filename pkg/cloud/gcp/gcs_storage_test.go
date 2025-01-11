@@ -58,14 +58,11 @@ func TestPutGoogleCloud(t *testing.T) {
 		if specified {
 			uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
 		}
-		cloudtestutils.CheckExportStore(
-			t,
-			uri,
-			false,
-			user,
-			nil, /* db */
-			testSettings,
-		)
+		info := cloudtestutils.StoreInfo{
+			URI:  uri,
+			User: user,
+		}
+		cloudtestutils.CheckExportStore(t, info)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			bucket,
 			"backup-test-specified",
@@ -84,15 +81,12 @@ func TestPutGoogleCloud(t *testing.T) {
 		if !cloudtestutils.IsImplicitAuthConfigured() {
 			skip.IgnoreLint(t, "implicit auth is not configured")
 		}
-
-		cloudtestutils.CheckExportStore(
-			t,
-			fmt.Sprintf("gs://%s/%s-%d?%s=%s", bucket, "backup-test-implicit", testID,
+		info := cloudtestutils.StoreInfo{
+			URI: fmt.Sprintf("gs://%s/%s-%d?%s=%s", bucket, "backup-test-implicit", testID,
 				cloud.AuthParam, cloud.AuthParamImplicit),
-			false,
-			user,
-			nil, /* db */
-			testSettings)
+			User: user,
+		}
+		cloudtestutils.CheckExportStore(t, info)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s",
 			bucket,
 			"backup-test-implicit",
@@ -128,13 +122,11 @@ func TestPutGoogleCloud(t *testing.T) {
 			token.AccessToken,
 		)
 		uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
-		cloudtestutils.CheckExportStore(
-			t,
-			uri,
-			false,
-			user,
-			nil, /* db */
-			testSettings)
+		info := cloudtestutils.StoreInfo{
+			URI:  uri,
+			User: user,
+		}
+		cloudtestutils.CheckExportStore(t, info)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			bucket,
 			"backup-test-specified",
@@ -181,9 +173,8 @@ func TestGCSAssumeRole(t *testing.T) {
 			testSettings,
 		)
 
-		cloudtestutils.CheckExportStore(
-			t,
-			fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s&%s=%s",
+		info := cloudtestutils.StoreInfo{
+			URI: fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s&%s=%s",
 				limitedBucket,
 				"backup-test-assume-role",
 				testID,
@@ -192,10 +183,10 @@ func TestGCSAssumeRole(t *testing.T) {
 				AssumeRoleParam,
 				assumedAccount, CredentialsParam,
 				url.QueryEscape(encoded),
-			), false, user,
-			nil, /* db */
-			testSettings,
-		)
+			),
+			User: user,
+		}
+		cloudtestutils.CheckExportStore(t, info)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s&%s=%s",
 			limitedBucket,
 			"backup-test-assume-role",
@@ -226,11 +217,14 @@ func TestGCSAssumeRole(t *testing.T) {
 			testSettings,
 		)
 
-		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role", testID,
-			cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount), false, user,
-			nil, /* db */
-			testSettings,
-		)
+		info := cloudtestutils.StoreInfo{
+			URI: fmt.Sprintf(
+				"gs://%s/%s-%d?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role", testID,
+				cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount,
+			),
+			User: user,
+		}
+		cloudtestutils.CheckExportStore(t, info)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			limitedBucket,
 			"backup-test-assume-role",
@@ -291,18 +285,18 @@ func TestGCSAssumeRole(t *testing.T) {
 
 				// Finally, check that the chain of roles can be used to access the storage.
 				q.Set(AssumeRoleParam, roleChainStr)
-				uri := fmt.Sprintf("gs://%s/%s-%d/%s?%s",
-					limitedBucket,
-					"backup-test-assume-role",
-					testID,
-					"listing-test",
-					q.Encode(),
-				)
-				cloudtestutils.CheckExportStore(t, uri, false, user,
-					nil, /* db */
-					testSettings,
-				)
-				cloudtestutils.CheckListFiles(t, uri, user,
+				info := cloudtestutils.StoreInfo{
+					URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s",
+						limitedBucket,
+						"backup-test-assume-role",
+						testID,
+						"listing-test",
+						q.Encode(),
+					),
+					User: user,
+				}
+				cloudtestutils.CheckExportStore(t, info)
+				cloudtestutils.CheckListFiles(t, info.URI, user,
 					nil, /* db */
 					testSettings,
 				)

@@ -118,27 +118,45 @@ func storeFromURI(
 	return s
 }
 
-// CheckExportStore runs an array of tests against a storeURI.
-func CheckExportStore(
-	t *testing.T,
-	storeURI string,
-	skipSingleFile bool,
-	user username.SQLUsername,
-	db isql.DB,
-	testSettings *cluster.Settings,
-) {
+type StoreInfo struct {
+	URI  string
+	User username.SQLUsername
+
+	// Fields below are optional.
+
+	TestSettings  *cluster.Settings
+	DB            isql.DB
+	ExternalIODir string
+}
+
+// CheckExportStore runs an array of tests against a store.
+func CheckExportStore(t *testing.T, info StoreInfo) {
+	checkExportStore(t, info, false /* skipSingleFile */)
+}
+
+// CheckExportStoreSkipSingleFile runs an array of tests against a store,
+// skipping single file tests.
+func CheckExportStoreSkipSingleFile(t *testing.T, info StoreInfo) {
+	checkExportStore(t, info, true /* skipSingleFile */)
+}
+
+// CheckExportStore runs an array of tests against a store.
+func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 	ioConf := base.ExternalIODirConfig{}
 	ctx := context.Background()
 
-	conf, err := cloud.ExternalStorageConfFromURI(storeURI, user)
+	if info.TestSettings == nil {
+		info.TestSettings = cluster.MakeTestingClusterSettings()
+	}
+
+	conf, err := cloud.ExternalStorageConfFromURI(info.URI, info.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Setup a sink for the given args.
-	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
-		db, nil, cloud.NilMetrics)
+	clientFactory := blobs.TestBlobServiceClient(info.ExternalIODir)
+	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, info.TestSettings, clientFactory, info.DB, nil, cloud.NilMetrics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,8 +267,8 @@ func CheckExportStore(
 		if err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
-		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
-			user, db, testSettings)
+		singleFile := storeFromURI(ctx, t, appendPath(t, info.URI, testingFilename), clientFactory,
+			info.User, info.DB, info.TestSettings)
 		defer singleFile.Close()
 
 		res, _, err := singleFile.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
@@ -270,8 +288,8 @@ func CheckExportStore(
 	})
 	t.Run("write-single-file-by-uri", func(t *testing.T) {
 		const testingFilename = "B"
-		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
-			user, db, testSettings)
+		singleFile := storeFromURI(ctx, t, appendPath(t, info.URI, testingFilename), clientFactory,
+			info.User, info.DB, info.TestSettings)
 		defer singleFile.Close()
 
 		if err := cloud.WriteFile(ctx, singleFile, "", bytes.NewReader([]byte("bbb"))); err != nil {
@@ -302,7 +320,7 @@ func CheckExportStore(
 		if err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
-		singleFile := storeFromURI(ctx, t, storeURI, clientFactory, user, db, testSettings)
+		singleFile := storeFromURI(ctx, t, info.URI, clientFactory, info.User, info.DB, info.TestSettings)
 		defer singleFile.Close()
 
 		// Read a valid file.

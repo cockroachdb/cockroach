@@ -44,15 +44,19 @@ func TestPutUserFileTable(t *testing.T) {
 	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
 
 	db := s.InternalDB().(isql.DB)
-	cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), db, testSettings)
+	info := cloudtestutils.StoreInfo{
+		URI:  dest,
+		User: username.RootUserName(),
+		DB:   db,
+	}
+	cloudtestutils.CheckExportStore(t, info)
 
 	cloudtestutils.CheckListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
 		username.RootUserName(), db, testSettings)
 
 	t.Run("empty-qualified-table-name", func(t *testing.T) {
-		dest := userfile.MakeUserFileStorageURI("", filename)
-
-		cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), db, testSettings)
+		info.URI = userfile.MakeUserFileStorageURI("", filename)
+		cloudtestutils.CheckExportStore(t, info)
 
 		cloudtestutils.CheckListFilesCanonical(t, "userfile:///listing-test/basepath", "userfile://defaultdb.public.userfiles_root/listing-test/basepath",
 			username.RootUserName(), db, testSettings)

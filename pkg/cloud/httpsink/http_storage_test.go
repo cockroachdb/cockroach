@@ -116,10 +116,12 @@ func TestPutHttp(t *testing.T) {
 	t.Run("singleHost", func(t *testing.T) {
 		srv, files, cleanup := makeServer()
 		defer cleanup()
-		cloudtestutils.CheckExportStore(t, srv.String(), false, user,
-			nil, /* db */
-			testSettings,
-		)
+		info := cloudtestutils.StoreInfo{
+			URI:          srv.String(),
+			User:         user,
+			TestSettings: testSettings,
+		}
+		cloudtestutils.CheckExportStore(t, info)
 		if expected, actual := 14, files(); expected != actual {
 			t.Fatalf("expected %d files to be written to single http store, got %d", expected, actual)
 		}
@@ -136,10 +138,12 @@ func TestPutHttp(t *testing.T) {
 		combined := *srv1
 		combined.Host = strings.Join([]string{srv1.Host, srv2.Host, srv3.Host}, ",")
 
-		cloudtestutils.CheckExportStore(t, combined.String(), true, user,
-			nil, /* db */
-			testSettings,
-		)
+		info := cloudtestutils.StoreInfo{
+			URI:          combined.String(),
+			User:         user,
+			TestSettings: testSettings,
+		}
+		cloudtestutils.CheckExportStoreSkipSingleFile(t, info)
 		if expected, actual := 3, files1(); expected != actual {
 			t.Fatalf("expected %d files written to http host 1, got %d", expected, actual)
 		}
