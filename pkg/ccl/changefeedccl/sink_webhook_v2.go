@@ -29,9 +29,11 @@ import (
 )
 
 const (
-	applicationTypeJSON = `application/json`
-	applicationTypeCSV  = `text/csv`
-	authorizationHeader = `Authorization`
+	applicationTypeJSON   = `application/json`
+	applicationTypeCSV    = `text/csv`
+	authorizationHeader   = `Authorization`
+	contentEncodingHeader = `Content-Encoding`
+	acceptEncodingHeader  = `Accept-Encoding`
 )
 
 func isWebhookSink(u *url.URL) bool {
@@ -45,12 +47,14 @@ func isWebhookSink(u *url.URL) bool {
 }
 
 type webhookSinkClient struct {
-	ctx        context.Context
-	format     changefeedbase.FormatType
-	url        sinkURL
-	authHeader string
-	batchCfg   sinkBatchConfig
-	client     *httputil.Client
+	ctx         context.Context
+	format      changefeedbase.FormatType
+	url         sinkURL
+	authHeader  string
+	batchCfg    sinkBatchConfig
+	client      *httputil.Client
+	settings    *cluster.Settings
+	compression compressionAlgo
 }
 
 var _ SinkClient = (*webhookSinkClient)(nil)
@@ -64,19 +68,31 @@ func makeWebhookSinkClient(
 	batchCfg sinkBatchConfig,
 	parallelism int,
 	m metricsRecorder,
+	settings *cluster.Settings,
 ) (SinkClient, error) {
 	err := validateWebhookOpts(u, encodingOpts, opts)
 	if err != nil {
 		return nil, err
 	}
 
+	var compression compressionAlgo
+	if opts.Compression != "" {
+		algo, _, err := compressionFromString(strings.ToLower(opts.Compression))
+		if err != nil {
+			return nil, errors.Wrap(err, "unsupported compression type")
+		}
+		compression = algo
+	}
+
 	u.Scheme = strings.TrimPrefix(u.Scheme, `webhook-`)
 
 	sinkClient := &webhookSinkClient{
-		ctx:        ctx,
-		authHeader: opts.AuthHeader,
-		format:     encodingOpts.Format,
-		batchCfg:   batchCfg,
+		ctx:         ctx,
+		authHeader:  opts.AuthHeader,
+		format:      encodingOpts.Format,
+		batchCfg:    batchCfg,
+		settings:    settings,
+		compression: compression,
 	}
 
 	var connTimeout time.Duration
@@ -178,19 +194,33 @@ func makeWebhookClient(
 }
 
 func (sc *webhookSinkClient) makePayloadForBytes(body []byte) (SinkPayload, error) {
-	req, err := http.NewRequestWithContext(sc.ctx, http.MethodPost, sc.url.String(), bytes.NewReader(body))
+	var finalBytes []byte
+	if sc.compression.enabled() {
+		var buf bytes.Buffer
+		codec, err := newCompressionCodec(sc.compression, &sc.settings.SV, &buf)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create compression codec")
+		}
+		if _, err := codec.Write(body); err != nil {
+			return nil, errors.Wrap(err, "failed to compress payload")
+		}
+		if err := codec.Close(); err != nil {
+			return nil, errors.Wrap(err, "failed to finalize compression")
+		}
+		finalBytes = buf.Bytes()
+	} else {
+		finalBytes = body
+	}
+
+	req, err := http.NewRequestWithContext(sc.ctx, http.MethodPost, sc.url.String(), bytes.NewReader(finalBytes))
 	if err != nil {
 		return nil, err
 	}
-	switch sc.format {
-	case changefeedbase.OptFormatJSON:
-		req.Header.Set("Content-Type", applicationTypeJSON)
-	case changefeedbase.OptFormatCSV:
-		req.Header.Set("Content-Type", applicationTypeCSV)
-	}
 
-	if sc.authHeader != "" {
-		req.Header.Set(authorizationHeader, sc.authHeader)
+	sc.setRequestHeaders(req)
+
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(finalBytes)), nil
 	}
 
 	return req, nil
@@ -241,6 +271,25 @@ func (sc *webhookSinkClient) Close() error {
 
 func (sc *webhookSinkClient) CheckConnection(ctx context.Context) error {
 	return nil
+}
+
+func (sc *webhookSinkClient) setRequestHeaders(req *http.Request) {
+	switch sc.format {
+	case changefeedbase.OptFormatJSON:
+		req.Header.Set("Content-Type", applicationTypeJSON)
+	case changefeedbase.OptFormatCSV:
+		req.Header.Set("Content-Type", applicationTypeCSV)
+	}
+
+	if sc.compression.enabled() {
+		compression := string(sc.compression)
+		req.Header.Set(acceptEncodingHeader, compression)
+		req.Header.Set(contentEncodingHeader, compression)
+	}
+
+	if sc.authHeader != "" {
+		req.Header.Set(authorizationHeader, sc.authHeader)
+	}
 }
 
 func validateWebhookOpts(
@@ -299,9 +348,10 @@ func (cb *webhookCSVBuffer) Close() (SinkPayload, error) {
 }
 
 type webhookJSONBuffer struct {
-	messages [][]byte
-	numBytes int
-	sc       *webhookSinkClient
+	messages        [][]byte
+	numBytes        int
+	compressedBytes int
+	sc              *webhookSinkClient
 }
 
 var _ BatchBuffer = (*webhookJSONBuffer)(nil)
@@ -323,7 +373,6 @@ func (jb *webhookJSONBuffer) Close() (SinkPayload, error) {
 	prefix := "{\"payload\":["
 	suffix := fmt.Sprintf("],\"length\":%d}", len(jb.messages))
 
-	// Grow all at once to avoid reallocations
 	buffer.Grow(len(prefix) + jb.numBytes /* msgs */ + len(jb.messages) /* commas */ + len(suffix))
 
 	buffer.WriteString(prefix)
@@ -334,7 +383,22 @@ func (jb *webhookJSONBuffer) Close() (SinkPayload, error) {
 		buffer.Write(msg)
 	}
 	buffer.WriteString(suffix)
-	return jb.sc.makePayloadForBytes(buffer.Bytes())
+
+	payload, err := jb.sc.makePayloadForBytes(buffer.Bytes())
+	if err != nil {
+		return nil, err
+	}
+
+	if jb.sc.compression.enabled() {
+		if req, ok := payload.(*http.Request); ok && req.Body != nil {
+			if compressed, err := io.ReadAll(req.Body); err == nil {
+				jb.compressedBytes = len(compressed)
+				req.Body = io.NopCloser(bytes.NewReader(compressed))
+			}
+		}
+	}
+
+	return payload, nil
 }
 
 // MakeBatchBuffer implements the SinkClient interface
@@ -367,7 +431,7 @@ func makeWebhookSink(
 		return nil, err
 	}
 
-	sinkClient, err := makeWebhookSinkClient(ctx, u, encodingOpts, opts, batchCfg, parallelism, m)
+	sinkClient, err := makeWebhookSinkClient(ctx, u, encodingOpts, opts, batchCfg, parallelism, m, settings)
 	if err != nil {
 		return nil, err
 	}

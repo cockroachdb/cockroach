@@ -6,6 +6,7 @@
 package cdctest
 
 import (
+	"compress/gzip"
 	"crypto/tls"
 	"io"
 	"net/http"
@@ -26,6 +27,7 @@ type MockWebhookSink struct {
 		statusCodes      []int
 		statusCodesIndex int
 		rows             []string
+		lastHeaders      http.Header
 		notify           chan struct{}
 	}
 }
@@ -35,6 +37,13 @@ func StartMockWebhookSinkInsecure() (*MockWebhookSink, error) {
 	s := makeMockWebhookSink()
 	s.server.Start()
 	return s, nil
+}
+
+// LastRequestHeaders returns the headers from the most recent request
+func (s *MockWebhookSink) LastRequestHeaders() http.Header {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.lastHeaders
 }
 
 // StartMockWebhookSink creates and starts a mock webhook sink for tests.
@@ -181,14 +190,32 @@ func (s *MockWebhookSink) requestHandler(hw http.ResponseWriter, hr *http.Reques
 
 func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) error {
 	defer hr.Body.Close()
-	row, err := io.ReadAll(hr.Body)
-	if err != nil {
-		return err
+
+	s.mu.Lock()
+	s.mu.lastHeaders = hr.Header.Clone()
+	s.mu.Unlock()
+
+	reader := hr.Body
+
+	if hr.Header.Get("Content-Encoding") == "gzip" {
+		gzReader, err := gzip.NewReader(reader)
+		if err != nil {
+			return errors.Wrap(err, "failed to create gzip reader")
+		}
+		defer gzReader.Close()
+		reader = gzReader
 	}
+
+	row, err := io.ReadAll(reader)
+	if err != nil {
+		return errors.Wrap(err, "failed to read request body")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.numCalls++
-	if s.mu.statusCodes[s.mu.statusCodesIndex] >= http.StatusOK && s.mu.statusCodes[s.mu.statusCodesIndex] < http.StatusMultipleChoices {
+	if s.mu.statusCodes[s.mu.statusCodesIndex] >= http.StatusOK &&
+		s.mu.statusCodes[s.mu.statusCodesIndex] < http.StatusMultipleChoices {
 		s.mu.rows = append(s.mu.rows, string(row))
 		if s.mu.notify != nil {
 			close(s.mu.notify)

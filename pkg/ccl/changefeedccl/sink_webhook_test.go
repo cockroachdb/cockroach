@@ -763,3 +763,162 @@ func TestWebhookSinkRetry(t *testing.T) {
 	sinkDest.Close()
 	require.NoError(t, sinkSrc.Close())
 }
+
+func TestWebhookSinkCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	webhookSinkCompressionTestFn := func(parallelism int) {
+		// Create a test certificate
+		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		require.NoError(t, err)
+
+		// Start mock webhook sink
+		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		require.NoError(t, err)
+
+		// Get sink options with compression enabled
+		opts := getGenericWebhookSinkOptions(struct {
+			key   string
+			value string
+		}{
+			key:   changefeedbase.OptCompression,
+			value: "gzip",
+		})
+
+		sinkDestHost, err := url.Parse(sinkDest.URL())
+		require.NoError(t, err)
+
+		params := sinkDestHost.Query()
+		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		sinkDestHost.RawQuery = params.Encode()
+
+		details := jobspb.ChangefeedDetails{
+			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
+			Opts:    opts.AsMap(),
+		}
+
+		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
+		require.NoError(t, err)
+
+		// Test with compression
+		require.NoError(t, sinkSrc.EmitRow(context.Background(), noTopic{},
+			[]byte("[1001]"),
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+			zeroTS,
+			zeroTS,
+			zeroAlloc))
+		require.NoError(t, sinkSrc.Flush(context.Background()))
+
+		// Verify compression headers are present
+		require.Equal(t, "gzip", sinkDest.LastRequestHeaders().Get("Content-Encoding"))
+		require.Equal(t, "gzip", sinkDest.LastRequestHeaders().Get("Accept-Encoding"))
+
+		// Verify the content can be decompressed and matches expected
+		expected := "{\"payload\":[{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}],\"length\":1}"
+		require.Equal(t, expected, sinkDest.Latest())
+
+		// Test invalid compression type
+		invalidOpts := getGenericWebhookSinkOptions(struct {
+			key   string
+			value string
+		}{
+			key:   changefeedbase.OptCompression,
+			value: "invalid",
+		})
+
+		details.Opts = invalidOpts.AsMap()
+		_, err = setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unsupported compression type")
+
+		require.NoError(t, sinkSrc.Close())
+		sinkDest.Close()
+	}
+
+	// Run tests with parallelism from 1-4 like other webhook sink tests
+	for i := 1; i <= 4; i++ {
+		webhookSinkCompressionTestFn(i)
+	}
+}
+
+func TestWebhookSinkCompressionWithBatching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	batchingWithCompressionTestFn := func(parallelism int) {
+		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		require.NoError(t, err)
+		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		require.NoError(t, err)
+
+		// Configure both compression and batching
+		opts := getGenericWebhookSinkOptions(
+			struct {
+				key   string
+				value string
+			}{
+				key:   changefeedbase.OptCompression,
+				value: "gzip",
+			},
+			struct {
+				key   string
+				value string
+			}{
+				key:   changefeedbase.OptWebhookSinkConfig,
+				value: `{"Flush":{"Messages": 2, "Frequency": "1h"}}`,
+			},
+		)
+
+		sinkDestHost, err := url.Parse(sinkDest.URL())
+		require.NoError(t, err)
+
+		params := sinkDestHost.Query()
+		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		sinkDestHost.RawQuery = params.Encode()
+
+		details := jobspb.ChangefeedDetails{
+			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
+			Opts:    opts.AsMap(),
+		}
+
+		mt := timeutil.NewManualTime(timeutil.Now())
+		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, mt)
+		require.NoError(t, err)
+
+		// Send first message - should not trigger batch
+		require.NoError(t, sinkSrc.EmitRow(context.Background(), noTopic{},
+			[]byte("[1001]"),
+			[]byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"),
+			zeroTS,
+			zeroTS,
+			zeroAlloc))
+		require.Equal(t, "", sinkDest.Latest())
+
+		// Send second message - should trigger batch
+		require.NoError(t, sinkSrc.EmitRow(context.Background(), noTopic{},
+			[]byte("[1002]"),
+			[]byte("{\"after\":{\"col1\":\"val2\",\"rowid\":1001},\"key\":[1002],\"topic:\":\"foo\"}"),
+			zeroTS,
+			zeroTS,
+			zeroAlloc))
+		require.NoError(t, sinkSrc.Flush(context.Background()))
+
+		// Verify compression headers
+		require.Equal(t, "gzip", sinkDest.LastRequestHeaders().Get("Content-Encoding"))
+		require.Equal(t, "gzip", sinkDest.LastRequestHeaders().Get("Accept-Encoding"))
+
+		// Verify batched content
+		expected := "{\"payload\":[" +
+			"{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}," +
+			"{\"after\":{\"col1\":\"val2\",\"rowid\":1001},\"key\":[1002],\"topic:\":\"foo\"}" +
+			"],\"length\":2}"
+		require.Equal(t, expected, sinkDest.Latest())
+
+		require.NoError(t, sinkSrc.Close())
+		sinkDest.Close()
+	}
+
+	// Run tests with parallelism from 1-4
+	for i := 1; i <= 4; i++ {
+		batchingWithCompressionTestFn(i)
+	}
+}
