@@ -39,7 +39,6 @@ func TestPutUserFileTable(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
-	testSettings := s.ClusterSettings()
 
 	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
 
@@ -51,15 +50,15 @@ func TestPutUserFileTable(t *testing.T) {
 	}
 	cloudtestutils.CheckExportStore(t, info)
 
-	cloudtestutils.CheckListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
-		username.RootUserName(), db, testSettings)
+	info.URI = "userfile://defaultdb.public.file_list_table/listing-test/basepath"
+	cloudtestutils.CheckListFiles(t, info)
 
 	t.Run("empty-qualified-table-name", func(t *testing.T) {
 		info.URI = userfile.MakeUserFileStorageURI("", filename)
 		cloudtestutils.CheckExportStore(t, info)
 
-		cloudtestutils.CheckListFilesCanonical(t, "userfile:///listing-test/basepath", "userfile://defaultdb.public.userfiles_root/listing-test/basepath",
-			username.RootUserName(), db, testSettings)
+		info.URI = "userfile:///listing-test/basepath"
+		cloudtestutils.CheckListFilesCanonical(t, info, "userfile://defaultdb.public.userfiles_root/listing-test/basepath")
 	})
 
 	t.Run("reject-normalized-basename", func(t *testing.T) {

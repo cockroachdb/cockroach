@@ -39,7 +39,6 @@ func TestPutGoogleCloud(t *testing.T) {
 	}
 
 	user := username.RootUserName()
-	testSettings := cluster.MakeTestingClusterSettings()
 	testID := cloudtestutils.NewTestID()
 
 	testutils.RunTrueAndFalse(t, "auth-specified-with-auth-param", func(t *testing.T, specified bool) {
@@ -63,19 +62,20 @@ func TestPutGoogleCloud(t *testing.T) {
 			User: user,
 		}
 		cloudtestutils.CheckExportStore(t, info)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
-			bucket,
-			"backup-test-specified",
-			testID,
-			"listing-test",
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
-			CredentialsParam,
-			url.QueryEscape(encoded),
-		), username.RootUserName(),
-			nil, /* db */
-			testSettings,
-		)
+		info = cloudtestutils.StoreInfo{
+			URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
+				bucket,
+				"backup-test-specified",
+				testID,
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				CredentialsParam,
+				url.QueryEscape(encoded),
+			),
+			User: username.RootUserName(),
+		}
+		cloudtestutils.CheckListFiles(t, info)
 	})
 	t.Run("auth-implicit", func(t *testing.T) {
 		if !cloudtestutils.IsImplicitAuthConfigured() {
@@ -87,17 +87,18 @@ func TestPutGoogleCloud(t *testing.T) {
 			User: user,
 		}
 		cloudtestutils.CheckExportStore(t, info)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s",
-			bucket,
-			"backup-test-implicit",
-			testID,
-			"listing-test",
-			cloud.AuthParam,
-			cloud.AuthParamImplicit,
-		), username.RootUserName(),
-			nil, /* db */
-			testSettings,
-		)
+		info = cloudtestutils.StoreInfo{
+			URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s",
+				bucket,
+				"backup-test-implicit",
+				testID,
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamImplicit,
+			),
+			User: username.RootUserName(),
+		}
+		cloudtestutils.CheckListFiles(t, info)
 	})
 
 	t.Run("auth-specified-bearer-token", func(t *testing.T) {
@@ -127,19 +128,20 @@ func TestPutGoogleCloud(t *testing.T) {
 			User: user,
 		}
 		cloudtestutils.CheckExportStore(t, info)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
-			bucket,
-			"backup-test-specified",
-			testID,
-			"listing-test",
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
-			BearerTokenParam,
-			token.AccessToken,
-		), username.RootUserName(),
-			nil, /* db */
-			testSettings,
-		)
+		info = cloudtestutils.StoreInfo{
+			URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
+				bucket,
+				"backup-test-specified",
+				testID,
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				BearerTokenParam,
+				token.AccessToken,
+			),
+			User: username.RootUserName(),
+		}
+		cloudtestutils.CheckListFiles(t, info)
 	})
 }
 
@@ -187,21 +189,22 @@ func TestGCSAssumeRole(t *testing.T) {
 			User: user,
 		}
 		cloudtestutils.CheckExportStore(t, info)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s&%s=%s",
-			limitedBucket,
-			"backup-test-assume-role",
-			testID,
-			"listing-test",
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
-			AssumeRoleParam,
-			assumedAccount,
-			CredentialsParam,
-			url.QueryEscape(encoded),
-		), username.RootUserName(),
-			nil, /* db */
-			testSettings,
-		)
+		info = cloudtestutils.StoreInfo{
+			URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s&%s=%s",
+				limitedBucket,
+				"backup-test-assume-role",
+				testID,
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				AssumeRoleParam,
+				assumedAccount,
+				CredentialsParam,
+				url.QueryEscape(encoded),
+			),
+			User: username.RootUserName(),
+		}
+		cloudtestutils.CheckListFiles(t, info)
 	})
 
 	t.Run("implicit", func(t *testing.T) {
@@ -225,7 +228,7 @@ func TestGCSAssumeRole(t *testing.T) {
 			User: user,
 		}
 		cloudtestutils.CheckExportStore(t, info)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
+		info.URI = fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			limitedBucket,
 			"backup-test-assume-role",
 			testID,
@@ -234,10 +237,8 @@ func TestGCSAssumeRole(t *testing.T) {
 			cloud.AuthParamImplicit,
 			AssumeRoleParam,
 			assumedAccount,
-		), username.RootUserName(),
-			nil, /* db */
-			testSettings,
 		)
+		cloudtestutils.CheckListFiles(t, info)
 	})
 
 	t.Run("role-chaining", func(t *testing.T) {
@@ -296,10 +297,7 @@ func TestGCSAssumeRole(t *testing.T) {
 					User: user,
 				}
 				cloudtestutils.CheckExportStore(t, info)
-				cloudtestutils.CheckListFiles(t, info.URI, user,
-					nil, /* db */
-					testSettings,
-				)
+				cloudtestutils.CheckListFiles(t, info)
 			})
 		}
 	})
