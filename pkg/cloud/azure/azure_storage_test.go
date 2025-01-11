@@ -104,7 +104,6 @@ func TestAzure(t *testing.T) {
 		skip.IgnoreLint(t, "Test not configured for Azure")
 		return
 	}
-	testSettings := cluster.MakeTestingClusterSettings()
 	testID := cloudtestutils.NewTestID()
 	testPath := fmt.Sprintf("backup-test-%d", testID)
 	testListPath := fmt.Sprintf("listing-test-%d", testID)
@@ -114,29 +113,20 @@ func TestAzure(t *testing.T) {
 		User: username.RootUserName(),
 	}
 	cloudtestutils.CheckExportStore(t, info)
-	cloudtestutils.CheckListFiles(t, cfg.filePath(testListPath),
-		username.RootUserName(),
-		nil, /* db */
-		testSettings,
-	)
+	info.URI = cfg.filePath(testListPath)
+	cloudtestutils.CheckListFiles(t, info)
 
 	// Client Secret auth
 	info.URI = cfg.filePathClientAuth(testPath)
 	cloudtestutils.CheckExportStore(t, info)
-	cloudtestutils.CheckListFiles(t, cfg.filePathClientAuth(testListPath),
-		username.RootUserName(),
-		nil, /* db */
-		testSettings,
-	)
+	info.URI = cfg.filePathClientAuth(testListPath)
+	cloudtestutils.CheckListFiles(t, info)
 
 	// Implicit auth
 	info.URI = cfg.filePathImplicitAuth(testPath)
 	cloudtestutils.CheckExportStore(t, info)
-	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),
-		username.RootUserName(),
-		nil, /* db */
-		testSettings,
-	)
+	info.URI = cfg.filePathImplicitAuth(testListPath)
+	cloudtestutils.CheckListFiles(t, info)
 }
 
 func TestAzureSchemes(t *testing.T) {
@@ -298,11 +288,7 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 		URI:  cfg.filePathImplicitAuth(testPath),
 		User: username.RootUserName(),
 	}
-
 	cloudtestutils.CheckExportStore(t, info)
-	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),
-		username.RootUserName(),
-		nil, /* db */
-		testSettings,
-	)
+	info.URI = cfg.filePathImplicitAuth(testListPath)
+	cloudtestutils.CheckListFiles(t, info)
 }

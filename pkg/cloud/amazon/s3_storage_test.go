@@ -139,9 +139,7 @@ func TestPutS3(t *testing.T) {
 					User: user,
 				}
 				cloudtestutils.CheckExportStore(t, info)
-				cloudtestutils.CheckListFiles(
-					t, info.URI, info.User, nil /* db */, testSettings,
-				)
+				cloudtestutils.CheckListFiles(t, info)
 			})
 
 			// Tests that we can put an object with server side encryption specified.
@@ -232,9 +230,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 			User: user,
 		}
 		cloudtestutils.CheckExportStore(t, info)
-		cloudtestutils.CheckListFiles(
-			t, info.URI, user, nil /* db */, testSettings,
-		)
+		cloudtestutils.CheckListFiles(t, info)
 	})
 
 	t.Run("auth-specified", func(t *testing.T) {
@@ -245,9 +241,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 			User: user,
 		}
 		cloudtestutils.CheckExportStore(t, info)
-		cloudtestutils.CheckListFiles(
-			t, info.URI, user, nil /* db */, testSettings,
-		)
+		cloudtestutils.CheckListFiles(t, info)
 	})
 
 	t.Run("role-chaining-external-id", func(t *testing.T) {

@@ -129,6 +129,13 @@ type StoreInfo struct {
 	ExternalIODir string
 }
 
+func (info StoreInfo) testSettings() *cluster.Settings {
+	if info.TestSettings != nil {
+		return info.TestSettings
+	}
+	return cluster.MakeTestingClusterSettings()
+}
+
 // CheckExportStore runs an array of tests against a store.
 func CheckExportStore(t *testing.T, info StoreInfo) {
 	checkExportStore(t, info, false /* skipSingleFile */)
@@ -144,10 +151,7 @@ func CheckExportStoreSkipSingleFile(t *testing.T, info StoreInfo) {
 func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 	ioConf := base.ExternalIODirConfig{}
 	ctx := context.Background()
-
-	if info.TestSettings == nil {
-		info.TestSettings = cluster.MakeTestingClusterSettings()
-	}
+	testSettings := info.testSettings()
 
 	conf, err := cloud.ExternalStorageConfFromURI(info.URI, info.User)
 	if err != nil {
@@ -156,7 +160,7 @@ func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(info.ExternalIODir)
-	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, info.TestSettings, clientFactory, info.DB, nil, cloud.NilMetrics)
+	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, info.DB, nil, cloud.NilMetrics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +272,7 @@ func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 			t.Fatal(err)
 		}
 		singleFile := storeFromURI(ctx, t, appendPath(t, info.URI, testingFilename), clientFactory,
-			info.User, info.DB, info.TestSettings)
+			info.User, info.DB, testSettings)
 		defer singleFile.Close()
 
 		res, _, err := singleFile.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
@@ -289,7 +293,7 @@ func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 	t.Run("write-single-file-by-uri", func(t *testing.T) {
 		const testingFilename = "B"
 		singleFile := storeFromURI(ctx, t, appendPath(t, info.URI, testingFilename), clientFactory,
-			info.User, info.DB, info.TestSettings)
+			info.User, info.DB, testSettings)
 		defer singleFile.Close()
 
 		if err := cloud.WriteFile(ctx, singleFile, "", bytes.NewReader([]byte("bbb"))); err != nil {
@@ -320,7 +324,7 @@ func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 		if err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
-		singleFile := storeFromURI(ctx, t, info.URI, clientFactory, info.User, info.DB, info.TestSettings)
+		singleFile := storeFromURI(ctx, t, info.URI, clientFactory, info.User, info.DB, testSettings)
 		defer singleFile.Close()
 
 		// Read a valid file.
@@ -353,28 +357,16 @@ func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 
 // CheckListFiles tests the ListFiles() interface method for the ExternalStorage
 // specified by storeURI.
-func CheckListFiles(
-	t *testing.T,
-	storeURI string,
-	user username.SQLUsername,
-	db isql.DB,
-	testSettings *cluster.Settings,
-) {
-	CheckListFilesCanonical(t, storeURI, "", user, db, testSettings)
+func CheckListFiles(t *testing.T, info StoreInfo) {
+	CheckListFilesCanonical(t, info, "" /* canonical */)
 }
 
 // CheckListFilesCanonical is like CheckListFiles but takes a canonical prefix
 // that it should expect to see on returned listings, instead of storeURI (e.g.
 // if storeURI automatically expands).
-func CheckListFilesCanonical(
-	t *testing.T,
-	storeURI string,
-	canonical string,
-	user username.SQLUsername,
-	db isql.DB,
-	testSettings *cluster.Settings,
-) {
+func CheckListFilesCanonical(t *testing.T, info StoreInfo, canonical string) {
 	ctx := context.Background()
+	testSettings := info.testSettings()
 	dataLetterFiles := []string{"file/letters/dataA.csv", "file/letters/dataB.csv", "file/letters/dataC.csv"}
 	dataNumberFiles := []string{"file/numbers/data1.csv", "file/numbers/data2.csv", "file/numbers/data3.csv"}
 	letterFiles := []string{"file/abc/A.csv", "file/abc/B.csv", "file/abc/C.csv"}
@@ -382,9 +374,9 @@ func CheckListFilesCanonical(
 	fileNames = append(fileNames, letterFiles...)
 	sort.Strings(fileNames)
 
-	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	clientFactory := blobs.TestBlobServiceClient(info.ExternalIODir)
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI, clientFactory, user, db, testSettings)
+		file := storeFromURI(ctx, t, info.URI, clientFactory, info.User, info.DB, testSettings)
 		if err := cloud.WriteFile(ctx, file, fileName, bytes.NewReader([]byte("bbb"))); err != nil {
 			t.Fatal(err)
 		}
@@ -409,70 +401,70 @@ func CheckListFilesCanonical(
 		}{
 			{
 				"root",
-				storeURI,
+				info.URI,
 				"",
 				"",
 				foreach(fileNames, func(s string) string { return "/" + s }),
 			},
 			{
 				"file-slash-numbers-slash",
-				storeURI,
+				info.URI,
 				"file/numbers/",
 				"",
 				[]string{"data1.csv", "data2.csv", "data3.csv"},
 			},
 			{
 				"root-slash",
-				storeURI,
+				info.URI,
 				"/",
 				"",
 				foreach(fileNames, func(s string) string { return s }),
 			},
 			{
 				"file",
-				storeURI,
+				info.URI,
 				"file",
 				"",
 				foreach(fileNames, func(s string) string { return strings.TrimPrefix(s, "file") }),
 			},
 			{
 				"file-slash",
-				storeURI,
+				info.URI,
 				"file/",
 				"",
 				foreach(fileNames, func(s string) string { return strings.TrimPrefix(s, "file/") }),
 			},
 			{
 				"slash-f",
-				storeURI,
+				info.URI,
 				"/f",
 				"",
 				foreach(fileNames, func(s string) string { return strings.TrimPrefix(s, "f") }),
 			},
 			{
 				"nothing",
-				storeURI,
+				info.URI,
 				"nothing",
 				"",
 				nil,
 			},
 			{
 				"delim-slash-file-slash",
-				storeURI,
+				info.URI,
 				"file/",
 				"/",
 				[]string{"abc/", "letters/", "numbers/"},
 			},
 			{
 				"delim-data",
-				storeURI,
+				info.URI,
 				"",
 				"data",
 				[]string{"/file/abc/A.csv", "/file/abc/B.csv", "/file/abc/C.csv", "/file/letters/data", "/file/numbers/data"},
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				s := storeFromURI(ctx, t, tc.uri, clientFactory, user, db, testSettings)
+				s := storeFromURI(ctx, t, tc.uri, clientFactory, info.User, info.DB, testSettings)
 				var actual []string
 				require.NoError(t, s.List(ctx, tc.prefix, tc.delimiter, func(f string) error {
 					actual = append(actual, f)
@@ -485,7 +477,7 @@ func CheckListFilesCanonical(
 	})
 
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI, clientFactory, user, db, testSettings)
+		file := storeFromURI(ctx, t, info.URI, clientFactory, info.User, info.DB, testSettings)
 		if err := file.Delete(ctx, fileName); err != nil {
 			t.Fatal(err)
 		}
