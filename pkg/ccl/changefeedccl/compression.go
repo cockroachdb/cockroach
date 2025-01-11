@@ -9,6 +9,7 @@ import (
 	stdgzip "compress/gzip"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -17,22 +18,129 @@ import (
 	"github.com/klauspost/pgzip"
 )
 
-var useFastGzip = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.fast_gzip.enabled",
-	"use fast gzip implementation",
-	metamorphic.ConstantWithTestBool(
-		"changefeed.fast_gzip.enabled", true,
-	),
-	settings.WithPublic)
+var (
+	useFastGzip = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"changefeed.fast_gzip.enabled",
+		"use fast gzip implementation",
+		metamorphic.ConstantWithTestBool(
+			"changefeed.fast_gzip.enabled", true,
+		),
+		settings.WithPublic)
+	gzipEncoderPool     = sync.Pool{}
+	fastGzipEncoderPool = sync.Pool{}
+	zstdEncoderPool     = sync.Pool{}
+	gzipDecoderPool     = sync.Pool{}
+	zstdDecoderPool     = sync.Pool{}
+)
 
 type compressionAlgo string
 
-const sinkCompressionGzip compressionAlgo = "gzip"
-const sinkCompressionZstd compressionAlgo = "zstd"
+const (
+	sinkCompressionGzip compressionAlgo = "gzip"
+	sinkCompressionZstd compressionAlgo = "zstd"
+)
 
 func (a compressionAlgo) enabled() bool {
 	return a != ""
+}
+
+type encoder interface {
+	io.WriteCloser
+	Reset(io.Writer)
+}
+
+type decoder interface {
+	io.ReadCloser
+	Reset(io.Reader) error
+}
+
+// encWrapper wraps an encoder and includes a pointer to the pool it's associated with.
+type encWrapper struct {
+	encoder encoder
+	pool    *sync.Pool
+	closed  bool
+}
+
+// Close flushes and closes the underlying encoder, resets it, and returns the wrapper to the pool.
+// This differs from the inner encoder's Close by adding pool management - the wrapper
+// is recycled after closing rather than being discarded.
+func (e *encWrapper) Close() error {
+	if e.closed {
+		return nil
+	}
+	if err := e.encoder.Close(); err != nil {
+		return errors.Wrap(err, "failed to close writer")
+	}
+	e.encoder.Reset(nil)
+	e.pool.Put(e)
+	e.closed = true
+	return nil
+}
+
+func (e *encWrapper) Write(p []byte) (int, error) {
+	if e.closed {
+		return 0, errors.AssertionFailedf("attempt to write on a closed encoder, reset it first")
+	}
+	return e.encoder.Write(p)
+}
+
+func (e *encWrapper) Reset(w io.Writer) {
+	e.encoder.Reset(w)
+	e.closed = false
+}
+
+// decWrapper wraps a decoder with decoders pool.
+type decWrapper struct {
+	decoder decoder
+	pool    *sync.Pool
+	closed  bool
+}
+
+// Close closes the underlying decoder and returns the wrapper to the pool.
+func (d *decWrapper) Close() error {
+	if d.closed {
+		return nil
+	}
+	if err := d.decoder.Close(); err != nil {
+		return errors.Wrap(err, "failed to close reader")
+	}
+
+	d.pool.Put(d)
+	d.closed = true
+	return nil
+}
+
+// Reset resets the underlying decoder.
+// Avoid using nil reader as it may cause gzip and pgzip decoder to hang.
+func (d *decWrapper) Reset(r io.Reader) error {
+	if r == nil {
+		return errors.AssertionFailedf("nil reader is not allowed since it causes decoder to hang")
+	}
+	if err := d.decoder.Reset(r); err != nil {
+		return errors.Wrap(err, "failed to reset reader")
+	}
+	d.closed = false
+	return nil
+}
+
+func (d *decWrapper) Read(p []byte) (int, error) {
+	if d.closed {
+		return 0, errors.AssertionFailedf("attempt to read on a closed decoder, reset it first")
+	}
+	return d.decoder.Read(p)
+}
+
+// zstdDecoder wraps zstd.Decoder to implement io.Closer interface correctly.
+// While zstd.Decoder.Close() returns void, io.Closer requires Close() error.
+type zstdDecoder struct {
+	*zstd.Decoder
+}
+
+// Close implements io.Closer interface.
+func (z *zstdDecoder) Close() error {
+	z.Decoder.Close()
+	return nil
 }
 
 // newCompressionCodec returns compression codec for the specified algorithm,
@@ -45,11 +153,79 @@ func newCompressionCodec(
 	switch algo {
 	case sinkCompressionGzip:
 		if useFastGzip.Get(sv) {
-			return pgzip.NewWriterLevel(dest, pgzip.DefaultCompression)
+			pooled := fastGzipEncoderPool.Get()
+			if pooled != nil {
+				encoder := pooled.(*encWrapper)
+				encoder.Reset(dest)
+				return encoder, nil
+			}
+			encoder, err := pgzip.NewWriterLevel(dest, pgzip.DefaultCompression)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to create pgzip encoder")
+			}
+			return &encWrapper{encoder: encoder, pool: &fastGzipEncoderPool}, nil
 		}
-		return stdgzip.NewWriterLevel(dest, stdgzip.DefaultCompression)
+
+		pooled := gzipEncoderPool.Get()
+		if pooled != nil {
+			encoder := pooled.(*encWrapper)
+			encoder.Reset(dest)
+			return encoder, nil
+		}
+		encoder, err := stdgzip.NewWriterLevel(dest, stdgzip.DefaultCompression)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create gzip encoder")
+		}
+		return &encWrapper{encoder: encoder, pool: &gzipEncoderPool}, nil
 	case sinkCompressionZstd:
-		return zstd.NewWriter(dest, zstd.WithEncoderLevel(zstd.SpeedFastest))
+		pooled := zstdEncoderPool.Get()
+		if pooled != nil {
+			encoder := pooled.(*encWrapper)
+			encoder.Reset(dest)
+			return encoder, nil
+		}
+		encoder, err := zstd.NewWriter(dest, zstd.WithEncoderLevel(zstd.SpeedFastest))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create zstd encoder")
+		}
+		return &encWrapper{encoder: encoder, pool: &zstdEncoderPool}, nil
+	default:
+		return nil, errors.AssertionFailedf("unsupported compression algorithm %q", algo)
+	}
+}
+
+// newDecompressionReader returns decompression reader for the specified algorithm
+func newDecompressionReader(algo compressionAlgo, src io.Reader) (io.ReadCloser, error) {
+	switch algo {
+	case sinkCompressionGzip:
+		// since we are using decompression only for reading error response body, we can use default reader
+		pooled := gzipDecoderPool.Get()
+		if pooled != nil {
+			reader := pooled.(*decWrapper)
+			if err := reader.Reset(src); err != nil {
+				return nil, errors.Wrap(err, "failed to reset gzip reader")
+			}
+			return reader, nil
+		}
+		reader, err := pgzip.NewReader(src)
+		if err != nil {
+			return nil, err
+		}
+		return &decWrapper{decoder: reader, pool: &gzipDecoderPool}, nil
+	case sinkCompressionZstd:
+		pooled := zstdDecoderPool.Get()
+		if pooled != nil {
+			reader := pooled.(*decWrapper)
+			if err := reader.Reset(src); err != nil {
+				return nil, errors.Wrap(err, "failed to reset zstd reader")
+			}
+			return reader, nil
+		}
+		reader, err := zstd.NewReader(src)
+		if err != nil {
+			return nil, err
+		}
+		return &decWrapper{decoder: &zstdDecoder{reader}, pool: &zstdDecoderPool}, nil
 	default:
 		return nil, errors.AssertionFailedf("unsupported compression algorithm %q", algo)
 	}
