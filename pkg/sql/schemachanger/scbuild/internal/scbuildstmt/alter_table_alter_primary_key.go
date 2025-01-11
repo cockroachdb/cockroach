@@ -682,10 +682,10 @@ func recreateAllSecondaryIndexes(
 		inColumns := make([]indexColumnSpec, 0, len(out.columns))
 		// Determine which columns end up in the new secondary index.
 		{
+			// First, add all key columns. Also determine the ID of the last key
+			// column.
 			var largestKeyOrdinal uint32
-			var invertedColumnID catid.ColumnID
-			// First, add all key columns.
-			// Also determine the ID of the inverted column, if applicable.
+			var lastKeyColumnID catid.ColumnID
 			for _, ic := range out.columns {
 				if ic.Kind == scpb.IndexColumn_KEY {
 					idxColIDs.Add(ic.ColumnID)
@@ -694,19 +694,21 @@ func recreateAllSecondaryIndexes(
 						kind:      scpb.IndexColumn_KEY,
 						direction: ic.Direction,
 					})
-					if idx.IsInverted && ic.OrdinalInKind >= largestKeyOrdinal {
+					if ic.OrdinalInKind >= largestKeyOrdinal {
 						largestKeyOrdinal = ic.OrdinalInKind
-						invertedColumnID = ic.ColumnID
+						lastKeyColumnID = ic.ColumnID
 					}
 				}
 			}
 			// Second, determine the key suffix columns: add all primary key columns
 			// which have not already been added to the secondary index.
 			for _, ics := range newKeySuffix {
-				if !idxColIDs.Contains(ics.columnID) {
+				if !idxColIDs.Contains(ics.columnID) || (idx.IsVector && lastKeyColumnID == ics.columnID) {
+					// Similar to inverted indexes, a vector index doesn't actually
+					// contain values for the indexed column.
 					idxColIDs.Add(ics.columnID)
 					inColumns = append(inColumns, ics)
-				} else if idx.IsInverted && invertedColumnID == ics.columnID {
+				} else if idx.IsInverted && lastKeyColumnID == ics.columnID {
 					// In an inverted index, the inverted column's value is not equal to
 					// the actual data in the row for that column. As a result, if the
 					// inverted column happens to also be in the primary key, it's crucial
@@ -714,12 +716,12 @@ func recreateAllSecondaryIndexes(
 					// value to preserve the index semantics.
 					// However, this functionality is not supported by the execution
 					// engine, so prevent it by returning an error.
-					_, _, cn := scpb.FindColumnName(publicTableElts.Filter(hasColumnIDAttrFilter(invertedColumnID)))
+					_, _, cn := scpb.FindColumnName(publicTableElts.Filter(hasColumnIDAttrFilter(lastKeyColumnID)))
 					var colName string
 					if cn != nil {
 						colName = cn.Name
 					} else {
-						colName = fmt.Sprintf("#%d", invertedColumnID)
+						colName = fmt.Sprintf("#%d", lastKeyColumnID)
 					}
 					panic(unimplemented.NewWithIssuef(84405,
 						"primary key column %s cannot be present in an inverted index",
@@ -792,6 +794,7 @@ func addNewUniqueSecondaryIndexAndTempIndex(
 		IndexID:             nextRelationIndexID(b, tbl),
 		IsUnique:            true,
 		IsInverted:          oldPrimaryIndexElem.IsInverted,
+		IsVector:            oldPrimaryIndexElem.IsVector,
 		Sharding:            oldPrimaryIndexElem.Sharding,
 		IsCreatedExplicitly: false,
 		ConstraintID:        b.NextTableConstraintID(tbl.TableID),

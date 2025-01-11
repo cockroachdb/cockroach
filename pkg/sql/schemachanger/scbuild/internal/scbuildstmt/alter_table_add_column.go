@@ -681,6 +681,7 @@ func addSecondaryIndexTargetsForAddColumn(
 		IndexID:       desc.ID,
 		IsUnique:      desc.Unique,
 		IsInverted:    desc.Type == descpb.IndexDescriptor_INVERTED,
+		IsVector:      desc.Type == descpb.IndexDescriptor_VECTOR,
 		SourceIndexID: newPrimaryIdx.IndexID,
 		IsNotVisible:  desc.NotVisible,
 		Invisibility:  desc.Invisibility,

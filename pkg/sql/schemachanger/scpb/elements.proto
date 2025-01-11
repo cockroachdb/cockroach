@@ -13,6 +13,7 @@ import "sql/sem/semenumpb/constraint.proto";
 import "sql/sem/semenumpb/trigger.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/types/types.proto";
+import "sql/vecindex/vecdesc/vecdesc.proto";
 import "gogoproto/gogo.proto";
 import "geo/geopb/config.proto";
 import "config/zonepb/zone.proto";
@@ -316,6 +317,9 @@ message Index {
 
   // Invisibility specifies index invisibility to the optimizer.
   double invisibility = 25;
+  
+  bool is_vector = 26;
+  cockroach.sql.vecindex.vecdesc.Config vec_config = 27 [(gogoproto.nullable) = true];
 
   reserved 3, 4, 5, 6, 7;
 }

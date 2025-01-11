@@ -433,7 +433,9 @@ func (p *planner) AlterPrimaryKey(
 			return true, nil
 		}
 
-		return !idx.IsUnique() || idx.GetType() == descpb.IndexDescriptor_INVERTED, nil
+		idxTypeNeedsRewrite := idx.GetType() == descpb.IndexDescriptor_INVERTED ||
+			idx.GetType() == descpb.IndexDescriptor_VECTOR
+		return !idx.IsUnique() || idxTypeNeedsRewrite, nil
 	}
 	var indexesToRewrite []catalog.Index
 	for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
@@ -810,8 +812,11 @@ func setKeySuffixAndStoredColumnIDsFromPrimary(
 	// which have not already been in the key columns in the secondary index.
 	toAdd.KeySuffixColumnIDs = nil
 	invIdx := toAdd.Type == descpb.IndexDescriptor_INVERTED
+	vecIdx := toAdd.Type == descpb.IndexDescriptor_VECTOR
 	for _, colID := range primary.KeyColumnIDs {
-		if !idxColIDs.Contains(colID) {
+		if !idxColIDs.Contains(colID) || (vecIdx && colID == toAdd.VectorColumnID()) {
+			// Similar to inverted indexes, a vector index doesn't actually contain
+			// values for the indexed column.
 			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
 			idxColIDs.Add(colID)
 		} else if invIdx && colID == toAdd.InvertedColumnID() {

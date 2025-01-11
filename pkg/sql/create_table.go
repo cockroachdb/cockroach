@@ -1886,9 +1886,6 @@ func NewTableDesc(
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
-			if d.Vector {
-				return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
-			}
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
@@ -1911,6 +1908,7 @@ func NewTableDesc(
 				&n.Table,
 				d.Columns,
 				d.Inverted,
+				d.Vector,
 				true, /* isNewTable */
 				semaCtx,
 				version,
@@ -1929,6 +1927,9 @@ func NewTableDesc(
 			}
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
+			}
+			if d.Vector {
+				idx.Type = descpb.IndexDescriptor_VECTOR
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -1950,6 +1951,14 @@ func NewTableDesc(
 					ctx, evalCtx.Settings, column, &idx, columns[len(columns)-1]); err != nil {
 					return nil, err
 				}
+			}
+			if d.Vector {
+				column, err := catalog.MustFindColumnByName(&desc, idx.VectorColumnName())
+				if err != nil {
+					return nil, err
+				}
+				// TODO(drewk): generate the random seed as well.
+				idx.VecConfig.Dims = int64(column.GetType().Width())
 			}
 
 			var idxPartitionBy *tree.PartitionBy
@@ -2031,6 +2040,7 @@ func NewTableDesc(
 				&n.Table,
 				d.Columns,
 				false, /* isInverted */
+				false, /* isVector */
 				true,  /* isNewTable */
 				semaCtx,
 				version,
@@ -2392,6 +2402,12 @@ func NewTableDesc(
 			}
 			if idx.PartitioningColumnCount() != 0 {
 				telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+			}
+		}
+		if idx.GetType() == descpb.IndexDescriptor_VECTOR {
+			telemetry.Inc(sqltelemetry.VectorIndexCounter)
+			if idx.NumKeyColumns() > 1 {
+				telemetry.Inc(sqltelemetry.MultiColumnVectorIndexCounter)
 			}
 		}
 		if idx.IsPartial() {
@@ -2773,6 +2789,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				indexDef := tree.IndexTableDef{
 					Name:         tree.Name(idx.GetName()),
 					Inverted:     idx.GetType() == descpb.IndexDescriptor_INVERTED,
+					Vector:       idx.GetType() == descpb.IndexDescriptor_VECTOR,
 					Storing:      make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
 					Columns:      make(tree.IndexElemList, 0, idx.NumKeyColumns()),
 					Invisibility: tree.IndexInvisibility{Value: idx.GetInvisibility()},
@@ -2809,9 +2826,9 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)
 				}
-				// The last column of an inverted index cannot have an explicit
-				// direction.
-				if indexDef.Inverted {
+				// The last column of an inverted or vector index cannot have an
+				// explicit direction.
+				if indexDef.Inverted || indexDef.Vector {
 					indexDef.Columns[len(indexDef.Columns)-1].Direction = tree.DefaultDirection
 				}
 				for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {

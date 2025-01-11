@@ -275,6 +275,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					tableName,
 					columns,
 					false, /* isInverted */
+					false, /* isVector */
 					false, /* isNewTable */
 					params.p.SemaCtx(),
 					params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),

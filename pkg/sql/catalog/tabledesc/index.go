@@ -192,6 +192,13 @@ func (w index) InvertedColumnID() descpb.ColumnID {
 	return w.desc.InvertedColumnID()
 }
 
+// VectorColumnID returns the ColumnID of the vector column of the vector index.
+// This is always the last column in KeyColumnIDs. Panics if the index is not a
+// vector index.
+func (w index) VectorColumnID() descpb.ColumnID {
+	return w.desc.VectorColumnID()
+}
+
 // InvertedColumnName returns the name of the inverted column of the inverted
 // index. This is always the last column in KeyColumnNames. Panics if the index is
 // not inverted.

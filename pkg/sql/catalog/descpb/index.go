@@ -96,7 +96,7 @@ func (desc *IndexDescriptor) GetName() string {
 }
 
 // InvertedColumnID returns the ColumnID of the inverted column of the inverted
-// index. This is always the last column in ColumnIDs. Panics if the index is
+// index. This is always the last column in KeyColumnIDs. Panics if the index is
 // not inverted.
 func (desc *IndexDescriptor) InvertedColumnID() ColumnID {
 	if desc.Type != IndexDescriptor_INVERTED {
@@ -124,4 +124,24 @@ func (desc *IndexDescriptor) InvertedColumnKeyType() *types.T {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return types.EncodedKey
+}
+
+// VectorColumnID returns the ColumnID of the vector column of the vector index.
+// This is always the last column in KeyColumnIDs. Panics if the index is not a
+// vector index.
+func (desc *IndexDescriptor) VectorColumnID() ColumnID {
+	if desc.Type != IndexDescriptor_VECTOR {
+		panic(errors.AssertionFailedf("index is not a vector index"))
+	}
+	return desc.KeyColumnIDs[len(desc.KeyColumnIDs)-1]
+}
+
+// VectorColumnName returns the name of the vector column of the vector index.
+// This is always the last column in KeyColumnNames. Panics if the index is
+// not a vector index.
+func (desc *IndexDescriptor) VectorColumnName() string {
+	if desc.Type != IndexDescriptor_VECTOR {
+		panic(errors.AssertionFailedf("index is not a vector index"))
+	}
+	return desc.KeyColumnNames[len(desc.KeyColumnNames)-1]
 }

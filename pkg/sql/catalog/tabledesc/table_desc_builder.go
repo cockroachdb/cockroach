@@ -842,7 +842,7 @@ func maybeUpgradePrimaryIndexFormatVersion(builder *tableDescriptorBuilder) (has
 func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
-		if idx.Type == descpb.IndexDescriptor_INVERTED {
+		if idx.Type == descpb.IndexDescriptor_INVERTED || idx.Type == descpb.IndexDescriptor_VECTOR {
 			return false
 		}
 	case descpb.EmptyArraysInInvertedIndexesVersion:

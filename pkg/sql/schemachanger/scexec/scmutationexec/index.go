@@ -64,6 +64,8 @@ func addNewIndexMutation(
 	indexType := descpb.IndexDescriptor_FORWARD
 	if opIndex.IsInverted {
 		indexType = descpb.IndexDescriptor_INVERTED
+	} else if opIndex.IsVector {
+		indexType = descpb.IndexDescriptor_VECTOR
 	}
 	// Set up the encoding type.
 	encodingType := catenumpb.PrimaryIndexEncoding
@@ -94,6 +96,9 @@ func addNewIndexMutation(
 	}
 	if opIndex.GeoConfig != nil {
 		idx.GeoConfig = *opIndex.GeoConfig
+	}
+	if opIndex.VecConfig != nil {
+		idx.VecConfig = *opIndex.VecConfig
 	}
 	return enqueueIndexMutation(tbl, idx, state, descpb.DescriptorMutation_ADD)
 }
