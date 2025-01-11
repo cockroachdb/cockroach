@@ -558,24 +558,19 @@ func CheckAntagonisticRead(
 
 // CheckNoPermission checks that we do not have permission to list the external
 // storage at storeURI.
-func CheckNoPermission(
-	t *testing.T,
-	storeURI string,
-	user username.SQLUsername,
-	db isql.DB,
-	testSettings *cluster.Settings,
-) {
+func CheckNoPermission(t *testing.T, info StoreInfo) {
 	ioConf := base.ExternalIODirConfig{}
 	ctx := context.Background()
 
-	conf, err := cloud.ExternalStorageConfFromURI(storeURI, user)
+	conf, err := cloud.ExternalStorageConfFromURI(info.URI, info.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	testSettings := info.testSettings()
+	clientFactory := blobs.TestBlobServiceClient(info.ExternalIODir)
 	s, err := cloud.MakeExternalStorage(
-		ctx, conf, ioConf, testSettings, clientFactory, db, nil, cloud.NilMetrics,
+		ctx, conf, ioConf, testSettings, clientFactory, info.DB, nil, cloud.NilMetrics,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -584,7 +579,7 @@ func CheckNoPermission(
 
 	err = s.List(ctx, "", "", nil)
 	if err == nil {
-		t.Fatalf("expected error when listing %s with no permissions", storeURI)
+		t.Fatalf("expected error when listing %s with no permissions", info.URI)
 	}
 
 	require.Regexp(t, "(failed|unable) to list", err)

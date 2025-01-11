@@ -210,7 +210,6 @@ func TestPutS3AssumeRole(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
-	testSettings := cluster.MakeTestingClusterSettings()
 	testID := cloudtestutils.NewTestID()
 	testPath := fmt.Sprintf("backup-test-%d", testID)
 
@@ -263,18 +262,19 @@ func TestPutS3AssumeRole(t *testing.T) {
 			t.Run(tc.auth, func(t *testing.T) {
 				// First verify that none of the individual roles in the chain can be used to access the storage.
 				for _, p := range providerChain {
-					roleURI := S3URI(bucket, testPath,
-						&cloudpb.ExternalStorage_S3{
-							Auth:               tc.auth,
-							AssumeRoleProvider: p,
-							AccessKey:          tc.accessKey,
-							Secret:             tc.secretKey,
-							Region:             "us-east-1",
-						},
-					)
-					cloudtestutils.CheckNoPermission(
-						t, roleURI, user, nil /* db */, testSettings,
-					)
+					info := cloudtestutils.StoreInfo{
+						URI: S3URI(bucket, testPath,
+							&cloudpb.ExternalStorage_S3{
+								Auth:               tc.auth,
+								AssumeRoleProvider: p,
+								AccessKey:          tc.accessKey,
+								Secret:             tc.secretKey,
+								Region:             "us-east-1",
+							},
+						),
+						User: user,
+					}
+					cloudtestutils.CheckNoPermission(t, info)
 				}
 
 				// Next check that the role chain without any external IDs cannot be used to
@@ -298,9 +298,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 					),
 					User: user,
 				}
-				cloudtestutils.CheckNoPermission(
-					t, info.URI, user, nil /* db */, testSettings,
-				)
+				cloudtestutils.CheckNoPermission(t, info)
 
 				// Finally, check that the chain of roles can be used to access the storage.
 				info.URI = S3URI(bucket, testPath,

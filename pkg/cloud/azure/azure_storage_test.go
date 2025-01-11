@@ -263,7 +263,6 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 		skip.IgnoreLint(t, "Test not configured for Azure")
 		return
 	}
-	testSettings := cluster.MakeTestingClusterSettings()
 	testID := cloudtestutils.NewTestID()
 
 	cleanup := envutil.TestSetEnv(t, "AZURE_CLIENT_ID", "")
@@ -272,8 +271,11 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 	testPath := fmt.Sprintf("backup-test-%d", testID)
 	testListPath := fmt.Sprintf("listing-test-%d", testID)
 
-	cloudtestutils.CheckNoPermission(t, cfg.filePathImplicitAuth(testPath), username.RootUserName(),
-		nil /*db*/, testSettings)
+	info := cloudtestutils.StoreInfo{
+		URI:  cfg.filePathImplicitAuth(testPath),
+		User: username.RootUserName(),
+	}
+	cloudtestutils.CheckNoPermission(t, info)
 
 	tmpDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
@@ -284,10 +286,6 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 	cleanup3 := envutil.TestSetEnv(t, "COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE", credFile)
 	defer cleanup3()
 
-	info := cloudtestutils.StoreInfo{
-		URI:  cfg.filePathImplicitAuth(testPath),
-		User: username.RootUserName(),
-	}
 	cloudtestutils.CheckExportStore(t, info)
 	info.URI = cfg.filePathImplicitAuth(testListPath)
 	cloudtestutils.CheckListFiles(t, info)

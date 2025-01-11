@@ -147,7 +147,6 @@ func TestPutGoogleCloud(t *testing.T) {
 
 func TestGCSAssumeRole(t *testing.T) {
 	user := username.RootUserName()
-	testSettings := cluster.MakeTestingClusterSettings()
 
 	limitedBucket := os.Getenv("GOOGLE_LIMITED_BUCKET")
 	if limitedBucket == "" {
@@ -167,27 +166,25 @@ func TestGCSAssumeRole(t *testing.T) {
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 
-		// Verify that specified permissions with the credentials do not give us
-		// access to the bucket.
-		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
-			CredentialsParam, url.QueryEscape(encoded)), user,
-			nil, /* db */
-			testSettings,
-		)
-
 		info := cloudtestutils.StoreInfo{
-			URI: fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s&%s=%s",
-				limitedBucket,
-				"backup-test-assume-role",
-				testID,
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
-				AssumeRoleParam,
-				assumedAccount, CredentialsParam,
-				url.QueryEscape(encoded),
-			),
+			URI: fmt.Sprintf(
+				"gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
+				CredentialsParam, url.QueryEscape(encoded)),
 			User: user,
 		}
+		// Verify that specified permissions with the credentials do not give us
+		// access to the bucket.
+		cloudtestutils.CheckNoPermission(t, info)
+		info.URI = fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s&%s=%s",
+			limitedBucket,
+			"backup-test-assume-role",
+			testID,
+			cloud.AuthParam,
+			cloud.AuthParamSpecified,
+			AssumeRoleParam,
+			assumedAccount, CredentialsParam,
+			url.QueryEscape(encoded),
+		)
 		cloudtestutils.CheckExportStore(t, info)
 		info = cloudtestutils.StoreInfo{
 			URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s&%s=%s",
@@ -212,21 +209,18 @@ func TestGCSAssumeRole(t *testing.T) {
 			skip.IgnoreLint(t, err)
 		}
 
-		// Verify that implicit permissions with the credentials do not give us
-		// access to the bucket.
-		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
-			cloud.AuthParam, cloud.AuthParamImplicit), user,
-			nil, /* db */
-			testSettings,
-		)
-
 		info := cloudtestutils.StoreInfo{
 			URI: fmt.Sprintf(
-				"gs://%s/%s-%d?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role", testID,
-				cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount,
+				"gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
+				cloud.AuthParam, cloud.AuthParamImplicit,
 			),
 			User: user,
 		}
+		cloudtestutils.CheckNoPermission(t, info)
+		info.URI = fmt.Sprintf(
+			"gs://%s/%s-%d?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role", testID,
+			cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount,
+		)
 		cloudtestutils.CheckExportStore(t, info)
 		info.URI = fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			limitedBucket,
@@ -271,17 +265,17 @@ func TestGCSAssumeRole(t *testing.T) {
 				// to access the storage.
 				for _, role := range roleChain {
 					q.Set(AssumeRoleParam, role)
-					roleURI := fmt.Sprintf("gs://%s/%s-%d/%s?%s",
-						limitedBucket,
-						"backup-test-assume-role",
-						testID,
-						"listing-test",
-						q.Encode(),
-					)
-					cloudtestutils.CheckNoPermission(t, roleURI, user,
-						nil, /* db */
-						testSettings,
-					)
+					info := cloudtestutils.StoreInfo{
+						URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s",
+							limitedBucket,
+							"backup-test-assume-role",
+							testID,
+							"listing-test",
+							q.Encode(),
+						),
+						User: user,
+					}
+					cloudtestutils.CheckNoPermission(t, info)
 				}
 
 				// Finally, check that the chain of roles can be used to access the storage.
