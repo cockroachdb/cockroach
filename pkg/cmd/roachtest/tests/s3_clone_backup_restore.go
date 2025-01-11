@@ -60,6 +60,7 @@ func registerBackupS3Clones(r registry.Registry) {
 					version: cephVersion,
 				}
 				ceph.install(ctx)
+				defer ceph.cleanup(ctx)
 				v.validateBackupRestore(ctx, ceph)
 			},
 		})
