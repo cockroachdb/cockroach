@@ -40,6 +40,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_klauspost_compress//zstd",
         "@com_github_lib_pq//oid",
         "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_stretchr_testify//require",
