@@ -125,6 +125,7 @@ func CheckExportStore(
 	skipSingleFile bool,
 	user username.SQLUsername,
 	db isql.DB,
+	externalIODir string,
 	testSettings *cluster.Settings,
 ) {
 	ioConf := base.ExternalIODirConfig{}
@@ -136,7 +137,7 @@ func CheckExportStore(
 	}
 
 	// Setup a sink for the given args.
-	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	clientFactory := blobs.TestBlobServiceClient(externalIODir)
 	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
 		db, nil, cloud.NilMetrics)
 	if err != nil {

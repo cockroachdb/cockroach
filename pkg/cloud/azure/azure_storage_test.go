@@ -112,6 +112,7 @@ func TestAzure(t *testing.T) {
 	cloudtestutils.CheckExportStore(t, cfg.filePath(testPath),
 		false, username.RootUserName(),
 		nil, /* db */
+		"",  /* externalIODir */
 		testSettings,
 	)
 	cloudtestutils.CheckListFiles(t, cfg.filePath(testListPath),
@@ -124,6 +125,7 @@ func TestAzure(t *testing.T) {
 	cloudtestutils.CheckExportStore(t, cfg.filePathClientAuth(testPath),
 		false, username.RootUserName(),
 		nil, /* db */
+		"",  /* externalIODir */
 		testSettings,
 	)
 	cloudtestutils.CheckListFiles(t, cfg.filePathClientAuth(testListPath),
@@ -136,6 +138,7 @@ func TestAzure(t *testing.T) {
 	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth(testPath),
 		false, username.RootUserName(),
 		nil, /* db */
+		"",  /* externalIODir */
 		testSettings,
 	)
 	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),
@@ -303,6 +306,7 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth(testPath),
 		false, username.RootUserName(),
 		nil, /* db */
+		"",  /* externalIODir */
 		testSettings,
 	)
 	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),

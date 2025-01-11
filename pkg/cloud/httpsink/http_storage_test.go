@@ -118,6 +118,7 @@ func TestPutHttp(t *testing.T) {
 		defer cleanup()
 		cloudtestutils.CheckExportStore(t, srv.String(), false, user,
 			nil, /* db */
+			"",  /* externalIODir */
 			testSettings,
 		)
 		if expected, actual := 14, files(); expected != actual {
@@ -138,6 +139,7 @@ func TestPutHttp(t *testing.T) {
 
 		cloudtestutils.CheckExportStore(t, combined.String(), true, user,
 			nil, /* db */
+			"",  /* externalIODir */
 			testSettings,
 		)
 		if expected, actual := 3, files1(); expected != actual {

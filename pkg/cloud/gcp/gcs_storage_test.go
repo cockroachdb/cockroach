@@ -64,6 +64,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			false,
 			user,
 			nil, /* db */
+			"",  /* externalIODir */
 			testSettings,
 		)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
@@ -92,6 +93,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			false,
 			user,
 			nil, /* db */
+			"",  /* externalIODir */
 			testSettings)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s",
 			bucket,
@@ -134,6 +136,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			false,
 			user,
 			nil, /* db */
+			"",  /* externalIODir */
 			testSettings)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			bucket,
@@ -194,6 +197,7 @@ func TestGCSAssumeRole(t *testing.T) {
 				url.QueryEscape(encoded),
 			), false, user,
 			nil, /* db */
+			"",  /* externalIODir */
 			testSettings,
 		)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s&%s=%s",
@@ -229,6 +233,7 @@ func TestGCSAssumeRole(t *testing.T) {
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role", testID,
 			cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount), false, user,
 			nil, /* db */
+			"",  /* externalIODir */
 			testSettings,
 		)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
@@ -300,6 +305,7 @@ func TestGCSAssumeRole(t *testing.T) {
 				)
 				cloudtestutils.CheckExportStore(t, uri, false, user,
 					nil, /* db */
+					"",  /* externalIODir */
 					testSettings,
 				)
 				cloudtestutils.CheckListFiles(t, uri, user,

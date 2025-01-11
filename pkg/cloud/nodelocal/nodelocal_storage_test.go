@@ -26,7 +26,7 @@ func TestPutLocal(t *testing.T) {
 	dest := MakeLocalStorageURI(p)
 
 	cloudtestutils.CheckExportStore(
-		t, dest, false, username.RootUserName(), nil /* db */, testSettings)
+		t, dest, false, username.RootUserName(), nil /* db */, p, testSettings)
 	url := "nodelocal://1/listing-test/basepath"
 	cloudtestutils.CheckListFiles(
 		t, url, username.RootUserName(), nil /*db */, testSettings,

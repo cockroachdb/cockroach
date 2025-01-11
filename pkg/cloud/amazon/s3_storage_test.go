@@ -130,6 +130,7 @@ func TestPutS3(t *testing.T) {
 					cloud.AuthParam, cloud.AuthParamImplicit,
 				), false, user,
 					nil, /* db */
+					"",  /* externalIODir */
 					testSettings)
 			})
 			t.Run("auth-specified", func(t *testing.T) {
@@ -137,7 +138,7 @@ func TestPutS3(t *testing.T) {
 					&cloudpb.ExternalStorage_S3{AccessKey: envCreds.AccessKeyID, Secret: envCreds.SecretAccessKey, Region: "us-east-1"},
 				)
 				cloudtestutils.CheckExportStore(
-					t, uri, false, user, nil /* db */, testSettings,
+					t, uri, false, user, nil /* db */, "" /* externalIODir */, testSettings,
 				)
 				cloudtestutils.CheckListFiles(
 					t, uri, user, nil /* db */, testSettings,
@@ -156,6 +157,7 @@ func TestPutS3(t *testing.T) {
 					false,
 					user,
 					nil, /* db */
+					"",  /* externalIODir */
 					testSettings,
 				)
 
@@ -172,6 +174,7 @@ func TestPutS3(t *testing.T) {
 					false,
 					user,
 					nil, /* db */
+					"",  /* externalIODir */
 					testSettings)
 			})
 
@@ -235,7 +238,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamImplicit, RoleARN: roleArn, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(
-			t, uri, false, user, nil /* db */, testSettings,
+			t, uri, false, user, nil /* db */, "" /* externalIODir */, testSettings,
 		)
 		cloudtestutils.CheckListFiles(
 			t, uri, user, nil /* db */, testSettings,
@@ -247,7 +250,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamSpecified, RoleARN: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(
-			t, uri, false, user, nil /* db */, testSettings,
+			t, uri, false, user, nil /* db */, "" /* externalIODir */, testSettings,
 		)
 		cloudtestutils.CheckListFiles(
 			t, uri, user, nil /* db */, testSettings,
@@ -322,7 +325,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 				)
 
 				cloudtestutils.CheckExportStore(
-					t, uri, false, user, nil /* db */, testSettings,
+					t, uri, false, user, nil /* db */, "" /* externalIODir */, testSettings,
 				)
 			})
 		}
@@ -366,7 +369,7 @@ func TestPutS3Endpoint(t *testing.T) {
 		testSettings := cluster.MakeTestingClusterSettings()
 
 		cloudtestutils.CheckExportStore(
-			t, u.String(), false, user, nil /* db */, testSettings,
+			t, u.String(), false, user, nil /* db */, "" /* externalIODir */, testSettings,
 		)
 	})
 	t.Run("use-path-style", func(t *testing.T) {
