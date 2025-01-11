@@ -15,7 +15,12 @@ import (
 )
 
 func commonStoreTests(
-	ctx context.Context, t *testing.T, store Store, quantizer quantize.Quantizer,
+	ctx context.Context,
+	t *testing.T,
+	store Store,
+	quantizer quantize.Quantizer,
+	testPKs []PrimaryKey,
+	testVectors []vector.T,
 ) {
 	childKey2 := ChildKey{PartitionKey: 2}
 	primaryKey100 := ChildKey{PrimaryKey: PrimaryKey{1, 00}}
@@ -24,6 +29,45 @@ func commonStoreTests(
 	primaryKey400 := ChildKey{PrimaryKey: PrimaryKey{4, 00}}
 	primaryKey500 := ChildKey{PrimaryKey: PrimaryKey{5, 00}}
 	primaryKey600 := ChildKey{PrimaryKey: PrimaryKey{6, 00}}
+
+	t.Run("get full vectors", func(t *testing.T) {
+		txn := beginTransaction(ctx, t, store)
+		defer commitTransaction(ctx, t, store, txn)
+
+		// Include primary keys that cannot be found.
+		results := []VectorWithKey{
+			{Key: ChildKey{PrimaryKey: testPKs[0]}},
+			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
+			{Key: ChildKey{PrimaryKey: testPKs[1]}},
+			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
+			{Key: ChildKey{PrimaryKey: testPKs[0]}},
+		}
+		err := txn.GetFullVectors(ctx, results)
+		require.NoError(t, err)
+		require.Equal(t, testVectors[0], results[0].Vector)
+		require.Nil(t, results[1].Vector)
+		require.Equal(t, testVectors[1], results[2].Vector)
+		require.Nil(t, results[3].Vector)
+		require.Equal(t, testVectors[0], results[4].Vector)
+
+		// Grab another set of vectors to ensure that saved state is properly reset.
+		results = []VectorWithKey{
+			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
+			{Key: ChildKey{PrimaryKey: testPKs[0]}},
+			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
+			{Key: ChildKey{PrimaryKey: testPKs[1]}},
+			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
+			{Key: ChildKey{PrimaryKey: testPKs[1]}},
+		}
+		err = txn.GetFullVectors(ctx, results)
+		require.NoError(t, err)
+		require.Nil(t, results[0].Vector)
+		require.Equal(t, testVectors[0], results[1].Vector)
+		require.Nil(t, results[2].Vector)
+		require.Equal(t, testVectors[1], results[3].Vector)
+		require.Nil(t, results[4].Vector)
+		require.Equal(t, testVectors[1], results[5].Vector)
+	})
 
 	t.Run("search empty root partition", func(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
@@ -87,20 +131,17 @@ func commonStoreTests(
 		require.Equal(t, []ChildKey{primaryKey100, primaryKey200, primaryKey300}, root.ChildKeys())
 		require.Equal(t, vector.T{0, 0}, root.Centroid())
 
-		// TODO (mw5h): Implement GetFullVectors for PersistentStore.
 		// Get partition centroid + full vectors.
-		if _, ok := txn.(*inMemoryTxn); ok {
-			results := []VectorWithKey{
-				{Key: ChildKey{PartitionKey: RootKey}},
-				{Key: ChildKey{PrimaryKey: PrimaryKey{11}}},
-				{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
-			}
-			err = txn.GetFullVectors(ctx, results)
-			require.NoError(t, err)
-			require.Equal(t, vector.T{0, 0}, results[0].Vector)
-			require.Equal(t, vector.T{100, 200}, results[1].Vector)
-			require.Nil(t, results[2].Vector)
+		results := []VectorWithKey{
+			{Key: ChildKey{PartitionKey: RootKey}},
+			{Key: ChildKey{PrimaryKey: testPKs[0]}},
+			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
 		}
+		err = txn.GetFullVectors(ctx, results)
+		require.NoError(t, err)
+		require.Equal(t, vector.T{0, 0}, results[0].Vector)
+		require.Equal(t, testVectors[0], results[1].Vector)
+		require.Nil(t, results[2].Vector)
 	})
 
 	t.Run("replace root partition", func(t *testing.T) {
