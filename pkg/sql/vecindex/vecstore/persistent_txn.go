@@ -13,7 +13,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -27,11 +30,18 @@ type persistentStoreTxn struct {
 	kv    *kv.Txn
 	store *PersistentStore
 
+	// Locking durability required by transaction isolation level.
 	lockDurability kvpb.KeyLockingDurabilityType
-	tmpChildKeys   []ChildKey
 
-	codec     persistentStoreCodec
+	// Quantizer specific encoding and decoding for the root partition and everyone
+	// else.
 	rootCodec persistentStoreCodec
+	codec     persistentStoreCodec
+
+	// Retained allocations to prevent excessive reallocation.
+	tmpChildKeys []ChildKey
+	tmpSpans     []roachpb.Span
+	tmpSpanIDs   []int
 }
 
 var _ Txn = (*persistentStoreTxn)(nil)
@@ -403,8 +413,124 @@ func (psTxn *persistentStoreTxn) SearchPartitions(
 	return level, nil
 }
 
+// getFullVectorsFromPK fills in refs that are specified by primary key. Refs
+// that specify a partition ID are ignored. The values are returned in-line in
+// the refs slice.
+func (psTxn *persistentStoreTxn) getFullVectorsFromPK(
+	ctx context.Context, refs []VectorWithKey, numPKLookups int,
+) (err error) {
+	if cap(psTxn.tmpSpans) >= numPKLookups {
+		psTxn.tmpSpans = psTxn.tmpSpans[:0]
+		psTxn.tmpSpanIDs = psTxn.tmpSpanIDs[:0]
+	} else {
+		psTxn.tmpSpans = make([]roachpb.Span, 0, numPKLookups)
+		psTxn.tmpSpanIDs = make([]int, 0, numPKLookups)
+	}
+
+	for refIdx, ref := range refs {
+		if ref.Key.PartitionKey != InvalidKey {
+			continue
+		}
+
+		key := make(roachpb.Key, len(psTxn.store.pkPrefix)+len(ref.Key.PrimaryKey))
+		copy(key, psTxn.store.pkPrefix)
+		copy(key[len(psTxn.store.pkPrefix):], ref.Key.PrimaryKey)
+		psTxn.tmpSpans = append(psTxn.tmpSpans, roachpb.Span{Key: key})
+		psTxn.tmpSpanIDs = append(psTxn.tmpSpanIDs, refIdx)
+	}
+
+	if len(psTxn.tmpSpans) > 0 {
+		var fetcher row.Fetcher
+		var alloc tree.DatumAlloc
+		err = fetcher.Init(ctx, row.FetcherInitArgs{
+			Txn:             psTxn.kv,
+			Alloc:           &alloc,
+			Spec:            &psTxn.store.fetchSpec,
+			SpansCanOverlap: true,
+		})
+		if err != nil {
+			return err
+		}
+		defer fetcher.Close(ctx)
+
+		err = fetcher.StartScan(
+			ctx,
+			psTxn.tmpSpans,
+			psTxn.tmpSpanIDs,
+			rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
+			rowinfra.RowLimit(len(psTxn.tmpSpans)),
+		)
+		if err != nil {
+			return err
+		}
+
+		var data [1]tree.Datum
+		for {
+			ok, refIdx, err := fetcher.NextRowDecodedInto(ctx, data[0:], psTxn.store.colIdxMap)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
+			if v, ok := tree.AsDPGVector(data[0]); ok {
+				refs[refIdx].Vector = v.T
+			}
+		}
+	}
+	return err
+}
+
+// getFullVectorsFromPartitionMetadata traverses the refs list and fills in refs
+// specified by partition ID. Primary key references are ignored.
+func (psTxn *persistentStoreTxn) getFullVectorsFromPartitionMetadata(
+	ctx context.Context, refs []VectorWithKey,
+) (numPKLookups int, err error) {
+	b := psTxn.kv.NewBatch()
+
+	for _, ref := range refs {
+		if ref.Key.PartitionKey == InvalidKey {
+			numPKLookups++
+			continue
+		}
+		key := psTxn.encodePartitionKey(ref.Key.PartitionKey)
+		b.Get(key)
+	}
+
+	if numPKLookups == len(refs) {
+		return numPKLookups, nil
+	}
+	if err := psTxn.kv.Run(ctx, b); err != nil {
+		return 0, err
+	}
+
+	idx := 0
+	for _, result := range b.Results {
+		if len(result.Rows) == 0 {
+			return 0, ErrPartitionNotFound
+		}
+		_, centroid, err := DecodePartitionMetadata(result.Rows[0].ValueBytes())
+		if err != nil {
+			return 0, err
+		}
+		for ; refs[idx].Key.PartitionKey == InvalidKey; idx++ {
+		}
+		refs[idx].Vector = centroid
+		idx++
+	}
+	return numPKLookups, nil
+}
+
+// GetFullVectors implements the Store interface.
 func (psTxn *persistentStoreTxn) GetFullVectors(ctx context.Context, refs []VectorWithKey) error {
-	panic("GetFullVectors() unimplemented")
+	numPKLookups, err := psTxn.getFullVectorsFromPartitionMetadata(ctx, refs)
+	if err != nil {
+		return err
+	}
+	if numPKLookups > 0 {
+		err = psTxn.getFullVectorsFromPK(ctx, refs, numPKLookups)
+	}
+	return err
 }
 
 // encodePartitionKey takes a partition key and creates a KV key to read that

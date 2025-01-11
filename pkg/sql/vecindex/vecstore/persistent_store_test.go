@@ -11,11 +11,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
@@ -25,8 +30,10 @@ func TestPersistentStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(42)})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	codec := srv.ApplicationLayer().Codec()
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	defer srv.Stopper().Stop(ctx)
 
 	childKey2 := ChildKey{PartitionKey: 2}
 	childKey10 := ChildKey{PartitionKey: 10}
@@ -36,10 +43,33 @@ func TestPersistentStore(t *testing.T) {
 	primaryKey300 := ChildKey{PrimaryKey: PrimaryKey{3, 00}}
 	primaryKey400 := ChildKey{PrimaryKey: PrimaryKey{4, 00}}
 
-	ten5Codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
-	prefix := rowenc.MakeIndexKeyPrefix(ten5Codec, 500, 42)
+	tdb.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(2))")
+	tdb.Exec(t, "INSERT INTO t VALUES (11, '[100, 200]'), (12, '[300, 400]')")
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "t")
+
+	col, err := catalog.MustFindColumnByName(tableDesc, "v")
+	require.NoError(t, err)
+
+	indexDesc := descpb.IndexDescriptor{
+		ID: 42, Name: "idx_vector_t",
+		KeyColumnIDs:        []descpb.ColumnID{col.GetID()},
+		KeyColumnNames:      []string{col.GetName()},
+		KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+		KeySuffixColumnIDs:  []descpb.ColumnID{tableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
+		Version:             descpb.LatestIndexDescriptorVersion,
+		EncodingType:        catenumpb.SecondaryIndexEncoding,
+	}
+	index := tabledesc.NewTestIndex(&indexDesc, 1)
+
 	quantizer := quantize.NewUnQuantizer(2)
-	store := NewPersistentStore(kvDB, quantizer, prefix)
+	store, err := NewPersistentStore(kvDB, quantizer, codec, tableDesc, index)
+	require.NoError(t, err)
+
+	pk1 := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 11), 0 /* famID */)
+	pk2 := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 12), 0 /* famID */)
+	testPKs := []PrimaryKey{pk1, pk2}
+	testVectors := []vector.T{{100, 200}, {300, 400}}
 
 	// TODO(mw5h): Figure out where to create the empty root partition.
 	t.Run("create empty root partition", func(t *testing.T) {
@@ -50,7 +80,7 @@ func TestPersistentStore(t *testing.T) {
 		require.NoError(t, txn.SetRootPartition(ctx, emptyRoot))
 	})
 
-	commonStoreTests(ctx, t, store, quantizer)
+	commonStoreTests(ctx, t, store, quantizer, testPKs, testVectors)
 
 	t.Run("insert a root partition into the store and read it back", func(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
