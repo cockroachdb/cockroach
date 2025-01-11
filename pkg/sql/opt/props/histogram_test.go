@@ -438,8 +438,8 @@ func TestFilterBucket(t *testing.T) {
 		// the second bucket.
 		iter.setIdx(1)
 		b := getFilteredBucket(&iter, &keyCtx, span, colOffset)
-		roundBucket(b)
-		return b, nil
+		roundBucket(&b)
+		return &b, nil
 	}
 
 	runTest := func(h *Histogram, testData []testCase, colOffset int, typs ...types.Family) {
