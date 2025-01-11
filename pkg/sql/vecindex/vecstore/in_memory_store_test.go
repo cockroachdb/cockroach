@@ -30,41 +30,27 @@ func TestInMemoryStore(t *testing.T) {
 
 	store := NewInMemoryStore(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
+	testPKs := []PrimaryKey{{11}, {12}}
+	testVectors := []vector.T{{100, 200}, {300, 400}}
 
-	t.Run("insert and get full vectors", func(t *testing.T) {
+	t.Run("insert and get all vectors", func(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
 		defer commitTransaction(ctx, t, store, txn)
 
-		vec1 := vector.T{100, 200}
-		store.InsertVector([]byte{11}, vec1)
-		vec2 := vector.T{300, 400}
-		store.InsertVector([]byte{12}, vec2)
-
-		// Include primary keys that are cannot be found.
-		results := []VectorWithKey{
-			{Key: ChildKey{PrimaryKey: PrimaryKey{11}}},
-			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
-			{Key: ChildKey{PrimaryKey: PrimaryKey{12}}},
-			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
-		}
-		err := txn.GetFullVectors(ctx, results)
-		require.NoError(t, err)
-		require.Equal(t, vec1, results[0].Vector)
-		require.Nil(t, results[1].Vector)
-		require.Equal(t, vec2, results[2].Vector)
-		require.Nil(t, results[3].Vector)
+		store.InsertVector(testPKs[0], testVectors[0])
+		store.InsertVector(testPKs[1], testVectors[1])
 
 		vectors := store.GetAllVectors()
 		slices.SortFunc(vectors, func(a, b VectorWithKey) int {
 			return a.Key.Compare(b.Key)
 		})
 		require.Equal(t, []VectorWithKey{
-			{Key: ChildKey{PrimaryKey: PrimaryKey{11}}, Vector: vector.T{100, 200}},
-			{Key: ChildKey{PrimaryKey: PrimaryKey{12}}, Vector: vector.T{300, 400}},
+			{Key: ChildKey{PrimaryKey: testPKs[0]}, Vector: testVectors[0]},
+			{Key: ChildKey{PrimaryKey: testPKs[1]}, Vector: testVectors[1]},
 		}, vectors)
 	})
 
-	commonStoreTests(ctx, t, store, quantizer)
+	commonStoreTests(ctx, t, store, quantizer, testPKs, testVectors)
 
 	t.Run("delete full vector", func(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
@@ -86,7 +72,7 @@ func TestInMemoryStore(t *testing.T) {
 		require.NoError(t, err)
 
 		err = txn.GetFullVectors(ctx, []VectorWithKey{
-			{Key: ChildKey{PrimaryKey: PrimaryKey{11}}},
+			{Key: ChildKey{PrimaryKey: testPKs[0]}},
 		})
 		require.NoError(t, err)
 	})
