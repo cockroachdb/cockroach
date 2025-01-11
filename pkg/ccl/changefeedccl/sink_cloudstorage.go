@@ -40,6 +40,11 @@ import (
 	_ "github.com/klauspost/pgzip"
 )
 
+type encoder struct {
+	io.WriteCloser
+	Done func()
+}
+
 func isCloudStorageSink(u *url.URL) bool {
 	switch u.Scheme {
 	case changefeedbase.SinkSchemeCloudStorageS3, changefeedbase.SinkSchemeCloudStorageGCS,
@@ -68,7 +73,7 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
 	created       time.Time
-	codec         io.WriteCloser
+	codec         *encoder
 	rawSize       int
 	numMessages   int
 	buf           bytes.Buffer
@@ -531,11 +536,11 @@ func (s *cloudStorageSink) getOrCreateFile(
 	}
 
 	if s.compression.enabled() {
-		codec, err := newCompressionCodec(s.compression, &s.settings.SV, &f.buf)
+		codec, done, err := newCompressionCodec(s.compression, &s.settings.SV, &f.buf)
 		if err != nil {
 			return nil, err
 		}
-		f.codec = codec
+		f.codec = &encoder{codec, done}
 	}
 	s.files.ReplaceOrInsert(f)
 	return f, nil
@@ -884,7 +889,9 @@ func (f *cloudStorageSinkFile) flushToStorage(
 	}
 
 	if f.codec != nil {
-		if err := f.codec.Close(); err != nil {
+		err := f.codec.Close()
+		f.codec.Done()
+		if err != nil {
 			return err
 		}
 	}
@@ -910,6 +917,7 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 		f := i.(*cloudStorageSinkFile)
 		if f.codec != nil {
 			cErr := f.codec.Close()
+			f.codec.Done()
 			f.codec = nil
 			if err == nil {
 				err = cErr
