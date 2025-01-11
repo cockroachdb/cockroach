@@ -14,7 +14,8 @@ INSERT INTO t SELECT i, i FROM generate_series(1, 6) AS g(i)
 
 # Upreplicate the table's range. We need a retry to guarantee that the
 # capability has been picked up.
-statement ok retry
+retry
+statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1, 2, 3], 0)
 
 # Split the ranges in the table.

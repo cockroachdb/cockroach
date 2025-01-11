@@ -184,7 +184,7 @@ SELECT (SELECT COALESCE(max(1), 0) FROM generate_series(1,0))
 ----
 0
 
-statement OK
+statement ok
 INSERT INTO kv VALUES
 (1, 2, 3, 'a', '1min', '{1, 2, NULL}'),
 (3, 4, 5, 'a', '2sec', '{3, 4, 5}'),
@@ -1081,7 +1081,7 @@ SELECT bool_and(b), bool_or(b) FROM bools
 ----
 NULL NULL
 
-statement OK
+statement ok
 INSERT INTO bools VALUES (true), (true), (true)
 
 query BB
@@ -1089,7 +1089,7 @@ SELECT bool_and(b), bool_or(b) FROM bools
 ----
 true true
 
-statement OK
+statement ok
 INSERT INTO bools VALUES (false), (false)
 
 query BB
@@ -1097,7 +1097,7 @@ SELECT bool_and(b), bool_or(b) FROM bools
 ----
 false true
 
-statement OK
+statement ok
 DELETE FROM bools WHERE b
 
 query BB
@@ -1129,7 +1129,7 @@ CREATE TABLE filter_test (
   mark BOOL
 )
 
-statement OK
+statement ok
 INSERT INTO filter_test VALUES
 (1, 2, false),
 (3, 4, true),
@@ -1260,7 +1260,7 @@ true
 true
 
 # Grouping and rendering tuples.
-statement OK
+statement ok
 CREATE TABLE ab (
   a INT PRIMARY KEY,
   b INT,
@@ -1435,7 +1435,7 @@ SELECT 123 FROM kv ORDER BY max(v)
 
 subtest statistics
 
-statement OK
+statement ok
 CREATE TABLE statistics_agg_test (
   y float,
   x float,
@@ -1445,7 +1445,7 @@ CREATE TABLE statistics_agg_test (
   dx decimal
 )
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,   10.0,    1,   10, 1.0,   10.0),
   (2.0,   25.0,    2,   25, 2.0,   25.0),
@@ -1486,7 +1486,7 @@ FROM statistics_agg_test
 query error pq: unknown signature: corr\(string, string\)
 SELECT corr(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0, 1.797693134862315708145274237317043567981e+308, 0)
 
@@ -1495,10 +1495,10 @@ SELECT corr(y, x), corr(int_y, int_x) FROM statistics_agg_test
 ----
 -0.443213217542505  0.917580124387801
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -1509,10 +1509,10 @@ FROM statistics_agg_test
 ----
 1 1 1
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -1523,10 +1523,10 @@ FROM statistics_agg_test
 ----
 -1 -1 -1
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -1537,12 +1537,12 @@ FROM statistics_agg_test
 ----
 NULL NULL NULL
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest covar_pop
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -1583,17 +1583,17 @@ FROM statistics_agg_test
 query error pq: unknown signature: covar_pop\(string, string\)
 SELECT covar_pop(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
 query error float out of range
 SELECT covar_pop(y, x), covar_pop(int_y, int_x) FROM statistics_agg_test
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -1604,10 +1604,10 @@ FROM statistics_agg_test
 ----
 2.5 2.5 2.5
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -1618,10 +1618,10 @@ FROM statistics_agg_test
 ----
 -7.5 -7.5 -7.5
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -1632,12 +1632,12 @@ FROM statistics_agg_test
 ----
 0 0 0
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest covar_samp
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -1678,17 +1678,17 @@ FROM statistics_agg_test
 query error pq: unknown signature: covar_samp\(string, string\)
 SELECT covar_samp(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
 query error float out of range
 SELECT covar_samp(y, x), covar_samp(int_y, int_x) FROM statistics_agg_test
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -1699,10 +1699,10 @@ FROM statistics_agg_test
 ----
 5 5 5
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -1713,10 +1713,10 @@ FROM statistics_agg_test
 ----
 -15 -15 -15
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -1727,12 +1727,12 @@ FROM statistics_agg_test
 ----
 0 0 0
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest regr_intercept
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -1773,7 +1773,7 @@ FROM statistics_agg_test
 query error pq: unknown signature: regr_intercept\(string, string\)
 SELECT regr_intercept(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
@@ -1782,10 +1782,10 @@ SELECT regr_intercept(y, x), regr_intercept(int_y, int_x) FROM statistics_agg_te
 ----
 2.79449911391682e+307  1.07386861313869
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -1796,10 +1796,10 @@ FROM statistics_agg_test
 ----
 0 0 0
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -1810,10 +1810,10 @@ FROM statistics_agg_test
 ----
 1.3333333333333333  1.3333333333333333  1.3333333333333333
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -1824,12 +1824,12 @@ FROM statistics_agg_test
 ----
 1 1 1
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest regr_r2
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -1870,7 +1870,7 @@ FROM statistics_agg_test
 query error pq: unknown signature: regr_r2\(string, string\)
 SELECT regr_r2(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
@@ -1879,10 +1879,10 @@ SELECT regr_r2(y, x), regr_r2(int_y, int_x) FROM statistics_agg_test
 ----
 0.070994090464941  0.841953284671533
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -1893,10 +1893,10 @@ FROM statistics_agg_test
 ----
 1 1 1
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -1907,10 +1907,10 @@ FROM statistics_agg_test
 ----
 1 1 1
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -1921,12 +1921,12 @@ FROM statistics_agg_test
 ----
 1 1 1
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest regr_slope
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -1967,7 +1967,7 @@ FROM statistics_agg_test
 query error pq: unknown signature: regr_slope\(string, string\)
 SELECT regr_slope(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
@@ -1976,10 +1976,10 @@ SELECT regr_slope(y, x), regr_slope(int_y, int_x) FROM statistics_agg_test
 ----
 -1.19338306247506e+305  0.0313576642335766
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -1990,10 +1990,10 @@ FROM statistics_agg_test
 ----
 0.1 0.1 0.1
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -2004,10 +2004,10 @@ FROM statistics_agg_test
 ----
 -0.03333333333333333  -0.03333333333333333  -0.03333333333333333
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -2018,12 +2018,12 @@ FROM statistics_agg_test
 ----
 0 0 0
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest regr_sxx
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -2064,17 +2064,17 @@ FROM statistics_agg_test
 query error pq: unknown signature: regr_sxx\(string, string\)
 SELECT regr_sxx(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (0, 1.797693134862315708145274237317043567981e+308, 0, 0)
 
 query error float out of range
 SELECT regr_sxx(y, x), regr_sxx(int_y, int_x) FROM statistics_agg_test
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -2085,10 +2085,10 @@ FROM statistics_agg_test
 ----
 50 50 50
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -2099,10 +2099,10 @@ FROM statistics_agg_test
 ----
 450 450 450
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -2113,12 +2113,12 @@ FROM statistics_agg_test
 ----
 2 2 2
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest regr_sxy
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -2159,17 +2159,17 @@ FROM statistics_agg_test
 query error pq: unknown signature: regr_sxy\(string, string\)
 SELECT regr_sxy(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
 query error float out of range
 SELECT regr_sxy(y, x), regr_sxy(int_y, int_x) FROM statistics_agg_test
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -2180,10 +2180,10 @@ FROM statistics_agg_test
 ----
 5 5 5
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -2194,10 +2194,10 @@ FROM statistics_agg_test
 ----
 -15 -15 -15
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -2208,12 +2208,12 @@ FROM statistics_agg_test
 ----
 0 0 0
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest regr_syy
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -2254,17 +2254,17 @@ FROM statistics_agg_test
 query error pq: unknown signature: regr_syy\(string, string\)
 SELECT regr_syy(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
 query error float out of range
 SELECT regr_syy(y, x), regr_syy(int_y, int_x) FROM statistics_agg_test
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -2275,10 +2275,10 @@ FROM statistics_agg_test
 ----
 0.5 0.5 0.5
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -2289,10 +2289,10 @@ FROM statistics_agg_test
 ----
 0.5 0.5 0.5
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -2303,12 +2303,12 @@ FROM statistics_agg_test
 ----
 0 0 0
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest regr_count
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -2349,7 +2349,7 @@ FROM statistics_agg_test
 query error pq: unknown signature: regr_count\(string, string\)
 SELECT regr_count(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
@@ -2358,7 +2358,7 @@ SELECT regr_count(y, x), regr_count(int_y, int_x), regr_count(dy, dx) FROM stati
 ----
 11 11 10
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 query I
@@ -2366,7 +2366,7 @@ SELECT regr_count(y, x) FROM statistics_agg_test
 ----
 0
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (NULL, NULL, NULL, NULL, NULL, NULL),
   (NULL, NULL, NULL, NULL, NULL, NULL)
@@ -2377,12 +2377,12 @@ FROM statistics_agg_test
 ----
 0
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest regr_avgx
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,   10.0,    1,   10, 1.0,   10.0),
   (2.0,   25.0,    2,   25, 2.0,   25.0),
@@ -2424,17 +2424,17 @@ FROM statistics_agg_test
 query error pq: unknown signature: regr_avgx\(string, string\)
 SELECT regr_avgx(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (0, 1.797693134862315708145274237317043567981e+408, 0, 0, 0, 1.797693134862315708145274237317043567981e+408)
 
 query error float out of range
 SELECT regr_avgx(y, x), regr_avgx(int_y, int_x) FROM statistics_agg_test
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -2445,10 +2445,10 @@ FROM statistics_agg_test
 ----
 15 15 15
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -2459,10 +2459,10 @@ FROM statistics_agg_test
 ----
 -5 -5 -5
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -2473,7 +2473,7 @@ FROM statistics_agg_test
 ----
 0 0 0
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 query R
@@ -2483,7 +2483,7 @@ NULL
 
 subtest regr_avgy
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
 VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (42.0,   324.78,    2,   25,  42.0,  324.78),
@@ -2524,17 +2524,17 @@ FROM statistics_agg_test
 query error pq: unknown signature: regr_avgy\(string, string\)
 SELECT regr_avgy(y::string, x::string) FROM statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+408, 0, 0, 0)
 
 query error float out of range
 SELECT regr_avgy(y, x), regr_avgy(int_y, int_x) FROM statistics_agg_test
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
@@ -2545,10 +2545,10 @@ FROM statistics_agg_test
 ----
 1.5  1.5  1.5
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
@@ -2559,10 +2559,10 @@ FROM statistics_agg_test
 ----
 1.5  1.5  1.5
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
-statement OK
+statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
@@ -2573,12 +2573,12 @@ FROM statistics_agg_test
 ----
 1  1  1
 
-statement OK
+statement ok
 TRUNCATE statistics_agg_test
 
 subtest string_agg
 
-statement OK
+statement ok
 CREATE TABLE string_agg_test (
   id INT PRIMARY KEY,
   company_id INT,
@@ -2617,7 +2617,7 @@ ORDER BY company_id;
 ----
 company_id  string_agg
 
-statement OK
+statement ok
 INSERT INTO string_agg_test VALUES
   (1, 1, 'A'),
   (2, 2, 'B'),
@@ -2779,10 +2779,10 @@ FROM string_agg_test
 GROUP BY company_id
 ORDER BY company_id;
 
-statement OK
+statement ok
 TRUNCATE string_agg_test
 
-statement OK
+statement ok
 INSERT INTO string_agg_test VALUES
   (1, 1, 'A'),
   (2, 1, 'B'),
@@ -2867,7 +2867,7 @@ ORDER BY e.company_id;
 company_id  string_agg
 1           DCBA
 
-statement OK
+statement ok
 DROP TABLE string_agg_test
 
 # Regression test for #28836.
@@ -3808,13 +3808,13 @@ test
 
 subtest corrupt_combine
 
-statement OK
+statement ok
 CREATE TABLE corrupt_combine (
   y float,
   x float
 )
 
-statement OK
+statement ok
 INSERT INTO corrupt_combine (y, x) VALUES
   (1.0, 10.0),
   (2.0, 25.0),

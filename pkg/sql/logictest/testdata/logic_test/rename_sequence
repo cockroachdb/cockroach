@@ -18,7 +18,7 @@ DROP SEQUENCE renamed_again_alter_test
 
 # You can't rename a sequence with ALTER TABLE or ALTER VIEW.
 
-statement OK
+statement ok
 CREATE SEQUENCE foo
 
 statement error pgcode 42809 "foo" is not a table

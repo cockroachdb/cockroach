@@ -285,7 +285,7 @@ SELECT * FROM txn_fingerprint_view
 ----
 7184384531886178123  {10543509969653713419,5745311157220589902,5153809228704478461}  1
 
-statement OK
+statement ok
 COMMIT
 
 # Change the limit for unique fingerprint.

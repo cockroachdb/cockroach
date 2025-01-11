@@ -2651,16 +2651,10 @@ func (t *logicTest) processSubtest(
 				pos:         fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
 				expectCount: -1,
 			}
-			// Parse "statement (notice|error) <regexp>"
-			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
-				stmt.expectNotice = m[1]
-			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
-				stmt.expectErrCode = m[1]
-				stmt.expectErr = m[2]
-			}
 			if len(fields) >= 3 && fields[1] == "async" {
 				stmt.expectAsync = true
 				stmt.statementName = fields[2]
+				// Consume 'async <name>'.
 				copy(fields[1:], fields[3:])
 				fields = fields[:len(fields)-2]
 			}
@@ -2670,6 +2664,25 @@ func (t *logicTest) processSubtest(
 					return err
 				}
 				stmt.expectCount = n
+				// Consume 'count <count>'.
+				copy(fields[1:], fields[3:])
+				fields = fields[:len(fields)-2]
+			}
+			fullyConsumed := len(fields) == 1
+			// Parse "statement (notice|error) <regexp>"
+			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
+				stmt.expectNotice = m[1]
+				fullyConsumed = true
+			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
+				stmt.expectErrCode = m[1]
+				stmt.expectErr = m[2]
+				fullyConsumed = true
+			} else if len(fields) == 2 && fields[1] == "ok" {
+				// Match 'ok' only if there are no options after it.
+				fullyConsumed = true
+			}
+			if !fullyConsumed {
+				return errors.Newf("unexpected options for 'statement' command: %s", line)
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err

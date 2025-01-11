@@ -7,8 +7,10 @@ SELECT crdb_internal.create_tenant(1000)
 upgrade 0
 
 # Create tenant using new binary.
-statement ok nodeidx=0
+query I nodeidx=0
 SELECT crdb_internal.create_tenant(1001)
+----
+1001
 
 upgrade 1
 
