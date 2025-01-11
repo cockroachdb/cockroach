@@ -4271,7 +4271,7 @@ SHOW use_declarative_schema_changer
 statement ok
 set use_declarative_schema_changer = 'unsafe_always';
 
-statement ok;
+statement ok
 BEGIN;
 ALTER TABLE t1_add DROP COLUMN c1;
 ALTER TABLE t1_add ADD COLUMN IF NOT EXISTS c1 date DEFAULT '2024-08-31';

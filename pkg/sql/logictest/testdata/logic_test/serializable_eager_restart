@@ -48,7 +48,7 @@ statement error pgcode 40001 retry txn.*
 RELEASE SAVEPOINT cockroach_restart
 
 #ROLLBACK TO SAVEPOINT
-statement OK
+statement ok
 ROLLBACK TO SAVEPOINT cockroach_restart
 
 # Check that the connection is usable after the failed COMMIT.

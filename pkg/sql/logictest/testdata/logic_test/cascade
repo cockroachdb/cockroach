@@ -2223,7 +2223,7 @@ CREATE TABLE c (
  ,b_a_id STRING REFERENCES b(a_id) ON UPDATE CASCADE
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('delete-me'), ('untouched');
 INSERT INTO b VALUES ('b1', 'delete-me'), ('b2', 'untouched');
 INSERT INTO c VALUES
@@ -2280,7 +2280,7 @@ CREATE TABLE c (
  ,b_a_id STRING NOT NULL REFERENCES b(a_id) ON UPDATE CASCADE
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('delete-me'), ('untouched');
 INSERT INTO b VALUES ('b1', 'delete-me'), ('b2', 'untouched');
 INSERT INTO c VALUES
@@ -2474,7 +2474,7 @@ CREATE TABLE c (
  ,b_a_id STRING REFERENCES b(a_id) ON UPDATE CASCADE
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('original'), ('untouched');
 INSERT INTO b VALUES ('b1', 'original'), ('b2', 'untouched');
 INSERT INTO c VALUES
@@ -2525,7 +2525,7 @@ CREATE TABLE c (
  ,b_a_id STRING NOT NULL REFERENCES b(a_id) ON UPDATE CASCADE
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('original'), ('untouched');
 INSERT INTO b VALUES ('b1', 'original'), ('b2', 'untouched');
 INSERT INTO c VALUES
@@ -2837,7 +2837,7 @@ CREATE TABLE c (
  ,b_a_id STRING REFERENCES b(a_id) ON UPDATE CASCADE
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('delete-me'), ('untouched'), ('default');
 INSERT INTO b VALUES ('b1', 'delete-me'), ('b2', 'untouched');
 INSERT INTO c VALUES
@@ -2895,7 +2895,7 @@ CREATE TABLE c (
  ,b_a_id STRING REFERENCES b(a_id) ON UPDATE CASCADE
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('delete-me'), ('untouched');
 INSERT INTO b VALUES ('b1', 'delete-me'), ('b2', 'untouched');
 INSERT INTO c VALUES
@@ -2948,7 +2948,7 @@ CREATE TABLE c (
  ,b_a_id STRING NOT NULL REFERENCES b(a_id) ON UPDATE CASCADE
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('delete-me'), ('untouched');
 INSERT INTO b VALUES ('b1', 'delete-me'), ('b2', 'untouched');
 INSERT INTO c VALUES
@@ -2982,7 +2982,7 @@ CREATE TABLE b (
  ,a_id STRING DEFAULT 'default' UNIQUE REFERENCES a ON DELETE SET DEFAULT
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('original'), ('default');
 INSERT INTO b VALUES ('b1', 'original'), ('b2', 'default');
 
@@ -3281,7 +3281,7 @@ CREATE TABLE c (
  ,b_a_id STRING REFERENCES b(a_id) ON UPDATE CASCADE
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('original'), ('untouched'), ('default');
 INSERT INTO b VALUES ('b1', 'original'), ('b2', 'untouched');
 INSERT INTO c VALUES
@@ -3333,7 +3333,7 @@ CREATE TABLE c (
  ,b_a_id STRING NOT NULL REFERENCES b(a_id) ON UPDATE CASCADE
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('original'), ('untouched'), ('default');
 INSERT INTO b VALUES ('b1', 'original'), ('b2', 'untouched');
 INSERT INTO c VALUES
@@ -3365,7 +3365,7 @@ CREATE TABLE b (
  ,a_id STRING DEFAULT 'default' UNIQUE REFERENCES a ON UPDATE SET DEFAULT
 );
 
-statement oK
+statement ok
 INSERT INTO a VALUES ('original'), ('default');
 INSERT INTO b VALUES ('b1', 'original'), ('b2', 'default');
 

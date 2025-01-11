@@ -10,7 +10,7 @@ query BB
 SELECT bool_and(b), bool_or(b) FROM bools GROUP BY a
 ----
 
-statement OK
+statement ok
 INSERT INTO bools VALUES
 (0, NULL),
 (1, true),  (1, true),

@@ -349,10 +349,10 @@ CREATE TABLE IF NOT EXISTS t98373 AS
         FROM
                 generate_series(1, 5) AS g;
 
-statement OK
+statement ok
 SET vectorize = off
 
-statement OK
+statement ok
 SET distsql = always
 
 # These query plans should be disallowed from executing in a distributed
@@ -392,8 +392,8 @@ vectorized: false
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkF9r2zAUxd_3KcR5akFh9sq2TE8tSTYMaZLZfhgUEzTr1hOVJU-S6Urwdx-20_1jg90HiftH5_6OTghfDQQ2nw7bm2zHLtZZURYft5es2Gw3q5J5ajrv6oujtvGVENmuXF4KkW8-HPL9it0UrHZm-eY1e5_vb1l8t7x6e3V9l1TgsE7RTrYUIO6QouIYhSgE58fSaRrI1DeIhEPbro9jueKonSeIE6KOhiBQys-GcpKK_MsEHIqi1GaSPS-cr2P3QE_gWDnTtzYINjGDo-jkmC7AkZNV5MUPW9fp2ROqgcP18SdGiLIhiPQX7mwNkQz8_9FzCp2zgX6j_tem5I9Ni3SoOEg1NP9XcL2v6eBdPc3O6X4SmgqKQpy76Zxk9rkVoifZzvgVx71xj0etIJCcY_GX4zkwPpBNGI0VX9zjJFs-dSPWvTSBOG7lA60pkm-11SHqGiL6nobhxfcAAAD__wgUvrk=
 
-statement OK
+statement ok
 RESET vectorize
 
-statement OK
+statement ok
 RESET distsql
