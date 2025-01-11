@@ -1271,13 +1271,13 @@ func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, err 
 // If there are no more rows, returns ok=false.
 func (rf *Fetcher) NextRowDecodedInto(
 	ctx context.Context, destination tree.Datums, colIdxMap catalog.TableColMap,
-) (ok bool, err error) {
-	row, _, err := rf.NextRow(ctx)
+) (ok bool, spanID int, err error) {
+	row, spanID, err := rf.NextRow(ctx)
 	if err != nil {
-		return false, err
+		return false, spanID, err
 	}
 	if row == nil {
-		return false, nil
+		return false, spanID, nil
 	}
 
 	for i := range rf.table.spec.FetchedColumns {
@@ -1293,12 +1293,12 @@ func (rf *Fetcher) NextRowDecodedInto(
 			continue
 		}
 		if err := encDatum.EnsureDecoded(col.Type, rf.args.Alloc); err != nil {
-			return false, err
+			return false, spanID, err
 		}
 		destination[ord] = encDatum.Datum
 	}
 
-	return true, nil
+	return true, spanID, nil
 }
 
 // RowLastModified may only be called after NextRow has returned a non-nil row
