@@ -85,6 +85,7 @@ targets:
           - --
           - -e
           - "ALTER RANGE default CONFIGURE ZONE USING num_replicas=5,num_voters=5"
+      - script: "pkg/cmd/drtprod/scripts/create_decommission_node.sh"
   - target_name: $WORKLOAD_CLUSTER
     steps:
       - command: create
