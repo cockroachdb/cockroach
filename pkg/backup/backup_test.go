@@ -3963,6 +3963,9 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Test Server too slow under deadlock.
+	skip.UnderDeadlock(t)
+
 	const numAccounts = 1000
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
