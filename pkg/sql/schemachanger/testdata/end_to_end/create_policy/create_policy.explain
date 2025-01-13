@@ -11,7 +11,7 @@ Schema change plan for CREATE POLICY ‹"policy 1"› ON ‹t1› AS PERMISSIVE 
  │         │    ├── ABSENT → PUBLIC Policy:{DescID: 104 (t1), PolicyID: 1}
  │         │    └── ABSENT → PUBLIC PolicyName:{DescID: 104 (t1), Name: "policy 1", PolicyID: 1}
  │         └── 2 Mutation operations
- │              ├── AddPolicy {"Policy":{"PolicyID":1,"TableID":104}}
+ │              ├── AddPolicy {"Policy":{"Command":2,"PolicyID":1,"TableID":104,"Type":1}}
  │              └── SetPolicyName {"Name":"policy 1","PolicyID":1,"TableID":104}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
@@ -25,5 +25,5 @@ Schema change plan for CREATE POLICY ‹"policy 1"› ON ‹t1› AS PERMISSIVE 
            │    ├── ABSENT → PUBLIC Policy:{DescID: 104 (t1), PolicyID: 1}
            │    └── ABSENT → PUBLIC PolicyName:{DescID: 104 (t1), Name: "policy 1", PolicyID: 1}
            └── 2 Mutation operations
-                ├── AddPolicy {"Policy":{"PolicyID":1,"TableID":104}}
+                ├── AddPolicy {"Policy":{"Command":2,"PolicyID":1,"TableID":104,"Type":1}}
                 └── SetPolicyName {"Name":"policy 1","PolicyID":1,"TableID":104}

@@ -302,6 +302,8 @@ object Policy
 
 Policy :  TableID
 Policy :  PolicyID
+Policy :  Type
+Policy :  Command
 
 object PolicyName
 
