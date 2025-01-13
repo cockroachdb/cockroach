@@ -95,6 +95,10 @@ func (r saslMechanismRegistry) pick(u *changefeedbase.SinkURL) (_ SASLMechanism,
 func (r saslMechanismRegistry) allMechanismNames() string {
 	allMechanisms := make([]string, 0, len(r))
 	for k := range r {
+		// Exclude PROPRIETARY_OAUTH since we want it to remain undocumented.
+		if k == "PROPRIETARY_OAUTH" {
+			continue
+		}
 		allMechanisms = append(allMechanisms, k)
 	}
 	sort.Strings(allMechanisms)
