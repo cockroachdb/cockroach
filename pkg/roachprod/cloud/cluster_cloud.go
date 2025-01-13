@@ -473,35 +473,61 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 	return nil
 }
 
+func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) error {
+
+	cl := promhelperclient.NewPromClient()
+
+	stopSpinner := ui.NewDefaultSpinner(l, "Destroying Prometheus configs").Start()
+	defer stopSpinner()
+
+	for _, node := range c.VMs {
+
+		// only gce is supported for prometheus
+		if !cl.IsSupportedNodeProvider(node.Provider) {
+			continue
+		}
+		if !cl.IsSupportedPromProject(node.Project) {
+			continue
+		}
+
+		err := cl.DeleteClusterConfig(ctx, c.Name, false, false /* insecure */, l)
+		if err != nil {
+
+			if !promhelperclient.IsNotFoundError(err) {
+				return errors.Wrapf(
+					err,
+					"failed to delete the cluster config with cluster as secure",
+				)
+			}
+
+			// TODO(bhaskar): Obtain secure cluster information.
+			// Cluster does not have the information on secure or not.
+			// So, we retry as insecure  if delete fails with cluster as secure.
+			if err = cl.DeleteClusterConfig(ctx, c.Name, false, true /* insecure */, l); err != nil {
+				return errors.Wrapf(
+					err,
+					"failed to delete the cluster config with cluster as insecure and secure",
+				)
+			}
+
+		}
+		break
+
+	}
+
+	return nil
+}
+
 // DestroyCluster TODO(peter): document
 func DestroyCluster(l *logger.Logger, c *Cluster) error {
-	stopSpinner := ui.NewDefaultSpinner(l, "Destroying Prometheus configs").Start()
-	// check if any node is supported as promhelper cluster
-	for _, node := range c.VMs {
-		if _, ok := promhelperclient.SupportedPromProjects[node.Project]; ok &&
-			node.Provider == gce.ProviderName {
-			if err := promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
-				c.Name, false, false /* insecure */, l); err != nil {
-				// TODO(bhaskar): Obtain secure cluster information.
-				// Cluster does not have the information on secure or not. So, we retry as insecure
-				// if delete fails with cluster as secure
-				if promhelperclient.IsNotFoundError(err) {
-					if err = promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
-						c.Name, false, true /* insecure */, l); err != nil {
-						l.Errorf("Failed to delete the cluster config with cluster as insecure and secure: %v", err)
-					}
-				} else {
-					l.Errorf("Failed to delete the cluster config with cluster as secure: %v", err)
-				}
-			}
-			break
-		}
+
+	if err := c.DeletePrometheusConfig(context.Background(), l); err != nil {
+		l.Printf("WARNING: failed to delete the prometheus config (already wiped?): %s", err)
 	}
-	stopSpinner()
 
 	// DNS entries are destroyed first to ensure that the GC job will not try
 	// and clean-up entries prematurely.
-	stopSpinner = ui.NewDefaultSpinner(l, "Destroying DNS entries").Start()
+	stopSpinner := ui.NewDefaultSpinner(l, "Destroying DNS entries").Start()
 	dnsErr := vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
 		return p.DeleteRecordsBySubdomain(context.Background(), c.Name)
 	})
