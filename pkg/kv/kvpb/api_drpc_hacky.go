@@ -41,14 +41,14 @@
 package kvpb
 
 import (
-	bytes "bytes"
-	context "context"
-	errors "errors"
+	"bytes"
+	"context"
 
-	jsonpb "github.com/gogo/protobuf/jsonpb"
-	proto "github.com/gogo/protobuf/proto"
-	drpc "storj.io/drpc"
-	drpcerr "storj.io/drpc/drpcerr"
+	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcerr"
 )
 
 type drpcEncoding_File_api_proto struct{}
@@ -146,7 +146,9 @@ type DRPCBatchServer interface {
 
 type DRPCBatchUnimplementedServer struct{}
 
-func (s *DRPCBatchUnimplementedServer) Batch(context.Context, *BatchRequest) (*BatchResponse, error) {
+func (s *DRPCBatchUnimplementedServer) Batch(
+	context.Context, *BatchRequest,
+) (*BatchResponse, error) {
 	return nil, drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
 }
 
@@ -158,7 +160,9 @@ type DRPCBatchDescription struct{}
 
 func (DRPCBatchDescription) NumMethods() int { return 2 }
 
-func (DRPCBatchDescription) Method(n int) (string, drpc.Encoding, drpc.Receiver, interface{}, bool) {
+func (DRPCBatchDescription) Method(
+	n int,
+) (string, drpc.Encoding, drpc.Receiver, interface{}, bool) {
 	switch n {
 	case 0:
 		return "/cockroach.kv.kvpb.Batch/Batch", drpcEncoding_File_api_proto{},
