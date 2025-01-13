@@ -59,6 +59,7 @@ func TestDRPCBatchServer(t *testing.T) {
 			cm, err := c.Server(0).RPCContext().GetCertificateManager()
 			require.NoError(t, err)
 			tlsCfg, err := cm.GetNodeClientTLSConfig()
+			require.NoError(t, err)
 			tlsCfg = tlsCfg.Clone()
 			tlsCfg.ServerName = "*.local"
 			tlsConn := tls.Client(rawconn, tlsCfg)
