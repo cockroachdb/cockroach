@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	e2e_tests "github.com/cockroachdb/cockroach/pkg/ui/workspaces/e2e-tests"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -158,8 +159,10 @@ func (d *dbConsoleCypressTest) buildDockerImage(ctx context.Context) {
 	require.NoError(t, rtCluster.Install(ctx, t.L(), workloadNode, "docker"), "failed to install docker")
 
 	// Build docker image on the workload node.
-	require.NoError(t, rtCluster.RunE(ctx, option.WithNodes(workloadNode),
-		fmt.Sprintf("docker build -t %s %s", d.imageName, d.cypressWorkingDir)))
+	testutils.SucceedsSoon(t, func() error {
+		return rtCluster.RunE(ctx, option.WithNodes(workloadNode),
+			fmt.Sprintf("docker build -t %s %s", d.imageName, d.cypressWorkingDir))
+	})
 }
 
 // writeCypressFilesToWorkloadNode writes the embedded dbConsoleCypressTest.cypressFiles to the
