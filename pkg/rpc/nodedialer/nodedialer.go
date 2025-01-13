@@ -152,7 +152,12 @@ func (n *Dialer) DialInternalClient(
 	if err != nil {
 		return nil, err
 	}
+
 	client := newBaseInternalClient(conn)
+	useStreamPoolClient := shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings)
+	if useStreamPoolClient {
+		client = newBatchStreamPoolClient(pool)
+	}
 
 	if rpc.ExperimentalDRPCEnabled.Get(&n.rpcContext.Settings.SV) {
 		// TODO(server): gRPC version of batch stream pool implements
@@ -160,6 +165,7 @@ func (n *Dialer) DialInternalClient(
 		// whereas here we allocate a new throw-away
 		// unaryDRPCBatchServiceToInternalAdapter.
 		client = &unaryDRPCBatchServiceToInternalAdapter{
+			useStreamPoolClient:      useStreamPoolClient,
 			RestrictedInternalClient: client, // for RangeFeed only
 			drpcClient:               kvpb.NewDRPCBatchClient(dconn),
 			drpcStreamPool:           drpcBatchStreamPool,
@@ -167,9 +173,6 @@ func (n *Dialer) DialInternalClient(
 		return client, nil
 	}
 
-	if shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings) {
-		client = newBatchStreamPoolClient(pool)
-	}
 	client = maybeWrapInTracingClient(ctx, client)
 	return client, nil
 }
