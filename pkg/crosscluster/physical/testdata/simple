@@ -38,9 +38,9 @@ repstream job id=$_producerJobID
 
 
 query-sql as=source-system
-SHOW TENANT source WITH REPLICATION STATUS
+select id, name, status FROM [SHOW TENANT source WITH REPLICATION STATUS]
 ----
-10 source <nil> <nil> <nil> <nil> <nil> <nil> ready
+10 source ready
 
 exec-sql as=source-tenant
 CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
