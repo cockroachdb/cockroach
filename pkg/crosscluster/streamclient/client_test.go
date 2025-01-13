@@ -134,7 +134,13 @@ func (sc testStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bo
 	return nil
 }
 
-// PriorReplicationDetails implements the Client interface.
+func (sc testStreamClient) ExecStatement(
+	_ context.Context, _ string, _ string, _ ...interface{},
+) error {
+	return nil
+}
+
+// PriorReplicationDetails implements the streamclient.Client interface.
 func (sc testStreamClient) PriorReplicationDetails(
 	_ context.Context, _ roachpb.TenantName,
 ) (string, string, hlc.Timestamp, error) {

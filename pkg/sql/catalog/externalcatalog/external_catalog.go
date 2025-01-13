@@ -49,9 +49,11 @@ func ExtractExternalCatalog(
 			return externalpb.ExternalCatalog{}, err
 		}
 		lookupFlags := tree.ObjectLookupFlags{
-			Required:          true,
-			DesiredObjectKind: tree.TableObject,
-			IncludeOffline:    includeOffline,
+			Required:             true,
+			DesiredObjectKind:    tree.TableObject,
+			IncludeOffline:       includeOffline,
+			DesiredTableDescKind: tree.ResolveRequireTableDesc,
+			RequireMutable:       includeOffline,
 		}
 		d, _, err := resolver.ResolveExistingObject(ctx, schemaResolver, uon, lookupFlags)
 		if err != nil {
