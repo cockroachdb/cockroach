@@ -11,20 +11,19 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/cli/commands"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cli"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/spf13/cobra"
 )
 
-// Initialize sets up the environment and initializes the command-line interface.
-func Initialize(ctx context.Context) {
+func init() {
 	// Set environment variables for the GCE project and DNS configurations.
 	_ = os.Setenv("ROACHPROD_DNS", "drt.crdb.io")
 	_ = os.Setenv("ROACHPROD_GCE_DNS_DOMAIN", "drt.crdb.io")
 	_ = os.Setenv("ROACHPROD_GCE_DNS_ZONE", "drt")
 	_ = os.Setenv("ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-drt")
-	// Initialize cloud providers for roachprod.
-	_ = roachprod.InitProviders()
+}
 
+// Initialize sets up the environment and initializes the command-line interface.
+func Initialize(ctx context.Context) {
 	// Disable command sorting in Cobra (command-line parser).
 	cobra.EnableCommandSorting = false
 
