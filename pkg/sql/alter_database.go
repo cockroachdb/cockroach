@@ -29,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -481,6 +483,39 @@ func (p *planner) AlterDatabaseDropRegion(
 	// not a part of any other database.
 	if isSystemDatabase := dbDesc.ID == keys.SystemDatabaseID; isSystemDatabase {
 		if err := p.checkCanDropSystemDatabaseRegion(ctx, n.Region); err != nil {
+			return nil, err
+		}
+		tablesToClean := []string{"sqlliveness", "lease", "sql_instances"}
+		for _, t := range tablesToClean {
+			livenessQuery := fmt.Sprintf(
+				`SELECT count(*) > 0 FROM system.%s WHERE crdb_region = '%s' AND 
+          crdb_internal.sql_liveness_is_alive(session_id)`, t, n.Region)
+			row, err := p.QueryRowEx(ctx, "check-session-liveness-for-region",
+				sessiondata.NodeUserSessionDataOverride, livenessQuery)
+			if err != nil {
+				return nil, err
+			}
+			// Block dropping n.Region if any associated session is active.
+			if tree.MustBeDBool(row[0]) {
+				return nil, errors.WithHintf(
+					pgerror.Newf(
+						pgcode.InvalidDatabaseDefinition,
+						"cannot drop region %q",
+						n.Region,
+					),
+					"You must not have any active sessions that are in this region. "+
+						"Ensure that there no nodes that still belong to region %q", n.Region,
+				)
+			}
+		}
+		// For the region_liveness table, we can just safely remove the reference
+		// (if any) of the dropping region from the table.
+		if _, err := p.ExecEx(ctx, "remove-region-liveness-ref",
+			sessiondata.NodeUserSessionDataOverride, `DELETE FROM system.region_liveness
+			        WHERE crdb_region = $1`, n.Region); err != nil {
+			return nil, err
+		}
+		if err := regionliveness.CleanupSystemTableForRegion(ctx, p.execCfg.Codec, n.Region.String(), p.txn); err != nil {
 			return nil, err
 		}
 	}

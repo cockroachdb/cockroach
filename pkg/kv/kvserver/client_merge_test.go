@@ -2996,14 +2996,9 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Settings: st,
-			},
 		})
 	defer tc.Stopper().Stop(ctx)
 	scratch := tc.ScratchRange(t)
@@ -3026,6 +3021,13 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 		}
 		if !rhsRepl.OwnsValidLease(ctx, tc.Servers[2].Clock().NowAsClockTimestamp()) {
 			return errors.New("store2 does not own valid lease for rhs range")
+		}
+
+		// This is important for leader leases to avoid a race between us stopping
+		// Raft traffic below, and Raft attempting to transfer the lease leadership
+		// to the leaseholder.
+		if rhsRepl.RaftStatus().ID != rhsRepl.RaftStatus().Lead {
+			return errors.New("store2 isn't the leader for rhs range")
 		}
 		return nil
 	})
