@@ -189,7 +189,7 @@ func WaitForReady(
 ) {
 	client := DefaultHTTPClient(c, t.L())
 	checkReady := func(ctx context.Context, url string) error {
-		resp, err := client.Get(ctx, url)
+		resp, err := client.client.Get(ctx, url)
 		if err != nil {
 			return err
 		}
@@ -212,13 +212,13 @@ func WaitForReady(
 			for i, adminAddr := range adminAddrs {
 				url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddr)
 
-				for err := checkReady(ctx, url); err != nil; err = checkReady(ctx, url) {
+				for err := checkReady(ctx, url); err != nil && ctx.Err() == nil; err = checkReady(ctx, url) {
 					t.L().Printf("n%d not ready, retrying: %s", nodes[i], err)
 					time.Sleep(time.Second)
 				}
 				t.L().Printf("n%d is ready", nodes[i])
 			}
-			return nil
+			return ctx.Err()
 		},
 	))
 }
