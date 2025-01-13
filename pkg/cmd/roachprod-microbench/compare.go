@@ -466,6 +466,9 @@ func (c *compare) pushToInfluxDB() error {
 		}
 
 		for idx, benchmarkName := range cs.Benchmarks {
+			if len(cs.Summaries) == 0 {
+				continue
+			}
 			sum := cs.Summaries[0][idx]
 			if !sum.Defined() {
 				continue
