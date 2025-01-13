@@ -41,12 +41,10 @@
 package kvpb
 
 import (
-	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcerr"
 )
@@ -54,24 +52,11 @@ import (
 type drpcEncoding_File_api_proto struct{}
 
 func (drpcEncoding_File_api_proto) Marshal(msg drpc.Message) ([]byte, error) {
-	return proto.Marshal(msg.(proto.Message))
+	return protoutil.Marshal(msg.(protoutil.Message))
 }
 
 func (drpcEncoding_File_api_proto) Unmarshal(buf []byte, msg drpc.Message) error {
-	return proto.Unmarshal(buf, msg.(proto.Message))
-}
-
-func (drpcEncoding_File_api_proto) JSONMarshal(msg drpc.Message) ([]byte, error) {
-	var buf bytes.Buffer
-	err := new(jsonpb.Marshaler).Marshal(&buf, msg.(proto.Message))
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-func (drpcEncoding_File_api_proto) JSONUnmarshal(buf []byte, msg drpc.Message) error {
-	return jsonpb.Unmarshal(bytes.NewReader(buf), msg.(proto.Message))
+	return protoutil.Unmarshal(buf, msg.(protoutil.Message))
 }
 
 type DRPCBatchClient interface {
@@ -193,17 +178,6 @@ func DRPCRegisterBatch(mux drpc.Mux, impl DRPCBatchServer) error {
 type DRPCBatch_BatchStream interface {
 	drpc.Stream
 	SendAndClose(*BatchResponse) error
-}
-
-type drpcBatch_BatchStream struct {
-	drpc.Stream
-}
-
-func (x *drpcBatch_BatchStream) SendAndClose(m *BatchResponse) error {
-	if err := x.MsgSend(m, drpcEncoding_File_api_proto{}); err != nil {
-		return err
-	}
-	return x.CloseSend()
 }
 
 type DRPCBatch_BatchStreamStream interface {
