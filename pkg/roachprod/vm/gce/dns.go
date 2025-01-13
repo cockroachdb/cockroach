@@ -35,6 +35,10 @@ const (
 )
 
 var (
+	dnsDefaultZone, dnsDefaultDomain, dnsDefaultManagedZone, dnsDefaultManagedDomain string
+)
+
+func initDNSDefault() {
 	dnsDefaultZone = config.EnvOrDefaultString(
 		"ROACHPROD_GCE_DNS_ZONE",
 		"roachprod",
@@ -56,7 +60,7 @@ var (
 		"ROACHPROD_GCE_DNS_MANAGED_DOMAIN",
 		"roachprod-managed.crdb.io",
 	)
-)
+}
 
 var ErrDNSOperation = fmt.Errorf("error during Google Cloud DNS operation")
 
