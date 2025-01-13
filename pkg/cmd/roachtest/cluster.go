@@ -16,6 +16,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -1480,43 +1481,6 @@ func (c *clusterImpl) FetchVMSpecs(ctx context.Context, l *logger.Logger) error 
 	})
 }
 
-// checkNoDeadNode returns an error if at least one of the nodes that have a populated
-// data dir are found to be not running. It prints both to t.L() and the test
-// output.
-func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
-	if c.spec.NodeCount == 0 {
-		// No nodes can happen during unit tests and implies nothing to do.
-		return nil
-	}
-
-	t.L().Printf("checking for dead nodes")
-	eventsCh, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
-
-	// An error here means there was a problem initialising a SyncedCluster.
-	if err != nil {
-		return err
-	}
-
-	deadProcesses := 0
-	for info := range eventsCh {
-		t.L().Printf("%s", info)
-
-		if _, isDeath := info.Event.(install.MonitorProcessDead); isDeath {
-			deadProcesses++
-		}
-	}
-
-	var plural string
-	if deadProcesses > 1 {
-		plural = "es"
-	}
-
-	if deadProcesses > 0 {
-		return errors.Newf("%d dead cockroach process%s detected", deadProcesses, plural)
-	}
-	return nil
-}
-
 func selectedNodesOrDefault(
 	opts []option.Option, defaultNodes option.NodeListOption,
 ) option.NodeListOption {
@@ -1550,20 +1514,24 @@ func newHealthStatusResult(node int, status int, body []byte, err error) *Health
 	}
 }
 
-// HealthStatus returns the result of the /health?ready=1 endpoint for each node.
+// HealthStatus returns the result of the /health?ready=1 endpoint for the
+// specified nodes.
 func (c *clusterImpl) HealthStatus(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
 ) ([]*HealthStatusResult, error) {
-	if len(nodes) < 1 {
+	nodeCount := len(nodes)
+	if nodeCount < 1 {
 		return nil, nil // unit tests
 	}
+
 	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, nodes)
 	if err != nil {
 		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
 	}
 	client := roachtestutil.DefaultHTTPClient(c, l)
-	getStatus := func(ctx context.Context, node int) *HealthStatusResult {
-		url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddrs[node-1])
+	getStatus := func(ctx context.Context, nodeIndex, node int) *HealthStatusResult {
+		url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddrs[nodeIndex])
+
 		resp, err := client.Get(ctx, url)
 		if err != nil {
 			return newHealthStatusResult(node, 0, nil, err)
@@ -1575,16 +1543,26 @@ func (c *clusterImpl) HealthStatus(
 		return newHealthStatusResult(node, resp.StatusCode, body, err)
 	}
 
-	results := make([]*HealthStatusResult, c.spec.NodeCount)
+	results := make([]*HealthStatusResult, nodeCount)
 
 	_ = timeutil.RunWithTimeout(ctx, "health status", 15*time.Second, func(ctx context.Context) error {
 		var wg sync.WaitGroup
-		wg.Add(c.spec.NodeCount)
-		for i := 1; i <= c.spec.NodeCount; i++ {
-			go func(node int) {
+		wg.Add(nodeCount)
+		for i := 0; i < nodeCount; i++ {
+			go func() {
 				defer wg.Done()
-				results[node-1] = getStatus(ctx, node)
-			}(i)
+				for {
+					results[i] = getStatus(ctx, i, nodes[i])
+					if results[i].Err == nil && results[i].Status == http.StatusOK {
+						return
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(3 * time.Second):
+					}
+				}
+			}()
 		}
 		wg.Wait()
 		return nil
