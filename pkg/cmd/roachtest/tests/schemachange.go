@@ -303,7 +303,7 @@ func makeIndexAddTpccTest(
 		Cluster:          spec,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
+		Leases:           registry.DefaultLeases,
 		Timeout:          length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
@@ -313,13 +313,15 @@ func makeIndexAddTpccTest(
 				ExtraRunArgs: fmt.Sprintf("--wait=false --tolerate-errors --workers=%d", warehouses),
 				During: func(ctx context.Context) error {
 					return runAndLogStmts(ctx, t, c, "addindex", []string{
+						`SET CLUSTER SETTING bulkio.index_backfill.ingest_concurrency = 2;`,
 						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
 						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
 						`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
 					})
 				},
-				Duration:  length,
-				SetupType: usingImport,
+				DisableDefaultScheduledBackup: true,
+				Duration:                      length,
+				SetupType:                     usingImport,
 			})
 		},
 	}
