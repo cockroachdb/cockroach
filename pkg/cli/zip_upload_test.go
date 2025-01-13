@@ -134,8 +134,9 @@ func TestUploadZipEndToEnd(t *testing.T) {
 	// those two in this list to avoid unnecessary errors
 	origTableDumps := clusterWideTableDumps
 	clusterWideTableDumps = map[string]columnParserMap{
-		"system.namespace.txt":          {},
-		"crdb_internal.system_jobs.txt": origTableDumps["crdb_internal.system_jobs.txt"],
+		"system.namespace.txt":            {},
+		"crdb_internal.system_jobs.txt":   origTableDumps["crdb_internal.system_jobs.txt"],
+		"crdb_internal.cluster_locks.txt": origTableDumps["crdb_internal.cluster_locks.txt"],
 	}
 	defer func() {
 		clusterWideTableDumps = origTableDumps
