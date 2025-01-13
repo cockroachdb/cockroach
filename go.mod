@@ -35,8 +35,8 @@ require (
 	github.com/golang/protobuf v1.5.3
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e
 	github.com/google/btree v1.0.1
-	github.com/google/pprof v0.0.0-20210827144239-02619b876842
-	github.com/google/uuid v1.5.0 // indirect
+	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7
+	github.com/google/uuid v1.6.0 // indirect
 	google.golang.org/api v0.114.0
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 	google.golang.org/grpc v1.56.3
@@ -155,6 +155,7 @@ require (
 	github.com/elastic/gosigar v0.14.3
 	github.com/emicklei/dot v0.15.0
 	github.com/fatih/color v1.9.0
+	github.com/felixge/fgprof v0.9.5
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/getsentry/sentry-go v0.27.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
@@ -356,7 +357,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/huandu/xstrings v1.3.0 // indirect
-	github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639 // indirect
+	github.com/ianlancetaylor/demangle v0.0.0-20230524184225-eabc099b10ab // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
