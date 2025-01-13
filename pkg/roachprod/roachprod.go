@@ -815,32 +815,39 @@ func updatePrometheusTargets(
 		return err
 	}
 
+	cl := promhelperclient.NewPromClient()
 	nodeIPPorts := make(map[int]*promhelperclient.NodeInfo)
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
 	for _, node := range c.Nodes {
-		if _, ok := promhelperclient.SupportedPromProjects[c.VMs[node-1].Project]; ok &&
-			c.VMs[node-1].Provider == gce.ProviderName {
-			wg.Add(1)
-			go func(index int, v vm.VM) {
-				defer wg.Done()
-				// only gce is supported for prometheus
-				desc, err := c.DiscoverService(ctx, install.Node(index), "", install.ServiceTypeUI, 0)
-				if err != nil {
-					l.Errorf("error getting the port for node %d: %v", index, err)
-					return
-				}
-				nodeInfo := fmt.Sprintf("%s:%d", v.PrivateIP, desc.Port)
-				nodeIPPortsMutex.Lock()
-				// ensure atomicity in map update
-				nodeIPPorts[index] = &promhelperclient.NodeInfo{Target: nodeInfo, CustomLabels: createLabels(v)}
-				nodeIPPortsMutex.Unlock()
-			}(int(node), c.VMs[node-1])
+
+		// only gce is supported for prometheus
+		if !cl.IsSupportedNodeProvider(c.VMs[node-1].Provider) {
+			continue
 		}
+		if !cl.IsSupportedPromProject(c.VMs[node-1].Project) {
+			continue
+		}
+
+		wg.Add(1)
+		go func(index int, v vm.VM) {
+			defer wg.Done()
+			desc, err := c.DiscoverService(ctx, install.Node(index), "", install.ServiceTypeUI, 0)
+			if err != nil {
+				l.Errorf("error getting the port for node %d: %v", index, err)
+				return
+			}
+			nodeInfo := fmt.Sprintf("%s:%d", v.PrivateIP, desc.Port)
+			nodeIPPortsMutex.Lock()
+			// ensure atomicity in map update
+			nodeIPPorts[index] = &promhelperclient.NodeInfo{Target: nodeInfo, CustomLabels: createLabels(v)}
+			nodeIPPortsMutex.Unlock()
+		}(int(node), c.VMs[node-1])
+
 	}
 	wg.Wait()
 	if len(nodeIPPorts) > 0 {
-		if err := promhelperclient.DefaultPromClient.UpdatePrometheusTargets(ctx,
+		if err := cl.UpdatePrometheusTargets(ctx,
 			c.Name, false, nodeIPPorts, !c.Secure, l); err != nil {
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
