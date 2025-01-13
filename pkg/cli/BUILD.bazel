@@ -439,7 +439,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/ts/tspb",
         "//pkg/util",
-        "//pkg/util/encoding",
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",
