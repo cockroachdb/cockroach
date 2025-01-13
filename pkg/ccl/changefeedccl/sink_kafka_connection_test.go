@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -22,11 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/twmb/franz-go/pkg/kgo"
-	kgosasl "github.com/twmb/franz-go/pkg/sasl"
-	kgosaslplain "github.com/twmb/franz-go/pkg/sasl/plain"
 )
 
 // externalConnectionKafkaSink is a wrapper sink that asserts the underlying
