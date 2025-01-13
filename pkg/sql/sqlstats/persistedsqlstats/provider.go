@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,6 +84,9 @@ type PersistedSQLStats struct {
 
 	// The last time the size was checked before doing a flush.
 	lastSizeCheck time.Time
+
+	upsertTxnStatsStmt  statements.Statement[tree.Statement]
+	upsertStmtStatsStmt statements.Statement[tree.Statement]
 }
 
 var _ sqlstats.Provider = &PersistedSQLStats{}
@@ -103,6 +109,34 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 	if cfg.Knobs != nil {
 		p.jobMonitor.testingKnobs.updateCheckInterval = cfg.Knobs.JobMonitorUpdateCheckInterval
 	}
+
+	upsertTxnStatsStmt, err := parser.ParseOne(`
+INSERT INTO system.transaction_statistics as t
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
+DO UPDATE
+SET
+  statistics = crdb_internal.merge_transaction_stats(ARRAY(t.statistics, EXCLUDED.statistics))
+`)
+	if err != nil {
+		panic(err)
+	}
+	p.upsertTxnStatsStmt = upsertTxnStatsStmt
+
+	upsertStmtStatsStmt, err := parser.ParseOne(`
+INSERT INTO system.statement_statistics as s
+VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
+             aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
+DO UPDATE
+SET
+  statistics = crdb_internal.merge_statement_stats(ARRAY(s.statistics, EXCLUDED.statistics)),
+  index_recommendations = EXCLUDED.index_recommendations
+`)
+	if err != nil {
+		panic(err)
+	}
+	p.upsertStmtStatsStmt = upsertStmtStatsStmt
 
 	return p
 }

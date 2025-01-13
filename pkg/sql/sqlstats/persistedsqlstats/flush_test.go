@@ -1288,3 +1288,37 @@ func TestSQLStatsFlushWorkerDoesntSignalJobOnAbort(t *testing.T) {
 	default:
 	}
 }
+
+func BenchmarkSQLStatsFlush(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	fakeTime := stubTime{
+		aggInterval: time.Hour,
+	}
+	fakeTime.setTime(timeutil.Now())
+	ts, conn, _ := serverutils.StartServer(b, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				StubTimeNow: fakeTime.Now,
+			},
+		},
+	},
+	)
+	defer ts.Stop(context.Background())
+
+	sqlStats := ts.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	runner := sqlutils.MakeSQLRunner(conn)
+
+	ctx := context.Background()
+	const QueryCountScale = int64(5000)
+	for iter := 0; iter < b.N; iter++ {
+		for _, tc := range testQueries {
+			for i := int64(0); i < QueryCountScale; i++ {
+				runner.Exec(b, tc.query)
+			}
+		}
+		b.StartTimer()
+		sqlStats.MaybeFlush(ctx, ts.Stopper())
+		b.StartTimer()
+	}
+}

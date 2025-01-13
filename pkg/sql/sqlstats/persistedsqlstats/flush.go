@@ -34,7 +34,6 @@ import (
 // 3. We have reached the limit of the number of rows in the system table.
 func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stopper) bool {
 	now := s.getTimeNow()
-
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
 	minimumFlushInterval := MinimumInterval.Get(&s.cfg.Settings.SV)
 
@@ -255,15 +254,6 @@ func (s *PersistedSQLStats) upsertTransactionStats(
 	serializedFingerprintID []byte,
 	stats *appstatspb.CollectedTransactionStatistics,
 ) error {
-	const upsertStmt = `
-INSERT INTO system.transaction_statistics as t
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
-DO UPDATE
-SET
-  statistics = crdb_internal.merge_transaction_stats(ARRAY(t.statistics, EXCLUDED.statistics))
-`
-
 	aggInterval := s.GetAggregationInterval()
 
 	// Prepare data for insertion.
@@ -280,12 +270,12 @@ SET
 	statistics := tree.NewDJSON(statisticsJSON)
 
 	nodeID := s.GetEnabledSQLInstanceID()
-	_, err = txn.ExecEx(
+	_, err = txn.ExecParsed(
 		ctx,
 		"upsert-txn-stats",
 		txn.KV(),
 		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
-		upsertStmt,
+		s.upsertTxnStatsStmt,
 		aggregatedTs,            // aggregated_ts
 		serializedFingerprintID, // fingerprint_id
 		stats.App,               // app_name
@@ -346,22 +336,12 @@ func (s *PersistedSQLStats) upsertStatementStats(
 		indexRecommendations,               // index_recommendations
 	)
 
-	const upsertStmt = `
-INSERT INTO system.statement_statistics as s
-VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
-             aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
-DO UPDATE
-SET
-  statistics = crdb_internal.merge_statement_stats(ARRAY(s.statistics, EXCLUDED.statistics)),
-  index_recommendations = EXCLUDED.index_recommendations
-`
-	_, err = txn.ExecEx(
+	_, err = txn.ExecParsed(
 		ctx,
 		"upsert-stmt-stats",
 		txn.KV(), /* txn */
 		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
-		upsertStmt,
+		s.upsertStmtStatsStmt,
 		args...,
 	)
 
