@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kafkaauth",
+    srcs = ["scram_client.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_ibm_sarama//:sarama",
+        "@com_github_xdg_go_scram//:scram",
+    ],
+)
