@@ -15,7 +15,7 @@ Schema change plan for DROP POLICY ‹"policy 2"› ON ‹t1›;
  │         │    └── PUBLIC → ABSENT PolicyName:{DescID: 104 (t1), Name: "policy 2", PolicyID: 2}
  │         └── 2 Mutation operations
  │              ├── SetPolicyName {"Name":"crdb_internal_po...","PolicyID":2,"TableID":104}
- │              └── RemovePolicy {"Policy":{"PolicyID":2,"TableID":104}}
+ │              └── RemovePolicy {"Policy":{"Command":3,"PolicyID":2,"TableID":104,"Type":1}}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 2 elements transitioning toward ABSENT
@@ -29,4 +29,4 @@ Schema change plan for DROP POLICY ‹"policy 2"› ON ‹t1›;
            │    └── PUBLIC → ABSENT PolicyName:{DescID: 104 (t1), Name: "policy 2", PolicyID: 2}
            └── 2 Mutation operations
                 ├── SetPolicyName {"Name":"crdb_internal_po...","PolicyID":2,"TableID":104}
-                └── RemovePolicy {"Policy":{"PolicyID":2,"TableID":104}}
+                └── RemovePolicy {"Policy":{"Command":3,"PolicyID":2,"TableID":104,"Type":1}}
