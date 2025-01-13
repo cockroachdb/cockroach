@@ -8,6 +8,7 @@ package serverccl
 import (
 	"context"
 	"crypto/tls"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"net/http"
 	"os"
 	"testing"
@@ -30,6 +31,7 @@ func TestTenantVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 119329)
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
