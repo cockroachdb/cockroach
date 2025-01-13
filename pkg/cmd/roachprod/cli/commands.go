@@ -672,7 +672,7 @@ of nodes, outputting a line whenever a change is detected:
 				return err
 			}
 			for info := range eventChan {
-				fmt.Println(info.String())
+				config.Logger.Printf(info.String())
 			}
 
 			return nil
