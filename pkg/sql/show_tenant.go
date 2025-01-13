@@ -226,6 +226,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		)
 	} else {
 		// This is a 'SHOW VIRTUAL CLUSTER name WITH REPLICATION STATUS' command.
+		replicationJobID := tree.DNull
 		sourceTenantName := tree.DNull
 		sourceClusterUri := tree.DNull
 		replicatedTimestamp := tree.DNull
@@ -235,6 +236,7 @@ func (n *showTenantNode) Values() tree.Datums {
 
 		replicationInfo := v.replicationInfo
 		if replicationInfo != nil {
+			replicationJobID = tree.NewDInt(tree.DInt(v.tenantInfo.PhysicalReplicationConsumerJobID))
 			sourceTenantName = tree.NewDString(string(replicationInfo.IngestionDetails.SourceTenantName))
 			sourceClusterUri = tree.NewDString(replicationInfo.IngestionDetails.SourceClusterConnUri)
 			if replicationInfo.ReplicationLagInfo != nil {
@@ -265,6 +267,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		}
 
 		result = append(result,
+			replicationJobID,
 			sourceTenantName,
 			sourceClusterUri,
 			retainedTimestamp,
