@@ -75,7 +75,7 @@ fi
 (
   cd "$CRDB_ROOT"
   set -x
-  bazel run @bazel_gazelle//cmd/gazelle -- update ${@:3} --go_prefix="$IMPORT_PATH" --repo_root=$REPO_DIR $REPO_DIR
+  bazel run @bazel_gazelle//cmd/gazelle -- update ${@:3} --go_naming_convention=import_alias --go_prefix="$IMPORT_PATH" --repo_root=$REPO_DIR $REPO_DIR
 )
 
 git add -A
