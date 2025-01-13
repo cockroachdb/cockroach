@@ -107,4 +107,61 @@ DROP TABLE explicit1;
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
 
+subtest policy_type_and_command_ddl
+
+statement ok
+CREATE TABLE multi_pol_tab1 (c1 INT NOT NULL PRIMARY KEY)
+
+statement ok
+CREATE POLICY "policy 1" ON multi_pol_tab1 AS PERMISSIVE
+
+statement ok
+CREATE POLICY "policy 2" ON multi_pol_tab1 AS RESTRICTIVE
+
+statement ok
+CREATE POLICY "policy 3" ON multi_pol_tab1 FOR ALL
+
+statement ok
+CREATE POLICY "policy 4" ON multi_pol_tab1 FOR INSERT
+
+statement ok
+CREATE POLICY "policy 5" ON multi_pol_tab1 FOR UPDATE
+
+statement ok
+CREATE POLICY "policy 6" ON multi_pol_tab1 FOR INSERT
+
+statement ok
+CREATE POLICY "policy 7" ON multi_pol_tab1 FOR DELETE
+
+statement ok
+CREATE POLICY "policy 8" ON multi_pol_tab1 FOR SELECT
+
+query TT
+SHOW CREATE TABLE multi_pol_tab1
+----
+multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
+                  c1 INT8 NOT NULL,
+                  CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
+                )
+
+statement ok
+DROP POLICY "policy 1" ON multi_pol_tab1
+
+statement ok
+DROP POLICY "policy 3" ON multi_pol_tab1
+
+statement ok
+DROP POLICY "policy 5" ON multi_pol_tab1
+
+query TT
+SHOW CREATE TABLE multi_pol_tab1
+----
+multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
+                  c1 INT8 NOT NULL,
+                  CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
+                )
+
+statement ok
+DROP TABLE multi_pol_tab1
+
 subtest end

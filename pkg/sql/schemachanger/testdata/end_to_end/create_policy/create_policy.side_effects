@@ -19,8 +19,10 @@ upsert descriptor #104
   +  nextPolicyId: 2
      parentId: 100
   +  policies:
-  +  - id: 1
+  +  - command: SELECT
+  +    id: 1
   +    name: policy 1
+  +    type: PERMISSIVE
      primaryIndex:
        constraintId: 1
   ...
@@ -41,8 +43,10 @@ upsert descriptor #104
   +  nextPolicyId: 2
      parentId: 100
   +  policies:
-  +  - id: 1
+  +  - command: SELECT
+  +    id: 1
   +    name: policy 1
+  +    type: PERMISSIVE
      primaryIndex:
        constraintId: 1
   ...

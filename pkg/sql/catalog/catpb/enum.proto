@@ -48,3 +48,20 @@ enum InvertedIndexColumnKind {
   // text columns.
   TRIGRAM = 1;
 }
+
+// Type indicates the type of policy it is.
+enum PolicyType {
+  POLICYTYPE_UNUSED = 0;
+  PERMISSIVE = 1;
+  RESTRICTIVE = 2;
+}
+
+// PolicyCommand specifies the SQL commands to which the policy applies.
+enum PolicyCommand {
+  POLICYCOMMAND_UNUSED = 0;
+  ALL = 1;
+  SELECT = 2;
+  INSERT = 3;
+  UPDATE = 4;
+  DELETE = 5;
+}
