@@ -289,11 +289,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 	const numAccounts = 1000
 
-	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
@@ -452,9 +448,7 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 
 	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-		},
+		ServerArgs: base.TestServerArgs{},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
 				ExternalIODir: "/west0",
@@ -585,13 +579,8 @@ func TestBackupRestoreAppend(t *testing.T) {
 
 	const numAccounts = 400
 	ctx := context.Background()
-	tc, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication, params)
+	_, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
-
-	if !tc.ApplicationLayer(0).Codec().ForSystemTenant() {
-		systemRunner := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
-		systemRunner.Exec(t, `ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
-	}
 
 	// Ensure that each node has at least one leaseholder. (These splits were
 	// made in backupRestoreTestSetup.) These are wrapped with SucceedsSoon()
@@ -4027,7 +4016,7 @@ func TestNonLinearChain(t *testing.T) {
 	defer cleanup()
 
 	tc := testcluster.NewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled, ExternalIODir: dir, Knobs: base.TestingKnobs{
+		ExternalIODir: dir, Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	}})
@@ -6416,8 +6405,6 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 			// The meta table is used to track limits.
 			UseMetaTable: true,
 		}
-		// Test fails within a tenant. Tracked with #76378.
-		params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
 		tc := testcluster.StartTestCluster(t, 1, params)
 		defer tc.Stopper().Stop(ctx)
 		db := tc.ServerConn(0)
@@ -9191,11 +9178,6 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		ExternalIODir: baseDir,
-		// This test hangs when run within a tenant. It's likely that
-		// the cause of the hang is the fact that we're waiting on the GC to
-		// complete, and we don't have visibility into the GC completing from
-		// the tenant. More investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			GCJob: &sql.GCJobTestingKnobs{
 				RunBeforePerformGC: func(id jobspb.JobID) error {
@@ -9210,10 +9192,11 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
+	systemSQLRunner := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	systemSQLRunner.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up the test
+
 	conn := tc.Conns[0]
 	sqlRunner := sqlutils.MakeSQLRunner(conn)
-	sqlRunner.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up the test
-
 	sqlRunner.Exec(t, `CREATE DATABASE test;`)
 	sqlRunner.Exec(t, ` USE test;`)
 	sqlRunner.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, id2 INT, id3 INT, INDEX bar (id2), INDEX baz(id3));`)
@@ -9367,9 +9350,6 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Disabled to run within tenants because the function that sets up the restoring cluster
-				// has not been configured yet to run within tenants.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig: &spanconfig.TestingKnobs{
@@ -9391,8 +9371,9 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 		})
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 	conn := tc.Conns[0]
 
 	sqlDB.Exec(t, `CREATE TABLE data.foo (id INT, INDEX bar(id))`)
@@ -10990,7 +10971,6 @@ func TestBackupInLocality(t *testing.T) {
 
 	const numAccounts = 1000
 
-	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
 		0: {Locality: localityFromStr(t, "region=east,dc=1,az=1")},
 		1: {Locality: localityFromStr(t, "region=east,dc=2,az=2")},

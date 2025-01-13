@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -159,6 +160,13 @@ func StartBackupRestoreTestCluster(
 		if err := tc.WaitForFullReplication(); err != nil {
 			t.Fatal(err)
 		}
+	}
+
+	if tc.Server(0).StartedDefaultTestTenant() {
+		systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+		systemDB.Exec(t,
+			`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`,
+			serverutils.TestTenantID().ToUint64())
 	}
 
 	return tc, sqlDB, opts.dataDir, func() {
