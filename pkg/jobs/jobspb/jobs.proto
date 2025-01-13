@@ -272,12 +272,25 @@ message LogicalReplicationDetails {
   }
 
   Discard discard = 11;
-
+  
+  // CreateTable is true if the job should create the table(s) in the
+  // destination.
   bool create_table = 12;
-
+  
+  // IngestedExternalCatalog is the catalog written to the destination cluster
+  // when CreateTable is true.
   sql.catalog.externalcatalog.externalpb.ExternalCatalog ingested_external_catalog = 13  [(gogoproto.nullable) = false];
+  
+  // ReverseStreamCommand is CREATE LDR command the coordinator will issue once
+  // the offline initial scan completes, but before the tables are made public.
+  string reverse_stream_command = 14;
+  
+  // ParentID is set on the reverse stream job in automatic bidirectional
+  // replication, and is equal to the job ID that issued the reverse stream
+  // command.
+  int64 parent_id = 15 [(gogoproto.customname) = "ParentID"];
 
-  // Next ID 14;
+  // Next ID: 16.
 }
 
 message LogicalReplicationProgress {
@@ -296,6 +309,8 @@ message LogicalReplicationProgress {
   repeated string partition_conn_uris = 8;
 
   bool published_new_tables = 9;
+
+  bool started_reverse_stream = 10;
 }
 
 message StreamReplicationDetails {

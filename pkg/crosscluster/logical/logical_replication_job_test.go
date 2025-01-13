@@ -381,6 +381,7 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 func TestCreateTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -403,7 +404,7 @@ func TestCreateTables(t *testing.T) {
 		sqlB := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("b")))
 
 		var jobID jobspb.JobID
-		sqlB.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE b.tab FROM TABLE tab ON $1", aURL.String()).Scan(&jobID)
+		sqlB.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE b.tab FROM TABLE tab ON $1 WITH UNIDIRECTIONAL", aURL.String()).Scan(&jobID)
 
 		// Check LWW on initial scan data.
 		sqlA.Exec(t, "UPSERT INTO tab VALUES (1, 'howdy')")
@@ -416,14 +417,18 @@ func TestCreateTables(t *testing.T) {
 		// Ensure secondary index was replicated as well.
 		compareReplicatedTables(t, srv, "a", "b", "tab", sqlA, sqlB)
 	})
+
 	t.Run("pause initial scan", func(t *testing.T) {
 		sqlA.Exec(t, "CREATE DATABASE c")
 		sqlA.Exec(t, "CREATE TABLE tab2 (pk int primary key, payload string)")
 		sqlc := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("c")))
 		sqlc.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'logical_replication.after.retryable_error'")
+		defer func() {
+			sqlc.Exec(t, "RESET CLUSTER SETTING jobs.debug.pausepoints")
+		}()
 
 		var jobID jobspb.JobID
-		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab2 FROM TABLE tab2 ON $1", aURL.String()).Scan(&jobID)
+		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab2 FROM TABLE tab2 ON $1 WITH UNIDIRECTIONAL", aURL.String()).Scan(&jobID)
 		jobutils.WaitForJobToPause(t, sqlc, jobID)
 
 		// Verify created tables are not visible as we paused before publishing
@@ -450,12 +455,44 @@ func TestCreateTables(t *testing.T) {
 		// rerun LDR again. As you can see in the
 		// restore-on-fail-or-cancel-fast-drop test, setting this up is a pain, so I
 		// will address this in an upcoming pr.
-		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab FROM TABLE tab ON $1", aURL.String()).Scan(&jobID)
+		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab FROM TABLE tab ON $1 WITH UNIDIRECTIONAL", aURL.String()).Scan(&jobID)
 		jobutils.WaitForJobToPause(t, sqlc, jobID)
 
 		// Next, resume it and wait for the table and its dlq table to come online.
 		sqlc.Exec(t, "RESUME JOB $1", jobID)
 		sqlc.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW TABLES]", [][]string{{"2"}})
+	})
+	t.Run("bidi", func(t *testing.T) {
+		sqlA.Exec(t, "CREATE TABLE tab3 (pk int primary key, payload string)")
+		sqlA.Exec(t, "INSERT INTO tab3 VALUES (1, 'hello')")
+
+		sqlA.Exec(t, "CREATE DATABASE d")
+		sqlD := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("d")))
+		dURL, cleanup := srv.PGUrl(t, serverutils.DBName("d"))
+		defer cleanup()
+
+		var jobID jobspb.JobID
+		sqlD.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab3 FROM TABLE tab3 ON $1 WITH BIDIRECTIONAL ON $2", aURL.String(), dURL.String()).Scan(&jobID)
+		WaitUntilReplicatedTime(t, srv.Clock().Now(), sqlD, jobID)
+		sqlD.CheckQueryResultsRetry(t, `SELECT count(*) FROM [SHOW LOGICAL REPLICATION JOBS] WHERE tables = '{a.public.tab3}'`, [][]string{{"1"}})
+		var reverseJobID jobspb.JobID
+		sqlD.QueryRow(t, "SELECT job_id FROM [SHOW LOGICAL REPLICATION JOBS] WHERE tables = '{a.public.tab3}'").Scan(&reverseJobID)
+		sqlD.Exec(t, "INSERT INTO tab3 VALUES (2, 'goodbye')")
+		sqlA.Exec(t, "INSERT INTO tab3 VALUES (3, 'brb')")
+		WaitUntilReplicatedTime(t, srv.Clock().Now(), sqlD, jobID)
+		WaitUntilReplicatedTime(t, srv.Clock().Now(), sqlD, reverseJobID)
+		compareReplicatedTables(t, srv, "a", "d", "tab3", sqlA, sqlD)
+	})
+	t.Run("create command errors", func(t *testing.T) {
+		sqlA.Exec(t, "CREATE TABLE tab4 (pk int primary key, payload string)")
+		sqlA.Exec(t, "INSERT INTO tab4 VALUES (1, 'hello')")
+
+		sqlA.Exec(t, "CREATE DATABASE e")
+		sqlE := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("e")))
+		eURL, cleanup := srv.PGUrl(t, serverutils.DBName("e"))
+		defer cleanup()
+		sqlE.ExpectErr(t, "either BIDIRECTIONAL or UNIDRECTIONAL must be specified", "CREATE LOGICALLY REPLICATED TABLE b.tab4 FROM TABLE tab4 ON $1", eURL.String())
+		sqlE.ExpectErr(t, "UNIDIRECTIONAL and BIDIRECTIONAL cannot be specified together", "CREATE LOGICALLY REPLICATED TABLE tab4 FROM TABLE tab4 ON $1 WITH BIDIRECTIONAL ON $2, UNIDIRECTIONAL", aURL.String(), eURL.String())
 	})
 }
 

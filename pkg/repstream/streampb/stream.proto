@@ -83,6 +83,8 @@ message ReplicationProducerRequest {
   // TableNames, if set, are the names of the individual tables that a
   // logical replication ingestion processor are interested in.
   repeated string table_names = 4;
+
+  bool allow_offline = 5;
 }
 
 enum ReplicationType {

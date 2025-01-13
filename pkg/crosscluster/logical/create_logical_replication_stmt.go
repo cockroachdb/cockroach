@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -100,7 +101,7 @@ func createLogicalReplicationStreamPlanHook(
 			return pgerror.New(pgcode.InvalidParameterValue, "the same number of source and destination tables must be specified")
 		}
 
-		options, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, p)
+		options, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, p, stmt.CreateTable)
 		if err != nil {
 			return err
 		}
@@ -135,6 +136,7 @@ func createLogicalReplicationStreamPlanHook(
 				return pgerror.Newf(pgcode.InvalidParameterValue, "unknown discard option %q", m)
 			}
 		}
+
 		resolvedDestObjects, err := resolveDestinationObjects(ctx, p, p.SessionData(), stmt.Into, stmt.CreateTable)
 		if err != nil {
 			return err
@@ -188,7 +190,8 @@ func createLogicalReplicationStreamPlanHook(
 			srcTableNames[i] = tb.String()
 		}
 		spec, err := client.CreateForTables(ctx, &streampb.ReplicationProducerRequest{
-			TableNames: srcTableNames,
+			TableNames:   srcTableNames,
+			AllowOffline: options.ParentID != 0,
 		})
 		if err != nil {
 			return err
@@ -253,8 +256,23 @@ func createLogicalReplicationStreamPlanHook(
 			defaultConflictResolution = *cr
 		}
 
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
+		var reverseStreamCmd string
+		if stmt.CreateTable && options.BidirectionalURI() != "" {
+			// TODO: validate URI.
+
+			reverseStmt := *stmt
+			reverseStmt.From, reverseStmt.Into = reverseStmt.Into, reverseStmt.From
+			reverseStmt.CreateTable = false
+			reverseStmt.Options.BidirectionalURI = nil
+			reverseStmt.Options.ParentID = tree.NewStrVal(jobID.String())
+			reverseStmt.PGURL = tree.NewStrVal(options.BidirectionalURI())
+			reverseStmt.Options.Cursor = &tree.Placeholder{Idx: 0}
+			reverseStreamCmd = reverseStmt.String()
+		}
+
 		jr := jobs.Record{
-			JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
+			JobID:       jobID,
 			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", resolvedDestObjects.TargetDescription(), cleanedURI),
 			Username:    p.User(),
 			Details: jobspb.LogicalReplicationDetails{
@@ -269,6 +287,8 @@ func createLogicalReplicationStreamPlanHook(
 				Mode:                      mode,
 				MetricsLabel:              options.metricsLabel,
 				CreateTable:               stmt.CreateTable,
+				ReverseStreamCommand:      reverseStreamCmd,
+				ParentID:                  int64(options.ParentID),
 			},
 			Progress: progress,
 		}
@@ -448,9 +468,13 @@ func createLogicalReplicationStreamTypeCheck(
 			stmt.Options.Mode,
 			stmt.Options.MetricsLabel,
 			stmt.Options.Discard,
+			stmt.Options.BidirectionalURI,
+			stmt.Options.ParentID,
 		},
+		exprutil.Ints{stmt.Options.ParentID},
 		exprutil.Bools{
 			stmt.Options.SkipSchemaCheck,
+			stmt.Options.Unidirectional,
 		},
 	}
 	if err := exprutil.TypeCheck(ctx, "LOGICAL REPLICATION STREAM", p.SemaCtx(),
@@ -467,10 +491,12 @@ type resolvedLogicalReplicationOptions struct {
 	mode            string
 	defaultFunction *jobspb.LogicalReplicationDetails_DefaultConflictResolution
 	// Mapping of table name to function descriptor
-	userFunctions   map[string]int32
-	discard         string
-	skipSchemaCheck bool
-	metricsLabel    string
+	userFunctions    map[string]int32
+	discard          string
+	skipSchemaCheck  bool
+	metricsLabel     string
+	bidirectionalURI string
+	ParentID         catpb.JobID
 }
 
 func evalLogicalReplicationOptions(
@@ -478,6 +504,7 @@ func evalLogicalReplicationOptions(
 	options tree.LogicalReplicationOptions,
 	eval exprutil.Evaluator,
 	p sql.PlanHookState,
+	createTable bool,
 ) (*resolvedLogicalReplicationOptions, error) {
 	r := &resolvedLogicalReplicationOptions{}
 	if options.Mode != nil {
@@ -562,6 +589,28 @@ func evalLogicalReplicationOptions(
 	if options.SkipSchemaCheck == tree.DBoolTrue {
 		r.skipSchemaCheck = true
 	}
+	if options.ParentID != nil {
+		parentID, err := eval.Int(ctx, options.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		r.ParentID = catpb.JobID(parentID)
+	}
+	unidirectional := options.Unidirectional == tree.DBoolTrue
+
+	if options.BidirectionalURI != nil {
+		uri, err := eval.String(ctx, options.BidirectionalURI)
+		if err != nil {
+			return nil, err
+		}
+		r.bidirectionalURI = uri
+	}
+	if createTable && unidirectional && r.bidirectionalURI != "" {
+		return nil, errors.New("UNIDIRECTIONAL and BIDIRECTIONAL cannot be specified together")
+	}
+	if createTable && !unidirectional && r.bidirectionalURI == "" {
+		return nil, errors.New("either BIDIRECTIONAL or UNIDRECTIONAL must be specified")
+	}
 	return r, nil
 }
 
@@ -626,4 +675,11 @@ func (r *resolvedLogicalReplicationOptions) SkipSchemaCheck() bool {
 		return false
 	}
 	return r.skipSchemaCheck
+}
+
+func (r *resolvedLogicalReplicationOptions) BidirectionalURI() string {
+	if r == nil || r.bidirectionalURI == "" {
+		return ""
+	}
+	return r.bidirectionalURI
 }
