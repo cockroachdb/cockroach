@@ -40,8 +40,8 @@ require (
 	google.golang.org/api v0.114.0
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 	google.golang.org/grpc v1.56.3
-	storj.io/drpc v0.0.34
 	google.golang.org/protobuf v1.35.1
+	storj.io/drpc v0.0.34
 )
 
 // If any of the following dependencies get updated as a side-effect
