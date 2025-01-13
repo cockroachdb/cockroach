@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mocks",
+    srcs = ["clusters.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters/mocks",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/cloud",
+        "@com_github_stretchr_testify//mock",
+    ],
+)

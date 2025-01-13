@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "clusters",
+    srcs = [
+        "clusters.go",
+        "operations.go",
+        "tasks.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/tasks",
+        "//pkg/cmd/roachprod-centralized/repositories/clusters",
+        "//pkg/cmd/roachprod-centralized/services/tasks",
+        "//pkg/cmd/roachprod-centralized/utils",
+        "//pkg/roachprod",
+        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "clusters_test",
+    srcs = ["clusters_test.go"],
+    embed = [":clusters"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/repositories/clusters/mocks",
+        "//pkg/cmd/roachprod-centralized/services/tasks",
+        "//pkg/cmd/roachprod-centralized/services/tasks/mocks",
+        "//pkg/cmd/roachprod-centralized/utils",
+        "//pkg/roachprod/cloud",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)
