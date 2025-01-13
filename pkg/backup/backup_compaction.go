@@ -32,8 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -41,12 +43,16 @@ import (
 
 var backupCompactionThreshold = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
-	"bulkio.backup.compaction.threshold",
+	"backup.compaction.threshold",
 	"backup chain length threshold at which backup compaction is triggered "+
 		"(0 to disable compactions)",
 	0,
 	settings.WithUnsafe,
 )
+
+// Hooked into in tests to easily trigger compactions without having to rely on
+// a schedule.
+var compactForScheduledOnly = true
 
 func maybeCompactIncrementals(
 	ctx context.Context,
@@ -58,7 +64,8 @@ func maybeCompactIncrementals(
 	// code.
 	threshold := backupCompactionThreshold.Get(&execCtx.ExecCfg().Settings.SV)
 	if threshold == 0 || !lastIncDetails.Destination.Exists ||
-		lastIncDetails.RevisionHistory || lastIncDetails.ScheduleID == 0 {
+		lastIncDetails.RevisionHistory ||
+		(compactForScheduledOnly && lastIncDetails.ScheduleID == 0) {
 		return nil
 	}
 	resolvedBaseDirs, resolvedIncDirs, _, err := resolveBackupDirs(
@@ -140,6 +147,16 @@ func compactIncrementals(
 	kmsEnv cloud.KMSEnv,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 ) error {
+	ctx, span := tracing.ChildSpan(ctx, "backup.compaction")
+	chainToCompact := backupChain[1:]
+	localityInfo = localityInfo[1:] // We only care about the locality info for the chain to compact.
+	defer span.Finish()
+	log.Infof(
+		ctx, "Beginning compaction of %d backups: %s",
+		len(chainToCompact), util.Map(chainToCompact, func(m backuppb.BackupManifest) string {
+			return m.ID.String()
+		}),
+	)
 	allIters, compactedIters, err := getIterFactoriesForCompaction(
 		ctx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage, backupChain, encryption, kmsEnv,
 	)
@@ -158,7 +175,6 @@ func compactIncrementals(
 	); err != nil {
 		return err
 	}
-	chainToCompact := backupChain[1:]
 	backupLocalityMap, err := makeBackupLocalityMap(localityInfo, execCtx.User())
 	if err != nil {
 		return err
@@ -299,7 +315,7 @@ func runCompaction(
 		select {
 		case entry, ok := <-entries:
 			if !ok {
-				return sink.Flush(ctx)
+				return nil
 			}
 
 			sstIter, err := openSSTs(ctx, execCtx, entry, encryptionOptions, details)
@@ -338,7 +354,11 @@ func processSpanEntry(
 		var key storage.MVCCKey
 		if ok, err := iter.Valid(); err != nil {
 			return err
-		} else if key = iter.UnsafeKey(); !ok || !key.Less(trimmedEnd) {
+		} else if !ok {
+			break
+		}
+		key = iter.UnsafeKey()
+		if !key.Less(trimmedEnd) {
 			break
 		}
 		value, err := iter.UnsafeValue()
