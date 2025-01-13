@@ -85,9 +85,6 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// The test tenant needs to be disabled for this test until
-				// we address #75449.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				UseDatabase:       "d",
 				SQLMemoryPoolSize: sqlMemoryPoolSize,
 			})
@@ -149,14 +146,13 @@ func TestAllRegisteredSetup(t *testing.T) {
 			defer log.Scope(t).Close(t)
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// Need to disable the test tenant here until we resolve
-				// #75449 as this test makes use of import through a fixture.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-				UseDatabase:       "d",
+				UseDatabase: "d",
 			})
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
-			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = false`)
+
+			systemDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
+			systemDB.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = false`)
 
 			var l workloadsql.InsertsDataLoader
 			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
