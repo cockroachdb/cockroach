@@ -87,6 +87,7 @@ func WithBuilderDependenciesFromTestServer(
 	planner.SessionData().NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 	planner.SessionData().EnableUniqueWithoutIndexConstraints = true
 	planner.SessionData().AlterColumnTypeGeneralEnabled = true
+	planner.SessionData().RowLevelSecurityEnabled = true
 	fn(scdeps.NewBuilderDependencies(
 		execCfg.NodeInfo.LogicalClusterID(),
 		execCfg.Codec,

@@ -10,7 +10,7 @@ var _ Statement = &AlterPolicy{}
 // AlterPolicy is a tree struct for the ALTER POLICY DDL statement
 type AlterPolicy struct {
 	PolicyName    Name
-	TableName     TableName
+	TableName     *UnresolvedObjectName
 	NewPolicyName Name
 	Roles         RoleSpecList
 	Exprs         PolicyExpressions
@@ -21,7 +21,7 @@ func (node *AlterPolicy) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER POLICY ")
 	ctx.FormatNode(&node.PolicyName)
 	ctx.WriteString(" ON ")
-	ctx.FormatNode(&node.TableName)
+	ctx.FormatNode(node.TableName)
 
 	if node.NewPolicyName != "" {
 		ctx.WriteString(" RENAME TO ")

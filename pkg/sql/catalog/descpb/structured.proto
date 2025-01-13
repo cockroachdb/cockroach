@@ -695,6 +695,19 @@ message MaterializedViewRefresh {
   optional bool should_backfill = 4 [(gogoproto.nullable) = false];
 }
 
+// PolicyDescriptor is a representation of a row-level security policy. It's
+// stored in the TableDescriptor.
+message PolicyDescriptor {
+  option (gogoproto.equal) = true;
+
+  // ID is used within the table descriptor to uniquely identify policies.
+  optional uint32 id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.casttype) = "PolicyID", (gogoproto.nullable) = false];
+
+  // The name of the policy. Unique within a table, and cannot be qualified.
+  optional string name = 2 [(gogoproto.nullable) = false];
+}
+
 // A DescriptorMutation represents a column or an index that
 // has either been added or dropped and hasn't yet transitioned
 // into a stable state: completely backfilled and visible, or
@@ -1296,7 +1309,14 @@ message TableDescriptor {
   optional uint32 next_trigger_id = 65 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "NextTriggerID", (gogoproto.casttype) = "TriggerID"];
 
-  // Next ID: 66
+  // Policies are the row-level security policies that are defined on this table.
+  repeated PolicyDescriptor policies = 66 [(gogoproto.nullable) = false];
+
+  // NextPolicyID is the ID for the next policy created.
+  optional uint32 next_policy_id = 67 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "NextPolicyID", (gogoproto.casttype) = "PolicyID"];
+
+  // Next ID: 68
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside

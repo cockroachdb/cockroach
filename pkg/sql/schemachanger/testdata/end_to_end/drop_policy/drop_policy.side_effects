@@ -1,0 +1,52 @@
+/* setup */
+CREATE TABLE t1 (tenant_id uuid, c1 int);
+SET enable_row_level_security = true;
+CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR ALL TO PUBLIC USING (true);
+CREATE POLICY "policy 2" on t1 AS PERMISSIVE FOR INSERT TO PUBLIC WITH CHECK (true);
+----
+...
++object {100 101 t1} -> 104
+
+/* test */
+DROP POLICY "policy 2" on t1;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP POLICY
+increment telemetry for sql.schema.drop_policy
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     - id: 1
+       name: policy 1
+  -  - id: 2
+  -    name: policy 2
+     primaryIndex:
+       constraintId: 1
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     - id: 1
+       name: policy 1
+  -  - id: 2
+  -    name: policy 2
+     primaryIndex:
+       constraintId: 1
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

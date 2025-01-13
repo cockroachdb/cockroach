@@ -87,3 +87,9 @@ func (PGAttributeNum) SafeValue() {}
 
 // RoleID is a custom type for a role id.
 type RoleID uint32
+
+// PolicyID is a custom type for TableDescriptor policy IDs.
+type PolicyID uint32
+
+// SafeValue implements the redact.SafeValue interface.
+func (PolicyID) SafeValue() {}

@@ -449,6 +449,12 @@ func NewUndefinedTriggerError(triggerName, tableName string) error {
 		"trigger %q for table %q does not exist", triggerName, tableName)
 }
 
+// NewUndefinedPolicyError return an error that the policy doesn't exist
+func NewUndefinedPolicyError(policyName, tableName string) error {
+	return pgerror.Newf(pgcode.UndefinedObject,
+		"policy %q for table %q does not exist", policyName, tableName)
+}
+
 // NewRangeUnavailableError creates an unavailable range error.
 func NewRangeUnavailableError(rangeID roachpb.RangeID, origErr error) error {
 	return pgerror.Wrapf(origErr, pgcode.RangeUnavailable, "key range id:%d is unavailable", rangeID)

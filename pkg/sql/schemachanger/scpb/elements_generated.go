@@ -1675,6 +1675,80 @@ func (c *ElementCollection[E]) FilterPartitionZoneConfig() *ElementCollection[*P
 	return (*ElementCollection[*PartitionZoneConfig])(ret)
 }
 
+func (e Policy) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_Policy) Element() Element {
+	return e.Policy
+}
+
+// ForEachPolicy iterates over elements of type Policy.
+// Deprecated
+func ForEachPolicy(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Policy),
+) {
+  c.FilterPolicy().ForEach(fn)
+}
+
+// FindPolicy finds the first element of type Policy.
+// Deprecated
+func FindPolicy(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Policy) {
+	if tc := c.FilterPolicy(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Policy)
+	}
+	return current, target, element
+}
+
+// PolicyElements filters elements of type Policy.
+func (c *ElementCollection[E]) FilterPolicy() *ElementCollection[*Policy] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Policy)
+		return ok
+	})
+	return (*ElementCollection[*Policy])(ret)
+}
+
+func (e PolicyName) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_PolicyName) Element() Element {
+	return e.PolicyName
+}
+
+// ForEachPolicyName iterates over elements of type PolicyName.
+// Deprecated
+func ForEachPolicyName(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PolicyName),
+) {
+  c.FilterPolicyName().ForEach(fn)
+}
+
+// FindPolicyName finds the first element of type PolicyName.
+// Deprecated
+func FindPolicyName(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *PolicyName) {
+	if tc := c.FilterPolicyName(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*PolicyName)
+	}
+	return current, target, element
+}
+
+// PolicyNameElements filters elements of type PolicyName.
+func (c *ElementCollection[E]) FilterPolicyName() *ElementCollection[*PolicyName] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*PolicyName)
+		return ok
+	})
+	return (*ElementCollection[*PolicyName])(ret)
+}
+
 func (e PrimaryIndex) element() {}
 
 // Element implements ElementGetter.
@@ -3102,6 +3176,10 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_Owner{ Owner: t}
 		case *PartitionZoneConfig:
 			e.ElementOneOf = &ElementProto_PartitionZoneConfig{ PartitionZoneConfig: t}
+		case *Policy:
+			e.ElementOneOf = &ElementProto_Policy{ Policy: t}
+		case *PolicyName:
+			e.ElementOneOf = &ElementProto_PolicyName{ PolicyName: t}
 		case *PrimaryIndex:
 			e.ElementOneOf = &ElementProto_PrimaryIndex{ PrimaryIndex: t}
 		case *RowLevelTTL:
@@ -3225,6 +3303,8 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_Namespace)(nil)),
 	((*ElementProto_Owner)(nil)),
 	((*ElementProto_PartitionZoneConfig)(nil)),
+	((*ElementProto_Policy)(nil)),
+	((*ElementProto_PolicyName)(nil)),
 	((*ElementProto_PrimaryIndex)(nil)),
 	((*ElementProto_RowLevelTTL)(nil)),
 	((*ElementProto_Schema)(nil)),
@@ -3313,6 +3393,8 @@ func GetElementTypes() []interface{} {
 	((*Namespace)(nil)),
 	((*Owner)(nil)),
 	((*PartitionZoneConfig)(nil)),
+	((*Policy)(nil)),
+	((*PolicyName)(nil)),
 	((*PrimaryIndex)(nil)),
 	((*RowLevelTTL)(nil)),
 	((*Schema)(nil)),

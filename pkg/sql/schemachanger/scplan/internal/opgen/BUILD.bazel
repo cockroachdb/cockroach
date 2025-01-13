@@ -50,6 +50,8 @@ go_library(
         "opgen_namespace.go",
         "opgen_owner.go",
         "opgen_partition_zone_config.go",
+        "opgen_policy.go",
+        "opgen_policy_name.go",
         "opgen_primary_index.go",
         "opgen_row_level_ttl.go",
         "opgen_schema.go",
