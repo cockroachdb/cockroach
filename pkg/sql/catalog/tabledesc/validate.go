@@ -2081,6 +2081,14 @@ func (desc *wrapper) validatePolicies() error {
 				p.ID, p.Name, other)
 		}
 		idToName[p.ID] = p.Name
+		if _, ok := catpb.PolicyType_name[int32(p.Type)]; !ok || p.Type == catpb.PolicyType_POLICYTYPE_UNUSED {
+			return errors.AssertionFailedf(
+				"policy %q has an unknown policy type %v", p.Name, p.Type)
+		}
+		if _, ok := catpb.PolicyCommand_name[int32(p.Command)]; !ok || p.Command == catpb.PolicyCommand_POLICYCOMMAND_UNUSED {
+			return errors.AssertionFailedf(
+				"policy %q has an unknown policy command %v", p.Name, p.Command)
+		}
 	}
 	return nil
 }
