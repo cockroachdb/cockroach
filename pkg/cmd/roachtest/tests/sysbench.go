@@ -185,7 +185,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	var start time.Time
 	runWorkload := func(ctx context.Context) error {
 		t.Status("preparing workload")
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), opts.cmd(false /* haproxy */)+" prepare")
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), opts.cmd(true /* haproxy */)+" prepare")
 
 		t.Status("running workload")
 		cmd := opts.cmd(useHAProxy /* haproxy */) + " run"
