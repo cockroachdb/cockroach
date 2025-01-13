@@ -167,6 +167,7 @@ func startListenRPCAndSQL(
 		drpcCancel()
 		// TODO(bdarnell): Do we need to also close the other listeners?
 		netutil.FatalIfUnexpected(grpcL.Close())
+		netutil.FatalIfUnexpected(drpcL.Close())
 		netutil.FatalIfUnexpected(rpcLoopbackL.Close())
 		netutil.FatalIfUnexpected(sqlLoopbackL.Close())
 		netutil.FatalIfUnexpected(ln.Close())
