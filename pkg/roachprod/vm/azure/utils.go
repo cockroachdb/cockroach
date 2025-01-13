@@ -103,6 +103,37 @@ systemctl stop unattended-upgrades
 sudo rm -rf /var/log/unattended-upgrades
 apt-get purge -y unattended-upgrades
 
+# Disable Hyper-V Time Synchronization device
+# See https://www.cockroachlabs.com/docs/stable/deploy-cockroachdb-on-microsoft-azure#step-3-synchronize-clocks
+curl -O https://raw.githubusercontent.com/torvalds/linux/master/tools/hv/lsvmbus
+ts_dev_id=$(python3 lsvmbus -vv | grep -w "Time Synchronization" -A 3 | grep "Device_ID" | awk -F '[{}]' '{print $2}')
+echo $ts_dev_id | sudo tee /sys/bus/vmbus/drivers/hv_utils/unbind
+
+# Override the chrony config. In particular,
+# log aggressively when clock is adjusted (0.01s)
+# and exclusively use a single time server.
+sudo cat <<EOF > /etc/chrony/chrony.conf
+keyfile /etc/chrony/chrony.keys
+commandkey 1
+driftfile /var/lib/chrony/chrony.drift
+log tracking measurements statistics
+logdir /var/log/chrony
+maxupdateskew 100.0
+dumponexit
+dumpdir /var/lib/chrony
+logchange 0.01
+hwclockfile /etc/adjtime
+rtcsync
+server time1.google.com iburst
+server time2.google.com iburst
+server time3.google.com iburst
+server time4.google.com iburst
+makestep 0.1 3
+EOF
+
+sudo /etc/init.d/chrony restart
+sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
+
 # Enable core dumps
 cat <<EOF > /etc/security/limits.d/core_unlimited.conf
 * soft core unlimited
