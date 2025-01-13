@@ -86,15 +86,6 @@ const (
 	BackupProgressDirectory = "progress"
 )
 
-// WriteMetadataSST controls if we write the experimental new format BACKUP
-// metadata file.
-var WriteMetadataSST = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"kv.bulkio.write_metadata_sst.enabled",
-	"write experimental new format BACKUP metadata file",
-	metamorphic.ConstantWithTestBool("write-metadata-sst", false),
-)
-
 // WriteMetadataWithExternalSSTsEnabled controls if we write a `BACKUP_METADATA`
 // file along with external SSTs containing lists of `BackupManifest_Files` and
 // descriptors. This new format of metadata is written in addition to the
@@ -1669,6 +1660,57 @@ func (f *IterFactory) NewDescIter(ctx context.Context) bulk.Iterator[*descpb.Des
 	}
 
 	return newSlicePointerIterator(f.m.Descriptors)
+}
+
+// Close closes the iterator.
+func (di *DescIterator) Close() {
+	di.backing.close()
+}
+
+// Valid implements the Iterator interface.
+func (di *DescIterator) Valid() (bool, error) {
+	if di.err != nil {
+		return false, di.err
+	}
+	return di.value != nil, nil
+}
+
+// Value implements the Iterator interface.
+func (di *DescIterator) Value() *descpb.Descriptor {
+	return di.value
+}
+
+// Next implements the Iterator interface.
+func (di *DescIterator) Next() {
+	if di.err != nil {
+		return
+	}
+
+	wrapper := resultWrapper{}
+	var nextValue *descpb.Descriptor
+	descHolder := descpb.Descriptor{}
+	for di.backing.next(&wrapper) {
+		err := protoutil.Unmarshal(wrapper.value, &descHolder)
+		if err != nil {
+			di.err = err
+			return
+		}
+
+		tbl, db, typ, sc, fn := descpb.GetDescriptors(&descHolder)
+		if tbl != nil || db != nil || typ != nil || sc != nil || fn != nil {
+			nextValue = &descHolder
+			break
+		}
+	}
+
+	di.value = nextValue
+}
+
+// DescIterator is a simple iterator to iterate over descpb.Descriptors.
+type DescIterator struct {
+	backing bytesIter
+	value   *descpb.Descriptor
+	err     error
 }
 
 // NewDescriptorChangesIter creates a new Iterator over
