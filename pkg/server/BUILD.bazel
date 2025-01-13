@@ -463,6 +463,7 @@ go_test(
         "purge_auth_session_test.go",
         "server_controller_http_test.go",
         "server_controller_test.go",
+        "server_drpc_test.go",
         "server_http_test.go",
         "server_import_ts_test.go",
         "server_internal_executor_factory_test.go",
