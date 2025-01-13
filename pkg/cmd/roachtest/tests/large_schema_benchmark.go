@@ -46,6 +46,9 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 		spec.GCEMachineType("n2-standard-8"),
 	}
 	testTimeout := 19 * time.Hour
+
+	// The roachprod default for GCE and the backup testing bucket are both us-east1,
+	// so no special region assignment is required for the single-region case.
 	regions := ""
 	if isMultiRegion {
 		regions = "us-east1,us-west1,us-central1"
@@ -59,22 +62,22 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				"us-east1-b,us-west1-b,us-central1-b,"+
 				"us-east1-b"))
 	}
+	// 9 CRDB nodes and one will be used for the TPCC workload runner.
+	numNodes := 10
 
 	r.Add(registry.TestSpec{
 		Name:      fmt.Sprintf("tpcc/large-schema-benchmark/multiregion=%t/tables=%d", isMultiRegion, numTables),
 		Owner:     registry.OwnerSQLFoundations,
 		Benchmark: true,
 		Cluster: r.MakeClusterSpec(
-			// 9 CRDB nodes and one will be used for the TPCC workload
-			// runner.
-			10,
+			numNodes,
 			clusterSpec...,
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          testTimeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			numWorkers := (len(c.All()) - 1) * 10
+			numWorkers := (numNodes - 1) * 10
 			// Number of tables per-database from the TPCC template.
 			const numTablesForTPCC = 9
 			// Active databases will continually execute a mix of TPCC + ORM
@@ -92,9 +95,11 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			// the max per schema is hit.
 			numSchemasForDatabase := 1
 			const MaxSchemasForDatabase = 72
+			dbs := make([]string, 0)
 			for numTablesRemaining > 0 {
 				schemaIdx := 0
 				databaseName := fmt.Sprintf("warehouse_%d", databaseIdx)
+				dbs = append(dbs, databaseName)
 				var newDatabaseAndSchemas []string
 				numToSubtract := 0
 				for schemaIdx = 0; schemaIdx < numSchemasForDatabase; schemaIdx++ {
@@ -133,7 +138,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 					WorkloadCmd: "tpccmultidb",
 					DB:          strings.Split(dbList[0], ".")[0],
 					SetupType:   usingInit,
-					Warehouses:  len(c.All()) - 1,
+					Warehouses:  numNodes - 1,
 					ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s %s --import-concurrency-limit=%d",
 						populateFileName,
 						regionsArg,
@@ -218,7 +223,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 					options := tpccOptions{
 						WorkloadCmd:       "tpccmultidb",
 						DB:                strings.Split(dbList[0], ".")[0],
-						Warehouses:        len(c.All()) - 1,
+						Warehouses:        numNodes - 1,
 						SkipSetup:         true,
 						DisablePrometheus: true,
 						DisableHistogram:  disableHistogram, // We setup the flag above.
@@ -240,6 +245,31 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				})
 			}
 			mon.Wait()
+
+			// Run a backup and restore.
+			if !isMultiRegion {
+				// The backup testing bucket is single-region, because that's cheaper.
+				// So skip this test in multi-region clusters, to avoid the expense of
+				// transferring data across regions.
+				conn := c.Conn(ctx, t.L(), 1)
+				defer conn.Close()
+
+				dest := destinationName(c)
+				uri := `gs://` + backupTestingBucket + `/` + dest + `?AUTH=implicit`
+				t.L().Printf("Backing up to %s\n", uri)
+				_, err = conn.Exec("BACKUP INTO $1", uri)
+				require.NoError(t, err)
+
+				t.L().Printf("Dropping databases\n") // Needed to do the full cluster restore.
+				for _, dbName := range dbs {
+					_, err = conn.Exec("DROP DATABASE IF EXISTS " + dbName + " CASCADE")
+					require.NoError(t, err)
+				}
+
+				t.L().Printf("Restoring from %s\n", uri)
+				_, err = conn.Exec("RESTORE FROM LATEST IN $1", uri)
+				require.NoError(t, err)
+			}
 		},
 	})
 }
