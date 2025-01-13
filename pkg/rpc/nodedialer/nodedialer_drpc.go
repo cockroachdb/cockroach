@@ -15,6 +15,7 @@ import (
 )
 
 type unaryDRPCBatchServiceToInternalAdapter struct {
+	useStreamPoolClient bool
 	rpc.RestrictedInternalClient
 	drpcClient     kvpb.DRPCBatchClient
 	drpcStreamPool *rpc.DRPCBatchStreamPool
@@ -26,8 +27,9 @@ func (a *unaryDRPCBatchServiceToInternalAdapter) Batch(
 	if len(opts) > 0 {
 		return nil, errors.New("CallOptions unsupported")
 	}
-	if a.drpcStreamPool != nil {
+	if a.useStreamPoolClient && a.drpcStreamPool != nil {
 		return a.drpcStreamPool.Send(ctx, in)
 	}
+
 	return a.drpcClient.Batch(ctx, in)
 }
