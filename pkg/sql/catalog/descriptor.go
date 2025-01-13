@@ -830,6 +830,11 @@ type TableDescriptor interface {
 	// GetNextTriggerID returns the next unused trigger ID for this table.
 	// Trigger IDs are unique per table, but not unique globally.
 	GetNextTriggerID() descpb.TriggerID
+	// GetPolicies returns a slice with all policies defined on the table.
+	GetPolicies() []descpb.PolicyDescriptor
+	// GetNextPolicyID returns the next unused policy ID for this table.
+	// Policy IDs are unique per table.
+	GetNextPolicyID() descpb.PolicyID
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

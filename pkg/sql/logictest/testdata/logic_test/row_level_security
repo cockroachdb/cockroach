@@ -1,3 +1,5 @@
+# LogicTest: !local-legacy-schema-changer !local-mixed-24.3
+
 statement ok
 SET enable_row_level_security = on;
 
@@ -5,3 +7,104 @@ query T
 show session enable_row_level_security;
 ----
 on
+
+subtest legacy_fail
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'off';
+
+statement ok
+CREATE TABLE legacy();
+
+statement error pq: CREATE POLICY is only implemented in the declarative schema changer
+CREATE POLICY p1 on legacy;
+
+statement ok
+DROP TABLE legacy;
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
+
+subtest create_drop_sanity
+
+statement ok
+CREATE TABLE sanity1();
+
+statement ok
+CREATE POLICY p1 on sanity1 USING (true);
+
+statement error pq: policy with name "p1" already exists on table "sanity1"
+CREATE POLICY p1 on sanity1 WITH CHECK (true);
+
+statement ok
+CREATE POLICY p2 on sanity1 AS PERMISSIVE WITH CHECK (true);
+
+statement notice NOTICE: relation "nonexist" does not exist, skipping
+DROP POLICY IF EXISTS notthere on nonexist;
+
+statement notice NOTICE: policy "notthere" for relation "sanity1" does not exist, skipping
+DROP POLICY IF EXISTS notthere on sanity1;
+
+statement error pq: policy "notthere" for table "sanity1" does not exist
+DROP POLICY notthere on sanity1;
+
+statement ok
+DROP POLICY p1 on sanity1;
+
+statement ok
+DROP POLICY p2 on sanity1;
+
+statement ok
+CREATE POLICY newp1 on sanity1 AS PERMISSIVE USING (true) WITH CHECK (true);
+
+statement ok
+DROP TABLE sanity1;
+
+subtest explicit_txn
+
+statement ok
+CREATE TABLE explicit1();
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always';
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+CREATE POLICY p1 on explicit1;
+
+statement ok
+DROP POLICY p1 on explicit1;
+
+statement ok
+CREATE POLICY p1 on explicit1 AS PERMISSIVE USING (false);
+
+statement ok
+COMMIT;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+DROP POLICY p1 on explicit1;
+
+statement ok
+CREATE POLICY p1 on explicit1 USING (false) WITH CHECK (true);
+
+statement ok
+COMMIT;
+
+statement ok
+DROP TABLE explicit1;
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
+
+subtest end

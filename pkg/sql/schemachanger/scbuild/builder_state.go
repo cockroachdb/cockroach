@@ -516,6 +516,35 @@ func (b *builderState) NextTableTriggerID(tableID catid.DescID) (ret catid.Trigg
 	return ret
 }
 
+// NextTablePolicyID implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) NextTablePolicyID(tableID catid.DescID) (ret catid.PolicyID) {
+	{
+		b.ensureDescriptor(tableID)
+		desc := b.descCache[tableID].desc
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
+				desc.GetID(), desc.DescriptorType()))
+		}
+		ret = tbl.GetNextPolicyID()
+		if ret == 0 {
+			ret = 1
+		}
+	}
+	// Consult all present element in case they have a larger PolicyID field.
+	b.QueryByID(tableID).ForEach(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) {
+		v, _ := screl.Schema.GetAttribute(screl.PolicyID, e)
+		if id, ok := v.(catid.PolicyID); ok {
+			if id < catid.PolicyID(scbuildstmt.TableTentativeIdsStart) && id >= ret {
+				ret = id + 1
+			}
+		}
+	})
+	return ret
+}
+
 // NextTableTentativeIndexID implements the scbuildstmt.TableHelpers interface.
 func (b *builderState) NextTableTentativeIndexID(tableID catid.DescID) (ret catid.IndexID) {
 	ret = catid.IndexID(scbuildstmt.TableTentativeIdsStart)
@@ -1444,6 +1473,30 @@ func (b *builderState) ResolveTrigger(
 	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		id, _ := screl.Schema.GetAttribute(screl.TriggerID, e)
 		return id != nil && id.(catid.TriggerID) == triggerID
+	})
+}
+
+func (b *builderState) ResolvePolicy(
+	tableID catid.DescID, policyName tree.Name, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(tableID)
+	tbl := b.descCache[tableID].desc.(catalog.TableDescriptor)
+	elems := b.QueryByID(tbl.GetID())
+	var policyID catid.PolicyID
+	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		if t, ok := e.(*scpb.PolicyName); ok && t.Name == string(policyName) {
+			policyID = t.PolicyID
+		}
+	})
+	if policyID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(sqlerrors.NewUndefinedPolicyError(string(policyName), tbl.GetName()))
+	}
+	return elems.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		id, _ := screl.Schema.GetAttribute(screl.PolicyID, e)
+		return id != nil && id.(catid.PolicyID) == policyID
 	})
 }
 

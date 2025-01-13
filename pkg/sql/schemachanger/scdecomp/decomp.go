@@ -411,6 +411,10 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	for i := range triggers {
 		w.walkTrigger(tbl, &triggers[i])
 	}
+	policies := tbl.GetPolicies()
+	for i := range policies {
+		w.walkPolicy(tbl, &policies[i])
+	}
 
 	_ = tbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 		w.backRefs.Add(dep.ID)
@@ -867,6 +871,18 @@ func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDesc
 		UsesRelationIDs: t.DependsOn,
 		UsesTypeIDs:     t.DependsOnTypes,
 		UsesRoutineIDs:  t.DependsOnRoutines,
+	})
+}
+
+func (w *walkCtx) walkPolicy(tbl catalog.TableDescriptor, p *descpb.PolicyDescriptor) {
+	w.ev(scpb.Status_PUBLIC, &scpb.Policy{
+		TableID:  tbl.GetID(),
+		PolicyID: p.ID,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.PolicyName{
+		TableID:  tbl.GetID(),
+		PolicyID: p.ID,
+		Name:     p.Name,
 	})
 }
 

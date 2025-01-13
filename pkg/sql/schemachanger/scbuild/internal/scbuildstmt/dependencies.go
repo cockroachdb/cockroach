@@ -279,6 +279,10 @@ type TableHelpers interface {
 	// added to this table.
 	NextTableTriggerID(tableID catid.DescID) catid.TriggerID
 
+	// NextTablePolicyID returns the ID that should be used for any new row-level
+	// security policies added to this table.
+	NextTablePolicyID(tableID catid.DescID) catid.PolicyID
+
 	// NextTableTentativeIndexID returns the tentative ID, starting from
 	// scbuild.TABLE_TENTATIVE_IDS_START, that should be used for any new index added to
 	// this table.
@@ -432,6 +436,9 @@ type NameResolver interface {
 
 	// ResolveTrigger retrieves a trigger by name and returns its elements.
 	ResolveTrigger(relationID catid.DescID, triggerName tree.Name, p ResolveParams) ElementResultSet
+
+	// ResolvePolicy retrieves a policy by name and returns its elements.
+	ResolvePolicy(relationID catid.DescID, policyName tree.Name, p ResolveParams) ElementResultSet
 }
 
 // ReferenceProvider provides all referenced objects with in current DDL

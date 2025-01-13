@@ -298,6 +298,17 @@ PartitionZoneConfig : []SubzoneSpans
 PartitionZoneConfig :  SeqNum
 PartitionZoneConfig :  OldIdxRef
 
+object Policy
+
+Policy :  TableID
+Policy :  PolicyID
+
+object PolicyName
+
+PolicyName :  TableID
+PolicyName :  PolicyID
+PolicyName :  Name
+
 object PrimaryIndex
 
 PrimaryIndex :  Index
@@ -576,6 +587,8 @@ Schema <|-- Owner
 AliasType <|-- Owner
 EnumType <|-- Owner
 TablePartitioning <|-- PartitionZoneConfig
+Table <|-- Policy
+Policy <|-- PolicyName
 Table <|-- PrimaryIndex
 View <|-- PrimaryIndex
 Table <|-- RowLevelTTL
