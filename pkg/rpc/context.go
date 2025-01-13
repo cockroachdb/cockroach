@@ -49,8 +49,6 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
-	"storj.io/drpc/drpcmux"
-	"storj.io/drpc/drpcserver"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -77,12 +75,6 @@ type ClientInterceptorInfo struct {
 	UnaryInterceptors []grpc.UnaryClientInterceptor
 	// StreamInterceptors lists the interceptors for streaming RPCs.
 	StreamInterceptors []grpc.StreamClientInterceptor
-}
-
-type DRPCServer struct {
-	Srv    *drpcserver.Server
-	Mux    *drpcmux.Mux
-	TLSCfg *tls.Config
 }
 
 // NewServerEx is like NewServer, but also returns the interceptors that have

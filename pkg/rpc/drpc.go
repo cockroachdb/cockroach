@@ -9,8 +9,11 @@ import (
 	"context"
 	"crypto/tls"
 	"math"
+	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"storj.io/drpc"
 	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
@@ -21,34 +24,63 @@ import (
 	"storj.io/drpc/drpcwire"
 )
 
-func newDRPCServer(ctx context.Context, rpcCtx *Context) (*DRPCServer, error) {
-	dmux := drpcmux.New()
-	// NB: any server middleware (server interceptors in gRPC parlance) would go
-	// here:
-	//     dmux = whateverMiddleware1(dmux)
-	//     dmux = whateverMiddleware2(dmux)
-	//     ...
-	//
-	// Each middleware must implement the Handler interface:
-	//
-	//   HandleRPC(stream Stream, rpc string) error
-	//
-	// where Stream
-	// See here for an example:
-	// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
+// ErrDRPCDisabled is returned from hosts that in principle could but do not
+// have the DRPC server enabled.
+var ErrDRPCDisabled = errors.New("DRPC is not enabled")
 
-	dsrv := drpcserver.NewWithOptions(dmux, drpcserver.Options{
-		Log: func(err error) {
-			log.Warningf(context.Background(), "drpc server error %v", err)
-		},
-		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
-		// as happens with AddSSTable) the RPCs fail.
-		Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
-	})
+type drpcServerI interface {
+	Serve(ctx context.Context, lis net.Listener) error
+}
 
-	tlsCfg, err := rpcCtx.GetServerTLSConfig()
-	if err != nil {
-		return nil, err
+type drpcMuxI interface {
+	Register(srv interface{}, desc drpc.Description) error
+}
+
+type DRPCServer struct {
+	Srv    drpcServerI
+	Mux    drpcMuxI
+	TLSCfg *tls.Config
+}
+
+var _ drpcServerI = (*drpcserver.Server)(nil)
+var _ drpcServerI = (*drpcOffServer)(nil)
+
+func newDRPCServer(_ context.Context, rpcCtx *Context) (*DRPCServer, error) {
+	var dmux drpcMuxI = &drpcOffServer{}
+	var dsrv drpcServerI = &drpcOffServer{}
+	var tlsCfg *tls.Config
+
+	if ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
+		mux := drpcmux.New()
+		dsrv = drpcserver.NewWithOptions(mux, drpcserver.Options{
+			Log: func(err error) {
+				log.Warningf(context.Background(), "drpc server error %v", err)
+			},
+			// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
+			// as happens with AddSSTable) the RPCs fail.
+			Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
+		})
+		dmux = mux
+
+		var err error
+		tlsCfg, err = rpcCtx.GetServerTLSConfig()
+		if err != nil {
+			return nil, err
+		}
+
+		// NB: any server middleware (server interceptors in gRPC parlance) would go
+		// here:
+		//     dmux = whateverMiddleware1(dmux)
+		//     dmux = whateverMiddleware2(dmux)
+		//     ...
+		//
+		// Each middleware must implement the Handler interface:
+		//
+		//   HandleRPC(stream Stream, rpc string) error
+		//
+		// where Stream
+		// See here for an example:
+		// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
 	}
 
 	return &DRPCServer{
@@ -114,4 +146,22 @@ type closeEntirePoolConn struct {
 func (c *closeEntirePoolConn) Close() error {
 	_ = c.Conn.Close()
 	return c.pool.Close()
+}
+
+// drpcOffServer is used for drpcServerI and drpcMuxI if the DRPC server is
+// disabled. It immediately closes accepted connections and returns
+// ErrDRPCDisabled.
+type drpcOffServer struct{}
+
+func (srv *drpcOffServer) Serve(_ context.Context, lis net.Listener) error {
+	conn, err := lis.Accept()
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return ErrDRPCDisabled
+}
+
+func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
+	return nil
 }
