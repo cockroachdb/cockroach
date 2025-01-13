@@ -211,9 +211,6 @@ func TestTenantBackupNemesis(t *testing.T) {
 	// the ID here because the IDs are built into the test
 	// certificates.
 	hostSQLDB.Exec(t, "SELECT crdb_internal.create_tenant(12)")
-	// Disabled until #113852 is fixed or the feature is removed.
-	hostSQLDB.Exec(t, "SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled=false")
-	_, err = tenant10Conn.Exec("SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled=false")
 	require.NoError(t, err)
 
 	rng, _ := randutil.NewPseudoRand()
