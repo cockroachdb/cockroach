@@ -1839,6 +1839,9 @@ func (r *raft) logMsgHigherTerm(m pb.Message, suffix redact.SafeString) {
 type stepFunc func(r *raft, m pb.Message) error
 
 func stepLeader(r *raft, m pb.Message) error {
+	// Compute the LeadSupportUntil on every tick.
+	r.fortificationTracker.ComputeLeadSupportUntil(r.state)
+
 	// These message types do not require any progress for m.From.
 	switch m.Type {
 	case pb.MsgBeat:
@@ -2754,6 +2757,10 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 		//    leader is gone and stepping up to campaign.
 		r.logger.Panicf("%x leader removed from configuration %s", r.id, r.config)
 	}
+
+	// Config changes might cause the LeadSupportUntil to change, we need to
+	// recalculate it here.
+	r.fortificationTracker.ComputeLeadSupportUntil(r.state)
 
 	if r.isLearner {
 		// This node is leader and was demoted, step down.

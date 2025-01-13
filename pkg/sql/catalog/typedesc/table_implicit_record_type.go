@@ -150,7 +150,9 @@ func (v *tableImplicitRecordType) NewBuilder() catalog.DescriptorBuilder {
 }
 
 // GetReferencedDescIDs implements the catalog.Descriptor interface.
-func (v *tableImplicitRecordType) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+func (v *tableImplicitRecordType) GetReferencedDescIDs(
+	catalog.ValidationLevel,
+) (catalog.DescriptorIDSet, error) {
 	return catalog.DescriptorIDSet{}, errors.AssertionFailedf(
 		"GetReferencedDescIDs are unsupported for implicit table record types")
 }

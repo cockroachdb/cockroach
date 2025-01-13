@@ -633,6 +633,7 @@ func (tc *Collection) finalizeDescriptors(
 	descs []catalog.Descriptor,
 	validationLevels []catalog.ValidationLevel,
 ) error {
+	var requiredLevel catalog.ValidationLevel
 	// Add the descriptors to the uncommitted layer if we want them to be mutable.
 	if flags.isMutable {
 		for i, desc := range descs {
@@ -642,14 +643,13 @@ func (tc *Collection) finalizeDescriptors(
 			}
 			descs[i] = mut
 		}
+		requiredLevel = validate.MutableRead
+	} else {
+		requiredLevel = validate.ImmutableRead
 	}
 	// Ensure that all descriptors are sufficiently validated.
 	if !tc.validationModeProvider.ValidateDescriptorsOnRead() {
 		return nil
-	}
-	requiredLevel := validate.MutableRead
-	if !flags.layerFilters.withoutLeased {
-		requiredLevel = validate.ImmutableRead
 	}
 	var toValidate []catalog.Descriptor
 	for i := range descs {

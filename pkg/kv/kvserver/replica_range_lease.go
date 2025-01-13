@@ -758,13 +758,9 @@ func (r *Replica) leaseStatusForRequestRLocked(
 		RequestTs:          reqTS,
 		Lease:              *r.shMu.state.Lease,
 	}
-	// TODO(nvanbenschoten): evaluate whether this is too expensive to compute for
-	// every lease status request. We may need to cache this result. If, at that
-	// time, we determine that it is sufficiently cheap, we should either compute
-	// it unconditionally, regardless of the lease type or let leases.Status
-	// decide when to compute it. See #125255.
+
 	if in.Lease.Type() == roachpb.LeaseLeader {
-		in.RaftStatus = r.raftLeadSupportStatusRLocked()
+		in.RaftStatus = r.raftBasicStatusRLocked()
 	}
 	return leases.Status(ctx, r.store.cfg.NodeLiveness, in)
 }

@@ -91,7 +91,7 @@ func (p *planner) getNonTemporarySchemaForCreate(
 	case catalog.SchemaPublic:
 		return sc, nil
 	case catalog.SchemaUserDefined:
-		sc, err := p.Descriptors().MutableByID(p.txn).Schema(ctx, sc.GetID())
+		sc, err = p.Descriptors().ByIDWithoutLeased(p.Txn()).Get().Schema(ctx, sc.GetID())
 		if err != nil {
 			return nil, err
 		}

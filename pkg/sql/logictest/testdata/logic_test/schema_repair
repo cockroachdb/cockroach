@@ -217,7 +217,7 @@ SELECT * FROM corrupt_backref_fk
 ----
 1 a
 
-statement error invalid foreign key backreference
+statement error (invalid foreign key backreference)*(.*referenced descriptor not found.*)*
 DROP TABLE corrupt_backref_fk
 
 statement ok
@@ -241,7 +241,13 @@ SELECT * FROM corrupt_backref_view
 ----
 1 a
 
+onlyif config local-legacy-schema-changer
+
 statement error pgcode XX000 invalid depended-on-by relation back reference
+DROP TABLE corrupt_backref_view
+
+skipif config local-legacy-schema-changer
+statement error pgcode XXUUU .*descriptor not found.*
 DROP TABLE corrupt_backref_view
 
 statement ok
