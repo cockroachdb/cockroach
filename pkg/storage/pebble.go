@@ -1711,7 +1711,7 @@ func (p *Pebble) ScanInternal(
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set category.
-	return p.db.ScanInternal(ctx, sstable.CategoryUnknown, rawLower, rawUpper, visitPointKey,
+	return p.db.ScanInternal(ctx, block.CategoryUnknown, rawLower, rawUpper, visitPointKey,
 		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
@@ -3108,7 +3108,7 @@ func (p *pebbleSnapshot) ScanInternal(
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set category.
-	return p.snapshot.ScanInternal(ctx, sstable.CategoryUnknown, rawLower, rawUpper, visitPointKey,
+	return p.snapshot.ScanInternal(ctx, block.CategoryUnknown, rawLower, rawUpper, visitPointKey,
 		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
@@ -3232,7 +3232,7 @@ func (p *pebbleEFOS) ScanInternal(
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set category.
-	return p.efos.ScanInternal(ctx, sstable.CategoryUnknown, rawLower, rawUpper, visitPointKey,
+	return p.efos.ScanInternal(ctx, block.CategoryUnknown, rawLower, rawUpper, visitPointKey,
 		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 

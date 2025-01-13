@@ -30,7 +30,7 @@ go_library(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//record",
-        "@com_github_cockroachdb_pebble//sstable",
+        "@com_github_cockroachdb_pebble//sstable/block",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_pebble//vfs/atomicfs",
         "@com_github_cockroachdb_pebble//vfs/vfstest",
