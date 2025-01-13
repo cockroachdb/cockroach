@@ -687,6 +687,12 @@ message JobRequest {
   int64 job_id = 1;
 }
 
+message JobMessage {
+  string kind = 1;
+  google.protobuf.Timestamp timestamp = 2 [(gogoproto.nullable)=false, (gogoproto.stdtime) = true];
+  string message = 3;
+}
+
 // JobResponse contains the job record for a job.
 message JobResponse {
   int64 id = 1 [(gogoproto.customname) = "ID"];
@@ -737,6 +743,8 @@ message JobResponse {
   // coordinator_id identifies the node coordinating the job. This value will
   // only be present for jobs that are currently running or recently ran.
   int64 coordinator_id = 21 [(gogoproto.customname) = "CoordinatorID"];
+
+  repeated JobMessage messages = 22 [(gogoproto.nullable)=false];
 }
 
 // LocationsRequest requests system locality location information.
