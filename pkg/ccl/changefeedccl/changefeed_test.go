@@ -2336,7 +2336,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 
 	// Checkpoint progress frequently, allow a large enough checkpoint, and
 	// reduce the lag threshold to allow lag checkpointing to trigger
-	changefeedbase.FrontierCheckpointFrequency.Override(
+	changefeedbase.SpanCheckpointInterval.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
 	changefeedbase.SpanCheckpointMaxBytes.Override(
 		context.Background(), &s.ClusterSettings().SV, 100<<20)
@@ -2522,7 +2522,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		require.NoError(t, jobFeed.Pause())
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
-		changefeedbase.FrontierCheckpointFrequency.Override(
+		changefeedbase.SpanCheckpointInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
 		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
@@ -7341,7 +7341,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		}
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
-		changefeedbase.FrontierCheckpointFrequency.Override(
+		changefeedbase.SpanCheckpointInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
 		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
@@ -7492,7 +7492,7 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(25)
 			return nil
 		}
-		changefeedbase.FrontierCheckpointFrequency.Override(
+		changefeedbase.SpanCheckpointInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
 		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 100<<20)
@@ -9936,7 +9936,7 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		// Checkpoint and trigger potential protected timestamp updates frequently.
 		// Make the protected timestamp lag long enough that it shouldn't be
 		// immediately updated after a restart.
-		changefeedbase.FrontierCheckpointFrequency.Override(
+		changefeedbase.SpanCheckpointInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
 		changefeedbase.ProtectTimestampInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
