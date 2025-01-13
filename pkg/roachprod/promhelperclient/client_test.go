@@ -106,7 +106,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 		}
 		err := c.DeleteClusterConfig(ctx, "c1", false, false, l)
 		require.NotNil(t, err)
-		require.Equal(t, "request failed with status 400 and error failed", err.Error())
+		require.Equal(t, "request failed with url http://prom_url.com/v1/instance-configs/c1 status 400 and error failed", err.Error())
 	})
 	t.Run("DeleteClusterConfig succeeds", func(t *testing.T) {
 		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
