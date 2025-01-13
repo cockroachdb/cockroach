@@ -26,9 +26,10 @@ func TestSelectQuery(t *testing.T) {
 
 	// Run the test with both DRPC enabled and disabled.
 	testutils.RunTrueAndFalse(t, "enableDRPC", func(t *testing.T, enableDRPC bool) {
-		envutil.TestSetEnv(t, "COCKROACH_EXPERIMENTAL_DRPC_ENABLED", strconv.FormatBool(enableDRPC))
-		ctx := context.Background()
+		clear := envutil.TestSetEnv(t, "COCKROACH_EXPERIMENTAL_DRPC_ENABLED", strconv.FormatBool(enableDRPC))
+		defer clear()
 
+		ctx := context.Background()
 		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Insecure: true,
@@ -39,7 +40,7 @@ func TestSelectQuery(t *testing.T) {
 		db := tc.ServerConn(1)
 		defer db.Close()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 
 		rows, err := db.QueryContext(ctx, "SELECT COUNT(*) FROM system.tenants")
