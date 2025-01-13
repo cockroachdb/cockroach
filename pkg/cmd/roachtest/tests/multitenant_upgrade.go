@@ -221,8 +221,20 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 			for _, tenant := range tenants {
 				if !tenant.running {
-					if err := startTenant(ctx, l, tenant, h.Context().FromVersion, true); err != nil {
-						return err
+					if h.IsFinalizing() {
+						// If the upgrading service is finalizing, we need to stage the tenants with the upgraded
+						// binary to allow the tenant to start successfully.
+						if err := startTenant(ctx, l, tenant, h.Context().ToVersion, true); err != nil {
+							return err
+						}
+					} else {
+						// For all other upgrade stages, we can stage the tenant with the previous binary version i.e.
+						// the version from which the system tenant is being upgraded. This tests the scenario that
+						// in a mixed version state, tenants on the previous version can continue to connect
+						// to the cluster.
+						if err := startTenant(ctx, l, tenant, h.Context().FromVersion, true); err != nil {
+							return err
+						}
 					}
 				}
 			}
