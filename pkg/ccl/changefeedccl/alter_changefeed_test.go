@@ -246,13 +246,30 @@ func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya`)
 		defer closeFeed(t, testFeed)
 
-		sqlDB.Exec(t, `INSERT INTO foo VALUES(1, 'hello')`)
-		assertPayloads(t, testFeed, []string{
-			`foo.onlya: [1]->{"after": {"a": 1}}`,
-		})
-
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
 		require.True(t, ok)
+
+		tsr := sqlDB.QueryRow(t, `INSERT INTO foo VALUES(42, 'hello') RETURNING cluster_logical_timestamp()`)
+		var insertTsDecStr string
+		tsr.Scan(&insertTsDecStr)
+		insertTs := parseTimeToHLC(t, insertTsDecStr)
+		assertPayloads(t, testFeed, []string{
+			`foo.onlya: [42]->{"after": {"a": 42}}`,
+		})
+
+		// Wait for the high water mark (aka resolved ts) to advance past the row we inserted's
+		// mvcc ts. Otherwise, we'd see [42] again due to a catch up scan, and it
+		// would muddy the waters.
+		testutils.SucceedsSoon(t, func() error {
+			registry := s.Server.JobRegistry().(*jobs.Registry)
+			job, err := registry.LoadJob(context.Background(), feed.JobID())
+			require.NoError(t, err)
+			prog := job.Progress()
+			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() && insertTs.Less(*p) {
+				return nil
+			}
+			return errors.New("waiting for highwater")
+		})
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
 		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
@@ -261,12 +278,12 @@ func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
 		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
-
-		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES(37, 'goodbye')`)
 		assertPayloads(t, testFeed, []string{
-			`foo.onlyb: [1]->{"after": {"b": "hello"}}`,
-			`foo.onlya: [2]->{"after": {"a": 2}}`,
-			`foo.onlyb: [2]->{"after": {"b": "goodbye"}}`,
+			// Note that we don't see foo.onlyb.[42] here, because we're not
+			// doing a catchup scan and we've already processed that tuple.
+			`foo.onlya: [37]->{"after": {"a": 37}}`,
+			`foo.onlyb: [37]->{"after": {"b": "goodbye"}}`,
 		})
 	}
 
@@ -287,13 +304,31 @@ func TestAlterChangefeedSwitchFamily(t *testing.T) {
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya`)
 		defer closeFeed(t, testFeed)
 
-		sqlDB.Exec(t, `INSERT INTO foo VALUES(1, 'hello')`)
+		tsr := sqlDB.QueryRow(t, `INSERT INTO foo VALUES(1, 'hello') RETURNING cluster_logical_timestamp()`)
+		var insertTsDecStr string
+		tsr.Scan(&insertTsDecStr)
+		insertTs := parseTimeToHLC(t, insertTsDecStr)
+
 		assertPayloads(t, testFeed, []string{
 			`foo.onlya: [1]->{"after": {"a": 1}}`,
 		})
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
 		require.True(t, ok)
+
+		// Wait for the high water mark (aka resolved ts) to advance past the row we inserted's
+		// mvcc ts. Otherwise, we'd see [1] again due to a catch up scan, and it
+		// would muddy the waters.
+		testutils.SucceedsSoon(t, func() error {
+			registry := s.Server.JobRegistry().(*jobs.Registry)
+			job, err := registry.LoadJob(context.Background(), feed.JobID())
+			require.NoError(t, err)
+			prog := job.Progress()
+			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() && insertTs.Less(*p) {
+				return nil
+			}
+			return errors.New("waiting for highwater")
+		})
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
 		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
@@ -305,7 +340,8 @@ func TestAlterChangefeedSwitchFamily(t *testing.T) {
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
 		assertPayloads(t, testFeed, []string{
-			`foo.onlyb: [1]->{"after": {"b": "hello"}}`,
+			// Note that we don't see foo.onlyb.[1] here, because we're not
+			// doing a catchup scan and we've already processed that tuple.
 			`foo.onlyb: [2]->{"after": {"b": "goodbye"}}`,
 		})
 	}
