@@ -67,13 +67,16 @@ var IdleTimeout = settings.RegisterDurationSetting(
 	settings.WithName("changefeed.auto_idle.timeout"),
 )
 
-// FrontierCheckpointFrequency controls the frequency of frontier checkpoints.
-var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
+// SpanCheckpointInterval controls how often span-level checkpoints
+// can be written.
+var SpanCheckpointInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_frequency",
-	"controls the frequency with which span level checkpoints will be written; if 0, disabled",
+	"interval at which span-level checkpoints will be written; "+
+		"if 0, span-level checkpoints are disabled",
 	10*time.Minute,
 	settings.NonNegativeDuration,
+	settings.WithName("changefeed.span_checkpoint.interval"),
 )
 
 // FrontierHighwaterLagCheckpointThreshold controls the amount the high-water
@@ -100,7 +103,7 @@ var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 //   - Assume we want to have at most 150MB worth of checkpoints in the job record.
 //
 // Therefore, we should write at most 6 MB of checkpoint/hour; OR, based on the default
-// FrontierCheckpointFrequency setting, 1 MB per checkpoint.
+// SpanCheckpointInterval setting, 1 MB per checkpoint.
 var SpanCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_max_bytes",
