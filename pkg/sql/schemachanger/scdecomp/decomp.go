@@ -878,6 +878,8 @@ func (w *walkCtx) walkPolicy(tbl catalog.TableDescriptor, p *descpb.PolicyDescri
 	w.ev(scpb.Status_PUBLIC, &scpb.Policy{
 		TableID:  tbl.GetID(),
 		PolicyID: p.ID,
+		Type:     p.Type,
+		Command:  p.Command,
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.PolicyName{
 		TableID:  tbl.GetID(),

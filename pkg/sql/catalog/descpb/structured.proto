@@ -706,6 +706,12 @@ message PolicyDescriptor {
 
   // The name of the policy. Unique within a table, and cannot be qualified.
   optional string name = 2 [(gogoproto.nullable) = false];
+
+  // Type indicates whether the policy is permissive or restrictive.
+  optional cockroach.sql.catalog.catpb.PolicyType type = 3 [(gogoproto.nullable) = false];
+
+  // Command specifies the SQL commands to which the policy applies.
+  optional cockroach.sql.catalog.catpb.PolicyCommand command = 4 [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that

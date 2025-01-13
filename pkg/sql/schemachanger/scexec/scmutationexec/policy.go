@@ -22,7 +22,9 @@ func (i *immediateVisitor) AddPolicy(ctx context.Context, op scop.AddPolicy) err
 		tbl.NextPolicyID = op.Policy.PolicyID + 1
 	}
 	tbl.Policies = append(tbl.Policies, descpb.PolicyDescriptor{
-		ID: op.Policy.PolicyID,
+		ID:      op.Policy.PolicyID,
+		Type:    op.Policy.Type,
+		Command: op.Policy.Command,
 	})
 	return nil
 }
