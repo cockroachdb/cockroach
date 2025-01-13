@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
@@ -48,7 +49,12 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	sysDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
 	sysDB.Exec(t, "SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true;")
 	sysDB.Exec(t, "SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled = true;")
-	sysDB.Exec(t, "SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '250ms'")
+
+	rng, _ := randutil.NewTestRand()
+	fastGC := rng.Float64() < 0.5
+	if fastGC {
+		sysDB.Exec(t, "SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '250ms'")
+	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, "CREATE DATABASE db1")
@@ -113,12 +119,17 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 		var res int
 		sqlDB.QueryRow(t, "SELECT count(*) FROM [SHOW TABLES]").Scan(&res)
 		require.Zero(t, res)
-		sqlDB.CheckQueryResults(t, "SELECT name FROM crdb_internal.tables WHERE state = 'DROP'", [][]string{{"tab1"}, {"tab2"}})
-		sqlDB.CheckQueryResultsRetry(
-			t,
-			"SELECT status FROM [SHOW JOBS] WHERE description = 'test gc'",
-			[][]string{{"succeeded"}},
-		)
+		if fastGC {
+			// With fast gc, the dropped tables may disappear before
+			// crdb_internal.tables is read.
+			sqlDB.CheckQueryResultsRetry(
+				t,
+				"SELECT status FROM [SHOW JOBS] WHERE description = 'test gc'",
+				[][]string{{"succeeded"}},
+			)
+		} else {
+			sqlDB.CheckQueryResults(t, "SELECT name FROM crdb_internal.tables WHERE state = 'DROP'", [][]string{{"tab1"}, {"tab2"}})
+		}
 	})
 
 	t.Run("fk", func(t *testing.T) {
