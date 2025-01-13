@@ -78,7 +78,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// and adopts 10 jobs at a time.
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.registry.interval.adopt='5s'")
 
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewLockedPseudoRand()
 	t.L().Printf("Rand seed: %d", seed)
 
 	done := make(chan struct{})
