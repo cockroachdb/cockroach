@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -76,15 +77,17 @@ func Initialize(rootCmd *cobra.Command) {
 		fmt.Printf("problem loading clusters: %s\n", err)
 	}
 
-	updateTime, sha, err := CheckLatest(roachprodUpdateBranch, roachprodUpdateOS, roachprodUpdateArch)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "WARN: failed to check if a more recent 'roachprod' binary exists: %s\n", err)
-	} else {
-		age, err := TimeSinceUpdate(updateTime)
+	if roachprodUpdateSupported(runtime.GOOS, runtime.GOARCH) && os.Getenv("ROACHPROD_DISABLE_UPDATE_CHECK") != "true" {
+		updateTime, sha, err := CheckLatest(roachprodUpdateBranch, roachprodUpdateOS, roachprodUpdateArch)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARN: unable to check mtime of 'roachprod' binary: %s\n", err)
-		} else if age.Hours() >= 14*24 {
-			fmt.Fprintf(os.Stderr, "WARN: roachprod binary is >= 2 weeks old (%s); latest sha: %q\nWARN: Consider updating the binary: `roachprod update`\n\n", age, sha)
+			fmt.Fprintf(os.Stderr, "WARN: failed to check if a more recent 'roachprod' binary exists: %s\n", err)
+		} else {
+			age, err := TimeSinceUpdate(updateTime)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "WARN: unable to check mtime of 'roachprod' binary: %s\n", err)
+			} else if age.Hours() >= 14*24 {
+				fmt.Fprintf(os.Stderr, "WARN: roachprod binary is >= 2 weeks old (%s); latest sha: %q\nWARN: Consider updating the binary: `roachprod update`\n\n", age, sha)
+			}
 		}
 	}
 }
