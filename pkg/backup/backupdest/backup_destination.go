@@ -50,7 +50,7 @@ const (
 // On some cloud storage platforms (i.e. GS, S3), backups in a base bucket may
 // omit a leading slash. However, backups in a subdirectory of a base bucket
 // will contain one.
-var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.BackupManifestName + "$")
+var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.LegacyBackupManifestName + "$")
 
 // featureFullBackupUserSubdir, when true, will create a full backup at a user
 // specified subdirectory if no backup already exists at that subdirectory. As
@@ -65,7 +65,7 @@ var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
 
 // TODO(adityamaru): Move this to the soon to be `backupinfo` package.
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
-	r, _, err := exportStore.ReadFile(ctx, backupbase.BackupManifestName, cloud.ReadOptions{NoFileSize: true})
+	r, _, err := exportStore.ReadFile(ctx, backupbase.LegacyBackupManifestName, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return false, nil
@@ -475,7 +475,7 @@ func ListFullBackupsInCollection(
 		return nil, err
 	}
 	for i, backupPath := range backupPaths {
-		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupbase.BackupManifestName)
+		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupbase.LegacyBackupManifestName)
 	}
 	return backupPaths, nil
 }

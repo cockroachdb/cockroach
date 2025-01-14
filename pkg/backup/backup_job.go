@@ -456,7 +456,7 @@ func backup(
 	// TODO(adityamaru): We can stop writing `BACKUP_MANIFEST` in 23.2
 	// because a mixed-version cluster with 23.1 nodes will read the
 	// `BACKUP_METADATA` instead.
-	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.BackupManifestName,
+	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.LegacyBackupManifestName,
 		encryption, &kmsEnv, backupManifest); err != nil {
 		return roachpb.RowCount{}, 0, err
 	}

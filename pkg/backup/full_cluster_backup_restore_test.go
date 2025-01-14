@@ -665,7 +665,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupbase.BackupManifestName ||
+		if info.Name() == backupbase.LegacyBackupManifestName ||
 			!strings.HasSuffix(path, ".sst") ||
 			info.Name() == backupinfo.BackupMetadataDescriptorsListPath ||
 			info.Name() == backupinfo.BackupMetadataFilesListPath {

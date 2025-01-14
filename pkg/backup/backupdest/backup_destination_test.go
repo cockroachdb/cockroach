@@ -48,7 +48,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		storage, err := externalStorageFromURI(ctx, uri, username.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
-		require.NoError(t, cloud.WriteFile(ctx, storage, backupbase.BackupManifestName, emptyReader))
+		require.NoError(t, cloud.WriteFile(ctx, storage, backupbase.LegacyBackupManifestName, emptyReader))
 	}
 
 	// writeLatest writes latestBackupSuffix to the LATEST file in the given
