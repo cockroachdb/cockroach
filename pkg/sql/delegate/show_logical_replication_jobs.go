@@ -53,7 +53,7 @@ WHERE job_type = 'LOGICAL REPLICATION'
 		payload)->'logicalReplicationDetails'->'defaultConflictResolution'->>'conflictResolutionType', 'LWW') AS conflict_resolution_type,
 	crdb_internal.pb_to_json(
 		'cockroach.sql.jobs.jobspb.Payload',
-		payload)->>'description' AS description`
+		payload)->'logicalReplicationDetails'->>'command' AS command`
 )
 
 func (d *delegator) delegateShowLogicalReplicationJobs(
