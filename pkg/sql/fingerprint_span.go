@@ -244,9 +244,12 @@ func fingerprintSpanImpl(
 			redact.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: span.Key,
 				EndKey: span.EndKey}),
 			5*time.Minute, func(ctx context.Context) error {
-				sp := tracing.SpanFromContext(ctx)
-				ctx, exportSpan := sp.Tracer().StartSpanCtx(ctx, "fingerprint.ExportRequest", tracing.WithParent(sp))
-				rawResp, pErr = kv.SendWrappedWithAdmission(ctx, evalCtx.Txn.DB().NonTransactionalSender(), header, admissionHeader, req)
+				var exportSpan *tracing.Span
+				reqCtx := ctx
+				if sp := tracing.SpanFromContext(ctx); sp != nil {
+					reqCtx, exportSpan = sp.Tracer().StartSpanCtx(ctx, "fingerprint.ExportRequest", tracing.WithParent(sp))
+				}
+				rawResp, pErr = kv.SendWrappedWithAdmission(reqCtx, evalCtx.Txn.DB().NonTransactionalSender(), header, admissionHeader, req)
 				recording = exportSpan.FinishAndGetConfiguredRecording()
 				if pErr != nil {
 					return pErr.GoError()

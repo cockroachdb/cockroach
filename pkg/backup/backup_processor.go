@@ -557,14 +557,24 @@ func runBackupProcessor(
 							redact.Sprintf("ExportRequest for span %s", span.span),
 							timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
 								sp := tracing.SpanFromContext(ctx)
-								opts := make([]tracing.SpanOption, 0)
-								opts = append(opts, tracing.WithParent(sp))
-								if sendExportRequestWithVerboseTracing.Get(&clusterSettings.SV) {
-									opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
+								tracer := sp.Tracer()
+								if tracer == nil {
+									tracer = flowCtx.Cfg.Tracer
 								}
-								ctx, exportSpan := sp.Tracer().StartSpanCtx(ctx, "backup.ExportRequest", opts...)
+								var exportSpan *tracing.Span
+								spanCtx := ctx
+								if tracer != nil {
+									opts := make([]tracing.SpanOption, 0)
+									opts = append(opts, tracing.WithParent(sp))
+									if sendExportRequestWithVerboseTracing.Get(&clusterSettings.SV) {
+										opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
+									}
+									spanCtx, exportSpan = tracer.StartSpanCtx(ctx, "backup.ExportRequest", opts...)
+								} else {
+									log.Warning(ctx, "nil tracer in backup processor")
+								}
 								rawResp, pErr = kv.SendWrappedWithAdmission(
-									ctx, flowCtx.Cfg.DB.KV().NonTransactionalSender(), header, admissionHeader, req)
+									spanCtx, flowCtx.Cfg.DB.KV().NonTransactionalSender(), header, admissionHeader, req)
 								recording = exportSpan.FinishAndGetConfiguredRecording()
 								if pErr != nil {
 									return pErr.GoError()
