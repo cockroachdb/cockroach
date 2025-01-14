@@ -50,6 +50,9 @@ func TestParseClusterUri(t *testing.T) {
 	tests := []testCase{
 		{uri: "postgres://foo", err: ""},
 		{uri: "postgresql://foo", err: ""},
+		{uri: "postgresql://foo?crdb_route=node", err: ""},
+		{uri: "postgresql://foo?crdb_route=gateway", err: ""},
+		{uri: "postgresql://foo?crdb_route=ohhno", err: "unknown crdb_route value \"ohhno\""},
 		{uri: "randomgen://foo", err: ""},
 		{uri: "external://foo", err: "external uri \"external://foo\" must be resolved before constructing a cluster uri"},
 		{uri: "ohhno://foo", err: "stream replication from scheme \"ohhno\" is unsupported"},

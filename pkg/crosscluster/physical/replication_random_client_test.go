@@ -82,7 +82,7 @@ func (sv *streamClientValidator) noteRow(
 ) error {
 	sv.mu.Lock()
 	defer sv.mu.Unlock()
-	return sv.NoteRow(partition, key, value, updated)
+	return sv.NoteRow(partition, key, value, updated, "" /* topic */)
 }
 
 func (sv *streamClientValidator) noteResolved(partition string, resolved hlc.Timestamp) error {

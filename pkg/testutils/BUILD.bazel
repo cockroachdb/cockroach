@@ -6,6 +6,7 @@ go_library(
         "backup.go",
         "dir.go",
         "error.go",
+        "exectrace.go",
         "files.go",
         "hook.go",
         "keys.go",
@@ -33,6 +34,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dataexmachina_dev_side_eye_go//sideeye",
+        "@com_github_petermattis_goid//:goid",
         "@com_github_stretchr_testify//require",
     ],
 )

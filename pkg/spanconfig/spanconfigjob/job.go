@@ -30,7 +30,7 @@ type resumer struct {
 
 var _ jobs.Resumer = (*resumer)(nil)
 
-var reconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
+var ReconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"spanconfig.reconciliation_job.checkpoint_interval",
 	"the frequency at which the span config reconciliation job checkpoints itself",
@@ -104,17 +104,17 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		syncutil.Mutex
 		util.EveryN
 	}{}
-	persistCheckpointsMu.EveryN = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+	persistCheckpointsMu.EveryN = util.Every(ReconciliationJobCheckpointInterval.Get(settingValues))
 
-	reconciliationJobCheckpointInterval.SetOnChange(settingValues, func(ctx context.Context) {
+	ReconciliationJobCheckpointInterval.SetOnChange(settingValues, func(ctx context.Context) {
 		persistCheckpointsMu.Lock()
 		defer persistCheckpointsMu.Unlock()
-		persistCheckpointsMu.EveryN = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+		persistCheckpointsMu.EveryN = util.Every(ReconciliationJobCheckpointInterval.Get(settingValues))
 	})
 
 	checkpointingDisabled := false
 	shouldSkipRetry := false
-	var onCheckpointInterceptor func() error
+	var onCheckpointInterceptor func(lastCheckpoint hlc.Timestamp) error
 
 	retryOpts := retry.Options{
 		InitialBackoff: 5 * time.Second,
@@ -140,7 +140,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		started := timeutil.Now()
 		if err := rc.Reconcile(ctx, lastCheckpoint, r.job.Session(), func() error {
 			if onCheckpointInterceptor != nil {
-				if err := onCheckpointInterceptor(); err != nil {
+				if err := onCheckpointInterceptor(lastCheckpoint); err != nil {
 					return err
 				}
 			}

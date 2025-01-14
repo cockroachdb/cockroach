@@ -8,7 +8,6 @@ package physical
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
@@ -586,8 +585,7 @@ func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
 	enforcedGC.ts = afterBackup
 	enforcedGC.Unlock()
 
-	u, cleanupURLA := sqlutils.PGUrl(t, srv.SQLAddr(), t.Name(), url.User(username.RootUser))
-	defer cleanupURLA()
+	u := replicationtestutils.GetReplicationUri(t, srv, srv, serverutils.User(username.RootUser))
 
 	db.Exec(t, "RESTORE TENANT 3 FROM LATEST IN 'nodelocal://1/t' WITH TENANT = '5', TENANT_NAME = 't2'")
 	db.Exec(t, "ALTER TENANT t2 START REPLICATION OF t1 ON $1", u.String())

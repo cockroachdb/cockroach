@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net"
 	"net/url"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -129,26 +132,12 @@ func TestTenantStreamingFailback(t *testing.T) {
 	sqlA := sqlutils.MakeSQLRunner(aDB)
 	sqlB := sqlutils.MakeSQLRunner(bDB)
 
-	serverAURL, cleanupURLA := sqlutils.PGUrl(t, serverA.SQLAddr(), t.Name(), url.User(username.RootUser))
-	defer cleanupURLA()
-	serverBURL, cleanupURLB := sqlutils.PGUrl(t, serverB.SQLAddr(), t.Name(), url.User(username.RootUser))
-	defer cleanupURLB()
+	serverAURL := replicationtestutils.GetReplicationUri(t, serverA, serverB, serverutils.User(username.RootUser))
+	serverBURL := replicationtestutils.GetReplicationUri(t, serverB, serverA, serverutils.User(username.RootUser))
 
-	for _, s := range []string{
-		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
-		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
-		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
-		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+	replicationtestutils.ConfigureDefaultSettings(t, sqlA)
+	replicationtestutils.ConfigureDefaultSettings(t, sqlB)
 
-		"SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'",
-		"SET CLUSTER SETTING physical_replication.consumer.job_checkpoint_frequency = '100ms'",
-		"SET CLUSTER SETTING physical_replication.consumer.minimum_flush_interval = '10ms'",
-		"SET CLUSTER SETTING physical_replication.consumer.failover_signal_poll_interval = '100ms'",
-		"SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'",
-	} {
-		sqlA.Exec(t, s)
-		sqlB.Exec(t, s)
-	}
 	compareAtTimetamp := func(ts string) {
 		fingerprintQueryFmt := "SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT %s] AS OF SYSTEM TIME %s"
 		var fingerprintF int64
@@ -156,7 +145,6 @@ func TestTenantStreamingFailback(t *testing.T) {
 		var fingerprintG int64
 		sqlB.QueryRow(t, fmt.Sprintf(fingerprintQueryFmt, "g", ts)).Scan(&fingerprintG)
 		require.Equal(t, fingerprintF, fingerprintG, "fingerprint mismatch at %s", ts)
-
 	}
 
 	// The overall test plan looks like:
@@ -672,4 +660,60 @@ func waitUntilTenantServerStopped(
 		t.Logf("tenant %q is not accepting connections", tenantName)
 		return nil
 	})
+}
+
+func TestPhysicalReplicationGatewayRoute(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create a blackhole so we can claim a port and black hole any connections
+	// routed there.
+	blackhole, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, blackhole.Close())
+	}()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			Streaming: &sql.StreamingTestingKnobs{
+				OnGetSQLInstanceInfo: func(node *roachpb.NodeDescriptor) *roachpb.NodeDescriptor {
+					copy := *node
+					copy.SQLAddress = util.UnresolvedAddr{
+						NetworkField: "tcp",
+						AddressField: blackhole.Addr().String(),
+					}
+					return &copy
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(context.Background())
+
+	systemDB := sqlutils.MakeSQLRunner(db)
+
+	replicationtestutils.ConfigureDefaultSettings(t, systemDB)
+
+	// Create the source tenant and start service
+	systemDB.Exec(t, "CREATE VIRTUAL CLUSTER source")
+	systemDB.Exec(t, "ALTER VIRTUAL CLUSTER source START SERVICE SHARED")
+
+	serverURL, cleanup := srv.PGUrl(t)
+	defer cleanup()
+
+	q := serverURL.Query()
+	q.Set(streamclient.RoutingModeKey, string(streamclient.RoutingModeGateway))
+	serverURL.RawQuery = q.Encode()
+
+	// Create the destination tenant by replicating the source cluster
+	systemDB.Exec(t, "CREATE VIRTUAL CLUSTER target FROM REPLICATION OF source ON $1", serverURL.String())
+
+	_, jobID := replicationtestutils.GetStreamJobIds(t, context.Background(), systemDB, "target")
+
+	now := srv.Clock().Now()
+	replicationtestutils.WaitUntilReplicatedTime(t, now, systemDB, jobspb.JobID(jobID))
+
+	progress := jobutils.GetJobProgress(t, systemDB, jobspb.JobID(jobID))
+	require.Empty(t, progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest.PartitionConnUris)
 }

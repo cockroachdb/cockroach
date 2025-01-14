@@ -3495,17 +3495,28 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 	return false, fmt.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
 }
 
+var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
+
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL, changed := randgen.ApplyString(t.rng, stmt.sql, randgen.ColumnFamilyMutator)
-	if changed {
-		log.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
-		if *showSQL {
-			t.outf("rewrote:\n%s\n", execSQL)
+	execSQL := stmt.sql
+	// TODO(#65929, #107398): Don't mutate column families for CREATE TABLE
+	// statements with unique, hash-sharded indexes. The altered AST will be
+	// reserialized with a UNIQUE constraint, not a UNIQUE INDEX, which may not
+	// be parsable because constraints do not support all the options that
+	// indexes do.
+	if !uniqueHashPattern.MatchString(stmt.sql) {
+		var changed bool
+		execSQL, changed = randgen.ApplyString(t.rng, execSQL, randgen.ColumnFamilyMutator)
+		if changed {
+			log.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
+			if *showSQL {
+				t.outf("rewrote:\n%s\n", execSQL)
+			}
 		}
 	}
 
@@ -3534,8 +3545,6 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	res, err := db.Exec(execSQL)
 	return t.finishExecStatement(stmt, execSQL, res, err)
 }
-
-var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
 func (t *logicTest) finishExecStatement(
 	stmt logicStatement, execSQL string, res gosql.Result, err error,

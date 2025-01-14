@@ -336,10 +336,11 @@ func (h *Histogram) filter(
 	// used for comparison and are not stored, and two spans are never
 	// built and referenced simultaneously.
 	var sb spanBuilder
+	sb.init(prefix)
 	{
 		// Limit the scope of firstBucket to avoid referencing it below after
 		// sb.makeSpanFromBucket has been called again.
-		firstBucket := sb.makeSpanFromBucket(ctx, &iter, prefix)
+		firstBucket := sb.makeSpanFromBucket(ctx, &iter)
 		for spanIndex < spanCount {
 			span := getSpan(spanIndex)
 			if firstBucket.StartsAfter(&keyCtx, span) {
@@ -357,7 +358,7 @@ func (h *Histogram) filter(
 	span := getSpan(spanIndex)
 	bucIndex := sort.Search(bucketCount, func(i int) bool {
 		iter.setIdx(i)
-		bucket := sb.makeSpanFromBucket(ctx, &iter, prefix)
+		bucket := sb.makeSpanFromBucket(ctx, &iter)
 		if desc {
 			return span.StartsAfter(&keyCtx, &bucket)
 		}
@@ -382,7 +383,7 @@ func (h *Histogram) filter(
 	}
 	if spanCount == 1 && bucIndex < bucketCount-1 {
 		iter.setIdx(bucIndex + 1)
-		bucket := sb.makeSpanFromBucket(ctx, &iter, prefix)
+		bucket := sb.makeSpanFromBucket(ctx, &iter)
 		if !desc && bucket.StartsAfter(&keyCtx, span) ||
 			desc && !bucket.StartsAfter(&keyCtx, span) {
 			newBucketCount = 2
@@ -406,7 +407,7 @@ func (h *Histogram) filter(
 
 		// Convert the bucket to a span in order to take advantage of the
 		// constraint library.
-		left := sb.makeSpanFromBucket(ctx, &iter, prefix)
+		left := sb.makeSpanFromBucket(ctx, &iter)
 		right := getSpan(spanIndex)
 
 		if left.StartsAfter(&keyCtx, right) {
@@ -425,7 +426,7 @@ func (h *Histogram) filter(
 			continue
 		}
 
-		filteredBucket := iter.b
+		filteredBucket := *iter.b
 		if filteredSpan.Compare(&keyCtx, &left) != 0 {
 			// The bucket was cut off in the middle. Get the resulting filtered
 			// bucket.
@@ -476,7 +477,7 @@ func (h *Histogram) filter(
 			filtered.addEmptyBucket(ctx, iter.inclusiveLowerBound(ctx), desc)
 		} else if lastBucket := filtered.buckets[len(filtered.buckets)-1]; lastBucket.NumRange != 0 {
 			iter.setIdx(0)
-			span := sb.makeSpanFromBucket(ctx, &iter, prefix)
+			span := sb.makeSpanFromBucket(ctx, &iter)
 			ub := h.getPrevUpperBound(ctx, span.EndKey(), span.EndBoundary(), colOffset)
 			filtered.addEmptyBucket(ctx, ub, desc)
 		}
@@ -567,16 +568,16 @@ func (h *Histogram) getPrevUpperBound(
 }
 
 func (h *Histogram) addEmptyBucket(ctx context.Context, upperBound tree.Datum, desc bool) {
-	h.addBucket(ctx, &cat.HistogramBucket{UpperBound: upperBound}, desc)
+	h.addBucket(ctx, cat.HistogramBucket{UpperBound: upperBound}, desc)
 }
 
-func (h *Histogram) addBucket(ctx context.Context, bucket *cat.HistogramBucket, desc bool) {
+func (h *Histogram) addBucket(ctx context.Context, bucket cat.HistogramBucket, desc bool) {
 	// Check whether we can combine this bucket with the previous bucket.
 	if len(h.buckets) != 0 {
 		lastBucket := &h.buckets[len(h.buckets)-1]
-		lower, higher := lastBucket, bucket
+		lower, higher := lastBucket, &bucket
 		if desc {
-			lower, higher = bucket, lastBucket
+			lower, higher = &bucket, lastBucket
 		}
 		if lower.NumRange == 0 && lower.NumEq == 0 && higher.NumRange == 0 {
 			lastBucket.NumEq = higher.NumEq
@@ -592,7 +593,7 @@ func (h *Histogram) addBucket(ctx context.Context, bucket *cat.HistogramBucket, 
 			return
 		}
 	}
-	h.buckets = append(h.buckets, *bucket)
+	h.buckets = append(h.buckets, bucket)
 }
 
 // ApplySelectivity returns a histogram with the given selectivity applied. If
@@ -740,6 +741,15 @@ type spanBuilder struct {
 	endScratch   []tree.Datum
 }
 
+func (sb *spanBuilder) init(prefix []tree.Datum) {
+	n := len(prefix) + 1
+	d := make([]tree.Datum, 2*n)
+	copy(d, prefix)
+	copy(d[n:], prefix)
+	sb.startScratch = d[:n:n]
+	sb.endScratch = d[n:]
+}
+
 // makeSpanFromBucket constructs a constraint.Span from iter's current histogram
 // bucket.
 //
@@ -747,7 +757,7 @@ type spanBuilder struct {
 // on the same spanBuilder. This is because it reuses scratch slices in the
 // spanBuilder to reduce allocations when building span keys.
 func (sb *spanBuilder) makeSpanFromBucket(
-	ctx context.Context, iter *histogramIter, prefix []tree.Datum,
+	ctx context.Context, iter *histogramIter,
 ) (span constraint.Span) {
 	start, startBoundary := iter.lowerBound()
 	end, endBoundary := iter.upperBound()
@@ -762,10 +772,8 @@ func (sb *spanBuilder) makeSpanFromBucket(
 		startBoundary = constraint.IncludeBoundary
 		endBoundary = constraint.IncludeBoundary
 	}
-	sb.startScratch = append(sb.startScratch[:0], prefix...)
-	sb.startScratch = append(sb.startScratch, start)
-	sb.endScratch = append(sb.endScratch[:0], prefix...)
-	sb.endScratch = append(sb.endScratch, end)
+	sb.startScratch[len(sb.startScratch)-1] = start
+	sb.endScratch[len(sb.endScratch)-1] = end
 	span.Init(
 		constraint.MakeCompositeKey(sb.startScratch...),
 		startBoundary,
@@ -808,7 +816,7 @@ func (sb *spanBuilder) makeSpanFromBucket(
 // we use the heuristic that NumRange is reduced by half.
 func getFilteredBucket(
 	iter *histogramIter, keyCtx *constraint.KeyContext, filteredSpan *constraint.Span, colOffset int,
-) *cat.HistogramBucket {
+) cat.HistogramBucket {
 	spanLowerBound := filteredSpan.StartKey().Value(colOffset)
 	spanUpperBound := filteredSpan.EndKey().Value(colOffset)
 	bucketLowerBound := iter.inclusiveLowerBound(keyCtx.Ctx)
@@ -915,7 +923,7 @@ func getFilteredBucket(
 	if iter.desc {
 		upperBound = spanLowerBound
 	}
-	return &cat.HistogramBucket{
+	return cat.HistogramBucket{
 		NumEq:         numEq,
 		NumRange:      numRange,
 		DistinctRange: distinctCountRange,

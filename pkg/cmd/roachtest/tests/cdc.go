@@ -898,7 +898,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			partitionStr := strconv.Itoa(int(m.Partition))
 			if len(m.Key) > 0 {
-				if err := v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated); err != nil {
+				if err := v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated, m.Topic); err != nil {
 					return err
 				}
 			} else {
@@ -926,7 +926,11 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
 		}
-		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`)
+		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`, cdctest.ChangefeedOption{
+			FullTableName: false,
+			KeyInValue:    false,
+			Format:        "json",
+		})
 		if err != nil {
 			return err
 		}
@@ -953,7 +957,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 			partitionStr := strconv.Itoa(int(m.Partition))
 			if len(m.Key) > 0 {
 				startTime := timeutil.Now()
-				if err := v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated); err != nil {
+				if err := v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated, m.Topic); err != nil {
 					return err
 				}
 				timeSpentValidatingRows += timeutil.Since(startTime)
@@ -3890,7 +3894,7 @@ func (c *topicConsumer) validateMessage(partition int32, m *sarama.ConsumerMessa
 			return err
 		}
 	default:
-		err := c.validator.NoteRow(partitionStr, string(m.Key), string(m.Value), updated)
+		err := c.validator.NoteRow(partitionStr, string(m.Key), string(m.Value), updated, m.Topic)
 		if err != nil {
 			return err
 		}
