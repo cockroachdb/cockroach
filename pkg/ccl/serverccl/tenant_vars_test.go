@@ -69,17 +69,17 @@ func TestTenantVars(t *testing.T) {
 		metrics, err := parser.TextToMetricFamilies(resp.Body)
 		require.NoError(t, err)
 
-		userCPU, found := metrics["sys_cpu_user_ns"]
+		tenantUserCPU, found := metrics["sys_cpu_user_ns"]
 		require.True(t, found)
-		require.Len(t, userCPU.GetMetric(), 1)
-		require.Equal(t, io_prometheus_client.MetricType_GAUGE, userCPU.GetType())
-		cpuUserNanos := userCPU.Metric[0].GetGauge().GetValue()
+		require.Len(t, tenantUserCPU.GetMetric(), 1)
+		require.Equal(t, io_prometheus_client.MetricType_GAUGE, tenantUserCPU.GetType())
+		tenantCpuUserNanos := tenantUserCPU.Metric[0].GetGauge().GetValue()
 
-		sysCPU, found := metrics["sys_cpu_sys_ns"]
+		tenantSysCPU, found := metrics["sys_cpu_sys_ns"]
 		require.True(t, found)
-		require.Len(t, sysCPU.GetMetric(), 1)
-		require.Equal(t, io_prometheus_client.MetricType_GAUGE, sysCPU.GetType())
-		cpuSysNanos := sysCPU.Metric[0].GetGauge().GetValue()
+		require.Len(t, tenantSysCPU.GetMetric(), 1)
+		require.Equal(t, io_prometheus_client.MetricType_GAUGE, tenantSysCPU.GetType())
+		tenantCpuSysNanos := tenantSysCPU.Metric[0].GetGauge().GetValue()
 
 		now, found := metrics["sys_cpu_now_ns"]
 		require.True(t, found)
@@ -87,23 +87,22 @@ func TestTenantVars(t *testing.T) {
 		require.Equal(t, io_prometheus_client.MetricType_GAUGE, now.GetType())
 		nowNanos := now.Metric[0].GetGauge().GetValue()
 
-		uptime, found := metrics["sys_uptime"]
+		tenantUptime, found := metrics["sys_uptime"]
 		require.True(t, found)
-		require.Len(t, uptime.GetMetric(), 1)
-		require.Equal(t, io_prometheus_client.MetricType_GAUGE, uptime.GetType())
-		uptimeSeconds := uptime.Metric[0].GetGauge().GetValue()
+		require.Len(t, tenantUptime.GetMetric(), 1)
+		require.Equal(t, io_prometheus_client.MetricType_GAUGE, tenantUptime.GetType())
+		uptimeSeconds := tenantUptime.Metric[0].GetGauge().GetValue()
 
 		// The values are between zero and whatever User/Sys time is observed after the get.
 		require.LessOrEqual(t, float64(startNowNanos), nowNanos)
 		require.LessOrEqual(t, nowNanos, float64(timeutil.Now().UnixNano()))
 
-		cpuTime := gosigar.ProcTime{}
-		require.NoError(t, cpuTime.Get(os.Getpid()))
-		require.LessOrEqual(t, 0., cpuUserNanos)
-		require.LessOrEqual(t, cpuUserNanos, float64(cpuTime.User)*1e6)
-		require.LessOrEqual(t, 0., cpuSysNanos)
-		require.LessOrEqual(t, cpuSysNanos, float64(cpuTime.Sys)*1e6)
-
+		testCpuTime := gosigar.ProcTime{}
+		require.NoError(t, testCpuTime.Get(os.Getpid()))
+		require.LessOrEqual(t, 0., tenantCpuUserNanos)
+		require.LessOrEqual(t, tenantCpuUserNanos, float64(testCpuTime.User)*1e6)
+		require.LessOrEqual(t, 0., tenantCpuSysNanos)
+		require.LessOrEqual(t, tenantCpuSysNanos, float64(testCpuTime.Sys)*1e6)
 		require.LessOrEqual(t, 0., uptimeSeconds)
 
 		resp, err = client.Get(url)
@@ -115,30 +114,29 @@ func TestTenantVars(t *testing.T) {
 		metrics, err = parser.TextToMetricFamilies(resp.Body)
 		require.NoError(t, err)
 
-		userCPU, found = metrics["sys_cpu_user_ns"]
+		tenantUserCPU, found = metrics["sys_cpu_user_ns"]
 		require.True(t, found)
-		require.Len(t, userCPU.GetMetric(), 1)
-		require.Equal(t, io_prometheus_client.MetricType_GAUGE, userCPU.GetType())
-		cpuUserNanos2 := userCPU.Metric[0].GetGauge().GetValue()
+		require.Len(t, tenantUserCPU.GetMetric(), 1)
+		require.Equal(t, io_prometheus_client.MetricType_GAUGE, tenantUserCPU.GetType())
+		tenantCpuUserNanos2 := tenantUserCPU.Metric[0].GetGauge().GetValue()
 
-		sysCPU, found = metrics["sys_cpu_sys_ns"]
+		tenantSysCPU, found = metrics["sys_cpu_sys_ns"]
 		require.True(t, found)
-		require.Len(t, sysCPU.GetMetric(), 1)
-		require.Equal(t, io_prometheus_client.MetricType_GAUGE, sysCPU.GetType())
-		// cpuSysNanos2 := sysCPU.Metric[0].GetGauge().GetValue()
+		require.Len(t, tenantSysCPU.GetMetric(), 1)
+		require.Equal(t, io_prometheus_client.MetricType_GAUGE, tenantSysCPU.GetType())
+		tenantCpuSysNanos2 := tenantSysCPU.Metric[0].GetGauge().GetValue()
 
-		uptime, found = metrics["sys_uptime"]
+		tenantUptime, found = metrics["sys_uptime"]
 		require.True(t, found)
-		require.Len(t, uptime.GetMetric(), 1)
-		require.Equal(t, io_prometheus_client.MetricType_GAUGE, uptime.GetType())
-		uptimeSeconds2 := uptime.Metric[0].GetGauge().GetValue()
+		require.Len(t, tenantUptime.GetMetric(), 1)
+		require.Equal(t, io_prometheus_client.MetricType_GAUGE, tenantUptime.GetType())
+		uptimeSeconds2 := tenantUptime.Metric[0].GetGauge().GetValue()
 
 		cpuTime2 := gosigar.ProcTime{}
 		require.NoError(t, cpuTime2.Get(os.Getpid()))
 
-		require.LessOrEqual(t, float64(cpuTime2.User-cpuTime.User)*1e6, cpuUserNanos2)
-		// TODO(#119329): Sometimes our metrics have 0 cpuSysNanos.
-		// require.LessOrEqual(t, float64(cpuTime2.Sys-cpuTime.Sys)*1e6, cpuSysNanos2)
+		require.Less(t, tenantCpuUserNanos2, float64(cpuTime2.User)*1e6)
+		require.LessOrEqual(t, tenantCpuSysNanos2, float64(cpuTime2.Sys)*1e6)
 		require.LessOrEqual(t, uptimeSeconds, uptimeSeconds2)
 
 		_, found = metrics["jobs_running_non_idle"]
