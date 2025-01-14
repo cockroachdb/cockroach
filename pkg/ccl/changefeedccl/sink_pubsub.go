@@ -64,7 +64,7 @@ type deprecatedGcpPubsubClient struct {
 	projectID  string
 	endpoint   string
 	topicNamer *TopicNamer
-	url        sinkURL
+	url        *changefeedbase.SinkURL
 
 	mu struct {
 		syncutil.Mutex
@@ -115,8 +115,8 @@ func makeDeprecatedPubsubSink(
 	knobs *TestingKnobs,
 ) (Sink, error) {
 	m := mb(requiresResourceAccounting)
-	pubsubURL := sinkURL{URL: u, q: u.Query()}
-	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
+	pubsubURL := &changefeedbase.SinkURL{URL: u}
+	pubsubTopicName := pubsubURL.ConsumeParam(changefeedbase.SinkParamTopicName)
 
 	var formatType changefeedbase.FormatType
 	switch encodingOpts.Format {
@@ -153,7 +153,7 @@ func makeDeprecatedPubsubSink(
 		if projectID == "" {
 			return nil, errors.New("missing project name")
 		}
-		region := pubsubURL.consumeParam(regionParam)
+		region := pubsubURL.ConsumeParam(regionParam)
 		var endpoint string
 		if region == "" {
 			if unordered {
