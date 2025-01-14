@@ -7,41 +7,42 @@ package server
 
 import (
 	"context"
-	"strconv"
+	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSelectQuery(t *testing.T) {
+func TestDRPCSelectQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Run the test with both DRPC enabled and disabled.
-	testutils.RunTrueAndFalse(t, "enableDRPC", func(t *testing.T, enableDRPC bool) {
-		clear := envutil.TestSetEnv(t, "COCKROACH_EXPERIMENTAL_DRPC_ENABLED", strconv.FormatBool(enableDRPC))
-		defer clear()
+	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
+		ctx, cancel := context.WithTimeout(context.Background(), testutils.SucceedsSoonDuration())
+		defer cancel()
 
-		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		rpc.ExperimentalDRPCEnabled.Override(ctx, &st.SV, true)
+
 		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Insecure: true,
+				Settings: st,
+				Insecure: insecure,
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
 
-		db := tc.ServerConn(1)
+		idx := rand.Intn(tc.NumServers())
+		t.Logf("querying from node %d", idx+1)
+		db := tc.ServerConn(idx)
 		defer db.Close()
-
-		ctx, cancel := context.WithTimeout(ctx, time.Second)
-		defer cancel()
 
 		rows, err := db.QueryContext(ctx, "SELECT count(*) FROM system.tenants")
 		require.NoError(t, err)
@@ -52,6 +53,6 @@ func TestSelectQuery(t *testing.T) {
 			require.NoError(t, rows.Scan(&count))
 			require.Equal(t, 1, count)
 		}
-		require.NoError(t, rows.Close())
+		require.NoError(t, rows.Err())
 	})
 }
