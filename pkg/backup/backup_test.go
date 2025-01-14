@@ -4723,7 +4723,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	tc, origDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	s := tc.ApplicationLayer(0)
-	args := base.TestServerArgs{ExternalIODir: s.ClusterSettings().ExternalIODir}
+	args := base.TestServerArgs{ExternalIODir: s.ExternalIODir()}
 
 	for _, q := range []string{
 		`CREATE DATABASE d2`,

@@ -158,7 +158,6 @@ func TestAzureFileCredential(t *testing.T) {
 	// reload, there should be no error that bubbles up to the rest of the Azure
 	// SDK and storage.
 	t.Run("reload-on-error", func(t *testing.T) {
-		testSettings := cluster.MakeTestingClusterSettings()
 		ioConf := base.ExternalIODirConfig{}
 		storeURI := cfg.filePathImplicitAuth("backup-test")
 
@@ -183,7 +182,8 @@ func TestAzureFileCredential(t *testing.T) {
 			}
 
 			// Setup a sink for the given args.
-			clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+			clientFactory := blobs.TestBlobServiceClient("")
+			testSettings := cluster.MakeTestingClusterSettings()
 			s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
 				nil, nil, cloud.NilMetrics, cloud.WithAzureStorageTestingKnobs(&knobs))
 			if err != nil {

@@ -321,6 +321,9 @@ type ApplicationLayerInterface interface {
 	// TestingKnobs returns the TestingKnobs in use by the test server.
 	TestingKnobs() *base.TestingKnobs
 
+	// ExternalIODir returns ExternalIODir form the server config.
+	ExternalIODir() string
+
 	// SQLServerInternal returns the *server.SQLServer as an interface{}
 	// Note: most tests should use SQLServer() and InternalExecutor() instead.
 	SQLServerInternal() interface{}

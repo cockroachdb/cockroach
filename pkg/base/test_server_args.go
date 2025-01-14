@@ -89,12 +89,13 @@ type TestServerArgs struct {
 	// If not initialized, will default to DefaultTestTempStorageConfig.
 	TempStorageConfig TempStorageConfig
 
-	// ExternalIODir is used to initialize field in cluster.Settings.
-	ExternalIODir string
-
 	// ExternalIODirConfig is used to initialize the same-named
 	// field on the server.Config struct.
 	ExternalIODirConfig ExternalIODirConfig
+
+	// ExternalIODir is used to initialize the same-named field on
+	// the server.Config struct.
+	ExternalIODir string
 
 	// Fields copied to the server.Config.
 	Insecure                    bool
@@ -578,7 +579,7 @@ type TestTenantArgs struct {
 	ExternalIODirConfig ExternalIODirConfig
 
 	// ExternalIODir is used to initialize the same-named field on
-	// the params.Settings struct.
+	// the server.Config struct.
 	ExternalIODir string
 
 	// If set, this will be appended to the Postgres URL by functions that
