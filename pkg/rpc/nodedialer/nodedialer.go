@@ -397,7 +397,7 @@ func maybeWrapInTracingClient(
 	ctx context.Context, client rpc.RestrictedInternalClient,
 ) rpc.RestrictedInternalClient {
 	sp := tracing.SpanFromContext(ctx)
-	if sp != nil && !sp.IsNoop() {
+	if sp != nil {
 		return &tracingInternalClient{RestrictedInternalClient: client}
 	}
 	return client
@@ -408,7 +408,7 @@ func (c *tracingInternalClient) Batch(
 	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
 ) (*kvpb.BatchResponse, error) {
 	sp := tracing.SpanFromContext(ctx)
-	if sp != nil && !sp.IsNoop() {
+	if sp != nil {
 		ba = ba.ShallowCopy()
 		ba.TraceInfo = sp.Meta().ToProto()
 	}
