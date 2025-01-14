@@ -16,10 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -93,6 +95,13 @@ type ParallelUnorderedSynchronizer struct {
 	// the corresponding to it input.
 	nextBatch []func()
 
+	// outputBatch is the output batch emitted by the synchronizer.
+	//
+	// The contract of Operator.Next encourages emitting the same batch across
+	// Next calls, so batches coming from the inputs are decomposed into vectors
+	// which are inserted into this batch.
+	outputBatch coldata.Batch
+
 	state int32
 	// externalWaitGroup refers to the WaitGroup passed in externally. Since the
 	// ParallelUnorderedSynchronizer spawns goroutines, this allows callers to
@@ -141,7 +150,8 @@ func eagerCancellationDisabled(flowCtx *execinfra.FlowCtx) bool {
 func NewParallelUnorderedSynchronizer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	streamingMemAcc *mon.BoundAccount,
+	allocator *colmem.Allocator,
+	inputTypes []*types.T,
 	inputs []colexecargs.OpWithMetaInfo,
 	wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
@@ -154,7 +164,7 @@ func NewParallelUnorderedSynchronizer(
 	return &ParallelUnorderedSynchronizer{
 		flowCtx:           flowCtx,
 		processorID:       processorID,
-		streamingMemAcc:   streamingMemAcc,
+		streamingMemAcc:   allocator.Acc(),
 		inputs:            inputs,
 		inputCtxs:         make([]context.Context, len(inputs)),
 		cancelLocalInput:  make([]context.CancelFunc, len(inputs)),
@@ -162,6 +172,7 @@ func NewParallelUnorderedSynchronizer(
 		readNextBatch:     readNextBatch,
 		batches:           make([]coldata.Batch, len(inputs)),
 		nextBatch:         make([]func(), len(inputs)),
+		outputBatch:       allocator.NewMemBatchNoCols(inputTypes, coldata.BatchSize() /* capacity */),
 		externalWaitGroup: wg,
 		internalWaitGroup: &sync.WaitGroup{},
 		// batchCh is a buffered channel in order to offer non-blocking writes to
@@ -398,7 +409,11 @@ func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
 				s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
 				continue
 			}
-			return msg.b
+			for i, vec := range msg.b.ColVecs() {
+				s.outputBatch.ReplaceCol(vec, i)
+			}
+			colexecutils.UpdateBatchState(s.outputBatch, msg.b.Length(), msg.b.Selection() != nil /* usesSel */, msg.b.Selection())
+			return s.outputBatch
 		}
 	}
 }
@@ -482,6 +497,7 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 
 	// Done.
 	s.setState(parallelUnorderedSynchronizerStateDone)
+	s.outputBatch = nil
 	bufferedMeta := s.bufferedMeta
 	// Eagerly lose the reference to the metadata since it might be of
 	// non-trivial footprint.
