@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cloudcheck
+package sql
 
 import (
 	"context"
@@ -13,17 +13,36 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+var CloudCheckHeader = colinfo.ResultColumns{
+	{Name: "node", Typ: types.Int},
+	{Name: "locality", Typ: types.String},
+	{Name: "ok", Typ: types.Bool},
+	{Name: "error", Typ: types.String},
+	{Name: "transferred", Typ: types.String},
+	{Name: "read_speed", Typ: types.String},
+	{Name: "write_speed", Typ: types.String},
+	{Name: "can_delete", Typ: types.Bool},
+}
+
+type CloudCheckParams = execinfrapb.CloudStorageTestSpec_Params
 
 type result struct {
 	ok         bool
@@ -35,7 +54,7 @@ type result struct {
 	canDelete  bool
 }
 
-var flowTypes = []*types.T{
+var cloudCheckFlowTypes = []*types.T{
 	types.Int, types.String, // node and locality
 	types.Bool, types.String, // ok and error
 	types.Int, types.Int, // read bytes/nanos
@@ -48,7 +67,7 @@ func checkURI(
 	opener cloud.ExternalStorageFromURIFactory,
 	location string,
 	username username.SQLUsername,
-	params Params,
+	params CloudCheckParams,
 ) result {
 	ctxDone := ctx.Done()
 
@@ -178,7 +197,7 @@ func newCloudCheckProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	p := &proc{spec: spec}
-	if err := p.Init(ctx, p, post, flowTypes, flowCtx, processorID, nil /* memMonitor */, execinfra.ProcStateOpts{}); err != nil {
+	if err := p.Init(ctx, p, post, cloudCheckFlowTypes, flowCtx, processorID, nil /* memMonitor */, execinfra.ProcStateOpts{}); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -244,6 +263,54 @@ func (p *proc) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 			rowenc.DatumToEncDatum(types.Bool, tree.MakeDBool(tree.DBool(res.canDelete))),
 		}, nil
 	}
+}
+
+// CheckDestinationPrivileges iterates over the External Storage URIs and
+// ensures the user has adequate privileges to use each of them.
+func CheckDestinationPrivileges(ctx context.Context, p PlanHookState, to []string) error {
+	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
+	if err != nil {
+		return err
+	}
+	if isAdmin {
+		return nil
+	}
+
+	// Check destination specific privileges.
+	for _, uri := range to {
+		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
+		if err != nil {
+			return err
+		}
+
+		// Check if the destination requires the user to be an admin or have the
+		// `EXTERNALIOIMPLICITACCESS` privilege.
+		requiresImplicitAccess := !conf.AccessIsWithExplicitAuth()
+		hasImplicitAccessPrivilege, privErr :=
+			p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS, p.User())
+		if privErr != nil {
+			return privErr
+		}
+		if requiresImplicitAccess && !(p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound || hasImplicitAccessPrivilege) {
+			return pgerror.Newf(
+				pgcode.InsufficientPrivilege,
+				"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified %s URI",
+				conf.Provider.String())
+		}
+
+		// If the resource being used is an External Connection, check that the user
+		// has adequate privileges.
+		if conf.Provider == cloudpb.ExternalStorageProvider_external {
+			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
+				ConnectionName: conf.ExternalConnectionConfig.Name,
+			}
+			if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func init() {

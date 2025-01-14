@@ -26,6 +26,7 @@ go_library(
         "batch.go",
         "call.go",
         "changefeed.go",
+        "check.go",
         "col_name.go",
         "comment_on_column.go",
         "comment_on_constraint.go",

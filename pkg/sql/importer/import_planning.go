@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -412,7 +411,7 @@ func importPlanHook(
 			}
 			return nil, nil, false, err
 		}
-		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, []string{file}); err != nil {
+		if err := sql.CheckDestinationPrivileges(ctx, p, []string{file}); err != nil {
 			return nil, nil, false, err
 		}
 	}

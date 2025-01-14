@@ -86,8 +86,6 @@ const (
 	// BackupValidateDetails identifies a SHOW BACKUP VALIDATION
 	// statement.
 	BackupValidateDetails
-	// BackupConnectionTest identifies a SHOW BACKUP CONNECTION statement
-	BackupConnectionTest
 )
 
 // TODO (msbutler): 22.2 after removing old style show backup syntax, rename
@@ -120,8 +118,6 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("FILES ")
 	case BackupSchemaDetails:
 		ctx.WriteString("SCHEMAS ")
-	case BackupConnectionTest:
-		ctx.WriteString("CONNECTION ")
 	}
 
 	if node.From {
