@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // streamClient is a type constraint that is satisfied by a bidirectional gRPC
@@ -330,4 +331,13 @@ type BatchStreamClient = streamClient[*kvpb.BatchRequest, *kvpb.BatchResponse]
 // newBatchStream constructs a BatchStreamClient from a grpc.ClientConn.
 func newBatchStream(ctx context.Context, cc *grpc.ClientConn) (BatchStreamClient, error) {
 	return kvpb.NewInternalClient(cc).BatchStream(ctx)
+}
+
+type DRPCBatchStreamPool = streamPool[*kvpb.BatchRequest, *kvpb.BatchResponse, drpc.Conn]
+
+type DRPCBatchStreamClient = streamClient[*kvpb.BatchRequest, *kvpb.BatchResponse]
+
+// newDRPCBatchStream constructs a BatchStreamClient from a drpc.Conn.
+func newDRPCBatchStream(ctx context.Context, dc drpc.Conn) (DRPCBatchStreamClient, error) {
+	return kvpb.NewDRPCBatchClient(dc).BatchStream(ctx)
 }
