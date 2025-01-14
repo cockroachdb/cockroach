@@ -30,6 +30,7 @@ go_library(
         "//pkg/crosscluster/replicationutils",
         "//pkg/crosscluster/streamclient",
         "//pkg/jobs",
+        "//pkg/jobs/ingeststopped",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprofiler",
         "//pkg/keys",
