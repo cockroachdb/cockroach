@@ -6,8 +6,8 @@
 package base64
 
 import (
+	"bytes"
 	"encoding/base64"
-	"strings"
 )
 
 // Encoder is a streaming encoder for base64 strings. It must be initialized
@@ -21,7 +21,7 @@ import (
 // handling has been removed for simplification.
 type Encoder struct {
 	enc  *base64.Encoding
-	sb   strings.Builder
+	sb   bytes.Buffer
 	buf  [3]byte    // buffered data waiting to be encoded
 	nbuf int8       // number of bytes in buf
 	out  [1024]byte // output buffer
