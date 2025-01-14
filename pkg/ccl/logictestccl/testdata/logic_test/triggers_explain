@@ -380,6 +380,7 @@ quality of service: regular
 │
 └── • after-triggers
       trigger: t
+      short-circuited
       input: buffer 1
 
 # Insert a row so that the trigger fires, and show the trigger plan.
@@ -723,6 +724,7 @@ quality of service: regular
 │
 └── • fk-cascade
       fk: child_fk_fkey
+      short-circuited
       input: buffer 1
 
 # Insert rows so that the cascade fires and the plan is generated.

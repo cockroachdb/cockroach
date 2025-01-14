@@ -283,11 +283,6 @@ type PostQuery struct {
 	// PostQuery describes a set of AFTER triggers.
 	FKConstraint cat.ForeignKeyConstraint
 
-	// CascadeHasBeforeTriggers is set only for cascades. It indicates whether the
-	// mutation planned for the cascade will fire BEFORE triggers. It is used
-	// during EXPLAIN.
-	CascadeHasBeforeTriggers bool
-
 	// Triggers is used for logging and EXPLAIN purposes. It is nil if this
 	// PostQuery describes a foreign-key cascade action.
 	Triggers []cat.Trigger
