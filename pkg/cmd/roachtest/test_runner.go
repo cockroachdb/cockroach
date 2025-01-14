@@ -2171,11 +2171,15 @@ func monitorForPreemptedVMs(ctx context.Context, t test.Test, c cluster.Cluster,
 					continue
 				}
 
-				// If we find any preemptions, fail the test. Note that we will recheck for
-				// preemptions in post failure processing, which will correctly assign this
-				// failure as an infra flake.
+				// If we find any preemptions, fail the test. Note that while we will recheck for
+				// preemptions in post failure processing, we need to mark the test as a preemption
+				// failure here in case the recheck says there were no preemptions.
 				if len(preemptedVMs) != 0 {
-					t.Errorf("monitorForPreemptedVMs: Preempted VMs detected: %s", preemptedVMs)
+					var vmNames []string
+					for _, preemptedVM := range preemptedVMs {
+						vmNames = append(vmNames, preemptedVM.Name)
+					}
+					t.Errorf("monitorForPreemptedVMs detected VM Preemptions: %s", vmPreemptionError(getVMNames(vmNames)))
 				}
 			}
 		}
