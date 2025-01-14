@@ -562,7 +562,11 @@ func runBackupProcessor(
 								if sendExportRequestWithVerboseTracing.Get(&clusterSettings.SV) {
 									opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
 								}
-								ctx, exportSpan := sp.Tracer().StartSpanCtx(ctx, "backup.ExportRequest", opts...)
+								tracer := sp.Tracer()
+								if tracer == nil {
+									tracer = flowCtx.Cfg.Tracer
+								}
+								ctx, exportSpan := tracer.StartSpanCtx(ctx, "backup.ExportRequest", opts...)
 								rawResp, pErr = kv.SendWrappedWithAdmission(
 									ctx, flowCtx.Cfg.DB.KV().NonTransactionalSender(), header, admissionHeader, req)
 								recording = exportSpan.FinishAndGetConfiguredRecording()

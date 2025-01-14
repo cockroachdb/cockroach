@@ -467,10 +467,6 @@ func (ih *instrumentationHelper) Setup(
 			ih.needFinish = true
 			return ctx
 		}
-	} else {
-		if buildutil.CrdbTestBuild {
-			panic(errors.AssertionFailedf("the context doesn't have a tracing span"))
-		}
 	}
 
 	shouldSampleFirstEncounter := func() bool {
