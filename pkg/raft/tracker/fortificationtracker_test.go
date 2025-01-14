@@ -6,6 +6,7 @@
 package tracker
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
@@ -902,6 +903,44 @@ func TestConfigChangeSafe(t *testing.T) {
 		ft.ComputeLeadSupportUntil(pb.StateLeader)
 		require.Equal(t, tc.expConfigChangeSafe, ft.ConfigChangeSafe())
 		require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil(pb.StateLeader))
+	}
+}
+
+// BenchmarkComputeLeadSupportUntil keeps calling ComputeLeadSupportUntil() for
+// different number of members.
+func BenchmarkComputeLeadSupportUntil(b *testing.B) {
+	ts := func(ts int64) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: ts,
+		}
+	}
+
+	for _, members := range []int{1, 3, 5, 7, 100} {
+		b.Run(fmt.Sprintf("members=%d", members), func(b *testing.B) {
+			// Prepare the mock store liveness, and record fortifications.
+			livenessMap := map[pb.PeerID]mockLivenessEntry{}
+			for i := 1; i <= members; i++ {
+				livenessMap[pb.PeerID(i)] = makeMockLivenessEntry(10, ts(100))
+			}
+
+			mockLiveness := makeMockStoreLiveness(livenessMap)
+			cfg := quorum.MakeEmptyConfig()
+			for i := 1; i <= members; i++ {
+				cfg.Voters[0][pb.PeerID(i)] = struct{}{}
+			}
+
+			ft := NewFortificationTracker(&cfg, mockLiveness, raftlogger.DiscardLogger)
+			for i := 1; i <= members; i++ {
+				ft.RecordFortification(pb.PeerID(i), 10)
+			}
+
+			// The benchmark actually starts here.
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				ft.ComputeLeadSupportUntil(pb.StateLeader)
+			}
+		})
 	}
 }
 
