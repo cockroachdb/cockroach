@@ -474,6 +474,22 @@ func TestCreateTables(t *testing.T) {
 		sqlE.ExpectErr(t, "either BIDIRECTIONAL or UNIDRECTIONAL must be specified", "CREATE LOGICALLY REPLICATED TABLE b.tab4 FROM TABLE tab4 ON $1", eURL.String())
 		sqlE.ExpectErr(t, "UNIDIRECTIONAL and BIDIRECTIONAL cannot be specified together", "CREATE LOGICALLY REPLICATED TABLE tab4 FROM TABLE tab4 ON $1 WITH BIDIRECTIONAL ON $2, UNIDIRECTIONAL", aURL.String(), eURL.String())
 	})
+	t.Run("parent id check", func(t *testing.T) {
+		sqlA.Exec(t, "CREATE DATABASE f")
+		sqlF := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("f")))
+		fURL, cleanup := srv.PGUrl(t, serverutils.DBName("f"))
+		defer cleanup()
+
+		sqlF.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
+
+		var jobID, jobIDDupe, jobIDDiff jobspb.JobID
+		repeatcmd := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH PARENT = '123'"
+		sqlF.QueryRow(t, repeatcmd, fURL.String()).Scan(&jobID)
+		sqlF.QueryRow(t, repeatcmd, fURL.String()).Scan(&jobIDDupe)
+		require.Equal(t, jobID, jobIDDupe)
+		sqlF.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH PARENT = '124'", fURL.String()).Scan(&jobIDDiff)
+		require.NotEqual(t, jobID, jobIDDiff)
+	})
 }
 
 // TestLogicalStreamIngestionAdvancePTS tests that the producer side pts advances

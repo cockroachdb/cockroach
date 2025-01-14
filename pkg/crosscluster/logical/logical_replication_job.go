@@ -325,11 +325,6 @@ func (r *logicalReplicationResumer) maybeStartReverseStream(
 		return errors.Wrapf(err, "failed to start reverse stream")
 	}
 
-	// TODO(msbutler): if the job exits before we write here but after setting up
-	// the reverse stream, we will accidentally create a second reverse stream. To
-	// prevent this, the PARENT option will passed to the reverse stream, then
-	// during ldr stream creation, the planhook checks if any job is already
-	// running with this parent job id.
 	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.StartedReverseStream = true
 		ju.UpdateProgress(md.Progress)
