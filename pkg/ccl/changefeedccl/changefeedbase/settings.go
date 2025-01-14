@@ -79,16 +79,21 @@ var SpanCheckpointInterval = settings.RegisterDurationSetting(
 	settings.WithName("changefeed.span_checkpoint.interval"),
 )
 
-// FrontierHighwaterLagCheckpointThreshold controls the amount the high-water
-// mark is allowed to lag behind the leading edge of the frontier before we
-// begin to attempt checkpointing spans above the high-water mark
-var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
+// SpanCheckpointLagThreshold controls the amount of time a changefeed's
+// lagging spans must lag behind its leading spans before a span-level
+// checkpoint is written.
+var SpanCheckpointLagThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_highwater_lag_checkpoint_threshold",
-	"controls the maximum the high-water mark is allowed to lag behind the leading spans of the frontier before per-span checkpointing is enabled; if 0, checkpointing due to high-water lag is disabled",
+	"the amount of time a changefeed's lagging (slowest) spans must lag "+
+		"behind its leading (fastest) spans before a span-level checkpoint "+
+		"to save leading span progress is written; if 0, span-level checkpoints "+
+		"due to lagging spans is disabled",
 	10*time.Minute,
 	settings.NonNegativeDuration,
-	settings.WithPublic)
+	settings.WithPublic,
+	settings.WithName("changefeed.span_checkpoint.lag_threshold"),
+)
 
 // SpanCheckpointMaxBytes controls the maximum number of key bytes that will be added
 // to a span-level checkpoint record.
