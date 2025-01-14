@@ -289,6 +289,7 @@ func createLogicalReplicationStreamPlanHook(
 				CreateTable:               stmt.CreateTable,
 				ReverseStreamCommand:      reverseStreamCmd,
 				ParentID:                  int64(options.ParentID),
+				Command:                   stmt.String(),
 			},
 			Progress: progress,
 		}
