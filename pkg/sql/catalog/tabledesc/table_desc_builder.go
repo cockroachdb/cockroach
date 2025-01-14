@@ -1313,15 +1313,15 @@ func maybeFixUsesSequencesIDForIdentityColumns(
 		if len(column.UsesSequenceIds) == 1 {
 			continue
 		}
-		// The first ownership will point to the owner from CREATE TABLE.
+		if len(column.OwnsSequenceIds) == 0 {
+			// With serial_normalization=rowid, a table definition like
+			// `CREATE TABLE t (a SERIAL GENERATED ALWAYS AS IDENTITY)`
+			// creates an identity column without any backing sequence. If that's the
+			// case, there's no need to add a sequence reference.
+			continue
+		}
 		tableDesc = builder.getOrInitModifiedDesc()
 		column = &tableDesc.Columns[idx]
-		if len(column.OwnsSequenceIds) == 0 {
-			return false, errors.AssertionFailedf("identity column %s (%d) on table %s must own a sequence",
-				column.Name,
-				column.ID,
-				tableDesc.Name)
-		}
 		column.UsesSequenceIds = append(column.UsesSequenceIds, column.OwnsSequenceIds[0])
 		wasRepaired = true
 	}
