@@ -290,7 +290,9 @@ message LogicalReplicationDetails {
   // command.
   int64 parent_id = 15 [(gogoproto.customname) = "ParentID"];
 
-  // Next ID: 16.
+  string command = 16;
+
+  // Next ID: 17.
 }
 
 message LogicalReplicationProgress {

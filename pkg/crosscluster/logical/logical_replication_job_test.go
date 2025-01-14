@@ -1867,21 +1867,18 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 		serverutils.UserPassword(username.RootUser, "password"))
 	defer cleanupB()
 
-	redactedDbAURL := strings.Replace(dbAURL.String(), "password", `redacted`, 1)
-	redactedDbBURL := strings.Replace(dbBURL.String(), "password", `redacted`, 1)
-
-	redactedJobADescription := fmt.Sprintf("LOGICAL REPLICATION STREAM into a.public.tab from %s", redactedDbBURL)
-	redactedJobBDescription := fmt.Sprintf("LOGICAL REPLICATION STREAM into b.public.tab from %s", redactedDbAURL)
-
 	var (
 		jobAID jobspb.JobID
 		jobBID jobspb.JobID
 	)
+
+	cmdA := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
+	cmdB := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH OPTIONS (DEFAULT FUNCTION = 'dlq')"
 	dbA.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab",
+		cmdA,
 		dbBURL.String()).Scan(&jobAID)
 	dbB.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'dlq'",
+		cmdB,
 		dbAURL.String()).Scan(&jobBID)
 
 	now := s.Clock().Now()
@@ -1906,7 +1903,7 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 		replicatedTime         time.Time
 		replicationStartTime   time.Time
 		conflictResolutionType string
-		description            string
+		command                string
 	)
 
 	showRows := dbA.Query(t, "SELECT * FROM [SHOW LOGICAL REPLICATION JOBS] ORDER BY job_id")
@@ -1949,7 +1946,7 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 			&replicatedTime,
 			&replicationStartTime,
 			&conflictResolutionType,
-			&description)
+			&command)
 		require.NoError(t, err)
 
 		expectedJobID := jobIDs[rowIdx]
@@ -1962,14 +1959,20 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 
 		expectedJobDescription := payload.Description
 
-		// Verify that URL is redacted in job descriptions
+		// Verify that URL is redacted in job descriptions. Note these do not appear
+		// in SHOW LDR JOBS, but do in the db console description.
+		redactedDbAURL := strings.Replace(dbAURL.String(), "password", `redacted`, 1)
+		redactedDbBURL := strings.Replace(dbBURL.String(), "password", `redacted`, 1)
+		redactedJobADescription := fmt.Sprintf("LOGICAL REPLICATION STREAM into a.public.tab from %s", redactedDbBURL)
+		redactedJobBDescription := fmt.Sprintf("LOGICAL REPLICATION STREAM into b.public.tab from %s", redactedDbAURL)
 		if jobID == jobAID {
 			require.Equal(t, redactedJobADescription, expectedJobDescription)
+			require.Equal(t, cmdA, command)
+
 		} else if jobID == jobBID {
 			require.Equal(t, redactedJobBDescription, expectedJobDescription)
+			require.Equal(t, cmdB, command)
 		}
-
-		require.Equal(t, expectedJobDescription, description)
 
 		rowIdx++
 	}
