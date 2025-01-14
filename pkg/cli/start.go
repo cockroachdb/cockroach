@@ -604,11 +604,10 @@ func runStartInternal(
 		return errors.Wrapf(err, "failed to initialize %s", serverType)
 	}
 
-	st := serverCfg.BaseConfig.Settings
-
 	// Derive temporary/auxiliary directory specifications.
-	st.ExternalIODir = startCtx.externalIODir
+	serverCfg.ExternalIODir = startCtx.externalIODir
 
+	st := serverCfg.BaseConfig.Settings
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
 		ctx, st, stopper, serverCfg.Stores,
 	); err != nil {
@@ -869,7 +868,7 @@ func createAndStartServerAsync(
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			return reportServerInfo(ctx, tBegin, serverCfg, s.ClusterSettings(),
-				serverType, s.InitialStart(), s.LogicalClusterID())
+				serverType, s.InitialStart(), s.LogicalClusterID(), startCtx.externalIODir)
 		}(); err != nil {
 			shutdownReqC <- serverctl.MakeShutdownRequest(
 				serverctl.ShutdownReasonServerStartupError, errors.Wrapf(err, "server startup failed"))
@@ -1183,6 +1182,7 @@ func reportServerInfo(
 	serverType redact.SafeString,
 	initialStart bool,
 	tenantClusterID uuid.UUID,
+	externalIODir string,
 ) error {
 	var buf redact.StringBuilder
 	info := build.GetInfo()
@@ -1227,8 +1227,8 @@ func reportServerInfo(
 	if tmpDir := serverCfg.SQLConfig.TempStorageConfig.Path; tmpDir != "" {
 		buf.Printf("temp dir:\t%s\n", log.SafeManaged(tmpDir))
 	}
-	if ext := st.ExternalIODir; ext != "" {
-		buf.Printf("external I/O path: \t%s\n", log.SafeManaged(ext))
+	if externalIODir != "" {
+		buf.Printf("external I/O path: \t%s\n", log.SafeManaged(externalIODir))
 	} else {
 		buf.Printf("external I/O path: \t<disabled>\n")
 	}

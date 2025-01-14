@@ -145,7 +145,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		st = cluster.MakeClusterSettings()
 	}
 
-	st.ExternalIODir = params.ExternalIODir
 	tr := params.Tracer
 	if params.Tracer == nil {
 		tr = tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
@@ -166,6 +165,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Locality = params.Locality
 	cfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	cfg.DisableSQLServer = params.DisableSQLServer
+	cfg.ExternalIODir = params.ExternalIODir
 	if params.TraceDir != "" {
 		if err := initTraceDir(params.TraceDir); err == nil {
 			cfg.InflightTraceDirName = params.TraceDir
@@ -566,6 +566,11 @@ func (ts *testServer) TestingKnobs() *base.TestingKnobs {
 	return nil
 }
 
+// ExternalIODir is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) ExternalIODir() string {
+	return ts.cfg.ExternalIODir
+}
+
 // SQLServerInternal is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) SQLServerInternal() interface{} {
 	return ts.sqlServer
@@ -936,6 +941,11 @@ func (t *testTenant) HTTPAddr() string {
 // RPCAddr is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) RPCAddr() string {
 	return t.Cfg.Addr
+}
+
+// ExternalIODir is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) ExternalIODir() string {
+	return t.Cfg.ExternalIODir
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
@@ -1634,7 +1644,6 @@ func (ts *testServer) StartTenant(
 		st = cluster.MakeTestingClusterSettings()
 	}
 
-	st.ExternalIODir = params.ExternalIODir
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantLoopbackAddr = ts.AdvRPCAddr()
 	if params.MemoryPoolSize != 0 {
@@ -1692,6 +1701,7 @@ func (ts *testServer) StartTenant(
 	baseCfg.CPUProfileDirName = ts.Cfg.BaseConfig.CPUProfileDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 	baseCfg.ExternalIODirConfig = params.ExternalIODirConfig
+	baseCfg.ExternalIODir = params.ExternalIODir
 
 	// Grant the tenant the default capabilities.
 	if err := ts.grantDefaultTenantCapabilities(ctx, params.TenantID, params.SkipTenantCheck); err != nil {

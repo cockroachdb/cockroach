@@ -45,9 +45,8 @@ func makeS3Storage(
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	// Setup a sink for the given args.
-	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		clientFactory,
+		blobs.TestEmptyBlobClientFactory,
 		nil, /* db */
 		nil, /* limiters */
 		cloud.NilMetrics,
@@ -391,7 +390,7 @@ func TestPutS3Endpoint(t *testing.T) {
 
 		// Setup a sink for the given args.
 		testSettings := cluster.MakeTestingClusterSettings()
-		clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+		clientFactory := blobs.TestBlobServiceClient("")
 
 		storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
 			nil, nil, cloud.NilMetrics)
@@ -584,8 +583,6 @@ func TestInterpretAWSCode(t *testing.T) {
 func TestS3BucketDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testSettings := cluster.MakeTestingClusterSettings()
-
 	ctx := context.Background()
 	skipIfNoDefaultConfig(t, ctx)
 
@@ -610,7 +607,8 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	}
 
 	// Setup a sink for the given args.
-	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	clientFactory := blobs.TestBlobServiceClient("")
+	testSettings := cluster.MakeTestingClusterSettings()
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
 		clientFactory,
 		nil, /* db */

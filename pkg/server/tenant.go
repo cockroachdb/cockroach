@@ -859,6 +859,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
 		s.costController,
 		s.registry,
+		s.cfg.ExternalIODir,
 	)
 
 	// Start the job scheduler now that the SQL Server and
