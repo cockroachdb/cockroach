@@ -223,44 +223,22 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas. v1 refers to the pre-v24.3 flow controller.`}
+      tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas.`}
     >
       <Axis units={AxisUnits.Duration} label="Flow Token Wait Duration">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
-              name="cr.node.kvadmission.flow_controller.regular_wait_duration-p99"
-              title={
-                "(v1) Regular " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={[nid]}
-              downsampleMax
-            />
-            <Metric
-              key={nid}
-              name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p99"
-              title={
-                "(v1) Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={[nid]}
-              downsampleMax
-            />
-            <Metric
-              key={nid}
               name="cr.node.kvflowcontrol.eval_wait.regular.duration-p99"
-              title={
-                "(v2) Regular " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Regular " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
               name="cr.node.kvflowcontrol.eval_wait.elastic.duration-p99"
-              title={
-                "(v2) Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
@@ -274,41 +252,42 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`Blocked replication streams per node in Replication Admission Control, separated by admission priority {regular, elastic}. v1 refers to the pre-v24.3 flow controller.`}
+      tooltip={`Blocked replication streams per node in Replication Admission Control, separated by admission priority {regular, elastic}.`}
     >
       <Axis label="Blocked Stream Count">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
-              name="cr.node.kvadmission.flow_controller.regular_blocked_stream_count"
-              title={
-                "(v1) Regular " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={[nid]}
-            />
-            <Metric
-              key={nid}
-              name="cr.node.kvadmission.flow_controller.elastic_blocked_stream_count"
-              title={
-                "(v1) Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={[nid]}
-            />
-            <Metric
-              key={nid}
               name="cr.node.kvflowcontrol.streams.eval.regular.blocked_count"
-              title={
-                "(v2) Regular " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Regular " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
             />
             <Metric
               key={nid}
               name="cr.node.kvflowcontrol.streams.eval.elastic.blocked_count"
-              title={
-                "(v2) Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              sources={[nid]}
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Replication Stream Send Queue Size"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+      tooltip={`Queued bytes to be sent across all replication streams on a node in Replication Admission Control. `}
+    >
+      <Axis units={AxisUnits.Bytes} label="Size">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.kvflowcontrol.send_queue.bytes"
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
             />
           </>
