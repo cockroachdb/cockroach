@@ -219,10 +219,6 @@ func (sc *webhookSinkClient) makePayloadForBytes(body []byte) (SinkPayload, erro
 
 	sc.setRequestHeaders(req)
 
-	req.GetBody = func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(finalBytes)), nil
-	}
-
 	return req, nil
 }
 
@@ -348,10 +344,9 @@ func (cb *webhookCSVBuffer) Close() (SinkPayload, error) {
 }
 
 type webhookJSONBuffer struct {
-	messages        [][]byte
-	numBytes        int
-	compressedBytes int
-	sc              *webhookSinkClient
+	messages [][]byte
+	numBytes int
+	sc       *webhookSinkClient
 }
 
 var _ BatchBuffer = (*webhookJSONBuffer)(nil)
@@ -384,21 +379,7 @@ func (jb *webhookJSONBuffer) Close() (SinkPayload, error) {
 	}
 	buffer.WriteString(suffix)
 
-	payload, err := jb.sc.makePayloadForBytes(buffer.Bytes())
-	if err != nil {
-		return nil, err
-	}
-
-	if jb.sc.compression.enabled() {
-		if req, ok := payload.(*http.Request); ok && req.Body != nil {
-			if compressed, err := io.ReadAll(req.Body); err == nil {
-				jb.compressedBytes = len(compressed)
-				req.Body = io.NopCloser(bytes.NewReader(compressed))
-			}
-		}
-	}
-
-	return payload, nil
+	return jb.sc.makePayloadForBytes(buffer.Bytes())
 }
 
 // MakeBatchBuffer implements the SinkClient interface
