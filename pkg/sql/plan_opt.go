@@ -884,9 +884,18 @@ func (opc *optPlanningCtx) runExecBuilder(
 	allowAutoCommit bool,
 ) error {
 	var result *planComponents
+	var explainFactory *explain.Factory
 	if !opc.p.SessionData().DisablePlanGists {
 		opc.gf.Init(f)
-		defer opc.gf.Reset()
+		defer func(f exec.Factory) {
+			if explainFactory != nil {
+				// The gist factory was captured by the explain factory, so
+				// given that we're about to reset the former, we need to modify
+				// the latter to point to the original exec factory.
+				explainFactory.ReplaceWrapped(f)
+			}
+			opc.gf.Reset()
+		}(f)
 		f = &opc.gf
 	}
 	var bld *execbuilder.Builder
@@ -902,7 +911,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		result = plan.(*planComponents)
 	} else {
 		// Create an explain factory and record the explain.Plan.
-		explainFactory := explain.NewFactory(f, semaCtx, evalCtx)
+		explainFactory = explain.NewFactory(f, semaCtx, evalCtx)
 		bld = execbuilder.New(
 			ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
 			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),

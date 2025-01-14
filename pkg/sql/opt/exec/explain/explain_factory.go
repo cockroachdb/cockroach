@@ -139,6 +139,11 @@ func NewFactory(
 	}
 }
 
+// ReplaceWrapped updates the wrapped factory with the given one.
+func (f *Factory) ReplaceWrapped(wrappedFactory exec.Factory) {
+	f.wrappedFactory = wrappedFactory
+}
+
 // AnnotateNode is part of the exec.ExplainFactory interface.
 func (f *Factory) AnnotateNode(execNode exec.Node, id exec.ExplainAnnotationID, value interface{}) {
 	execNode.(*Node).Annotate(id, value)
