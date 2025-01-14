@@ -189,6 +189,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateExternalConnection(ctx, n)
 	case *tree.CreateTenant:
 		return p.CreateTenantNode(ctx, n)
+	case *tree.CheckExternalConnection:
+		return p.CheckExternalConnection(ctx, n)
 	case *tree.DropExternalConnection:
 		return p.DropExternalConnection(ctx, n)
 	case *tree.Deallocate:
@@ -450,6 +452,7 @@ func init() {
 		&tree.ScheduledBackup{},
 		&tree.CreateTenantFromReplication{},
 		&tree.CreateLogicalReplicationStream{},
+		&tree.CheckExternalConnection{},
 	} {
 		typ := optbuilder.OpaqueReadOnly
 		if tree.CanModifySchema(stmt) {

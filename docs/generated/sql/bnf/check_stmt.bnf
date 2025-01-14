@@ -1,0 +1,2 @@
+check_stmt ::=
+	check_external_connection_stmt

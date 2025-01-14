@@ -747,6 +747,9 @@ func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
 func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
   return u.val.(*tree.ShowBackupOptions)
 }
+func (u *sqlSymUnion) checkExternalConnectionOptions() *tree.CheckExternalConnectionOptions {
+  return u.val.(*tree.CheckExternalConnectionOptions)
+}
 func (u *sqlSymUnion) restoreOptions() *tree.RestoreOptions {
   return u.val.(*tree.RestoreOptions)
 }
@@ -1269,13 +1272,17 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.Statement> create_trigger_stmt
 %type <tree.Statement> create_policy_stmt
 
-%type <tree.LogicalReplicationResources> logical_replication_resources, logical_replication_resources_list
+%type <tree.Statement> check_stmt
+%type <tree.Statement> check_external_connection_stmt
+
+%type <tree.LogicalReplicationResources> logical_replication_resources logical_replication_resources_list
 %type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list opt_logical_replication_create_table_options logical_replication_create_table_options logical_replication_create_table_options_list
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
 %type <*tree.CreateStatsOptions> create_stats_option_list
 %type <*tree.CreateStatsOptions> create_stats_option
+%type <*tree.CheckExternalConnectionOptions> opt_with_check_external_connection_options_list check_external_connection_options_list check_external_connection_options
 
 %type <tree.Statement> create_type_stmt
 %type <tree.Statement> delete_stmt
@@ -1423,7 +1430,6 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 
 %type <tree.Statement> reindex_stmt
 
-%type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
@@ -1431,7 +1437,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options opt_with_show_backup_connection_options_list show_backup_connection_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -3821,6 +3827,64 @@ create_external_connection_stmt:
 	}
  | CREATE EXTERNAL CONNECTION error // SHOW HELP: CREATE EXTERNAL CONNECTION
 
+// %Help: CHECK EXTERNAL CONNECTION - check the status of an external connection
+// %Category: Misc
+// %Text:
+// CREATE EXTERNAL CONNECTION <uri> [WITH <options>]
+//
+// Uri:
+//   Uri for the external connection.
+check_external_connection_stmt:
+	CHECK EXTERNAL CONNECTION string_or_placeholder opt_with_check_external_connection_options_list
+	{
+	$$.val = &tree.CheckExternalConnection{
+		URI: $4.expr(),
+		Options: *($5.checkExternalConnectionOptions()),
+	}
+	}
+ | CHECK EXTERNAL CONNECTION error // SHOW HELP: CHECK EXTERNAL CONNECTION
+
+opt_with_check_external_connection_options_list:
+  WITH check_external_connection_options_list
+  {
+    $$.val = $2.checkExternalConnectionOptions()
+  }
+| WITH OPTIONS '(' check_external_connection_options_list ')'
+  {
+    $$.val = $4.checkExternalConnectionOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.CheckExternalConnectionOptions{}
+  }
+
+check_external_connection_options_list:
+  // Require at least one option
+  check_external_connection_options
+  {
+    $$.val = $1.checkExternalConnectionOptions()
+  }
+| check_external_connection_options_list ',' check_external_connection_options
+  {
+    if err := $1.checkExternalConnectionOptions().CombineWith($3.checkExternalConnectionOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+check_external_connection_options:
+  TRANSFER '=' string_or_placeholder
+ {
+  $$.val = &tree.CheckExternalConnectionOptions{TransferSize: $3.expr()}
+ }
+ | TIME '=' string_or_placeholder
+ {
+  $$.val = &tree.CheckExternalConnectionOptions{Duration: $3.expr()}
+ }
+ | CONCURRENTLY '=' a_expr
+ {
+  $$.val = &tree.CheckExternalConnectionOptions{Concurrency: $3.expr()}
+ }
+
 // %Help: DROP EXTERNAL CONNECTION - drop an existing external connection
 // %Category: Misc
 // %Text:
@@ -3831,9 +3895,9 @@ create_external_connection_stmt:
 drop_external_connection_stmt:
 	DROP EXTERNAL CONNECTION string_or_placeholder
 	{
-      $$.val = &tree.DropExternalConnection{
-            ConnectionLabel: $4.expr(),
-      }
+	$$.val = &tree.DropExternalConnection{
+	    ConnectionLabel: $4.expr(),
+	}
 	}
 	| DROP EXTERNAL CONNECTION error // SHOW HELP: DROP EXTERNAL CONNECTION
 
@@ -4156,16 +4220,6 @@ string_or_placeholder_list:
 | string_or_placeholder_list ',' string_or_placeholder
   {
     $$.val = append($1.exprs(), $3.expr())
-  }
-
-opt_incremental:
-  INCREMENTAL FROM string_or_placeholder_list
-  {
-    $$.val = $3.exprs()
-  }
-| /* EMPTY */
-  {
-    $$.val = tree.Exprs(nil)
   }
 
 kv_option:
@@ -4652,11 +4706,19 @@ create_stmt:
 | create_unsupported     {}
 | CREATE error           // SHOW HELP: CREATE
 
+// %Help: CHECK
+// %Category: Group
+// %Text:
+// CHECK EXTERNAL CONNECTION
+check_stmt:
+  check_external_connection_stmt // EXTEND WITH HELP: CHECK EXTERNAL CONNECTION
+| CHECK error // SHOW HELP: CHECK
+
 // %Help: CREATE LOGICAL REPLICATION STREAM - create a new logical replication stream
 // %Category: Experimental
 // %Text:
-// CREATE LOGICAL REPLICATION STREAM 
-//  FROM <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name> 
+// CREATE LOGICAL REPLICATION STREAM
+//  FROM <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
 //  ON 'stream_uri'
 //  INTO <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
 //  [WITH
@@ -4685,7 +4747,7 @@ create_logical_replication_stream_stmt:
       PGURL: $8.expr(),
       CreateTable: true,
       Options: *$9.logicalReplicationOptions(),
-    } 
+    }
   }
 | CREATE LOGICAL REPLICATION STREAM error // SHOW HELP: CREATE LOGICAL REPLICATION STREAM
 
@@ -4722,7 +4784,7 @@ logical_replication_resources_list:
   {
     $$.val = tree.LogicalReplicationResources{
       Tables: append($1.logicalReplicationResources().Tables, $3.unresolvedObjectName().ToUnresolvedName()),
-    } 
+    }
   }
 
 // Optional logical replication options.
@@ -4794,7 +4856,7 @@ logical_replication_options:
 | DEFAULT FUNCTION '=' string_or_placeholder
   {
     $$.val = &tree.LogicalReplicationOptions{DefaultFunction: $4.expr()}
-  } 
+  }
 | FUNCTION db_object_name FOR TABLE db_object_name
   {
      $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.UnresolvedName]tree.RoutineName{*$5.unresolvedObjectName().ToUnresolvedName():$2.unresolvedObjectName().ToRoutineName()}}
@@ -4805,7 +4867,7 @@ logical_replication_options:
   }
 | SKIP SCHEMA CHECK
   {
-    $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)} 
+    $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)}
   }
 | LABEL '=' string_or_placeholder
   {
@@ -6760,6 +6822,7 @@ preparable_stmt:
 | backup_stmt    // EXTEND WITH HELP: BACKUP
 | cancel_stmt    // help texts in sub-rule
 | create_stmt    // help texts in sub-rule
+| check_stmt	 // help texts in sub-rule
 | delete_stmt    // EXTEND WITH HELP: DELETE
 | drop_stmt      // help texts in sub-rule
 | explain_stmt   // EXTEND WITH HELP: EXPLAIN
@@ -8675,13 +8738,11 @@ show_backup_stmt:
 		setErr(sqllex, errors.New("The `SHOW BACKUP VALIDATE` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP VALIDATE FROM <subdirectory> IN <collectionURI>`."))
     return helpWith(sqllex, "SHOW BACKUP")
 	}
-| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list error
+| SHOW BACKUP CONNECTION string_or_placeholder error
 	{
-		$$.val = &tree.ShowBackup{
-			Details:  tree.BackupConnectionTest,
-			Path:    $4.expr(),
-			Options: *$5.showBackupOptions(),
-		}
+		/* SKIP DOC */
+		setErr(sqllex, errors.New("The `SHOW BACKUP CONNECTION` syntax is no longer supported. Please use `CHECK EXTERNAL CONNECTION`."))
+		return helpWith(sqllex, "CHECK EXTERNAL CONNECTION")
 	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
@@ -8782,47 +8843,6 @@ show_backup_options:
  | DEBUG_DUMP_METADATA_SST
  {
  $$.val = &tree.ShowBackupOptions{DebugMetadataSST: true}
- }
-
-opt_with_show_backup_connection_options_list:
-  WITH show_backup_connection_options_list
-  {
-    $$.val = $2.showBackupOptions()
-  }
-| WITH OPTIONS '(' show_backup_connection_options_list ')'
-  {
-    $$.val = $4.showBackupOptions()
-  }
-| /* EMPTY */
-  {
-    $$.val = &tree.ShowBackupOptions{}
-  }
-
-show_backup_connection_options_list:
-  // Require at least one option
-  show_backup_connection_options
-  {
-    $$.val = $1.showBackupOptions()
-  }
-| show_backup_connection_options_list ',' show_backup_connection_options
-  {
-    if err := $1.showBackupOptions().CombineWith($3.showBackupOptions()); err != nil {
-      return setErr(sqllex, err)
-    }
-  }
-
-show_backup_connection_options:
-  TRANSFER '=' string_or_placeholder
- {
-  $$.val = &tree.ShowBackupOptions{CheckConnectionTransferSize: $3.expr()}
- }
- | TIME '=' string_or_placeholder
- {
-  $$.val = &tree.ShowBackupOptions{CheckConnectionDuration: $3.expr()}
- }
- | CONCURRENTLY '=' a_expr
- {
-  $$.val = &tree.ShowBackupOptions{CheckConnectionConcurrency: $3.expr()}
  }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings

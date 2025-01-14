@@ -1484,7 +1484,7 @@ var specs = []stmtSpec{
 	{
 		name:   "show_backup",
 		stmt:   "show_backup_stmt",
-		inline: []string{"opt_with_options", "show_backup_details", "opt_with_show_backup_options", "opt_with_show_backup_connection_options_list", "show_backup_connection_options_list", "show_backup_options_list"},
+		inline: []string{"opt_with_options", "show_backup_details", "opt_with_show_backup_options", "show_backup_options_list"},
 		replace: map[string]string{
 			"'BACKUPS' 'IN' string_or_placeholder_opt_list":                                       "'BACKUPS' 'IN' collectionURI",
 			"'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list":                  "'BACKUP' subdirectory 'IN' collectionURI",

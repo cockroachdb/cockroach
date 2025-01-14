@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudcheck"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -45,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -208,9 +205,6 @@ func showBackupTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
-	if backup.Details == tree.BackupConnectionTest {
-		return true, cloudcheck.Header, nil
-	}
 	infoReader := getBackupInfoReader(p, backup)
 	return true, infoReader.header(), nil
 }
@@ -224,45 +218,6 @@ func showBackupPlanHook(
 		return nil, nil, false, nil
 	}
 	exprEval := p.ExprEvaluator("SHOW BACKUP")
-
-	// TODO(dt): find move this to its own hook.
-	if showStmt.Details == tree.BackupConnectionTest {
-		loc, err := exprEval.String(ctx, showStmt.Path)
-		if err != nil {
-			return nil, nil, false, err
-		}
-		var params cloudcheck.Params
-		if showStmt.Options.CheckConnectionTransferSize != nil {
-			transferSizeStr, err := exprEval.String(ctx, showStmt.Options.CheckConnectionTransferSize)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			parsed, err := humanizeutil.ParseBytes(transferSizeStr)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			params.TransferSize = parsed
-		}
-		if showStmt.Options.CheckConnectionDuration != nil {
-			durationStr, err := exprEval.String(ctx, showStmt.Options.CheckConnectionDuration)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			parsed, err := time.ParseDuration(durationStr)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			params.MinDuration = parsed
-		}
-		if showStmt.Options.CheckConnectionConcurrency != nil {
-			concurrency, err := exprEval.Int(ctx, showStmt.Options.CheckConnectionConcurrency)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			params.Concurrency = concurrency
-		}
-		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, params)
-	}
 
 	if showStmt.Path == nil && showStmt.InCollection != nil {
 		collection, err := exprEval.StringArray(
@@ -319,7 +274,7 @@ func showBackupPlanHook(
 					"https://www.cockroachlabs.com/docs/stable/show-backup.html"))
 		}
 
-		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, dest); err != nil {
+		if err := sql.CheckDestinationPrivileges(ctx, p, dest); err != nil {
 			return err
 		}
 
@@ -1517,7 +1472,7 @@ func showBackupsInCollectionPlanHook(
 	ctx context.Context, collection []string, showStmt *tree.ShowBackup, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 
-	if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, collection); err != nil {
+	if err := sql.CheckDestinationPrivileges(ctx, p, collection); err != nil {
 		return nil, nil, false, err
 	}
 
