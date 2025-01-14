@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -21,6 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kgo"
+	kgosasl "github.com/twmb/franz-go/pkg/sasl"
+	kgosaslplain "github.com/twmb/franz-go/pkg/sasl/plain"
 )
 
 // externalConnectionKafkaSink is a wrapper sink that asserts the underlying
@@ -191,7 +197,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		},
 		{
 			name:          "param sasl_handshake must be a bool",
-			uri:           "kafka://nope/?sasl_enabled=true&sasl_handshake=maybe",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_user=x&sasl_password=y&sasl_handshake=maybe",
 			expectedError: "param sasl_handshake must be a bool",
 		},
 		{
@@ -225,9 +231,9 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			expectedError: "sasl_enabled must be enabled to configure SASL mechanism",
 		},
 		{
-			name:          "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
+			name:          "param sasl_mechanism must be one of OAUTHBEARER, PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512",
 			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported",
-			expectedError: "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
+			expectedError: "param sasl_mechanism must be one of OAUTHBEARER, PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512",
 		},
 		// confluent-cloud scheme tests
 		{
