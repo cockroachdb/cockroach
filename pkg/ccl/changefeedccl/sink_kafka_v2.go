@@ -11,7 +11,6 @@ import (
 	"crypto/x509"
 	"hash/fnv"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 
@@ -31,11 +30,6 @@ import (
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kversion"
-	"github.com/twmb/franz-go/pkg/sasl"
-	sasloauth "github.com/twmb/franz-go/pkg/sasl/oauth"
-	saslplain "github.com/twmb/franz-go/pkg/sasl/plain"
-	saslscram "github.com/twmb/franz-go/pkg/sasl/scram"
-	"golang.org/x/oauth2/clientcredentials"
 )
 
 type kafkaSinkClientV2 struct {
@@ -438,41 +432,13 @@ func buildKgoConfig(
 		opts = append(opts, kgo.Dialer(netMetrics.Wrap(dialer.DialContext, "kafka")))
 	}
 
-	if dialConfig.saslEnabled {
-		var s sasl.Mechanism
-		switch dialConfig.saslMechanism {
-		// TODO(#126991): Remove this sarama dependency.
-		case sarama.SASLTypeOAuth:
-			tp, err := newKgoOauthTokenProvider(ctx, dialConfig)
-			if err != nil {
-				return nil, err
-			}
-			s = sasloauth.Oauth(tp)
-		case sarama.SASLTypePlaintext, "":
-			s = saslplain.Plain(func(ctc context.Context) (saslplain.Auth, error) {
-				return saslplain.Auth{
-					User: dialConfig.saslUser,
-					Pass: dialConfig.saslPassword,
-				}, nil
-			})
-		case sarama.SASLTypeSCRAMSHA256:
-			s = saslscram.Sha256(func(ctx context.Context) (saslscram.Auth, error) {
-				return saslscram.Auth{
-					User: dialConfig.saslUser,
-					Pass: dialConfig.saslPassword,
-				}, nil
-			})
-		case sarama.SASLTypeSCRAMSHA512:
-			s = saslscram.Sha512(func(ctx context.Context) (saslscram.Auth, error) {
-				return saslscram.Auth{
-					User: dialConfig.saslUser,
-					Pass: dialConfig.saslPassword,
-				}, nil
-			})
-		default:
-			return nil, errors.Errorf(`unsupported SASL mechanism: %s`, dialConfig.saslMechanism)
+	if dialConfig.authMechanism != nil {
+		authOpts, err := dialConfig.authMechanism.KgoOpts(ctx)
+		if err != nil {
+			return nil, err
 		}
-		opts = append(opts, kgo.SASL(s))
+		opts = append(opts, authOpts...)
+		log.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
 	}
 
 	// Apply some statement level overrides. The flush related ones (Messages, MaxMessages, Bytes) are not applied here, but on the sinkBatchConfig instead.
@@ -599,45 +565,6 @@ func (p *kgoChangefeedTopicPartitioner) Partition(r *kgo.Record, n int) int {
 		return int(r.Partition)
 	}
 	return p.inner.Partition(r, n)
-}
-
-func newKgoOauthTokenProvider(
-	ctx context.Context, dialConfig kafkaDialConfig,
-) (func(ctx context.Context) (sasloauth.Auth, error), error) {
-
-	// grant_type is by default going to be set to 'client_credentials' by the
-	// clientcredentials library as defined by the spec, however non-compliant
-	// auth server implementations may want a custom type
-	var endpointParams url.Values
-	if dialConfig.saslGrantType != `` {
-		endpointParams = url.Values{"grant_type": {dialConfig.saslGrantType}}
-	}
-
-	tokenURL, err := url.Parse(dialConfig.saslTokenURL)
-	if err != nil {
-		return nil, errors.Wrap(err, "malformed token url")
-	}
-
-	// the clientcredentials.Config's TokenSource method creates an
-	// oauth2.TokenSource implementation which returns tokens for the given
-	// endpoint, returning the same cached result until its expiration has been
-	// reached, and then once expired re-requesting a new token from the endpoint.
-	cfg := clientcredentials.Config{
-		ClientID:       dialConfig.saslClientID,
-		ClientSecret:   dialConfig.saslClientSecret,
-		TokenURL:       tokenURL.String(),
-		Scopes:         dialConfig.saslScopes,
-		EndpointParams: endpointParams,
-	}
-	ts := cfg.TokenSource(ctx)
-
-	return func(ctx context.Context) (sasloauth.Auth, error) {
-		tok, err := ts.Token()
-		if err != nil {
-			return sasloauth.Auth{}, err
-		}
-		return sasloauth.Auth{Token: tok.AccessToken}, nil
-	}, nil
 }
 
 type kgoMetricsAdapter struct {
