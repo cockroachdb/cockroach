@@ -501,7 +501,7 @@ func TestSQLSink(t *testing.T) {
 	// TODO(herko): `makeSQLSink` does not expect "options" to be present in the URL, find out if
 	// this is a bug, or if we should add it to to `consumeParam` in the `makeSQLSink` function.
 	// See: https://github.com/cockroachdb/cockroach/issues/112863.
-	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets, nilMetricsRecorderBuilder)
+	sink, err := makeSQLSink(&changefeedbase.SinkURL{URL: &pgURL}, testTableName, targets, nilMetricsRecorderBuilder)
 	require.NoError(t, err)
 	require.NoError(t, sink.(*sqlSink).Dial())
 	defer func() { require.NoError(t, sink.Close()) }()

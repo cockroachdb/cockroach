@@ -89,7 +89,7 @@ func getAndDeleteParams(u *url.URL) (*schemaRegistryParams, error) {
 		changefeedbase.RegistryParamClientKey} {
 		if stringParam := query.Get(k); stringParam != "" {
 			var decoded []byte
-			err := decodeBase64FromString(stringParam, &decoded)
+			err := changefeedbase.DecodeBase64FromString(stringParam, &decoded)
 			if err != nil {
 				return nil, errors.Wrapf(err, "param %s must be base 64 encoded", k)
 			}
