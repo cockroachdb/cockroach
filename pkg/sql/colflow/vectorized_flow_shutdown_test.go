@@ -229,7 +229,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				// memory accounting system.
 				syncAllocator := colmem.NewAllocator(ctx, &syncMemAccount, testColumnFactory)
 				syncFlowCtx := &execinfra.FlowCtx{Local: false, Gateway: !addAnotherRemote}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncFlowCtx, 0 /* processorID */, syncAllocator, synchronizerInputs, &wg)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncFlowCtx, 0 /* processorID */, syncAllocator, typs, synchronizerInputs, &wg)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 
 				runOutboxInbox := func(
