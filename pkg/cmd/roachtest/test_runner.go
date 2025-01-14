@@ -1164,6 +1164,9 @@ func (r *testRunner) runTest(
 					// Note that this error message is referred for test selection in
 					// pkg/cmd/roachtest/testselector/snowflake_query.sql.
 					failureMsg = fmt.Sprintf("VMs preempted during the test run: %s\n\n**Other Failures:**\n%s", preemptedVMNames, failureMsg)
+					// Reset the failures as a timeout may have suppressed failures, but we
+					// want to propagate the preemption error and avoid creating an issue.
+					t.resetFailures()
 					t.Error(vmPreemptionError(preemptedVMNames))
 				}
 				hostErrorVMNames := getHostErrorVMNames(ctx, c, l)

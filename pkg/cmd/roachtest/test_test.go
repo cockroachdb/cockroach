@@ -800,4 +800,34 @@ func TestVMPreemptionPolling(t *testing.T) {
 
 		require.NoError(t, err)
 	})
+
+	// Test that if the test hangs until timeout, a VM preemption will still be caught.
+	t.Run("test hangs and still catches preemption", func(t *testing.T) {
+		// We don't want the polling to cancel the test early.
+		setPollPreemptionInterval(10 * time.Minute)
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			preemptedVMs := []vm.PreemptedVM{{
+				Name:        "test_node",
+				PreemptedAt: time.Now(),
+			}}
+			return preemptedVMs, nil
+		}
+
+		mockTest.Timeout = 10 * time.Millisecond
+		// We expect the following to occur:
+		//	1. The test blocks on the context, which is only cancelled when the test runner
+		//		 returns after test completion. This effectively blocks the test forever.
+		//  2. The test times out and the test runner marks it as failed.
+		//  3. Normally, this would result in a failed test and runner.Run returning an error.
+		//     However, because we injected a preemption, the test runner marks it as a flake
+		//     instead and returns no errors.
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			<-ctx.Done()
+		}
+
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+
+		require.NoError(t, err)
+	})
 }
