@@ -11,6 +11,7 @@ import (
 	"math/bits"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -397,6 +398,7 @@ func (md *Metadata) CheckDependencies(
 	// is sufficient.
 	currentDigest := optCatalog.GetDependencyDigest()
 	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled &&
+		evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_1) &&
 		evalCtx.AsOfSystemTime == nil &&
 		!evalCtx.Txn.ReadTimestampFixed() &&
 		md.dependencyDigestEquals(&currentDigest) {
