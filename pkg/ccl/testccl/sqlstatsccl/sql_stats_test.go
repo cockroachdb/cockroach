@@ -150,7 +150,10 @@ func TestSQLStatsRegions(t *testing.T) {
 				if err != nil {
 					return err
 				}
-
+				_, err = db.DB.ExecContext(ctx, `SET distsql = on;`)
+				if err != nil {
+					return err
+				}
 				// Use EXPLAIN ANALYSE (DISTSQL) to get the accurate list of nodes.
 				explainInfo, err := db.DB.QueryContext(ctx, `EXPLAIN ANALYSE (DISTSQL) SELECT * FROM test`)
 				if err != nil {
