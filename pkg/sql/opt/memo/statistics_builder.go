@@ -231,6 +231,7 @@ type statisticsBuilder struct {
 	ctx     context.Context
 	evalCtx *eval.Context
 	md      *opt.Metadata
+	epsilon float64
 }
 
 func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, md *opt.Metadata) {
@@ -240,6 +241,7 @@ func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, md
 		ctx:     ctx,
 		evalCtx: evalCtx,
 		md:      md,
+		epsilon: epsilon,
 	}
 }
 
@@ -1337,8 +1339,8 @@ func (sb *statisticsBuilder) buildJoin(
 		case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 			// Don't set the row count to 0 since we can't guarantee that the
 			// cardinality is 0.
-			s.RowCount = epsilon
-			s.Selectivity = props.MakeSelectivity(epsilon)
+			s.RowCount = sb.epsilon
+			s.Selectivity = props.MakeSelectivity(sb.epsilon)
 		}
 		return
 	}
@@ -1503,7 +1505,7 @@ func (sb *statisticsBuilder) buildJoin(
 	// Fix the stats for anti join.
 	switch h.joinType {
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		s.RowCount = max(leftStats.RowCount-s.RowCount, epsilon)
+		s.RowCount = max(leftStats.RowCount-s.RowCount, sb.epsilon)
 		s.Selectivity = props.MakeSelectivity(1 - s.Selectivity.AsFloat())
 
 		// Converting column stats is error-prone. If any column stats are needed,
@@ -1764,23 +1766,23 @@ func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 	switch joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		if !rightColsAreEmpty && leftNullCount > 0 && rowCount > innerJoinRowCount {
-			addedRows := max(rowCount-innerJoinRowCount, epsilon)
+			addedRows := max(rowCount-innerJoinRowCount, sb.epsilon)
 			colStat.NullCount += addedRows * leftNullCount / leftRowCount
 		}
 
 	case opt.RightJoinOp:
 		if !leftColsAreEmpty && rightNullCount > 0 && rowCount > innerJoinRowCount {
-			addedRows := max(rowCount-innerJoinRowCount, epsilon)
+			addedRows := max(rowCount-innerJoinRowCount, sb.epsilon)
 			colStat.NullCount += addedRows * rightNullCount / rightRowCount
 		}
 
 	case opt.FullJoinOp:
 		if !leftColsAreEmpty && rightNullCount > 0 && rightRowCount > innerJoinRowCount {
-			addedRows := max(rightRowCount-innerJoinRowCount, epsilon)
+			addedRows := max(rightRowCount-innerJoinRowCount, sb.epsilon)
 			colStat.NullCount += addedRows * rightNullCount / rightRowCount
 		}
 		if !rightColsAreEmpty && leftNullCount > 0 && leftRowCount > innerJoinRowCount {
-			addedRows := max(leftRowCount-innerJoinRowCount, epsilon)
+			addedRows := max(leftRowCount-innerJoinRowCount, sb.epsilon)
 			colStat.NullCount += addedRows * leftNullCount / leftRowCount
 		}
 	}
@@ -4060,7 +4062,7 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 			colStat = sb.copyColStat(colSet, s, colStat)
 			if colStat.NullCount > 0 && colSet.Intersects(notNullCols) {
 				colStat.NullCount = 0
-				colStat.DistinctCount = max(colStat.DistinctCount-1, epsilon)
+				colStat.DistinctCount = max(colStat.DistinctCount-1, sb.epsilon)
 			}
 		}
 		if colStat.DistinctCount < minDistinctCount {

@@ -41,7 +41,7 @@ func MakeSelectivity(sel float64) Selectivity {
 }
 
 // MakeSelectivityFromFraction calculates selectivity as a fraction of a and b
-// if a is less than b and returns OneSelectivity otherwise..
+// if a is less than b and returns OneSelectivity otherwise.
 func MakeSelectivityFromFraction(a, b float64) Selectivity {
 	if a < b {
 		return MakeSelectivity(a / b)
