@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -407,7 +408,7 @@ func TestBuildAzureKafkaConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			oldUri, err := url.Parse(tc.uri)
 			require.NoError(t, err)
-			actualConfig, expectedError := buildDialConfig(sinkURL{URL: oldUri})
+			actualConfig, expectedError := buildDialConfig(&changefeedbase.SinkURL{URL: oldUri})
 			require.NoError(t, expectedError)
 			require.Equal(t, tc.expectedKafkaDialConfig, actualConfig)
 		})
