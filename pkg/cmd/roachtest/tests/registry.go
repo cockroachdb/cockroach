@@ -53,6 +53,7 @@ func RegisterTests(r registry.Registry) {
 	registerDjango(r)
 	registerDrain(r)
 	registerDrop(r)
+	registerDRPC(r)
 	registerEncryption(r)
 	registerFailover(r)
 	registerFixtures(r)

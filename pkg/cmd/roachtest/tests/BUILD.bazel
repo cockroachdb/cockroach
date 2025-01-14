@@ -66,6 +66,7 @@ go_library(
         "dotnet_helpers.go",
         "drain.go",
         "drop.go",
+        "drpc.go",
         "drt.go",
         "encryption.go",
         "event_log.go",
