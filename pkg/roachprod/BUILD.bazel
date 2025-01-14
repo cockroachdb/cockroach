@@ -27,6 +27,7 @@ go_library(
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/azure",
+        "//pkg/roachprod/vm/flagstub",
         "//pkg/roachprod/vm/gce",
         "//pkg/roachprod/vm/local",
         "//pkg/server/debug/replay",

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
@@ -1844,33 +1845,58 @@ func StageURL(
 	return urls, nil
 }
 
+var disabledProviders = func() map[string]struct{} {
+	disabled := make(map[string]struct{})
+	for _, p := range strings.Split(os.Getenv("ROACHPROD_DISABLED_PROVIDERS"), ",") {
+		disabled[strings.TrimSpace(strings.ToLower(p))] = struct{}{}
+	}
+	return disabled
+}()
+
 // InitProviders initializes providers and returns a map that indicates
 // if a provider is active or inactive.
 func InitProviders() map[string]string {
 	providersState := make(map[string]string)
 
-	if err := aws.Init(); err != nil {
-		providersState[aws.ProviderName] = "Inactive - " + err.Error()
-	} else {
-		providersState[aws.ProviderName] = "Active"
-	}
-
-	if err := gce.Init(); err != nil {
-		providersState[gce.ProviderName] = "Inactive - " + err.Error()
-	} else {
-		providersState[gce.ProviderName] = "Active"
-	}
-
-	if err := azure.Init(); err != nil {
-		providersState[azure.ProviderName] = "Inactive - " + err.Error()
-	} else {
-		providersState[azure.ProviderName] = "Active"
-	}
-
-	if err := local.Init(localVMStorage{}); err != nil {
-		providersState[local.ProviderName] = "Inactive - " + err.Error()
-	} else {
-		providersState[local.ProviderName] = "Active"
+	for _, prov := range []struct {
+		name  string
+		init  func() error
+		empty vm.Provider
+	}{
+		{
+			name:  aws.ProviderName,
+			init:  aws.Init,
+			empty: &aws.Provider{},
+		},
+		{
+			name:  gce.ProviderName,
+			init:  gce.Init,
+			empty: &gce.Provider{},
+		},
+		{
+			name:  azure.ProviderName,
+			init:  azure.Init,
+			empty: &azure.Provider{},
+		},
+		{
+			name: local.ProviderName,
+			init: func() error {
+				return local.Init(localVMStorage{})
+			},
+			empty: &local.Provider{},
+		},
+	} {
+		if _, dis := disabledProviders[prov.name]; dis {
+			reason := "disabled via ROACHPROD_DISABLED_PROVIDERS"
+			providersState[prov.name] = "Inactive - " + reason
+			// We need an empty provider that emits errors or we'll
+			// crash as roachprod expects all providers to be present.
+			vm.Providers[prov.name] = flagstub.New(prov.empty, reason)
+		} else if err := prov.init(); err != nil {
+			providersState[prov.name] = "Inactive - " + err.Error()
+		} else {
+			providersState[prov.name] = "Active"
+		}
 	}
 
 	return providersState
