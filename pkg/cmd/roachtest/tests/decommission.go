@@ -75,17 +75,25 @@ func registerDecommission(r registry.Registry) {
 	}
 	{
 		numNodes := 4
-		r.Add(registry.TestSpec{
-			Name:             "decommission/drains",
-			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(numNodes),
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           registry.MetamorphicLeases,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runDecommissionDrains(ctx, t, c)
-			},
-		})
+		for _, dead := range []bool{false, true} {
+			name := "decommission/drains"
+			if dead {
+				name += "/dead"
+			} else {
+				name += "/alive"
+			}
+			r.Add(registry.TestSpec{
+				Name:             name,
+				Owner:            registry.OwnerKV,
+				Cluster:          r.MakeClusterSpec(numNodes),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Weekly),
+				Leases:           registry.MetamorphicLeases,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runDecommissionDrains(ctx, t, c, dead)
+				},
+			})
+		}
 	}
 	{
 		numNodes := 6
@@ -991,7 +999,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 // the end of decommissioning. The test cluster contains 4 nodes and the fourth
 // node is decommissioned. While the decommissioning node has open SQL
 // connections, queries should never fail.
-func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) {
+func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster, dead bool) {
 	var (
 		numNodes     = 4
 		pinnedNodeID = 1
@@ -1021,10 +1029,6 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		require.NoError(t, err)
 	}
 
-	// Connect to node 4 (the target node of the decommission).
-	decommNodeDB := c.Conn(ctx, t.L(), decommNodeID)
-	defer decommNodeDB.Close()
-
 	// Decommission node 4 and poll its status during the decommission.
 	var (
 		maxAttempts = 50
@@ -1036,16 +1040,25 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		// The expected output of decommission while the node is about to be drained/is draining.
 		expReplicasTransferred = [][]string{
 			decommissionHeader,
-			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioning", "false", "ready", "0"},
+			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioning", "false", ".*", "0"},
 			decommissionFooter,
 		}
 		// The expected output of decommission once the node is finally marked as "decommissioned."
 		expDecommissioned = [][]string{
 			decommissionHeader,
-			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioned", "false", "ready", "0"},
+			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioned", "false", ".*", "0"},
 			decommissionFooter,
 		}
 	)
+	if dead {
+		t.Status(fmt.Sprintf("stopping node %d and waiting for it to be recognized as dead", decommNodeID))
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), decommNode)
+		// This should reliably result in the node being perceived as non-live from
+		// this point on. If the node were still "down but live" when decommission
+		// finishes, we'd try to drain a live node and get an error (since it can't
+		// be reached any more).
+		time.Sleep(15 * time.Second)
+	}
 	t.Status(fmt.Sprintf("decommissioning node %d", decommNodeID))
 	e := retry.WithMaxAttempts(ctx, retryOpts, maxAttempts, func() error {
 		o, err := h.decommission(ctx, decommNode, pinnedNodeID, "--wait=none", "--format=csv")
@@ -1056,12 +1069,22 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 			return err
 		}
 
-		// Check to see if the node has been drained or decomissioned.
+		// When the target node is dead in this test configuration, the draining
+		// step is moot. If the target node is alive, the last decommission
+		// invocation should have drained it, which we verify below.
+
+		if dead {
+			return nil
+		}
+
+		// Check to see if the node has been drained or decommissioned.
 		// If not, queries should not fail.
+		// Connect to node 4 (the target node of the decommission).
+		decommNodeDB := c.Conn(ctx, t.L(), decommNodeID)
+		defer decommNodeDB.Close()
 		if err = run(decommNodeDB, `SHOW DATABASES`); err != nil {
-			if strings.Contains(err.Error(), "not accepting clients") || // drained
-				strings.Contains(err.Error(), "node is decommissioned") { // decommissioned
-				return nil
+			if strings.Contains(err.Error(), "not accepting clients") {
+				return nil // success (drained)
 			}
 			t.Fatal(err)
 		}
