@@ -20,6 +20,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/cat",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/geo/geopb",
         "//pkg/roachpb",

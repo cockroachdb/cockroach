@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -4071,8 +4072,20 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			handleErr(err)
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, crtime.NowMono())
-		if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs); err != nil {
-			return advanceInfo{}, err
+		// If descriptors are either modified or created wait then we may have to
+		// wait for one version (if no job exists) or the initial version to be
+		// acquired.
+		if ex.extraTxnState.descCollection.HasUncommittedDescriptors() {
+			cachedRegions, err := regions.NewCachedDatabaseRegions(ex.Ctx(), ex.server.cfg.DB, ex.server.cfg.LeaseManager)
+			if err != nil {
+				return advanceInfo{}, err
+			}
+			if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs, cachedRegions); err != nil {
+				return advanceInfo{}, err
+			}
+			if err := ex.waitForInitialVersionForNewDescriptors(cachedRegions); err != nil {
+				return advanceInfo{}, err
+			}
 		}
 		if ex.extraTxnState.descCollection.HasUncommittedNewOrDroppedDescriptors() {
 			execCfg := ex.planner.ExecCfg()
