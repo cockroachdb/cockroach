@@ -328,7 +328,7 @@ var _ BatchBuffer = (*kafkaBuffer)(nil)
 
 func makeKafkaSinkV2(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	targets changefeedbase.Targets,
 	jsonConfig changefeedbase.SinkSpecificJSONConfig,
 	parallelism int,
@@ -351,9 +351,9 @@ func makeKafkaSinkV2(
 		return nil, err
 	}
 
-	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
-	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
-	if schemaTopic := u.consumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
+	kafkaTopicPrefix := u.ConsumeParam(changefeedbase.SinkParamTopicPrefix)
+	kafkaTopicName := u.ConsumeParam(changefeedbase.SinkParamTopicName)
+	if schemaTopic := u.ConsumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
@@ -370,7 +370,7 @@ func makeKafkaSinkV2(
 		return nil, err
 	}
 
-	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
+	if unknownParams := u.RemainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
@@ -387,7 +387,7 @@ func makeKafkaSinkV2(
 
 func buildKgoConfig(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	netMetrics *cidr.NetMetrics,
 ) ([]kgo.Opt, error) {
