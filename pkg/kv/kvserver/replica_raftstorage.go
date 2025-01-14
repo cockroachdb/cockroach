@@ -838,6 +838,29 @@ func writeUnreplicatedSST(
 	)
 	defer unreplicatedSST.Close()
 
+	clearedSpan, err := rewriteRaftState(ctx, id, hs, kvserverpb.RaftTruncatedState{
+		Index: kvpb.RaftIndex(meta.Index),
+		Term:  kvpb.RaftTerm(meta.Term),
+	}, sl, &unreplicatedSST)
+	if err != nil {
+		return nil, roachpb.Span{}, err
+	}
+	if err := unreplicatedSST.Finish(); err != nil {
+		return nil, roachpb.Span{}, err
+	}
+	return unreplicatedSSTFile, clearedSpan, nil
+}
+
+// rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
+// of the given replica with the provided raft state.
+func rewriteRaftState(
+	ctx context.Context,
+	id storage.FullReplicaID,
+	hs raftpb.HardState,
+	ts kvserverpb.RaftTruncatedState,
+	sl *logstore.StateLoader,
+	w storage.Writer,
+) (clearedSpan roachpb.Span, _ error) {
 	// Clearing the unreplicated state.
 	//
 	// NB: We do not expect to see range keys in the unreplicated state, so
@@ -846,37 +869,26 @@ func writeUnreplicatedSST(
 	unreplicatedStart := unreplicatedPrefixKey
 	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
 	clearedSpan = roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd}
-	if err := unreplicatedSST.ClearRawRange(
+	if err := w.ClearRawRange(
 		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
 	); err != nil {
-		return nil, roachpb.Span{}, errors.Wrapf(err, "error clearing range of unreplicated SST writer")
+		return roachpb.Span{}, errors.Wrapf(err, "error clearing the unreplicated space")
 	}
 
 	// Update HardState.
-	if err := sl.SetHardState(ctx, &unreplicatedSST, hs); err != nil {
-		return nil, roachpb.Span{}, errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
+	if err := sl.SetHardState(ctx, w, hs); err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "unable to write HardState")
 	}
 	// We've cleared all the raft state above, so we are forced to write the
 	// RaftReplicaID again here.
-	if err := sl.SetRaftReplicaID(
-		ctx, &unreplicatedSST, id.ReplicaID); err != nil {
-		return nil, roachpb.Span{}, errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
+	if err := sl.SetRaftReplicaID(ctx, w, id.ReplicaID); err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftReplicaID")
 	}
-
-	if err := sl.SetRaftTruncatedState(
-		ctx, &unreplicatedSST,
-		&kvserverpb.RaftTruncatedState{
-			Index: kvpb.RaftIndex(meta.Index),
-			Term:  kvpb.RaftTerm(meta.Term),
-		},
-	); err != nil {
-		return nil, roachpb.Span{}, errors.Wrapf(err, "unable to write TruncatedState to unreplicated SST writer")
+	// Update the log truncation state.
+	if err := sl.SetRaftTruncatedState(ctx, w, &ts); err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
-
-	if err := unreplicatedSST.Finish(); err != nil {
-		return nil, roachpb.Span{}, err
-	}
-	return unreplicatedSSTFile, clearedSpan, nil
+	return clearedSpan, nil
 }
 
 // clearSubsumedReplicaDiskData clears the on disk data of the subsumed
