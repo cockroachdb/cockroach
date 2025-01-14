@@ -6,7 +6,9 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -50,6 +52,7 @@ func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
 		PolicyID: policyID,
 		Name:     string(n.PolicyName),
 	})
+	addRoleElements(b, n, tbl.TableID, policyID)
 }
 
 // convertPolicyType will convert from a tree.PolicyType to a catpb.PolicyType
@@ -80,4 +83,47 @@ func convertPolicyCommand(in tree.PolicyCommand) catpb.PolicyCommand {
 	default:
 		panic(errors.AssertionFailedf("cannot convert tree.PolicyCommand: %v", in))
 	}
+}
+
+// addRoleElements will add an element for each role defined in the policy.
+func addRoleElements(
+	b BuildCtx, n *tree.CreatePolicy, tableID descpb.ID, policyID descpb.PolicyID,
+) {
+	// If there were no roles provided, then we will default to adding the public
+	// role so that it applies to everyone.
+	if len(n.Roles) == 0 {
+		addRoleElement(b, tableID, policyID, username.PublicRoleName())
+		return
+	}
+	for _, role := range n.Roles {
+		switch role.RoleSpecType {
+		case tree.RoleName:
+			usr, err := username.MakeSQLUsernameFromUserInput(role.Name, username.PurposeValidation)
+			if err != nil {
+				panic(err)
+			}
+			addRoleElement(b, tableID, policyID, usr)
+		case tree.CurrentUser:
+			addRoleElement(b, tableID, policyID, b.CurrentUser())
+		case tree.SessionUser:
+			addRoleElement(b, tableID, policyID, b.SessionData().SessionUser())
+		default:
+			panic(errors.AssertionFailedf("unknown role spec type: %q", role.RoleSpecType.String()))
+		}
+	}
+}
+
+// addRoleElement will add a single role element for the given role name
+func addRoleElement(
+	b BuildCtx, tableID descpb.ID, policyID descpb.PolicyID, username username.SQLUsername,
+) {
+	err := b.CheckRoleExists(b, username)
+	if err != nil {
+		panic(err)
+	}
+	b.Add(&scpb.PolicyRole{
+		TableID:  tableID,
+		PolicyID: policyID,
+		RoleName: username.Normalized(),
+	})
 }

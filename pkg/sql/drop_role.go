@@ -203,6 +203,20 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				break
 			}
 		}
+		// Check that any of the roles we are dropping aren't referenced in any of
+		// the row-level security policies defined on this table.
+		for _, p := range tableDescriptor.GetPolicies() {
+			for _, rn := range p.RoleNames {
+				roleName := username.MakeSQLUsernameFromPreNormalizedString(rn)
+				if _, found := userNames[roleName]; found {
+					return errors.WithDetailf(
+						pgerror.Newf(pgcode.DependentObjectsStillExist,
+							"role %q cannot be dropped because some objects depend on it",
+							roleName),
+						"target of policy %q on table %q", p.Name, tableDescriptor.GetName())
+				}
+			}
+		}
 	}
 	for _, schemaDesc := range lCtx.schemaDescs {
 		if !descriptorIsVisible(schemaDesc, true /* allowAdding */, false /* includeDropped */) {
