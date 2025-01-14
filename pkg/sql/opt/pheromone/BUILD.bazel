@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pheromone",
+    srcs = [
+        "pheromone.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/pheromone",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/buildutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "pheromone_test",
+    size = "small",
+    srcs = [
+        "pheromone_test.go",
+    ],
+    embed = [":pheromone"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/opt/testutils/testexpr",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

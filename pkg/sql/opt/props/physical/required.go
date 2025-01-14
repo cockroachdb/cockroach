@@ -59,7 +59,7 @@ type Required struct {
 	Distribution Distribution
 
 	// Pheromone specifies the required shape of the plan.
-	Pheromone Pheromone
+	Pheromone *Pheromone
 }
 
 // MinRequired are the default physical properties that require nothing and

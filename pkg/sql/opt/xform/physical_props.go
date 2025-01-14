@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/pheromone"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,7 +37,7 @@ func CanProvidePhysicalProps(
 	// need to check for that.
 	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
 	canProvideDistribution := e.Op() == opt.DistributeOp || distribution.CanProvide(ctx, evalCtx, e, &required.Distribution)
-	return canProvideOrdering && canProvideDistribution
+	return canProvideOrdering && canProvideDistribution && !required.Pheromone.HasAlternates()
 }
 
 // BuildChildPhysicalProps returns the set of physical properties required of
@@ -84,7 +85,7 @@ func BuildChildPhysicalProps(
 	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
 	childProps.Distribution = distribution.BuildChildRequired(parent, &parentProps.Distribution, nth)
 	// needs to be aware of the current operator, I think, to skip over projection and explain
-	childProps.Pheromone = parentProps.Pheromone.Child(nth)
+	childProps.Pheromone = pheromone.BuildChildRequired(parent, parentProps.Pheromone, nth)
 
 	switch parent.Op() {
 	case opt.LimitOp:

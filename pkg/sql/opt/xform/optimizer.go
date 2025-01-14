@@ -697,6 +697,19 @@ func (o *Optimizer) enforceProps(
 	// stripped by recursively optimizing the group with successively fewer
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
+
+	// if required.Pheromone has alternates, call optimizeEnforcer in two ways:
+	// 1. with the head
+	// 2. with the tail
+	// we also need CanProvidePhysicalProps to return false if the Pheromone has alternates
+	// so that we only try the head way once
+	if required.Pheromone.HasAlternates() {
+		// for each alternate that matches the member:
+		// call o.optimizeGroup with that pheremone (as solo)
+		// then ratchet this state's cost using that one
+		// if none match, call o.optimizeGroup with NonePheromone, then ratchet
+	}
+
 	if !required.Distribution.Any() && member.Op() != opt.ExplainOp {
 		enforcer := &memo.DistributeExpr{Input: member}
 		getEnforcer := func() memo.RelExpr {
@@ -733,12 +746,6 @@ func (o *Optimizer) enforceProps(
 
 		return fullyOptimized
 	}
-
-	/*
-		if !pheromone.CanProvide(member, required.Pheromone) {
-			return false
-		}
-	*/
 
 	return true
 }
@@ -779,7 +786,7 @@ func (o *Optimizer) optimizeEnforcer(
 // shouldExplore ensures that exploration is only triggered for optimizeGroup
 // calls that will not recurse via a call from enforceProps.
 func (o *Optimizer) shouldExplore(required *physical.Required) bool {
-	return required.Ordering.Any() && required.Distribution.Any() && required.Pheromone.Any()
+	return required.Ordering.Any() && required.Distribution.Any()
 }
 
 // setLowestCostTree traverses the memo and recursively updates child pointers

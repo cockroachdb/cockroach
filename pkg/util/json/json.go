@@ -511,8 +511,8 @@ func (s *pairSorter) unique() {
 // pairs, which are unique by key.
 type jsonObject []jsonKeyValuePair
 
-var emptyJSONObject = jsonObject(nil)
-var emptyJSONArray = jsonArray(nil)
+var EmptyJSONObject = jsonObject(nil)
+var EmptyJSONArray = jsonArray(nil)
 
 func (jsonNull) Type() Type   { return NullJSONType }
 func (jsonFalse) Type() Type  { return FalseJSONType }
@@ -567,25 +567,30 @@ func cmpJSONTypes(a Type, b Type) int {
 	return 0
 }
 
-// isEmptyArray returns true if j is a JSON array with length 0.
-func isEmptyArray(j JSON) bool {
+// IsEmptyArray returns true if j is a JSON array with length 0.
+func IsEmptyArray(j JSON) bool {
 	return j.Type() == ArrayJSONType && j.Len() == 0
 }
 
+// IsEmptyObject returns true if j is a JSON object with length 0.
+func IsEmptyObject(j JSON) bool {
+	return j.Type() == ObjectJSONType && j.Len() == 0
+}
+
 func (j jsonNull) Compare(other JSON) (int, error) {
-	if isEmptyArray(other) {
+	if IsEmptyArray(other) {
 		return 1, nil
 	}
 	return cmpJSONTypes(j.Type(), other.Type()), nil
 }
 func (j jsonFalse) Compare(other JSON) (int, error) {
-	if isEmptyArray(other) {
+	if IsEmptyArray(other) {
 		return 1, nil
 	}
 	return cmpJSONTypes(j.Type(), other.Type()), nil
 }
 func (j jsonTrue) Compare(other JSON) (int, error) {
-	if isEmptyArray(other) {
+	if IsEmptyArray(other) {
 		return 1, nil
 	}
 	return cmpJSONTypes(j.Type(), other.Type()), nil
@@ -603,7 +608,7 @@ func decodeIfNeeded(j JSON) (JSON, error) {
 }
 
 func (j jsonNumber) Compare(other JSON) (int, error) {
-	if isEmptyArray(other) {
+	if IsEmptyArray(other) {
 		return 1, nil
 	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
@@ -620,7 +625,7 @@ func (j jsonNumber) Compare(other JSON) (int, error) {
 }
 
 func (j jsonString) Compare(other JSON) (int, error) {
-	if isEmptyArray(other) {
+	if IsEmptyArray(other) {
 		return 1, nil
 	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
@@ -644,11 +649,11 @@ func (j jsonString) Compare(other JSON) (int, error) {
 
 func (j jsonArray) Compare(other JSON) (int, error) {
 	switch {
-	case isEmptyArray(j) && isEmptyArray(other):
+	case IsEmptyArray(j) && IsEmptyArray(other):
 		return 0, nil
-	case isEmptyArray(j):
+	case IsEmptyArray(j):
 		return -1, nil
-	case isEmptyArray(other):
+	case IsEmptyArray(other):
 		return 1, nil
 	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
@@ -1450,18 +1455,18 @@ func isEnd(json JSON) bool {
 func emptyJSONForType(json JSON) JSON {
 	switch t := json.(type) {
 	case jsonArray:
-		return emptyJSONArray
+		return EmptyJSONArray
 
 	case jsonObject:
-		return emptyJSONObject
+		return EmptyJSONObject
 
 	case *jsonEncoded:
 		switch t.typ {
 		case ArrayJSONType:
-			return emptyJSONArray
+			return EmptyJSONArray
 
 		case ObjectJSONType:
-			return emptyJSONObject
+			return EmptyJSONObject
 		}
 	}
 	return nil
