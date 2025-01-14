@@ -885,7 +885,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 	// At a lower frequency, we checkpoint specific spans in the job progress
 	// either in backfills or if the highwater mark is excessively lagging behind.
 	checkpointSpans := ca.spec.JobID != 0 && /* enterprise changefeed */
-		(ca.frontier.InBackfill(resolved) || ca.frontier.HasLaggingSpans(sv)) &&
+		(ca.frontier.InBackfill(resolved) || ca.frontier.HasLeadingSpans(sv)) &&
 		canCheckpointSpans(sv, ca.lastSpanFlush)
 
 	if checkpointSpans {
@@ -1670,7 +1670,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	// highwater mark remains fixed while other spans may significantly outpace
 	// it, therefore to avoid losing that progress on changefeed resumption we
 	// also store as many of those leading spans as we can in the job progress
-	updateCheckpoint := (inBackfill || cf.frontier.HasLaggingSpans(&cf.js.settings.SV)) && cf.js.canCheckpointSpans()
+	updateCheckpoint := (inBackfill || cf.frontier.HasLeadingSpans(&cf.js.settings.SV)) && cf.js.canCheckpointSpans()
 
 	// If the highwater has moved an empty checkpoint will be saved
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
