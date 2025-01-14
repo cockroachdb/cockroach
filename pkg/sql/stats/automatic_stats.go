@@ -755,7 +755,7 @@ func (r *Refresher) maybeRefreshStats(
 	rowsAffected int64,
 	asOf time.Duration,
 ) {
-	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */)
+	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */)
 	if err != nil {
 		log.Errorf(ctx, "failed to get table statistics: %v", err)
 		return
