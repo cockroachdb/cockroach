@@ -1421,6 +1421,9 @@ func (t *T) WithoutTypeModifiers() *T {
 		if !changed {
 			return t
 		}
+		if l := t.TupleLabels(); l != nil {
+			return MakeLabeledTuple(newContents, l)
+		}
 		return MakeTuple(newContents)
 	case EnumFamily:
 		// Enums have no type modifiers.
