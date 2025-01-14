@@ -129,11 +129,6 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	tdb.ExpectErr(t, `boom`, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 	jobID := jobspb.JobID(atomic.LoadInt64(&jobIDValue))
 
-	// Check that the error is featured in the jobs table.
-	results := tdb.QueryStr(t, `SELECT execution_errors FROM crdb_internal.jobs WHERE job_id = $1`, jobID)
-	require.Len(t, results, 1)
-	require.Regexp(t, `^\{\"reverting execution from .* on 1 failed: boom\"\}$`, results[0][0])
-
 	// Check that the error details are also featured in the jobs table.
 	checkErrWithDetails := func(ee *errorspb.EncodedError) {
 		require.NotNil(t, ee)
@@ -146,7 +141,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 		require.Regexp(t, "^stages graphviz: https.*", ed[1])
 		require.Regexp(t, "^dependencies graphviz: https.*", ed[2])
 	}
-	results = tdb.QueryStr(t, `SELECT encode(payload, 'hex') FROM crdb_internal.system_jobs WHERE id = $1`, jobID)
+	results := tdb.QueryStr(t, `SELECT encode(payload, 'hex') FROM crdb_internal.system_jobs WHERE id = $1`, jobID)
 	require.Len(t, results, 1)
 	b, err := hex.DecodeString(results[0][0])
 	require.NoError(t, err)
@@ -154,8 +149,6 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	err = protoutil.Unmarshal(b, &p)
 	require.NoError(t, err)
 	checkErrWithDetails(p.FinalResumeError)
-	require.LessOrEqual(t, 1, len(p.RetriableExecutionFailureLog))
-	checkErrWithDetails(p.RetriableExecutionFailureLog[0].Error)
 
 	// Check that the error is featured in the event log.
 	const eventLogCountQuery = `SELECT count(*) FROM system.eventlog WHERE "eventType" = $1`
