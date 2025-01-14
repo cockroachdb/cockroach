@@ -51,6 +51,7 @@ var (
 	_ = pgcode.Syntax
 	_ = pgdate.ParseTimestamp
 	_ = pgerror.Wrapf
+	_ = log.ExpensiveLogEnabled
 )
 
 func isIdentityCast(fromType, toType *types.T) bool {

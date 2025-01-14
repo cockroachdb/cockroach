@@ -953,14 +953,12 @@ func (s *vectorizedFlowCreator) setupInput(
 	opWithMetaInfo := inputStreamOps[0]
 	if len(inputStreamOps) > 1 {
 		statsInputs := inputStreamOps
+		allocator := colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			os := colexec.NewOrderedSynchronizer(
-				flowCtx,
-				processorID,
-				colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
-				execinfra.GetWorkMemLimit(flowCtx), inputStreamOps,
-				input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering),
-				0, /* tuplesToMerge */
+				flowCtx, processorID, allocator, execinfra.GetWorkMemLimit(flowCtx),
+				inputStreamOps, input.ColumnTypes,
+				execinfrapb.ConvertToColumnOrdering(input.Ordering), 0, /* tuplesToMerge */
 			)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            os,
@@ -975,7 +973,10 @@ func (s *vectorizedFlowCreator) setupInput(
 					err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
 				}
 			}
-			sync := colexec.NewSerialUnorderedSynchronizer(flowCtx, processorID, inputStreamOps, input.EnforceHomeRegionStreamExclusiveUpperBound, err)
+			sync := colexec.NewSerialUnorderedSynchronizer(
+				flowCtx, processorID, allocator, input.ColumnTypes, inputStreamOps,
+				input.EnforceHomeRegionStreamExclusiveUpperBound, err,
+			)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
@@ -985,8 +986,9 @@ func (s *vectorizedFlowCreator) setupInput(
 			// Note that if we have opt == flowinfra.FuseAggressively, then we
 			// must use the serial unordered sync above in order to remove any
 			// concurrency.
-			streamingMemAcc := s.monitorRegistry.NewStreamingMemAccount(flowCtx)
-			sync := colexec.NewParallelUnorderedSynchronizer(flowCtx, processorID, streamingMemAcc, inputStreamOps, s.f.GetWaitGroup())
+			sync := colexec.NewParallelUnorderedSynchronizer(
+				flowCtx, processorID, allocator, input.ColumnTypes, inputStreamOps, s.f.GetWaitGroup(),
+			)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
