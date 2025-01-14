@@ -767,4 +767,31 @@ func TestVMPreemptionPolling(t *testing.T) {
 		// be treated as a flake instead of a failed test.
 		require.NoError(t, err)
 	})
+
+	// Test that if VM preemption polling finds a preempted VM but the post test failure
+	// check doesn't, the test is still marked as a flake.
+	t.Run("post test check doesn't catch preemption", func(t *testing.T) {
+		setPollPreemptionInterval(50 * time.Millisecond)
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			preemptedVMs := []vm.PreemptedVM{{
+				Name:        "test_node",
+				PreemptedAt: time.Now(),
+			}}
+			return preemptedVMs, nil
+		}
+
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			defer func() {
+				getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+					return nil, nil
+				}
+			}()
+			<-ctx.Done()
+		}
+
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+
+		require.NoError(t, err)
+	})
 }
