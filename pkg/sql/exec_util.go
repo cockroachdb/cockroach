@@ -4007,6 +4007,10 @@ func (m *sessionDataMutator) SetCatalogDigestStalenessCheckEnabled(b bool) {
 	m.data.CatalogDigestStalenessCheckEnabled = b
 }
 
+func (m *sessionDataMutator) SetOptimizerStatsEpsilon(val float64) {
+	m.data.OptimizerStatsEpsilon = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

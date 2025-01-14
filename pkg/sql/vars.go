@@ -3724,6 +3724,7 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
 	// CockroachDB extension.
 	`catalog_digest_staleness_check_enabled`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`catalog_digest_staleness_check_enabled`),
@@ -3740,6 +3741,33 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 		Hidden:        true,
+	},
+
+	// CockroachDB extension.
+	`optimizer_stats_epsilon`: {
+		GetStringVal: makeFloatGetStringValFn(`optimizer_stats_epsilon`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			// Note that we permit fractions above 1.0 to allow for giving
+			// head-of-the-line batch more memory that is available - this will
+			// put the budget in debt.
+			if f < 0 || f > 1 {
+				return pgerror.New(pgcode.InvalidParameterValue,
+					"optimizer_stats_epsilon must be between 0 and 1")
+			}
+			m.SetOptimizerStatsEpsilon(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().OptimizerStatsEpsilon), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "1e-10"
+		},
+		Hidden: true,
 	},
 }
 

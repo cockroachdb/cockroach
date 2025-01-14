@@ -60,7 +60,7 @@ func (b *logicalPropsBuilder) init(ctx context.Context, evalCtx *eval.Context, m
 		evalCtx: evalCtx,
 		mem:     mem,
 	}
-	b.sb.init(ctx, evalCtx, mem.Metadata())
+	b.sb.init(ctx, evalCtx, mem.Metadata(), evalCtx.SessionData().OptimizerStatsEpsilon)
 }
 
 func (b *logicalPropsBuilder) clear() {

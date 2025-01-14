@@ -234,7 +234,9 @@ type statisticsBuilder struct {
 	epsilon float64
 }
 
-func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, md *opt.Metadata) {
+func (sb *statisticsBuilder) init(
+	ctx context.Context, evalCtx *eval.Context, md *opt.Metadata, epsilon float64,
+) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*sb = statisticsBuilder{
@@ -5063,7 +5065,7 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 // expression. This is used for testing.
 func RequestColStat(ctx context.Context, evalCtx *eval.Context, e RelExpr, cols opt.ColSet) {
 	var sb statisticsBuilder
-	sb.init(ctx, evalCtx, e.Memo().Metadata())
+	sb.init(ctx, evalCtx, e.Memo().Metadata(), evalCtx.SessionData().OptimizerStatsEpsilon)
 	sb.colStat(cols, e)
 }
 

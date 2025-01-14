@@ -594,6 +594,9 @@ message LocalOnlySessionData {
   // CatalogDigestStalenessCheckEnabled is used to enable using the catalog
   // digest information to do fast memo checks.
   bool catalog_digest_staleness_check_enabled = 153;
+  // OptimizerStatsEpsilon is used to control the epsilon in the optimizer's
+  // statistics builder.
+  double optimizer_stats_epsilon = 154;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
