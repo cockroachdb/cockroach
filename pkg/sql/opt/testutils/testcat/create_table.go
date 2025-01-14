@@ -207,6 +207,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		rowid.Init(
 			ordinal,
 			cat.StableID(1+ordinal),
+			0, /* pgAttrNum */
 			"rowid",
 			cat.Ordinary,
 			types.Int,
@@ -237,6 +238,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	mvcc.Init(
 		ordinal,
 		cat.StableID(1+ordinal),
+		0, /* pgAttrNum */
 		colinfo.MVCCTimestampColumnName,
 		cat.System,
 		colinfo.MVCCTimestampColumnType,
@@ -256,6 +258,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	tableoid.Init(
 		ordinal,
 		cat.StableID(1+ordinal),
+		0, /* pgAttrNum */
 		colinfo.TableOIDColumnName,
 		cat.System,
 		types.Oid,
@@ -435,6 +438,7 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 	pk.Init(
 		0, /* ordinal */
 		0, /* stableID */
+		0, /* pgAttrNum */
 		"crdb_internal_vtable_pk",
 		cat.Ordinary,
 		types.Int,
@@ -494,6 +498,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 	rowid.Init(
 		ordinal,
 		cat.StableID(1+ordinal),
+		0, /* pgAttrNum */
 		"rowid",
 		cat.Ordinary,
 		types.Int,
@@ -837,6 +842,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		col.InitVirtualComputed(
 			ordinal,
 			cat.StableID(1+ordinal),
+			0, /* pgAttrNum */
 			name,
 			kind,
 			typ,
@@ -848,6 +854,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		col.Init(
 			ordinal,
 			cat.StableID(1+ordinal),
+			0, /* pgAttrNum */
 			name,
 			kind,
 			typ,
@@ -1290,6 +1297,7 @@ func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 	col.InitVirtualComputed(
 		len(tt.Columns),
 		cat.StableID(1+len(tt.Columns)),
+		0, /* pgAttrNum */
 		name,
 		cat.Ordinary,
 		typ,

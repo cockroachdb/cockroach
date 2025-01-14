@@ -4205,6 +4205,7 @@ func (ex *connExecutor) initStatementResult(
 	if ex.planner.instrumentation.outputMode == unmodifiedOutput &&
 		ast.StatementReturnType() == tree.Rows {
 		// Note that this call is necessary even if cols is nil.
+		// HERE
 		res.SetColumns(ctx, cols)
 	}
 	return nil

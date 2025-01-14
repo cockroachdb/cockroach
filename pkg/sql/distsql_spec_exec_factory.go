@@ -893,6 +893,7 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 
 func (e *distSQLSpecExecFactory) ConstructPlan(
 	root exec.Node,
+	cols colinfo.ResultColumns,
 	subqueries []exec.Subquery,
 	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
@@ -916,7 +917,7 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 	} else {
 		p.physPlan.onClose = e.planCtx.getCleanupFunc()
 	}
-	return constructPlan(e.planner, root, subqueries, cascades, triggers, checks, rootRowCount, flags)
+	return constructPlan(e.planner, root, cols, subqueries, cascades, triggers, checks, rootRowCount, flags)
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(

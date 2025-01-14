@@ -2759,7 +2759,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	var cols colinfo.ResultColumns
 	if stmt.AST.StatementReturnType() == tree.Rows {
-		cols = planner.curPlan.main.planColumns()
+		cols = planner.curPlan.cols
 	}
 	if err := ex.initStatementResult(ctx, res, stmt.AST, cols); err != nil {
 		res.SetError(err)

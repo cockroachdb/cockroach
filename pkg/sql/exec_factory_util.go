@@ -23,13 +23,16 @@ import (
 func constructPlan(
 	planner *planner,
 	root exec.Node,
+	cols colinfo.ResultColumns,
 	subqueries []exec.Subquery,
 	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
 	rootRowCount int64,
 	flags exec.PlanFlags,
 ) (exec.Plan, error) {
-	res := &planComponents{}
+	res := &planComponents{
+		cols: cols,
+	}
 	assignPlan := func(plan *planMaybePhysical, node exec.Node) {
 		switch n := node.(type) {
 		case planNode:

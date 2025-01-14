@@ -861,7 +861,7 @@ func (b *Builder) buildSubquery(
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
 			eb.tailCalls = tailCalls
-			ePlan, _, err := eb.buildRelational(input)
+			ePlan, planCols, err := eb.buildRelational(input)
 			if err != nil {
 				return err
 			}
@@ -880,7 +880,9 @@ func (b *Builder) buildSubquery(
 				return expectedLazyRoutineError("check")
 			}
 			plan, err := b.factory.ConstructPlan(
-				ePlan.root, eb.subqueries, eb.cascades, eb.triggers, eb.checks, inputRowCount, eb.flags,
+				ePlan.root, eb.ResultColumns(planCols),
+				eb.subqueries, eb.cascades, eb.triggers, eb.checks,
+				inputRowCount, eb.flags,
 			)
 			if err != nil {
 				return err

@@ -394,12 +394,13 @@ func (p *planMaybePhysical) isPhysicalPlan() bool {
 	return p.physPlan != nil
 }
 
-func (p *planMaybePhysical) planColumns() colinfo.ResultColumns {
-	if p.isPhysicalPlan() {
-		return p.physPlan.ResultColumns
-	}
-	return planColumns(p.planNode)
-}
+// TODO
+// func (p *planMaybePhysical) planColumns() colinfo.ResultColumns {
+// 	if p.isPhysicalPlan() {
+// 		return p.physPlan.ResultColumns
+// 	}
+// 	return planColumns(p.planNode)
+// }
 
 // Close closes the pieces of the plan that haven't been yet closed. Note that
 // it also resets the corresponding fields.
@@ -441,6 +442,10 @@ func (t planComponentType) String() string {
 type planComponents struct {
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
+
+	// cols contains information about the result columns required for the
+	// pgwire protocol.
+	cols colinfo.ResultColumns
 
 	// flags is populated during planning and execution.
 	flags planFlags

@@ -142,13 +142,16 @@ func (f *PlanGistFactory) Reset() {
 // ConstructPlan delegates to the wrapped factory.
 func (f *PlanGistFactory) ConstructPlan(
 	root exec.Node,
+	cols colinfo.ResultColumns,
 	subqueries []exec.Subquery,
 	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
 	rootRowCount int64,
 	flags exec.PlanFlags,
 ) (exec.Plan, error) {
-	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, triggers, checks, rootRowCount, flags)
+	plan, err := f.wrappedFactory.ConstructPlan(
+		root, cols, subqueries, cascades, triggers, checks, rootRowCount, flags,
+	)
 	return plan, err
 }
 
@@ -718,6 +721,7 @@ func (u *unknownIndex) Column(i int) cat.IndexColumn {
 	col.Init(
 		i,
 		cat.DefaultStableID,
+		0, /* pgAttrNum */
 		"?",
 		cat.Ordinary,
 		types.Int,

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -282,14 +284,16 @@ func New(
 // Build constructs the execution node tree and returns its root node if no
 // error occurred.
 func (b *Builder) Build() (_ exec.Plan, err error) {
-	plan, _, err := b.build(b.e)
+	plan, outputCols, err := b.build(b.e)
 	if err != nil {
 		return nil, err
 	}
 
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Statistics().RowCountIfAvailable())
 	return b.factory.ConstructPlan(
-		plan.root, b.subqueries, b.cascades, b.triggers, b.checks, rootRowCount, b.flags,
+		plan.root, b.ResultColumns(outputCols),
+		b.subqueries, b.cascades, b.triggers, b.checks,
+		rootRowCount, b.flags,
 	)
 }
 
@@ -420,6 +424,35 @@ func (b *Builder) findBuiltWithExpr(id opt.WithID) *builtWithExpr {
 // boundedStaleness returns true if this query uses bounded staleness.
 func (b *Builder) boundedStaleness() bool {
 	return b.evalCtx != nil && b.evalCtx.BoundedStaleness()
+}
+
+func (b *Builder) ResultColumns(m colOrdMap) colinfo.ResultColumns {
+	md := b.mem.Metadata()
+	// TODO(mgartner): Keep track of number of columns in col ord map so that we
+	// can pre-allocate cols.
+	var cols colinfo.ResultColumns
+	m.ForEach(func(col opt.ColumnID, ord int) {
+		colMeta := md.ColumnMeta(col)
+		var tableID descpb.ID
+		var attrNum uint32
+		var hidden bool
+		if colMeta.Table != 0 {
+			tab := md.Table(colMeta.Table)
+			tableID = descpb.ID(tab.ID())
+			baseTableOrd := colMeta.Table.ColumnOrdinal(col)
+			tabCol := tab.Column(baseTableOrd)
+			attrNum = tabCol.PGAttrNum()
+			hidden = tab.Column(baseTableOrd).Visibility() == cat.Hidden
+		}
+		cols = append(cols, colinfo.ResultColumn{
+			Name:           colMeta.Alias,
+			Typ:            colMeta.Type,
+			Hidden:         hidden,
+			TableID:        tableID,
+			PGAttributeNum: attrNum,
+		})
+	})
+	return cols
 }
 
 // mdVarContainer is an eval.IndexedVarContainer implementation used by

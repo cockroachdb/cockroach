@@ -186,6 +186,7 @@ func testTablesAndIndexCols() ([]cat.Table, []cat.IndexColumn) {
 
 	col1.Init(0,
 		1,
+		0,
 		"k",
 		cat.Ordinary,
 		types.Bool,
@@ -198,6 +199,7 @@ func testTablesAndIndexCols() ([]cat.Table, []cat.IndexColumn) {
 		nil /* generatedAsIdentitySequenceOption */)
 	col2.Init(1,
 		2,
+		0,
 		"i",
 		cat.Ordinary,
 		types.Bool,
@@ -210,6 +212,7 @@ func testTablesAndIndexCols() ([]cat.Table, []cat.IndexColumn) {
 		nil /* generatedAsIdentitySequenceOption */)
 	col3.Init(2,
 		3,
+		0,
 		"j",
 		cat.Ordinary,
 		types.Bool,
