@@ -835,7 +835,18 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *appstatspb.E
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
 	ob.AddPlanType(ih.generic, ih.optimized)
-	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
+	// We cannot allow the creation of post-query plans if they are missing
+	// since PlanForStats() is called after the query execution, so it could hit
+	// problems if we were to try to create some new plans (#135155, #138974).
+	//
+	// This means that the "plan for stats" could change depending on the data
+	// that the query ran over. (For example, in one case the cascade could be
+	// triggered and in another the cascade could be skipped ("short-circuited")
+	// depending on whether the main query modified some rows or not.) This is
+	// unfortunate because we would produce different "plan for stats" even
+	// though the query is the same.
+	const createPostQueryPlanIfMissing = false
+	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan, createPostQueryPlanIfMissing); err != nil {
 		log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
 		return nil
 	}
@@ -913,7 +924,12 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	}
 	ob.AddTxnInfo(iso, ih.txnPriority, qos, asOfSystemTime)
 
-	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
+	// When building EXPLAIN ANALYZE output we do **not** want to create
+	// post-query plans if they are missing. The fact that they are missing
+	// highlights that they were not executed, so we will only include that into
+	// the output.
+	const createPostQueryPlanIfMissing = false
+	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan, createPostQueryPlanIfMissing); err != nil {
 		ob.AddField("error emitting plan", fmt.Sprint(err))
 	}
 	return ob
