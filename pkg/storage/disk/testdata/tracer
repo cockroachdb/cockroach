@@ -8,7 +8,7 @@ rolling-window time=2024-03-27T12:00:00.5Z
 
 latest
 ----
-trace is empty
+"0001-01-01T00:00:00Z\t\t0\t0\t0\t0s\t0\t0\t0\t0s\t0\t0s\t0s\t0\t0\t0\t0s\t0\t0s\tnil"
 
 trace
 ----
