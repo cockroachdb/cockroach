@@ -47,7 +47,7 @@ func isWebhookSink(u *url.URL) bool {
 type webhookSinkClient struct {
 	ctx        context.Context
 	format     changefeedbase.FormatType
-	url        sinkURL
+	url        *changefeedbase.SinkURL
 	authHeader string
 	batchCfg   sinkBatchConfig
 	client     *httputil.Client
@@ -58,7 +58,7 @@ var _ SinkPayload = (*http.Request)(nil)
 
 func makeWebhookSinkClient(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	encodingOpts changefeedbase.EncodingOptions,
 	opts changefeedbase.WebhookSinkOptions,
 	batchCfg sinkBatchConfig,
@@ -99,13 +99,13 @@ func makeWebhookSinkClient(
 	params.Del(changefeedbase.SinkParamClientCert)
 	params.Del(changefeedbase.SinkParamClientKey)
 	sinkURLParsed.RawQuery = params.Encode()
-	sinkClient.url = sinkURL{URL: sinkURLParsed}
+	sinkClient.url = &changefeedbase.SinkURL{URL: sinkURLParsed}
 
 	return sinkClient, nil
 }
 
 func makeWebhookClient(
-	u sinkURL, timeout time.Duration, parallelism int, nm *cidr.NetMetrics,
+	u *changefeedbase.SinkURL, timeout time.Duration, parallelism int, nm *cidr.NetMetrics,
 ) (*httputil.Client, error) {
 	client := &httputil.Client{
 		Client: &http.Client{
@@ -129,16 +129,16 @@ func makeWebhookClient(
 
 	transport := client.Transport.(*http.Transport)
 
-	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
+	if _, err := u.ConsumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
 		return nil, err
 	}
-	if err := u.decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
+	if err := u.DecodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
 		return nil, err
 	}
-	if err := u.decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
+	if err := u.DecodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
 		return nil, err
 	}
-	if err := u.decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
+	if err := u.DecodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
 		return nil, err
 	}
 
@@ -244,7 +244,9 @@ func (sc *webhookSinkClient) CheckConnection(ctx context.Context) error {
 }
 
 func validateWebhookOpts(
-	u sinkURL, encodingOpts changefeedbase.EncodingOptions, opts changefeedbase.WebhookSinkOptions,
+	u *changefeedbase.SinkURL,
+	encodingOpts changefeedbase.EncodingOptions,
+	opts changefeedbase.WebhookSinkOptions,
 ) error {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeWebhookHTTPS)
@@ -351,7 +353,7 @@ func (sc *webhookSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 
 func makeWebhookSink(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	encodingOpts changefeedbase.EncodingOptions,
 	opts changefeedbase.WebhookSinkOptions,
 	parallelism int,
