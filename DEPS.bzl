@@ -9303,6 +9303,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_zeebo_errs",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/zeebo/errs",
+        sha256 = "d2fa293e275c21bfb413e2968d79036931a55f503d8b62381563ed189b523cd2",
+        strip_prefix = "github.com/zeebo/errs@v1.2.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/zeebo/errs/com_github_zeebo_errs-v1.2.2.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_zeebo_xxh3",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/zeebo/xxh3",
@@ -11433,6 +11443,16 @@ def go_deps():
         strip_prefix = "rsc.io/sampler@v1.3.0",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/rsc.io/sampler/io_rsc_sampler-v1.3.0.zip",
+        ],
+    )
+    go_repository(
+        name = "io_storj_drpc",
+        build_file_proto_mode = "disable_global",
+        importpath = "storj.io/drpc",
+        sha256 = "e297ccead2763d354959a3c04b0c9c27c9c84c99d129f216ec07da663ee0091a",
+        strip_prefix = "storj.io/drpc@v0.0.34",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/storj.io/drpc/io_storj_drpc-v0.0.34.zip",
         ],
     )
     go_repository(

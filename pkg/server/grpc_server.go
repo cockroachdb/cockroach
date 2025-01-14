@@ -22,6 +22,7 @@ import (
 // RPCs.
 type grpcServer struct {
 	*grpc.Server
+	drpc                   *rpc.DRPCServer
 	serverInterceptorsInfo rpc.ServerInterceptorInfo
 	mode                   serveMode
 }
@@ -29,7 +30,7 @@ type grpcServer struct {
 func newGRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*grpcServer, error) {
 	s := &grpcServer{}
 	s.mode.set(modeInitializing)
-	srv, interceptorInfo, err := rpc.NewServerEx(
+	srv, dsrv, interceptorInfo, err := rpc.NewServerEx(
 		ctx, rpcCtx, rpc.WithInterceptor(func(path string) error {
 			return s.intercept(path)
 		}))
@@ -37,6 +38,7 @@ func newGRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*grpcServer, error
 		return nil, err
 	}
 	s.Server = srv
+	s.drpc = dsrv
 	s.serverInterceptorsInfo = interceptorInfo
 	return s, nil
 }
