@@ -106,14 +106,10 @@ func TestPutS3(t *testing.T) {
 		}
 		t.Run(testName, func(t *testing.T) {
 			t.Run("auth-empty-no-cred", func(t *testing.T) {
-				_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s-%d", bucket,
-					"backup-test-default", testID), base.ExternalIODirConfig{}, testSettings,
-					blobs.TestEmptyBlobClientFactory, user,
-					nil, /* ie */
-					nil, /* ief */
-					nil, /* kvDB */
-					nil, /* limiters */
-					nil, /* metrics */
+				uri := fmt.Sprintf("s3://%s/%s-%d", bucket, "backup-test-default", testID)
+				_, err := cloud.ExternalStorageFromURI(
+					ctx, uri, base.ExternalIODirConfig{}, testSettings, blobs.TestEmptyBlobClientFactory, user,
+					nil /* ie */, nil /* ief */, nil /* kvDB */, nil /* limiters */, nil, /* metrics */
 				)
 				require.EqualError(t, err, fmt.Sprintf(
 					`%s is set to '%s', but %s is not set`,
@@ -124,55 +120,52 @@ func TestPutS3(t *testing.T) {
 			})
 			t.Run("auth-implicit", func(t *testing.T) {
 				skipIfNoDefaultConfig(t, ctx)
-				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
-					"s3://%s/%s-%d?%s=%s",
-					bucket, "backup-test-default", testID,
-					cloud.AuthParam, cloud.AuthParamImplicit,
-				), false, user,
-					nil, /* db */
-					testSettings)
+				info := cloudtestutils.StoreInfo{
+					URI: fmt.Sprintf(
+						"s3://%s/%s-%d?%s=%s",
+						bucket, "backup-test-default", testID,
+						cloud.AuthParam, cloud.AuthParamImplicit,
+					),
+					User: user,
+				}
+				cloudtestutils.CheckExportStore(t, info)
 			})
 			t.Run("auth-specified", func(t *testing.T) {
-				uri := S3URI(bucket, fmt.Sprintf("backup-test-%d", testID),
-					&cloudpb.ExternalStorage_S3{AccessKey: envCreds.AccessKeyID, Secret: envCreds.SecretAccessKey, Region: "us-east-1"},
-				)
-				cloudtestutils.CheckExportStore(
-					t, uri, false, user, nil /* db */, testSettings,
-				)
-				cloudtestutils.CheckListFiles(
-					t, uri, user, nil /* db */, testSettings,
-				)
+				info := cloudtestutils.StoreInfo{
+					URI: S3URI(
+						bucket, fmt.Sprintf("backup-test-%d", testID),
+						&cloudpb.ExternalStorage_S3{AccessKey: envCreds.AccessKeyID, Secret: envCreds.SecretAccessKey, Region: "us-east-1"},
+					),
+					User: user,
+				}
+				cloudtestutils.CheckExportStore(t, info)
+				cloudtestutils.CheckListFiles(t, info)
 			})
 
 			// Tests that we can put an object with server side encryption specified.
 			t.Run("server-side-encryption", func(t *testing.T) {
 				skipIfNoDefaultConfig(t, ctx)
-				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
-					"s3://%s/%s-%d?%s=%s&%s=%s",
-					bucket, "backup-test-sse-256", testID,
-					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
-					"AES256",
-				),
-					false,
-					user,
-					nil, /* db */
-					testSettings,
-				)
-
+				info := cloudtestutils.StoreInfo{
+					URI: fmt.Sprintf(
+						"s3://%s/%s-%d?%s=%s&%s=%s",
+						bucket, "backup-test-sse-256", testID,
+						cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+						"AES256",
+					),
+					User: user,
+				}
+				cloudtestutils.CheckExportStore(t, info)
 				v := os.Getenv("AWS_KMS_KEY_ARN")
 				if v == "" {
 					skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
 				}
-				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
+				info.URI = fmt.Sprintf(
 					"s3://%s/%s-%d?%s=%s&%s=%s&%s=%s",
 					bucket, "backup-test-sse-kms", testID,
 					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
 					"aws:kms", AWSServerSideEncryptionKMSID, v,
-				),
-					false,
-					user,
-					nil, /* db */
-					testSettings)
+				)
+				cloudtestutils.CheckExportStore(t, info)
 			})
 
 			t.Run("server-side-encryption-invalid-params", func(t *testing.T) {
@@ -197,7 +190,6 @@ func TestPutS3(t *testing.T) {
 				require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
 			})
 		})
-
 	}
 }
 
@@ -218,7 +210,6 @@ func TestPutS3AssumeRole(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
-	testSettings := cluster.MakeTestingClusterSettings()
 	testID := cloudtestutils.NewTestID()
 	testPath := fmt.Sprintf("backup-test-%d", testID)
 
@@ -231,27 +222,25 @@ func TestPutS3AssumeRole(t *testing.T) {
 	ctx := context.Background()
 	t.Run("auth-implicit", func(t *testing.T) {
 		skipIfNoDefaultConfig(t, ctx)
-		uri := S3URI(bucket, testPath,
-			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamImplicit, RoleARN: roleArn, Region: "us-east-1"},
-		)
-		cloudtestutils.CheckExportStore(
-			t, uri, false, user, nil /* db */, testSettings,
-		)
-		cloudtestutils.CheckListFiles(
-			t, uri, user, nil /* db */, testSettings,
-		)
+		info := cloudtestutils.StoreInfo{
+			URI: S3URI(bucket, testPath,
+				&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamImplicit, RoleARN: roleArn, Region: "us-east-1"},
+			),
+			User: user,
+		}
+		cloudtestutils.CheckExportStore(t, info)
+		cloudtestutils.CheckListFiles(t, info)
 	})
 
 	t.Run("auth-specified", func(t *testing.T) {
-		uri := S3URI(bucket, testPath,
-			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamSpecified, RoleARN: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
-		)
-		cloudtestutils.CheckExportStore(
-			t, uri, false, user, nil /* db */, testSettings,
-		)
-		cloudtestutils.CheckListFiles(
-			t, uri, user, nil /* db */, testSettings,
-		)
+		info := cloudtestutils.StoreInfo{
+			URI: S3URI(bucket, testPath,
+				&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamSpecified, RoleARN: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+			),
+			User: user,
+		}
+		cloudtestutils.CheckExportStore(t, info)
+		cloudtestutils.CheckListFiles(t, info)
 	})
 
 	t.Run("role-chaining-external-id", func(t *testing.T) {
@@ -273,18 +262,19 @@ func TestPutS3AssumeRole(t *testing.T) {
 			t.Run(tc.auth, func(t *testing.T) {
 				// First verify that none of the individual roles in the chain can be used to access the storage.
 				for _, p := range providerChain {
-					roleURI := S3URI(bucket, testPath,
-						&cloudpb.ExternalStorage_S3{
-							Auth:               tc.auth,
-							AssumeRoleProvider: p,
-							AccessKey:          tc.accessKey,
-							Secret:             tc.secretKey,
-							Region:             "us-east-1",
-						},
-					)
-					cloudtestutils.CheckNoPermission(
-						t, roleURI, user, nil /* db */, testSettings,
-					)
+					info := cloudtestutils.StoreInfo{
+						URI: S3URI(bucket, testPath,
+							&cloudpb.ExternalStorage_S3{
+								Auth:               tc.auth,
+								AssumeRoleProvider: p,
+								AccessKey:          tc.accessKey,
+								Secret:             tc.secretKey,
+								Region:             "us-east-1",
+							},
+						),
+						User: user,
+					}
+					cloudtestutils.CheckNoPermission(t, info)
 				}
 
 				// Next check that the role chain without any external IDs cannot be used to
@@ -295,22 +285,23 @@ func TestPutS3AssumeRole(t *testing.T) {
 					delegatesWithoutID = append(delegatesWithoutID, cloudpb.ExternalStorage_AssumeRoleProvider{Role: p.Role})
 				}
 
-				uri := S3URI(bucket, testPath,
-					&cloudpb.ExternalStorage_S3{
-						Auth:                  tc.auth,
-						AssumeRoleProvider:    roleWithoutID,
-						DelegateRoleProviders: delegatesWithoutID,
-						AccessKey:             tc.accessKey,
-						Secret:                tc.secretKey,
-						Region:                "us-east-1",
-					},
-				)
-				cloudtestutils.CheckNoPermission(
-					t, uri, user, nil /* db */, testSettings,
-				)
+				info := cloudtestutils.StoreInfo{
+					URI: S3URI(bucket, testPath,
+						&cloudpb.ExternalStorage_S3{
+							Auth:                  tc.auth,
+							AssumeRoleProvider:    roleWithoutID,
+							DelegateRoleProviders: delegatesWithoutID,
+							AccessKey:             tc.accessKey,
+							Secret:                tc.secretKey,
+							Region:                "us-east-1",
+						},
+					),
+					User: user,
+				}
+				cloudtestutils.CheckNoPermission(t, info)
 
 				// Finally, check that the chain of roles can be used to access the storage.
-				uri = S3URI(bucket, testPath,
+				info.URI = S3URI(bucket, testPath,
 					&cloudpb.ExternalStorage_S3{
 						Auth:                  tc.auth,
 						AssumeRoleProvider:    providerChain[len(providerChain)-1],
@@ -321,9 +312,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 					},
 				)
 
-				cloudtestutils.CheckExportStore(
-					t, uri, false, user, nil /* db */, testSettings,
-				)
+				cloudtestutils.CheckExportStore(t, info)
 			})
 		}
 	})
@@ -363,11 +352,11 @@ func TestPutS3Endpoint(t *testing.T) {
 			RawQuery: q.Encode(),
 		}
 
-		testSettings := cluster.MakeTestingClusterSettings()
-
-		cloudtestutils.CheckExportStore(
-			t, u.String(), false, user, nil /* db */, testSettings,
-		)
+		info := cloudtestutils.StoreInfo{
+			URI:  u.String(),
+			User: user,
+		}
+		cloudtestutils.CheckExportStore(t, info)
 	})
 	t.Run("use-path-style", func(t *testing.T) {
 		// EngFlow machines have no internet access, and queries even to localhost will time out.
