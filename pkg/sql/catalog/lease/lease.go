@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -313,7 +314,8 @@ func (m *Manager) WaitForInitialVersion(
 	retryOpts retry.Options,
 	regions regionliveness.CachedDatabaseRegions,
 ) error {
-	if !WaitForInitialVersion.Get(&m.settings.SV) {
+	if !WaitForInitialVersion.Get(&m.settings.SV) ||
+		!m.storage.settings.Version.IsActive(ctx, clusterversion.V25_1) {
 		return nil
 	}
 	wsTracker := startWaitStatsTracker(ctx)
