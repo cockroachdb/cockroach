@@ -276,9 +276,6 @@ func (ts *txnState) resetForNewSQLTxn(
 func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timestamp) {
 	ts.mon.Stop(ts.Ctx)
 	sp := tracing.SpanFromContext(ts.Ctx)
-	if sp == nil {
-		panic(errors.AssertionFailedf("No span in context? Was resetForNewSQLTxn() called previously?"))
-	}
 
 	if ts.recordingThreshold > 0 {
 		if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {

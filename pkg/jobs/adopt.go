@@ -69,7 +69,7 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 	// could have been canceled at this point.
 	dumpCtx, _ := r.makeCtx()
 	sp := tracing.SpanFromContext(resumerCtx)
-	if sp == nil || sp.IsNoop() {
+	if sp == nil {
 		// Should never be true since TraceableJobs force real tracing spans to be
 		// attached to the context.
 		return

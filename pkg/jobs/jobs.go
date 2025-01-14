@@ -127,7 +127,7 @@ type StartableJob struct {
 // recordings.
 type TraceableJob interface {
 	// ForceRealSpan forces the registry to create a real Span instead of a
-	// low-overhead non-recordable noop span.
+	// non-recordable no-op (nil) span.
 	ForceRealSpan() bool
 	// DumpTraceAfterRun determines whether the job's trace is dumped to disk at
 	// the end of every adoption.

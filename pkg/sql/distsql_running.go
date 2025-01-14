@@ -490,7 +490,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// issued (either by the current goroutine directly or delegated to the
 	// DistSQL workers).
 	var numIssuedRequests int
-	if sp := tracing.SpanFromContext(origCtx); sp != nil && !sp.IsNoop() {
+	if sp := tracing.SpanFromContext(origCtx); sp != nil {
 		setupReq.TraceInfo = sp.Meta().ToProto()
 	}
 	resultChan := make(chan runnerResult, len(flows)-1)
