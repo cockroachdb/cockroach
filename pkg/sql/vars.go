@@ -3724,6 +3724,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+	// CockroachDB extension.
+	`catalog_digest_staleness_check_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`catalog_digest_staleness_check_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("catalog_digest_staleness_check_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetCatalogDigestStalenessCheckEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CatalogDigestStalenessCheckEnabled), nil
+		},
+		GlobalDefault: globalTrue,
+		Hidden:        true,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

@@ -2454,6 +2454,10 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 
 	db1 := tc.ServerConn(0)
 	tdb1 := sqlutils.MakeSQLRunner(db1)
+	// Disable acquisition / waiting for the initial version, since the callbacks
+	// above will get held up on the CREATE. This test needs the SELECT after to
+	// be the first acquisition.
+	tdb1.Exec(t, "SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false")
 	db2 := tc.ServerConn(1)
 
 	// Create a couple of descriptors.
@@ -2613,10 +2617,11 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	checkLeaseState(true /* shouldBePresent */)
 
 	// Take the table dropped and back online again.
-	// This should relinquish the lease.
+	// This should relinquish the lease. Note: We acquire
+	// leases for new descriptors automatically now.
 	setTableState(descpb.DescriptorState_PUBLIC, descpb.DescriptorState_DROP)
 	setTableState(descpb.DescriptorState_DROP, descpb.DescriptorState_PUBLIC)
-	checkLeaseState(false /* shouldBePresent */)
+	checkLeaseState(true /* shouldBePresent */)
 
 	// Query the table, thereby acquiring a lease once again.
 	runner.CheckQueryResults(t, "SELECT s FROM t.test", [][]string{})

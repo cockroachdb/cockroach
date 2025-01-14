@@ -12,6 +12,13 @@ rewrite
 ${1} (...)
 ----
 
+# We are injecting a corrupt descriptors below, so lease on first creation
+# will not work.
+exec
+SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false
+----
+
+
 exec
 CREATE TABLE fktbl (id INT PRIMARY KEY);
 ----

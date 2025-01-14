@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -140,6 +141,11 @@ type Metadata struct {
 	// path cause a function call to be resolved to a UDF with the same signature
 	// as a builtin function.
 	builtinRefsByName map[tree.UnresolvedName]struct{}
+
+	digest struct {
+		syncutil.Mutex
+		depDigest cat.DependencyDigest
+	}
 
 	// NOTE! When adding fields here, update Init (if reusing allocated
 	// data structures is desired), CopyFrom and TestMetadata.
@@ -361,6 +367,14 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 	}
 }
 
+// dependencyDigestEquals checks if the stored dependency digest matches the
+// current dependency digest.
+func (md *Metadata) dependencyDigestEquals(currentDigest *cat.DependencyDigest) bool {
+	md.digest.Lock()
+	defer md.digest.Unlock()
+	return currentDigest.Equal(&md.digest.depDigest)
+}
+
 // CheckDependencies resolves (again) each database object on which this
 // metadata depends, in order to check the following conditions:
 //  1. The object has not been modified.
@@ -378,6 +392,17 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 func (md *Metadata) CheckDependencies(
 	ctx context.Context, evalCtx *eval.Context, optCatalog cat.Catalog,
 ) (upToDate bool, err error) {
+	// If the query is AOST we must check all the dependencies, since the descriptors
+	// may have been different in the past. Otherwise, the dependency digest
+	// is sufficient.
+	currentDigest := optCatalog.GetDependencyDigest()
+	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled &&
+		evalCtx.AsOfSystemTime == nil &&
+		!evalCtx.Txn.ReadTimestampFixed() &&
+		md.dependencyDigestEquals(&currentDigest) {
+		return true, nil
+	}
+
 	// Check that no referenced data sources have changed.
 	for id, dataSource := range md.dataSourceDeps {
 		var toCheck cat.DataSource
@@ -510,6 +535,13 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
+	// Update the digest after a full dependency check, since our fast
+	// check did not succeed.
+	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled {
+		md.digest.Lock()
+		md.digest.depDigest = currentDigest
+		md.digest.Unlock()
+	}
 	return true, nil
 }
 
