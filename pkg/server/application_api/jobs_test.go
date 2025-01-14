@@ -146,9 +146,8 @@ func TestAdminAPIJobs(t *testing.T) {
 	}
 	for _, job := range testJobs {
 		payload := jobspb.Payload{
-			UsernameProto:                job.username.EncodeProto(),
-			Details:                      jobspb.WrapPayloadDetails(job.details),
-			RetriableExecutionFailureLog: job.executionFailures,
+			UsernameProto: job.username.EncodeProto(),
+			Details:       jobspb.WrapPayloadDetails(job.details),
 		}
 		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
@@ -337,9 +336,8 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 	}
 	for _, job := range testJobs {
 		payload := jobspb.Payload{
-			UsernameProto:                job.username.EncodeProto(),
-			Details:                      jobspb.WrapPayloadDetails(job.details),
-			RetriableExecutionFailureLog: job.executionLog,
+			UsernameProto: job.username.EncodeProto(),
+			Details:       jobspb.WrapPayloadDetails(job.details),
 		}
 		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
@@ -391,20 +389,6 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 
 	for i, job := range resJobs {
 		require.Equal(t, testJobs[i].id, job.ID)
-		require.Equal(t, len(testJobs[i].executionLog), len(job.ExecutionFailures))
-		for j, f := range job.ExecutionFailures {
-			tf := testJobs[i].executionLog[j]
-			require.Equal(t, tf.Status, f.Status)
-			require.Equal(t, tf.ExecutionStartMicros, f.Start.UnixMicro())
-			require.Equal(t, tf.ExecutionEndMicros, f.End.UnixMicro())
-			var expErr string
-			if tf.Error != nil {
-				expErr = errors.DecodeError(context.Background(), *tf.Error).Error()
-			} else {
-				expErr = tf.TruncatedError
-			}
-			require.Equal(t, expErr, f.Error)
-		}
 	}
 }
 

@@ -6,14 +6,12 @@
 package jobs
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -162,27 +160,4 @@ func (e *retriableExecutionError) SafeFormatError(p errors.Printer) error {
 		p.Printf("retriable execution error")
 	}
 	return e.cause
-}
-
-func (e *retriableExecutionError) toRetriableExecutionFailure(
-	ctx context.Context, maxErrorSize int,
-) *jobspb.RetriableExecutionFailure {
-	// If the cause is too large, we format it, losing all structure, and retain
-	// a prefix.
-	ef := &jobspb.RetriableExecutionFailure{
-		Status:               string(e.status),
-		ExecutionStartMicros: timeutil.ToUnixMicros(e.start),
-		ExecutionEndMicros:   timeutil.ToUnixMicros(e.end),
-		InstanceID:           e.instanceID,
-	}
-	if encodedCause := errors.EncodeError(ctx, e.cause); encodedCause.Size() < maxErrorSize {
-		ef.Error = &encodedCause
-	} else {
-		formatted := e.cause.Error()
-		if len(formatted) > maxErrorSize {
-			formatted = formatted[:maxErrorSize]
-		}
-		ef.TruncatedError = formatted
-	}
-	return ef
 }

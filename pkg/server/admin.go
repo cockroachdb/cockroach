@@ -2396,23 +2396,6 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	if runningStatusOrNil != nil {
 		job.RunningStatus = *runningStatusOrNil
 	}
-	if executionFailuresOrNil != nil {
-		failures, err := jobs.ParseRetriableExecutionErrorLogFromJSON([]byte(*executionFailuresOrNil))
-		if err != nil {
-			return errors.Wrap(err, "parse")
-		}
-		job.ExecutionFailures = make([]*serverpb.JobResponse_ExecutionFailure, len(failures))
-		for i, f := range failures {
-			start := time.UnixMicro(f.ExecutionStartMicros)
-			end := time.UnixMicro(f.ExecutionEndMicros)
-			job.ExecutionFailures[i] = &serverpb.JobResponse_ExecutionFailure{
-				Status: f.Status,
-				Start:  &start,
-				End:    &end,
-				Error:  f.TruncatedError,
-			}
-		}
-	}
 	if coordinatorOrNil != nil {
 		job.CoordinatorID = *coordinatorOrNil
 	}

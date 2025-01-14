@@ -83,18 +83,16 @@ func (j *Job) TestingCurrentStatus(ctx context.Context) (Status, error) {
 }
 
 const (
-	AdoptQuery                     = claimQuery
-	CancelQuery                    = pauseAndCancelUpdate
-	RemoveClaimsQuery              = removeClaimsForDeadSessionsQuery
-	ProcessJobsQuery               = processQuery
-	IntervalBaseSettingKey         = intervalBaseSettingKey
-	AdoptIntervalSettingKey        = adoptIntervalSettingKey
-	CancelIntervalSettingKey       = cancelIntervalSettingKey
-	GcIntervalSettingKey           = gcIntervalSettingKey
-	RetentionTimeSettingKey        = retentionTimeSettingKey
-	DefaultAdoptInterval           = defaultAdoptInterval
-	ExecutionErrorsMaxEntriesKey   = executionErrorsMaxEntriesKey
-	ExecutionErrorsMaxEntrySizeKey = executionErrorsMaxEntrySizeKey
+	AdoptQuery               = claimQuery
+	CancelQuery              = pauseAndCancelUpdate
+	RemoveClaimsQuery        = removeClaimsForDeadSessionsQuery
+	ProcessJobsQuery         = processQuery
+	IntervalBaseSettingKey   = intervalBaseSettingKey
+	AdoptIntervalSettingKey  = adoptIntervalSettingKey
+	CancelIntervalSettingKey = cancelIntervalSettingKey
+	GcIntervalSettingKey     = gcIntervalSettingKey
+	RetentionTimeSettingKey  = retentionTimeSettingKey
+	DefaultAdoptInterval     = defaultAdoptInterval
 )
 
 var (

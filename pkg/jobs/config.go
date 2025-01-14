@@ -16,16 +16,14 @@ import (
 )
 
 const (
-	intervalBaseSettingKey         = "jobs.registry.interval.base"
-	adoptIntervalSettingKey        = "jobs.registry.interval.adopt"
-	cancelIntervalSettingKey       = "jobs.registry.interval.cancel"
-	gcIntervalSettingKey           = "jobs.registry.interval.gc"
-	retentionTimeSettingKey        = "jobs.retention_time"
-	cancelUpdateLimitKey           = "jobs.cancel_update_limit"
-	executionErrorsMaxEntriesKey   = "jobs.execution_errors.max_entries"
-	executionErrorsMaxEntrySizeKey = "jobs.execution_errors.max_entry_size"
-	debugPausePointsSettingKey     = "jobs.debug.pausepoints"
-	metricsPollingIntervalKey      = "jobs.metrics.interval.poll"
+	intervalBaseSettingKey     = "jobs.registry.interval.base"
+	adoptIntervalSettingKey    = "jobs.registry.interval.adopt"
+	cancelIntervalSettingKey   = "jobs.registry.interval.cancel"
+	gcIntervalSettingKey       = "jobs.registry.interval.gc"
+	retentionTimeSettingKey    = "jobs.retention_time"
+	cancelUpdateLimitKey       = "jobs.cancel_update_limit"
+	debugPausePointsSettingKey = "jobs.debug.pausepoints"
+	metricsPollingIntervalKey  = "jobs.metrics.interval.poll"
 )
 
 const (
@@ -48,15 +46,6 @@ const (
 	// defaultCancellationsUpdateLimit is the default number of jobs that can be
 	// updated when canceling jobs concurrently from dead sessions.
 	defaultCancellationsUpdateLimit int64 = 1000
-
-	// defaultExecutionErrorsMaxEntries is the default number of error entries
-	// which will be retained.
-	defaultExecutionErrorsMaxEntries = 3
-
-	// defaultExecutionErrorsMaxEntrySize is the maximum allowed size of an
-	// error. If this size is exceeded, the error will be formatted as a string
-	// and then truncated to fit the size.
-	defaultExecutionErrorsMaxEntrySize = 64 << 10 // 64 KiB
 
 	// defaultPollForMetricsInterval is the default interval to poll the jobs
 	// table for metrics.
@@ -125,22 +114,6 @@ var (
 		"the number of jobs that can be updated when canceling jobs concurrently from dead sessions",
 		defaultCancellationsUpdateLimit,
 		settings.NonNegativeInt,
-	)
-
-	executionErrorsMaxEntriesSetting = settings.RegisterIntSetting(
-		settings.ApplicationLevel,
-		executionErrorsMaxEntriesKey,
-		"the maximum number of retriable error entries which will be stored for introspection",
-		defaultExecutionErrorsMaxEntries,
-		settings.NonNegativeInt,
-	)
-
-	executionErrorsMaxEntrySize = settings.RegisterByteSizeSetting(
-		settings.ApplicationLevel,
-		executionErrorsMaxEntrySizeKey,
-		"the maximum byte size of individual error entries which will be stored"+
-			" for introspection",
-		defaultExecutionErrorsMaxEntrySize,
 	)
 
 	debugPausepoints = settings.RegisterStringSetting(

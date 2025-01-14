@@ -1983,25 +1983,12 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 	if !errors.As(err, &efe) {
 		return
 	}
-
-	updateErr := j.NoTxn().Update(ctx, func(
-		txn isql.Txn, md JobMetadata, ju *JobUpdater,
-	) error {
-		pl := md.Payload
-		{ // Append the entry to the log
-			maxSize := int(executionErrorsMaxEntrySize.Get(&r.settings.SV))
-			pl.RetriableExecutionFailureLog = append(pl.RetriableExecutionFailureLog,
-				efe.toRetriableExecutionFailure(ctx, maxSize))
+	updateErr := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		v, err := txn.GetSystemSchemaVersion(ctx)
+		if err != nil || v.Less(clusterversion.V25_1.Version()) {
+			return err
 		}
-		{ // Maybe truncate the log.
-			maxEntries := int(executionErrorsMaxEntriesSetting.Get(&r.settings.SV))
-			log := &pl.RetriableExecutionFailureLog
-			if len(*log) > maxEntries {
-				*log = (*log)[len(*log)-maxEntries:]
-			}
-		}
-		ju.UpdatePayload(pl)
-		return nil
+		return j.Messages().Record(ctx, txn, "retry", efe.cause.Error())
 	})
 	if ctx.Err() != nil {
 		return
