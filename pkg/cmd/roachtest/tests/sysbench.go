@@ -185,12 +185,21 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	var start time.Time
 	runWorkload := func(ctx context.Context) error {
 		t.Status("preparing workload")
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), opts.cmd(true /* haproxy */)+" prepare")
+		cmd := opts.cmd(useHAProxy /* haproxy */)
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" prepare")
+		if err != nil {
+			return err
+		} else if strings.Contains(result.Stdout, "FATAL") {
+			// sysbench prepare doesn't exit on errors for some reason, so we have
+			// to check that it didn't silently fail. We've seen it do so, causing
+			// the run step to segfault. Segfaults are an ignored error, so in the
+			// past, this would cause the test to silently fail.
+			return errors.Newf("sysbench prepare failed with FATAL error")
+		}
 
 		t.Status("running workload")
-		cmd := opts.cmd(useHAProxy /* haproxy */) + " run"
 		start = timeutil.Now()
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd)
+		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" run")
 
 		// Sysbench occasionally segfaults. When that happens, don't fail the
 		// test.
