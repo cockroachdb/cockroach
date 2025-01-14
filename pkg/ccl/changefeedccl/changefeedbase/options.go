@@ -239,9 +239,6 @@ const (
 	Topics = `topics`
 )
 
-// Support additional mechanism on top of the default SASL mechanism.
-const SASLTypeAWSMSKIAM = "AWS_MSK_IAM"
-
 func makeStringSet(opts ...string) map[string]struct{} {
 	res := make(map[string]struct{}, len(opts))
 	for _, opt := range opts {
