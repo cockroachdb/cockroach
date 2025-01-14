@@ -3842,6 +3842,54 @@ CREATE TABLE t_identity_drop_dependency(id INT PRIMARY KEY DEFAULT nextval('publ
 statement error pgcode 2BP01 pq: cannot drop table t_identity_drop because other objects depend on it
 ALTER TABLE t_identity_drop ALTER COLUMN b DROP IDENTITY;
 
+let $old_serial_normalization
+SHOW serial_normalization
+
+statement ok
+SET serial_normalization = rowid
+
+# Allow creating an IDENTITY column that isn't backed by a sequence.
+statement ok
+CREATE TABLE t_serial_identity_no_sequence(a SERIAL PRIMARY KEY GENERATED ALWAYS AS IDENTITY)
+
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->'columns'->0->>'defaultExpr'
+FROM system.descriptor
+WHERE id = 't_serial_identity_no_sequence'::regclass::oid
+----
+unique_rowid()
+
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->'columns'->0->>'generatedAsIdentityType'
+FROM system.descriptor
+WHERE id = 't_serial_identity_no_sequence'::regclass::oid
+----
+GENERATED_ALWAYS
+
+statement ok
+SET serial_normalization = sql_sequence
+
+# Allow creating an IDENTITY column that is backed by a sequence.
+statement ok
+CREATE TABLE t_serial_identity_with_sequence(a SERIAL PRIMARY KEY GENERATED ALWAYS AS IDENTITY)
+
+query T
+SELECT substring(crdb_internal.pb_to_json('desc', descriptor)->'table'->'columns'->0->>'defaultExpr' FOR 7)
+FROM system.descriptor
+WHERE id = 't_serial_identity_with_sequence'::regclass::oid
+----
+nextval
+
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->'columns'->0->>'generatedAsIdentityType'
+FROM system.descriptor
+WHERE id = 't_serial_identity_with_sequence'::regclass::oid
+----
+GENERATED_ALWAYS
+
+statement ok
+SET serial_normalization = $old_serial_normalization
+
 subtest comma_syntax
 
 statement ok
