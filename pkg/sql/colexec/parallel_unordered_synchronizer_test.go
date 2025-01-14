@@ -123,7 +123,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testMemAcc, inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
 
 	t.Run(fmt.Sprintf("numInputs=%d/numBatches=%d/terminationScenario=%d", numInputs, numBatches, terminationScenario), func(t *testing.T) {
@@ -193,6 +193,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}}
+	typs := types.OneIntCol
 	for i := 1; i < len(inputs); i++ {
 		acc := testMemMonitor.MakeBoundAccount()
 		defer acc.Close(ctx)
@@ -201,7 +202,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 				NextCb: func() coldata.Batch {
 					// All inputs that do not encounter an error will continue to return
 					// batches.
-					b := allocator.NewMemBatchWithMaxCapacity([]*types.T{types.Int})
+					b := allocator.NewMemBatchWithMaxCapacity(typs)
 					b.SetLength(1)
 					return b
 				},
@@ -224,7 +225,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testMemAcc, inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
 	for {
 		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next() }); err != nil {
@@ -256,7 +257,7 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
-	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testMemAcc, inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()

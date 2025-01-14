@@ -11,20 +11,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
 	colexecop.NonExplainable
-	batches map[coldata.Batch]*projectingBatch
 	colexecop.OneInputInitCloserHelper
+
 	projection []uint32
-	// numBatchesLoggingThreshold is the threshold on the number of items in
-	// 'batches' map at which we will log a message when a new projectingBatch
-	// is created. It is growing exponentially.
-	numBatchesLoggingThreshold int
+	batch      *projectingBatch
 }
 
 var _ colexecop.ClosableOperator = &simpleProjectOp{}
@@ -105,10 +101,8 @@ func NewSimpleProjectOp(
 		}
 	}
 	s := &simpleProjectOp{
-		OneInputInitCloserHelper:   colexecop.MakeOneInputInitCloserHelper(input),
-		projection:                 make([]uint32, len(projection)),
-		batches:                    make(map[coldata.Batch]*projectingBatch),
-		numBatchesLoggingThreshold: 128,
+		OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+		projection:               make([]uint32, len(projection)),
 	}
 	// We make a copy of projection to be safe.
 	copy(s.projection, projection)
@@ -120,19 +114,21 @@ func (d *simpleProjectOp) Next() coldata.Batch {
 	if batch.Length() == 0 {
 		return coldata.ZeroBatch
 	}
-	projBatch, found := d.batches[batch]
-	if !found {
-		projBatch = newProjectionBatch(d.projection)
-		d.batches[batch] = projBatch
-		if len(d.batches) == d.numBatchesLoggingThreshold {
-			if log.V(1) {
-				log.Infof(d.Ctx, "simpleProjectOp: size of 'batches' map = %d", len(d.batches))
-			}
-			d.numBatchesLoggingThreshold = d.numBatchesLoggingThreshold * 2
-		}
+	if d.batch == nil || d.batch.Batch != batch {
+		// Create a fresh projection batch if we haven't created one already or
+		// if we see a different "internally" batch coming from the input. The
+		// latter case can happen during dynamically growing the size of the
+		// batch in the input, and we need to create a fresh projection batch
+		// since the last one might have been modified higher up in the tree
+		// (e.g. a vector could have been appended).
+		//
+		// The contract of Operator.Next encourages implementations to reuse the
+		// same batch, so we shouldn't be hitting this case often to make this
+		// allocation have non-trivial impact.
+		d.batch = newProjectionBatch(d.projection)
 	}
-	projBatch.Batch = batch
-	return projBatch
+	d.batch.Batch = batch
+	return d.batch
 }
 
 func (d *simpleProjectOp) Reset(ctx context.Context) {

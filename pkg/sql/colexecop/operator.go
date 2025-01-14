@@ -40,6 +40,9 @@ type Operator interface {
 	// Calling Next may invalidate the contents of the last Batch returned by
 	// Next.
 	//
+	// Implementations should strive for reusing the same Batch across calls to
+	// Next which should be possible if the capacity of the Batch didn't change.
+	//
 	// It might panic with an expected error, so there must be a "root"
 	// component that will catch that panic.
 	Next() coldata.Batch
