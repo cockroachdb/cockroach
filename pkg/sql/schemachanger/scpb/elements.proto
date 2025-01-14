@@ -169,6 +169,7 @@ message ElementProto {
 
     // Policy elements.
     PolicyName policy_name = 240 [(gogoproto.moretags) = "parent:\"Policy\""];
+    PolicyRole policy_role = 241 [(gogoproto.moretags) = "parent:\"Policy\""];
 
     // Next element group start id: 250
   }
@@ -377,6 +378,13 @@ message PolicyName {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
   string name = 3;
+}
+
+// PolicyRole is the role that is attached to a specific policy.
+message PolicyRole {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
+  string role_name = 3;
 }
 
 message Sequence {

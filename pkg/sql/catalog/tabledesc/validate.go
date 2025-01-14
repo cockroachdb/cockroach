@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -2090,6 +2091,24 @@ func (desc *wrapper) validatePolicies() error {
 		if _, ok := catpb.PolicyCommand_name[int32(p.Command)]; !ok || p.Command == catpb.PolicyCommand_POLICYCOMMAND_UNUSED {
 			return errors.AssertionFailedf(
 				"policy %q has an unknown policy command %v", p.Name, p.Command)
+		}
+		if len(p.RoleNames) == 0 {
+			return errors.AssertionFailedf(
+				"policy %q has no roles defined", p.Name)
+		}
+		rolesInUse := make(map[string]struct{}, len(p.RoleNames))
+		for i, roleName := range p.RoleNames {
+			if _, found := rolesInUse[roleName]; found {
+				return errors.AssertionFailedf(
+					"policy %q contains duplicate role name %q", p.Name, roleName)
+			}
+			rolesInUse[roleName] = struct{}{}
+			// The public role, if included, must always be the first entry in the
+			// role names slice.
+			if roleName == username.PublicRole && i > 0 {
+				return errors.AssertionFailedf(
+					"the public role must be the first role defined in policy %q", p.Name)
+			}
 		}
 	}
 	return nil
