@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 )
 
 type traceEvent struct {
@@ -87,16 +86,16 @@ func (m *monitorTracer) RecordEvent(event traceEvent) {
 	}
 }
 
-// Latest retrieves the last traceEvent that was queued. If the trace is empty
-// we throw an error.
-func (m *monitorTracer) Latest() (traceEvent, error) {
+// Latest retrieves the last traceEvent that was queued. Returns a zero-valued
+// traceEvent if none exists.
+func (m *monitorTracer) Latest() traceEvent {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.sizeLocked() == 0 {
-		return traceEvent{}, errors.Errorf("trace is empty")
+		return traceEvent{}
 	}
 	latestIdx := (m.mu.end - 1) % m.capacity
-	return m.mu.trace[latestIdx], nil
+	return m.mu.trace[latestIdx]
 }
 
 // RollingWindow retrieves all traceEvents that occurred after the specified
