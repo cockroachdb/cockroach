@@ -635,6 +635,22 @@ func (r *Registry) CreateJobWithTxn(
 		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
 			return err
 		}
+		if v.AtLeast(clusterversion.V25_1_AddJobsTables.Version()) {
+			if j.mu.progress.GetFractionCompleted() > 0 || j.mu.progress.GetHighWater() != nil {
+				var resolved hlc.Timestamp
+				if ts := j.mu.progress.GetHighWater(); ts != nil {
+					resolved = *ts
+				}
+				if err := j.ProgressStorage().Set(ctx, txn, float64(j.mu.progress.GetFractionCompleted()), resolved); err != nil {
+					return err
+				}
+			}
+			if j.mu.progress.RunningStatus != "" {
+				if err := j.StatusStorage().Set(ctx, txn, j.mu.progress.RunningStatus); err != nil {
+					return err
+				}
+			}
+		}
 
 		return nil
 	}
