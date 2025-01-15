@@ -12,7 +12,9 @@ import (
 
 // whereis is a helper executable that is basically just `realpath`. It's meant
 // to be used like:
-//     bazel run ... --run_under //build/bazelutil/whereis
+//
+//	bazel run ... --run_under //build/bazelutil/whereis
+//
 // ... which will print the location of the binary you're running. Useful
 // because Bazel can be a little unclear about where exactly to find any given
 // executable.

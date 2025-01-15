@@ -76,121 +76,87 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
-func TestCCLLogic_multi_region(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region")
 }
 
-func TestCCLLogic_multi_region_default_primary_region(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_default_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_default_primary_region")
 }
 
-func TestCCLLogic_multi_region_drop_region(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_drop_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_drop_region")
 }
 
-func TestCCLLogic_multi_region_privileges(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_privileges")
 }
 
-func TestCCLLogic_multi_region_secondary_tenants_abstractions_disallowed(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_secondary_tenants_abstractions_disallowed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_secondary_tenants_abstractions_disallowed")
 }
 
-func TestCCLLogic_multi_region_show(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_show(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_show")
 }
 
-func TestCCLLogic_multi_region_stats(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_stats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_stats")
 }
 
-func TestCCLLogic_multi_region_survival_goal(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_survival_goal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_survival_goal")
 }
 
-func TestCCLLogic_multi_region_zone_config_extensions(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_zone_config_extensions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_zone_config_extensions")
 }
 
-func TestCCLLogic_multi_region_zone_configs(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_zone_configs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_zone_configs")
 }
 
-func TestCCLLogic_partitioning_hash_sharded_index_mr(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_hash_sharded_index_mr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_hash_sharded_index_mr")
 }
 
-func TestCCLLogic_regional_by_row(
-	t *testing.T,
-) {
+func TestCCLLogic_regional_by_row(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row")
 }
 
-func TestCCLLogic_regional_by_row_auto_rehoming(
-	t *testing.T,
-) {
+func TestCCLLogic_regional_by_row_auto_rehoming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row_auto_rehoming")
 }
 
-func TestCCLLogic_regional_by_row_placement_restricted(
-	t *testing.T,
-) {
+func TestCCLLogic_regional_by_row_placement_restricted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row_placement_restricted")
 }
 
-func TestCCLLogic_regional_by_row_read_committed(
-	t *testing.T,
-) {
+func TestCCLLogic_regional_by_row_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row_read_committed")
 }
 
-func TestCCLLogic_regional_by_row_rename_column(
-	t *testing.T,
-) {
+func TestCCLLogic_regional_by_row_rename_column(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row_rename_column")
 }
 
-func TestCCLLogic_regional_by_table_placement_restricted(
-	t *testing.T,
-) {
+func TestCCLLogic_regional_by_table_placement_restricted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_table_placement_restricted")
 }

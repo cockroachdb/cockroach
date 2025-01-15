@@ -75,352 +75,252 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
-func TestCCLLogic_as_of(
-	t *testing.T,
-) {
+func TestCCLLogic_as_of(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "as_of")
 }
 
-func TestCCLLogic_auto_rehoming(
-	t *testing.T,
-) {
+func TestCCLLogic_auto_rehoming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "auto_rehoming")
 }
 
-func TestCCLLogic_builtins(
-	t *testing.T,
-) {
+func TestCCLLogic_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "builtins")
 }
 
-func TestCCLLogic_case_sensitive_names(
-	t *testing.T,
-) {
+func TestCCLLogic_case_sensitive_names(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "case_sensitive_names")
 }
 
-func TestCCLLogic_changefeed(
-	t *testing.T,
-) {
+func TestCCLLogic_changefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "changefeed")
 }
 
-func TestCCLLogic_crdb_internal(
-	t *testing.T,
-) {
+func TestCCLLogic_crdb_internal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "crdb_internal")
 }
 
-func TestCCLLogic_explain_call_plpgsql(
-	t *testing.T,
-) {
+func TestCCLLogic_explain_call_plpgsql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "explain_call_plpgsql")
 }
 
-func TestCCLLogic_explain_redact(
-	t *testing.T,
-) {
+func TestCCLLogic_explain_redact(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "explain_redact")
 }
 
-func TestCCLLogic_fips_ready(
-	t *testing.T,
-) {
+func TestCCLLogic_fips_ready(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "fips_ready")
 }
 
-func TestCCLLogic_fk_read_committed(
-	t *testing.T,
-) {
+func TestCCLLogic_fk_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "fk_read_committed")
 }
 
-func TestCCLLogic_hash_sharded_index_read_committed(
-	t *testing.T,
-) {
+func TestCCLLogic_hash_sharded_index_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "hash_sharded_index_read_committed")
 }
 
-func TestCCLLogic_nested_routines(
-	t *testing.T,
-) {
+func TestCCLLogic_nested_routines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "nested_routines")
 }
 
-func TestCCLLogic_new_schema_changer(
-	t *testing.T,
-) {
+func TestCCLLogic_new_schema_changer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "new_schema_changer")
 }
 
-func TestCCLLogic_partitioning(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning")
 }
 
-func TestCCLLogic_partitioning_all_by_nothing(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_all_by_nothing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_all_by_nothing")
 }
 
-func TestCCLLogic_partitioning_constrained_scans(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_constrained_scans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_constrained_scans")
 }
 
-func TestCCLLogic_partitioning_enum(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_enum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_enum")
 }
 
-func TestCCLLogic_partitioning_implicit(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_implicit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_implicit")
 }
 
-func TestCCLLogic_partitioning_implicit_read_committed(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_implicit_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_implicit_read_committed")
 }
 
-func TestCCLLogic_partitioning_index(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_index")
 }
 
-func TestCCLLogic_pgcrypto_builtins(
-	t *testing.T,
-) {
+func TestCCLLogic_pgcrypto_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "pgcrypto_builtins")
 }
 
-func TestCCLLogic_plpgsql_assign(
-	t *testing.T,
-) {
+func TestCCLLogic_plpgsql_assign(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_assign")
 }
 
-func TestCCLLogic_plpgsql_block(
-	t *testing.T,
-) {
+func TestCCLLogic_plpgsql_block(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_block")
 }
 
-func TestCCLLogic_plpgsql_call(
-	t *testing.T,
-) {
+func TestCCLLogic_plpgsql_call(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_call")
 }
 
-func TestCCLLogic_plpgsql_cte(
-	t *testing.T,
-) {
+func TestCCLLogic_plpgsql_cte(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_cte")
 }
 
-func TestCCLLogic_plpgsql_cursor(
-	t *testing.T,
-) {
+func TestCCLLogic_plpgsql_cursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_cursor")
 }
 
-func TestCCLLogic_plpgsql_into(
-	t *testing.T,
-) {
+func TestCCLLogic_plpgsql_into(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_into")
 }
 
-func TestCCLLogic_plpgsql_record(
-	t *testing.T,
-) {
+func TestCCLLogic_plpgsql_record(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_record")
 }
 
-func TestCCLLogic_plpgsql_txn(
-	t *testing.T,
-) {
+func TestCCLLogic_plpgsql_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_txn")
 }
 
-func TestCCLLogic_plpgsql_unsupported(
-	t *testing.T,
-) {
+func TestCCLLogic_plpgsql_unsupported(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_unsupported")
 }
 
-func TestCCLLogic_procedure_params(
-	t *testing.T,
-) {
+func TestCCLLogic_procedure_params(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "procedure_params")
 }
 
-func TestCCLLogic_procedure_plpgsql(
-	t *testing.T,
-) {
+func TestCCLLogic_procedure_plpgsql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "procedure_plpgsql")
 }
 
-func TestCCLLogic_read_committed(
-	t *testing.T,
-) {
+func TestCCLLogic_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "read_committed")
 }
 
-func TestCCLLogic_redact_descriptor(
-	t *testing.T,
-) {
+func TestCCLLogic_redact_descriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "redact_descriptor")
 }
 
-func TestCCLLogic_refcursor(
-	t *testing.T,
-) {
+func TestCCLLogic_refcursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "refcursor")
 }
 
-func TestCCLLogic_restore(
-	t *testing.T,
-) {
+func TestCCLLogic_restore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "restore")
 }
 
-func TestCCLLogic_schema_change_in_txn(
-	t *testing.T,
-) {
+func TestCCLLogic_schema_change_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "schema_change_in_txn")
 }
 
-func TestCCLLogic_select_for_update_read_committed(
-	t *testing.T,
-) {
+func TestCCLLogic_select_for_update_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "select_for_update_read_committed")
 }
 
-func TestCCLLogic_show_create(
-	t *testing.T,
-) {
+func TestCCLLogic_show_create(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "show_create")
 }
 
-func TestCCLLogic_subject(
-	t *testing.T,
-) {
+func TestCCLLogic_subject(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "subject")
 }
 
-func TestCCLLogic_tenant_capability(
-	t *testing.T,
-) {
+func TestCCLLogic_tenant_capability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "tenant_capability")
 }
 
-func TestCCLLogic_tenant_usage(
-	t *testing.T,
-) {
+func TestCCLLogic_tenant_usage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "tenant_usage")
 }
 
-func TestCCLLogic_triggers(
-	t *testing.T,
-) {
+func TestCCLLogic_triggers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "triggers")
 }
 
-func TestCCLLogic_triggers_explain(
-	t *testing.T,
-) {
+func TestCCLLogic_triggers_explain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "triggers_explain")
 }
 
-func TestCCLLogic_udf_params(
-	t *testing.T,
-) {
+func TestCCLLogic_udf_params(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "udf_params")
 }
 
-func TestCCLLogic_udf_plpgsql(
-	t *testing.T,
-) {
+func TestCCLLogic_udf_plpgsql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "udf_plpgsql")
 }
 
-func TestCCLLogic_udf_rewrite(
-	t *testing.T,
-) {
+func TestCCLLogic_udf_rewrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "udf_rewrite")
 }
 
-func TestCCLLogic_udf_volatility_check(
-	t *testing.T,
-) {
+func TestCCLLogic_udf_volatility_check(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "udf_volatility_check")
 }
 
-func TestCCLLogic_unique_read_committed(
-	t *testing.T,
-) {
+func TestCCLLogic_unique_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "unique_read_committed")
 }
 
-func TestCCLLogic_vector(
-	t *testing.T,
-) {
+func TestCCLLogic_vector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "vector")
 }

@@ -118,44 +118,32 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 }
 
-func TestTenantLogic_distsql_tenant(
-	t *testing.T,
-) {
+func TestTenantLogic_distsql_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_tenant")
 }
 
-func TestTenantLogic_distsql_tenant_locality(
-	t *testing.T,
-) {
+func TestTenantLogic_distsql_tenant_locality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_tenant_locality")
 }
 
-func TestTenantLogic_tenant_from_tenant(
-	t *testing.T,
-) {
+func TestTenantLogic_tenant_from_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tenant_from_tenant")
 }
 
-func TestTenantLogic_tenant_from_tenant_hint(
-	t *testing.T,
-) {
+func TestTenantLogic_tenant_from_tenant_hint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tenant_from_tenant_hint")
 }
 
-func TestTenantLogicCCL_multi_region_system_database(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_multi_region_system_database(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_system_database")
 }
 
-func TestTenantExecBuild_distsql_tenant_locality(
-	t *testing.T,
-) {
+func TestTenantExecBuild_distsql_tenant_locality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "distsql_tenant_locality")
 }

@@ -120,2837 +120,2027 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 }
 
-func TestTenantLogic_aggregate(
-	t *testing.T,
-) {
+func TestTenantLogic_aggregate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "aggregate")
 }
 
-func TestTenantLogic_alias_types(
-	t *testing.T,
-) {
+func TestTenantLogic_alias_types(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alias_types")
 }
 
-func TestTenantLogic_alter_column_type(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_column_type(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_column_type")
 }
 
-func TestTenantLogic_alter_database_convert_to_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_database_convert_to_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_database_convert_to_schema")
 }
 
-func TestTenantLogic_alter_database_owner(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_database_owner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_database_owner")
 }
 
-func TestTenantLogic_alter_default_privileges_for_all_roles(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_default_privileges_for_all_roles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_default_privileges_for_all_roles")
 }
 
-func TestTenantLogic_alter_default_privileges_for_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_default_privileges_for_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_default_privileges_for_schema")
 }
 
-func TestTenantLogic_alter_default_privileges_for_sequence(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_default_privileges_for_sequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_default_privileges_for_sequence")
 }
 
-func TestTenantLogic_alter_default_privileges_for_table(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_default_privileges_for_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_default_privileges_for_table")
 }
 
-func TestTenantLogic_alter_default_privileges_for_type(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_default_privileges_for_type(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_default_privileges_for_type")
 }
 
-func TestTenantLogic_alter_default_privileges_in_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_default_privileges_in_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_default_privileges_in_schema")
 }
 
-func TestTenantLogic_alter_default_privileges_with_grant_option(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_default_privileges_with_grant_option(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_default_privileges_with_grant_option")
 }
 
-func TestTenantLogic_alter_primary_key(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_primary_key(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_primary_key")
 }
 
-func TestTenantLogic_alter_role(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_role(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_role")
 }
 
-func TestTenantLogic_alter_role_set(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_role_set(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_role_set")
 }
 
-func TestTenantLogic_alter_schema_owner(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_schema_owner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_schema_owner")
 }
 
-func TestTenantLogic_alter_sequence(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_sequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_sequence")
 }
 
-func TestTenantLogic_alter_sequence_owner(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_sequence_owner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_sequence_owner")
 }
 
-func TestTenantLogic_alter_table(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_table")
 }
 
-func TestTenantLogic_alter_table_owner(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_table_owner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_table_owner")
 }
 
-func TestTenantLogic_alter_type(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_type(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_type")
 }
 
-func TestTenantLogic_alter_type_owner(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_type_owner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_type_owner")
 }
 
-func TestTenantLogic_alter_view_owner(
-	t *testing.T,
-) {
+func TestTenantLogic_alter_view_owner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_view_owner")
 }
 
-func TestTenantLogic_and_or(
-	t *testing.T,
-) {
+func TestTenantLogic_and_or(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "and_or")
 }
 
-func TestTenantLogic_apply_join(
-	t *testing.T,
-) {
+func TestTenantLogic_apply_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "apply_join")
 }
 
-func TestTenantLogic_array(
-	t *testing.T,
-) {
+func TestTenantLogic_array(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "array")
 }
 
-func TestTenantLogic_as_of(
-	t *testing.T,
-) {
+func TestTenantLogic_as_of(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "as_of")
 }
 
-func TestTenantLogic_asyncpg(
-	t *testing.T,
-) {
+func TestTenantLogic_asyncpg(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "asyncpg")
 }
 
-func TestTenantLogic_auto_span_config_reconciliation_job(
-	t *testing.T,
-) {
+func TestTenantLogic_auto_span_config_reconciliation_job(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "auto_span_config_reconciliation_job")
 }
 
-func TestTenantLogic_bit(
-	t *testing.T,
-) {
+func TestTenantLogic_bit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "bit")
 }
 
-func TestTenantLogic_bpchar(
-	t *testing.T,
-) {
+func TestTenantLogic_bpchar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "bpchar")
 }
 
-func TestTenantLogic_builtin_function(
-	t *testing.T,
-) {
+func TestTenantLogic_builtin_function(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "builtin_function")
 }
 
-func TestTenantLogic_bytes(
-	t *testing.T,
-) {
+func TestTenantLogic_bytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "bytes")
 }
 
-func TestTenantLogic_cascade(
-	t *testing.T,
-) {
+func TestTenantLogic_cascade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "cascade")
 }
 
-func TestTenantLogic_case_sensitive_names(
-	t *testing.T,
-) {
+func TestTenantLogic_case_sensitive_names(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "case_sensitive_names")
 }
 
-func TestTenantLogic_cast(
-	t *testing.T,
-) {
+func TestTenantLogic_cast(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "cast")
 }
 
-func TestTenantLogic_check_constraints(
-	t *testing.T,
-) {
+func TestTenantLogic_check_constraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "check_constraints")
 }
 
-func TestTenantLogic_cluster_settings(
-	t *testing.T,
-) {
+func TestTenantLogic_cluster_settings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "cluster_settings")
 }
 
-func TestTenantLogic_collatedstring(
-	t *testing.T,
-) {
+func TestTenantLogic_collatedstring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring")
 }
 
-func TestTenantLogic_collatedstring_constraint(
-	t *testing.T,
-) {
+func TestTenantLogic_collatedstring_constraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring_constraint")
 }
 
-func TestTenantLogic_collatedstring_index1(
-	t *testing.T,
-) {
+func TestTenantLogic_collatedstring_index1(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring_index1")
 }
 
-func TestTenantLogic_collatedstring_index2(
-	t *testing.T,
-) {
+func TestTenantLogic_collatedstring_index2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring_index2")
 }
 
-func TestTenantLogic_collatedstring_normalization(
-	t *testing.T,
-) {
+func TestTenantLogic_collatedstring_normalization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring_normalization")
 }
 
-func TestTenantLogic_collatedstring_nullinindex(
-	t *testing.T,
-) {
+func TestTenantLogic_collatedstring_nullinindex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring_nullinindex")
 }
 
-func TestTenantLogic_collatedstring_uniqueindex1(
-	t *testing.T,
-) {
+func TestTenantLogic_collatedstring_uniqueindex1(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring_uniqueindex1")
 }
 
-func TestTenantLogic_collatedstring_uniqueindex2(
-	t *testing.T,
-) {
+func TestTenantLogic_collatedstring_uniqueindex2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring_uniqueindex2")
 }
 
-func TestTenantLogic_column_families(
-	t *testing.T,
-) {
+func TestTenantLogic_column_families(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "column_families")
 }
 
-func TestTenantLogic_comment_on(
-	t *testing.T,
-) {
+func TestTenantLogic_comment_on(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "comment_on")
 }
 
-func TestTenantLogic_composite_types(
-	t *testing.T,
-) {
+func TestTenantLogic_composite_types(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "composite_types")
 }
 
-func TestTenantLogic_computed(
-	t *testing.T,
-) {
+func TestTenantLogic_computed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "computed")
 }
 
-func TestTenantLogic_conditional(
-	t *testing.T,
-) {
+func TestTenantLogic_conditional(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "conditional")
 }
 
-func TestTenantLogic_connect_privilege(
-	t *testing.T,
-) {
+func TestTenantLogic_connect_privilege(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "connect_privilege")
 }
 
-func TestTenantLogic_crdb_internal_default_privileges(
-	t *testing.T,
-) {
+func TestTenantLogic_crdb_internal_default_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "crdb_internal_default_privileges")
 }
 
-func TestTenantLogic_create_as(
-	t *testing.T,
-) {
+func TestTenantLogic_create_as(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "create_as")
 }
 
-func TestTenantLogic_create_index(
-	t *testing.T,
-) {
+func TestTenantLogic_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "create_index")
 }
 
-func TestTenantLogic_create_statements(
-	t *testing.T,
-) {
+func TestTenantLogic_create_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "create_statements")
 }
 
-func TestTenantLogic_create_table(
-	t *testing.T,
-) {
+func TestTenantLogic_create_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "create_table")
 }
 
-func TestTenantLogic_cross_join(
-	t *testing.T,
-) {
+func TestTenantLogic_cross_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "cross_join")
 }
 
-func TestTenantLogic_cursor(
-	t *testing.T,
-) {
+func TestTenantLogic_cursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "cursor")
 }
 
-func TestTenantLogic_custom_escape_character(
-	t *testing.T,
-) {
+func TestTenantLogic_custom_escape_character(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "custom_escape_character")
 }
 
-func TestTenantLogic_dangerous_statements(
-	t *testing.T,
-) {
+func TestTenantLogic_dangerous_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "dangerous_statements")
 }
 
-func TestTenantLogic_database(
-	t *testing.T,
-) {
+func TestTenantLogic_database(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "database")
 }
 
-func TestTenantLogic_datetime(
-	t *testing.T,
-) {
+func TestTenantLogic_datetime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "datetime")
 }
 
-func TestTenantLogic_decimal(
-	t *testing.T,
-) {
+func TestTenantLogic_decimal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "decimal")
 }
 
-func TestTenantLogic_default(
-	t *testing.T,
-) {
+func TestTenantLogic_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "default")
 }
 
-func TestTenantLogic_delete(
-	t *testing.T,
-) {
+func TestTenantLogic_delete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "delete")
 }
 
-func TestTenantLogic_delete_batch(
-	t *testing.T,
-) {
+func TestTenantLogic_delete_batch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "delete_batch")
 }
 
-func TestTenantLogic_dependencies(
-	t *testing.T,
-) {
+func TestTenantLogic_dependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "dependencies")
 }
 
-func TestTenantLogic_discard(
-	t *testing.T,
-) {
+func TestTenantLogic_discard(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "discard")
 }
 
-func TestTenantLogic_disjunction_in_join(
-	t *testing.T,
-) {
+func TestTenantLogic_disjunction_in_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "disjunction_in_join")
 }
 
-func TestTenantLogic_distinct(
-	t *testing.T,
-) {
+func TestTenantLogic_distinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distinct")
 }
 
-func TestTenantLogic_distinct_on(
-	t *testing.T,
-) {
+func TestTenantLogic_distinct_on(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distinct_on")
 }
 
-func TestTenantLogic_distsql_automatic_partial_stats(
-	t *testing.T,
-) {
+func TestTenantLogic_distsql_automatic_partial_stats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_automatic_partial_stats")
 }
 
-func TestTenantLogic_distsql_automatic_stats(
-	t *testing.T,
-) {
+func TestTenantLogic_distsql_automatic_stats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_automatic_stats")
 }
 
-func TestTenantLogic_distsql_event_log(
-	t *testing.T,
-) {
+func TestTenantLogic_distsql_event_log(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_event_log")
 }
 
-func TestTenantLogic_distsql_expr(
-	t *testing.T,
-) {
+func TestTenantLogic_distsql_expr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_expr")
 }
 
-func TestTenantLogic_distsql_join(
-	t *testing.T,
-) {
+func TestTenantLogic_distsql_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_join")
 }
 
-func TestTenantLogic_distsql_srfs(
-	t *testing.T,
-) {
+func TestTenantLogic_distsql_srfs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_srfs")
 }
 
-func TestTenantLogic_distsql_tenant(
-	t *testing.T,
-) {
+func TestTenantLogic_distsql_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distsql_tenant")
 }
 
-func TestTenantLogic_do(
-	t *testing.T,
-) {
+func TestTenantLogic_do(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "do")
 }
 
-func TestTenantLogic_drop_database(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_database(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_database")
 }
 
-func TestTenantLogic_drop_function(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_function(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_function")
 }
 
-func TestTenantLogic_drop_index(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_index")
 }
 
-func TestTenantLogic_drop_owned_by(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_owned_by(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_owned_by")
 }
 
-func TestTenantLogic_drop_procedure(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_procedure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_procedure")
 }
 
-func TestTenantLogic_drop_role_with_default_privileges(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_role_with_default_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_role_with_default_privileges")
 }
 
-func TestTenantLogic_drop_role_with_default_privileges_in_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_role_with_default_privileges_in_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_role_with_default_privileges_in_schema")
 }
 
-func TestTenantLogic_drop_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_schema")
 }
 
-func TestTenantLogic_drop_sequence(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_sequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_sequence")
 }
 
-func TestTenantLogic_drop_table(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_table")
 }
 
-func TestTenantLogic_drop_temp(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_temp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_temp")
 }
 
-func TestTenantLogic_drop_type(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_type(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_type")
 }
 
-func TestTenantLogic_drop_user(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_user(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_user")
 }
 
-func TestTenantLogic_drop_view(
-	t *testing.T,
-) {
+func TestTenantLogic_drop_view(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_view")
 }
 
-func TestTenantLogic_edge(
-	t *testing.T,
-) {
+func TestTenantLogic_edge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "edge")
 }
 
-func TestTenantLogic_enums(
-	t *testing.T,
-) {
+func TestTenantLogic_enums(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "enums")
 }
 
-func TestTenantLogic_errors(
-	t *testing.T,
-) {
+func TestTenantLogic_errors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "errors")
 }
 
-func TestTenantLogic_event_log(
-	t *testing.T,
-) {
+func TestTenantLogic_event_log(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "event_log")
 }
 
-func TestTenantLogic_exclude_data_from_backup(
-	t *testing.T,
-) {
+func TestTenantLogic_exclude_data_from_backup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "exclude_data_from_backup")
 }
 
-func TestTenantLogic_experimental_distsql_planning(
-	t *testing.T,
-) {
+func TestTenantLogic_experimental_distsql_planning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "experimental_distsql_planning")
 }
 
-func TestTenantLogic_explain_analyze(
-	t *testing.T,
-) {
+func TestTenantLogic_explain_analyze(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "explain_analyze")
 }
 
-func TestTenantLogic_export(
-	t *testing.T,
-) {
+func TestTenantLogic_export(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "export")
 }
 
-func TestTenantLogic_expression_index(
-	t *testing.T,
-) {
+func TestTenantLogic_expression_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "expression_index")
 }
 
-func TestTenantLogic_external_connection_privileges(
-	t *testing.T,
-) {
+func TestTenantLogic_external_connection_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "external_connection_privileges")
 }
 
-func TestTenantLogic_family(
-	t *testing.T,
-) {
+func TestTenantLogic_family(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "family")
 }
 
-func TestTenantLogic_fk(
-	t *testing.T,
-) {
+func TestTenantLogic_fk(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "fk")
 }
 
-func TestTenantLogic_float(
-	t *testing.T,
-) {
+func TestTenantLogic_float(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "float")
 }
 
-func TestTenantLogic_format(
-	t *testing.T,
-) {
+func TestTenantLogic_format(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "format")
 }
 
-func TestTenantLogic_function_lookup(
-	t *testing.T,
-) {
+func TestTenantLogic_function_lookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "function_lookup")
 }
 
-func TestTenantLogic_fuzzystrmatch(
-	t *testing.T,
-) {
+func TestTenantLogic_fuzzystrmatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "fuzzystrmatch")
 }
 
-func TestTenantLogic_geospatial(
-	t *testing.T,
-) {
+func TestTenantLogic_geospatial(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "geospatial")
 }
 
-func TestTenantLogic_geospatial_index(
-	t *testing.T,
-) {
+func TestTenantLogic_geospatial_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "geospatial_index")
 }
 
-func TestTenantLogic_geospatial_meta(
-	t *testing.T,
-) {
+func TestTenantLogic_geospatial_meta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "geospatial_meta")
 }
 
-func TestTenantLogic_geospatial_regression(
-	t *testing.T,
-) {
+func TestTenantLogic_geospatial_regression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "geospatial_regression")
 }
 
-func TestTenantLogic_geospatial_zm(
-	t *testing.T,
-) {
+func TestTenantLogic_geospatial_zm(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "geospatial_zm")
 }
 
-func TestTenantLogic_grant_database(
-	t *testing.T,
-) {
+func TestTenantLogic_grant_database(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "grant_database")
 }
 
-func TestTenantLogic_grant_in_txn(
-	t *testing.T,
-) {
+func TestTenantLogic_grant_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "grant_in_txn")
 }
 
-func TestTenantLogic_grant_on_all_sequences_in_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_grant_on_all_sequences_in_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "grant_on_all_sequences_in_schema")
 }
 
-func TestTenantLogic_grant_on_all_tables_in_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_grant_on_all_tables_in_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "grant_on_all_tables_in_schema")
 }
 
-func TestTenantLogic_grant_revoke_with_grant_option(
-	t *testing.T,
-) {
+func TestTenantLogic_grant_revoke_with_grant_option(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "grant_revoke_with_grant_option")
 }
 
-func TestTenantLogic_grant_role(
-	t *testing.T,
-) {
+func TestTenantLogic_grant_role(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "grant_role")
 }
 
-func TestTenantLogic_grant_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_grant_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "grant_schema")
 }
 
-func TestTenantLogic_group_join(
-	t *testing.T,
-) {
+func TestTenantLogic_group_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "group_join")
 }
 
-func TestTenantLogic_hash_join(
-	t *testing.T,
-) {
+func TestTenantLogic_hash_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "hash_join")
 }
 
-func TestTenantLogic_hash_sharded_index(
-	t *testing.T,
-) {
+func TestTenantLogic_hash_sharded_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "hash_sharded_index")
 }
 
-func TestTenantLogic_hidden_columns(
-	t *testing.T,
-) {
+func TestTenantLogic_hidden_columns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "hidden_columns")
 }
 
-func TestTenantLogic_impure(
-	t *testing.T,
-) {
+func TestTenantLogic_impure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "impure")
 }
 
-func TestTenantLogic_index_join(
-	t *testing.T,
-) {
+func TestTenantLogic_index_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "index_join")
 }
 
-func TestTenantLogic_inet(
-	t *testing.T,
-) {
+func TestTenantLogic_inet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inet")
 }
 
-func TestTenantLogic_inflight_trace_spans(
-	t *testing.T,
-) {
+func TestTenantLogic_inflight_trace_spans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inflight_trace_spans")
 }
 
-func TestTenantLogic_inner_join(
-	t *testing.T,
-) {
+func TestTenantLogic_inner_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inner-join")
 }
 
-func TestTenantLogic_insert(
-	t *testing.T,
-) {
+func TestTenantLogic_insert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "insert")
 }
 
-func TestTenantLogic_int_size(
-	t *testing.T,
-) {
+func TestTenantLogic_int_size(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "int_size")
 }
 
-func TestTenantLogic_internal_executor(
-	t *testing.T,
-) {
+func TestTenantLogic_internal_executor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "internal_executor")
 }
 
-func TestTenantLogic_interval(
-	t *testing.T,
-) {
+func TestTenantLogic_interval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "interval")
 }
 
-func TestTenantLogic_inv_stats(
-	t *testing.T,
-) {
+func TestTenantLogic_inv_stats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inv_stats")
 }
 
-func TestTenantLogic_inverted_filter_geospatial(
-	t *testing.T,
-) {
+func TestTenantLogic_inverted_filter_geospatial(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inverted_filter_geospatial")
 }
 
-func TestTenantLogic_inverted_filter_json_array(
-	t *testing.T,
-) {
+func TestTenantLogic_inverted_filter_json_array(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inverted_filter_json_array")
 }
 
-func TestTenantLogic_inverted_index(
-	t *testing.T,
-) {
+func TestTenantLogic_inverted_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inverted_index")
 }
 
-func TestTenantLogic_inverted_index_multi_column(
-	t *testing.T,
-) {
+func TestTenantLogic_inverted_index_multi_column(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inverted_index_multi_column")
 }
 
-func TestTenantLogic_inverted_join_geospatial(
-	t *testing.T,
-) {
+func TestTenantLogic_inverted_join_geospatial(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inverted_join_geospatial")
 }
 
-func TestTenantLogic_inverted_join_json_array(
-	t *testing.T,
-) {
+func TestTenantLogic_inverted_join_json_array(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inverted_join_json_array")
 }
 
-func TestTenantLogic_inverted_join_multi_column(
-	t *testing.T,
-) {
+func TestTenantLogic_inverted_join_multi_column(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inverted_join_multi_column")
 }
 
-func TestTenantLogic_jobs(
-	t *testing.T,
-) {
+func TestTenantLogic_jobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "jobs")
 }
 
-func TestTenantLogic_join(
-	t *testing.T,
-) {
+func TestTenantLogic_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "join")
 }
 
-func TestTenantLogic_json(
-	t *testing.T,
-) {
+func TestTenantLogic_json(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "json")
 }
 
-func TestTenantLogic_json_builtins(
-	t *testing.T,
-) {
+func TestTenantLogic_json_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "json_builtins")
 }
 
-func TestTenantLogic_json_index(
-	t *testing.T,
-) {
+func TestTenantLogic_json_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "json_index")
 }
 
-func TestTenantLogic_kv_builtin_functions_tenant(
-	t *testing.T,
-) {
+func TestTenantLogic_kv_builtin_functions_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "kv_builtin_functions_tenant")
 }
 
-func TestTenantLogic_limit(
-	t *testing.T,
-) {
+func TestTenantLogic_limit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "limit")
 }
 
-func TestTenantLogic_lock_timeout(
-	t *testing.T,
-) {
+func TestTenantLogic_lock_timeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "lock_timeout")
 }
 
-func TestTenantLogic_lookup_join(
-	t *testing.T,
-) {
+func TestTenantLogic_lookup_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "lookup_join")
 }
 
-func TestTenantLogic_lookup_join_spans(
-	t *testing.T,
-) {
+func TestTenantLogic_lookup_join_spans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "lookup_join_spans")
 }
 
-func TestTenantLogic_manual_retry(
-	t *testing.T,
-) {
+func TestTenantLogic_manual_retry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "manual_retry")
 }
 
-func TestTenantLogic_materialized_view(
-	t *testing.T,
-) {
+func TestTenantLogic_materialized_view(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "materialized_view")
 }
 
-func TestTenantLogic_merge_join(
-	t *testing.T,
-) {
+func TestTenantLogic_merge_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "merge_join")
 }
 
-func TestTenantLogic_multi_statement(
-	t *testing.T,
-) {
+func TestTenantLogic_multi_statement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "multi_statement")
 }
 
-func TestTenantLogic_name_escapes(
-	t *testing.T,
-) {
+func TestTenantLogic_name_escapes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "name_escapes")
 }
 
-func TestTenantLogic_namespace(
-	t *testing.T,
-) {
+func TestTenantLogic_namespace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "namespace")
 }
 
-func TestTenantLogic_new_schema_changer(
-	t *testing.T,
-) {
+func TestTenantLogic_new_schema_changer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "new_schema_changer")
 }
 
-func TestTenantLogic_no_primary_key(
-	t *testing.T,
-) {
+func TestTenantLogic_no_primary_key(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "no_primary_key")
 }
 
-func TestTenantLogic_notice(
-	t *testing.T,
-) {
+func TestTenantLogic_notice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "notice")
 }
 
-func TestTenantLogic_numeric_references(
-	t *testing.T,
-) {
+func TestTenantLogic_numeric_references(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "numeric_references")
 }
 
-func TestTenantLogic_on_update(
-	t *testing.T,
-) {
+func TestTenantLogic_on_update(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "on_update")
 }
 
-func TestTenantLogic_operator(
-	t *testing.T,
-) {
+func TestTenantLogic_operator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "operator")
 }
 
-func TestTenantLogic_optimizer_timeout(
-	t *testing.T,
-) {
+func TestTenantLogic_optimizer_timeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "optimizer_timeout")
 }
 
-func TestTenantLogic_order_by(
-	t *testing.T,
-) {
+func TestTenantLogic_order_by(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "order_by")
 }
 
-func TestTenantLogic_ordinal_references(
-	t *testing.T,
-) {
+func TestTenantLogic_ordinal_references(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "ordinal_references")
 }
 
-func TestTenantLogic_ordinality(
-	t *testing.T,
-) {
+func TestTenantLogic_ordinality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "ordinality")
 }
 
-func TestTenantLogic_orms(
-	t *testing.T,
-) {
+func TestTenantLogic_orms(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "orms")
 }
 
-func TestTenantLogic_overflow(
-	t *testing.T,
-) {
+func TestTenantLogic_overflow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "overflow")
 }
 
-func TestTenantLogic_overlaps(
-	t *testing.T,
-) {
+func TestTenantLogic_overlaps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "overlaps")
 }
 
-func TestTenantLogic_owner(
-	t *testing.T,
-) {
+func TestTenantLogic_owner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "owner")
 }
 
-func TestTenantLogic_parallel_stmts_compat(
-	t *testing.T,
-) {
+func TestTenantLogic_parallel_stmts_compat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "parallel_stmts_compat")
 }
 
-func TestTenantLogic_partial_index(
-	t *testing.T,
-) {
+func TestTenantLogic_partial_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "partial_index")
 }
 
-func TestTenantLogic_partial_txn_commit(
-	t *testing.T,
-) {
+func TestTenantLogic_partial_txn_commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "partial_txn_commit")
 }
 
-func TestTenantLogic_pg_builtins(
-	t *testing.T,
-) {
+func TestTenantLogic_pg_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "pg_builtins")
 }
 
-func TestTenantLogic_pg_catalog_pg_default_acl(
-	t *testing.T,
-) {
+func TestTenantLogic_pg_catalog_pg_default_acl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "pg_catalog_pg_default_acl")
 }
 
-func TestTenantLogic_pg_catalog_pg_default_acl_with_grant_option(
-	t *testing.T,
-) {
+func TestTenantLogic_pg_catalog_pg_default_acl_with_grant_option(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "pg_catalog_pg_default_acl_with_grant_option")
 }
 
-func TestTenantLogic_pg_extension(
-	t *testing.T,
-) {
+func TestTenantLogic_pg_extension(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "pg_extension")
 }
 
-func TestTenantLogic_pg_lsn(
-	t *testing.T,
-) {
+func TestTenantLogic_pg_lsn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "pg_lsn")
 }
 
-func TestTenantLogic_pgcrypto_builtins(
-	t *testing.T,
-) {
+func TestTenantLogic_pgcrypto_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "pgcrypto_builtins")
 }
 
-func TestTenantLogic_pgoidtype(
-	t *testing.T,
-) {
+func TestTenantLogic_pgoidtype(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "pgoidtype")
 }
 
-func TestTenantLogic_plpgsql_builtins(
-	t *testing.T,
-) {
+func TestTenantLogic_plpgsql_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "plpgsql_builtins")
 }
 
-func TestTenantLogic_poison_after_push(
-	t *testing.T,
-) {
+func TestTenantLogic_poison_after_push(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "poison_after_push")
 }
 
-func TestTenantLogic_postgres_jsonb(
-	t *testing.T,
-) {
+func TestTenantLogic_postgres_jsonb(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "postgres_jsonb")
 }
 
-func TestTenantLogic_postgresjoin(
-	t *testing.T,
-) {
+func TestTenantLogic_postgresjoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "postgresjoin")
 }
 
-func TestTenantLogic_privilege_builtins(
-	t *testing.T,
-) {
+func TestTenantLogic_privilege_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "privilege_builtins")
 }
 
-func TestTenantLogic_privileges_comments(
-	t *testing.T,
-) {
+func TestTenantLogic_privileges_comments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "privileges_comments")
 }
 
-func TestTenantLogic_privileges_table(
-	t *testing.T,
-) {
+func TestTenantLogic_privileges_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "privileges_table")
 }
 
-func TestTenantLogic_proc_invokes_proc(
-	t *testing.T,
-) {
+func TestTenantLogic_proc_invokes_proc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "proc_invokes_proc")
 }
 
-func TestTenantLogic_procedure(
-	t *testing.T,
-) {
+func TestTenantLogic_procedure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "procedure")
 }
 
-func TestTenantLogic_procedure_cte(
-	t *testing.T,
-) {
+func TestTenantLogic_procedure_cte(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "procedure_cte")
 }
 
-func TestTenantLogic_procedure_deps(
-	t *testing.T,
-) {
+func TestTenantLogic_procedure_deps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "procedure_deps")
 }
 
-func TestTenantLogic_procedure_params(
-	t *testing.T,
-) {
+func TestTenantLogic_procedure_params(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "procedure_params")
 }
 
-func TestTenantLogic_procedure_polymorphic(
-	t *testing.T,
-) {
+func TestTenantLogic_procedure_polymorphic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "procedure_polymorphic")
 }
 
-func TestTenantLogic_procedure_privileges(
-	t *testing.T,
-) {
+func TestTenantLogic_procedure_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "procedure_privileges")
 }
 
-func TestTenantLogic_procedure_schema_change(
-	t *testing.T,
-) {
+func TestTenantLogic_procedure_schema_change(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "procedure_schema_change")
 }
 
-func TestTenantLogic_propagate_input_ordering(
-	t *testing.T,
-) {
+func TestTenantLogic_propagate_input_ordering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "propagate_input_ordering")
 }
 
-func TestTenantLogic_reassign_owned_by(
-	t *testing.T,
-) {
+func TestTenantLogic_reassign_owned_by(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "reassign_owned_by")
 }
 
-func TestTenantLogic_record(
-	t *testing.T,
-) {
+func TestTenantLogic_record(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "record")
 }
 
-func TestTenantLogic_redact_descriptor(
-	t *testing.T,
-) {
+func TestTenantLogic_redact_descriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "redact_descriptor")
 }
 
-func TestTenantLogic_rename_atomic(
-	t *testing.T,
-) {
+func TestTenantLogic_rename_atomic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rename_atomic")
 }
 
-func TestTenantLogic_rename_column(
-	t *testing.T,
-) {
+func TestTenantLogic_rename_column(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rename_column")
 }
 
-func TestTenantLogic_rename_constraint(
-	t *testing.T,
-) {
+func TestTenantLogic_rename_constraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rename_constraint")
 }
 
-func TestTenantLogic_rename_database(
-	t *testing.T,
-) {
+func TestTenantLogic_rename_database(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rename_database")
 }
 
-func TestTenantLogic_rename_index(
-	t *testing.T,
-) {
+func TestTenantLogic_rename_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rename_index")
 }
 
-func TestTenantLogic_rename_sequence(
-	t *testing.T,
-) {
+func TestTenantLogic_rename_sequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rename_sequence")
 }
 
-func TestTenantLogic_rename_table(
-	t *testing.T,
-) {
+func TestTenantLogic_rename_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rename_table")
 }
 
-func TestTenantLogic_rename_view(
-	t *testing.T,
-) {
+func TestTenantLogic_rename_view(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rename_view")
 }
 
-func TestTenantLogic_reset(
-	t *testing.T,
-) {
+func TestTenantLogic_reset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "reset")
 }
 
-func TestTenantLogic_retry(
-	t *testing.T,
-) {
+func TestTenantLogic_retry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "retry")
 }
 
-func TestTenantLogic_returning(
-	t *testing.T,
-) {
+func TestTenantLogic_returning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "returning")
 }
 
-func TestTenantLogic_role(
-	t *testing.T,
-) {
+func TestTenantLogic_role(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "role")
 }
 
-func TestTenantLogic_routine_schema_change(
-	t *testing.T,
-) {
+func TestTenantLogic_routine_schema_change(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "routine_schema_change")
 }
 
-func TestTenantLogic_row_level_security(
-	t *testing.T,
-) {
+func TestTenantLogic_row_level_security(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "row_level_security")
 }
 
-func TestTenantLogic_row_level_ttl(
-	t *testing.T,
-) {
+func TestTenantLogic_row_level_ttl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "row_level_ttl")
 }
 
-func TestTenantLogic_rows_from(
-	t *testing.T,
-) {
+func TestTenantLogic_rows_from(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "rows_from")
 }
 
-func TestTenantLogic_run_control(
-	t *testing.T,
-) {
+func TestTenantLogic_run_control(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "run_control")
 }
 
-func TestTenantLogic_save_table(
-	t *testing.T,
-) {
+func TestTenantLogic_save_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "save_table")
 }
 
-func TestTenantLogic_savepoints(
-	t *testing.T,
-) {
+func TestTenantLogic_savepoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "savepoints")
 }
 
-func TestTenantLogic_scale(
-	t *testing.T,
-) {
+func TestTenantLogic_scale(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "scale")
 }
 
-func TestTenantLogic_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "schema")
 }
 
-func TestTenantLogic_schema_change_feature_flags(
-	t *testing.T,
-) {
+func TestTenantLogic_schema_change_feature_flags(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "schema_change_feature_flags")
 }
 
-func TestTenantLogic_schema_change_in_txn(
-	t *testing.T,
-) {
+func TestTenantLogic_schema_change_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "schema_change_in_txn")
 }
 
-func TestTenantLogic_schema_change_logical_replication(
-	t *testing.T,
-) {
+func TestTenantLogic_schema_change_logical_replication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "schema_change_logical_replication")
 }
 
-func TestTenantLogic_schema_change_retry(
-	t *testing.T,
-) {
+func TestTenantLogic_schema_change_retry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "schema_change_retry")
 }
 
-func TestTenantLogic_schema_locked(
-	t *testing.T,
-) {
+func TestTenantLogic_schema_locked(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "schema_locked")
 }
 
-func TestTenantLogic_schema_repair(
-	t *testing.T,
-) {
+func TestTenantLogic_schema_repair(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "schema_repair")
 }
 
-func TestTenantLogic_scrub(
-	t *testing.T,
-) {
+func TestTenantLogic_scrub(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "scrub")
 }
 
-func TestTenantLogic_secondary_index_column_families(
-	t *testing.T,
-) {
+func TestTenantLogic_secondary_index_column_families(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "secondary_index_column_families")
 }
 
-func TestTenantLogic_select(
-	t *testing.T,
-) {
+func TestTenantLogic_select(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select")
 }
 
-func TestTenantLogic_select_for_share(
-	t *testing.T,
-) {
+func TestTenantLogic_select_for_share(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_for_share")
 }
 
-func TestTenantLogic_select_for_update(
-	t *testing.T,
-) {
+func TestTenantLogic_select_for_update(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_for_update")
 }
 
-func TestTenantLogic_select_index(
-	t *testing.T,
-) {
+func TestTenantLogic_select_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_index")
 }
 
-func TestTenantLogic_select_index_flags(
-	t *testing.T,
-) {
+func TestTenantLogic_select_index_flags(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_index_flags")
 }
 
-func TestTenantLogic_select_search_path(
-	t *testing.T,
-) {
+func TestTenantLogic_select_search_path(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_search_path")
 }
 
-func TestTenantLogic_select_table_alias(
-	t *testing.T,
-) {
+func TestTenantLogic_select_table_alias(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_table_alias")
 }
 
-func TestTenantLogic_sequences(
-	t *testing.T,
-) {
+func TestTenantLogic_sequences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "sequences")
 }
 
-func TestTenantLogic_sequences_distsql(
-	t *testing.T,
-) {
+func TestTenantLogic_sequences_distsql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "sequences_distsql")
 }
 
-func TestTenantLogic_sequences_regclass(
-	t *testing.T,
-) {
+func TestTenantLogic_sequences_regclass(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "sequences_regclass")
 }
 
-func TestTenantLogic_serial(
-	t *testing.T,
-) {
+func TestTenantLogic_serial(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "serial")
 }
 
-func TestTenantLogic_serializable_eager_restart(
-	t *testing.T,
-) {
+func TestTenantLogic_serializable_eager_restart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "serializable_eager_restart")
 }
 
-func TestTenantLogic_set_local(
-	t *testing.T,
-) {
+func TestTenantLogic_set_local(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "set_local")
 }
 
-func TestTenantLogic_set_role(
-	t *testing.T,
-) {
+func TestTenantLogic_set_role(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "set_role")
 }
 
-func TestTenantLogic_set_schema(
-	t *testing.T,
-) {
+func TestTenantLogic_set_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "set_schema")
 }
 
-func TestTenantLogic_set_time_zone(
-	t *testing.T,
-) {
+func TestTenantLogic_set_time_zone(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "set_time_zone")
 }
 
-func TestTenantLogic_shift(
-	t *testing.T,
-) {
+func TestTenantLogic_shift(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "shift")
 }
 
-func TestTenantLogic_show_commit_timestamp(
-	t *testing.T,
-) {
+func TestTenantLogic_show_commit_timestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_commit_timestamp")
 }
 
-func TestTenantLogic_show_completions(
-	t *testing.T,
-) {
+func TestTenantLogic_show_completions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_completions")
 }
 
-func TestTenantLogic_show_create(
-	t *testing.T,
-) {
+func TestTenantLogic_show_create(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_create")
 }
 
-func TestTenantLogic_show_create_all_schemas(
-	t *testing.T,
-) {
+func TestTenantLogic_show_create_all_schemas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_create_all_schemas")
 }
 
-func TestTenantLogic_show_create_all_tables(
-	t *testing.T,
-) {
+func TestTenantLogic_show_create_all_tables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_create_all_tables")
 }
 
-func TestTenantLogic_show_create_all_tables_builtin(
-	t *testing.T,
-) {
+func TestTenantLogic_show_create_all_tables_builtin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_create_all_tables_builtin")
 }
 
-func TestTenantLogic_show_create_all_types(
-	t *testing.T,
-) {
+func TestTenantLogic_show_create_all_types(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_create_all_types")
 }
 
-func TestTenantLogic_show_create_redact(
-	t *testing.T,
-) {
+func TestTenantLogic_show_create_redact(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_create_redact")
 }
 
-func TestTenantLogic_show_default_privileges(
-	t *testing.T,
-) {
+func TestTenantLogic_show_default_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_default_privileges")
 }
 
-func TestTenantLogic_show_external_connections(
-	t *testing.T,
-) {
+func TestTenantLogic_show_external_connections(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_external_connections")
 }
 
-func TestTenantLogic_show_fingerprints(
-	t *testing.T,
-) {
+func TestTenantLogic_show_fingerprints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_fingerprints")
 }
 
-func TestTenantLogic_show_grants_on_virtual_table(
-	t *testing.T,
-) {
+func TestTenantLogic_show_grants_on_virtual_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_grants_on_virtual_table")
 }
 
-func TestTenantLogic_show_grants_synthetic(
-	t *testing.T,
-) {
+func TestTenantLogic_show_grants_synthetic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_grants_synthetic")
 }
 
-func TestTenantLogic_show_indexes(
-	t *testing.T,
-) {
+func TestTenantLogic_show_indexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_indexes")
 }
 
-func TestTenantLogic_show_var(
-	t *testing.T,
-) {
+func TestTenantLogic_show_var(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_var")
 }
 
-func TestTenantLogic_span_builtins(
-	t *testing.T,
-) {
+func TestTenantLogic_span_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "span_builtins")
 }
 
-func TestTenantLogic_sql_keys(
-	t *testing.T,
-) {
+func TestTenantLogic_sql_keys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "sql_keys")
 }
 
-func TestTenantLogic_sqllite(
-	t *testing.T,
-) {
+func TestTenantLogic_sqllite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "sqllite")
 }
 
-func TestTenantLogic_sqlliveness(
-	t *testing.T,
-) {
+func TestTenantLogic_sqlliveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "sqlliveness")
 }
 
-func TestTenantLogic_sqlsmith(
-	t *testing.T,
-) {
+func TestTenantLogic_sqlsmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "sqlsmith")
 }
 
-func TestTenantLogic_srfs(
-	t *testing.T,
-) {
+func TestTenantLogic_srfs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "srfs")
 }
 
-func TestTenantLogic_statement_source(
-	t *testing.T,
-) {
+func TestTenantLogic_statement_source(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "statement_source")
 }
 
-func TestTenantLogic_statement_statistics(
-	t *testing.T,
-) {
+func TestTenantLogic_statement_statistics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "statement_statistics")
 }
 
-func TestTenantLogic_statement_statistics_errors(
-	t *testing.T,
-) {
+func TestTenantLogic_statement_statistics_errors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "statement_statistics_errors")
 }
 
-func TestTenantLogic_statement_statistics_errors_redacted(
-	t *testing.T,
-) {
+func TestTenantLogic_statement_statistics_errors_redacted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "statement_statistics_errors_redacted")
 }
 
-func TestTenantLogic_stats(
-	t *testing.T,
-) {
+func TestTenantLogic_stats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "stats")
 }
 
-func TestTenantLogic_storing(
-	t *testing.T,
-) {
+func TestTenantLogic_storing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "storing")
 }
 
-func TestTenantLogic_strict_ddl_atomicity(
-	t *testing.T,
-) {
+func TestTenantLogic_strict_ddl_atomicity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "strict_ddl_atomicity")
 }
 
-func TestTenantLogic_suboperators(
-	t *testing.T,
-) {
+func TestTenantLogic_suboperators(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "suboperators")
 }
 
-func TestTenantLogic_subquery(
-	t *testing.T,
-) {
+func TestTenantLogic_subquery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "subquery")
 }
 
-func TestTenantLogic_subquery_correlated(
-	t *testing.T,
-) {
+func TestTenantLogic_subquery_correlated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "subquery_correlated")
 }
 
-func TestTenantLogic_synthetic_privileges(
-	t *testing.T,
-) {
+func TestTenantLogic_synthetic_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "synthetic_privileges")
 }
 
-func TestTenantLogic_system(
-	t *testing.T,
-) {
+func TestTenantLogic_system(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "system")
 }
 
-func TestTenantLogic_system_columns(
-	t *testing.T,
-) {
+func TestTenantLogic_system_columns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "system_columns")
 }
 
-func TestTenantLogic_system_namespace(
-	t *testing.T,
-) {
+func TestTenantLogic_system_namespace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "system_namespace")
 }
 
-func TestTenantLogic_table(
-	t *testing.T,
-) {
+func TestTenantLogic_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "table")
 }
 
-func TestTenantLogic_target_names(
-	t *testing.T,
-) {
+func TestTenantLogic_target_names(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "target_names")
 }
 
-func TestTenantLogic_temp_table(
-	t *testing.T,
-) {
+func TestTenantLogic_temp_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "temp_table")
 }
 
-func TestTenantLogic_temp_table_txn(
-	t *testing.T,
-) {
+func TestTenantLogic_temp_table_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "temp_table_txn")
 }
 
-func TestTenantLogic_tenant_from_tenant(
-	t *testing.T,
-) {
+func TestTenantLogic_tenant_from_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tenant_from_tenant")
 }
 
-func TestTenantLogic_tenant_from_tenant_hint(
-	t *testing.T,
-) {
+func TestTenantLogic_tenant_from_tenant_hint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tenant_from_tenant_hint")
 }
 
-func TestTenantLogic_tenant_slow_repro(
-	t *testing.T,
-) {
+func TestTenantLogic_tenant_slow_repro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tenant_slow_repro")
 }
 
-func TestTenantLogic_tenant_span_stats(
-	t *testing.T,
-) {
+func TestTenantLogic_tenant_span_stats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tenant_span_stats")
 }
 
-func TestTenantLogic_time(
-	t *testing.T,
-) {
+func TestTenantLogic_time(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "time")
 }
 
-func TestTenantLogic_timestamp(
-	t *testing.T,
-) {
+func TestTenantLogic_timestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "timestamp")
 }
 
-func TestTenantLogic_timetz(
-	t *testing.T,
-) {
+func TestTenantLogic_timetz(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "timetz")
 }
 
-func TestTenantLogic_trigram_builtins(
-	t *testing.T,
-) {
+func TestTenantLogic_trigram_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "trigram_builtins")
 }
 
-func TestTenantLogic_trigram_indexes(
-	t *testing.T,
-) {
+func TestTenantLogic_trigram_indexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "trigram_indexes")
 }
 
-func TestTenantLogic_truncate(
-	t *testing.T,
-) {
+func TestTenantLogic_truncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "truncate")
 }
 
-func TestTenantLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
+func TestTenantLogic_truncate_with_concurrent_mutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "truncate_with_concurrent_mutation")
 }
 
-func TestTenantLogic_tsvector(
-	t *testing.T,
-) {
+func TestTenantLogic_tsvector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tsvector")
 }
 
-func TestTenantLogic_tuple(
-	t *testing.T,
-) {
+func TestTenantLogic_tuple(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tuple")
 }
 
-func TestTenantLogic_txn(
-	t *testing.T,
-) {
+func TestTenantLogic_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "txn")
 }
 
-func TestTenantLogic_txn_as_of(
-	t *testing.T,
-) {
+func TestTenantLogic_txn_as_of(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "txn_as_of")
 }
 
-func TestTenantLogic_txn_retry(
-	t *testing.T,
-) {
+func TestTenantLogic_txn_retry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "txn_retry")
 }
 
-func TestTenantLogic_txn_stats(
-	t *testing.T,
-) {
+func TestTenantLogic_txn_stats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "txn_stats")
 }
 
-func TestTenantLogic_type_privileges(
-	t *testing.T,
-) {
+func TestTenantLogic_type_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "type_privileges")
 }
 
-func TestTenantLogic_typing(
-	t *testing.T,
-) {
+func TestTenantLogic_typing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "typing")
 }
 
-func TestTenantLogic_udf(
-	t *testing.T,
-) {
+func TestTenantLogic_udf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf")
 }
 
-func TestTenantLogic_udf_calling_udf(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_calling_udf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_calling_udf")
 }
 
-func TestTenantLogic_udf_cte(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_cte(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_cte")
 }
 
-func TestTenantLogic_udf_delete(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_delete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_delete")
 }
 
-func TestTenantLogic_udf_deps(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_deps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_deps")
 }
 
-func TestTenantLogic_udf_fk(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_fk(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_fk")
 }
 
-func TestTenantLogic_udf_in_column_defaults(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_in_column_defaults(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_in_column_defaults")
 }
 
-func TestTenantLogic_udf_in_constraints(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_in_constraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_in_constraints")
 }
 
-func TestTenantLogic_udf_insert(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_insert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_insert")
 }
 
-func TestTenantLogic_udf_observability(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_observability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_observability")
 }
 
-func TestTenantLogic_udf_oid_ref(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_oid_ref(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_oid_ref")
 }
 
-func TestTenantLogic_udf_options(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_options(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_options")
 }
 
-func TestTenantLogic_udf_params(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_params(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_params")
 }
 
-func TestTenantLogic_udf_polymorphic(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_polymorphic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_polymorphic")
 }
 
-func TestTenantLogic_udf_prepare(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_prepare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_prepare")
 }
 
-func TestTenantLogic_udf_privileges(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_privileges")
 }
 
-func TestTenantLogic_udf_privileges_mutations(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_privileges_mutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_privileges_mutations")
 }
 
-func TestTenantLogic_udf_procedure_mix(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_procedure_mix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_procedure_mix")
 }
 
-func TestTenantLogic_udf_record(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_record(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_record")
 }
 
-func TestTenantLogic_udf_regressions(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_regressions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_regressions")
 }
 
-func TestTenantLogic_udf_rewrite(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_rewrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_rewrite")
 }
 
-func TestTenantLogic_udf_schema_change(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_schema_change(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_schema_change")
 }
 
-func TestTenantLogic_udf_security(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_security(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_security")
 }
 
-func TestTenantLogic_udf_setof(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_setof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_setof")
 }
 
-func TestTenantLogic_udf_star(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_star(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_star")
 }
 
-func TestTenantLogic_udf_subquery(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_subquery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_subquery")
 }
 
-func TestTenantLogic_udf_unsupported(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_unsupported(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_unsupported")
 }
 
-func TestTenantLogic_udf_update(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_update(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_update")
 }
 
-func TestTenantLogic_udf_upsert(
-	t *testing.T,
-) {
+func TestTenantLogic_udf_upsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_upsert")
 }
 
-func TestTenantLogic_union(
-	t *testing.T,
-) {
+func TestTenantLogic_union(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "union")
 }
 
-func TestTenantLogic_unique(
-	t *testing.T,
-) {
+func TestTenantLogic_unique(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "unique")
 }
 
-func TestTenantLogic_update(
-	t *testing.T,
-) {
+func TestTenantLogic_update(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "update")
 }
 
-func TestTenantLogic_update_from(
-	t *testing.T,
-) {
+func TestTenantLogic_update_from(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "update_from")
 }
 
-func TestTenantLogic_upsert(
-	t *testing.T,
-) {
+func TestTenantLogic_upsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "upsert")
 }
 
-func TestTenantLogic_upsert_non_metamorphic(
-	t *testing.T,
-) {
+func TestTenantLogic_upsert_non_metamorphic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "upsert_non_metamorphic")
 }
 
-func TestTenantLogic_user(
-	t *testing.T,
-) {
+func TestTenantLogic_user(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "user")
 }
 
-func TestTenantLogic_uuid(
-	t *testing.T,
-) {
+func TestTenantLogic_uuid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "uuid")
 }
 
-func TestTenantLogic_values(
-	t *testing.T,
-) {
+func TestTenantLogic_values(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "values")
 }
 
-func TestTenantLogic_vectorize(
-	t *testing.T,
-) {
+func TestTenantLogic_vectorize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize")
 }
 
-func TestTenantLogic_vectorize_agg(
-	t *testing.T,
-) {
+func TestTenantLogic_vectorize_agg(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize_agg")
 }
 
-func TestTenantLogic_vectorize_overloads(
-	t *testing.T,
-) {
+func TestTenantLogic_vectorize_overloads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize_overloads")
 }
 
-func TestTenantLogic_vectorize_shutdown(
-	t *testing.T,
-) {
+func TestTenantLogic_vectorize_shutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize_shutdown")
 }
 
-func TestTenantLogic_vectorize_types(
-	t *testing.T,
-) {
+func TestTenantLogic_vectorize_types(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize_types")
 }
 
-func TestTenantLogic_vectorize_unsupported(
-	t *testing.T,
-) {
+func TestTenantLogic_vectorize_unsupported(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize_unsupported")
 }
 
-func TestTenantLogic_vectorize_window(
-	t *testing.T,
-) {
+func TestTenantLogic_vectorize_window(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize_window")
 }
 
-func TestTenantLogic_views(
-	t *testing.T,
-) {
+func TestTenantLogic_views(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "views")
 }
 
-func TestTenantLogic_virtual_columns(
-	t *testing.T,
-) {
+func TestTenantLogic_virtual_columns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "virtual_columns")
 }
 
-func TestTenantLogic_virtual_table_privileges(
-	t *testing.T,
-) {
+func TestTenantLogic_virtual_table_privileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "virtual_table_privileges")
 }
 
-func TestTenantLogic_void(
-	t *testing.T,
-) {
+func TestTenantLogic_void(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "void")
 }
 
-func TestTenantLogic_where(
-	t *testing.T,
-) {
+func TestTenantLogic_where(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "where")
 }
 
-func TestTenantLogic_window(
-	t *testing.T,
-) {
+func TestTenantLogic_window(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "window")
 }
 
-func TestTenantLogic_with(
-	t *testing.T,
-) {
+func TestTenantLogic_with(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "with")
 }
 
-func TestTenantLogic_workload_indexrecs(
-	t *testing.T,
-) {
+func TestTenantLogic_workload_indexrecs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "workload_indexrecs")
 }
 
-func TestTenantLogic_zero(
-	t *testing.T,
-) {
+func TestTenantLogic_zero(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "zero")
 }
 
-func TestTenantLogic_zigzag_join(
-	t *testing.T,
-) {
+func TestTenantLogic_zigzag_join(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "zigzag_join")
 }
 
-func TestTenantLogic_zone_config(
-	t *testing.T,
-) {
+func TestTenantLogic_zone_config(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "zone_config")
 }
 
-func TestTenantLogicCCL_cluster_locks_tenant(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_cluster_locks_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "cluster_locks_tenant")
 }
 
-func TestTenantLogicCCL_crdb_internal_tenant(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_crdb_internal_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "crdb_internal_tenant")
 }
 
-func TestTenantLogicCCL_fips_ready(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_fips_ready(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "fips_ready")
 }
 
-func TestTenantLogicCCL_fk_read_committed(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_fk_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "fk_read_committed")
 }
 
-func TestTenantLogicCCL_hash_sharded_index_read_committed(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_hash_sharded_index_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "hash_sharded_index_read_committed")
 }
 
-func TestTenantLogicCCL_nested_routines(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_nested_routines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "nested_routines")
 }
 
-func TestTenantLogicCCL_new_schema_changer(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_new_schema_changer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "new_schema_changer")
 }
 
-func TestTenantLogicCCL_partitioning_enum(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_partitioning_enum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_enum")
 }
 
-func TestTenantLogicCCL_pgcrypto_builtins(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_pgcrypto_builtins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "pgcrypto_builtins")
 }
 
-func TestTenantLogicCCL_plpgsql_assign(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_plpgsql_assign(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_assign")
 }
 
-func TestTenantLogicCCL_plpgsql_block(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_plpgsql_block(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_block")
 }
 
-func TestTenantLogicCCL_plpgsql_call(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_plpgsql_call(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_call")
 }
 
-func TestTenantLogicCCL_plpgsql_cte(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_plpgsql_cte(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_cte")
 }
 
-func TestTenantLogicCCL_plpgsql_cursor(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_plpgsql_cursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_cursor")
 }
 
-func TestTenantLogicCCL_plpgsql_into(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_plpgsql_into(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_into")
 }
 
-func TestTenantLogicCCL_plpgsql_record(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_plpgsql_record(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_record")
 }
 
-func TestTenantLogicCCL_plpgsql_txn(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_plpgsql_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_txn")
 }
 
-func TestTenantLogicCCL_plpgsql_unsupported(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_plpgsql_unsupported(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_unsupported")
 }
 
-func TestTenantLogicCCL_procedure_params(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_procedure_params(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "procedure_params")
 }
 
-func TestTenantLogicCCL_procedure_plpgsql(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_procedure_plpgsql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "procedure_plpgsql")
 }
 
-func TestTenantLogicCCL_read_committed(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "read_committed")
 }
 
-func TestTenantLogicCCL_redact_descriptor(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_redact_descriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "redact_descriptor")
 }
 
-func TestTenantLogicCCL_refcursor(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_refcursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "refcursor")
 }
 
-func TestTenantLogicCCL_schema_change_in_txn(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_schema_change_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "schema_change_in_txn")
 }
 
-func TestTenantLogicCCL_select_for_update_read_committed(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_select_for_update_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "select_for_update_read_committed")
 }
 
-func TestTenantLogicCCL_senstive_cluster_settings(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_senstive_cluster_settings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "senstive_cluster_settings")
 }
 
-func TestTenantLogicCCL_show_create(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_show_create(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "show_create")
 }
 
-func TestTenantLogicCCL_subject(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_subject(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "subject")
 }
 
-func TestTenantLogicCCL_tenant(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "tenant")
 }
 
-func TestTenantLogicCCL_tenant_settings(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_tenant_settings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "tenant_settings")
 }
 
-func TestTenantLogicCCL_tenant_unsupported(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_tenant_unsupported(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "tenant_unsupported")
 }
 
-func TestTenantLogicCCL_triggers(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_triggers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "triggers")
 }
 
-func TestTenantLogicCCL_udf_params(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_udf_params(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "udf_params")
 }
 
-func TestTenantLogicCCL_udf_plpgsql(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_udf_plpgsql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "udf_plpgsql")
 }
 
-func TestTenantLogicCCL_udf_rewrite(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_udf_rewrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "udf_rewrite")
 }
 
-func TestTenantLogicCCL_udf_volatility_check(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_udf_volatility_check(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "udf_volatility_check")
 }
 
-func TestTenantLogicCCL_unique_read_committed(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_unique_read_committed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "unique_read_committed")
 }
 
-func TestTenantLogicCCL_vector(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_vector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "vector")
 }
 
-func TestTenantLogicCCL_zone_config_secondary_tenants(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_zone_config_secondary_tenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "zone_config_secondary_tenants")
 }
 
-func TestTenantLogicCCL_zone_config_secondary_tenants_disallowed(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_zone_config_secondary_tenants_disallowed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "zone_config_secondary_tenants_disallowed")
 }
 
-func TestTenantLogicCCL_zone_configs_secondary_tenants_restricted(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_zone_configs_secondary_tenants_restricted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "zone_configs_secondary_tenants_restricted")
 }
 
-func TestTenantLogicCCL_zone_configs_secondary_tenants_unrestricted(
-	t *testing.T,
-) {
+func TestTenantLogicCCL_zone_configs_secondary_tenants_unrestricted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "zone_configs_secondary_tenants_unrestricted")
 }
 
-func TestTenantExecBuild_distsql_tenant(
-	t *testing.T,
-) {
+func TestTenantExecBuild_distsql_tenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "distsql_tenant")
 }

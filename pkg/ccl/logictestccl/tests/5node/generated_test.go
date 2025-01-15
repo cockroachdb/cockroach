@@ -75,37 +75,27 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
-func TestCCLLogic_distsql_partitioning(
-	t *testing.T,
-) {
+func TestCCLLogic_distsql_partitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "distsql_partitioning")
 }
 
-func TestCCLLogic_drop_index(
-	t *testing.T,
-) {
+func TestCCLLogic_drop_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "drop_index")
 }
 
-func TestCCLLogic_partitioning_hash_sharded_index(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_hash_sharded_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_hash_sharded_index")
 }
 
-func TestCCLLogic_partitioning_hash_sharded_index_query_plan(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_hash_sharded_index_query_plan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_hash_sharded_index_query_plan")
 }
 
-func TestCCLLogic_zone(
-	t *testing.T,
-) {
+func TestCCLLogic_zone(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "zone")
 }

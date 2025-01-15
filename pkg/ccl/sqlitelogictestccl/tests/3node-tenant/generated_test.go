@@ -84,1353 +84,967 @@ func runSqliteLogicTest(t *testing.T, file string) {
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(sqliteLogicTestDir, file))
 }
 
-func TestTenantSQLLiteLogic_testindexbetween1slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween1slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/1/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween10slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween10slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/10/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween10slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween10slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/10/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween10slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween10slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/10/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween10slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween10slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/10/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween10slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween10slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/10/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween10slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween10slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/10/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween100slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween100slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/100/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween100slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween100slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/100/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween100slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween100slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/100/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween100slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween100slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/100/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween100slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween100slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/100/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexbetween1000slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexbetween1000slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/between/1000/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_10_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_10_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_10.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_11_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_11_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_11.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_12_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_12_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_12.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_13_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_13_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_13.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_14_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_14_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_14.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_15_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_15_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_15.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_16_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_16_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_16.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_17_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_17_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_17.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_18_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_18_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_18.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_19_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_19_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_19.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_20_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_20_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_20.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_21_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_21_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_21.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_22_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_22_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_22.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_23_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_23_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_23.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_24_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_24_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_24.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_25_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_25_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_25.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_26_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_26_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_26.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_27_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_27_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_27.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_28_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_28_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_28.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_29_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_29_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_29.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_30_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_30_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_30.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_31_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_31_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_31.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_32_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_32_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_32.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_33_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_33_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_33.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_34_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_34_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_34.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_6_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_6_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_6.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_7_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_7_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_7.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_8_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_8_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_8.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute10slt_good_9_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute10slt_good_9_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/10/slt_good_9.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_10_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_10_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_10.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_11_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_11_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_11.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_12_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_12_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_12.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_6_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_6_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_6.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_7_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_7_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_7.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_8_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_8_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_8.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute100slt_good_9_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute100slt_good_9_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/100/slt_good_9.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute1000slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute1000slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/1000/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute1000slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute1000slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/1000/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute1000slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute1000slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/1000/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexcommute1000slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexcommute1000slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/commute/1000/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete1slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete1slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/1/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete10slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete10slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/10/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete10slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete10slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/10/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete10slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete10slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/10/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete10slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete10slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/10/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete10slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete10slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/10/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete10slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete10slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/10/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete100slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete100slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/100/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete100slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete100slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/100/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete100slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete100slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/100/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete100slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete100slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/100/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete1000slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete1000slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/1000/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete1000slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete1000slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/1000/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexdelete10000slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexdelete10000slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/delete/10000/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin10slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin10slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/10/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin10slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin10slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/10/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin10slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin10slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/10/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin10slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin10slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/10/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin10slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin10slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/10/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin10slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin10slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/10/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin100slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin100slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/100/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin100slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin100slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/100/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin100slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin100slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/100/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin100slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin100slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/100/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin100slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin100slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/100/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin1000slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin1000slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/1000/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexin1000slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexin1000slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/in/1000/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_10_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_10_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_10.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_11_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_11_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_11.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_12_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_12_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_12.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_13_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_13_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_13.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_14_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_14_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_14.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_15_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_15_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_15.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_16_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_16_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_16.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_17_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_17_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_17.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_18_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_18_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_18.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_19_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_19_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_19.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_20_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_20_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_20.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_21_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_21_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_21.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_22_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_22_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_22.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_23_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_23_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_23.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_24_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_24_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_24.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_25_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_25_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_25.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_6_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_6_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_6.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_7_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_7_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_7.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_8_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_8_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_8.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby10slt_good_9_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby10slt_good_9_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/10/slt_good_9.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby100slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby100slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/100/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby100slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby100slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/100/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby100slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby100slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/100/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby100slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby100slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/100/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby1000slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby1000slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby/1000/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_10_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_10_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_10.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_11_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_11_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_11.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_12_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_12_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_12.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_13_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_13_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_13.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_14_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_14_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_14.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_15_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_15_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_15.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_16_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_16_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_16.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_17_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_17_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_17.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_18_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_18_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_18.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_19_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_19_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_19.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_20_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_20_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_20.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_21_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_21_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_21.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_22_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_22_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_22.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_23_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_23_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_23.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_24_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_24_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_24.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_25_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_25_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_25.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_26_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_26_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_26.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_27_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_27_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_27.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_28_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_28_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_28.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_29_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_29_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_29.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_30_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_30_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_30.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_31_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_31_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_31.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_32_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_32_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_32.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_33_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_33_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_33.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_34_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_34_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_34.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_35_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_35_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_35.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_36_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_36_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_36.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_37_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_37_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_37.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_38_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_38_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_38.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_39_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_39_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_39.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_6_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_6_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_6.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_7_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_7_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_7.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_8_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_8_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_8.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_9_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort10slt_good_9_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/10/slt_good_9.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/100/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/100/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/100/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/100/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/100/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/100/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_6_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort100slt_good_6_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/100/slt_good_6.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort1000slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort1000slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/1000/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexorderby_nosort1000slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexorderby_nosort1000slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/orderby_nosort/1000/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview10slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview10slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/10/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview10slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview10slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/10/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview10slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview10slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/10/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview10slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview10slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/10/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview10slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview10slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/10/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview10slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview10slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/10/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview10slt_good_6_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview10slt_good_6_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/10/slt_good_6.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview10slt_good_7_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview10slt_good_7_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/10/slt_good_7.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview100slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview100slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/100/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview100slt_good_1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview100slt_good_1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/100/slt_good_1.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview100slt_good_2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview100slt_good_2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/100/slt_good_2.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview100slt_good_3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview100slt_good_3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/100/slt_good_3.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview100slt_good_4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview100slt_good_4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/100/slt_good_4.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview100slt_good_5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview100slt_good_5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/100/slt_good_5.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview1000slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview1000slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/1000/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testindexview10000slt_good_0_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testindexview10000slt_good_0_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/index/view/10000/slt_good_0.test")
 }
 
-func TestTenantSQLLiteLogic_testselect1_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testselect1_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/select1.test")
 }
 
-func TestTenantSQLLiteLogic_testselect2_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testselect2_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/select2.test")
 }
 
-func TestTenantSQLLiteLogic_testselect3_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testselect3_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/select3.test")
 }
 
-func TestTenantSQLLiteLogic_testselect4_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testselect4_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/select4.test")
 }
 
-func TestTenantSQLLiteLogic_testselect5_test(
-	t *testing.T,
-) {
+func TestTenantSQLLiteLogic_testselect5_test(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSqliteLogicTest(t, "/test/select5.test")
 }

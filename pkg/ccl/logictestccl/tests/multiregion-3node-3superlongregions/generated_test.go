@@ -76,9 +76,7 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
-func TestCCLLogic_multi_region_zone_configs_long_regions(
-	t *testing.T,
-) {
+func TestCCLLogic_multi_region_zone_configs_long_regions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_zone_configs_long_regions")
 }
