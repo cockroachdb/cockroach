@@ -396,6 +396,6 @@ func (rsl StateLoader) SynthesizeRaftState(
 	if err != nil {
 		return err
 	}
-	return rsl.SynthesizeHardState(
-		ctx, logRW.Writer(), hs, truncState, as.RaftAppliedIndex)
+	return rsl.SynthesizeHardState(ctx, logRW.Writer(),
+		hs, truncState, as.RaftAppliedIndex, as.RaftAppliedIndexTerm)
 }

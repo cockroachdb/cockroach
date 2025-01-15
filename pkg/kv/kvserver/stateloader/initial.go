@@ -36,7 +36,6 @@ const (
 func WriteInitialReplicaState(
 	ctx context.Context,
 	stateRW StateReadWriter,
-	logWriter logstore.LogWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
@@ -44,13 +43,9 @@ func WriteInitialReplicaState(
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
 ) (enginepb.MVCCStats, error) {
-	truncState := &kvserverpb.RaftTruncatedState{
-		Term:  RaftInitialLogTerm,
-		Index: RaftInitialLogIndex,
-	}
 	s := kvserverpb.ReplicaState{
-		RaftAppliedIndex:     truncState.Index,
-		RaftAppliedIndexTerm: truncState.Term,
+		RaftAppliedIndex:     RaftInitialLogIndex,
+		RaftAppliedIndexTerm: RaftInitialLogTerm,
 		Desc: &roachpb.RangeDescriptor{
 			RangeID: desc.RangeID,
 		},
@@ -88,11 +83,6 @@ func WriteInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
-	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
-	// the Raft log engine is separated. Figure out the ordering required here.
-	if err := rsl.SetRaftTruncatedState(ctx, logWriter, truncState); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
 	newMS, err := rsl.Save(ctx, stateRW, s)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
@@ -116,7 +106,7 @@ func WriteInitialRangeState(
 	initialGCHint := roachpb.GCHint{}
 	initialMS := enginepb.MVCCStats{}
 
-	if _, err := WriteInitialReplicaState(ctx, stateRW, logRW.Writer(),
+	if _, err := WriteInitialReplicaState(ctx, stateRW,
 		initialMS, desc, initialLease, initialGCThreshold, initialGCHint, replicaVersion,
 	); err != nil {
 		return err

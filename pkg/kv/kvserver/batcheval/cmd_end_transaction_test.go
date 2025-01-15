@@ -2353,13 +2353,9 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, loadedGCHint)
 	require.Equal(t, gcHint, *loadedGCHint)
-	expTruncState := kvserverpb.RaftTruncatedState{
-		Term:  stateloader.RaftInitialLogTerm,
-		Index: stateloader.RaftInitialLogIndex,
-	}
 	loadedTruncState, err := slRight.LoadRaftTruncatedState(ctx, logstore.MakeLogReader(batch))
 	require.NoError(t, err)
-	require.Equal(t, expTruncState, loadedTruncState)
+	require.Equal(t, kvserverpb.RaftTruncatedState{}, loadedTruncState)
 	loadedVersion, err := slRight.LoadVersion(ctx, rw.Reader())
 	require.NoError(t, err)
 	require.Equal(t, version, loadedVersion)

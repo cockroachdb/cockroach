@@ -155,9 +155,18 @@ func (sl StateLoader) SynthesizeHardState(
 	oldHS raftpb.HardState,
 	truncState kvserverpb.RaftTruncatedState,
 	raftAppliedIndex kvpb.RaftIndex,
+	raftAppliedTerm kvpb.RaftTerm,
 ) error {
+	newTruncState := truncState
+	if newTruncState.Index == 0 {
+		newTruncState = kvserverpb.RaftTruncatedState{
+			Index: raftAppliedIndex,
+			Term:  raftAppliedTerm,
+		}
+	}
+
 	newHS := raftpb.HardState{
-		Term: uint64(truncState.Term),
+		Term: uint64(newTruncState.Term),
 		// Note that when applying a Raft snapshot, the applied index is
 		// equal to the Commit index represented by the snapshot.
 		Commit: uint64(raftAppliedIndex),
@@ -185,6 +194,9 @@ func (sl StateLoader) SynthesizeHardState(
 		newHS.Vote = oldHS.Vote
 		newHS.Lead = oldHS.Lead
 		newHS.LeadEpoch = oldHS.LeadEpoch
+	}
+	if err := sl.SetRaftTruncatedState(ctx, writer, &newTruncState); err != nil {
+		return errors.Wrapf(err, "writing RaftTruncatedState %+v", &newTruncState)
 	}
 	err := sl.SetHardState(ctx, writer, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
