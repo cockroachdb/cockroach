@@ -8,6 +8,7 @@ package main
 import (
 	"archive/zip"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,11 +27,11 @@ func moveToZipArchive(archiveName string, rootPath string, relPaths ...string) e
 	z := zip.NewWriter(f)
 	for _, relPath := range relPaths {
 		// Walk the given path.
-		if err := filepath.Walk(filepath.Join(rootPath, relPath), func(path string, info os.FileInfo, err error) error {
+		if err := filepath.WalkDir(filepath.Join(rootPath, relPath), func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if info.IsDir() {
+			if d.IsDir() {
 				// Let Walk recurse inside.
 				return nil
 			}
