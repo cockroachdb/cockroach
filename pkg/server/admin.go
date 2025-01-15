@@ -3404,7 +3404,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 	case *string:
 		s, ok := tree.AsDString(src)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed %d %T", index, src)
 		}
 		*d = string(s)
 
