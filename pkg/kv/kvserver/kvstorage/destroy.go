@@ -106,6 +106,7 @@ func DestroyReplica(
 	rangeID roachpb.RangeID,
 	reader storage.Reader,
 	writer storage.Writer,
+	r LogReader,
 	nextReplicaID roachpb.ReplicaID,
 	opts ClearRangeDataOptions,
 ) error {
