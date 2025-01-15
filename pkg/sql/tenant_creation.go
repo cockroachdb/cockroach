@@ -693,19 +693,15 @@ func generateTenantClusterSettingKV(
 		return roachpb.KeyValue{}, errors.NewAssertionErrorWithWrappedErrf(err,
 			"failed to represent the current time")
 	}
-	kvs, err := rowenc.EncodePrimaryIndex(
-		codec,
-		systemschema.SettingsTable,
-		systemschema.SettingsTable.GetPrimaryIndex(),
-		catalog.ColumnIDToOrdinalMap(systemschema.SettingsTable.PublicColumns()),
-		[]tree.Datum{
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, systemschema.SettingsTable.GetID(), systemschema.SettingsTable.GetPrimaryIndexID())
+	kvs, err := rowenc.EncodePrimaryIndex(systemschema.SettingsTable,
+		systemschema.SettingsTable.GetPrimaryIndex(), keyPrefix,
+		catalog.ColumnIDToOrdinalMap(systemschema.SettingsTable.PublicColumns()), []tree.Datum{
 			tree.NewDString(clusterversion.KeyVersionSetting), // name
 			tree.NewDString(string(encoded)),                  // value
 			ts,                                                // lastUpdated
 			tree.NewDString((*settings.VersionSetting)(nil).Typ()), // type
-		},
-		false, /* includeEmpty */
-	)
+		}, false /* includeEmpty */)
 	if err != nil {
 		return roachpb.KeyValue{}, errors.NewAssertionErrorWithWrappedErrf(err,
 			"failed to encode cluster setting")

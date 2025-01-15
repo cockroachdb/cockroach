@@ -271,7 +271,9 @@ func (rh *RowHelper) encodeTombstonesForIndex(
 			}
 			tombstoneTmpForIndex.tmpTombstones = append(tombstoneTmpForIndex.tmpTombstones, key)
 		} else {
-			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values)
+			keyPrefix := rowenc.MakeIndexKeyPrefix(rh.Codec, rh.TableDesc.GetID(), index.GetID())
+			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(ctx, rh.TableDesc, index, keyPrefix,
+				colIDtoRowPosition, values)
 			if err != nil {
 				return nil, err
 			}
@@ -317,7 +319,9 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	for i := range rh.Indexes {
 		index := rh.Indexes[i]
 		if !ignoreIndexes.Contains(int(index.GetID())) {
-			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values, includeEmpty)
+			keyPrefix := rowenc.MakeIndexKeyPrefix(rh.Codec, rh.TableDesc.GetID(), index.GetID())
+			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.TableDesc, index, keyPrefix,
+				colIDtoRowPosition, values, includeEmpty)
 			if err != nil {
 				return nil, err
 			}

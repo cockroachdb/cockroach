@@ -60,7 +60,9 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2);
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), primaryIndex.GetID())
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+		colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -74,10 +76,9 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2);
 	}
 
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		context.Background(), codec, tableDesc, secondaryIndex,
-		colIDtoRowIndex, values, true, /* includeEmpty */
-	)
+	secondaryKeyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
+	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(context.Background(), tableDesc,
+		secondaryIndex, secondaryKeyPrefix, colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -149,7 +150,9 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, NULL, 2);
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), primaryIndex.GetID())
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+		colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -163,10 +166,9 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, NULL, 2);
 	}
 
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		context.Background(), codec, tableDesc, secondaryIndex,
-		colIDtoRowIndex, values, true, /* includeEmpty */
-	)
+	secondaryKeyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
+	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(context.Background(), tableDesc,
+		secondaryIndex, secondaryKeyPrefix, colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -223,7 +225,9 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), primaryIndex.GetID())
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+		colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -238,17 +242,14 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 	}
 	oldValues := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3)}
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-	secondaryIndexDelKey, err := rowenc.EncodeSecondaryIndex(
-		context.Background(), codec, tableDesc, secondaryIndex,
-		colIDtoRowIndex, oldValues, true, /* includeEmpty */
-	)
+	secondaryKeyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
+	secondaryIndexDelKey, err := rowenc.EncodeSecondaryIndex(context.Background(), tableDesc,
+		secondaryIndex, secondaryKeyPrefix, colIDtoRowIndex, oldValues, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		context.Background(), codec, tableDesc, secondaryIndex,
-		colIDtoRowIndex, values, true, /* includeEmpty */
-	)
+	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(context.Background(), tableDesc,
+		secondaryIndex, secondaryKeyPrefix, colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -313,7 +314,9 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
 
 	// Modify the primary index with a duplicate constrained value.
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, valuesConstrained, true)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), primaryIndex.GetID())
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+		colIDtoRowIndex, valuesConstrained, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -325,10 +328,9 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 	}
 
 	// Modify the secondary index with a duplicate constrained value.
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		context.Background(), codec, tableDesc, secondaryIndex,
-		colIDtoRowIndex, valuesConstrained, true, /* includeEmpty */
-	)
+	secondaryKeyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
+	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(context.Background(), tableDesc,
+		secondaryIndex, secondaryKeyPrefix, colIDtoRowIndex, valuesConstrained, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -341,7 +343,8 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 
 	// Modify the primary index with a duplicate value not in the constrained
 	// range.
-	primaryIndexKey, err = rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, valuesNotConstrained, true)
+	primaryIndexKey, err = rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+		colIDtoRowIndex, valuesNotConstrained, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -354,10 +357,8 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 
 	// Modify the secondary index with a duplicate value not in the constrained
 	// range.
-	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(
-		context.Background(), codec, tableDesc, secondaryIndex,
-		colIDtoRowIndex, valuesNotConstrained, true, /* includeEmpty */
-	)
+	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(context.Background(), tableDesc,
+		secondaryIndex, secondaryKeyPrefix, colIDtoRowIndex, valuesNotConstrained, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -432,7 +433,9 @@ INSERT INTO db.t VALUES (1, 1, 2, 1);
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[3].GetID(), 3)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), primaryIndex.GetID())
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+		colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -447,10 +450,9 @@ INSERT INTO db.t VALUES (1, 1, 2, 1);
 
 	// Modify the secondary index with the duplicate value.
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		context.Background(), codec, tableDesc, secondaryIndex,
-		colIDtoRowIndex, values, true, /* includeEmpty */
-	)
+	secondaryKeyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
+	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(context.Background(), tableDesc,
+		secondaryIndex, secondaryKeyPrefix, colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -519,7 +521,9 @@ INSERT INTO db.t VALUES (1, 1);
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), primaryIndex.GetID())
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+		colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}

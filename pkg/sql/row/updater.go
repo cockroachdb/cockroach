@@ -278,18 +278,12 @@ func (ru *Updater) UpdateRow(
 		// exists in ignoreIndexesForDel and ignoreIndexesForPut, respectively.
 		// Index IDs in these sets indicate that old and new values for the row
 		// do not satisfy a partial index's predicate expression.
+		keyPrefix := rowenc.MakeIndexKeyPrefix(ru.Helper.Codec, ru.Helper.TableDesc.GetID(), index.GetID())
 		if pm.IgnoreForDel.Contains(int(index.GetID())) {
 			ru.oldIndexEntries[i] = nil
 		} else {
-			ru.oldIndexEntries[i], err = rowenc.EncodeSecondaryIndex(
-				ctx,
-				ru.Helper.Codec,
-				ru.Helper.TableDesc,
-				index,
-				ru.FetchColIDtoRowIndex,
-				oldValues,
-				false, /* includeEmpty */
-			)
+			ru.oldIndexEntries[i], err = rowenc.EncodeSecondaryIndex(ctx, ru.Helper.TableDesc, index,
+				keyPrefix, ru.FetchColIDtoRowIndex, oldValues, false /* includeEmpty */)
 			if err != nil {
 				return nil, err
 			}
@@ -297,15 +291,8 @@ func (ru *Updater) UpdateRow(
 		if pm.IgnoreForPut.Contains(int(index.GetID())) {
 			ru.newIndexEntries[i] = nil
 		} else {
-			ru.newIndexEntries[i], err = rowenc.EncodeSecondaryIndex(
-				ctx,
-				ru.Helper.Codec,
-				ru.Helper.TableDesc,
-				index,
-				ru.FetchColIDtoRowIndex,
-				ru.newValues,
-				false, /* includeEmpty */
-			)
+			ru.newIndexEntries[i], err = rowenc.EncodeSecondaryIndex(ctx, ru.Helper.TableDesc, index,
+				keyPrefix, ru.FetchColIDtoRowIndex, ru.newValues, false /* includeEmpty */)
 			if err != nil {
 				return nil, err
 			}

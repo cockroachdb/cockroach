@@ -45,9 +45,9 @@ func (w KVWriter) RecordToKeyValues(values ...tree.Datum) (ret []roachpb.KeyValu
 	// Encode the primary index row.
 	{
 		idx := w.tableDesc.GetPrimaryIndex()
-		indexEntries, err := rowenc.EncodePrimaryIndex(
-			w.codec, w.tableDesc, idx, w.colIDtoRowIndex, values, true, /* includeEmpty */
-		)
+		keyPrefix := rowenc.MakeIndexKeyPrefix(w.codec, w.tableDesc.GetID(), idx.GetID())
+		indexEntries, err := rowenc.EncodePrimaryIndex(w.tableDesc, idx, keyPrefix, w.colIDtoRowIndex,
+			values, true /* includeEmpty */)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(
 				err, "encoding for primary index %q (%d)", idx.GetName(), idx.GetID(),
@@ -63,9 +63,9 @@ func (w KVWriter) RecordToKeyValues(values ...tree.Datum) (ret []roachpb.KeyValu
 
 	// Encode the secondary index rows.
 	for _, idx := range w.tableDesc.PublicNonPrimaryIndexes() {
-		indexEntries, err := rowenc.EncodeSecondaryIndex(
-			context.Background(), w.codec, w.tableDesc, idx, w.colIDtoRowIndex, values, true, /* includeEmpty */
-		)
+		keyPrefix := rowenc.MakeIndexKeyPrefix(w.codec, w.tableDesc.GetID(), idx.GetID())
+		indexEntries, err := rowenc.EncodeSecondaryIndex(context.Background(), w.tableDesc, idx,
+			keyPrefix, w.colIDtoRowIndex, values, true /* includeEmpty */)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(
 				err, "encoding for secondary index %q (%d)", idx.GetName(), idx.GetID(),

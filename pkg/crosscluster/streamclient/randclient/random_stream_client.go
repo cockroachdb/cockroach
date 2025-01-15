@@ -697,8 +697,8 @@ func encodeKV(
 	}
 
 	const includeEmpty = true
-	indexEntries, err := rowenc.EncodePrimaryIndex(codec, descr, primary,
-		colMap, datums, includeEmpty)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, descr.GetID(), primary.GetID())
+	indexEntries, err := rowenc.EncodePrimaryIndex(descr, primary, keyPrefix, colMap, datums, includeEmpty)
 	if err != nil {
 		return roachpb.KeyValue{}, err
 	}

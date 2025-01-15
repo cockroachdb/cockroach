@@ -219,10 +219,9 @@ func indexEntryForDatums(
 	for i, c := range tableDesc.PublicColumns() {
 		colIDtoRowIndex.Set(c.GetID(), i)
 	}
-	indexEntries, err := rowenc.EncodeSecondaryIndex(
-		context.Background(), keys.SystemSQLCodec, tableDesc, index,
-		colIDtoRowIndex, row, true, /* includeEmpty */
-	)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.GetID())
+	indexEntries, err := rowenc.EncodeSecondaryIndex(context.Background(), tableDesc, index,
+		keyPrefix, colIDtoRowIndex, row, true /* includeEmpty */)
 	if err != nil {
 		return rowenc.IndexEntry{}, err
 	}
@@ -685,7 +684,9 @@ INSERT INTO db.t VALUES (1, 2), (2,3);
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), primaryIndex.GetID())
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+		colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}

@@ -66,9 +66,10 @@ CREATE TABLE u (
 		colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
 
 		// Construct the primary index entry to insert.
-		primaryIndexEntry, err := rowenc.EncodePrimaryIndex(
-			keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true, /* includeEmpty */
-		)
+		keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(),
+			primaryIndex.GetID())
+		primaryIndexEntry, err := rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+			colIDtoRowIndex, values, true /* includeEmpty */)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(primaryIndexEntry))
 
@@ -93,15 +94,16 @@ CREATE TABLE u (
 		colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
 
 		// Construct the primary and secondary index entries to insert.
-		primaryIndexEntry, err := rowenc.EncodePrimaryIndex(
-			keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true, /* includeEmpty */
-		)
+		keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(),
+			primaryIndex.GetID())
+		primaryIndexEntry, err := rowenc.EncodePrimaryIndex(tableDesc, primaryIndex, keyPrefix,
+			colIDtoRowIndex, values, true /* includeEmpty */)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(primaryIndexEntry))
-		secondaryIndexEntry, err := rowenc.EncodeSecondaryIndex(
-			context.Background(), keys.SystemSQLCodec, tableDesc, secondaryIndex,
-			colIDtoRowIndex, values, true, /* includeEmpty */
-		)
+		secondaryKeyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(),
+			secondaryIndex.GetID())
+		secondaryIndexEntry, err := rowenc.EncodeSecondaryIndex(context.Background(), tableDesc,
+			secondaryIndex, secondaryKeyPrefix, colIDtoRowIndex, values, true /* includeEmpty */)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(secondaryIndexEntry))
 

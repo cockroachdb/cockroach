@@ -917,6 +917,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		}
 		return nil
 	}
+	idxToKeyPrefix := map[descpb.IndexID][]byte{}
 	for i := int64(0); i < chunkSize; i++ {
 		ok, _, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
@@ -977,17 +978,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		buffer, memUsedDuringEncoding, err = func(buffer []rowenc.IndexEntry) ([]rowenc.IndexEntry, int64, error) {
 			ib.muBoundAccount.Lock()
 			defer ib.muBoundAccount.Unlock()
-			return rowenc.EncodeSecondaryIndexes(
-				ctx,
-				ib.evalCtx.Codec,
-				tableDesc,
-				ib.indexesToEncode,
-				ib.colIdxMap,
-				ib.rowVals,
-				buffer,
-				false, /* includeEmpty */
-				&ib.muBoundAccount.boundAccount,
-			)
+			return rowenc.EncodeSecondaryIndexes(ctx, ib.evalCtx.Codec, tableDesc, ib.indexesToEncode,
+				idxToKeyPrefix, ib.colIdxMap, ib.rowVals, buffer, false, &ib.muBoundAccount.boundAccount)
 		}(buffer)
 		// Account for memory use prior to error checking
 		memUsedPerChunk += memUsedDuringEncoding

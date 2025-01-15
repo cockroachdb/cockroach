@@ -293,10 +293,9 @@ func TestIndexKey(t *testing.T) {
 		primaryValue := roachpb.MakeValueFromBytes(nil)
 		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
-		secondaryIndexEntry, err := EncodeSecondaryIndex(
-			ctx, codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0],
-			colMap, testValues, true, /* includeEmpty */
-		)
+		keyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), tableDesc.PublicNonPrimaryIndexes()[0].GetID())
+		secondaryIndexEntry, err := EncodeSecondaryIndex(ctx, tableDesc,
+			tableDesc.PublicNonPrimaryIndexes()[0], keyPrefix, colMap, testValues, true /* includeEmpty */)
 		if len(secondaryIndexEntry) != 1 {
 			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
 		}
@@ -448,10 +447,9 @@ func TestInvertedIndexKey(t *testing.T) {
 
 		codec := keys.SystemSQLCodec
 
-		secondaryIndexEntries, err := EncodeSecondaryIndex(
-			context.Background(), codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0],
-			colMap, testValues, true, /* includeEmpty */
-		)
+		keyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), tableDesc.PublicNonPrimaryIndexes()[0].GetID())
+		secondaryIndexEntries, err := EncodeSecondaryIndex(context.Background(), tableDesc,
+			tableDesc.PublicNonPrimaryIndexes()[0], keyPrefix, colMap, testValues, true /* includeEmpty */)
 		if err != nil {
 			t.Fatal(err)
 		}

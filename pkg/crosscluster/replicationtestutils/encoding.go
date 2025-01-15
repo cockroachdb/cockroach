@@ -56,8 +56,8 @@ func encodeKVImpl(
 	}
 
 	const includeEmpty = true
-	indexEntries, err := rowenc.EncodePrimaryIndex(codec, descr, primary,
-		colMap, datums, includeEmpty)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, descr.GetID(), primary.GetID())
+	indexEntries, err := rowenc.EncodePrimaryIndex(descr, primary, keyPrefix, colMap, datums, includeEmpty)
 	require.NoError(t, err)
 	for i := range indexEntries {
 		indexEntries[i].Value.InitChecksum(indexEntries[i].Key)
