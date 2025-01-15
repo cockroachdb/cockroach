@@ -57,6 +57,7 @@ var (
 	_ = pgcode.Syntax
 	_ = pgdate.ParseTimestamp
 	_ = pgerror.Wrapf
+	_ = log.ExpensiveLogEnabled
 )
 
 // {{/*
