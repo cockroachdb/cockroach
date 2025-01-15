@@ -353,6 +353,58 @@ func (v *beforeAfterValidator) Failures() []string {
 	return v.failures
 }
 
+type mvccTimestampValidator struct {
+	failures []string
+}
+
+// NewMvccTimestampValidator returns a Validator that verifies that the emitted
+// row includes the mvcc_timestamp field and that its value is not later than
+// the updated timestamp
+func NewMvccTimestampValidator() Validator {
+	return &mvccTimestampValidator{}
+}
+
+// NoteRow implements the Validator interface.
+func (v *mvccTimestampValidator) NoteRow(
+	partition, key, value string, updated hlc.Timestamp, topic string,
+) error {
+	valueJSON, err := json.ParseJSON(value)
+	if err != nil {
+		return err
+	}
+
+	mvccJSON, err := valueJSON.FetchValKey("mvcc_timestamp")
+	if err != nil {
+		return err
+	}
+	if mvccJSON == nil {
+		return errors.Errorf(`expected MVCC timestampt, got nil`)
+	}
+	mvccJSONText, err := mvccJSON.AsText()
+	if err != nil {
+		return err
+	}
+
+	if *mvccJSONText > updated.AsOfSystemTime() {
+		fmt.Println(valueJSON.String())
+		return errors.Errorf(
+			`expected MVCC timestampt to match updated timestamp (%s), got %s`,
+			updated.AsOfSystemTime(), mvccJSONText)
+	}
+
+	return nil
+}
+
+// NoteResolved implements the Validator interface.
+func (v *mvccTimestampValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return nil
+}
+
+// Failures implements the Validator interface.
+func (v *mvccTimestampValidator) Failures() []string {
+	return v.failures
+}
+
 type keyInValueValidator struct {
 	primaryKeyCols []string
 	failures       []string

@@ -35,8 +35,9 @@ func newChangefeedOption(testName string) ChangefeedOption {
 		// Because key_in_value is on by default for cloudstorage and webhook sinks,
 		// the key in the value is extracted and removed from the test feed
 		// messages (see extractKeyFromJSONValue function).
-		"key_in_value": !isCloudstorage && !isWebhook,
-		"diff":         true,
+		"key_in_value":   !isCloudstorage && !isWebhook,
+		"diff":           true,
+		"mvcc_timestamp": true,
 	}
 
 	cfo.BooleanOptions = make(map[string]bool)
@@ -297,6 +298,11 @@ func RunNemesis(
 			return nil, err
 		}
 		validators = append(validators, kivV)
+	}
+
+	if cfo.BooleanOptions["mvcc_timestamp"] {
+		mvccV := NewMvccTimestampValidator()
+		validators = append(validators, mvccV)
 	}
 
 	ns.v = NewCountValidator(validators)
