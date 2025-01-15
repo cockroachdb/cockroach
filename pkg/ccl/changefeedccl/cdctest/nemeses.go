@@ -36,6 +36,7 @@ func newChangefeedOption(testName string) ChangefeedOption {
 		// the key in the value is extracted and removed from the test feed
 		// messages (see extractKeyFromJSONValue function).
 		"key_in_value": !isCloudstorage && !isWebhook,
+		"diff":         true,
 	}
 
 	cfo.BooleanOptions = make(map[string]bool)
@@ -249,7 +250,7 @@ func RunNemesis(
 
 	cfo := newChangefeedOption(testName)
 	changefeedStatement := fmt.Sprintf(
-		`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff%s`,
+		`CREATE CHANGEFEED FOR foo WITH updated, resolved%s`,
 		cfo.OptionString(),
 	)
 	log.Infof(ctx, "Using changefeed options: %s", changefeedStatement)
@@ -269,7 +270,7 @@ func RunNemesis(
 		return nil, err
 	}
 
-	baV, err := NewBeforeAfterValidator(db, `foo`)
+	baV, err := NewBeforeAfterValidator(db, `foo`, cfo.BooleanOptions["diff"])
 	if err != nil {
 		return nil, err
 	}

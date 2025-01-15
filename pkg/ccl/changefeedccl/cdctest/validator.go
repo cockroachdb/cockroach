@@ -191,6 +191,7 @@ type beforeAfterValidator struct {
 	table          string
 	primaryKeyCols []string
 	resolved       map[string]hlc.Timestamp
+	diff           bool
 
 	failures []string
 }
@@ -198,7 +199,7 @@ type beforeAfterValidator struct {
 // NewBeforeAfterValidator returns a Validator verifies that the "before" and
 // "after" fields in each row agree with the source table when performing AS OF
 // SYSTEM TIME lookups before and at the row's timestamp.
-func NewBeforeAfterValidator(sqlDB *gosql.DB, table string) (Validator, error) {
+func NewBeforeAfterValidator(sqlDB *gosql.DB, table string, diff bool) (Validator, error) {
 	primaryKeyCols, err := fetchPrimaryKeyCols(sqlDB, table)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetchPrimaryKeyCols failed")
@@ -207,6 +208,7 @@ func NewBeforeAfterValidator(sqlDB *gosql.DB, table string) (Validator, error) {
 	return &beforeAfterValidator{
 		sqlDB:          sqlDB,
 		table:          table,
+		diff:           diff,
 		primaryKeyCols: primaryKeyCols,
 		resolved:       make(map[string]hlc.Timestamp),
 	}, nil
@@ -246,6 +248,15 @@ func (v *beforeAfterValidator) NoteRow(
 	// updated timestamp.
 	if err := v.checkRowAt("after", keyJSONAsArray, afterJSON, updated); err != nil {
 		return err
+	}
+
+	if !v.diff {
+		// If the diff option is not specified in the change feed,
+		// we don't expect the rows to contain a "before" field.
+		if beforeJson != nil {
+			return errors.Errorf(`expected before to be nil, got %s`, beforeJson.String())
+		}
+		return nil
 	}
 
 	if v.resolved[partition].IsEmpty() && (beforeJson == nil || beforeJson.Type() == json.NullJSONType) {
