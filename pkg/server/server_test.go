@@ -724,7 +724,7 @@ func TestServeIndexHTML(t *testing.T) {
 			// in `server` and not in `server_test`). However, serverutils
 			// doesn't link ccl, so it says it uses OSS distribution. Reconcile
 			// this mismatch.
-			buildInfo := strings.Replace(build.GetInfo().Short(), "CockroachDB CCL", "CockroachDB OSS", 1)
+			buildInfo := strings.Replace(build.GetInfo().Short().StripMarkers(), "CockroachDB CCL", "CockroachDB OSS", 1)
 			expected := fmt.Sprintf(`<!DOCTYPE html>
 <title>CockroachDB</title>
 Binary built without web UI.

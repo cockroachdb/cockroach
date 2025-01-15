@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/redact"
 )
 
 // TimeFormat is the reference format for build.Time. Make sure it stays in sync
@@ -135,13 +136,18 @@ func init() {
 }
 
 // Short returns a pretty printed build and version summary.
-func (b Info) Short() string {
+func (b Info) Short() redact.RedactableString {
 	plat := b.Platform
 	if b.CgoTargetTriple != "" {
 		plat = b.CgoTargetTriple
 	}
-	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
-		b.Distribution, b.Tag, plat, b.Time, b.GoVersion)
+	return redact.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
+		redact.SafeString(b.Distribution),
+		redact.SafeString(b.Tag),
+		redact.SafeString(plat),
+		redact.SafeString(b.Time),
+		redact.SafeString(b.GoVersion),
+	)
 }
 
 // Long returns a pretty printed build summary
