@@ -175,10 +175,10 @@ Del /Table/112/1/"updated"/0
 CPut /Table/112/1/"updated2"/0 -> /TUPLE/
 executing cascade for constraint b1_update_cascade_fkey
 Del /Table/113/2/"updated"/0
-CPut /Table/113/2/"updated2"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
+CPut /Table/113/2/"updated2"/0 -> /BYTES/0x1262312d706b310001
 executing cascade for constraint b2_update_cascade_fkey
 Del /Table/114/2/"updated"/0
-CPut /Table/114/2/"updated2"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
+CPut /Table/114/2/"updated2"/0 -> /BYTES/0x1262322d706b310001
 executing cascade for constraint c1_update_cascade_fkey
 executing cascade for constraint c2_update_cascade_fkey
 executing cascade for constraint c3_id_fkey
@@ -463,10 +463,10 @@ Del /Table/134/1/"original"/0
 CPut /Table/134/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_cascade_fkey
 Del /Table/135/2/"original"/0
-CPut /Table/135/2/"updated"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
+CPut /Table/135/2/"updated"/0 -> /BYTES/0x1262312d706b310001
 executing cascade for constraint b2_update_cascade_fkey
 Del /Table/136/2/"original"/0
-CPut /Table/136/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
+CPut /Table/136/2/"updated"/0 -> /BYTES/0x1262322d706b310001
 executing cascade for constraint c1_update_set_null_fkey
 executing cascade for constraint c2_update_set_null_fkey
 executing cascade for constraint c3_update_set_null_fkey
@@ -751,10 +751,10 @@ Del /Table/156/1/"original"/0
 CPut /Table/156/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_cascade_fkey
 Del /Table/157/2/"original"/0
-CPut /Table/157/2/"updated"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
+CPut /Table/157/2/"updated"/0 -> /BYTES/0x1262312d706b310001
 executing cascade for constraint b2_update_cascade_fkey
 Del /Table/158/2/"original"/0
-CPut /Table/158/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
+CPut /Table/158/2/"updated"/0 -> /BYTES/0x1262322d706b310001
 executing cascade for constraint c1_update_set_null_fkey
 executing cascade for constraint c2_update_set_null_fkey
 executing cascade for constraint c3_update_set_null_fkey
