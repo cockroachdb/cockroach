@@ -55,6 +55,27 @@ func newCompressionCodec(
 	}
 }
 
+// newDecompressionReader returns decompression reader for the specified algorithm
+func newDecompressionReader(algo compressionAlgo, src io.Reader) (io.ReadCloser, error) {
+	switch algo {
+	case sinkCompressionGzip:
+		// since we are using decompression only for reading error response body, we can use default reader
+		return pgzip.NewReader(src)
+	case sinkCompressionZstd:
+		// zstd reader does not implement io.Closer interface, so we need to wrap it
+		decoder, err := zstd.NewReader(src)
+		if err != nil {
+			return nil, err
+		}
+		return struct {
+			io.Reader
+			io.Closer
+		}{decoder, io.NopCloser(nil)}, nil
+	default:
+		return nil, errors.AssertionFailedf("unsupported compression algorithm %q", algo)
+	}
+}
+
 // compressionFromString returns compression algorithm type along with file extension.
 func compressionFromString(algo string) (_ compressionAlgo, ext string, _ error) {
 	if strings.EqualFold(algo, string(sinkCompressionGzip)) {

@@ -922,3 +922,69 @@ func TestWebhookSinkCompressionWithBatching(t *testing.T) {
 		batchingWithCompressionTestFn(i)
 	}
 }
+
+func TestWebhookSinkErrorCompressedResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	webhookSinkGzippedErrorTestFn := func(parallelism int) {
+		ctx := context.Background()
+		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		require.NoError(t, err)
+		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		require.NoError(t, err)
+
+		// Configure sink to return error and use compression
+		opts := getGenericWebhookSinkOptions(struct {
+			key   string
+			value string
+		}{
+			key:   changefeedbase.OptCompression,
+			value: "gzip",
+		})
+
+		// Configure error response
+		responseBody := "Test error response"
+		// we have to clear the default status code set by the sink mock factory
+		sinkDest.ClearStatusCodes()
+		sinkDest.SetResponse(http.StatusInternalServerError, []byte(responseBody))
+
+		sinkDestHost, err := url.Parse(sinkDest.URL())
+		require.NoError(t, err)
+
+		params := sinkDestHost.Query()
+		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		sinkDestHost.RawQuery = params.Encode()
+
+		details := jobspb.ChangefeedDetails{
+			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
+			Opts:    opts.AsMap(),
+		}
+
+		sinkSrc, err := setupWebhookSinkWithDetails(ctx, details, parallelism, timeutil.DefaultTimeSource{})
+		require.NoError(t, err)
+
+		// Send data and expect error with compressed response
+		require.NoError(t, sinkSrc.EmitRow(ctx, noTopic{},
+			[]byte("[1001]"),
+			[]byte(`{"after":{"col1":"val1","rowid":1000},"key":[1001],"topic:":"foo"}`),
+			zeroTS,
+			zeroTS,
+			zeroAlloc))
+
+		err = sinkSrc.Flush(ctx)
+		require.Error(t, err)
+		// Verify error body is decompressed
+		require.Equal(t, err.Error(), fmt.Sprintf(`500 Internal Server Error: %s`, responseBody))
+
+		// Verify no messages delivered
+		require.Equal(t, "", sinkDest.Pop())
+
+		require.NoError(t, sinkSrc.Close())
+		sinkDest.Close()
+	}
+
+	// Run tests with parallelism from 1-4
+	for i := 1; i <= 4; i++ {
+		webhookSinkGzippedErrorTestFn(i)
+	}
+}

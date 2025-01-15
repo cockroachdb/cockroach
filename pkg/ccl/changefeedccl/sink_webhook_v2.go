@@ -235,6 +235,30 @@ func (sc *webhookSinkClient) FlushResolvedPayload(
 	})
 }
 
+// readResponseBody handles rsponse body reading and decompression if needed
+func (sc *webhookSinkClient) readResponseBody(res *http.Response) ([]byte, error) {
+	encoding := res.Header.Get(contentEncodingHeader)
+	if encoding == "" {
+		return io.ReadAll(res.Body)
+	}
+
+	// Convert the content-encoding header to our internal compression algorithm type
+	algo, _, err := compressionFromString(encoding)
+	if err != nil {
+		return nil, errors.Wrapf(err,
+			"webhook endpoint returned unsupported content encoding: %s", encoding)
+	}
+
+	reader, err := newDecompressionReader(algo, res.Body)
+	if err != nil {
+		return nil, errors.Wrapf(err,
+			"failed to create decompression reader for algorithm %s", algo)
+	}
+	defer reader.Close()
+
+	return io.ReadAll(reader)
+}
+
 // Flush implements the SinkClient interface
 func (sc *webhookSinkClient) Flush(ctx context.Context, batch SinkPayload) error {
 	req := batch.(*http.Request)
@@ -250,7 +274,8 @@ func (sc *webhookSinkClient) Flush(ctx context.Context, batch SinkPayload) error
 	defer res.Body.Close()
 
 	if !(res.StatusCode >= http.StatusOK && res.StatusCode < http.StatusMultipleChoices) {
-		resBody, err := io.ReadAll(res.Body)
+		// response body may be compressed, so we need to use our reader with decompression support
+		resBody, err := sc.readResponseBody(res)
 		if err != nil {
 			return errors.Wrapf(err, "failed to read body for HTTP response with status: %d", res.StatusCode)
 		}

@@ -24,6 +24,7 @@ type MockWebhookSink struct {
 	mu                 struct {
 		syncutil.Mutex
 		numCalls         int
+		responseBodies   map[int][]byte
 		statusCodes      []int
 		statusCodesIndex int
 		rows             []string
@@ -97,6 +98,7 @@ func StartMockWebhookSinkWithBasicAuth(
 func makeMockWebhookSink() *MockWebhookSink {
 	s := &MockWebhookSink{}
 	s.mu.statusCodes = []int{http.StatusOK}
+	s.mu.responseBodies = make(map[int][]byte)
 	s.server = httptest.NewUnstartedServer(http.HandlerFunc(s.requestHandler))
 	return s
 }
@@ -120,6 +122,24 @@ func (s *MockWebhookSink) SetStatusCodes(statusCodes []int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.statusCodes = statusCodes
+	s.mu.statusCodesIndex = 0
+}
+
+// SetResponse sets the response body and status code to use when responding to
+// a request. Useful for testing error handling behavior on client side.
+func (s *MockWebhookSink) SetResponse(statusCode int, responseBody []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	numOfStatusCodes := len(s.mu.statusCodes)
+	s.mu.statusCodes = append(s.mu.statusCodes, statusCode)
+	s.mu.responseBodies[numOfStatusCodes] = responseBody
+}
+
+// ClearStatusCodes resets status codes to empty list and resets the index.
+func (s *MockWebhookSink) ClearStatusCodes() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.statusCodes = []int{}
 	s.mu.statusCodesIndex = 0
 }
 
@@ -197,7 +217,8 @@ func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) erro
 
 	reader := hr.Body
 
-	if hr.Header.Get("Content-Encoding") == "gzip" {
+	gzCompression := hr.Header.Get("Content-Encoding") == "gzip"
+	if gzCompression {
 		gzReader, err := gzip.NewReader(reader)
 		if err != nil {
 			return errors.Wrap(err, "failed to create gzip reader")
@@ -214,8 +235,11 @@ func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) erro
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.numCalls++
-	if s.mu.statusCodes[s.mu.statusCodesIndex] >= http.StatusOK &&
-		s.mu.statusCodes[s.mu.statusCodesIndex] < http.StatusMultipleChoices {
+
+	statusCode := s.mu.statusCodes[s.mu.statusCodesIndex]
+	resBody, hasResBody := s.mu.responseBodies[s.mu.statusCodesIndex]
+	s.mu.statusCodesIndex = (s.mu.statusCodesIndex + 1) % len(s.mu.statusCodes)
+	if statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices {
 		s.mu.rows = append(s.mu.rows, string(row))
 		if s.mu.notify != nil {
 			close(s.mu.notify)
@@ -223,7 +247,30 @@ func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) erro
 		}
 	}
 
-	hw.WriteHeader(s.mu.statusCodes[s.mu.statusCodesIndex])
-	s.mu.statusCodesIndex = (s.mu.statusCodesIndex + 1) % len(s.mu.statusCodes)
+	if gzCompression {
+		// if request was compressed, response should be compressed as well
+		hw.Header().Set("Content-Encoding", "gzip")
+	}
+	hw.WriteHeader(statusCode)
+
+	if !hasResBody {
+		return nil
+	}
+
+	writer := io.Writer(hw)
+	if gzCompression {
+		gw := gzip.NewWriter(hw)
+		defer func() {
+			if closeErr := gw.Close(); closeErr != nil {
+				err = errors.CombineErrors(err, errors.Wrap(closeErr, "failed to close gzip writer"))
+			}
+		}()
+		writer = gw
+	}
+
+	if _, err := writer.Write(resBody); err != nil {
+		return errors.Wrap(err, "failed to write response body")
+	}
+
 	return nil
 }
