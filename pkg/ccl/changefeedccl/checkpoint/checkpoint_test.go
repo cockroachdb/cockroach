@@ -151,7 +151,7 @@ func TestCheckpointCatchupTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numSpans = 100
-	maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Default()
+	maxBytes := changefeedbase.SpanCheckpointMaxBytes.Default()
 	hwm := hlc.Timestamp{}
 	rng, _ := randutil.NewTestRand()
 

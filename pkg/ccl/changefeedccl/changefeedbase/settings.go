@@ -67,28 +67,36 @@ var IdleTimeout = settings.RegisterDurationSetting(
 	settings.WithName("changefeed.auto_idle.timeout"),
 )
 
-// FrontierCheckpointFrequency controls the frequency of frontier checkpoints.
-var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
+// SpanCheckpointInterval controls how often span-level checkpoints
+// can be written.
+var SpanCheckpointInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_frequency",
-	"controls the frequency with which span level checkpoints will be written; if 0, disabled",
+	"interval at which span-level checkpoints will be written; "+
+		"if 0, span-level checkpoints are disabled",
 	10*time.Minute,
 	settings.NonNegativeDuration,
+	settings.WithName("changefeed.span_checkpoint.interval"),
 )
 
-// FrontierHighwaterLagCheckpointThreshold controls the amount the high-water
-// mark is allowed to lag behind the leading edge of the frontier before we
-// begin to attempt checkpointing spans above the high-water mark
-var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
+// SpanCheckpointLagThreshold controls the amount of time a changefeed's
+// lagging spans must lag behind its leading spans before a span-level
+// checkpoint is written.
+var SpanCheckpointLagThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_highwater_lag_checkpoint_threshold",
-	"controls the maximum the high-water mark is allowed to lag behind the leading spans of the frontier before per-span checkpointing is enabled; if 0, checkpointing due to high-water lag is disabled",
+	"the amount of time a changefeed's lagging (slowest) spans must lag "+
+		"behind its leading (fastest) spans before a span-level checkpoint "+
+		"to save leading span progress is written; if 0, span-level checkpoints "+
+		"due to lagging spans is disabled",
 	10*time.Minute,
 	settings.NonNegativeDuration,
-	settings.WithPublic)
+	settings.WithPublic,
+	settings.WithName("changefeed.span_checkpoint.lag_threshold"),
+)
 
-// FrontierCheckpointMaxBytes controls the maximum number of key bytes that will be added
-// to the checkpoint record.
+// SpanCheckpointMaxBytes controls the maximum number of key bytes that will be added
+// to a span-level checkpoint record.
 // Checkpoint record could be fairly large.
 // Assume we have a 10T table, and a 1/2G max range size: 20K spans.
 // Span frontier merges adjacent spans, so worst case we have 10K spans.
@@ -100,12 +108,13 @@ var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 //   - Assume we want to have at most 150MB worth of checkpoints in the job record.
 //
 // Therefore, we should write at most 6 MB of checkpoint/hour; OR, based on the default
-// FrontierCheckpointFrequency setting, 1 MB per checkpoint.
-var FrontierCheckpointMaxBytes = settings.RegisterByteSizeSetting(
+// SpanCheckpointInterval setting, 1 MB per checkpoint.
+var SpanCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_max_bytes",
-	"controls the maximum size of the checkpoint as a total size of key bytes",
+	"the maximum size of a changefeed span-level checkpoint as measured by the total size of key bytes",
 	1<<20, // 1 MiB
+	settings.WithName("changefeed.span_checkpoint.max_bytes"),
 )
 
 // ScanRequestLimit is the number of Scan requests that can run at once.

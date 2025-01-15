@@ -97,7 +97,7 @@ func (w KVWriter) Insert(
 		if kvTrace {
 			log.VEventf(ctx, 2, "CPut %s -> %s", kv.Key, kv.Value)
 		}
-		b.CPutAllowingIfNotExists(kv.Key, &kv.Value, nil /* expValue */)
+		b.CPut(kv.Key, &kv.Value, nil /* expValue */)
 	}
 	return nil
 }
