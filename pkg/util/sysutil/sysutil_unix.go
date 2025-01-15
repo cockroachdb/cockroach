@@ -11,10 +11,10 @@
 package sysutil
 
 import (
-	"fmt"
 	"os"
 	"syscall"
 
+	"github.com/cockroachdb/redact"
 	"golang.org/x/sys/unix"
 )
 
@@ -23,8 +23,8 @@ type StatT = syscall.Stat_t
 
 // ProcessIdentity returns a string describing the user and group that this
 // process is running as.
-func ProcessIdentity() string {
-	return fmt.Sprintf("uid %d euid %d gid %d egid %d",
+func ProcessIdentity() redact.RedactableString {
+	return redact.Sprintf("uid %d euid %d gid %d egid %d",
 		unix.Getuid(), unix.Geteuid(), unix.Getgid(), unix.Getegid())
 }
 
