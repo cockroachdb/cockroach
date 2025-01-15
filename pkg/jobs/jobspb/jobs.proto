@@ -1498,12 +1498,9 @@ message Payload {
   // PauseReason is used to describe the reason that the job is currently paused
   // or has been requested to be paused.
   string pause_reason = 28;
-  // RetriableExecutionFailureLog stores a history of retriable execution
-  // failures. These failures may occur in either the RUNNING or REVERTING
-  // status. A finite number of these entries will be kept, as governed by
-  // the jobs.execution_errors.max_entries cluster setting.
-  repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
+  reserved 32;
+  
   // CreationClusterID is populated at creation with the ClusterID, in case a
   // job resuming later, needs to use this information, e.g. to determine if it
   // has been restored into a different cluster, which might mean it should
