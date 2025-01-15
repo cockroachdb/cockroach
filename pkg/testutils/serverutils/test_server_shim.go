@@ -38,6 +38,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const defaultTestTenantName = roachpb.TenantName("test-tenant")
+
 // defaultTestTenantMessage is a message that is printed when a test is run
 // under cluster virtualization. This is useful for debugging test failures.
 //
@@ -317,6 +319,10 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	tcfg := params.DefaultTestTenant
 	if tcfg.TestTenantNoDecisionMade() {
 		return nil, errors.AssertionFailedf("programming error: DefaultTestTenant does not contain a decision\n(maybe call ShouldStartDefaultTestTenant?)")
+	}
+
+	if params.DefaultTenantName == "" {
+		params.DefaultTenantName = defaultTestTenantName
 	}
 
 	srv, err := srvFactoryImpl.New(params)

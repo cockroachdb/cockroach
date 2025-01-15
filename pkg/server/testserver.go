@@ -603,6 +603,7 @@ func (ts *testServer) startDefaultTestTenant(
 	}
 
 	params := base.TestTenantArgs{
+		TenantName: ts.params.DefaultTenantName,
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
 		TenantID:                  serverutils.TestTenantID(),
@@ -628,13 +629,17 @@ func (ts *testServer) startDefaultTestTenant(
 	if ts.params.Knobs.Server != nil {
 		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 		params.TestingKnobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
+		params.TestingKnobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle =
+			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle
+		params.TestingKnobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled =
+			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled
 	}
 	return ts.StartTenant(ctx, params)
 }
 
 func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcessTenantArgs {
 	args := base.TestSharedProcessTenantArgs{
-		TenantName:  "test-tenant",
+		TenantName:  ts.params.DefaultTenantName,
 		TenantID:    serverutils.TestTenantID(),
 		Knobs:       ts.params.Knobs,
 		UseDatabase: ts.params.UseDatabase,
@@ -645,6 +650,10 @@ func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcess
 	if ts.params.Knobs.Server != nil {
 		args.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 		args.Knobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
+		args.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle =
+			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle
+		args.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled =
+			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled
 	}
 	return args
 }
