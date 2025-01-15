@@ -56,7 +56,7 @@ SELECT
     FROM
       crdb_internal.tables
     WHERE
-      table_id = ANY (descriptor_ids)
+      table_id = ANY (SELECT key::INT FROM json_each(changefeed_details->'tables'))
   ) AS full_table_names,
   changefeed_details->'opts'->>'topics' AS topics,
   COALESCE(changefeed_details->'opts'->>'format','json') AS format

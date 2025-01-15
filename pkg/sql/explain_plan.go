@@ -126,7 +126,17 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			// For the JSON flag, we only want to emit the diagram JSON.
 			rows = []string{diagramJSON}
 		} else {
-			if err := emitExplain(params.ctx, ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
+			// We want to fully expand all post-queries in vanilla EXPLAIN. This
+			// should be safe because:
+			// 1. we created all separate exec.Factory objects (in
+			// execFactory.ConstructExplain and execbuilder.Builder.buildExplain),
+			// so there is no concern about factories being reset after the
+			// "main" optimizer plan was created.
+			// 2. the txn in which the EXPLAIN statement runs is still open
+			// since we're in the middle of the execution of the
+			// explainPlanNode.
+			const createPostQueryPlanIfMissing = true
+			if err := emitExplain(params.ctx, ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan, createPostQueryPlanIfMissing); err != nil {
 				return err
 			}
 			rows = ob.BuildStringRows()
@@ -177,6 +187,7 @@ func emitExplain(
 	evalCtx *eval.Context,
 	codec keys.SQLCodec,
 	explainPlan *explain.Plan,
+	createPostQueryPlanIfMissing bool,
 ) (err error) {
 	// Guard against bugs in the explain code.
 	defer func() {
@@ -226,7 +237,7 @@ func emitExplain(
 		return catalogkeys.PrettySpans(idx, spans, skip)
 	}
 
-	return explain.Emit(ctx, evalCtx, explainPlan, ob, spanFormatFn)
+	return explain.Emit(ctx, evalCtx, explainPlan, ob, spanFormatFn, createPostQueryPlanIfMissing)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
