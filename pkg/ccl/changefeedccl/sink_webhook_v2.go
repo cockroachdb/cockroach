@@ -393,6 +393,7 @@ func (jb *webhookJSONBuffer) Close() (SinkPayload, error) {
 	prefix := "{\"payload\":["
 	suffix := fmt.Sprintf("],\"length\":%d}", len(jb.messages))
 
+	// Grow all at once to avoid reallocations
 	buffer.Grow(len(prefix) + jb.numBytes /* msgs */ + len(jb.messages) /* commas */ + len(suffix))
 
 	buffer.WriteString(prefix)
