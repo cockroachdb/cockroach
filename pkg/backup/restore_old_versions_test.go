@@ -34,43 +34,25 @@ import (
 // TestRestoreOldVersions ensures that we can successfully restore tables
 // and databases exported by old version.
 //
-// The files being restored live in testdata and are all made from the same
-// input SQL which lives in <testdataBase>/create.sql.
-//
-// The SSTs were created via the following commands:
-//
-//	VERSION=...
-//	roachprod wipe local
-//	roachprod stage local release ${VERSION}
-//	roachprod start local
-//	# If the version is v1.0.7 then you need to enable enterprise with the
-//	# enterprise.enabled cluster setting.
-//	roachprod sql local:1 -- -e "$(cat pkg/backup/testdata/restore_old_versions/cluster/create.sql)"
-//	# Create an S3 bucket to store the backup.
-//	roachprod sql local:1 -- -e "BACKUP INTO 's3://<bucket-name>/${VERSION}?AWS_ACCESS_KEY_ID=<...>&AWS_SECRET_ACCESS_KEY=<...>'"
-//	# Then download the backup from s3 and plop the files into the appropriate
-//	# testdata directory.
+// The files being restored live in testdata and are all made by the
+// testdata/restore_old_versions/create-backups.sh script.
 func TestRestoreOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testdataBase := datapathutils.TestDataPath(t, "restore_old_versions")
 	var (
-		clusterDirs                    = testdataBase + "/cluster"
+		clusterDirs                    = testdataBase + "/cluster-restore"
 		systemRoleMembersDirs          = testdataBase + "/system-role-members-restore"
 		systemPrivilegesDirs           = testdataBase + "/system-privileges-restore"
 		systemDatabaseRoleSettingsDirs = testdataBase + "/system-database-role-settings-restore"
 		systemExternalConnectionsDirs  = testdataBase + "/system-external-connections-restore"
-		systemTenantSettingsDirs       = testdataBase + "/system-tenant-settings-version-override"
 	)
 
 	t.Run("cluster-restore", func(t *testing.T) {
 		dirs, err := os.ReadDir(clusterDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
-			// Skip over the `create.sql` file.
-			if !dir.IsDir() {
-				continue
-			}
+			require.True(t, dir.IsDir())
 			exportDir, err := filepath.Abs(filepath.Join(clusterDirs, dir.Name()))
 			require.NoError(t, err)
 
@@ -121,17 +103,6 @@ func TestRestoreOldVersions(t *testing.T) {
 			t.Run(dir.Name(), fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir))
 		}
 	})
-
-	t.Run("full cluster restore all-tenants version override is ignored", func(t *testing.T) {
-		dirs, err := os.ReadDir(systemTenantSettingsDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(systemTenantSettingsDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), fullClusterRestoreSystemTenantSettingsSkipVersionOverride(exportDir))
-		}
-	})
 }
 
 func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
@@ -179,12 +150,13 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 			{"information_schema", "node"},
 			{"pg_catalog", "node"},
 			{"pg_extension", "node"},
-			{"public", "admin"},
+			{"public", "root"},
 		})
 
 		sqlDB.CheckQueryResults(t, "SHOW USERS", [][]string{
 			{"admin", "", "{}"},
 			{"craig", "", "{}"},
+			{"roachprod", "", "{admin}"},
 			{"root", "", "{admin}"},
 		})
 
@@ -346,12 +318,13 @@ func fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir string) func(t *tes
 		// manifest version is always less than the MinSupportedVersion which will
 		// in turn fail the restore unless we pass in the specified option to elide
 		// the compatibility check.
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '/' IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
+			{"admin", "roachprod", "true", "2", "100"},
 			{"admin", "root", "true", "2", "1"},
-			{"testrole", "testuser1", "false", "100", "101"},
-			{"testrole", "testuser2", "true", "100", "102"},
+			{"testrole", "testuser1", "false", "101", "102"},
+			{"testrole", "testuser2", "true", "101", "103"},
 		})
 	}
 }
@@ -381,12 +354,12 @@ func fullClusterRestoreSystemPrivilegesWithoutIDs(exportDir string) func(t *test
 		// manifest version is always less than the MinSupportedVersion which will
 		// in turn fail the restore unless we pass in the specified option to elide
 		// the compatibility check.
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '/' IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.privileges", [][]string{
 			{"public", "/vtable/crdb_internal/tables", "{}", "{}", "4"},
-			{"testuser1", "/global/", "{VIEWACTIVITY}", "{}", "100"},
-			{"testuser2", "/global/", "{MODIFYCLUSTERSETTING}", "{}", "101"},
+			{"testuser1", "/global/", "{VIEWACTIVITY}", "{}", "101"},
+			{"testuser2", "/global/", "{MODIFYCLUSTERSETTING}", "{}", "102"},
 		})
 	}
 }
@@ -416,12 +389,12 @@ func fullClusterRestoreSystemDatabaseRoleSettingsWithoutIDs(exportDir string) fu
 		// manifest version is always less than the MinSupportedVersion which will
 		// in turn fail the restore unless we pass in the specified option to elide
 		// the compatibility check.
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '/' IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.database_role_settings", [][]string{
 			{"0", "", "{timezone=America/New_York}", "0"},
-			{"0", "testuser1", "{application_name=roachdb}", "100"},
-			{"0", "testuser2", "{disallow_full_table_scans=on}", "101"},
+			{"0", "testuser1", "{application_name=roachdb}", "101"},
+			{"0", "testuser2", "{disallow_full_table_scans=on}", "102"},
 		})
 	}
 }
@@ -451,13 +424,11 @@ func fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir string) fun
 		// manifest version is always less than the MinSupportedVersion which will
 		// in turn fail the restore unless we pass in the specified option to elide
 		// the compatibility check.
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '/' IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
-		sqlDB.CheckQueryResults(t, "SELECT * FROM system.external_connections", [][]string{
-			{"connection1", "2023-03-20 01:26:50.174781 +0000 +0000", "2023-03-20 01:26:50.174781 +0000 +0000", "STORAGE",
-				"\b\u0005\u0012\u0019\n\u0017userfile:///connection1", "testuser1", "100"},
-			{"connection2", "2023-03-20 01:26:51.223986 +0000 +0000", "2023-03-20 01:26:51.223986 +0000 +0000", "STORAGE",
-				"\b\u0005\u0012\u0019\n\u0017userfile:///connection2", "testuser2", "101"},
+		sqlDB.CheckQueryResults(t, "SELECT connection_name, connection_type, connection_details, owner FROM system.external_connections", [][]string{
+			{"connection1", "STORAGE", "\b\u0005\u0012\u0019\n\u0017userfile:///connection1", "testuser1"},
+			{"connection2", "STORAGE", "\b\u0005\u0012\u0019\n\u0017userfile:///connection2", "testuser2"},
 		})
 	}
 }
