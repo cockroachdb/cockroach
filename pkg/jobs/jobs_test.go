@@ -1740,7 +1740,6 @@ func TestShowJobs(t *testing.T) {
 		username          username.SQLUsername
 		err               string
 		created           time.Time
-		started           time.Time
 		finished          time.Time
 		modified          time.Time
 		fractionCompleted float32
@@ -1752,19 +1751,15 @@ func TestShowJobs(t *testing.T) {
 	const instanceID = 7
 	for _, in := range []row{
 		{
-			id:          42,
-			typ:         "SCHEMA CHANGE",
-			status:      "superfailed",
-			description: "failjob",
-			username:    username.MakeSQLUsernameFromPreNormalizedString("failure"),
-			err:         "boom",
-			// lib/pq returns time.Time objects with goofy locations, which breaks
-			// reflect.DeepEqual without this time.FixedZone song and dance.
-			// See: https://github.com/lib/pq/issues/329
-			created:           timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
-			started:           timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
-			finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
-			modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
+			id:                42,
+			typ:               "SCHEMA CHANGE",
+			status:            "superfailed",
+			description:       "failjob",
+			username:          username.MakeSQLUsernameFromPreNormalizedString("failure"),
+			err:               "boom",
+			created:           timeutil.Unix(1, 0),
+			finished:          timeutil.Unix(3, 0),
+			modified:          timeutil.Unix(4, 0),
 			fractionCompleted: 0.42,
 			coordinatorID:     instanceID,
 			details:           jobspb.SchemaChangeDetails{},
@@ -1776,13 +1771,9 @@ func TestShowJobs(t *testing.T) {
 			description: "persistent feed",
 			username:    username.MakeSQLUsernameFromPreNormalizedString("persistent"),
 			err:         "",
-			// lib/pq returns time.Time objects with goofy locations, which breaks
-			// reflect.DeepEqual without this time.FixedZone song and dance.
-			// See: https://github.com/lib/pq/issues/329
-			created:  timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
-			started:  timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
-			finished: timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
-			modified: timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
+			created:     timeutil.Unix(1, 0),
+			finished:    timeutil.Unix(3, 0),
+			modified:    timeutil.Unix(4, 0),
 			highWater: hlc.Timestamp{
 				WallTime: 1533143242000000,
 				Logical:  4,
@@ -1796,7 +1787,6 @@ func TestShowJobs(t *testing.T) {
 			// row struct directly.
 			inPayload, err := protoutil.Marshal(&jobspb.Payload{
 				Description:    in.description,
-				StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
 				FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
 				UsernameProto:  in.username.EncodeProto(),
 				Error:          in.err,
@@ -1823,9 +1813,12 @@ func TestShowJobs(t *testing.T) {
 				t.Fatal(err)
 			}
 			sqlDB.Exec(t,
-				`INSERT INTO system.jobs (id, status, created, claim_session_id, claim_instance_id) VALUES ($1, $2, $3, $4, $5)`,
-				in.id, in.status, in.created, session.ID().UnsafeBytes(), instanceID,
+				`INSERT INTO system.jobs (id, status, job_type, owner, description, created, finished, error_msg, claim_session_id, claim_instance_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+				in.id, in.status, in.typ, in.username.Normalized(), in.description, in.created, in.finished, in.err, session.ID().UnsafeBytes(), instanceID,
 			)
+			sqlDB.Exec(t, `INSERT INTO system.job_progress (job_id, written, resolved, fraction) VALUES ($1, $2, $3, $4)`, in.id, in.modified, in.highWater.AsOfSystemTime(), in.fractionCompleted)
+
+			// TODO(dt): delete these once sql.jobs.legacy_vtable.enabled is gone.
 			sqlDB.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, in.id, jobs.GetLegacyPayloadKey(), inPayload)
 			sqlDB.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, in.id, jobs.GetLegacyProgressKey(), inProgress)
 
@@ -1834,10 +1827,10 @@ func TestShowJobs(t *testing.T) {
 			var decimalHighWater *apd.Decimal
 			var resultUsername string
 			sqlDB.QueryRow(t, `
-      SELECT job_id, job_type, status, created, description, started, finished, modified,
+      SELECT job_id, job_type, status, created, description, finished, modified,
              fraction_completed, high_water_timestamp, user_name, ifnull(error, ''), coordinator_id
         FROM crdb_internal.jobs WHERE job_id = $1`, in.id).Scan(
-				&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
+				&out.id, &out.typ, &out.status, &out.created, &out.description,
 				&out.finished, &out.modified, &maybeFractionCompleted, &decimalHighWater, &resultUsername,
 				&out.err, &out.coordinatorID,
 			)
@@ -1864,14 +1857,19 @@ func TestShowJobs(t *testing.T) {
 			if out.created.Equal(in.created) {
 				out.created = in.created
 			}
-			if out.started.Equal(in.started) {
-				out.started = in.started
-			}
 			if out.finished.Equal(in.finished) {
 				out.finished = in.finished
 			}
 			if out.modified.Equal(in.modified) {
 				out.modified = in.modified
+			}
+
+			// Locations don't compare well so nuke them.
+			for _, ts := range []*time.Time{&in.created, &in.finished, &in.modified} {
+				*ts = ts.UTC()
+			}
+			for _, ts := range []*time.Time{&out.created, &out.finished, &out.modified} {
+				*ts = ts.UTC()
 			}
 
 			if !reflect.DeepEqual(in, out) {
