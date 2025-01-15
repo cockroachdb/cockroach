@@ -26,6 +26,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/version",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
