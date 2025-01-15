@@ -12,7 +12,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,11 +43,11 @@ func main() {
 				os.Exit(1)
 			}
 		}
-		if err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		if err := filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if !*dirsOnly || info.IsDir() {
+			if !*dirsOnly || d.IsDir() {
 				matches := codeOwners.Match(path)
 				var aliases []string
 				for _, match := range matches {
