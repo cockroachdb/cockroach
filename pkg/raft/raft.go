@@ -1210,6 +1210,9 @@ func (r *raft) tickElection() {
 func (r *raft) tickHeartbeat() {
 	assertTrue(r.state == pb.StateLeader, "tickHeartbeat called by non-leader")
 
+	// Compute the LeadSupportUntil on every tick.
+	r.fortificationTracker.ComputeLeadSupportUntil(r.state)
+
 	// Check if we intended to step down. If so, step down if it's safe to do so.
 	// Otherwise, continue doing leader things.
 	if r.fortificationTracker.SteppingDown() && r.fortificationTracker.CanDefortify() {
@@ -1841,9 +1844,6 @@ func (r *raft) logMsgHigherTerm(m pb.Message, suffix redact.SafeString) {
 type stepFunc func(r *raft, m pb.Message) error
 
 func stepLeader(r *raft, m pb.Message) error {
-	// Compute the LeadSupportUntil on every tick.
-	r.fortificationTracker.ComputeLeadSupportUntil(r.state)
-
 	// These message types do not require any progress for m.From.
 	switch m.Type {
 	case pb.MsgBeat:
