@@ -118,6 +118,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/Ranges":
 		return a.authRanges(tenID)
 
+	case "/cockroach.server.serverpb.Status/NetworkConnectivity":
+		return a.capabilitiesAuthorizer.HasProcessDebugCapability(ctx, tenID)
+
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)
 

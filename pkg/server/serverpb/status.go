@@ -90,6 +90,7 @@ type TenantStatusServer interface {
 	// download remote files. A method that mutates state should not be on the
 	// status server and so in the long run we should move it.
 	DownloadSpan(ctx context.Context, request *DownloadSpanRequest) (*DownloadSpanResponse, error)
+	NetworkConnectivity(context.Context, *NetworkConnectivityRequest) (*NetworkConnectivityResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is
