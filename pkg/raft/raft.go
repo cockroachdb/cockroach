@@ -923,6 +923,7 @@ func (r *raft) bcastDeFortify() {
 	assertTrue(r.fortificationTracker.CanDefortify(), "unsafe to de-fortify")
 
 	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
+		fmt.Printf("Sending defortify to %v\n", id)
 		r.sendDeFortify(id)
 	})
 }
@@ -1174,6 +1175,7 @@ func (r *raft) tickElection() {
 	r.heartbeatElapsed++
 	if r.heartbeatElapsed >= r.heartbeatTimeout {
 		r.heartbeatElapsed = 0
+
 		if r.shouldBcastDeFortify() {
 			r.bcastDeFortify()
 		}
