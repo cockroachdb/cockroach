@@ -92,12 +92,6 @@ var useBulkOracle = settings.RegisterBoolSetting(
 	"randomize the selection of which replica backs up each range",
 	true)
 
-var elidePrefixes = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.backup.elide_common_prefix.enabled",
-	"remove common prefixes from backup file",
-	true)
-
 func countRows(raw kvpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
 	res := roachpb.RowCount{DataSize: raw.DataSize}
 	for id, count := range raw.EntryCounts {
@@ -469,10 +463,6 @@ func backup(
 
 	// Write a `BACKUP_METADATA` file along with SSTs for all the alloc heavy
 	// fields elided from the `BACKUP_MANIFEST`.
-	//
-	// TODO(adityamaru,rhu713): Once backup/restore switches from writing and
-	// reading backup manifests to `metadata.sst` we can stop writing the slim
-	// manifest.
 	if backupinfo.WriteMetadataWithExternalSSTsEnabled.Get(&settings.SV) {
 		if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
 			&kmsEnv, backupManifest); err != nil {
@@ -483,17 +473,6 @@ func backup(
 	statsTable := getTableStatsForBackup(ctx, statsCache, backupManifest.Descriptors)
 	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
 		return roachpb.RowCount{}, 0, err
-	}
-
-	if backupinfo.WriteMetadataSST.Get(&settings.SV) {
-		if err := backupinfo.WriteBackupMetadataSST(ctx, defaultStore, encryption, &kmsEnv, backupManifest,
-			statsTable.Statistics); err != nil {
-			err = errors.Wrap(err, "writing forward-compat metadata sst")
-			if !build.IsRelease() {
-				return roachpb.RowCount{}, 0, err
-			}
-			log.Warningf(ctx, "%+v", err)
-		}
 	}
 
 	return backupManifest.EntryCounts, numBackupInstances, nil
@@ -1672,7 +1651,7 @@ func createBackupManifest(
 	elide := execinfrapb.ElidePrefix_None
 	if len(prevBackups) > 0 {
 		elide = prevBackups[0].ElidedPrefix
-	} else if elidePrefixes.Get(&execCfg.Settings.SV) {
+	} else {
 		if len(tenants) > 0 {
 			elide = execinfrapb.ElidePrefix_Tenant
 		} else {

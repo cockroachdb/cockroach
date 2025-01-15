@@ -45,7 +45,7 @@ exports_files([
 # gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto
 # gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto
 # gazelle:resolve proto proto google/api/annotations.proto @go_googleapis//google/api:annotations_proto
-# gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto//googleapis/api/annotations:go_default_library
+# gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto_googleapis_api//annotations:go_default_library
 # gazelle:resolve proto io/prometheus/client/metrics.proto @com_github_prometheus_client_model//io/prometheus/client:io_prometheus_client_proto
 # gazelle:resolve proto go io/prometheus/client/metrics.proto @com_github_prometheus_client_model//go
 # gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
@@ -57,6 +57,8 @@ exports_files([
 # gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
 # gazelle:resolve go google.golang.org/genproto/googleapis/cloud/kms/v1 @org_golang_google_genproto//googleapis/cloud/kms/v1:kms
 # gazelle:resolve go google.golang.org/genproto/googleapis/devtools/build/v1 @org_golang_google_genproto//googleapis/devtools/build/v1:build
+# gazelle:resolve go google.golang.org/genproto/googleapis/api/httpbody @org_golang_google_genproto_googleapis_api//httpbody:go_default_library
+# gazelle:resolve go google.golang.org/genproto/googleapis/api/annotations @org_golang_google_genproto_googleapis_api//annotations:go_default_library
 
 # See pkg/kv/kvpb/gen/BUILD.bazel for more details.
 #

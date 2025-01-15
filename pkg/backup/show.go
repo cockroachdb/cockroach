@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudcheck"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -45,8 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -130,53 +126,7 @@ func (m manifestInfoReader) showBackup(
 	return nil
 }
 
-type metadataSSTInfoReader struct{}
-
 var _ backupInfoReader = manifestInfoReader{}
-
-func (m metadataSSTInfoReader) header() colinfo.ResultColumns {
-	return colinfo.ResultColumns{
-		{Name: "file", Typ: types.String},
-		{Name: "key", Typ: types.String},
-		{Name: "detail", Typ: types.Jsonb},
-	}
-}
-
-func (m metadataSSTInfoReader) showBackup(
-	ctx context.Context,
-	_ *mon.BoundAccount,
-	mkStore cloud.ExternalStorageFromURIFactory,
-	info backupInfo,
-	user username.SQLUsername,
-	kmsEnv cloud.KMSEnv,
-	resultsCh chan<- tree.Datums,
-) error {
-	filename := backupinfo.MetadataSSTName
-	push := func(_, readable string, value json.JSON) error {
-		val := tree.DNull
-		if value != nil {
-			val = tree.NewDJSON(value)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case resultsCh <- []tree.Datum{tree.NewDString(filename), tree.NewDString(readable), val}:
-			return nil
-		}
-	}
-	for _, uri := range info.defaultURIs {
-		store, err := mkStore(ctx, uri, user)
-		if err != nil {
-			return errors.Wrapf(err, "creating external store")
-		}
-		defer store.Close()
-		if err := backupinfo.DebugDumpMetadataSST(ctx, store, filename, info.enc,
-			kmsEnv, push); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 func showBackupTypeCheck(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -208,9 +158,6 @@ func showBackupTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
-	if backup.Details == tree.BackupConnectionTest {
-		return true, cloudcheck.Header, nil
-	}
 	infoReader := getBackupInfoReader(p, backup)
 	return true, infoReader.header(), nil
 }
@@ -224,45 +171,6 @@ func showBackupPlanHook(
 		return nil, nil, false, nil
 	}
 	exprEval := p.ExprEvaluator("SHOW BACKUP")
-
-	// TODO(dt): find move this to its own hook.
-	if showStmt.Details == tree.BackupConnectionTest {
-		loc, err := exprEval.String(ctx, showStmt.Path)
-		if err != nil {
-			return nil, nil, false, err
-		}
-		var params cloudcheck.Params
-		if showStmt.Options.CheckConnectionTransferSize != nil {
-			transferSizeStr, err := exprEval.String(ctx, showStmt.Options.CheckConnectionTransferSize)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			parsed, err := humanizeutil.ParseBytes(transferSizeStr)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			params.TransferSize = parsed
-		}
-		if showStmt.Options.CheckConnectionDuration != nil {
-			durationStr, err := exprEval.String(ctx, showStmt.Options.CheckConnectionDuration)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			parsed, err := time.ParseDuration(durationStr)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			params.MinDuration = parsed
-		}
-		if showStmt.Options.CheckConnectionConcurrency != nil {
-			concurrency, err := exprEval.Int(ctx, showStmt.Options.CheckConnectionConcurrency)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			params.Concurrency = concurrency
-		}
-		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, params)
-	}
 
 	if showStmt.Path == nil && showStmt.InCollection != nil {
 		collection, err := exprEval.StringArray(
@@ -319,7 +227,7 @@ func showBackupPlanHook(
 					"https://www.cockroachlabs.com/docs/stable/show-backup.html"))
 		}
 
-		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, dest); err != nil {
+		if err := sql.CheckDestinationPrivileges(ctx, p, dest); err != nil {
 			return err
 		}
 
@@ -545,9 +453,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 
 func getBackupInfoReader(p sql.PlanHookState, showStmt *tree.ShowBackup) backupInfoReader {
 	var infoReader backupInfoReader
-	if showStmt.Options.DebugMetadataSST {
-		infoReader = metadataSSTInfoReader{}
-	} else if showStmt.Options.AsJson {
+	if showStmt.Options.AsJson {
 		infoReader = manifestInfoReader{shower: jsonShower}
 	} else {
 		var shower backupShower
@@ -604,18 +510,10 @@ func checkBackupFiles(
 		// Check metadata files. Note: we do not check locality aware backup
 		// metadata files ( prefixed with `backupPartitionDescriptorPrefix`) , as
 		// they're validated in resolveBackupManifests.
-		for _, metaFile := range []string{
-			backupinfo.FileInfoPath,
-			backupinfo.MetadataSSTName,
-			backupbase.BackupManifestName + backupinfo.BackupManifestChecksumSuffix} {
-			if _, err := defaultStore.Size(ctx, metaFile); err != nil {
-				if metaFile == backupinfo.FileInfoPath || metaFile == backupinfo.MetadataSSTName {
-					log.Warningf(ctx, `%v not found. This is only relevant if kv.bulkio.write_metadata_sst.enabled = true`, metaFile)
-					continue
-				}
-				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
-					info.defaultURIs[layer], metaFile)
-			}
+		metaFile := backupbase.BackupManifestName + backupinfo.BackupManifestChecksumSuffix
+		if _, err := defaultStore.Size(ctx, metaFile); err != nil {
+			return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
+				info.defaultURIs[layer], metaFile)
 		}
 		// Check stat files.
 		for _, statFile := range info.manifests[layer].StatisticsFilenames {
@@ -1517,7 +1415,7 @@ func showBackupsInCollectionPlanHook(
 	ctx context.Context, collection []string, showStmt *tree.ShowBackup, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 
-	if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, collection); err != nil {
+	if err := sql.CheckDestinationPrivileges(ctx, p, collection); err != nil {
 		return nil, nil, false, err
 	}
 

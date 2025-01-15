@@ -617,12 +617,6 @@ func (rn *RawNode) SparseStatus() SparseStatus {
 	return getSparseStatus(rn.raft)
 }
 
-// LeadSupportStatus returns a LeadSupportStatus. Notably, it only includes
-// leader support information.
-func (rn *RawNode) LeadSupportStatus() LeadSupportStatus {
-	return getLeadSupportStatus(rn.raft)
-}
-
 // ProgressType indicates the type of replica a Progress corresponds to.
 type ProgressType byte
 

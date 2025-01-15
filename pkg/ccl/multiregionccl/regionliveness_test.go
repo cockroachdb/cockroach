@@ -281,7 +281,9 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 				keyToBlockMu.Lock()
 				keyPrefix := keyToBlock
 				keyToBlockMu.Unlock()
-				if keyPrefix == nil || !deleteRequest.Key[:len(keyPrefix)].Equal(keyPrefix) {
+				isPrefixToDelReq := len(deleteRequest.Key) >= len(keyPrefix) &&
+					!deleteRequest.Key[:len(keyPrefix)].Equal(keyPrefix)
+				if keyPrefix == nil || isPrefixToDelReq {
 					return nil
 				}
 				recoveryStart <- struct{}{}

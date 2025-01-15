@@ -1302,21 +1302,40 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
-				code := pgerror.GetPGCode(err)
 				// Skip errors that may come up during SQL execution. If the SQL query
 				// didn't fail with these errors, it's likely because the query was built in
 				// a way that did not have to execute on the row that caused the error, but
 				// the CDC query did.
-				switch code {
-				case pgcode.ConfigFile,
-					pgcode.DatetimeFieldOverflow,
-					pgcode.InvalidEscapeCharacter,
-					pgcode.InvalidEscapeSequence,
-					pgcode.InvalidParameterValue,
-					pgcode.InvalidRegularExpression:
-					t.Logf("Skipping statement %s because it encountered pgerror %s: %s", createStmt, code, err)
+				// Since we get the error that caused the changefeed job to
+				// fail from scraping the job status and creating a new
+				// error, we unfortunately don't have the pgcode and have to
+				// rely on known strings.
+				validPgErrs := []string{
+					"cannot subtract infinite dates",
+					"regexp compilation failed",
+					"invalid regular expression",
+					"error parsing GeoJSON",
+					"error parsing EWKT",
+					"geometry type is unsupported",
+					"should be of length",
+					"dwithin distance cannot be less than zero",
+					"parameter has to be of type Point",
+					"expected LineString",
+					"no locations to init GEOS",
+				}
+				containsKnownPgErr := func(e error) (interface{}, bool) {
+					for _, v := range validPgErrs {
+						if strings.Contains(e.Error(), v) {
+							return nil, true
+						}
+					}
+					return nil, false
+				}
+				if _, contains := errors.If(err, containsKnownPgErr); contains {
+					t.Logf("Skipping statement %s because it encountered pgerror %s", createStmt, err)
 					continue
 				}
+
 				t.Fatal(err)
 			}
 			numNonTrivialTestRuns++
@@ -2317,11 +2336,11 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 
 	// Checkpoint progress frequently, allow a large enough checkpoint, and
 	// reduce the lag threshold to allow lag checkpointing to trigger
-	changefeedbase.FrontierCheckpointFrequency.Override(
+	changefeedbase.SpanCheckpointInterval.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
-	changefeedbase.FrontierCheckpointMaxBytes.Override(
+	changefeedbase.SpanCheckpointMaxBytes.Override(
 		context.Background(), &s.ClusterSettings().SV, 100<<20)
-	changefeedbase.FrontierHighwaterLagCheckpointThreshold.Override(
+	changefeedbase.SpanCheckpointLagThreshold.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
 
 	// We'll start changefeed with the cursor.
@@ -2503,9 +2522,9 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		require.NoError(t, jobFeed.Pause())
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
-		changefeedbase.FrontierCheckpointFrequency.Override(
+		changefeedbase.SpanCheckpointInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
-		changefeedbase.FrontierCheckpointMaxBytes.Override(
+		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
 		var tableSpan roachpb.Span
@@ -7322,9 +7341,9 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		}
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
-		changefeedbase.FrontierCheckpointFrequency.Override(
+		changefeedbase.SpanCheckpointInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
-		changefeedbase.FrontierCheckpointMaxBytes.Override(
+		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
@@ -7473,9 +7492,9 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(25)
 			return nil
 		}
-		changefeedbase.FrontierCheckpointFrequency.Override(
+		changefeedbase.SpanCheckpointInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
-		changefeedbase.FrontierCheckpointMaxBytes.Override(
+		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 100<<20)
 
 		emittedCount := 0
@@ -7537,7 +7556,7 @@ func TestCheckpointFrequency(t *testing.T) {
 	// If we also specify minimum amount of time between updates, we would skip updates
 	// until enough time has elapsed.
 	minAdvance := 10 * time.Minute
-	changefeedbase.MinHighWaterMarkCheckpointAdvance.Override(ctx, &js.settings.SV, minAdvance)
+	changefeedbase.ResolvedTimestampMinUpdateInterval.Override(ctx, &js.settings.SV, minAdvance)
 
 	require.False(t, js.canCheckpointHighWatermark(frontierAdvanced))
 	ts.Advance(minAdvance)
@@ -9917,7 +9936,7 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		// Checkpoint and trigger potential protected timestamp updates frequently.
 		// Make the protected timestamp lag long enough that it shouldn't be
 		// immediately updated after a restart.
-		changefeedbase.FrontierCheckpointFrequency.Override(
+		changefeedbase.SpanCheckpointInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
 		changefeedbase.ProtectTimestampInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)

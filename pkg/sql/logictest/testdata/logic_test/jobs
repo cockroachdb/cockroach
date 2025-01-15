@@ -2,7 +2,7 @@
 statement ok
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 
-statement ok;
+statement ok
 SET use_declarative_schema_changer = 'off';
 
 # These test verify that a user's job are visible via

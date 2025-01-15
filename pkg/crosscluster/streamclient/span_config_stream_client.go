@@ -7,11 +7,9 @@ package streamclient
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -23,13 +21,13 @@ import (
 // SpanConfigClient provides methods to interact with a stream of span
 // config updates of a specific application tenant.
 type SpanConfigClient interface {
-	Dialer
-
 	// SetupSpanConfigsStream creates a stream for the span configs
 	// that apply to the passed in tenant, and returns the subscriptions the
 	// client can subscribe to. No protected timestamp or job is persisted to the
 	// source cluster.
 	SetupSpanConfigsStream(tenant roachpb.TenantName) (Subscription, error)
+
+	Close(ctx context.Context) error
 }
 
 type spanConfigClient struct {
@@ -41,57 +39,39 @@ type spanConfigClient struct {
 var _ SpanConfigClient = &spanConfigClient{}
 
 func NewSpanConfigStreamClient(
-	ctx context.Context, remote *url.URL, db isql.DB, opts ...Option,
+	ctx context.Context, remoteUri ClusterUri, opts ...Option,
 ) (SpanConfigClient, error) {
-
-	if remote.Scheme == "external" {
-		if db == nil {
-			return nil, errors.AssertionFailedf("nil db handle can't be used to dereference external URI")
-		}
-		addr, err := lookupExternalConnection(ctx, remote.Host, db)
-		if err != nil {
-			return nil, err
-		}
-		url, err := addr.URL()
-		if err != nil {
-			return nil, err
-		}
-		return NewSpanConfigStreamClient(ctx, url, db, opts...)
-	}
+	remote := remoteUri.URL()
 
 	options := processOptions(opts)
 	conn, config, err := newPGConnForClient(ctx, remote, options)
 	if err != nil {
 		return nil, err
 	}
-	return &spanConfigClient{
+	client := &spanConfigClient{
 		pgxConfig: config,
 		srcConn:   conn,
-	}, nil
+	}
+
+	if err := client.dial(ctx); err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 // GetFirstActiveSpanConfigClient iterates through each provided stream address
 // and returns the first client it's able to successfully Dial.
 func GetFirstActiveSpanConfigClient(
-	ctx context.Context, streamAddresses []string, db isql.DB, opts ...Option,
+	ctx context.Context, streamAddresses []ClusterUri, opts ...Option,
 ) (SpanConfigClient, error) {
-
-	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (Dialer, error) {
-		streamURL, err := address.URL()
-		if err != nil {
-			return nil, err
-		}
-		return NewSpanConfigStreamClient(ctx, streamURL, db, opts...)
+	newClient := func(ctx context.Context, sourceUri ClusterUri) (SpanConfigClient, error) {
+		return NewSpanConfigStreamClient(ctx, sourceUri, opts...)
 	}
-	dialer, err := getFirstDialer(ctx, streamAddresses, newClient)
-	if err != nil {
-		return nil, err
-	}
-	return dialer.(SpanConfigClient), err
+	return getFirstClient(ctx, streamAddresses, newClient)
 }
 
-// Dial implements Client interface.
-func (p *spanConfigClient) Dial(ctx context.Context) error {
+func (p *spanConfigClient) dial(ctx context.Context) error {
 	err := p.srcConn.Ping(ctx)
 	return errors.Wrap(err, "failed to dial client")
 }

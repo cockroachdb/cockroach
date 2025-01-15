@@ -673,6 +673,13 @@ func TestTenantLogic_distsql_tenant(
 	runLogicTest(t, "distsql_tenant")
 }
 
+func TestTenantLogic_do(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "do")
+}
+
 func TestTenantLogic_drop_database(
 	t *testing.T,
 ) {

@@ -72,6 +72,7 @@ type leasingMetrics struct {
 	longWaitForOneVersionsActive               *metric.Gauge
 	longWaitForNoVersionsActive                *metric.Gauge
 	longTwoVersionInvariantViolationWaitActive *metric.Gauge
+	longWaitForInitialVersionActive            *metric.Gauge
 }
 
 type leaseFields struct {

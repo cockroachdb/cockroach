@@ -1,0 +1,2 @@
+check_external_connection_stmt ::=
+	'CHECK' 'EXTERNAL' 'CONNECTION' string_or_placeholder opt_with_check_external_connection_options_list

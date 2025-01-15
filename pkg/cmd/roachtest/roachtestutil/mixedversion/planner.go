@@ -55,6 +55,9 @@ type (
 		// isLocal indicates if this test plan is generated for a `local`
 		// run.
 		isLocal bool
+		// length denotes the total number of steps in this test plan.
+		// It is computed in `assignIDs`.
+		length int
 	}
 
 	// serviceSetup encapsulates the steps to setup a service in the
@@ -742,7 +745,7 @@ func (p *testPlanner) upgradeSteps(
 	p.setStage(service, stage)
 	nodes := service.Descriptor.Nodes
 	msg := fmt.Sprintf("upgrade nodes %v from %q to %q", nodes, from.String(), to.String())
-	return p.changeVersionSteps(service, from, to, msg, scheduleHooks, virtualClusterRunning)
+	return p.changeVersionSteps(service, to, msg, scheduleHooks, virtualClusterRunning)
 }
 
 func (p *testPlanner) downgradeSteps(
@@ -753,7 +756,7 @@ func (p *testPlanner) downgradeSteps(
 	p.setStage(service, RollbackUpgradeStage)
 	nodes := p.currentContext.System.Descriptor.Nodes
 	msg := fmt.Sprintf("downgrade nodes %v from %q to %q", nodes, from.String(), to.String())
-	return p.changeVersionSteps(service, from, to, msg, scheduleHooks, virtualClusterRunning)
+	return p.changeVersionSteps(service, to, msg, scheduleHooks, virtualClusterRunning)
 }
 
 // changeVersionSteps returns the sequence of steps to be performed
@@ -764,7 +767,7 @@ func (p *testPlanner) downgradeSteps(
 // upgrade/downgrade process.
 func (p *testPlanner) changeVersionSteps(
 	service *ServiceContext,
-	from, to *clusterupgrade.Version,
+	to *clusterupgrade.Version,
 	label string,
 	scheduleHooks, virtualClusterRunning bool,
 ) []testStep {
@@ -1504,6 +1507,8 @@ func (plan *TestPlan) assignIDs() {
 		ss.ID = stepID
 		return []testStep{ss}
 	})
+	// Record the length, which corresponds to the last stepID assigned.
+	plan.length = currentID
 }
 
 // allUpgrades returns a list of all upgrades encoded in this test

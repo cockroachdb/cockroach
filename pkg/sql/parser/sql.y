@@ -747,6 +747,9 @@ func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
 func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
   return u.val.(*tree.ShowBackupOptions)
 }
+func (u *sqlSymUnion) checkExternalConnectionOptions() *tree.CheckExternalConnectionOptions {
+  return u.val.(*tree.CheckExternalConnectionOptions)
+}
 func (u *sqlSymUnion) restoreOptions() *tree.RestoreOptions {
   return u.val.(*tree.RestoreOptions)
 }
@@ -940,6 +943,12 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 func (u *sqlSymUnion) indexType() tree.IndexType {
   return u.val.(tree.IndexType)
 }
+func (u *sqlSymUnion) doBlockOptions() tree.DoBlockOptions {
+    return u.val.(tree.DoBlockOptions)
+}
+func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
+    return u.val.(tree.DoBlockOption)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -963,7 +972,7 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AS_JSON AT_AT
 %token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY AVOID_FULL_SCAN
 
-%token <str> BACKUP BACKUPS BACKWARD BATCH BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
+%token <str> BACKUP BACKUPS BACKWARD BATCH BEFORE BEGIN BETWEEN BIDIRECTIONAL BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY BYPASSRLS
 
@@ -977,7 +986,7 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CURSOR CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_IDS DEC DEBUG_DUMP_METADATA_SST DECIMAL DEFAULT DEFAULTS DEFINER
+%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_IDS DEC DECIMAL DEFAULT DEFAULTS DEFINER
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
 %token <str> DISABLE DISCARD DISTANCE DISTINCT DO DOMAIN DOUBLE DROP
 
@@ -1060,7 +1069,7 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %token <str> TRUNCATE TRUSTED TYPE TYPES
 %token <str> TRACING
 
-%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
+%token <str> UNBOUNDED UNCOMMITTED UNIDIRECTIONAL UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
 %token <str> UPDATE UPDATES_CLUSTER_MONITORING_METRICS UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VECTOR VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
@@ -1263,13 +1272,17 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %type <tree.Statement> create_trigger_stmt
 %type <tree.Statement> create_policy_stmt
 
-%type <tree.LogicalReplicationResources> logical_replication_resources, logical_replication_resources_list
+%type <tree.Statement> check_stmt
+%type <tree.Statement> check_external_connection_stmt
+
+%type <tree.LogicalReplicationResources> logical_replication_resources logical_replication_resources_list
 %type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list opt_logical_replication_create_table_options logical_replication_create_table_options logical_replication_create_table_options_list
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
 %type <*tree.CreateStatsOptions> create_stats_option_list
 %type <*tree.CreateStatsOptions> create_stats_option
+%type <*tree.CheckExternalConnectionOptions> opt_with_check_external_connection_options_list check_external_connection_options_list check_external_connection_options
 
 %type <tree.Statement> create_type_stmt
 %type <tree.Statement> delete_stmt
@@ -1300,6 +1313,7 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %type <tree.Statement> explainable_stmt
 %type <tree.Statement> row_source_extension_stmt
 %type <tree.Statement> copy_to_stmt
+%type <tree.Statement> do_stmt
 %type <tree.Statement> export_stmt
 %type <tree.Statement> execute_stmt
 %type <tree.Statement> deallocate_stmt
@@ -1416,7 +1430,6 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 
 %type <tree.Statement> reindex_stmt
 
-%type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
@@ -1424,7 +1437,7 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options opt_with_show_backup_connection_options_list show_backup_connection_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -1770,6 +1783,8 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 %type <tree.RoutineOption> create_routine_opt_item common_routine_opt_item
 %type <tree.RoutineParamClass> routine_param_class
 %type <*tree.UnresolvedObjectName> routine_create_name
+%type <tree.DoBlockOptions> do_stmt_opt_list
+%type <tree.DoBlockOption> do_stmt_opt_item
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
@@ -1887,6 +1902,7 @@ stmt_without_legacy_transaction:
 | execute_stmt               // EXTEND WITH HELP: EXECUTE
 | deallocate_stmt            // EXTEND WITH HELP: DEALLOCATE
 | discard_stmt               // EXTEND WITH HELP: DISCARD
+| do_stmt                    // EXTEND WITH HELP: DO
 | grant_stmt                 // EXTEND WITH HELP: GRANT
 | prepare_stmt               // EXTEND WITH HELP: PREPARE
 | revoke_stmt                // EXTEND WITH HELP: REVOKE
@@ -3811,6 +3827,64 @@ create_external_connection_stmt:
 	}
  | CREATE EXTERNAL CONNECTION error // SHOW HELP: CREATE EXTERNAL CONNECTION
 
+// %Help: CHECK EXTERNAL CONNECTION - check the status of an external connection
+// %Category: Misc
+// %Text:
+// CREATE EXTERNAL CONNECTION <uri> [WITH <options>]
+//
+// Uri:
+//   Uri for the external connection.
+check_external_connection_stmt:
+	CHECK EXTERNAL CONNECTION string_or_placeholder opt_with_check_external_connection_options_list
+	{
+	$$.val = &tree.CheckExternalConnection{
+		URI: $4.expr(),
+		Options: *($5.checkExternalConnectionOptions()),
+	}
+	}
+ | CHECK EXTERNAL CONNECTION error // SHOW HELP: CHECK EXTERNAL CONNECTION
+
+opt_with_check_external_connection_options_list:
+  WITH check_external_connection_options_list
+  {
+    $$.val = $2.checkExternalConnectionOptions()
+  }
+| WITH OPTIONS '(' check_external_connection_options_list ')'
+  {
+    $$.val = $4.checkExternalConnectionOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.CheckExternalConnectionOptions{}
+  }
+
+check_external_connection_options_list:
+  // Require at least one option
+  check_external_connection_options
+  {
+    $$.val = $1.checkExternalConnectionOptions()
+  }
+| check_external_connection_options_list ',' check_external_connection_options
+  {
+    if err := $1.checkExternalConnectionOptions().CombineWith($3.checkExternalConnectionOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+check_external_connection_options:
+  TRANSFER '=' string_or_placeholder
+ {
+  $$.val = &tree.CheckExternalConnectionOptions{TransferSize: $3.expr()}
+ }
+ | TIME '=' string_or_placeholder
+ {
+  $$.val = &tree.CheckExternalConnectionOptions{Duration: $3.expr()}
+ }
+ | CONCURRENTLY '=' a_expr
+ {
+  $$.val = &tree.CheckExternalConnectionOptions{Concurrency: $3.expr()}
+ }
+
 // %Help: DROP EXTERNAL CONNECTION - drop an existing external connection
 // %Category: Misc
 // %Text:
@@ -3821,9 +3895,9 @@ create_external_connection_stmt:
 drop_external_connection_stmt:
 	DROP EXTERNAL CONNECTION string_or_placeholder
 	{
-      $$.val = &tree.DropExternalConnection{
-            ConnectionLabel: $4.expr(),
-      }
+	$$.val = &tree.DropExternalConnection{
+	    ConnectionLabel: $4.expr(),
+	}
 	}
 	| DROP EXTERNAL CONNECTION error // SHOW HELP: DROP EXTERNAL CONNECTION
 
@@ -4146,16 +4220,6 @@ string_or_placeholder_list:
 | string_or_placeholder_list ',' string_or_placeholder
   {
     $$.val = append($1.exprs(), $3.expr())
-  }
-
-opt_incremental:
-  INCREMENTAL FROM string_or_placeholder_list
-  {
-    $$.val = $3.exprs()
-  }
-| /* EMPTY */
-  {
-    $$.val = tree.Exprs(nil)
   }
 
 kv_option:
@@ -4642,11 +4706,19 @@ create_stmt:
 | create_unsupported     {}
 | CREATE error           // SHOW HELP: CREATE
 
+// %Help: CHECK
+// %Category: Group
+// %Text:
+// CHECK EXTERNAL CONNECTION
+check_stmt:
+  check_external_connection_stmt // EXTEND WITH HELP: CHECK EXTERNAL CONNECTION
+| CHECK error // SHOW HELP: CHECK
+
 // %Help: CREATE LOGICAL REPLICATION STREAM - create a new logical replication stream
 // %Category: Experimental
 // %Text:
-// CREATE LOGICAL REPLICATION STREAM 
-//  FROM <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name> 
+// CREATE LOGICAL REPLICATION STREAM
+//  FROM <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
 //  ON 'stream_uri'
 //  INTO <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
 //  [WITH
@@ -4675,7 +4747,7 @@ create_logical_replication_stream_stmt:
       PGURL: $8.expr(),
       CreateTable: true,
       Options: *$9.logicalReplicationOptions(),
-    } 
+    }
   }
 | CREATE LOGICAL REPLICATION STREAM error // SHOW HELP: CREATE LOGICAL REPLICATION STREAM
 
@@ -4712,7 +4784,7 @@ logical_replication_resources_list:
   {
     $$.val = tree.LogicalReplicationResources{
       Tables: append($1.logicalReplicationResources().Tables, $3.unresolvedObjectName().ToUnresolvedName()),
-    } 
+    }
   }
 
 // Optional logical replication options.
@@ -4784,7 +4856,7 @@ logical_replication_options:
 | DEFAULT FUNCTION '=' string_or_placeholder
   {
     $$.val = &tree.LogicalReplicationOptions{DefaultFunction: $4.expr()}
-  } 
+  }
 | FUNCTION db_object_name FOR TABLE db_object_name
   {
      $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.UnresolvedName]tree.RoutineName{*$5.unresolvedObjectName().ToUnresolvedName():$2.unresolvedObjectName().ToRoutineName()}}
@@ -4795,12 +4867,18 @@ logical_replication_options:
   }
 | SKIP SCHEMA CHECK
   {
-    $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)} 
+    $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)}
   }
 | LABEL '=' string_or_placeholder
   {
     $$.val = &tree.LogicalReplicationOptions{MetricsLabel: $3.expr()}
   }
+| PARENT '=' string_or_placeholder
+  /* SKIP DOC */
+  {
+    $$.val = &tree.LogicalReplicationOptions{ParentID: $3.expr()}
+  }
+
 
 logical_replication_create_table_options:
   MODE '=' string_or_placeholder
@@ -4815,6 +4893,15 @@ logical_replication_create_table_options:
   {
     $$.val = &tree.LogicalReplicationOptions{MetricsLabel: $3.expr()}
   }
+| UNIDIRECTIONAL
+  {
+   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)} 
+  }
+| BIDIRECTIONAL ON string_or_placeholder
+  {
+   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()} 
+  }
+
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
@@ -4845,7 +4932,7 @@ create_virtual_cluster_stmt:
     $$.val = &tree.CreateTenantFromReplication{
       TenantSpec: $3.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
-      ReplicationSourceAddress: $9.expr(),
+      ReplicationSourceConnUri: $9.expr(),
       Options: *$10.tenantReplicationOptions(),
     }
   }
@@ -4856,7 +4943,7 @@ create_virtual_cluster_stmt:
       IfNotExists: true,
       TenantSpec: $6.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $10.expr()},
-      ReplicationSourceAddress: $12.expr(),
+      ReplicationSourceConnUri: $12.expr(),
       Options: *$13.tenantReplicationOptions(),
     }
   }
@@ -4957,7 +5044,7 @@ alter_policy_stmt:
     /* SKIP DOC */
     $$.val = &tree.AlterPolicy{
       PolicyName: tree.Name($3),
-      TableName: $5.unresolvedObjectName().ToTableName(),
+      TableName: $5.unresolvedObjectName(),
       NewPolicyName: tree.Name($8),
     }
   }
@@ -4966,7 +5053,7 @@ alter_policy_stmt:
     /* SKIP DOC */
     $$.val = &tree.AlterPolicy{
       PolicyName: tree.Name($3),
-      TableName: $5.unresolvedObjectName().ToTableName(),
+      TableName: $5.unresolvedObjectName(),
       Roles: $6.roleSpecList(),
       Exprs: $7.policyExpressions(),
     }
@@ -4990,7 +5077,7 @@ create_policy_stmt:
     /* SKIP DOC */
     $$.val = &tree.CreatePolicy{
       PolicyName: tree.Name($3),
-      TableName: $5.unresolvedObjectName().ToTableName(),
+      TableName: $5.unresolvedObjectName(),
       Type: $6.policyType(),
       Cmd: $7.policyCommand(),
       Roles: $8.roleSpecList(),
@@ -5489,6 +5576,45 @@ opt_link_sym:
   }
 | /* Empty */
   {
+  }
+
+// %Help: DO - execute an anonymous code block
+// %Category: Misc
+// %Text:
+// DO [LANGUAGE lang_name] code
+do_stmt:
+  DO do_stmt_opt_list
+  {
+    doBlockBody, err := ParseDoBlockFn($2.doBlockOptions())
+    if err != nil {
+      return setErrNoDetails(sqllex, err)
+    }
+    $$.val = &tree.DoBlock{Code: doBlockBody}
+  }
+| DO error // SHOW HELP: DO
+
+do_stmt_opt_list:
+  do_stmt_opt_item
+  {
+    $$.val = tree.DoBlockOptions{$1.doBlockOption()}
+  }
+| do_stmt_opt_list do_stmt_opt_item
+  {
+    $$.val = append($1.doBlockOptions(), $2.doBlockOption())
+  }
+
+do_stmt_opt_item:
+  SCONST
+  {
+    $$.val = tree.RoutineBodyStr($1)
+  }
+| LANGUAGE non_reserved_word_or_sconst
+  {
+    lang, err := tree.AsRoutineLanguage($2)
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = lang
   }
 
 // %Help: DROP FUNCTION - remove a function
@@ -6689,12 +6815,14 @@ explainable_stmt:
 | comment_stmt
 | execute_stmt
 | call_stmt
+| do_stmt
 
 preparable_stmt:
   alter_stmt     // help texts in sub-rule
 | backup_stmt    // EXTEND WITH HELP: BACKUP
 | cancel_stmt    // help texts in sub-rule
 | create_stmt    // help texts in sub-rule
+| check_stmt	 // help texts in sub-rule
 | delete_stmt    // EXTEND WITH HELP: DELETE
 | drop_stmt      // help texts in sub-rule
 | explain_stmt   // EXTEND WITH HELP: EXPLAIN
@@ -7745,7 +7873,7 @@ alter_virtual_cluster_replication_stmt:
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
-      ReplicationSourceAddress: $9.expr(),
+      ReplicationSourceConnUri: $9.expr(),
       Options: *$10.tenantReplicationOptions(),
     }
   }
@@ -8610,13 +8738,11 @@ show_backup_stmt:
 		setErr(sqllex, errors.New("The `SHOW BACKUP VALIDATE` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP VALIDATE FROM <subdirectory> IN <collectionURI>`."))
     return helpWith(sqllex, "SHOW BACKUP")
 	}
-| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list error
+| SHOW BACKUP CONNECTION string_or_placeholder error
 	{
-		$$.val = &tree.ShowBackup{
-			Details:  tree.BackupConnectionTest,
-			Path:    $4.expr(),
-			Options: *$5.showBackupOptions(),
-		}
+		/* SKIP DOC */
+		setErr(sqllex, errors.New("The `SHOW BACKUP CONNECTION` syntax is no longer supported. Please use `CHECK EXTERNAL CONNECTION`."))
+		return helpWith(sqllex, "CHECK EXTERNAL CONNECTION")
 	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
@@ -8713,51 +8839,6 @@ show_backup_options:
  | ENCRYPTION_INFO_DIR '=' string_or_placeholder
  {
  $$.val = &tree.ShowBackupOptions{EncryptionInfoDir: $3.expr()}
- }
- | DEBUG_DUMP_METADATA_SST
- {
- $$.val = &tree.ShowBackupOptions{DebugMetadataSST: true}
- }
-
-opt_with_show_backup_connection_options_list:
-  WITH show_backup_connection_options_list
-  {
-    $$.val = $2.showBackupOptions()
-  }
-| WITH OPTIONS '(' show_backup_connection_options_list ')'
-  {
-    $$.val = $4.showBackupOptions()
-  }
-| /* EMPTY */
-  {
-    $$.val = &tree.ShowBackupOptions{}
-  }
-
-show_backup_connection_options_list:
-  // Require at least one option
-  show_backup_connection_options
-  {
-    $$.val = $1.showBackupOptions()
-  }
-| show_backup_connection_options_list ',' show_backup_connection_options
-  {
-    if err := $1.showBackupOptions().CombineWith($3.showBackupOptions()); err != nil {
-      return setErr(sqllex, err)
-    }
-  }
-
-show_backup_connection_options:
-  TRANSFER '=' string_or_placeholder
- {
-  $$.val = &tree.ShowBackupOptions{CheckConnectionTransferSize: $3.expr()}
- }
- | TIME '=' string_or_placeholder
- {
-  $$.val = &tree.ShowBackupOptions{CheckConnectionDuration: $3.expr()}
- }
- | CONCURRENTLY '=' a_expr
- {
-  $$.val = &tree.ShowBackupOptions{CheckConnectionConcurrency: $3.expr()}
  }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
@@ -17959,6 +18040,7 @@ unreserved_keyword:
 | BATCH
 | BEFORE
 | BEGIN
+| BIDIRECTIONAL
 | BINARY
 | BUCKET_COUNT
 | BUNDLE
@@ -18013,7 +18095,6 @@ unreserved_keyword:
 | DAY
 | DEALLOCATE
 | DEBUG_IDS
-| DEBUG_DUMP_METADATA_SST
 | DECLARE
 | DELETE
 | DEFAULTS
@@ -18385,6 +18466,7 @@ unreserved_keyword:
 | TYPE
 | TYPES
 | THROTTLING
+| UNIDIRECTIONAL
 | UNBOUNDED
 | UNCOMMITTED
 | UNKNOWN
@@ -18462,6 +18544,7 @@ bare_label_keywords:
 | BEFORE
 | BEGIN
 | BETWEEN
+| BIDIRECTIONAL
 | BIGINT
 | BINARY
 | BIT
@@ -18536,7 +18619,6 @@ bare_label_keywords:
 | DATABASE
 | DATABASES
 | DEALLOCATE
-| DEBUG_DUMP_METADATA_SST
 | DEBUG_IDS
 | DEC
 | DECIMAL
@@ -18990,6 +19072,7 @@ bare_label_keywords:
 | TYPES
 | UNBOUNDED
 | UNCOMMITTED
+| UNIDIRECTIONAL
 | UNIQUE
 | UNKNOWN
 | UNLISTEN

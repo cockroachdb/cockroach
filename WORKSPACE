@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "094b2d9b480eb508bd352914a085c5901d0f3c4520833a12b9197394a80619c7",
-    strip_prefix = "cockroachdb-rules_go-548c13b",
+    sha256 = "fc43f42615292c9c3ca6dc211b19ce45986562b0efbca3635e83a70eb011e293",
+    strip_prefix = "cockroachdb-rules_go-59db5f5",
     urls = [
-        # cockroachdb/rules_go as of 548c13bf30e840418237a12cb5fbd0be391278bd
+        # cockroachdb/rules_go as of 59db5f5a4a65d6671dd62dd4aea42757b09a1fa3
         # (upstream release-0.50 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-529-g548c13b.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-530-g59db5f5.tar.gz",
     ],
 )
 
@@ -635,8 +635,8 @@ load("//build:pgo.bzl", "pgo_profile")
 
 pgo_profile(
     name = "pgo_profile",
-    url = "https://storage.googleapis.com/cockroach-profiles/20241218165031.pprof",
-    sha256 = "976ceda1deda3494db56cbd95e7e2399d432f2d02c45da04d22b4e6b8eafe72d",
+    url = "https://storage.googleapis.com/cockroach-profiles/20250109191252.pprof",
+    sha256 = "d9e541652962eaddc7dbc1fabfe9695296362d1fdfca261658f754a9383742bf",
 )
 
 # Download and register the FIPS enabled Go toolchain at the end to avoid toolchain conflicts for gazelle.

@@ -31,10 +31,12 @@ import (
 const (
 	resourceName    = "instance-configs"
 	resourceVersion = "v1"
-)
 
-// SupportedPromProjects are the projects supported for prometheus target
-var SupportedPromProjects = map[string]struct{}{gce.DefaultProject(): {}}
+	// ErrorMessage is the generic error message used to return an error
+	// when a requests to the prometheus helper service yields a non 200 status.
+	ErrorMessage       = ErrorMessagePrefix + ` on url %s and error %s`
+	ErrorMessagePrefix = "request failed with status %d"
+)
 
 // The URL for the Prometheus registration service. An empty string means that the
 // Prometheus integration is disabled. Should be accessed through
@@ -58,20 +60,29 @@ type PromClient struct {
 	// newTokenSource is the token generator source.
 	newTokenSource func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (
 		oauth2.TokenSource, error)
+
+	// supportedPromProviders are the providers supported for prometheus target
+	supportedPromProviders map[string]struct{}
+
+	// supportedPromProjects are the projects supported for prometheus target
+	supportedPromProjects map[string]struct{}
 }
 
-// DefaultPromClient is the default instance of PromClient. This instance should
-// be used unless custom configuration is needed.
-var DefaultPromClient = NewPromClient()
+// IsNotFoundError returns true if the error is a 404 error.
+func IsNotFoundError(err error) bool {
+	return strings.Contains(err.Error(), fmt.Sprintf(ErrorMessagePrefix, http.StatusNotFound))
+}
 
 // NewPromClient returns a new instance of PromClient
 func NewPromClient() *PromClient {
 	return &PromClient{
-		promUrl:        promRegistrationUrl,
-		disabled:       promRegistrationUrl == "",
-		httpPut:        httputil.Put,
-		httpDelete:     httputil.Delete,
-		newTokenSource: idtoken.NewTokenSource,
+		promUrl:                promRegistrationUrl,
+		disabled:               promRegistrationUrl == "",
+		httpPut:                httputil.Put,
+		httpDelete:             httputil.Delete,
+		newTokenSource:         idtoken.NewTokenSource,
+		supportedPromProviders: map[string]struct{}{gce.ProviderName: {}},
+		supportedPromProjects:  map[string]struct{}{gce.DefaultProject(): {}},
 	}
 }
 
@@ -129,8 +140,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 		if err != nil {
 			return err
 		}
-		return errors.Newf("request failed with status %d and error %s", response.StatusCode,
-			string(body))
+		return errors.Newf(ErrorMessage, response.StatusCode, url, string(body))
 	}
 	return nil
 }
@@ -166,14 +176,27 @@ func (c *PromClient) DeleteClusterConfig(
 		if err != nil {
 			return err
 		}
-		return errors.Newf("request failed with url %s status %d and error %s", url, response.StatusCode,
-			string(body))
+		return errors.Newf(ErrorMessage, response.StatusCode, url, string(body))
 	}
 	return nil
 }
 
 func getUrl(promUrl, clusterName string) string {
 	return fmt.Sprintf("%s/%s/%s/%s", promUrl, resourceVersion, resourceName, clusterName)
+}
+
+// IsSupportedNodeProvider returns true if the provider is supported
+// for prometheus target.
+func (c *PromClient) IsSupportedNodeProvider(provider string) bool {
+	_, ok := c.supportedPromProviders[provider]
+	return ok
+}
+
+// IsSupportedPromProject returns true if the project is supported
+// for prometheus target.
+func (c *PromClient) IsSupportedPromProject(project string) bool {
+	_, ok := c.supportedPromProjects[project]
+	return ok
 }
 
 // CCParams are the params for the cluster configs

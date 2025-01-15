@@ -1,0 +1,57 @@
+setup
+SET enable_row_level_security = true;
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY);
+CREATE USER fred;
+CREATE POLICY "first policy" on defaultdb.foo AS PERMISSIVE FOR SELECT TO fred USING (i > 0) WITH CHECK (i % 2 = 0);
+CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT USING (false);
+CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred WITH CHECK (i < 0);
+CREATE POLICY "fourth policy" on defaultdb.foo AS PERMISSIVE TO PUBLIC,CURRENT_SESSION;
+----
+
+build
+DROP POLICY "first policy" on defaultdb.foo;
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 1}, ABSENT], PUBLIC]
+  {command: 2, policyId: 1, tableId: 104, type: 1}
+- [[PolicyName:{DescID: 104, Name: first policy, PolicyID: 1}, ABSENT], PUBLIC]
+  {name: first policy, policyId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+
+build
+DROP POLICY "second policy" on defaultdb.foo CASCADE;
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 2}, ABSENT], PUBLIC]
+  {command: 3, policyId: 2, tableId: 104, type: 2}
+- [[PolicyName:{DescID: 104, Name: second policy, PolicyID: 2}, ABSENT], PUBLIC]
+  {name: second policy, policyId: 2, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+
+build
+DROP POLICY "third policy" on defaultdb.foo RESTRICT;
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 3}, ABSENT], PUBLIC]
+  {command: 5, policyId: 3, tableId: 104, type: 1}
+- [[PolicyName:{DescID: 104, Name: third policy, PolicyID: 3}, ABSENT], PUBLIC]
+  {name: third policy, policyId: 3, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+
+build
+DROP POLICY "fourth policy" on defaultdb.foo;
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 4}, ABSENT], PUBLIC]
+  {command: 1, policyId: 4, tableId: 104, type: 1}
+- [[PolicyName:{DescID: 104, Name: fourth policy, PolicyID: 4}, ABSENT], PUBLIC]
+  {name: fourth policy, policyId: 4, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}

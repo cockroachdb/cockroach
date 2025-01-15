@@ -6,6 +6,7 @@
 package backupsink
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -81,4 +82,23 @@ func generateUniqueSSTName(nodeID base.SQLInstanceID) string {
 	// common file/bucket browse UIs.
 	return fmt.Sprintf("data/%d.sst",
 		builtins.GenerateUniqueInt(builtins.ProcessUniqueID(nodeID)))
+}
+
+// isContiguousSpan returns true if the first span ends where the second span begins.
+func isContiguousSpan(first, second roachpb.Span) bool {
+	return first.EndKey.Equal(second.Key)
+}
+
+// sameElidedPrefix returns true if the elided prefix of a and b are equal based
+// on the given mode.
+func sameElidedPrefix(a, b roachpb.Key, mode execinfrapb.ElidePrefix) (bool, error) {
+	prefixA, err := ElidedPrefix(a, mode)
+	if err != nil {
+		return false, err
+	}
+	prefixB, err := ElidedPrefix(b, mode)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(prefixA, prefixB), nil
 }

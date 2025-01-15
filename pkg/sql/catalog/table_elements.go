@@ -234,7 +234,7 @@ type Index interface {
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 	UseDeletePreservingEncoding() bool
-	// ForcePut forces all writes to use Put rather than CPut or InitPut.
+	// ForcePut forces all writes to use Put rather than CPut.
 	//
 	// Users of this options should take great care as it
 	// effectively mean unique constraints are not respected.
@@ -1174,6 +1174,19 @@ func FindTriggerByID(tbl TableDescriptor, id descpb.TriggerID) *descpb.TriggerDe
 	for i := range triggers {
 		if triggers[i].ID == id {
 			return &triggers[i]
+		}
+	}
+	return nil
+}
+
+// FindPolicyByID traverses the slice returned by the GetPolicies method on the
+// table descriptor and returns the first policy that matches the desired ID,
+// or nil if none was found.
+func FindPolicyByID(tbl TableDescriptor, id descpb.PolicyID) *descpb.PolicyDescriptor {
+	policies := tbl.GetPolicies()
+	for i := range policies {
+		if policies[i].ID == id {
+			return &policies[i]
 		}
 	}
 	return nil

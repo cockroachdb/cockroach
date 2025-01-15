@@ -72,9 +72,8 @@ message EncryptionInfo {
 }
 
 message StreamIngestionDetails {
-  // StreamAddress locates the stream. It enables the client to find the
-  // addresses of the stream's partitions.
-  string stream_address = 1;
+	// SourceClusterConnUri is the user-provided address of the source cluster.
+  string source_cluster_conn_uri = 1;
 
   uint64 stream_id = 4 [(gogoproto.customname) = "StreamID"];
 
@@ -163,8 +162,9 @@ message StreamIngestionProgress {
   // Checkpoint stores a set of resolved spans denoting completed ingestion progress
   StreamIngestionCheckpoint checkpoint = 4 [(gogoproto.nullable) = false];
 
-  // StreamAddresses are the source cluster addresses read from the latest topology.
-  repeated string stream_addresses = 5;
+	// PartitionPgUris are the source cluster addresses read from the latest
+	// topology.
+  repeated string partition_conn_uris = 5;
 
   reserved 3;
 
@@ -211,9 +211,8 @@ message HistoryRetentionProgress {
 }
 
 message LogicalReplicationDetails {
-  // SourceClusterConnStr is the user-provided address of the source
-  // cluster.
-  string source_cluster_conn_str = 1;
+	// SourceClusterConnUri is the user-provided address of the source cluster.
+  string source_cluster_conn_uri = 1;
 
   // TableNames is the original list of source table names given by the user.
   repeated string table_names = 2;
@@ -273,12 +272,27 @@ message LogicalReplicationDetails {
   }
 
   Discard discard = 11;
-
+  
+  // CreateTable is true if the job should create the table(s) in the
+  // destination.
   bool create_table = 12;
-
+  
+  // IngestedExternalCatalog is the catalog written to the destination cluster
+  // when CreateTable is true.
   sql.catalog.externalcatalog.externalpb.ExternalCatalog ingested_external_catalog = 13  [(gogoproto.nullable) = false];
+  
+  // ReverseStreamCommand is CREATE LDR command the coordinator will issue once
+  // the offline initial scan completes, but before the tables are made public.
+  string reverse_stream_command = 14;
+  
+  // ParentID is set on the reverse stream job in automatic bidirectional
+  // replication, and is equal to the job ID that issued the reverse stream
+  // command.
+  int64 parent_id = 15 [(gogoproto.customname) = "ParentID"];
 
-  // Next ID 14;
+  string command = 16;
+
+  // Next ID: 17.
 }
 
 message LogicalReplicationProgress {
@@ -292,10 +306,13 @@ message LogicalReplicationProgress {
   // Checkpoint stores a set of resolved spans denoting completed ingestion progress
   StreamIngestionCheckpoint checkpoint = 6 [(gogoproto.nullable) = false];
 
-  // StreamAddresses are the source cluster addresses read from the latest topology.
-  repeated string stream_addresses = 8;
+	// PartitionConnUris are the source cluster addresses read from the latest
+	// topology.
+  repeated string partition_conn_uris = 8;
 
   bool published_new_tables = 9;
+
+  bool started_reverse_stream = 10;
 }
 
 message StreamReplicationDetails {
@@ -1481,12 +1498,9 @@ message Payload {
   // PauseReason is used to describe the reason that the job is currently paused
   // or has been requested to be paused.
   string pause_reason = 28;
-  // RetriableExecutionFailureLog stores a history of retriable execution
-  // failures. These failures may occur in either the RUNNING or REVERTING
-  // status. A finite number of these entries will be kept, as governed by
-  // the jobs.execution_errors.max_entries cluster setting.
-  repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
+  reserved 32;
+  
   // CreationClusterID is populated at creation with the ClusterID, in case a
   // job resuming later, needs to use this information, e.g. to determine if it
   // has been restored into a different cluster, which might mean it should

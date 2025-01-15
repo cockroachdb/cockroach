@@ -86,8 +86,6 @@ const (
 	// BackupValidateDetails identifies a SHOW BACKUP VALIDATION
 	// statement.
 	BackupValidateDetails
-	// BackupConnectionTest identifies a SHOW BACKUP CONNECTION statement
-	BackupConnectionTest
 )
 
 // TODO (msbutler): 22.2 after removing old style show backup syntax, rename
@@ -120,8 +118,6 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("FILES ")
 	case BackupSchemaDetails:
 		ctx.WriteString("SCHEMAS ")
-	case BackupConnectionTest:
-		ctx.WriteString("CONNECTION ")
 	}
 
 	if node.From {
@@ -161,7 +157,6 @@ type ShowBackupOptions struct {
 	// `ENCRYPTION-INFO` file necessary to decode the incremental backup lives in
 	// the full backup dir.
 	EncryptionInfoDir Expr
-	DebugMetadataSST  bool
 
 	CheckConnectionTransferSize Expr
 	CheckConnectionDuration     Expr
@@ -224,10 +219,6 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("skip size")
 	}
-	if o.DebugMetadataSST {
-		maybeAddSep()
-		ctx.WriteString("debug_dump_metadata_sst")
-	}
 
 	// The following are only used in connection-check SHOW.
 	if o.CheckConnectionConcurrency != nil {
@@ -257,7 +248,6 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.Privileges == options.Privileges &&
 		o.SkipSize == options.SkipSize &&
-		o.DebugMetadataSST == options.DebugMetadataSST &&
 		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
 		o.CheckConnectionDuration == options.CheckConnectionDuration &&
@@ -327,11 +317,6 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 		return err
 	}
 	o.SkipSize, err = combineBools(o.SkipSize, other.SkipSize, "skip size")
-	if err != nil {
-		return err
-	}
-	o.DebugMetadataSST, err = combineBools(o.DebugMetadataSST, other.DebugMetadataSST,
-		"debug_dump_metadata_sst")
 	if err != nil {
 		return err
 	}

@@ -771,9 +771,6 @@ func (sc *SchemaChanger) checkForMVCCCompliantAddIndexMutations(
 // If the txn that queued the schema changer did not commit, this will be a
 // no-op, as we'll fail to find the job for our mutation in the jobs registry.
 func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
-	sc.metrics.RunningSchemaChanges.Inc(1)
-	defer sc.metrics.RunningSchemaChanges.Dec(1)
-
 	ctx = logtags.AddTags(ctx, sc.execLogTags())
 
 	// Pull out the requested descriptor.
@@ -2747,7 +2744,6 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			scErr = sc.exec(ctx)
 			switch {
 			case scErr == nil:
-				sc.metrics.Successes.Inc(1)
 				return nil
 			case errors.Is(scErr, catalog.ErrDescriptorNotFound):
 				// If the table descriptor for the ID can't be found, we assume that
@@ -2764,16 +2760,12 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 				// Check if the error is on a allowlist of errors we should retry on,
 				// including the schema change not having the first mutation in line.
 				log.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
-				sc.metrics.RetryErrors.Inc(1)
 				if IsConstraintError(scErr) {
 					telemetry.Inc(sc.metrics.ConstraintErrors)
 				} else {
 					telemetry.Inc(sc.metrics.UncategorizedErrors)
 				}
 			default:
-				if ctx.Err() == nil {
-					sc.metrics.PermanentErrors.Inc(1)
-				}
 				if IsConstraintError(scErr) {
 					telemetry.Inc(sc.metrics.ConstraintErrors)
 				} else {
@@ -3356,4 +3348,21 @@ func (p *planner) CanCreateCrossDBSequenceRef() error {
 		)
 	}
 	return nil
+}
+
+// UpdateDescriptorCount updates our sql.schema_changer.object_count gauge with
+// a fresh count of objects in the system.descriptor table.
+func UpdateDescriptorCount(
+	ctx context.Context, execCfg *ExecutorConfig, metric *SchemaChangerMetrics,
+) error {
+	return DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		row, err := txn.QueryRow(ctx, "sql-schema-changer-object-count", txn.KV(),
+			`SELECT count(*) FROM system.descriptor`)
+		if err != nil {
+			return err
+		}
+		count := *row[0].(*tree.DInt)
+		metric.ObjectCount.Update(int64(count))
+		return nil
+	})
 }

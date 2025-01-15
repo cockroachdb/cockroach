@@ -98,7 +98,7 @@ func registerAcceptance(r registry.Registry) {
 			{
 				name:          "validate-system-schema-after-version-upgrade",
 				fn:            runValidateSystemSchemaAfterVersionUpgrade,
-				timeout:       30 * time.Minute,
+				timeout:       60 * time.Minute,
 				defaultLeases: true,
 				randomized:    true,
 				numNodes:      1,

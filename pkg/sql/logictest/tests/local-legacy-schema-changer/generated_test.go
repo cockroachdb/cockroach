@@ -626,6 +626,13 @@ func TestLogic_distsql_srfs(
 	runLogicTest(t, "distsql_srfs")
 }
 
+func TestLogic_do(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "do")
+}
+
 func TestLogic_drop_database(
 	t *testing.T,
 ) {
@@ -1562,13 +1569,6 @@ func TestLogic_routine_schema_change(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "routine_schema_change")
-}
-
-func TestLogic_row_level_security(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "row_level_security")
 }
 
 func TestLogic_row_level_ttl(

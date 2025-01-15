@@ -149,7 +149,7 @@ func fetchTableDescriptors(
 	) error {
 		targetDescs = make([]catalog.TableDescriptor, 0, targets.NumUniqueTables())
 		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
-			return err
+			return errors.Wrapf(err, "setting timestamp for table descriptor fetch")
 		}
 		// Note that all targets are currently guaranteed to have a Table ID
 		// and lie within the primary index span. Deduplication is important
@@ -157,7 +157,7 @@ func fetchTableDescriptors(
 		return targets.EachTableID(func(id catid.DescID) error {
 			tableDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "fetching table descriptor %d", id)
 			}
 			targetDescs = append(targetDescs, tableDesc)
 			return nil

@@ -101,7 +101,6 @@ func (r *Replica) Metrics(
 		clusterNodes:             clusterNodes,
 		desc:                     r.shMu.state.Desc,
 		raftStatus:               r.raftSparseStatusRLocked(),
-		leadSupportStatus:        r.raftLeadSupportStatusRLocked(),
 		now:                      now,
 		leaseStatus:              r.leaseStatusAtRLocked(ctx, now),
 		storeID:                  r.store.StoreID(),
@@ -134,7 +133,6 @@ type calcReplicaMetricsInput struct {
 	clusterNodes             int
 	desc                     *roachpb.RangeDescriptor
 	raftStatus               *raft.SparseStatus
-	leadSupportStatus        raft.LeadSupportStatus
 	now                      hlc.ClockTimestamp
 	leaseStatus              kvserverpb.LeaseStatus
 	storeID                  roachpb.StoreID
@@ -190,7 +188,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 	if leader {
 		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.vitalityMap)
 		leaderPausedFollowerCount = int64(len(d.paused))
-		leaderNotFortified = d.leadSupportStatus.LeadSupportUntil.Less(d.now.ToTimestamp())
+		leaderNotFortified = d.raftStatus.LeadSupportUntil.Less(d.now.ToTimestamp())
 	}
 
 	return ReplicaMetrics{

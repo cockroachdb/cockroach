@@ -20,6 +20,7 @@ import (
 
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -2395,23 +2396,6 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	if runningStatusOrNil != nil {
 		job.RunningStatus = *runningStatusOrNil
 	}
-	if executionFailuresOrNil != nil {
-		failures, err := jobs.ParseRetriableExecutionErrorLogFromJSON([]byte(*executionFailuresOrNil))
-		if err != nil {
-			return errors.Wrap(err, "parse")
-		}
-		job.ExecutionFailures = make([]*serverpb.JobResponse_ExecutionFailure, len(failures))
-		for i, f := range failures {
-			start := time.UnixMicro(f.ExecutionStartMicros)
-			end := time.UnixMicro(f.ExecutionEndMicros)
-			job.ExecutionFailures[i] = &serverpb.JobResponse_ExecutionFailure{
-				Status: f.Status,
-				Start:  &start,
-				End:    &end,
-				Error:  f.TruncatedError,
-			}
-		}
-	}
 	if coordinatorOrNil != nil {
 		job.CoordinatorID = *coordinatorOrNil
 	}
@@ -2473,7 +2457,49 @@ func jobHelper(
 		return nil, err
 	}
 
+	// On 25.1+, add any recorded job messages to the response as well.
+	if sqlServer.cfg.Settings.Version.IsActive(ctx, clusterversion.V25_1) {
+		job.Messages = fetchJobMessages(ctx, job.ID, userName, sqlServer)
+	}
 	return &job, nil
+}
+
+func fetchJobMessages(
+	ctx context.Context, jobID int64, user username.SQLUsername, sqlServer *SQLServer,
+) (messages []serverpb.JobMessage) {
+	const msgQuery = `SELECT kind, written, message FROM system.job_message WHERE job_id = $1 ORDER BY written DESC`
+	it, err := sqlServer.internalExecutor.QueryIteratorEx(ctx, "admin-job-messages", nil,
+		sessiondata.InternalExecutorOverride{User: user},
+		msgQuery,
+		jobID,
+	)
+
+	if err != nil {
+		return []serverpb.JobMessage{{Kind: "error", Timestamp: timeutil.Now(), Message: err.Error()}}
+	}
+
+	defer func() {
+		if err := it.Close(); err != nil {
+			messages = []serverpb.JobMessage{{Kind: "error", Timestamp: timeutil.Now(), Message: err.Error()}}
+		}
+	}()
+
+	for {
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return []serverpb.JobMessage{{Kind: "error", Timestamp: timeutil.Now(), Message: err.Error()}}
+		}
+		if !ok {
+			break
+		}
+		row := it.Cur()
+		messages = append(messages, serverpb.JobMessage{
+			Kind:      string(tree.MustBeDStringOrDNull(row[0])),
+			Timestamp: tree.MustBeDTimestampTZ(row[1]).Time,
+			Message:   string(tree.MustBeDStringOrDNull(row[2])),
+		})
+	}
+	return messages
 }
 
 func (s *adminServer) Locations(

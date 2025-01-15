@@ -38,7 +38,7 @@ message SetupFlowRequest {
   // Version of distsqlrun protocol; a server accepts a certain range of
   // versions, up to its own version. See server.go for more details.
   optional uint32 version = 5 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "DistSQLVersion"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/execversion.V"];
 
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 

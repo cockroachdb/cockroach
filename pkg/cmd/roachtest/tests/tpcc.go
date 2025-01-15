@@ -442,7 +442,9 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
-		mixedversion.MaxUpgrades(3),
+		// We limit the total number of plan steps to 70, which is roughly 80% of all plan lengths.
+		// See #138014 for more details.
+		mixedversion.MaxNumPlanSteps(70),
 	)
 
 	tenantFeaturesEnabled := make(chan struct{})

@@ -43,6 +43,7 @@ type replicationStreamManagerImpl struct {
 	resolver  resolver.SchemaResolver
 	txn       descs.Txn
 	sessionID clusterunique.ID
+	knobs     *sql.StreamingTestingKnobs
 }
 
 // StartReplicationStream implements streaming.ReplicationStreamManager interface.
@@ -83,7 +84,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	mutableTableDescs := make([]*tabledesc.Mutable, 0, len(req.TableNames))
 	tableIDs := make([]uint32, 0, len(req.TableNames))
 
-	externalCatalog, err := externalcatalog.ExtractExternalCatalog(ctx, r.resolver, r.txn, r.txn.Descriptors(), req.TableNames...)
+	externalCatalog, err := externalcatalog.ExtractExternalCatalog(ctx, r.resolver, r.txn, r.txn.Descriptors(), req.AllowOffline, req.TableNames...)
 	if err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
@@ -215,7 +216,7 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 		}
 	}
 
-	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans, useStreaksInLDR.Get(&r.evalCtx.Settings.SV))
+	spec, err := r.buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans, useStreaksInLDR.Get(&r.evalCtx.Settings.SV))
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +272,7 @@ func (r *replicationStreamManagerImpl) GetPhysicalReplicationStreamSpec(
 	if err := r.checkLicense(); err != nil {
 		return nil, err
 	}
-	return getPhysicalReplicationStreamSpec(ctx, r.evalCtx, r.txn, streamID)
+	return r.getPhysicalReplicationStreamSpec(ctx, r.evalCtx, r.txn, streamID)
 }
 
 // CompleteReplicationStream implements ReplicationStreamManager interface.
@@ -290,7 +291,7 @@ func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 	if err := r.checkLicense(); err != nil {
 		return nil, err
 	}
-	return setupSpanConfigsStream(ctx, r.evalCtx, r.txn, tenantName)
+	return r.setupSpanConfigsStream(ctx, r.evalCtx, r.txn, tenantName)
 }
 
 func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
@@ -351,7 +352,11 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 		privilege.REPLICATION); err != nil {
 		return nil, err
 	}
-	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, sessionID: sessionID, resolver: sc}, nil
+
+	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+	knobs := execCfg.StreamingTestingKnobs
+
+	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, sessionID: sessionID, resolver: sc, knobs: knobs}, nil
 }
 
 func (r *replicationStreamManagerImpl) checkLicense() error {

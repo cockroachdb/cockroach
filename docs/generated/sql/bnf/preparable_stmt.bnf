@@ -3,6 +3,7 @@ preparable_stmt ::=
 	| backup_stmt
 	| cancel_stmt
 	| create_stmt
+	| check_stmt
 	| delete_stmt
 	| drop_stmt
 	| explain_stmt

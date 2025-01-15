@@ -29,12 +29,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// KVInserter implements the putter interface.
+// KVInserter implements the row.Putter interface.
 type KVInserter func(roachpb.KeyValue)
 
-// CPut is not implmented.
+// CPut implements the row.Putter interface.
 func (i KVInserter) CPut(key, value interface{}, expValue []byte) {
-	panic("unimplemented")
+	if expValue != nil {
+		panic(errors.AssertionFailedf("unexpected non-nil expValue in CPut in KVInserter: %v", expValue))
+	}
+	i(roachpb.KeyValue{
+		Key:   *key.(*roachpb.Key),
+		Value: *value.(*roachpb.Value),
+	})
 }
 
 // Del is not implemented.
@@ -53,7 +59,7 @@ func (i KVInserter) Del(key ...interface{}) {
 	// empty).
 }
 
-// Put method of the putter interface.
+// Put method of the row.Putter interface.
 func (i KVInserter) Put(key, value interface{}) {
 	i(roachpb.KeyValue{
 		Key:   *key.(*roachpb.Key),
@@ -61,23 +67,15 @@ func (i KVInserter) Put(key, value interface{}) {
 	})
 }
 
-// InitPut method of the putter interface.
-func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
-	i(roachpb.KeyValue{
-		Key:   *key.(*roachpb.Key),
-		Value: *value.(*roachpb.Value),
-	})
-}
 func (c KVInserter) CPutWithOriginTimestamp(
 	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
 ) {
 }
+func (c KVInserter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte)         {}
 func (c KVInserter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte)        {}
 func (c KVInserter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {}
 func (c KVInserter) PutBytes(kys []roachpb.Key, values [][]byte)               {}
-func (c KVInserter) InitPutBytes(kys []roachpb.Key, values [][]byte)           {}
 func (c KVInserter) PutTuples(kys []roachpb.Key, values [][]byte)              {}
-func (c KVInserter) InitPutTuples(kys []roachpb.Key, values [][]byte)          {}
 
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default
 // expressions, verifies non-nullable columns, and checks column widths.

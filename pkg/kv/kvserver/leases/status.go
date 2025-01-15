@@ -27,7 +27,7 @@ type StatusInput struct {
 	MinValidObservedTs hlc.ClockTimestamp
 
 	// Information about raft.
-	RaftStatus raft.LeadSupportStatus
+	RaftStatus raft.BasicStatus
 
 	// The current time and the time of the request to evaluate the lease for.
 	Now       hlc.ClockTimestamp

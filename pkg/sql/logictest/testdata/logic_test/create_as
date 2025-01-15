@@ -375,7 +375,7 @@ ROLLBACK
 statement ok
 CREATE SEQUENCE seq;
 
-statement OK
+statement ok
 CREATE TABLE tab_from_seq AS (SELECT nextval('seq'))
 
 query B

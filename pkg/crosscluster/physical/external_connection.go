@@ -7,7 +7,6 @@ package physical
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
@@ -24,15 +23,12 @@ func postgresSchemes() [2]string {
 func validatePostgresConnectionURI(
 	ctx context.Context, env externalconn.ExternalConnEnv, uri string,
 ) error {
-	parsedURI, err := url.Parse(uri)
+	parsedURI, err := streamclient.ParseClusterUri(uri)
 	if err != nil {
 		return err
 	}
 	conn, err := streamclient.NewPartitionedStreamClient(ctx, parsedURI)
 	if err != nil {
-		return err
-	}
-	if err = conn.Dial(ctx); err != nil {
 		return err
 	}
 	return conn.Close(ctx)
@@ -48,5 +44,4 @@ func init() {
 		cloud.RegisterRedactedParams(cloud.RedactedParams(streamclient.SslInlineURLParam))
 		externalconn.RegisterDefaultValidation(scheme, validatePostgresConnectionURI)
 	}
-
 }

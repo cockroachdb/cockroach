@@ -1,0 +1,35 @@
+monitor nodes=3
+----
+
+write node=1
+cockroach-system=500
+status=unknown
+cockroach-tenant-a_0=501
+status=unknown
+<\n>
+----
+
+write node=2
+cockroach-system=500
+status=unknown
+cockroach-tenant-b_3=501
+status=unknown
+<\n>
+----
+
+write node=3
+cockroach-system=500
+status=unknown
+cockroach-tenant-c_7=501
+status=unknown
+<\n>
+----
+
+events count=6
+----
+n1: cockroach process for system interface is running (PID: 500)
+n1: cockroach process for virtual cluster "tenant-a", instance 0 is running (PID: 501)
+n2: cockroach process for system interface is running (PID: 500)
+n2: cockroach process for virtual cluster "tenant-b", instance 3 is running (PID: 501)
+n3: cockroach process for system interface is running (PID: 500)
+n3: cockroach process for virtual cluster "tenant-c", instance 7 is running (PID: 501)

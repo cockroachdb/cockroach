@@ -69,6 +69,7 @@ package mixedversion
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -151,6 +152,9 @@ const (
 	// 	- MVT_UPGRADE_PATH=24.1.5,24.2.0,current
 	// 	- MVT_UPGRADE_PATH=24.1,24.2,current
 	upgradePathOverrideEnv = "MVT_UPGRADE_PATH"
+
+	// Dump the test plan and return, i.e., skipping the actual execution of the test.
+	dryRunEnv = "MVT_DRY_RUN"
 )
 
 var (
@@ -319,6 +323,7 @@ type (
 	testOptions struct {
 		useFixturesProbability         float64
 		upgradeTimeout                 time.Duration
+		maxNumPlanSteps                int
 		minUpgrades                    int
 		maxUpgrades                    int
 		minimumSupportedVersion        *clusterupgrade.Version
@@ -405,6 +410,14 @@ func AlwaysUseFixtures(opts *testOptions) {
 func UpgradeTimeout(timeout time.Duration) CustomOption {
 	return func(opts *testOptions) {
 		opts.upgradeTimeout = timeout
+	}
+}
+
+// MaxNumPlanSteps allows callers to set a maximum number of steps to
+// be performed during a test run.
+func MaxNumPlanSteps(n int) CustomOption {
+	return func(opts *testOptions) {
+		opts.maxNumPlanSteps = n
 	}
 }
 
@@ -534,8 +547,11 @@ func defaultTestOptions() testOptions {
 	return testOptions{
 		// We use fixtures more often than not as they are more likely to
 		// detect bugs, especially in migrations.
-		useFixturesProbability:  0.7,
-		upgradeTimeout:          clusterupgrade.DefaultUpgradeTimeout,
+		useFixturesProbability: 0.7,
+		upgradeTimeout:         clusterupgrade.DefaultUpgradeTimeout,
+		// N.B. The default is unlimited since a priori we don't know anything
+		// about the test plan.
+		maxNumPlanSteps:         math.MaxInt,
 		minUpgrades:             1,
 		maxUpgrades:             4,
 		minimumSupportedVersion: OldestSupportedVersion,
@@ -774,6 +790,11 @@ func (t *Test) Run() {
 
 	t.logger.Printf("mixed-version test:\n%s", plan.PrettyPrint())
 
+	if override := os.Getenv(dryRunEnv); override != "" {
+		t.logger.Printf("skipping test run in dry-run mode")
+		return
+	}
+
 	// Mark the deployment mode and versions, so they show up in the github issue. This makes
 	// it easier to group failures together without having to dig into the test logs.
 	t.rt.AddParam("mvtDeploymentMode", string(plan.deploymentMode))
@@ -799,43 +820,58 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 			)
 		}
 	}()
+	var retries int
+	// In case the length of the test plan exceeds `opts.maxNumPlanSteps`, retry up to 100 times.
+	// N.B. Statistically, the expected number of retries is miniscule; see #138014 for more info.
+	for ; retries < 100; retries++ {
 
-	// Pick a random deployment mode to use in this test run among the
-	// list of enabled deployment modes enabled for this test.
-	deploymentMode := t.deploymentMode()
-	t.updateOptionsForDeploymentMode(deploymentMode)
+		// Pick a random deployment mode to use in this test run among the
+		// list of enabled deployment modes enabled for this test.
+		deploymentMode := t.deploymentMode()
+		t.updateOptionsForDeploymentMode(deploymentMode)
 
-	upgradePath, err := t.choosePreviousReleases()
-	if err != nil {
-		return nil, err
-	}
-	upgradePath = append(upgradePath, clusterupgrade.CurrentVersion())
-
-	if override := os.Getenv(upgradePathOverrideEnv); override != "" {
-		upgradePath, err = parseUpgradePathOverride(override)
+		upgradePath, err := t.choosePreviousReleases()
 		if err != nil {
 			return nil, err
 		}
-		t.logger.Printf("%s override set: %s", upgradePathOverrideEnv, upgradePath)
+		upgradePath = append(upgradePath, clusterupgrade.CurrentVersion())
+
+		if override := os.Getenv(upgradePathOverrideEnv); override != "" {
+			upgradePath, err = parseUpgradePathOverride(override)
+			if err != nil {
+				return nil, err
+			}
+			t.logger.Printf("%s override set: %s", upgradePathOverrideEnv, upgradePath)
+		}
+
+		tenantDescriptor := t.tenantDescriptor(deploymentMode)
+		initialRelease := upgradePath[0]
+
+		planner := testPlanner{
+			versions:       upgradePath,
+			deploymentMode: deploymentMode,
+			seed:           t.seed,
+			currentContext: newInitialContext(initialRelease, t.crdbNodes, tenantDescriptor),
+			options:        t.options,
+			rt:             t.rt,
+			isLocal:        t.isLocal(),
+			hooks:          t.hooks,
+			prng:           t.prng,
+			bgChans:        t.bgChans,
+		}
+		// Let's generate a plan.
+		plan = planner.Plan()
+		if plan.length <= t.options.maxNumPlanSteps {
+			break
+		}
 	}
-
-	tenantDescriptor := t.tenantDescriptor(deploymentMode)
-	initialRelease := upgradePath[0]
-
-	planner := testPlanner{
-		versions:       upgradePath,
-		deploymentMode: deploymentMode,
-		seed:           t.seed,
-		currentContext: newInitialContext(initialRelease, t.crdbNodes, tenantDescriptor),
-		options:        t.options,
-		rt:             t.rt,
-		isLocal:        t.isLocal(),
-		hooks:          t.hooks,
-		prng:           t.prng,
-		bgChans:        t.bgChans,
+	if plan.length > t.options.maxNumPlanSteps {
+		return nil, errors.Newf("unable to generate a test plan with at most %d steps", t.options.maxNumPlanSteps)
 	}
-
-	return planner.Plan(), nil
+	if retries > 0 {
+		t.logger.Printf("WARNING: generated a smaller (%d) test plan after %d retries", plan.length, retries)
+	}
+	return plan, nil
 }
 
 func (t *Test) clusterArch() vm.CPUArch {

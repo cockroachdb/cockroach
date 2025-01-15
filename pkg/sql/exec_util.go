@@ -1940,6 +1940,8 @@ type StreamingTestingKnobs struct {
 
 	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
 
+	OnGetSQLInstanceInfo func(cluster *roachpb.NodeDescriptor) *roachpb.NodeDescriptor
+
 	FailureRate uint32
 }
 
@@ -3999,6 +4001,10 @@ func (m *sessionDataMutator) SetRecursionDepthLimit(val int) {
 
 func (m *sessionDataMutator) SetLegacyVarcharTyping(val bool) {
 	m.data.LegacyVarcharTyping = val
+}
+
+func (m *sessionDataMutator) SetCatalogDigestStalenessCheckEnabled(b bool) {
+	m.data.CatalogDigestStalenessCheckEnabled = b
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

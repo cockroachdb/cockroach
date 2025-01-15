@@ -7113,3 +7113,168 @@ values
                                                                                                      ├── columns: stmt_return_4:2!null
                                                                                                      └── tuple
                                                                                                           └── const: 0
+
+# DO statements execute a PL/pgSQL code block inline. This is effectively an
+# anonymous function with no arguments.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $outer$
+  DECLARE
+    x INT := 1000;
+  BEGIN
+    INSERT INTO kv VALUES (x, x);
+    DO $$
+      DECLARE
+        x INT := 3000;
+      BEGIN
+        RAISE NOTICE 'hello';
+        INSERT INTO kv VALUES (x, x);
+      END
+    $$;
+    x := 2000;
+    INSERT INTO kv VALUES (x, x);
+    RETURN 0;
+  END
+$outer$;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:35
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:35]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_exec_1":34
+                     ├── project
+                     │    ├── columns: "_stmt_exec_1":34
+                     │    ├── barrier
+                     │    │    ├── columns: x:1!null
+                     │    │    └── project
+                     │    │         ├── columns: x:1!null
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── const: 1000 [as=x:1]
+                     │    └── projections
+                     │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":34]
+                     │              ├── args
+                     │              │    └── variable: x:1
+                     │              ├── params: x:2
+                     │              └── body
+                     │                   ├── insert kv
+                     │                   │    ├── columns: <none>
+                     │                   │    ├── insert-mapping:
+                     │                   │    │    ├── column1:7 => k:3
+                     │                   │    │    └── column2:8 => v:4
+                     │                   │    └── values
+                     │                   │         ├── columns: column1:7 column2:8
+                     │                   │         └── tuple
+                     │                   │              ├── variable: x:2
+                     │                   │              └── variable: x:2
+                     │                   └── project
+                     │                        ├── columns: "_stmt_do_2":33
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: _stmt_do_2 [as="_stmt_do_2":33]
+                     │                                  ├── tail-call
+                     │                                  ├── args
+                     │                                  │    └── variable: x:2
+                     │                                  ├── params: x:9
+                     │                                  └── body
+                     │                                       ├── limit
+                     │                                       │    ├── columns: "_stmt_raise_1":22
+                     │                                       │    ├── project
+                     │                                       │    │    ├── columns: "_stmt_raise_1":22
+                     │                                       │    │    ├── barrier
+                     │                                       │    │    │    ├── columns: x:10!null
+                     │                                       │    │    │    └── project
+                     │                                       │    │    │         ├── columns: x:10!null
+                     │                                       │    │    │         ├── values
+                     │                                       │    │    │         │    └── tuple
+                     │                                       │    │    │         └── projections
+                     │                                       │    │    │              └── const: 3000 [as=x:10]
+                     │                                       │    │    └── projections
+                     │                                       │    │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":22]
+                     │                                       │    │              ├── args
+                     │                                       │    │              │    └── variable: x:10
+                     │                                       │    │              ├── params: x:11
+                     │                                       │    │              └── body
+                     │                                       │    │                   ├── project
+                     │                                       │    │                   │    ├── columns: stmt_raise_2:12
+                     │                                       │    │                   │    ├── values
+                     │                                       │    │                   │    │    └── tuple
+                     │                                       │    │                   │    └── projections
+                     │                                       │    │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:12]
+                     │                                       │    │                   │              ├── const: 'NOTICE'
+                     │                                       │    │                   │              ├── const: 'hello'
+                     │                                       │    │                   │              ├── const: ''
+                     │                                       │    │                   │              ├── const: ''
+                     │                                       │    │                   │              └── const: '00000'
+                     │                                       │    │                   └── project
+                     │                                       │    │                        ├── columns: "_stmt_exec_3":21
+                     │                                       │    │                        ├── values
+                     │                                       │    │                        │    └── tuple
+                     │                                       │    │                        └── projections
+                     │                                       │    │                             └── udf: _stmt_exec_3 [as="_stmt_exec_3":21]
+                     │                                       │    │                                  ├── tail-call
+                     │                                       │    │                                  ├── args
+                     │                                       │    │                                  │    └── variable: x:11
+                     │                                       │    │                                  ├── params: x:13
+                     │                                       │    │                                  └── body
+                     │                                       │    │                                       ├── insert kv
+                     │                                       │    │                                       │    ├── columns: <none>
+                     │                                       │    │                                       │    ├── insert-mapping:
+                     │                                       │    │                                       │    │    ├── column1:18 => k:14
+                     │                                       │    │                                       │    │    └── column2:19 => v:15
+                     │                                       │    │                                       │    └── values
+                     │                                       │    │                                       │         ├── columns: column1:18 column2:19
+                     │                                       │    │                                       │         └── tuple
+                     │                                       │    │                                       │              ├── variable: x:13
+                     │                                       │    │                                       │              └── variable: x:13
+                     │                                       │    │                                       └── project
+                     │                                       │    │                                            ├── columns: "_implicit_return":20
+                     │                                       │    │                                            ├── values
+                     │                                       │    │                                            │    └── tuple
+                     │                                       │    │                                            └── projections
+                     │                                       │    │                                                 └── cast: VOID [as="_implicit_return":20]
+                     │                                       │    │                                                      └── null
+                     │                                       │    └── const: 1
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_exec_3":32
+                     │                                            ├── barrier
+                     │                                            │    ├── columns: x:23!null
+                     │                                            │    └── project
+                     │                                            │         ├── columns: x:23!null
+                     │                                            │         ├── values
+                     │                                            │         │    └── tuple
+                     │                                            │         └── projections
+                     │                                            │              └── const: 2000 [as=x:23]
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_exec_3 [as="_stmt_exec_3":32]
+                     │                                                      ├── tail-call
+                     │                                                      ├── args
+                     │                                                      │    └── variable: x:23
+                     │                                                      ├── params: x:24
+                     │                                                      └── body
+                     │                                                           ├── insert kv
+                     │                                                           │    ├── columns: <none>
+                     │                                                           │    ├── insert-mapping:
+                     │                                                           │    │    ├── column1:29 => k:25
+                     │                                                           │    │    └── column2:30 => v:26
+                     │                                                           │    └── values
+                     │                                                           │         ├── columns: column1:29 column2:30
+                     │                                                           │         └── tuple
+                     │                                                           │              ├── variable: x:24
+                     │                                                           │              └── variable: x:24
+                     │                                                           └── project
+                     │                                                                ├── columns: stmt_return_4:31!null
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── const: 0 [as=stmt_return_4:31]
+                     └── const: 1

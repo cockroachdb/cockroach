@@ -121,26 +121,57 @@ func (m *MembershipCache) GetRolesForMember(
 		return nil, errors.AssertionFailedf("cannot use MembershipCache without a txn")
 	}
 
-	// Lookup table version.
-	tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleMembersTableID)
+	// Lookup table versions.
+	roleMembersTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleMembersTableID)
 	if err != nil {
 		return nil, err
 	}
 
-	tableVersion := tableDesc.GetVersion()
-	if tableDesc.IsUncommittedVersion() {
+	tableVersion := roleMembersTableDesc.GetVersion()
+	if roleMembersTableDesc.IsUncommittedVersion() {
 		return resolveRolesForMember(ctx, txn, member)
 	}
+
 	if txn.SessionData().AllowRoleMembershipsToChangeDuringTransaction {
+		systemUsersTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.UsersTableID)
+		if err != nil {
+			return nil, err
+		}
+
+		roleOptionsTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleOptionsTableID)
+		if err != nil {
+			return nil, err
+		}
+
+		systemUsersTableVersion := systemUsersTableDesc.GetVersion()
+		if systemUsersTableDesc.IsUncommittedVersion() {
+			return resolveRolesForMember(ctx, txn, member)
+		}
+
+		roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
+		if roleOptionsTableDesc.IsUncommittedVersion() {
+			return resolveRolesForMember(ctx, txn, member)
+		}
+
 		defer func() {
 			if retErr != nil {
 				return
 			}
 			txn.Descriptors().ReleaseSpecifiedLeases(ctx, []lease.IDVersion{
 				{
-					Name:    tableDesc.GetName(),
-					ID:      tableDesc.GetID(),
+					Name:    roleMembersTableDesc.GetName(),
+					ID:      roleMembersTableDesc.GetID(),
 					Version: tableVersion,
+				},
+				{
+					Name:    systemUsersTableDesc.GetName(),
+					ID:      systemUsersTableDesc.GetID(),
+					Version: systemUsersTableVersion,
+				},
+				{
+					Name:    roleOptionsTableDesc.GetName(),
+					ID:      roleOptionsTableDesc.GetID(),
+					Version: roleOptionsTableVersion,
 				},
 			})
 		}()

@@ -35,12 +35,13 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e
 	github.com/google/btree v1.0.1
-	github.com/google/pprof v0.0.0-20210827144239-02619b876842
+	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7
 	github.com/google/uuid v1.6.0 // indirect
 	google.golang.org/api v0.114.0
-	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
-	google.golang.org/grpc v1.56.3
+	google.golang.org/genproto v0.0.0-20230526161137-0005af68ea54
+	google.golang.org/grpc v1.57.2
 	google.golang.org/protobuf v1.35.1
+	storj.io/drpc v0.0.34
 )
 
 // If any of the following dependencies get updated as a side-effect
@@ -117,6 +118,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.33.0
 	github.com/aws/smithy-go v1.21.0
 	github.com/axiomhq/hyperloglog v0.2.0
+	github.com/axiomhq/hyperloglog/000 v0.0.0-20181223111420-4b99d0c2c99e
 	github.com/bazelbuild/rules_go v0.26.0
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
 	github.com/blevesearch/snowballstem v0.9.0
@@ -134,7 +136,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250107201914-d21c9e72493f
+	github.com/cockroachdb/pebble v0.0.0-20250114230814-ba0eeec8205a
 	github.com/cockroachdb/redact v1.1.5
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -154,6 +156,7 @@ require (
 	github.com/elastic/gosigar v0.14.3
 	github.com/emicklei/dot v0.15.0
 	github.com/fatih/color v1.9.0
+	github.com/felixge/fgprof v0.9.5
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/getsentry/sentry-go v0.27.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
@@ -251,6 +254,7 @@ require (
 	golang.org/x/term v0.27.0
 	golang.org/x/tools/go/vcs v0.1.0-deprecated
 	gonum.org/v1/gonum v0.15.1
+	google.golang.org/genproto/googleapis/api v0.0.0-20230525234035-dd9d682886f9
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	honnef.co/go/tools v0.4.5
@@ -357,7 +361,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/huandu/xstrings v1.3.0 // indirect
-	github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639 // indirect
+	github.com/ianlancetaylor/demangle v0.0.0-20230524184225-eabc099b10ab // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
@@ -430,6 +434,7 @@ require (
 	github.com/twpayne/go-kml v1.5.2 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
+	github.com/zeebo/errs v1.2.2 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	gitlab.com/golang-commonmark/html v0.0.0-20191124015941-a22733972181 // indirect
 	gitlab.com/golang-commonmark/linkify v0.0.0-20191026162114-a0c2df6c8f82 // indirect
@@ -446,6 +451,8 @@ require (
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gonum.org/v1/plot v0.14.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
+	google.golang.org/genproto/googleapis/bytestream v0.0.0-20230525234009-2805bf891e89 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20230525234030-28d5490b6b19 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 )
 
@@ -485,3 +492,7 @@ replace github.com/docker/docker => github.com/moby/moby v24.0.6+incompatible
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1
+
+// TODO(yuzefovich): remove this version once compatibility with 24.3 is no
+// longer needed.
+replace github.com/axiomhq/hyperloglog/000 => github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e

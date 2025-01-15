@@ -11,7 +11,7 @@ set -xeuo pipefail
 # Usage: testrace_impl.sh PKG1 [PKG2 PKG3 PKG4...]
 # packages are expected to be formatted as go-style, e.g. ./pkg/cmd/bazci.
 
-bazel build //pkg/cmd/bazci --config=ci
+bazel build //pkg/cmd/bazci
 size_to_timeout=("small:1200" "medium:6000" "large:18000" "enormous:72000")
 for pkg in "$@"
 do
@@ -35,7 +35,7 @@ do
                 echo "Skipping test $test"
                 continue
             fi
-            $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- test --config=ci --config=race "$test" \
+            $(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci -- test --config=ci --config=race "$test" \
                                 --test_env=COCKROACH_LOGIC_TESTS_SKIP=true \
                                 --test_timeout $timeout \
                                 --test_sharding_strategy=disabled \

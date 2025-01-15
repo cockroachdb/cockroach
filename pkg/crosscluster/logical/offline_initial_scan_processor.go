@@ -152,17 +152,16 @@ func (o *offlineInitialScanProcessor) setup(ctx context.Context) error {
 	// Start the subscription for our partition.
 	partitionSpec := o.spec.PartitionSpec
 	token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
-	addr := partitionSpec.Address
-	redactedAddr, redactedErr := streamclient.RedactSourceURI(addr)
-	if redactedErr != nil {
-		log.Warning(o.Ctx(), "could not redact stream address")
+	uri, err := streamclient.ParseClusterUri(partitionSpec.PartitionConnUri)
+	if err != nil {
+		return err
 	}
-	streamClient, err := streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(addr), db,
+	streamClient, err := streamclient.NewStreamClient(ctx, uri, db,
 		streamclient.WithStreamID(streampb.StreamID(o.spec.StreamID)),
 		streamclient.WithCompression(true),
 	)
 	if err != nil {
-		return errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr)
+		return errors.Wrapf(err, "creating client for partition spec %q from %q", token, uri.Redacted())
 	}
 	o.streamPartitionClient = streamClient
 

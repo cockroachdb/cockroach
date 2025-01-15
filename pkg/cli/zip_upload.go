@@ -30,6 +30,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -70,8 +71,9 @@ const (
 	datadogAppKeyHeader = "DD-APPLICATION-KEY"
 
 	// the path pattern to search for specific artifacts in the debug zip directory
-	zippedProfilePattern = "nodes/*/*.pprof"
-	zippedLogsPattern    = "nodes/*/logs/*"
+	zippedProfilePattern        = "nodes/*/*.pprof"
+	zippedLogsPattern           = "nodes/*/logs/*"
+	zippedNodeTableDumpsPattern = "nodes/*/*.txt"
 
 	// this is not the pprof version, but the version of the profile
 	// upload format supported by datadog
@@ -663,11 +665,53 @@ var clusterWideTableDumps = map[string]columnParserMap{
 	"crdb_internal.cluster_contention_events.txt":   {},
 	"crdb_internal.cluster_queries.txt":             {},
 	"crdb_internal.jobs.txt":                        {},
+	"crdb_internal.regions.txt":                     {},
+	"system.table_statistics.txt":                   {},
 
 	// table dumps with columns that need to be interpreted as protos
 	"crdb_internal.system_jobs.txt": {
 		"progress": makeProtoColumnParser[*jobspb.Progress](),
 	},
+	"system.tenants.txt": {
+		"info": makeProtoColumnParser[*mtinfopb.ProtoInfo](),
+	},
+}
+
+var nodeSpecificTableDumps = map[string]columnParserMap{
+	"crdb_internal.node_metrics.txt":                   {},
+	"crdb_internal.node_txn_stats.txt":                 {},
+	"crdb_internal.node_contention_events.txt":         {},
+	"crdb_internal.gossip_liveness.txt":                {},
+	"crdb_internal.gossip_nodes.txt":                   {},
+	"crdb_internal.node_runtime_info.txt":              {},
+	"crdb_internal.node_transaction_statistics.txt":    {},
+	"crdb_internal.node_tenant_capabilities_cache.txt": {},
+	"crdb_internal.node_sessions.txt":                  {},
+	"crdb_internal.node_statement_statistics.txt":      {},
+	"crdb_internal.leases.txt":                         {},
+	"crdb_internal.node_build_info.txt":                {},
+	"crdb_internal.node_memory_monitors.txt":           {},
+	"crdb_internal.active_range_feeds.txt":             {},
+	"crdb_internal.gossip_alerts.txt":                  {},
+	"crdb_internal.node_transactions.txt":              {},
+	"crdb_internal.feature_usage.txt":                  {},
+	"crdb_internal.node_queries.txt":                   {},
+}
+
+func getNodeSpecificTableDumps(debugDirPath string) ([]string, error) {
+	allTxtFiles, err := expandPatterns([]string{path.Join(debugDirPath, zippedNodeTableDumpsPattern)})
+	if err != nil {
+		return nil, err
+	}
+
+	filteredTxtFiles := []string{}
+	for _, txtFile := range allTxtFiles {
+		if _, ok := nodeSpecificTableDumps[filepath.Base(txtFile)]; ok {
+			filteredTxtFiles = append(filteredTxtFiles, strings.TrimPrefix(txtFile, debugDirPath+"/"))
+		}
+	}
+
+	return filteredTxtFiles, nil
 }
 
 // uploadZipTables uploads the table dumps to datadog. The concurrency model
@@ -675,10 +719,16 @@ var clusterWideTableDumps = map[string]columnParserMap{
 // set of workers and fan-in the errors if any. The workers read the file,
 // parse the columns and uploads the data to datadog.
 func uploadZipTables(ctx context.Context, uploadID string, debugDirPath string) error {
+	nodeTableDumps, err := getNodeSpecificTableDumps(debugDirPath)
+	if err != nil {
+		return err
+	}
+
 	var (
-		noOfWorkers = min(debugZipUploadOpts.maxConcurrentUploads, len(clusterWideTableDumps))
-		workChan    = make(chan string, len(clusterWideTableDumps))
-		errChan     = make(chan error, len(clusterWideTableDumps))
+		totalJobs   = len(clusterWideTableDumps) + len(nodeTableDumps)
+		noOfWorkers = min(debugZipUploadOpts.maxConcurrentUploads, totalJobs)
+		workChan    = make(chan string, totalJobs)
+		errChan     = make(chan error, totalJobs)
 
 		errTables []string
 	)
@@ -702,7 +752,11 @@ func uploadZipTables(ctx context.Context, uploadID string, debugDirPath string) 
 		workChan <- fileName
 	}
 
-	for range clusterWideTableDumps {
+	for _, fileName := range nodeTableDumps {
+		workChan <- fileName
+	}
+
+	for i := 0; i < totalJobs; i++ {
 		if err := <-errChan; err != nil {
 			errTables = append(errTables, err.Error())
 		}
@@ -730,9 +784,19 @@ func processTableDump(
 	}
 	defer f.Close()
 
-	defaultTags := []string{"env:debug", "source:debug-zip"}
-	tableName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
-	lines := [][]byte{}
+	var (
+		lines     = [][]byte{}
+		tableName = strings.TrimSuffix(fileName, filepath.Ext(fileName))
+		tags      = append(
+			[]string{"env:debug", "source:debug-zip"}, makeDDTag(uploadIDTag, uploadID),
+			makeDDTag(clusterTag, debugZipUploadOpts.clusterName), makeDDTag(tableTag, tableName),
+		)
+	)
+
+	if strings.HasPrefix(fileName, "nodes/") {
+		tags = append(tags, makeDDTag(nodeIDTag, strings.Split(fileName, "/")[1]))
+	}
+
 	header, iter := makeTableIterator(f)
 	if err := iter(func(row string) error {
 		cols := strings.Split(row, "\t")
@@ -741,10 +805,7 @@ func processTableDump(
 		}
 
 		headerColumnMapping := map[string]any{
-			ddTagsTag: strings.Join(append(
-				defaultTags, makeDDTag(uploadIDTag, uploadID), makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
-				makeDDTag(tableTag, tableName),
-			), ","),
+			ddTagsTag: strings.Join(tags, ","),
 		}
 		for i, h := range header {
 			if parser, ok := parsers[h]; ok {

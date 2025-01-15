@@ -210,6 +210,13 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.skipValidationOnWrite = false
 }
 
+// GetLeaseGeneration provides an integer which will change whenever new
+// descriptor versions are available. This can be used for fast comparisons
+// to make sure previously looked up information is still valid.
+func (tc *Collection) GetLeaseGeneration() int64 {
+	return tc.leased.lm.GetLeaseGeneration()
+}
+
 // HasUncommittedTables returns true if the Collection contains uncommitted
 // tables.
 func (tc *Collection) HasUncommittedTables() (has bool) {
@@ -226,6 +233,23 @@ func (tc *Collection) HasUncommittedTables() (has bool) {
 // uncommitted descriptors.
 func (tc *Collection) HasUncommittedDescriptors() bool {
 	return tc.uncommitted.uncommitted.Len() > 0
+}
+
+// HasUncommittedNewOrDroppedDescriptors returns true if the collection contains
+// any uncommitted descriptors that are newly created or dropped.
+func (tc *Collection) HasUncommittedNewOrDroppedDescriptors() bool {
+	isNewDescriptor := false
+	err := tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if desc.GetVersion() == 1 || desc.Dropped() {
+			isNewDescriptor = true
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if err != nil {
+		return false
+	}
+	return isNewDescriptor
 }
 
 // HasUncommittedTypes returns true if the Collection contains uncommitted

@@ -512,29 +512,30 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	}
 
 	return kvfeed.Config{
-		Writer:              buf,
-		Settings:            cfg.Settings,
-		DB:                  cfg.DB.KV(),
-		Codec:               cfg.Codec,
-		Clock:               cfg.DB.KV().Clock(),
-		Spans:               spans,
-		CheckpointSpans:     ca.spec.Checkpoint.Spans,
-		CheckpointTimestamp: ca.spec.Checkpoint.Timestamp,
-		Targets:             AllTargets(ca.spec.Feed),
-		Metrics:             &ca.metrics.KVFeedMetrics,
-		MM:                  memMon,
-		InitialHighWater:    initialHighWater,
-		EndTime:             config.EndTime,
-		WithDiff:            filters.WithDiff,
-		WithFiltering:       filters.WithFiltering,
-		NeedsInitialScan:    needsInitialScan,
-		SchemaChangeEvents:  schemaChange.EventClass,
-		SchemaChangePolicy:  schemaChange.Policy,
-		SchemaFeed:          sf,
-		Knobs:               ca.knobs.FeedKnobs,
-		ScopedTimers:        ca.sliMetrics.Timers,
-		MonitoringCfg:       monitoringCfg,
-		ConsumerID:          int64(ca.spec.JobID),
+		Writer:               buf,
+		Settings:             cfg.Settings,
+		DB:                   cfg.DB.KV(),
+		Codec:                cfg.Codec,
+		Clock:                cfg.DB.KV().Clock(),
+		Spans:                spans,
+		CheckpointSpans:      ca.spec.Checkpoint.Spans,
+		CheckpointTimestamp:  ca.spec.Checkpoint.Timestamp,
+		Targets:              AllTargets(ca.spec.Feed),
+		Metrics:              &ca.metrics.KVFeedMetrics,
+		MM:                   memMon,
+		InitialHighWater:     initialHighWater,
+		EndTime:              config.EndTime,
+		WithDiff:             filters.WithDiff,
+		WithFiltering:        filters.WithFiltering,
+		WithFrontierQuantize: changefeedbase.Quantize.Get(&cfg.Settings.SV),
+		NeedsInitialScan:     needsInitialScan,
+		SchemaChangeEvents:   schemaChange.EventClass,
+		SchemaChangePolicy:   schemaChange.Policy,
+		SchemaFeed:           sf,
+		Knobs:                ca.knobs.FeedKnobs,
+		ScopedTimers:         ca.sliMetrics.Timers,
+		MonitoringCfg:        monitoringCfg,
+		ConsumerID:           int64(ca.spec.JobID),
 	}, nil
 }
 
@@ -1093,11 +1094,11 @@ func newJobState(
 }
 
 func canCheckpointSpans(sv *settings.Values, lastCheckpoint time.Time) bool {
-	freq := changefeedbase.FrontierCheckpointFrequency.Get(sv)
-	if freq == 0 {
+	interval := changefeedbase.SpanCheckpointInterval.Get(sv)
+	if interval == 0 {
 		return false
 	}
-	return timeutil.Since(lastCheckpoint) > freq
+	return timeutil.Since(lastCheckpoint) > interval
 }
 
 func (j *jobState) canCheckpointSpans() bool {
@@ -1105,19 +1106,21 @@ func (j *jobState) canCheckpointSpans() bool {
 }
 
 // canCheckpointHighWatermark returns true if we should update job high water mark (i.e. progress).
-// Normally, whenever frontier changes, we update high water mark.
+// Normally, whenever the frontier changes, we update the high water mark.
 // However, if the rate of frontier changes is too high, we want to slow down
-// the frequency of job progress updates.  We do this by skipping some updates
-// if the time to update the job progress is greater than the delta between
-// previous and the current progress update time.
+// the frequency of job progress updates. We do this by enforcing a minimum
+// interval between high water updates, which is the greater of the average time
+// it takes to update the job progress and changefeed.resolved_timestamp.min_update_interval.
 func (j *jobState) canCheckpointHighWatermark(frontierChanged bool) bool {
 	if !(frontierChanged || j.progressUpdatesSkipped) {
 		return false
 	}
 
-	minAdvance := changefeedbase.MinHighWaterMarkCheckpointAdvance.Get(&j.settings.SV)
-	if j.checkpointDuration > 0 &&
-		j.ts.Now().Before(j.lastProgressUpdate.Add(j.checkpointDuration+minAdvance)) {
+	minInterval := max(
+		j.checkpointDuration,
+		changefeedbase.ResolvedTimestampMinUpdateInterval.Get(&j.settings.SV),
+	)
+	if j.ts.Now().Before(j.lastProgressUpdate.Add(minInterval)) {
 		// Updates are too rapid; skip some.
 		j.progressUpdatesSkipped = true
 		return false
@@ -1129,16 +1132,15 @@ func (j *jobState) canCheckpointHighWatermark(frontierChanged bool) bool {
 // checkpointCompleted must be called when job checkpoint completes.
 // checkpointDuration indicates how long the checkpoint took.
 func (j *jobState) checkpointCompleted(ctx context.Context, checkpointDuration time.Duration) {
-	minAdvance := changefeedbase.MinHighWaterMarkCheckpointAdvance.Get(&j.settings.SV)
 	if j.progressUpdatesSkipped {
 		// Log message if we skipped updates for some time.
-		warnThreshold := 2 * minAdvance
+		warnThreshold := 2 * changefeedbase.ResolvedTimestampMinUpdateInterval.Get(&j.settings.SV)
 		if warnThreshold < 60*time.Second {
 			warnThreshold = 60 * time.Second
 		}
 		behind := j.ts.Now().Sub(j.lastProgressUpdate)
 		if behind > warnThreshold {
-			log.Warningf(ctx, "high water mark update delayed by %s; mean checkpoint duration %s",
+			log.Warningf(ctx, "high water mark update was delayed by %s; mean checkpoint duration %s",
 				behind, j.checkpointDuration)
 		}
 	}
@@ -1309,9 +1311,9 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 			return
 		}
 		cf.js.job = job
-		if changefeedbase.FrontierCheckpointFrequency.Get(&cf.FlowCtx.Cfg.Settings.SV) == 0 {
+		if changefeedbase.SpanCheckpointInterval.Get(&cf.FlowCtx.Cfg.Settings.SV) == 0 {
 			log.Warning(ctx,
-				"Frontier checkpointing disabled; set changefeed.frontier_checkpoint_frequency to non-zero value to re-enable")
+				"span-level checkpointing disabled; set changefeed.span_checkpoint.interval to positive duration to re-enable")
 		}
 
 		// Recover highwater information from job progress.
@@ -1673,7 +1675,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	// If the highwater has moved an empty checkpoint will be saved
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
 	if updateCheckpoint {
-		maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Get(&cf.FlowCtx.Cfg.Settings.SV)
+		maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&cf.FlowCtx.Cfg.Settings.SV)
 		checkpoint = cf.frontier.MakeCheckpoint(maxBytes)
 	}
 

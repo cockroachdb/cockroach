@@ -24,9 +24,13 @@ func ts(i int64) hlc.Timestamp {
 	return hlc.Timestamp{WallTime: i}
 }
 
-func noteRow(t *testing.T, v Validator, partition, key, value string, updated hlc.Timestamp) {
+func noteRow(
+	t *testing.T, v Validator, partition, key, value string, updated hlc.Timestamp, topic string,
+) {
 	t.Helper()
-	if err := v.NoteRow(partition, key, value, updated); err != nil {
+	// None of the validators in this file include assertions about the topic
+	// name, so it's ok to pass in an empty string for topic.
+	if err := v.NoteRow(partition, key, value, updated, topic); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -57,23 +61,23 @@ func TestOrderValidator(t *testing.T) {
 	})
 	t.Run(`dupe okay`, func(t *testing.T) {
 		v := NewOrderValidator(`t1`)
-		noteRow(t, v, `p1`, `k1`, ignored, ts(1))
-		noteRow(t, v, `p1`, `k1`, ignored, ts(2))
-		noteRow(t, v, `p1`, `k1`, ignored, ts(1))
+		noteRow(t, v, `p1`, `k1`, ignored, ts(1), `foo`)
+		noteRow(t, v, `p1`, `k1`, ignored, ts(2), `foo`)
+		noteRow(t, v, `p1`, `k1`, ignored, ts(1), `foo`)
 		assertValidatorFailures(t, v)
 	})
 	t.Run(`key on two partitions`, func(t *testing.T) {
 		v := NewOrderValidator(`t1`)
-		noteRow(t, v, `p1`, `k1`, ignored, ts(2))
-		noteRow(t, v, `p2`, `k1`, ignored, ts(1))
+		noteRow(t, v, `p1`, `k1`, ignored, ts(2), `foo`)
+		noteRow(t, v, `p2`, `k1`, ignored, ts(1), `foo`)
 		assertValidatorFailures(t, v,
 			`key [k1] received on two partitions: p1 and p2`,
 		)
 	})
 	t.Run(`new key with lower timestamp`, func(t *testing.T) {
 		v := NewOrderValidator(`t1`)
-		noteRow(t, v, `p1`, `k1`, ignored, ts(2))
-		noteRow(t, v, `p1`, `k1`, ignored, ts(1))
+		noteRow(t, v, `p1`, `k1`, ignored, ts(2), `foo`)
+		noteRow(t, v, `p1`, `k1`, ignored, ts(1), `foo`)
 		assertValidatorFailures(t, v,
 			`topic t1 partition p1: saw new row timestamp 1.0000000000 after 2.0000000000 was seen`,
 		)
@@ -82,17 +86,23 @@ func TestOrderValidator(t *testing.T) {
 		v := NewOrderValidator(`t1`)
 		noteResolved(t, v, `p2`, ts(3))
 		// Okay because p2 saw the resolved timestamp but p1 didn't.
-		noteRow(t, v, `p1`, `k1`, ignored, ts(1))
+		noteRow(t, v, `p1`, `k1`, ignored, ts(1), `foo`)
 		noteResolved(t, v, `p1`, ts(3))
 		// This one is not okay.
-		noteRow(t, v, `p1`, `k1`, ignored, ts(2))
+		noteRow(t, v, `p1`, `k1`, ignored, ts(2), `foo`)
 		// Still okay because we've seen it before.
-		noteRow(t, v, `p1`, `k1`, ignored, ts(1))
+		noteRow(t, v, `p1`, `k1`, ignored, ts(1), `foo`)
 		assertValidatorFailures(t, v,
 			`topic t1 partition p1`+
 				`: saw new row timestamp 2.0000000000 after 3.0000000000 was resolved`,
 		)
 	})
+}
+
+var standardChangefeedOptions = ChangefeedOption{
+	FullTableName: false,
+	KeyInValue:    false,
+	Format:        "json",
 }
 
 func TestBeforeAfterValidator(t *testing.T) {
@@ -130,97 +140,115 @@ func TestBeforeAfterValidator(t *testing.T) {
 	}
 
 	t.Run(`empty`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		require.NoError(t, err)
+		assertValidatorFailures(t, v)
+	})
+	t.Run(`fullTableName`, func(t *testing.T) {
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, ChangefeedOption{
+			FullTableName: true,
+			KeyInValue:    false,
+			Format:        "json",
+		})
+		require.NoError(t, err)
+		assertValidatorFailures(t, v)
+	})
+	t.Run(`key_in_value`, func(t *testing.T) {
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, ChangefeedOption{
+			FullTableName: false,
+			KeyInValue:    true,
+			Format:        "json",
+		})
 		require.NoError(t, err)
 		assertValidatorFailures(t, v)
 	})
 	t.Run(`during initial`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 		require.NoError(t, err)
 		// "before" is ignored if missing.
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2], `foo`)
 		// However, if provided, it is validated.
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":2}, "before": {"k":1,"v":1}}`, ts[2])
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":2}, "before": {"k":1,"v":1}}`, ts[2], `foo`)
 		assertValidatorFailures(t, v)
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":3}, "before": {"k":1,"v":3}}`, ts[3])
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":3}, "before": {"k":1,"v":3}}`, ts[3], `foo`)
 		assertValidatorFailures(t, v,
 			`"before" field did not agree with row at `+ts[3].Prev().AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[3].Prev().AsOfSystemTime()+
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 3]`)
 	})
 	t.Run(`missing before`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" should have been provided.
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2], `foo`)
 		assertValidatorFailures(t, v,
 			`"before" field did not agree with row at `+ts[2].Prev().AsOfSystemTime()+
 				`: SELECT count(*) = 0 FROM foo AS OF SYSTEM TIME '`+ts[2].Prev().AsOfSystemTime()+
 				`' WHERE to_json(k)::TEXT = $1 [1]`)
 	})
 	t.Run(`incorrect before`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" provided with wrong value.
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":3}, "before": {"k":5,"v":10}}`, ts[3])
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":3}, "before": {"k":5,"v":10}}`, ts[3], `foo`)
 		assertValidatorFailures(t, v,
 			`"before" field did not agree with row at `+ts[3].Prev().AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[3].Prev().AsOfSystemTime()+
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [5 10]`)
 	})
 	t.Run(`unnecessary before`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" provided but should not have been.
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}, "before": {"k":1,"v":1}}`, ts[1])
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}, "before": {"k":1,"v":1}}`, ts[1], `foo`)
 		assertValidatorFailures(t, v,
 			`"before" field did not agree with row at `+ts[1].Prev().AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[1].Prev().AsOfSystemTime()+
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 1]`)
 	})
 	t.Run(`missing after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "after" should have been provided.
-		noteRow(t, v, `p`, `[1]`, `{"before": {"k":1,"v":1}}`, ts[2])
+		noteRow(t, v, `p`, `[1]`, `{"before": {"k":1,"v":1}}`, ts[2], `foo`)
 		assertValidatorFailures(t, v,
 			`"after" field did not agree with row at `+ts[2].AsOfSystemTime()+
 				`: SELECT count(*) = 0 FROM foo AS OF SYSTEM TIME '`+ts[2].AsOfSystemTime()+
 				`' WHERE to_json(k)::TEXT = $1 [1]`)
 	})
 	t.Run(`incorrect after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "after" provided with wrong value.
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":5}, "before": {"k":1,"v":2}}`, ts[3])
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":5}, "before": {"k":1,"v":2}}`, ts[3], `foo`)
 		assertValidatorFailures(t, v,
 			`"after" field did not agree with row at `+ts[3].AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[3].AsOfSystemTime()+
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 5]`)
 	})
 	t.Run(`unnecessary after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "after" provided but should not have been.
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":3}, "before": {"k":1,"v":3}}`, ts[4])
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":3}, "before": {"k":1,"v":3}}`, ts[4], `foo`)
 		assertValidatorFailures(t, v,
 			`"after" field did not agree with row at `+ts[4].AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[4].AsOfSystemTime()+
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 3]`)
 	})
 	t.Run(`incorrect before and after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" and "after" both provided with wrong value.
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":5}, "before": {"k":1,"v":4}}`, ts[3])
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":5}, "before": {"k":1,"v":4}}`, ts[3], `foo`)
 		assertValidatorFailures(t, v,
 			`"after" field did not agree with row at `+ts[3].AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[3].AsOfSystemTime()+
@@ -230,19 +258,19 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 4]`)
 	})
 	t.Run(`correct`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
-		noteRow(t, v, `p`, `[1]`, `{}`, ts[0])
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}, "before": null}`, ts[1])
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":2}, "before": {"k":1,"v":1}}`, ts[2])
-		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":3}, "before": {"k":1,"v":2}}`, ts[3])
-		noteRow(t, v, `p`, `[1]`, `{                        "before": {"k":1,"v":3}}`, ts[4])
-		noteRow(t, v, `p`, `[1]`, `{"after": null,          "before": {"k":1,"v":3}}`, ts[4])
-		noteRow(t, v, `p`, `[2]`, `{}`, ts[1])
-		noteRow(t, v, `p`, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2])
-		noteRow(t, v, `p`, `[2]`, `{"after": {"k":2,"v":2}, "before": null}`, ts[2])
+		noteRow(t, v, `p`, `[1]`, `{}`, ts[0], `foo`)
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}, "before": null}`, ts[1], `foo`)
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":2}, "before": {"k":1,"v":1}}`, ts[2], `foo`)
+		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":3}, "before": {"k":1,"v":2}}`, ts[3], `foo`)
+		noteRow(t, v, `p`, `[1]`, `{                        "before": {"k":1,"v":3}}`, ts[4], `foo`)
+		noteRow(t, v, `p`, `[1]`, `{"after": null,          "before": {"k":1,"v":3}}`, ts[4], `foo`)
+		noteRow(t, v, `p`, `[2]`, `{}`, ts[1], `foo`)
+		noteRow(t, v, `p`, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2], `foo`)
+		noteRow(t, v, `p`, `[2]`, `{"after": {"k":2,"v":2}, "before": null}`, ts[2], `foo`)
 		assertValidatorFailures(t, v)
 	})
 }
@@ -269,10 +297,10 @@ func TestBeforeAfterValidatorForGeometry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+	v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
 	require.NoError(t, err)
 	assertValidatorFailures(t, v)
-	noteRow(t, v, `p`, `[1]`, `{"after": {"k":1, "geom":{"coordinates": [1,2], "type": "Point"}}}`, ts[0])
+	noteRow(t, v, `p`, `[1]`, `{"after": {"k":1, "geom":{"coordinates": [1,2], "type": "Point"}}}`, ts[0], `foo`)
 }
 
 func TestFingerprintValidator(t *testing.T) {
@@ -326,7 +354,7 @@ func TestFingerprintValidator(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`wrong_data`))
 		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `wrong_data`, []string{`p`}, testColumns)
 		require.NoError(t, err)
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":10}}`, ts[1])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":10}}`, ts[1], `foo`)
 		noteResolved(t, v, `p`, ts[1])
 		assertValidatorFailures(t, v,
 			`fingerprints did not match at `+ts[1].AsOfSystemTime()+
@@ -340,14 +368,14 @@ func TestFingerprintValidator(t *testing.T) {
 		if err := v.NoteResolved(`p`, ts[0]); err != nil {
 			t.Fatal(err)
 		}
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
 		noteResolved(t, v, `p`, ts[1])
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
-		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2], `foo`)
+		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2], `foo`)
 		noteResolved(t, v, `p`, ts[2])
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3], `foo`)
 		noteResolved(t, v, `p`, ts[3])
-		noteRow(t, v, ignored, `[1]`, `{"after": null}`, ts[4])
+		noteRow(t, v, ignored, `[1]`, `{"after": null}`, ts[4], `foo`)
 		noteResolved(t, v, `p`, ts[4])
 		noteResolved(t, v, `p`, ts[5])
 		assertValidatorFailures(t, v)
@@ -356,11 +384,11 @@ func TestFingerprintValidator(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`rows_unsorted`))
 		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `rows_unsorted`, []string{`p`}, testColumns)
 		require.NoError(t, err)
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
-		noteRow(t, v, ignored, `[1]`, `{"after": null}`, ts[4])
-		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3], `foo`)
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2], `foo`)
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
+		noteRow(t, v, ignored, `[1]`, `{"after": null}`, ts[4], `foo`)
+		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2], `foo`)
 		noteResolved(t, v, `p`, ts[5])
 		assertValidatorFailures(t, v)
 	})
@@ -371,9 +399,9 @@ func TestFingerprintValidator(t *testing.T) {
 		noteResolved(t, v, `p`, ts[0])
 		// Intentionally missing {"k":1,"v":1} at ts[1].
 		// Insert a fake row since we don't fingerprint earlier than the first seen row.
-		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2].Prev())
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
-		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2])
+		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2].Prev(), `foo`)
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2], `foo`)
+		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2], `foo`)
 		noteResolved(t, v, `p`, ts[2].Prev())
 		assertValidatorFailures(t, v,
 			`fingerprints did not match at `+ts[2].Prev().AsOfSystemTime()+
@@ -385,11 +413,11 @@ func TestFingerprintValidator(t *testing.T) {
 		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_middle`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
 		// Intentionally missing {"k":1,"v":2} at ts[2].
-		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2])
+		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2], `foo`)
 		noteResolved(t, v, `p`, ts[2])
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3], `foo`)
 		noteResolved(t, v, `p`, ts[3])
 		assertValidatorFailures(t, v,
 			`fingerprints did not match at `+ts[2].AsOfSystemTime()+
@@ -403,9 +431,9 @@ func TestFingerprintValidator(t *testing.T) {
 		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_end`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
-		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2], `foo`)
+		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2], `foo`)
 		// Intentionally missing {"k":1,"v":3} at ts[3].
 		noteResolved(t, v, `p`, ts[3])
 		assertValidatorFailures(t, v,
@@ -417,8 +445,8 @@ func TestFingerprintValidator(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`initial_scan`))
 		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `initial_scan`, []string{`p`}, testColumns)
 		require.NoError(t, err)
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
-		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[3])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3], `foo`)
+		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[3], `foo`)
 		noteResolved(t, v, `p`, ts[3])
 		assertValidatorFailures(t, v)
 	})
@@ -434,7 +462,7 @@ func TestFingerprintValidator(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`resolved_unsorted`))
 		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `resolved_unsorted`, []string{`p`}, testColumns)
 		require.NoError(t, err)
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
 		noteResolved(t, v, `p`, ts[1])
 		noteResolved(t, v, `p`, ts[1])
 		noteResolved(t, v, `p`, ts[0])
@@ -444,8 +472,8 @@ func TestFingerprintValidator(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`two_partitions`))
 		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `two_partitions`, []string{`p0`, `p1`}, testColumns)
 		require.NoError(t, err)
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
-		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
+		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2], `foo`)
 		// Intentionally missing {"k":2,"v":2}.
 		noteResolved(t, v, `p0`, ts[2])
 		noteResolved(t, v, `p0`, ts[4])
@@ -478,7 +506,7 @@ func TestValidators(t *testing.T) {
 			NewOrderValidator(`t2`),
 		}
 		noteResolved(t, v, `p1`, ts(2))
-		noteRow(t, v, `p1`, `k1`, ignored, ts(1))
+		noteRow(t, v, `p1`, `k1`, ignored, ts(1), `foo`)
 		assertValidatorFailures(t, v,
 			`topic t1 partition p1`+
 				`: saw new row timestamp 1.0000000000 after 2.0000000000 was resolved`,

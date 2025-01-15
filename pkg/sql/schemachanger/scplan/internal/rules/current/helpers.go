@@ -316,6 +316,14 @@ func isTriggerDependent(e scpb.Element) bool {
 	return false
 }
 
+func isPolicyDependent(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.PolicyName:
+		return true
+	}
+	return false
+}
+
 func isData(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.DatabaseData:

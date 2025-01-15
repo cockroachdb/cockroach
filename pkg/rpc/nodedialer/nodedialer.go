@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc/drpcpool"
 )
 
 // An AddressResolver translates NodeIDs into addresses.
@@ -100,7 +101,7 @@ func (n *Dialer) Dial(
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
 		return nil, err
 	}
-	conn, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
 	return conn, err
 }
 
@@ -117,7 +118,7 @@ func (n *Dialer) DialNoBreaker(
 	if err != nil {
 		return nil, err
 	}
-	conn, _, err := n.dial(ctx, nodeID, addr, locality, false, class)
+	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, false, class)
 	return conn, err
 }
 
@@ -147,14 +148,31 @@ func (n *Dialer) DialInternalClient(
 		return nil, errors.Wrap(err, "resolver error")
 	}
 	log.VEventf(ctx, 2, "sending request to %s", addr)
-	conn, pool, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	conn, pool, dconn, drpcBatchStreamPool, err := n.dial(ctx, nodeID, addr, locality, true, class)
 	if err != nil {
 		return nil, err
 	}
+
 	client := newBaseInternalClient(conn)
-	if shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings) {
+	useStreamPoolClient := shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings)
+	if useStreamPoolClient {
 		client = newBatchStreamPoolClient(pool)
 	}
+
+	if rpc.ExperimentalDRPCEnabled.Get(&n.rpcContext.Settings.SV) {
+		// TODO(server): gRPC version of batch stream pool implements
+		// rpc.RestrictedInternalClient and is allocation-optimized,
+		// whereas here we allocate a new throw-away
+		// unaryDRPCBatchServiceToInternalAdapter.
+		client = &unaryDRPCBatchServiceToInternalAdapter{
+			useStreamPoolClient:      useStreamPoolClient,
+			RestrictedInternalClient: client, // for RangeFeed only
+			drpcClient:               kvpb.NewDRPCBatchClient(dconn),
+			drpcStreamPool:           drpcBatchStreamPool,
+		}
+		return client, nil
+	}
+
 	client = maybeWrapInTracingClient(ctx, client)
 	return client, nil
 }
@@ -169,28 +187,29 @@ func (n *Dialer) dial(
 	locality roachpb.Locality,
 	checkBreaker bool,
 	class rpc.ConnectionClass,
-) (_ *grpc.ClientConn, _ *rpc.BatchStreamPool, err error) {
+) (*grpc.ClientConn, *rpc.BatchStreamPool, drpcpool.Conn, *rpc.DRPCBatchStreamPool, error) {
 	const ctxWrapMsg = "dial"
 	// Don't trip the breaker if we're already canceled.
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+		return nil, nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
 	}
 	rpcConn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class)
-	connect := rpcConn.Connect
+	connect := rpcConn.ConnectEx
 	if !checkBreaker {
 		connect = rpcConn.ConnectNoBreaker
 	}
-	conn, err := connect(ctx)
+	conn, dconn, err := connect(ctx)
 	if err != nil {
 		// If we were canceled during the dial, don't trip the breaker.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+			return nil, nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
 		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	pool := rpcConn.BatchStreamPool()
-	return conn, pool, nil
+	drpcStreamPool := rpcConn.DRPCBatchStreamPool()
+	return conn, pool, dconn, drpcStreamPool, nil
 }
 
 // ConnHealth returns nil if we have an open connection of the request

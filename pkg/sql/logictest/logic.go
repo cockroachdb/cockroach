@@ -2651,16 +2651,10 @@ func (t *logicTest) processSubtest(
 				pos:         fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
 				expectCount: -1,
 			}
-			// Parse "statement (notice|error) <regexp>"
-			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
-				stmt.expectNotice = m[1]
-			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
-				stmt.expectErrCode = m[1]
-				stmt.expectErr = m[2]
-			}
 			if len(fields) >= 3 && fields[1] == "async" {
 				stmt.expectAsync = true
 				stmt.statementName = fields[2]
+				// Consume 'async <name>'.
 				copy(fields[1:], fields[3:])
 				fields = fields[:len(fields)-2]
 			}
@@ -2670,6 +2664,25 @@ func (t *logicTest) processSubtest(
 					return err
 				}
 				stmt.expectCount = n
+				// Consume 'count <count>'.
+				copy(fields[1:], fields[3:])
+				fields = fields[:len(fields)-2]
+			}
+			fullyConsumed := len(fields) == 1
+			// Parse "statement (notice|error) <regexp>"
+			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
+				stmt.expectNotice = m[1]
+				fullyConsumed = true
+			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
+				stmt.expectErrCode = m[1]
+				stmt.expectErr = m[2]
+				fullyConsumed = true
+			} else if len(fields) == 2 && fields[1] == "ok" {
+				// Match 'ok' only if there are no options after it.
+				fullyConsumed = true
+			}
+			if !fullyConsumed {
+				return errors.Newf("unexpected options for 'statement' command: %s", line)
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
@@ -2735,8 +2748,8 @@ func (t *logicTest) processSubtest(
 			} else if len(fields) < 2 {
 				return errors.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
-				// Parse "query empty"
-				if len(fields) == 2 && fields[1] == "empty" {
+				// Parse "query empty <options>"
+				if fields[1] == "empty" {
 					query.empty = true
 				} else {
 					// Parse "query <type-string> <options> <label>"
@@ -3482,17 +3495,28 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 	return false, fmt.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
 }
 
+var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
+
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL, changed := randgen.ApplyString(t.rng, stmt.sql, randgen.ColumnFamilyMutator)
-	if changed {
-		log.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
-		if *showSQL {
-			t.outf("rewrote:\n%s\n", execSQL)
+	execSQL := stmt.sql
+	// TODO(#65929, #107398): Don't mutate column families for CREATE TABLE
+	// statements with unique, hash-sharded indexes. The altered AST will be
+	// reserialized with a UNIQUE constraint, not a UNIQUE INDEX, which may not
+	// be parsable because constraints do not support all the options that
+	// indexes do.
+	if !uniqueHashPattern.MatchString(stmt.sql) {
+		var changed bool
+		execSQL, changed = randgen.ApplyString(t.rng, execSQL, randgen.ColumnFamilyMutator)
+		if changed {
+			log.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
+			if *showSQL {
+				t.outf("rewrote:\n%s\n", execSQL)
+			}
 		}
 	}
 
@@ -3521,8 +3545,6 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	res, err := db.Exec(execSQL)
 	return t.finishExecStatement(stmt, execSQL, res, err)
 }
-
-var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
 func (t *logicTest) finishExecStatement(
 	stmt logicStatement, execSQL string, res gosql.Result, err error,

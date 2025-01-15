@@ -6,6 +6,7 @@
 package tracker
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
@@ -172,34 +173,6 @@ func TestLeadSupportUntil(t *testing.T) {
 			ids:           []pb.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
 			setup: func(fortificationTracker *FortificationTracker) {
-				fortificationTracker.RecordFortification(1, 10)
-				fortificationTracker.RecordFortification(3, 30)
-				fortificationTracker.RecordFortification(2, 20)
-			},
-			// If the state isn't StateLeader, we expect the LeadSupportUntil won't
-			// be computed, and the previous value will be returned.
-			state:                  pb.StateFollower,
-			initLeadSupportedUntil: ts(1),
-			expTS:                  ts(1),
-		},
-		{
-			ids:           []pb.PeerID{1, 2, 3},
-			storeLiveness: mockLiveness3Peers,
-			setup: func(fortificationTracker *FortificationTracker) {
-				fortificationTracker.RecordFortification(1, 10)
-				fortificationTracker.RecordFortification(3, 30)
-				fortificationTracker.RecordFortification(2, 20)
-			},
-			// If the state isn't StateLeader, we expect that LeadSupportUntil won't
-			// be computed, and the previous value will be returned.
-			state:                  pb.StateCandidate,
-			initLeadSupportedUntil: ts(1),
-			expTS:                  ts(1),
-		},
-		{
-			ids:           []pb.PeerID{1, 2, 3},
-			storeLiveness: mockLiveness3Peers,
-			setup: func(fortificationTracker *FortificationTracker) {
 				// If we are stepping down, expect that LeadSupportUntil won't be
 				// computed, and the previous value will be returned.
 				fortificationTracker.BeginSteppingDown(1)
@@ -222,7 +195,8 @@ func TestLeadSupportUntil(t *testing.T) {
 
 		tc.setup(fortificationTracker)
 		fortificationTracker.leaderMaxSupported.Forward(tc.initLeadSupportedUntil)
-		require.Equal(t, tc.expTS, fortificationTracker.LeadSupportUntil(tc.state))
+		fortificationTracker.ComputeLeadSupportUntil(tc.state)
+		require.Equal(t, tc.expTS, fortificationTracker.LeadSupportUntil())
 	}
 }
 
@@ -513,7 +487,7 @@ func TestQuorumActive(t *testing.T) {
 
 		tc.setup(fortificationTracker)
 		require.Equal(t, tc.expQuorumActive, fortificationTracker.QuorumActive(), "#%d %s %s",
-			i, fortificationTracker.LeadSupportUntil(pb.StateLeader), tc.curTS)
+			i, fortificationTracker.LeadSupportUntil(), tc.curTS)
 	}
 }
 
@@ -744,9 +718,9 @@ func TestCanDefortify(t *testing.T) {
 				ft.RecordFortification(3, 30)
 			},
 			curTS: ts(10),
-			// LeadSupportUntil = ts(15); however, because we don't call it explicitly,
-			// we should be able to de-fortify.
-			expCanDefortify: true,
+			// LeadSupportUntil = ts(15); even if we don't call it explicitly,
+			// we should not be able to de-fortify.
+			expCanDefortify: false,
 		},
 		{
 			setup: func(ft *FortificationTracker) {
@@ -768,7 +742,7 @@ func TestCanDefortify(t *testing.T) {
 		ft.Reset(10) // set non-zero term
 		tc.setup(ft)
 		if !tc.expLeadSupportUntil.IsEmpty() {
-			require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil(pb.StateLeader))
+			require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil())
 		}
 		require.Equal(t, tc.expCanDefortify, ft.CanDefortify())
 	}
@@ -892,15 +866,54 @@ func TestConfigChangeSafe(t *testing.T) {
 		ft.RecordFortification(1, 10)
 		ft.RecordFortification(2, 20)
 		ft.RecordFortification(3, 30)
-		require.Equal(t, ts(15), ft.LeadSupportUntil(pb.StateLeader))
+		require.Equal(t, ts(15), ft.LeadSupportUntil())
 
 		// Perform a configuration change that adds r4 to the voter set.
 		cfg.Voters[0][4] = struct{}{}
 
 		tc.afterConfigChange(&mockLiveness, ft)
 
+		ft.ComputeLeadSupportUntil(pb.StateLeader)
 		require.Equal(t, tc.expConfigChangeSafe, ft.ConfigChangeSafe())
-		require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil(pb.StateLeader))
+		require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil())
+	}
+}
+
+// BenchmarkComputeLeadSupportUntil keeps calling ComputeLeadSupportUntil() for
+// different number of members.
+func BenchmarkComputeLeadSupportUntil(b *testing.B) {
+	ts := func(ts int64) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: ts,
+		}
+	}
+
+	for _, members := range []int{1, 3, 5, 7, 100} {
+		b.Run(fmt.Sprintf("members=%d", members), func(b *testing.B) {
+			// Prepare the mock store liveness, and record fortifications.
+			livenessMap := map[pb.PeerID]mockLivenessEntry{}
+			for i := 1; i <= members; i++ {
+				livenessMap[pb.PeerID(i)] = makeMockLivenessEntry(10, ts(100))
+			}
+
+			mockLiveness := makeMockStoreLiveness(livenessMap)
+			cfg := quorum.MakeEmptyConfig()
+			for i := 1; i <= members; i++ {
+				cfg.Voters[0][pb.PeerID(i)] = struct{}{}
+			}
+
+			ft := NewFortificationTracker(&cfg, mockLiveness, raftlogger.DiscardLogger)
+			for i := 1; i <= members; i++ {
+				ft.RecordFortification(pb.PeerID(i), 10)
+			}
+
+			// The benchmark actually starts here.
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				ft.ComputeLeadSupportUntil(pb.StateLeader)
+			}
+		})
 	}
 }
 

@@ -46,7 +46,7 @@ func TestSpanConfigClient(t *testing.T) {
 	ctx := context.Background()
 
 	maybeInlineURL := h.MaybeGenerateInlineURL(t)
-	client, err := streamclient.NewSpanConfigStreamClient(ctx, maybeInlineURL, nil)
+	client, err := streamclient.NewSpanConfigStreamClient(ctx, maybeInlineURL)
 	defer func() {
 		require.NoError(t, client.Close(ctx))
 	}()
@@ -60,8 +60,6 @@ func TestSpanConfigClient(t *testing.T) {
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cg := ctxgroup.WithContext(ctxWithCancel)
 	cg.GoCtx(sub.Subscribe)
-
-	require.NoError(t, client.Dial(ctx))
 
 	// Ensure span config events are replicating.
 	rf.ObserveAnySpanConfigRecord(ctx)

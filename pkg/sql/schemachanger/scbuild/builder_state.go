@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -510,6 +509,35 @@ func (b *builderState) NextTableTriggerID(tableID catid.DescID) (ret catid.Trigg
 		v, _ := screl.Schema.GetAttribute(screl.TriggerID, e)
 		if id, ok := v.(catid.TriggerID); ok {
 			if id < catid.TriggerID(scbuildstmt.TableTentativeIdsStart) && id >= ret {
+				ret = id + 1
+			}
+		}
+	})
+	return ret
+}
+
+// NextTablePolicyID implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) NextTablePolicyID(tableID catid.DescID) (ret catid.PolicyID) {
+	{
+		b.ensureDescriptor(tableID)
+		desc := b.descCache[tableID].desc
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
+				desc.GetID(), desc.DescriptorType()))
+		}
+		ret = tbl.GetNextPolicyID()
+		if ret == 0 {
+			ret = 1
+		}
+	}
+	// Consult all present element in case they have a larger PolicyID field.
+	b.QueryByID(tableID).ForEach(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) {
+		v, _ := screl.Schema.GetAttribute(screl.PolicyID, e)
+		if id, ok := v.(catid.PolicyID); ok {
+			if id < catid.PolicyID(scbuildstmt.TableTentativeIdsStart) && id >= ret {
 				ret = id + 1
 			}
 		}
@@ -1448,6 +1476,30 @@ func (b *builderState) ResolveTrigger(
 	})
 }
 
+func (b *builderState) ResolvePolicy(
+	tableID catid.DescID, policyName tree.Name, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(tableID)
+	tbl := b.descCache[tableID].desc.(catalog.TableDescriptor)
+	elems := b.QueryByID(tbl.GetID())
+	var policyID catid.PolicyID
+	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		if t, ok := e.(*scpb.PolicyName); ok && t.Name == string(policyName) {
+			policyID = t.PolicyID
+		}
+	})
+	if policyID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(sqlerrors.NewUndefinedPolicyError(string(policyName), tbl.GetName()))
+	}
+	return elems.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		id, _ := screl.Schema.GetAttribute(screl.PolicyID, e)
+		return id != nil && id.(catid.PolicyID) == policyID
+	})
+}
+
 func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
 	return &cachedDesc{
 		desc:            b.readDescriptor(id),
@@ -1812,7 +1864,7 @@ func (b *builderState) replaceSeqNamesWithIDs(
 		}
 		stmts = plstmt.AST
 
-		v := utils.SQLStmtVisitor{Fn: replaceSeqFunc}
+		v := plpgsqltree.SQLStmtVisitor{Fn: replaceSeqFunc}
 		newStmt := plpgsqltree.Walk(&v, stmts)
 		fmtCtx.FormatNode(newStmt)
 	default:
@@ -1928,12 +1980,12 @@ func (b *builderState) serializeUserDefinedTypes(
 		}
 		stmts = plstmt.AST
 
-		v := utils.SQLStmtVisitor{Fn: replaceFunc}
+		v := plpgsqltree.SQLStmtVisitor{Fn: replaceFunc}
 		newStmt := plpgsqltree.Walk(&v, stmts)
 		// Some PLpgSQL statements (i.e., declarations), may contain type
 		// annotations containing the UDT. We need to walk the AST to replace them,
 		// too.
-		v2 := utils.TypeRefVisitor{Fn: replaceTypeFunc}
+		v2 := plpgsqltree.TypeRefVisitor{Fn: replaceTypeFunc}
 		newStmt = plpgsqltree.Walk(&v2, newStmt)
 		fmtCtx.FormatNode(newStmt)
 	default:

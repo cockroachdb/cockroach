@@ -191,6 +191,7 @@ func collectSpanStatsResponses(
 
 			// Logical values: take the values from the node that responded first.
 			// TODO: This should really be read from the leaseholder.
+			// https://github.com/cockroachdb/cockroach/issues/138792
 			if _, ok := responses[spanStr]; !ok {
 				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
 				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount

@@ -48,7 +48,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 		err := c.UpdatePrometheusTargets(ctx, "c1", false,
 			map[int]*NodeInfo{1: {Target: "n1"}}, true, l)
 		require.NotNil(t, err)
-		require.Equal(t, "request failed with status 400 and error failed", err.Error())
+		require.Equal(t, fmt.Sprintf(ErrorMessage, 400, getUrl(promUrl, "c1"), "failed"), err.Error())
 	})
 	t.Run("UpdatePrometheusTargets succeeds", func(t *testing.T) {
 		nodeInfos := map[int]*NodeInfo{1: {Target: "n1"}, 3: {
@@ -106,7 +106,11 @@ func TestDeleteClusterConfig(t *testing.T) {
 		}
 		err := c.DeleteClusterConfig(ctx, "c1", false, false, l)
 		require.NotNil(t, err)
-		require.Equal(t, "request failed with url http://prom_url.com/v1/instance-configs/c1 status 400 and error failed", err.Error())
+		require.Equal(
+			t,
+			fmt.Sprintf(ErrorMessage, 400, "http://prom_url.com/v1/instance-configs/c1", "failed"),
+			err.Error(),
+		)
 	})
 	t.Run("DeleteClusterConfig succeeds", func(t *testing.T) {
 		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
@@ -210,4 +214,15 @@ func (tk *mockToken) Token() (*oauth2.Token, error) {
 		return nil, tk.err
 	}
 	return &oauth2.Token{AccessToken: tk.token}, nil
+}
+
+func TestIsNotFoundError(t *testing.T) {
+	t.Run("IsNotFoundError true", func(t *testing.T) {
+		err := fmt.Errorf(ErrorMessage, 404, "http://prom_url.com/v1/instance-configs/c1", "failed")
+		require.True(t, IsNotFoundError(err))
+	})
+	t.Run("IsNotFoundError false", func(t *testing.T) {
+		err := fmt.Errorf(ErrorMessage, 500, "http://prom_url.com/v1/instance-configs/c1", "failed")
+		require.False(t, IsNotFoundError(err))
+	})
 }

@@ -19,7 +19,7 @@ import (
 
 // MockStreamClient will return the slice of events associated to the stream
 // partition being consumed. Stream partitions are identified by unique
-// partition addresses.
+// partition connection uris.
 type MockStreamClient struct {
 	PartitionEvents          map[string][]crosscluster.Event
 	DoneCh                   chan struct{}
@@ -144,6 +144,12 @@ func (p *MockStreamClient) CreateForTables(
 	ctx context.Context, req *streampb.ReplicationProducerRequest,
 ) (*streampb.ReplicationProducerSpec, error) {
 	return nil, errors.AssertionFailedf("unimplemented")
+}
+
+func (p *MockStreamClient) ExecStatement(
+	ctx context.Context, cmd string, opname string, args ...interface{},
+) error {
+	return errors.AssertionFailedf("unimplemented")
 }
 
 // ErrorStreamClient always returns an error when consuming a partition.

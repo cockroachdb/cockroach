@@ -134,6 +134,7 @@ go_library(
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/rditer",
         "//pkg/kv/kvserver/stateloader",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",

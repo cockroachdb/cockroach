@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
@@ -1479,22 +1480,10 @@ func (r *testRunner) postTestAssertions(
 	postAssertCh := make(chan struct{})
 	_ = r.stopper.RunAsyncTask(ctx, "test-post-assertions", func(ctx context.Context) {
 		defer close(postAssertCh)
-		// When a dead node is detected, the subsequent post validation queries are likely
-		// to hang (reason unclear), and eventually timeout according to the statement_timeout.
-		// If this occurs frequently enough, we can look at skipping post validations on a node
-		// failure (or even on any test failure).
-		if err := c.assertNoDeadNode(ctx, t); err != nil {
-			// Some tests expect dead nodes, so they may opt out of this check.
-			if t.spec.SkipPostValidations&registry.PostValidationNoDeadNodes == 0 {
-				postAssertionErr(err)
-			} else {
-				t.L().Printf("dead node(s) detected but expected")
-			}
-		}
 
 		// We collect all the admin health endpoints in parallel,
 		// and select the first one that succeeds to run the validation queries
-		statuses, err := c.HealthStatus(ctx, t.L(), c.All())
+		statuses, err := c.HealthStatus(ctx, t.L(), c.CRDBNodes())
 		if err != nil {
 			postAssertionErr(errors.WithDetail(err, "Unable to check health status"))
 		}
@@ -1535,7 +1524,8 @@ func (r *testRunner) postTestAssertions(
 		// the replica divergence check below will also fail.
 		if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
 			func() {
-				db := c.Conn(ctx, t.L(), validationNode)
+				// NB: the invalid description checks should run at the system tenant level.
+				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName(install.SystemInterfaceName))
 				defer db.Close()
 				if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
 					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
@@ -1547,7 +1537,7 @@ func (r *testRunner) postTestAssertions(
 		if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
 			func() {
 				// NB: the consistency checks should run at the system tenant level.
-				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName("system"))
+				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName(install.SystemInterfaceName))
 				defer db.Close()
 				if err := c.assertConsistentReplicas(ctx, db, t); err != nil {
 					postAssertionErr(errors.WithDetail(err, "consistency check failed"))

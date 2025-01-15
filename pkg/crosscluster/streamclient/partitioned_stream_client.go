@@ -9,8 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net"
-	"net/url"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
@@ -29,10 +27,10 @@ import (
 )
 
 type partitionedStreamClient struct {
-	urlPlaceholder url.URL
-	pgxConfig      *pgx.ConnConfig
-	compressed     bool
-	logical        bool
+	clusterUri ClusterUri
+	pgxConfig  *pgx.ConnConfig
+	compressed bool
+	logical    bool
 
 	mu struct {
 		syncutil.Mutex
@@ -44,21 +42,26 @@ type partitionedStreamClient struct {
 }
 
 func NewPartitionedStreamClient(
-	ctx context.Context, remote *url.URL, opts ...Option,
+	ctx context.Context, remote ClusterUri, opts ...Option,
 ) (*partitionedStreamClient, error) {
 	options := processOptions(opts)
-	conn, config, err := newPGConnForClient(ctx, remote, options)
+	conn, config, err := newPGConnForClient(ctx, remote.URL(), options)
 	if err != nil {
 		return nil, err
 	}
 	client := partitionedStreamClient{
-		urlPlaceholder: *remote,
-		pgxConfig:      config,
-		compressed:     options.compressed,
-		logical:        options.logical,
+		clusterUri: remote,
+		pgxConfig:  config,
+		compressed: options.compressed,
+		logical:    options.logical,
 	}
 	client.mu.activeSubscriptions = make(map[*partitionedStreamSubscription]struct{})
 	client.mu.srcConn = conn
+
+	if err := client.dial(ctx); err != nil {
+		return nil, err
+	}
+
 	return &client, nil
 }
 
@@ -68,7 +71,7 @@ var _ Client = &partitionedStreamClient{}
 func (p *partitionedStreamClient) CreateForTenant(
 	ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.CreateForTenant")
+	ctx, sp := tracing.ChildSpan(ctx, "Client.CreateForTenant")
 	defer sp.Finish()
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -102,7 +105,7 @@ func (p *partitionedStreamClient) CreateForTenant(
 }
 
 // Dial implements Client interface.
-func (p *partitionedStreamClient) Dial(ctx context.Context) error {
+func (p *partitionedStreamClient) dial(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	err := p.mu.srcConn.Ping(ctx)
@@ -113,7 +116,7 @@ func (p *partitionedStreamClient) Dial(ctx context.Context) error {
 func (p *partitionedStreamClient) Heartbeat(
 	ctx context.Context, streamID streampb.StreamID, consumed hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Heartbeat")
+	ctx, sp := tracing.ChildSpan(ctx, "Client.Heartbeat")
 	defer sp.Finish()
 
 	p.mu.Lock()
@@ -145,17 +148,6 @@ func (p *partitionedStreamClient) Heartbeat(
 		return streampb.StreamReplicationStatus{}, err
 	}
 	return status, nil
-}
-
-// postgresURL converts an SQL serving address into a postgres URL.
-func (p *partitionedStreamClient) postgresURL(servingAddr string) (url.URL, error) {
-	host, port, err := net.SplitHostPort(servingAddr)
-	if err != nil {
-		return url.URL{}, err
-	}
-	res := p.urlPlaceholder
-	res.Host = net.JoinHostPort(host, port)
-	return res, nil
 }
 
 // PlanPhysicalReplication implements Client interface.
@@ -190,10 +182,17 @@ func (p *partitionedStreamClient) createTopology(
 		SourceTenantID: spec.SourceTenantID,
 	}
 	for _, sp := range spec.Partitions {
-		pgURL, err := p.postgresURL(sp.SQLAddress.String())
-		if err != nil {
-			return Topology{}, err
+		var connUri ClusterUri
+		if p.clusterUri.RoutingMode() == RoutingModeGateway {
+			connUri = p.clusterUri
+		} else {
+			var err error
+			connUri, err = MakeClusterUriForNode(p.clusterUri, sp.SQLAddress)
+			if err != nil {
+				return Topology{}, err
+			}
 		}
+
 		rawSpec, err := protoutil.Marshal(sp.SourcePartition)
 		if err != nil {
 			return Topology{}, err
@@ -202,7 +201,7 @@ func (p *partitionedStreamClient) createTopology(
 			ID:                sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
 			SrcInstanceID:     int(sp.NodeID),
-			SrcAddr:           crosscluster.PartitionAddress(pgURL.String()),
+			ConnUri:           connUri,
 			SrcLocality:       sp.Locality,
 			Spans:             sp.SourcePartition.Spans,
 		})
@@ -238,7 +237,7 @@ func (p *partitionedStreamClient) Subscribe(
 	previousReplicatedTimes span.Frontier,
 	opts ...SubscribeOption,
 ) (Subscription, error) {
-	_, sp := tracing.ChildSpan(ctx, "streamclient.Client.Subscribe")
+	_, sp := tracing.ChildSpan(ctx, "Client.Subscribe")
 	defer sp.Finish()
 
 	cfg := &subscribeConfig{}
@@ -292,11 +291,11 @@ func (p *partitionedStreamClient) Subscribe(
 	return res, nil
 }
 
-// Complete implements the streamclient.Client interface.
+// Complete implements the Client interface.
 func (p *partitionedStreamClient) Complete(
 	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
 ) error {
-	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Complete")
+	ctx, sp := tracing.ChildSpan(ctx, "Client.Complete")
 	defer sp.Finish()
 
 	p.mu.Lock()
@@ -319,7 +318,7 @@ type LogicalReplicationPlan struct {
 func (p *partitionedStreamClient) PlanLogicalReplication(
 	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
 ) (LogicalReplicationPlan, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PlanLogicalReplication")
+	ctx, sp := tracing.ChildSpan(ctx, "Client.PlanLogicalReplication")
 	defer sp.Finish()
 
 	if !p.logical {
@@ -374,7 +373,7 @@ func (p *partitionedStreamClient) PlanLogicalReplication(
 func (p *partitionedStreamClient) CreateForTables(
 	ctx context.Context, req *streampb.ReplicationProducerRequest,
 ) (*streampb.ReplicationProducerSpec, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.CreateForTables")
+	ctx, sp := tracing.ChildSpan(ctx, "Client.CreateForTables")
 	defer sp.Finish()
 
 	if !p.logical {
@@ -400,12 +399,23 @@ func (p *partitionedStreamClient) CreateForTables(
 	}
 	return spec, nil
 }
+func (p *partitionedStreamClient) ExecStatement(
+	ctx context.Context, cmd string, opname string, args ...interface{},
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, opname)
+	defer sp.Finish()
 
-// PriorReplicationDetails implements the streamclient.Client interface.
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, err := p.mu.srcConn.Exec(ctx, cmd, args...)
+	return err
+}
+
+// PriorReplicationDetails implements the Client interface.
 func (p *partitionedStreamClient) PriorReplicationDetails(
 	ctx context.Context, tenant roachpb.TenantName,
 ) (string, string, hlc.Timestamp, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PriorReplicationDetails")
+	ctx, sp := tracing.ChildSpan(ctx, "Client.PriorReplicationDetails")
 	defer sp.Finish()
 
 	var id string

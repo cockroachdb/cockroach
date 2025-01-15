@@ -91,7 +91,9 @@ type testState struct {
 func (s *testState) NewIndex(d *datadriven.TestData) string {
 	var err error
 	dims := 2
-	s.Options = VectorIndexOptions{Seed: 42}
+	// Set seed and allow at most one background worker to run so vector index
+	// operations can be deterministic.
+	s.Options = VectorIndexOptions{Seed: 42, MaxWorkers: 1}
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "min-partition-size":
@@ -123,8 +125,12 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 
 	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
 	s.InMemStore = vecstore.NewInMemoryStore(dims, 42)
-	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, &s.Options, nil /* stopper */)
+	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, &s.Options, s.Stopper)
 	require.NoError(s.T, err)
+
+	// Suspend background fixups until ProcessFixups is explicitly called, so
+	// that vector index operations can be deterministic.
+	s.Index.SuspendFixups()
 
 	// Insert initial vectors.
 	return s.Insert(d)
@@ -199,7 +205,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%d partitions", searchSet.Stats.PartitionCount))
 
 	// Handle any fixups triggered by the search.
-	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+	s.Index.ProcessFixups()
 
 	return buf.String()
 }
@@ -263,26 +269,20 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 		if (i+1)%step == 0 && !noFixups {
-			require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+			s.Index.ProcessFixups()
 		}
 	}
 	wait.Wait()
 
-	if noFixups {
-		s.Index.fixups.clearPending()
-	} else {
+	if !noFixups {
 		// Handle any remaining fixups.
-		require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+		s.Index.ProcessFixups()
 	}
 
 	if hideTree {
 		str := fmt.Sprintf("Created index with %d vectors with %d dimensions.\n",
 			vectors.Count, vectors.Dims)
-		if s.Index.cancel == nil {
-			// Only show stats when building the index is deterministic.
-			str += s.Index.FormatStats()
-		}
-		return str
+		return str + s.Index.FormatStats()
 	}
 
 	return s.FormatTree(d)
@@ -335,12 +335,12 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 
 		if (i+1)%s.Options.MaxPartitionSize == 0 {
 			// Run synchronous fixups so that test results are deterministic.
-			require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+			s.Index.ProcessFixups()
 		}
 	}
 
 	// Handle any remaining fixups.
-	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+	s.Index.ProcessFixups()
 
 	return s.FormatTree(d)
 }
@@ -370,7 +370,7 @@ func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 	}
 
 	// Ensure the fixup runs.
-	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+	s.Index.ProcessFixups()
 
 	return s.FormatTree(d)
 }
@@ -625,6 +625,8 @@ func TestVectorIndexConcurrency(t *testing.T) {
 
 		vectorCount := validateIndex(ctx, t, store)
 		require.Equal(t, vectors.Count, vectorCount)
+
+		index.Close()
 	}
 }
 

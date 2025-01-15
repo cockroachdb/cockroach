@@ -104,7 +104,10 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 	readRow := func(streamOut execinfra.RowSource) []string {
 		row, meta := streamOut.Next()
-		require.Nil(t, meta, "unexpected non-nil meta on stream ingestion processor output: %v", meta)
+		if meta != nil {
+			require.NoError(t, meta.Err)
+			require.Nil(t, meta, "unexpected non-nil meta on stream ingestion processor output: %v", meta)
+		}
 		if row == nil {
 			return nil
 		}
@@ -135,6 +138,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		return actualRows
 	}
 
+	unusedUri := streamclient.MakeTestClusterUri(url.URL{Scheme: "postgresql", Host: "result"})
+
 	t.Run("finite stream client", func(t *testing.T) {
 		events := func() []crosscluster.Event {
 			return []crosscluster.Event{
@@ -153,8 +158,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
 		partitions := []streamclient.PartitionInfo{
-			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}},
-			{ID: "2", SubscriptionToken: p2, Spans: []roachpb.Span{p2Span}},
+			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}, ConnUri: unusedUri},
+			{ID: "2", SubscriptionToken: p2, Spans: []roachpb.Span{p2Span}, ConnUri: unusedUri},
 		}
 		topology := streamclient.Topology{
 			Partitions: partitions,
@@ -188,7 +193,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
 		partitions := []streamclient.PartitionInfo{
-			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}},
+			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}, ConnUri: unusedUri},
 		}
 		topology := streamclient.Topology{
 			Partitions: partitions,
@@ -232,7 +237,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
 		partitions := []streamclient.PartitionInfo{
-			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}},
+			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}, ConnUri: unusedUri},
 		}
 		topology := streamclient.Topology{
 			Partitions: partitions,
@@ -282,7 +287,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
 		partitions := []streamclient.PartitionInfo{
-			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}},
+			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}, ConnUri: unusedUri},
 		}
 		topology := streamclient.Topology{
 			Partitions: partitions,
@@ -330,8 +335,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
 		partitions := []streamclient.PartitionInfo{
-			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}},
-			{ID: "2", SubscriptionToken: p2, Spans: []roachpb.Span{p2Span}},
+			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}, ConnUri: unusedUri},
+			{ID: "2", SubscriptionToken: p2, Spans: []roachpb.Span{p2Span}, ConnUri: unusedUri},
 		}
 		topology := streamclient.Topology{
 			Partitions: partitions,
@@ -373,8 +378,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	t.Run("error stream client", func(t *testing.T) {
 		initialScanTimestamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		partitions := []streamclient.PartitionInfo{
-			{SubscriptionToken: streamclient.SubscriptionToken("1")},
-			{SubscriptionToken: streamclient.SubscriptionToken("2")},
+			{SubscriptionToken: streamclient.SubscriptionToken("1"), ConnUri: unusedUri},
+			{SubscriptionToken: streamclient.SubscriptionToken("2"), ConnUri: unusedUri},
 		}
 		topology := streamclient.Topology{
 			Partitions: partitions,
@@ -495,14 +500,18 @@ func makeTestStreamURI(
 	dupProbability float64,
 	tenantID roachpb.TenantID,
 	tenantName roachpb.TenantName,
-) string {
-	return streamclient.RandomGenScheme + ":///" +
+) streamclient.ClusterUri {
+	uri, err := streamclient.ParseClusterUri(streamclient.RandomGenScheme + ":///" +
 		"?EVENT_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
 		"&KVS_PER_CHECKPOINT=" + strconv.Itoa(kvsPerResolved) +
 		"&NUM_PARTITIONS=" + strconv.Itoa(numPartitions) +
 		"&DUP_PROBABILITY=" + strconv.FormatFloat(dupProbability, 'f', -1, 32) +
 		"&TENANT_ID=" + strconv.Itoa(int(tenantID.ToUint64())) +
-		"&TENANT_NAME=" + string(tenantName)
+		"&TENANT_NAME=" + string(tenantName))
+	if err != nil {
+		panic(err)
+	}
+	return uri
 }
 
 type noCutover struct{}
@@ -532,7 +541,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	streamAddr := getTestRandomClientURI(tenantID, tenantName)
 
 	// The random client returns system and table data partitions.
-	streamClient, err := streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(streamAddr), nil)
+	streamClient, err := streamclient.NewStreamClient(ctx, streamAddr, nil)
 	require.NoError(t, err)
 
 	randomStreamClient, ok := streamClient.(streamclient.RandomClient)
@@ -718,7 +727,7 @@ func getStreamIngestionProcessor(
 	for _, pa := range partitions.Partitions {
 		spec.PartitionSpecs[pa.ID] = execinfrapb.StreamIngestionPartitionSpec{
 			PartitionID:       pa.ID,
-			Address:           string(pa.SrcAddr),
+			PartitionConnUri:  pa.ConnUri.Serialize(),
 			SubscriptionToken: string(pa.SubscriptionToken),
 			Spans:             pa.Spans,
 		}

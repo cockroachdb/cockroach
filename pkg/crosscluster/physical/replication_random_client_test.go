@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
+	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -37,28 +38,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func getReplicatedTime(ingestionJobID int, sqlDB *gosql.DB) (hlc.Timestamp, error) {
-	var progressBytes []byte
-	if err := sqlDB.QueryRow(
-		`SELECT progress FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJobID,
-	).Scan(&progressBytes); err != nil {
-		return hlc.Timestamp{}, err
-	}
-	var progress jobspb.Progress
-	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
-		return hlc.Timestamp{}, err
-	}
-	return replicationutils.ReplicatedTimeFromProgress(&progress), nil
-}
-
-func getTestRandomClientURI(tenantID roachpb.TenantID, tenantName roachpb.TenantName) string {
+func getTestRandomClientURI(
+	tenantID roachpb.TenantID, tenantName roachpb.TenantName,
+) streamclient.ClusterUri {
 	kvsPerResolved := 200
 	kvFrequency := 50 * time.Nanosecond
 	numPartitions := 2
@@ -95,7 +82,7 @@ func (sv *streamClientValidator) noteRow(
 ) error {
 	sv.mu.Lock()
 	defer sv.mu.Unlock()
-	return sv.NoteRow(partition, key, value, updated)
+	return sv.NoteRow(partition, key, value, updated, "" /* topic */)
 }
 
 func (sv *streamClientValidator) noteResolved(partition string, resolved hlc.Timestamp) error {
@@ -118,6 +105,28 @@ func (sv *streamClientValidator) getValuesForKeyBelowTimestamp(
 	return sv.StreamValidator.GetValuesForKeyBelowTimestamp(key, timestamp)
 }
 
+// watchMaxCheckpointTimestamp updates an atomic pointer ever time a new
+// checkpoint with a higher hlc is observed.
+func watchMaxCheckpointTimestamp() (*atomic.Pointer[hlc.Timestamp], streamclient.InterceptFn) {
+	mu := &syncutil.Mutex{}
+	ts := &atomic.Pointer[hlc.Timestamp]{}
+	return ts, func(event crosscluster.Event, _ streamclient.SubscriptionToken) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch event.Type() {
+		case crosscluster.CheckpointEvent:
+			maxTimestamp := ts.Load()
+			for _, rs := range event.GetCheckpoint().ResolvedSpans {
+				if maxTimestamp == nil || rs.Timestamp.After(*maxTimestamp) {
+					copy := rs.Timestamp
+					maxTimestamp = &copy
+				}
+			}
+			ts.Store(maxTimestamp)
+		}
+	}
+}
+
 // TestStreamIngestionJobWithRandomClient creates a stream ingestion job that is
 // fed KVs from the random stream client. After receiving a certain number of
 // resolved timestamp events the test completes the job to tear down the flow,
@@ -132,12 +141,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	ctx := context.Background()
 
-	canBeCompletedCh := make(chan struct{})
-	const threshold = 10
-	mu := syncutil.Mutex{}
-	completeJobAfterCheckpoints := makeCheckpointEventCounter(&mu, threshold, func() {
-		canBeCompletedCh <- struct{}{}
-	})
+	maxCheckpointHlc, watchIntercepor := watchMaxCheckpointTimestamp()
 
 	// Register interceptors on the random stream client, which will be used by
 	// the processors.
@@ -160,7 +164,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	}()
 
 	client.ClearInterceptors()
-	client.RegisterInterception(completeJobAfterCheckpoints)
+	client.RegisterInterception(watchIntercepor)
 	client.RegisterInterception(validateFnWithValidator(t, streamValidator))
 	client.RegisterSSTableGenerator(func(keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable {
 		return replicationtestutils.SSTMaker(t, keyValues)
@@ -213,7 +217,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.failover_signal_poll_interval='1s'`)
 	require.NoError(t, err)
 	streamAddr := getTestRandomClientURI(roachpb.MustMakeTenantID(oldTenantID), oldTenantName)
-	query := fmt.Sprintf(`CREATE TENANT "30" FROM REPLICATION OF "10" ON '%s'`, streamAddr)
+	query := fmt.Sprintf(`CREATE TENANT "30" FROM REPLICATION OF "10" ON '%s'`, streamAddr.Serialize())
 
 	_, err = conn.Exec(query)
 	require.NoError(t, err)
@@ -235,28 +239,53 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	}
 	close(allowResponse)
 
-	// Wait for the job to signal that it is ready to be cutover, after it has
-	// received `threshold` resolved ts events.
-	<-canBeCompletedCh
-	close(canBeCompletedCh)
-
-	// Ensure that the job has made some progress.
-	var replicatedTime hlc.Timestamp
+	// Pick a cutover time based on when we observe a checkpoint that is older
+	// than the retained time. We wait for a checkpoint to make sure there is
+	// actually data written at the time we cutover to.
+	var cutoverTime time.Time
 	testutils.SucceedsSoon(t, func() error {
-		var err error
-		replicatedTime, err = getReplicatedTime(ingestionJobID, conn)
-		require.NoError(t, err)
-		if replicatedTime.IsEmpty() {
+		checkpointHlc := maxCheckpointHlc.Load()
+		if checkpointHlc == nil {
+			return errors.New("no checkpoint has been received")
+		}
+
+		var retainedTime time.Time
+		row := conn.QueryRow(
+			`SELECT retained_time FROM [SHOW VIRTUAL CLUSTER "30" WITH REPLICATION STATUS]`)
+		if err := row.Scan(&retainedTime); err != nil {
+			return err
+		}
+
+		if retainedTime.Before(checkpointHlc.GoTime()) {
+			cutoverTime = checkpointHlc.GoTime().Add(time.Microsecond)
+			return nil
+		}
+
+		return errors.New("waiting for a checkpoint that happens after the retained time")
+	})
+
+	// Wait for the replicated time to pass the cutover time. This ensures the
+	// test rolls back some data.
+	testutils.SucceedsSoon(t, func() error {
+		var replicatedTime gosql.NullTime
+		row := conn.QueryRow(
+			`SELECT replicated_time FROM [SHOW VIRTUAL CLUSTER "30" WITH REPLICATION STATUS]`)
+		if err := row.Scan(&replicatedTime); err != nil {
+			return err
+		}
+		if !replicatedTime.Valid {
 			return errors.New("ReplicatedTime is unset, no progress has been reported")
 		}
-		return nil
+		if cutoverTime.Before(replicatedTime.Time) {
+			return nil
+		}
+		return errors.New("replicated time has not yet passed the cutover time")
 	})
 
 	// Cutting over the job should shutdown the ingestion processors via a context
 	// cancellation, and subsequently rollback data above our frontier timestamp.
 	//
 	// Pick a cutover time just before the latest resolved timestamp.
-	cutoverTime := timeutil.Unix(0, replicatedTime.WallTime).UTC().Add(-1 * time.Microsecond).Round(time.Microsecond)
 	_, err = conn.Exec(`ALTER TENANT "30" COMPLETE REPLICATION TO SYSTEM TIME $1::string`, cutoverTime)
 	require.NoError(t, err)
 

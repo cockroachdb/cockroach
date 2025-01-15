@@ -8,6 +8,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"reflect"
@@ -582,9 +583,11 @@ func runDecommissionNodeImpl(
 
 		anyActive := false
 		var replicaCount int64
+		statusByNodeID := map[roachpb.NodeID]serverpb.DecommissionStatusResponse_Status{}
 		for _, status := range resp.Status {
 			anyActive = anyActive || status.Membership.Active()
 			replicaCount += status.ReplicaCount
+			statusByNodeID[status.NodeID] = status
 		}
 
 		if !anyActive && replicaCount == 0 {
@@ -594,9 +597,16 @@ func runDecommissionNodeImpl(
 			for _, targetNode := range nodeIDs {
 				if targetNode == localNodeID {
 					// Skip the draining step for the node serving the request, if it is a target node.
-					log.Warningf(ctx,
-						"skipping drain step for node n%d; it is decommissioning and serving the request",
+					_, _ = fmt.Fprintf(stderr,
+						"skipping drain step for node n%d; it is decommissioning and serving the request\n",
 						localNodeID,
+					)
+					continue
+				}
+				if status, ok := statusByNodeID[targetNode]; !ok || !status.IsLive {
+					// Skip the draining step for the node serving the request, if it is a target node.
+					_, _ = fmt.Fprintf(stderr,
+						"skipping drain step for node n%d; it is not live\n", targetNode,
 					)
 					continue
 				}
@@ -605,9 +615,24 @@ func runDecommissionNodeImpl(
 					DoDrain:  true,
 					NodeId:   targetNode.String(),
 				}
-				if _, err = c.Drain(ctx, drainReq); err != nil {
+				stream, err := c.Drain(ctx, drainReq)
+				if err != nil {
 					fmt.Fprintln(stderr)
 					return errors.Wrapf(err, "while trying to drain n%d", targetNode)
+				}
+
+				// Consume responses until the stream ends (which signals drain
+				// completion).
+				for {
+					_, err := stream.Recv()
+					if err == io.EOF {
+						// Stream gracefully closed by other side.
+						break
+					}
+					if err != nil {
+						fmt.Fprintln(stderr)
+						return errors.Wrapf(err, "while trying to drain n%d", targetNode)
+					}
 				}
 			}
 

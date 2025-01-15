@@ -28,25 +28,24 @@ func TestGetFirstActiveClient(t *testing.T) {
 		require.NoError(t, client.Close(context.Background()))
 	}()
 
-	streamAddresses := []string{
-		"randomgen://test0/",
-		"<invalid-url-test1>",
-		"randomgen://test2/",
-		"invalidScheme://test3",
-		"randomgen://test4/",
-		"randomgen://test5/",
-		"randomgen://test6/",
+	streamAddresses := []streamclient.ClusterUri{
+		streamclient.MakeTestClusterUri(url.URL{Scheme: "randomgen", Host: "test0"}),
+		streamclient.MakeTestClusterUri(url.URL{Scheme: "", Host: "<invalid-url-test1>"}),
+		streamclient.MakeTestClusterUri(url.URL{Scheme: "randomgen", Host: "test2"}),
+		streamclient.MakeTestClusterUri(url.URL{Scheme: "invalidScheme", Host: "test3"}),
+		streamclient.MakeTestClusterUri(url.URL{Scheme: "randomgen", Host: "test4"}),
+		streamclient.MakeTestClusterUri(url.URL{Scheme: "randomgen", Host: "test5"}),
+		streamclient.MakeTestClusterUri(url.URL{Scheme: "randomgen", Host: "test6"}),
 	}
-	addressDialCount := map[string]int{}
+	uriDialCount := map[url.URL]int{}
 	for _, addr := range streamAddresses {
-		addressDialCount[addr] = 0
+		uriDialCount[addr.URL()] = 0
 	}
 
 	// Track dials and error for all but test3 and test4
-	client.RegisterDialInterception(func(streamURL *url.URL) error {
-		addr := streamURL.String()
-		addressDialCount[addr]++
-		if addr != streamAddresses[3] && addr != streamAddresses[4] {
+	client.RegisterDialInterception(func(streamURL url.URL) error {
+		uriDialCount[streamURL]++
+		if streamURL != streamAddresses[3].URL() && streamURL != streamAddresses[4].URL() {
 			return errors.Errorf("injected dial error")
 		}
 		return nil
@@ -57,13 +56,13 @@ func TestGetFirstActiveClient(t *testing.T) {
 
 	// Should've dialed the valid schemes up to the 5th one where it should've
 	// succeeded
-	require.Equal(t, 1, addressDialCount[streamAddresses[0]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[1]])
-	require.Equal(t, 1, addressDialCount[streamAddresses[2]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[3]])
-	require.Equal(t, 1, addressDialCount[streamAddresses[4]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[5]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[6]])
+	require.Equal(t, 1, uriDialCount[streamAddresses[0].URL()])
+	require.Equal(t, 0, uriDialCount[streamAddresses[1].URL()])
+	require.Equal(t, 1, uriDialCount[streamAddresses[2].URL()])
+	require.Equal(t, 0, uriDialCount[streamAddresses[3].URL()])
+	require.Equal(t, 1, uriDialCount[streamAddresses[4].URL()])
+	require.Equal(t, 0, uriDialCount[streamAddresses[5].URL()])
+	require.Equal(t, 0, uriDialCount[streamAddresses[6].URL()])
 
 	// The 5th should've succeded as it was a valid scheme and succeeded Dial
 	require.Equal(t, activeClient.(streamclient.RandomClient).URL(), streamAddresses[4])

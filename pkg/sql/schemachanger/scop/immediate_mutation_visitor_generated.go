@@ -91,6 +91,9 @@ type ImmediateMutationVisitor interface {
 	SetTriggerFunctionCall(context.Context, SetTriggerFunctionCall) error
 	SetTriggerForwardReferences(context.Context, SetTriggerForwardReferences) error
 	RemoveTrigger(context.Context, RemoveTrigger) error
+	AddPolicy(context.Context, AddPolicy) error
+	RemovePolicy(context.Context, RemovePolicy) error
+	SetPolicyName(context.Context, SetPolicyName) error
 	UpdateTableBackReferencesInTypes(context.Context, UpdateTableBackReferencesInTypes) error
 	UpdateTypeBackReferencesInTypes(context.Context, UpdateTypeBackReferencesInTypes) error
 	RemoveBackReferenceInTypes(context.Context, RemoveBackReferenceInTypes) error
@@ -524,6 +527,21 @@ func (op SetTriggerForwardReferences) Visit(ctx context.Context, v ImmediateMuta
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveTrigger) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveTrigger(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddPolicy) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddPolicy(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemovePolicy) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemovePolicy(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetPolicyName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetPolicyName(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

@@ -215,6 +215,9 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE SCHEMA IF NOT ??`, `CREATE SCHEMA`},
 		{`CREATE SCHEMA bli ??`, `CREATE SCHEMA`},
 
+		{`CHECK ??`, `CHECK`},
+		{`CHECK EXTERNAL CONNECTION ??`, `CHECK EXTERNAL CONNECTION`},
+
 		{`DELETE FROM ??`, `DELETE`},
 		{`DELETE FROM blah ??`, `DELETE`},
 		{`DELETE FROM blah WHERE ??`, `DELETE`},
@@ -293,6 +296,8 @@ func TestContextualHelp(t *testing.T) {
 		{`DECLARE foo ??`, `DECLARE`},
 		{`DECLARE foo BINARY ??`, `DECLARE`},
 		{`DECLARE foo BINARY CURSOR ??`, `DECLARE`},
+
+		{`DO ??`, `DO`},
 
 		{`CLOSE ??`, `CLOSE`},
 

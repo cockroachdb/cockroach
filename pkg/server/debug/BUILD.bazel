@@ -38,6 +38,7 @@ go_library(
         "@com_github_cockroachdb_pebble//tool",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_felixge_fgprof//:fgprof",
         "@com_github_rcrowley_go_metrics//:go-metrics",
         "@com_github_rcrowley_go_metrics//exp",
         "@com_github_spf13_cobra//:cobra",
