@@ -248,7 +248,7 @@ go_library(
         "@com_github_cockroachdb_pebble//objstorage",
         "@com_github_cockroachdb_pebble//objstorage/remote",
         "@com_github_cockroachdb_pebble//rangekey",
-        "@com_github_cockroachdb_pebble//sstable",
+        "@com_github_cockroachdb_pebble//sstable/block",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",

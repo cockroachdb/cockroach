@@ -229,9 +229,7 @@ type Monitor struct {
 
 // CumulativeStats returns the most-recent stats observed.
 func (m *Monitor) CumulativeStats() (Stats, error) {
-	if event, err := m.tracer.Latest(); err != nil {
-		return Stats{}, err
-	} else if event.err != nil {
+	if event := m.tracer.Latest(); event.err != nil {
 		return Stats{}, event.err
 	} else {
 		return event.stats, nil

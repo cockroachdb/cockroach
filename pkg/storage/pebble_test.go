@@ -1709,8 +1709,8 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 		slowCount := testFunc(t, "pebble_logger_and_tracer")
 		require.Equal(t, 0, slowCount)
 	})
-	t.Run("reader", func(t *testing.T) {
-		slowCount := testFunc(t, "reader")
+	t.Run("block", func(t *testing.T) {
+		slowCount := testFunc(t, "block")
 		require.Less(t, 0, slowCount)
 	})
 }

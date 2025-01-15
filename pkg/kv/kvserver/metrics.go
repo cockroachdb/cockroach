@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -4161,7 +4161,7 @@ type pebbleCategoryIterMetrics struct {
 	IterBlockReadLatencySum *metric.Counter
 }
 
-func makePebbleCategorizedIterMetrics(category sstable.Category) pebbleCategoryIterMetrics {
+func makePebbleCategorizedIterMetrics(category block.Category) pebbleCategoryIterMetrics {
 	metaBlockBytes := metric.Metadata{
 		Name:        fmt.Sprintf("storage.iterator.category-%s.block-load.bytes", category),
 		Help:        "Bytes loaded by storage sstable iterators (possibly cached).",
@@ -4190,7 +4190,7 @@ func makePebbleCategorizedIterMetrics(category sstable.Category) pebbleCategoryI
 // MetricStruct implements the metric.Struct interface.
 func (m *pebbleCategoryIterMetrics) MetricStruct() {}
 
-func (m *pebbleCategoryIterMetrics) update(stats sstable.CategoryStats) {
+func (m *pebbleCategoryIterMetrics) update(stats block.CategoryStats) {
 	m.IterBlockBytes.Update(int64(stats.BlockBytes))
 	m.IterBlockBytesInCache.Update(int64(stats.BlockBytesInCache))
 	m.IterBlockReadLatencySum.Update(int64(stats.BlockReadDuration))
@@ -4198,20 +4198,20 @@ func (m *pebbleCategoryIterMetrics) update(stats sstable.CategoryStats) {
 
 type pebbleCategoryIterMetricsContainer struct {
 	registry *metric.Registry
-	// metrics slice for all categories; can be directly indexed by sstable.Category.
+	// metrics slice for all categories; can be directly indexed by block.Category.
 	metrics []pebbleCategoryIterMetrics
 }
 
 func (m *pebbleCategoryIterMetricsContainer) init(registry *metric.Registry) {
 	m.registry = registry
-	categories := sstable.Categories()
+	categories := block.Categories()
 	m.metrics = make([]pebbleCategoryIterMetrics, len(categories))
 	for _, c := range categories {
 		m.metrics[c] = makePebbleCategorizedIterMetrics(c)
 	}
 }
 
-func (m *pebbleCategoryIterMetricsContainer) update(stats []sstable.CategoryStatsAggregate) {
+func (m *pebbleCategoryIterMetricsContainer) update(stats []block.CategoryStatsAggregate) {
 	for _, s := range stats {
 		m.metrics[s.Category].update(s.CategoryStats)
 	}
