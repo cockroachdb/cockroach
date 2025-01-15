@@ -638,12 +638,6 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 
 	isBackupOfSystemTenant := tcBackup.ApplicationLayer(0).Codec().ForSystemTenant()
 
-	// This test flakes due to
-	// https://github.com/cockroachdb/cockroach/issues/86806. Instead of skipping
-	// the test all together, setting the cluster setting to false which triggers
-	// the failure.
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled=false")
-
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
 	numBatches := 100
