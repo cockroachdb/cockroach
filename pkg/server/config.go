@@ -648,6 +648,10 @@ func makeStorageCfg(
 
 // String implements the fmt.Stringer interface.
 func (cfg *Config) String() string {
+	return redact.StringWithoutMarkers(cfg)
+}
+
+func (cfg *Config) SafeFormat(sp redact.SafePrinter, _ rune) {
 	var buf bytes.Buffer
 
 	w := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
@@ -663,7 +667,7 @@ func (cfg *Config) String() string {
 	}
 	_ = w.Flush()
 
-	return buf.String()
+	sp.Print(redact.SafeString(buf.String()))
 }
 
 // Report logs an overview of the server configuration parameters via
@@ -674,7 +678,7 @@ func (cfg *Config) Report(ctx context.Context) {
 	} else {
 		log.Infof(ctx, "system total memory: %s", humanizeutil.IBytes(memSize))
 	}
-	log.Infof(ctx, "server configuration:\n%s", log.SafeManaged(cfg))
+	log.Infof(ctx, "server configuration:\n%s", cfg)
 }
 
 // Engines is a container of engines, allowing convenient closing.
