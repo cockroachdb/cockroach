@@ -274,7 +274,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *ScanExpr, *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *LockExpr, *SequenceSelectExpr,
-		*WindowExpr, *VectorSearchExpr, *VectorPartitionSearchExpr, *OpaqueRelExpr,
+		*WindowExpr, *VectorSearchExpr, *VectorMutationSearchExpr, *OpaqueRelExpr,
 		*OpaqueMutationExpr, *OpaqueDDLExpr, *AlterTableSplitExpr, *AlterTableUnsplitExpr,
 		*AlterTableUnsplitAllExpr, *AlterTableRelocateExpr, *AlterRangeRelocateExpr,
 		*ControlJobsExpr, *CancelQueriesExpr, *CancelSessionsExpr, *CreateViewExpr,
@@ -760,7 +760,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
 
-	case *VectorPartitionSearchExpr:
+	case *VectorMutationSearchExpr:
 		if len(t.PrefixKeyCols) > 0 {
 			tp.Childf("prefix key columns: %v", t.PrefixKeyCols)
 		}
@@ -1921,7 +1921,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *VectorSearchPrivate:
 		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
-	case *VectorPartitionSearchPrivate:
+	case *VectorMutationSearchPrivate:
 		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
 	case *props.OrderingChoice:

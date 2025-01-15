@@ -498,8 +498,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.VectorSearchOp:
 		return sb.colStatVectorSearch(colSet, e.(*VectorSearchExpr))
 
-	case opt.VectorPartitionSearchOp:
-		return sb.colStatVectorPartitionSearch(colSet, e.(*VectorPartitionSearchExpr))
+	case opt.VectorMutationSearchOp:
+		return sb.colStatVectorMutationSearch(colSet, e.(*VectorMutationSearchExpr))
 
 	case opt.BarrierOp:
 		return sb.colStatBarrier(colSet, e.(*BarrierExpr))
@@ -2902,11 +2902,11 @@ func (sb *statisticsBuilder) colStatVectorSearch(
 }
 
 // +-----------------------+
-// | VectorPartitionSearch |
+// | VectorMutationSearch |
 // +-----------------------+
 
-func (sb *statisticsBuilder) buildVectorPartitionSearch(
-	search *VectorPartitionSearchExpr, relProps *props.Relational,
+func (sb *statisticsBuilder) buildVectorMutationSearch(
+	search *VectorMutationSearchExpr, relProps *props.Relational,
 ) {
 	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
@@ -2917,14 +2917,14 @@ func (sb *statisticsBuilder) buildVectorPartitionSearch(
 
 	inputStats := search.Input.Relational().Statistics()
 
-	// VectorPartitionSearch operators do not change the cardinality of the input.
+	// VectorMutationSearch operators do not change the cardinality of the input.
 	s.RowCount = inputStats.RowCount
 	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 	sb.finalizeFromCardinality(relProps)
 }
 
-func (sb *statisticsBuilder) colStatVectorPartitionSearch(
-	colSet opt.ColSet, search *VectorPartitionSearchExpr,
+func (sb *statisticsBuilder) colStatVectorMutationSearch(
+	colSet opt.ColSet, search *VectorMutationSearchExpr,
 ) *props.ColumnStatistic {
 	s := search.Relational().Statistics()
 
