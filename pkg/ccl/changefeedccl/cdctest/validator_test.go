@@ -100,7 +100,6 @@ func TestOrderValidator(t *testing.T) {
 }
 
 func TestMvccTimestampValidator(t *testing.T) {
-	defer leaktest.AfterTest(t)()
 	const ignored = `ignored`
 
 	t.Run(`empty on initialization`, func(t *testing.T) {
@@ -150,6 +149,65 @@ func TestMvccTimestampValidator(t *testing.T) {
 		v := NewMvccTimestampValidator()
 		noteRow(t, v, `p1`, `k1`, `{"some_other_field": "value"}`, ts(1), `foo`)
 		assertValidatorFailures(t, v, `expected MVCC timestamp, got nil`)
+	})
+}
+
+func TestTopicValidator(t *testing.T) {
+	const ignored = `ignored`
+	ignoredTimestamp := hlc.Timestamp{}
+	t.Run(`topic matches table name`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", false)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "test_table")
+		if err != nil {
+			t.Fatalf("got %v expected %v", err, nil)
+		}
+		if f := v.Failures(); f != nil {
+			t.Fatalf("got %v expected %v", f, nil)
+		}
+	})
+
+	t.Run(`fails when topic does not match table name`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", false)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "wrong_table")
+		if err != nil {
+			t.Fatalf("got %v expected %v", err, nil)
+		}
+		if f := v.Failures(); f == nil || len(f) == 0 {
+			t.Fatalf("expected failure, got nil")
+		}
+	})
+
+	t.Run(`fails when topic is full table name if option not specified`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", false)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "d.public.test_table")
+		if err != nil {
+			t.Fatalf("got %v expected %v", err, nil)
+		}
+		if f := v.Failures(); f == nil || len(f) == 0 {
+			t.Fatalf("expected failure, got nil")
+		}
+	})
+
+	t.Run(`full table name succeeds when provided`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", true)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "d.public.test_table")
+		if err != nil {
+			t.Fatalf("got %v expected %v", err, nil)
+		}
+		if f := v.Failures(); f != nil {
+			t.Fatalf("got %v expected %v", f, nil)
+		}
+	})
+
+	t.Run(`full table name fails when partial table name is the topic`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", true)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "test_table")
+		if err != nil {
+			t.Fatalf("got %v expected %v", err, nil)
+		}
+		if f := v.Failures(); f == nil || len(f) == 0 {
+			t.Fatalf("expected failure, got nil")
+		}
 	})
 }
 

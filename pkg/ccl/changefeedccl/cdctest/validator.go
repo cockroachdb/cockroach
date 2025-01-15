@@ -498,20 +498,15 @@ func NewTopicValidator(table string, fullTableName bool) Validator {
 func (v *topicValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
-	fullTableName := v.fullTableName
-
-	if fullTableName {
-		// TODO: fetch the actual database and schema name for the full table name
+	if v.fullTableName {
 		if topic != fmt.Sprintf(`d.public.%s`, v.table) {
-			return errors.Errorf(
-				"topic %s does not match expected table d.public.%s", topic, v.table,
-			)
+			v.failures = append(v.failures, fmt.Sprintf(
+				"topic %s does not match expected table d.public.%s", topic, v.table))
 		}
 	} else {
 		if topic != v.table {
-			return errors.Errorf(
-				"topic %s does not match expected table %s", topic, v.table,
-			)
+			v.failures = append(v.failures, fmt.Sprintf(
+				"topic %s does not match expected table d.public.%s", topic, v.table))
 		}
 	}
 	return nil
