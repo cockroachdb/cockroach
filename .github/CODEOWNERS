@@ -221,6 +221,7 @@
 /pkg/server/server_controller_*.go       @cockroachdb/server-prs
 /pkg/server/server_controller_http.go    @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/server_controller_sql.go     @cockroachdb/sql-foundations @cockroachdb/server-prs
+/pkg/server/server_drpc_test.go          @cockroachdb/server-prs
 /pkg/server/server_http*.go              @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/server_import_ts*.go         @cockroachdb/obs-prs @cockroachdb/kv-prs
 /pkg/server/server_obs*                  @cockroachdb/obs-prs
