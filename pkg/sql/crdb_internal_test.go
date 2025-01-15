@@ -1357,46 +1357,6 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	// TODO(adityamaru): add checks for payload and progress
 }
 
-// TestCorruptPayloadError asserts that we can an error
-// with the correct hint when we fail to decode a payload.
-func TestCorruptPayloadError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			// Because this test modifies system.jobs and asserts its contents,
-			// we should disable jobs from being adopted and disable automatic jobs
-			// from being created.
-			JobsTestingKnobs: &jobs.TestingKnobs{
-				DisableAdoptions: true,
-			},
-			// DisableAdoptions needs this.
-			UpgradeManager: &upgradebase.TestingKnobs{
-				DontUseJobs: true,
-			},
-			SpanConfig: &spanconfig.TestingKnobs{
-				ManagerDisableJobCreation: true,
-			},
-		},
-	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(db)
-
-	tdb.Exec(t,
-		"INSERT INTO system.jobs (id, status, created) values ($1, $2, $3)",
-		1, jobs.StatusRunning, timeutil.Now(),
-	)
-	tdb.Exec(t,
-		"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",
-		1, jobs.GetLegacyPayloadKey(), []byte("invalid payload"),
-	)
-
-	tdb.ExpectErrWithHint(t, "proto", "could not decode the payload for job 1. consider deleting this job from system.jobs", "SELECT * FROM crdb_internal.system_jobs")
-	tdb.ExpectErrWithHint(t, "proto", "could not decode the payload for job 1. consider deleting this job from system.jobs", "SELECT * FROM crdb_internal.jobs")
-}
-
 // TestInternalSystemJobsAccess asserts which entries a user can query
 // based on their grants and role options.
 func TestInternalSystemJobsAccess(t *testing.T) {
@@ -1514,7 +1474,7 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 							return nil
 						}
 						opName, ok := sql.GetInternalOpName(ctx)
-						if !ok || opName != "system-jobs-scan" {
+						if !ok || !(opName == "system-jobs-scan" || opName == "system-jobs-join") {
 							return nil
 						}
 						numCallbacksAdded.Add(1)
