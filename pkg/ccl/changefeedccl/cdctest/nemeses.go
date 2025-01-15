@@ -269,14 +269,17 @@ func RunNemesis(
 		return nil, err
 	}
 
-	baV, err := NewBeforeAfterValidator(db, `foo`, cfo)
+	baV, err := NewBeforeAfterValidator(db, `foo`)
 	if err != nil {
 		return nil, err
 	}
 
+	tV := NewTopicValidator(`foo`, cfo.BooleanOptions["full_table_name"])
+
 	validators := Validators{
 		NewOrderValidator(`foo`),
 		baV,
+		tV,
 	}
 
 	if nOp.EnableFpValidator {
@@ -285,6 +288,14 @@ func RunNemesis(
 			return nil, err
 		}
 		validators = append(validators, fprintV)
+	}
+
+	if cfo.BooleanOptions["key_in_value"] {
+		kivV, err := NewKeyInValueValidator(db, `foo`)
+		if err != nil {
+			return nil, err
+		}
+		validators = append(validators, kivV)
 	}
 
 	ns.v = NewCountValidator(validators)
