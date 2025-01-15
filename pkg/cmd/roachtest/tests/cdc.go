@@ -926,11 +926,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
 		}
-		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`, cdctest.ChangefeedOption{
-			FullTableName: false,
-			KeyInValue:    false,
-			Format:        "json",
-		})
+		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`, false)
 		if err != nil {
 			return err
 		}

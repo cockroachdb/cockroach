@@ -45,7 +45,10 @@ func noteResolved(t *testing.T, v Validator, partition string, resolved hlc.Time
 func assertValidatorFailures(t *testing.T, v Validator, expected ...string) {
 	t.Helper()
 	if f := v.Failures(); !reflect.DeepEqual(f, expected) {
+		fmt.Println("these were not ok", f, expected)
 		t.Errorf(`got %v expected %v`, f, expected)
+	} else {
+		fmt.Println("these were ok", f, expected)
 	}
 }
 
@@ -99,10 +102,88 @@ func TestOrderValidator(t *testing.T) {
 	})
 }
 
-var standardChangefeedOptions = ChangefeedOption{
-	FullTableName: false,
-	KeyInValue:    false,
-	Format:        "json",
+func TestMvccTimestampValidator(t *testing.T) {
+	const ignored = `ignored`
+
+	t.Run(`empty on initialization`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		assertValidatorFailures(t, v)
+	})
+
+	t.Run(`fails if no mvcc timestamp provided`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, ignored, ignored, `{}`, ts(1), ignored)
+		assertValidatorFailures(t, v, `expected MVCC timestamp, got nil`)
+	})
+
+	t.Run(`mvcc later than updated`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, `p1`, `k1`, `{"mvcc_timestamp": "2.000000001"}`, ts(2), `foo`)
+		assertValidatorFailures(t, v, `expected MVCC timestamp to be earlier or equal to updated timestamp (2.0000000000), got 2.000000001`)
+	})
+
+	t.Run(`mvcc timestamp equal to updated`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, `p1`, `k1`, `{"mvcc_timestamp": "1.0000000000"}`, ts(1), `foo`)
+		assertValidatorFailures(t, v)
+	})
+
+	t.Run(`mvcc timestamp earlier than updated`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, `p1`, `k1`, `{"mvcc_timestamp": "1.0000000000"}`, ts(2), `foo`)
+		assertValidatorFailures(t, v)
+	})
+
+	t.Run(`invalid JSON input`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		err := v.NoteRow(`p1`, `k1`, `invalid_json`, ts(1), `foo`)
+		require.Error(t, err)
+	})
+
+	t.Run(`missing mvcc_timestamp field`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, `p1`, `k1`, `{"some_other_field": "value"}`, ts(1), `foo`)
+		assertValidatorFailures(t, v, `expected MVCC timestamp, got nil`)
+	})
+}
+
+func TestTopicValidator(t *testing.T) {
+	const ignored = `ignored`
+	ignoredTimestamp := hlc.Timestamp{}
+	t.Run(`topic matches table name`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", false)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "test_table")
+		require.NoError(t, err)
+		assertValidatorFailures(t, v)
+	})
+
+	t.Run(`fails when topic does not match table name`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", false)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "wrong_table")
+		require.NoError(t, err)
+		assertValidatorFailures(t, v, `topic wrong_table does not match expected table test_table`)
+	})
+
+	t.Run(`fails when topic is full table name if option not specified`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", false)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "d.public.test_table")
+		require.NoError(t, err)
+		assertValidatorFailures(t, v, `topic d.public.test_table does not match expected table test_table`)
+	})
+
+	t.Run(`full table name succeeds when provided`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", true)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "d.public.test_table")
+		require.NoError(t, err)
+		assertValidatorFailures(t, v)
+	})
+
+	t.Run(`full table name fails when partial table name is the topic`, func(t *testing.T) {
+		v := NewTopicValidator("test_table", true)
+		err := v.NoteRow(ignored, ignored, ignored, ignoredTimestamp, "test_table")
+		require.NoError(t, err)
+		assertValidatorFailures(t, v, `topic test_table does not match expected table d.public.test_table`)
+	})
 }
 
 func TestBeforeAfterValidator(t *testing.T) {
@@ -140,30 +221,12 @@ func TestBeforeAfterValidator(t *testing.T) {
 	}
 
 	t.Run(`empty`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
-		require.NoError(t, err)
-		assertValidatorFailures(t, v)
-	})
-	t.Run(`fullTableName`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, ChangefeedOption{
-			FullTableName: true,
-			KeyInValue:    false,
-			Format:        "json",
-		})
-		require.NoError(t, err)
-		assertValidatorFailures(t, v)
-	})
-	t.Run(`key_in_value`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, ChangefeedOption{
-			FullTableName: false,
-			KeyInValue:    true,
-			Format:        "json",
-		})
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		assertValidatorFailures(t, v)
 	})
 	t.Run(`during initial`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		// "before" is ignored if missing.
 		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
@@ -178,7 +241,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 3]`)
 	})
 	t.Run(`missing before`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" should have been provided.
@@ -189,7 +252,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 [1]`)
 	})
 	t.Run(`incorrect before`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" provided with wrong value.
@@ -200,7 +263,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [5 10]`)
 	})
 	t.Run(`unnecessary before`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" provided but should not have been.
@@ -211,7 +274,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 1]`)
 	})
 	t.Run(`missing after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "after" should have been provided.
@@ -222,7 +285,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 [1]`)
 	})
 	t.Run(`incorrect after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "after" provided with wrong value.
@@ -233,7 +296,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 5]`)
 	})
 	t.Run(`unnecessary after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "after" provided but should not have been.
@@ -244,7 +307,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 3]`)
 	})
 	t.Run(`incorrect before and after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" and "after" both provided with wrong value.
@@ -258,7 +321,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 4]`)
 	})
 	t.Run(`correct`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		noteRow(t, v, `p`, `[1]`, `{}`, ts[0], `foo`)
@@ -297,7 +360,7 @@ func TestBeforeAfterValidatorForGeometry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+	v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, false)
 	require.NoError(t, err)
 	assertValidatorFailures(t, v)
 	noteRow(t, v, `p`, `[1]`, `{"after": {"k":1, "geom":{"coordinates": [1,2], "type": "Point"}}}`, ts[0], `foo`)
