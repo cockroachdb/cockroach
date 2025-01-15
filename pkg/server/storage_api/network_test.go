@@ -81,3 +81,25 @@ func TestNetworkConnectivity(t *testing.T) {
 		return nil
 	})
 }
+
+func TestNetworkConnectivityTenantCapability(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	numNodes := 3
+	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Note: We're only testing external-process mode because shared service
+			// mode tenants have all capabilities. See PR #119211 for more info.
+			DefaultTestTenant: base.ExternalTestTenantAlwaysEnabled,
+		},
+		ReplicationMode: base.ReplicationManual,
+	})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	var resp serverpb.NetworkConnectivityResponse
+	err := srvtestutils.GetStatusJSONProto(
+		testCluster.Server(0).ApplicationLayer(), "connectivity", &resp)
+	require.ErrorContains(t, err,
+		"client tenant does not have capability to debug the process")
+}
