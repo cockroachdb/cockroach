@@ -577,7 +577,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 			tickProcessedCh := make(chan struct{})
 			persistHLCUpperBoundIntervalCh := make(chan time.Duration, 1)
 			stopCh := make(chan struct{}, 1)
-			defer close(persistHLCUpperBoundIntervalCh)
+			defer close(stopCh)
 
 			go periodicallyPersistHLCUpperBound(
 				c,
