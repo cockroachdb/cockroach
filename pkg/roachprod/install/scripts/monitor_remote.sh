@@ -19,7 +19,7 @@ one_shot=#{if .OneShot#}true#{end#}
 prev_frame=""
 while :; do
   # Get all cockroach system units
-  sysctl_output=$(systemctl list-units cockroach\*.service --type=service --no-legend --no-pager | awk '{print $1}')
+  sysctl_output=$(systemctl list-units cockroach\*.service --type=service --no-legend --no-pager --plain | awk '{print $1}')
   frame=""
   while IFS= read -r name; do
     # Query the PID and status of the cockroach system unit
