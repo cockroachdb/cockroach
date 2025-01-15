@@ -170,7 +170,13 @@ func (c *awsConfigValue) Set(path string) (err error) {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, &c.awsConfig)
+	err = json.Unmarshal(data, &c.awsConfig)
+	if err != nil {
+		return err
+	}
+	// Update the provider's config with the user-specified config.
+	providerInstance.Config = &c.awsConfig
+	return nil
 }
 
 // Type is part of the pflag.Value interface.
