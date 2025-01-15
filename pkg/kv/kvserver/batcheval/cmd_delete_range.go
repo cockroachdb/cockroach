@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -138,7 +139,7 @@ func deleteRangeUsingTombstone(
 			return nil
 		}
 		sl := MakeStateLoader(cArgs.EvalCtx)
-		hint, err := sl.LoadGCHint(ctx, readWriter)
+		hint, err := sl.LoadGCHint(ctx, stateloader.MakeStateReader(readWriter))
 		if err != nil {
 			return err
 		}
@@ -154,7 +155,7 @@ func deleteRangeUsingTombstone(
 			return nil
 		}
 
-		if err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
+		if err := sl.SetGCHint(ctx, stateloader.MakeStateRW(readWriter), cArgs.Stats, hint); err != nil {
 			return err
 		}
 		res.Replicated.State = &kvserverpb.ReplicaState{

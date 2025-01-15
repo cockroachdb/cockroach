@@ -416,7 +416,7 @@ func (r Replica) Load(
 	); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.ReplState, err = sl.Load(ctx, eng, r.Desc); err != nil {
+	if ls.ReplState, err = sl.Load(ctx, stateloader.MakeStateReader(eng), r.Desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
 

@@ -187,7 +187,7 @@ func visitStoreReplicas(
 ) error {
 	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, reader, func(desc roachpb.RangeDescriptor) error {
 		rsl := stateloader.Make(desc.RangeID)
-		rstate, err := rsl.Load(ctx, reader, &desc)
+		rstate, err := rsl.Load(ctx, stateloader.MakeStateReader(reader), &desc)
 		if err != nil {
 			return err
 		}

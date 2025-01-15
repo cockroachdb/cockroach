@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
@@ -71,7 +72,7 @@ func Migrate(
 	// Since we're a below raft migration, we'll need update our replica state
 	// version.
 	if err := MakeStateLoader(cArgs.EvalCtx).SetVersion(
-		ctx, readWriter, cArgs.Stats, &migrationVersion,
+		ctx, stateloader.MakeStateRW(readWriter), cArgs.Stats, &migrationVersion,
 	); err != nil {
 		return result.Result{}, err
 	}

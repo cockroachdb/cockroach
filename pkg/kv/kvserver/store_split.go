@@ -163,7 +163,9 @@ func splitPreApply(
 		initClosedTS = &hlc.Timestamp{}
 	}
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
-	if err := rsl.SetClosedTimestamp(ctx, readWriter, *initClosedTS); err != nil {
+	if err := rsl.SetClosedTimestamp(
+		ctx, stateloader.MakeStateRW(readWriter), *initClosedTS,
+	); err != nil {
 		log.Fatalf(ctx, "%s", err)
 	}
 }

@@ -63,7 +63,7 @@ func LoadReplicaState(
 	if ls.LastIndex, err = sl.LoadLastIndex(ctx, logstore.MakeLogReader(eng)); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.ReplState, err = sl.Load(ctx, eng, desc); err != nil {
+	if ls.ReplState, err = sl.Load(ctx, stateloader.MakeStateReader(eng), desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
 

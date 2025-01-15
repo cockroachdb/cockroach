@@ -526,7 +526,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 
 	// Use the reader to decide what is durable.
 	stateLoader := r.getStateLoader()
-	as, err := stateLoader.LoadRangeAppliedState(ctx, reader)
+	as, err := stateLoader.LoadRangeAppliedState(ctx, stateloader.MakeStateReader(reader))
 	if err != nil {
 		log.Errorf(ctx, "error loading RangeAppliedState, dropping all pending log truncations: %s",
 			err)

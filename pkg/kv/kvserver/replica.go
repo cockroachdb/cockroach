@@ -1778,7 +1778,8 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			redact.Safe(pretty.Diff(loaded, ts)))
 	}
 
-	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.shMu.state.Desc)
+	diskState, err := r.mu.stateLoader.Load(
+		ctx, stateloader.MakeStateReader(reader), r.shMu.state.Desc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}

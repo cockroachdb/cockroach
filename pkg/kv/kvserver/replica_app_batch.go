@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -578,7 +579,8 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 		// are all safe.
 		b.state.ForceFlushIndex = roachpb.ForceFlushIndex{Index: cmd.Entry.Index}
 		if err := b.r.raftMu.stateLoader.SetForceFlushIndex(
-			ctx, b.batch, b.state.Stats, &b.state.ForceFlushIndex); err != nil {
+			ctx, stateloader.MakeStateRW(b.batch), b.state.Stats, &b.state.ForceFlushIndex,
+		); err != nil {
 			return err
 		}
 	}
@@ -709,7 +711,8 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 	// lease index along with the mvcc stats, all in one key.
 	loader := &b.r.raftMu.stateLoader
 	return loader.SetRangeAppliedState(
-		ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex, b.state.RaftAppliedIndexTerm,
+		ctx, stateloader.MakeStateRW(b.batch), b.state.RaftAppliedIndex,
+		b.state.LeaseAppliedIndex, b.state.RaftAppliedIndexTerm,
 		b.state.Stats, b.state.RaftClosedTimestamp, &b.asAlloc,
 	)
 }

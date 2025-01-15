@@ -64,25 +64,26 @@ func WriteInitialReplicaState(
 	}
 
 	rsl := Make(desc.RangeID)
-	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
+	stateRW := MakeStateRW(readWriter)
+	if existingLease, err := rsl.LoadLease(ctx, stateRW.Reader()); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {
 		log.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
 	}
 
-	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, readWriter); err != nil {
+	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, stateRW.Reader()); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
 	} else if !existingGCThreshold.IsEmpty() {
 		log.Fatalf(ctx, "expected trivial GCthreshold, but found %+v", existingGCThreshold)
 	}
 
-	if existingGCHint, err := rsl.LoadGCHint(ctx, readWriter); err != nil {
+	if existingGCHint, err := rsl.LoadGCHint(ctx, stateRW.Reader()); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCHint")
 	} else if !existingGCHint.IsEmpty() {
 		return enginepb.MVCCStats{}, errors.AssertionFailedf("expected trivial GCHint, but found %+v", existingGCHint)
 	}
 
-	if existingVersion, err := rsl.LoadVersion(ctx, readWriter); err != nil {
+	if existingVersion, err := rsl.LoadVersion(ctx, stateRW.Reader()); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading Version")
 	} else if (existingVersion != roachpb.Version{}) {
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
@@ -95,7 +96,7 @@ func WriteInitialReplicaState(
 	); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	newMS, err := rsl.Save(ctx, readWriter, s)
+	newMS, err := rsl.Save(ctx, stateRW, s)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}

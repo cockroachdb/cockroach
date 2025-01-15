@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -82,7 +83,9 @@ func evalNewLease(
 	}
 
 	// Store the lease to disk & in-memory.
-	if err := MakeStateLoader(rec).SetLeaseBlind(ctx, readWriter, ms, lease, prevLease); err != nil {
+	if err := MakeStateLoader(rec).SetLeaseBlind(
+		ctx, stateloader.MakeStateRW(readWriter), ms, lease, prevLease,
+	); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 

@@ -345,7 +345,7 @@ func snapshot(
 	// TODO(sep-raft-log): do not load the state that is not useful for sending
 	// snapshots, e.g. Lease, GCThreshold, etc. Only applied indices and the
 	// descriptor are used, everything else is included in the snapshot data.
-	state, err := rsl.Load(ctx, snap, &desc)
+	state, err := rsl.Load(ctx, stateloader.MakeStateReader(snap), &desc)
 	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
@@ -660,7 +660,7 @@ func (r *Replica) applySnapshot(
 	// treated as fatal.
 
 	sl := stateloader.Make(desc.RangeID)
-	state, err := sl.Load(ctx, r.store.TODOEngine(), desc)
+	state, err := sl.Load(ctx, stateloader.MakeStateReader(r.store.TODOEngine()), desc)
 	if err != nil {
 		log.Fatalf(ctx, "unable to load replica state: %s", err)
 	}

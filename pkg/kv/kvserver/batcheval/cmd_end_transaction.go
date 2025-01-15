@@ -1144,7 +1144,7 @@ func splitTrigger(
 	// to write absolute RHS side stats since we hold lock for values, and
 	// "unprotected" lease key don't yet exist until this split operation creates
 	// RHS replica.
-	currentStats, err := MakeStateLoader(rec).LoadMVCCStats(ctx, batch)
+	currentStats, err := MakeStateLoader(rec).LoadMVCCStats(ctx, stateloader.MakeStateReader(batch))
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
 			"unable to fetch original range mvcc stats for split")
@@ -1332,7 +1332,7 @@ func splitTriggerHelper(
 		//   not know about the read at 'd' which happened at the beginning.
 		// - node two can illegally propose a write to 'd' at a lower timestamp.
 		sl := MakeStateLoader(rec)
-		leftLease, err := sl.LoadLease(ctx, batch)
+		leftLease, err := sl.LoadLease(ctx, stateloader.MakeStateReader(batch))
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load lease")
 		}
@@ -1367,14 +1367,14 @@ func splitTriggerHelper(
 			rightLease.MinExpiration = hlc.Timestamp{}
 		}
 
-		gcThreshold, err := sl.LoadGCThreshold(ctx, batch)
+		gcThreshold, err := sl.LoadGCThreshold(ctx, stateloader.MakeStateReader(batch))
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
 		if gcThreshold.IsEmpty() {
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
-		gcHint, err := sl.LoadGCHint(ctx, batch)
+		gcHint, err := sl.LoadGCHint(ctx, stateloader.MakeStateReader(batch))
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCHint")
 		}
@@ -1408,7 +1408,7 @@ func splitTriggerHelper(
 		// HardState via a call to synthesizeRaftState. Here, we only call
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
-		replicaVersion, err := sl.LoadVersion(ctx, batch)
+		replicaVersion, err := sl.LoadVersion(ctx, stateloader.MakeStateReader(batch))
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load replica version")
 		}
@@ -1547,17 +1547,17 @@ func mergeTrigger(
 		// optimized garbage removal in future.
 		// We will try to merge both hints if possible and set new hint on LHS.
 		lhsLoader := MakeStateLoader(rec)
-		lhsHint, err := lhsLoader.LoadGCHint(ctx, batch)
+		lhsHint, err := lhsLoader.LoadGCHint(ctx, stateloader.MakeStateReader(batch))
 		if err != nil {
 			return result.Result{}, err
 		}
 		rhsLoader := stateloader.Make(merge.RightDesc.RangeID)
-		rhsHint, err := rhsLoader.LoadGCHint(ctx, batch)
+		rhsHint, err := rhsLoader.LoadGCHint(ctx, stateloader.MakeStateReader(batch))
 		if err != nil {
 			return result.Result{}, err
 		}
 		if lhsHint.Merge(rhsHint, rec.GetMVCCStats().HasNoUserData(), merge.RightMVCCStats.HasNoUserData()) {
-			if err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint); err != nil {
+			if err := lhsLoader.SetGCHint(ctx, stateloader.MakeStateRW(batch), ms, lhsHint); err != nil {
 				return result.Result{}, err
 			}
 			pd.Replicated.State = &kvserverpb.ReplicaState{

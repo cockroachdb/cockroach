@@ -6,7 +6,6 @@ go_library(
         "cluster_version.go",
         "destroy.go",
         "doc.go",
-        "engine.go",
         "init.go",
         "replica_state.go",
     ],

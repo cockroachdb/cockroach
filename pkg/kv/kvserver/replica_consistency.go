@@ -636,7 +636,8 @@ func CalcReplicaDigest(
 		result.RecomputedMS = ms
 	}
 
-	rangeAppliedState, err := stateloader.Make(desc.RangeID).LoadRangeAppliedState(ctx, snap)
+	rangeAppliedState, err := stateloader.Make(desc.RangeID).LoadRangeAppliedState(
+		ctx, stateloader.MakeStateReader(snap))
 	if err != nil {
 		return nil, err
 	}
@@ -697,7 +698,7 @@ func (r *Replica) computeChecksumPostApply(
 	}
 	if cc.Checkpoint {
 		sl := stateloader.Make(r.RangeID)
-		as, err := sl.LoadRangeAppliedState(ctx, snap)
+		as, err := sl.LoadRangeAppliedState(ctx, stateloader.MakeStateReader(snap))
 		if err != nil {
 			log.Warningf(ctx, "unable to load applied index, continuing anyway")
 		}
