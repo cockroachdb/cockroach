@@ -236,7 +236,7 @@ func generateRandomDataForUnorderedDistinct(
 		}
 	}
 
-	rand.Shuffle(nTups, func(i, j int) { tups[i], tups[j] = tups[j], tups[i] })
+	rng.Shuffle(nTups, func(i, j int) { tups[i], tups[j] = tups[j], tups[i] })
 	return tups, expected
 }
 
