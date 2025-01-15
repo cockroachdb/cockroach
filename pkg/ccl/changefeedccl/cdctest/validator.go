@@ -378,18 +378,20 @@ func (v *mvccTimestampValidator) NoteRow(
 		return err
 	}
 	if mvccJSON == nil {
-		return errors.Errorf(`expected MVCC timestampt, got nil`)
+		v.failures = append(v.failures, fmt.Sprintf(
+			"expected MVCC timestamp, got nil"))
+		return nil
 	}
+
 	mvccJSONText, err := mvccJSON.AsText()
 	if err != nil {
 		return err
 	}
 
 	if *mvccJSONText > updated.AsOfSystemTime() {
-		fmt.Println(valueJSON.String())
-		return errors.Errorf(
-			`expected MVCC timestampt to match updated timestamp (%s), got %s`,
-			updated.AsOfSystemTime(), mvccJSONText)
+		v.failures = append(v.failures, fmt.Sprintf(
+			`expected MVCC timestamp to be earlier or equal to updated timestamp (%s), got %s`,
+			updated.AsOfSystemTime(), *mvccJSONText))
 	}
 
 	return nil

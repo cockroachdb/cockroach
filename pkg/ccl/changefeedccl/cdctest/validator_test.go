@@ -99,6 +99,60 @@ func TestOrderValidator(t *testing.T) {
 	})
 }
 
+func TestMvccTimestampValidator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const ignored = `ignored`
+
+	t.Run(`empty on initialization`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		if f := v.Failures(); f != nil {
+			t.Fatalf("got %v expected %v", f, nil)
+		}
+	})
+
+	t.Run(`fails if no mvcc timestamp provided`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, ignored, ignored, `{}`, ts(1), ignored)
+		assertValidatorFailures(t, v, `expected MVCC timestamp, got nil`)
+	})
+
+	t.Run(`mvcc later than updated`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, `p1`, `k1`, `{"mvcc_timestamp": "2.000000001"}`, ts(2), `foo`)
+		assertValidatorFailures(t, v, `expected MVCC timestamp to be earlier or equal to updated timestamp (2.0000000000), got 2.000000001`)
+	})
+
+	t.Run(`mvcc timestamp equal to updated`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, `p1`, `k1`, `{"mvcc_timestamp": "1.0000000000"}`, ts(1), `foo`)
+		if f := v.Failures(); f != nil {
+			t.Fatalf("got %v expected %v", f, nil)
+		}
+	})
+
+	t.Run(`mvcc timestamp earlier than updated`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, `p1`, `k1`, `{"mvcc_timestamp": "1.0000000000"}`, ts(2), `foo`)
+		if f := v.Failures(); f != nil {
+			t.Fatalf("got %v expected %v", f, nil)
+		}
+	})
+
+	t.Run(`invalid JSON input`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		err := v.NoteRow(`p1`, `k1`, `invalid_json`, ts(1), `foo`)
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+	})
+
+	t.Run(`missing mvcc_timestamp field`, func(t *testing.T) {
+		v := NewMvccTimestampValidator()
+		noteRow(t, v, `p1`, `k1`, `{"some_other_field": "value"}`, ts(1), `foo`)
+		assertValidatorFailures(t, v, `expected MVCC timestamp, got nil`)
+	})
+}
+
 func TestBeforeAfterValidator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
