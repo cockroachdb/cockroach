@@ -208,9 +208,14 @@ func WriteInitialClusterData(
 			}
 		}
 
+		logBatch := batch
+		if sepEng, ok := eng.(SeparatedEngine); ok {
+			logBatch = sepEng.LogEngine().NewBatch()
+			defer logBatch.Close()
+		}
 		if err := stateloader.WriteInitialRangeState(ctx,
 			stateloader.MakeStateRW(batch),
-			logstore.MakeLogRW(batch),
+			logstore.MakeLogRW(logBatch),
 			*desc, firstReplicaID, initialReplicaVersion,
 		); err != nil {
 			return err
@@ -226,6 +231,9 @@ func WriteInitialClusterData(
 		}
 
 		if err := batch.Commit(true /* sync */); err != nil {
+			return err
+		}
+		if err := logBatch.Commit(true /* sync */); err != nil {
 			return err
 		}
 	}
