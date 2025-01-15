@@ -157,6 +157,8 @@ type TestServerArgs struct {
 	// below for alternative options that suits your test case.
 	DefaultTestTenant DefaultTestTenantOptions
 
+	DefaultTenantName roachpb.TenantName
+
 	// StartDiagnosticsReporting checks cluster.TelemetryOptOut(), and
 	// if not disabled starts the asynchronous goroutine that checks for
 	// CockroachDB upgrades and periodically reports diagnostics to
