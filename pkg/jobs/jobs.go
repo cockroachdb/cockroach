@@ -6,9 +6,7 @@
 package jobs
 
 import (
-	"bytes"
 	"context"
-	gojson "encoding/json"
 	"fmt"
 	"reflect"
 	"sync/atomic"
@@ -21,13 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -36,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/gogo/protobuf/jsonpb"
 )
 
 // Job manages logging the progress of long-running system processes, like
@@ -890,90 +884,6 @@ func (sj *StartableJob) Cancel(ctx context.Context) error {
 
 func (sj *StartableJob) recordStart() (alreadyStarted bool) {
 	return atomic.AddInt64(&sj.starts, 1) != 1
-}
-
-// ParseRetriableExecutionErrorLogFromJSON inverts the output of
-// FormatRetriableExecutionErrorLogToJSON.
-func ParseRetriableExecutionErrorLogFromJSON(
-	log []byte,
-) ([]*jobspb.RetriableExecutionFailure, error) {
-	var jsonArr []gojson.RawMessage
-	if err := gojson.Unmarshal(log, &jsonArr); err != nil {
-		return nil, errors.Wrap(err, "failed to decode json array for execution log")
-	}
-	ret := make([]*jobspb.RetriableExecutionFailure, len(jsonArr))
-
-	json := jsonpb.Unmarshaler{AllowUnknownFields: true}
-	var reader bytes.Reader
-	for i, data := range jsonArr {
-		msgI, err := protoreflect.NewMessage("cockroach.sql.jobs.jobspb.RetriableExecutionFailure")
-		if err != nil {
-			return nil, errors.WithAssertionFailure(err)
-		}
-		msg := msgI.(*jobspb.RetriableExecutionFailure)
-		reader.Reset(data)
-		if err := json.Unmarshal(&reader, msg); err != nil {
-			return nil, err
-		}
-		ret[i] = msg
-	}
-	return ret, nil
-}
-
-// FormatRetriableExecutionErrorLogToJSON extracts the events
-// stored in the payload, formats them into a json array. This function
-// is intended for use with crdb_internal.jobs. Note that the error will
-// be flattened into a string and stored in the TruncatedError field.
-func FormatRetriableExecutionErrorLogToJSON(
-	ctx context.Context, log []*jobspb.RetriableExecutionFailure,
-) (*tree.DJSON, error) {
-	ab := json.NewArrayBuilder(len(log))
-	for i := range log {
-		ev := *log[i]
-		if ev.Error != nil {
-			ev.TruncatedError = errors.DecodeError(ctx, *ev.Error).Error()
-			ev.Error = nil
-		}
-		msg, err := protoreflect.MessageToJSON(&ev, protoreflect.FmtFlags{
-			EmitDefaults: false,
-		})
-		if err != nil {
-			return nil, err
-		}
-		ab.Add(msg)
-	}
-	return tree.NewDJSON(ab.Build()), nil
-}
-
-// FormatRetriableExecutionErrorLogToStringArray extracts the events
-// stored in the payload, formats them into strings and returns them as an
-// array of strings. This function is intended for use with crdb_internal.jobs.
-func FormatRetriableExecutionErrorLogToStringArray(
-	ctx context.Context, log []*jobspb.RetriableExecutionFailure,
-) *tree.DArray {
-	arr := tree.NewDArray(types.String)
-	for _, ev := range log {
-		if ev == nil { // no reason this should happen, but be defensive
-			continue
-		}
-		var cause error
-		if ev.Error != nil {
-			cause = errors.DecodeError(ctx, *ev.Error)
-		} else {
-			cause = fmt.Errorf("(truncated) %s", ev.TruncatedError)
-		}
-		msg := formatRetriableExecutionFailure(
-			ev.InstanceID,
-			Status(ev.Status),
-			timeutil.FromUnixMicros(ev.ExecutionStartMicros),
-			timeutil.FromUnixMicros(ev.ExecutionEndMicros),
-			cause,
-		)
-		// We really don't care about errors here. I'd much rather see nothing
-		// in my log than crash.
-		_ = arr.Append(tree.NewDString(msg))
-	}
-	return arr
 }
 
 // GetJobTraceID returns the current trace ID of the job from the job progress.

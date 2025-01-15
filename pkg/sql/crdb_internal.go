@@ -1365,23 +1365,6 @@ func makeJobsTableRows(
 				traceID = tree.NewDInt(tree.DInt(progress.TraceID))
 			}
 		}
-		if len(payload.RetriableExecutionFailureLog) > 0 {
-			executionErrors = jobs.FormatRetriableExecutionErrorLogToStringArray(
-				ctx, payload.RetriableExecutionFailureLog,
-			)
-			// It's not clear why we'd ever see an error here,
-			var err error
-			executionEvents, err = jobs.FormatRetriableExecutionErrorLogToJSON(
-				ctx, payload.RetriableExecutionFailureLog,
-			)
-			if err != nil {
-				if errorStr == tree.DNull {
-					errorStr = tree.NewDString(errors.Wrap(err, "failed to marshal execution error log").Error())
-				} else {
-					executionEvents = tree.DNull
-				}
-			}
-		}
 
 		if err = addRow(
 			id,
