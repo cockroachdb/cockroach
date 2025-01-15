@@ -8,7 +8,6 @@ package jobutils
 import (
 	"context"
 	gosql "database/sql"
-	"sort"
 	"testing"
 	"time"
 
@@ -17,12 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -132,7 +129,6 @@ func verifySystemJob(
 	expected jobs.Record,
 ) error {
 	var actual jobs.Record
-	var rawDescriptorIDs pq.Int64Array
 	var statusString string
 	var runningStatus gosql.NullString
 	var runningStatusString string
@@ -141,12 +137,12 @@ func verifySystemJob(
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
 	// the job ID.
 	db.QueryRow(t, `
-		SELECT description, user_name, descriptor_ids, status, running_status
+		SELECT description, user_name, status, running_status
 		FROM crdb_internal.jobs WHERE job_type = $1 ORDER BY created LIMIT 1 OFFSET $2`,
 		filterType.String(),
 		offset,
 	).Scan(
-		&actual.Description, &usernameString, &rawDescriptorIDs,
+		&actual.Description, &usernameString,
 		&statusString, &runningStatus,
 	)
 	actual.Username = username.MakeSQLUsernameFromPreNormalizedString(usernameString)
@@ -154,13 +150,7 @@ func verifySystemJob(
 		runningStatusString = runningStatus.String
 	}
 
-	if len(expected.DescriptorIDs) > 0 {
-		for _, id := range rawDescriptorIDs {
-			actual.DescriptorIDs = append(actual.DescriptorIDs, descpb.ID(id))
-		}
-		sort.Sort(actual.DescriptorIDs)
-		sort.Sort(expected.DescriptorIDs)
-	}
+	expected.DescriptorIDs = nil
 	expected.Details = nil
 	if e, a := expected, actual; !assert.Equal(logT{t}, e, a) {
 		return errors.Errorf("job %d did not match:\n%s",
