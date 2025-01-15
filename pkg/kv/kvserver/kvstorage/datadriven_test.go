@@ -65,9 +65,10 @@ func (e *env) handleNewReplica(
 	k, ek roachpb.RKey,
 ) *roachpb.RangeDescriptor {
 	sl := logstore.NewStateLoader(id.RangeID)
-	require.NoError(t, sl.SetHardState(ctx, e.eng, raftpb.HardState{}))
+	writer := logstore.MakeLogWriter(e.eng)
+	require.NoError(t, sl.SetHardState(ctx, writer, raftpb.HardState{}))
 	if !skipRaftReplicaID && id.ReplicaID != 0 {
-		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng, id.ReplicaID))
+		require.NoError(t, sl.SetRaftReplicaID(ctx, writer, id.ReplicaID))
 	}
 	if len(ek) == 0 {
 		return nil

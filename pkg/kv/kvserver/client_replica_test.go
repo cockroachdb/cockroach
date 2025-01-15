@@ -4917,7 +4917,7 @@ func TestRangeMigration(t *testing.T) {
 		}
 
 		sl := stateloader.Make(rangeID)
-		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
+		persistedV, err := sl.LoadVersion(ctx, stateloader.MakeStateReader(store.TODOEngine()))
 		if err != nil {
 			t.Fatal(err)
 		}

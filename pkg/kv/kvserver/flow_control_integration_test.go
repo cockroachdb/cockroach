@@ -5822,7 +5822,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 		}
 
 		sl := stateloader.Make(desc.RangeID)
-		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
+		persistedV, err := sl.LoadVersion(ctx, stateloader.MakeStateReader(store.TODOEngine()))
 		if err != nil {
 			return err
 		}

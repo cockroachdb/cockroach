@@ -6394,7 +6394,8 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 func verifyRangeStats(
 	reader storage.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats,
 ) error {
-	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), reader)
+	ms, err := stateloader.Make(rangeID).LoadMVCCStats(
+		context.Background(), stateloader.MakeStateReader(reader))
 	if err != nil {
 		return err
 	}
@@ -10440,7 +10441,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	disturbMS := enginepb.NewPopulatedMVCCStats(rnd, false)
 	disturbMS.ContainsEstimates = 0
 	ms.Add(*disturbMS)
-	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, tc.engine, ms)
+	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, stateloader.MakeStateRW(tc.engine), ms)
 	repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
 	repl.mu.Unlock()
 	repl.raftMu.Unlock()

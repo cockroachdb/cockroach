@@ -64,7 +64,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 					Term:  kvpb.RaftTerm(term),
 				}
 
-				require.NoError(t, loader.SetRaftTruncatedState(ctx, eng, truncState))
+				require.NoError(t, loader.SetRaftTruncatedState(ctx, logstore.MakeLogWriter(eng), truncState))
 				return ""
 
 			case "handle":
@@ -77,7 +77,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 					Index: kvpb.RaftIndex(index),
 					Term:  kvpb.RaftTerm(term),
 				}
-				currentTruncatedState, err := loader.LoadRaftTruncatedState(ctx, eng)
+				currentTruncatedState, err := loader.LoadRaftTruncatedState(ctx, logstore.MakeLogReader(eng))
 				require.NoError(t, err)
 
 				// Write log entries at start, middle, end, and above the truncated interval.

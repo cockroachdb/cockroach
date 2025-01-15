@@ -173,7 +173,8 @@ func assertRangeStats(
 ) {
 	t.Helper()
 
-	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), r)
+	ms, err := stateloader.Make(rangeID).LoadMVCCStats(
+		context.Background(), stateloader.MakeStateReader(r))
 	require.NoError(t, err)
 	// When used with a real wall clock these will not be the same, since it
 	// takes time to load stats.

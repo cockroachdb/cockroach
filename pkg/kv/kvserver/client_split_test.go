@@ -665,7 +665,8 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	originalRepl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.NotNil(t, originalRepl)
 	// Get the original stats for key and value bytes.
-	ms, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+	ms, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(
+		ctx, stateloader.MakeStateReader(store.TODOEngine()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -738,12 +739,14 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
-	left, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+	left, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(
+		ctx, stateloader.MakeStateReader(store.TODOEngine()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	right, err := stateloader.Make(newRng.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+	right, err := stateloader.Make(newRng.RangeID).LoadMVCCStats(
+		ctx, stateloader.MakeStateReader(store.TODOEngine()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -808,7 +811,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	// See: https://github.com/cockroachdb/cockroach/issues/129601#issuecomment-2309865742
 	repl.RaftLock()
 	replMS := repl.GetMVCCStats()
-	snap := store.TODOEngine().NewSnapshot()
+	snap := stateloader.MakeStateReader(store.TODOEngine().NewSnapshot())
 	defer snap.Close()
 	repl.RaftUnlock()
 
@@ -824,7 +827,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	_, pErr = repl.AdminSplit(ctx, *adminSplitArgs(splitKey), "test")
 	require.NoError(t, pErr.GoError())
 
-	snap = store.TODOEngine().NewSnapshot()
+	snap = stateloader.MakeStateReader(store.TODOEngine().NewSnapshot())
 	defer snap.Close()
 	msLeft, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -885,7 +888,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.NoError(t, pErr.GoError())
 
 	repl = store.LookupReplica(roachpb.RKey(keyPrefix))
-	snap = store.TODOEngine().NewSnapshot()
+	snap = stateloader.MakeStateReader(store.TODOEngine().NewSnapshot())
 	defer snap.Close()
 
 	msMerged, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
@@ -1004,7 +1007,7 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 					// Wait for the split to complete.
 					require.Nil(t, g.Wait())
 
-					snap := store.TODOEngine().NewSnapshot()
+					snap := stateloader.MakeStateReader(store.TODOEngine().NewSnapshot())
 					defer snap.Close()
 					lhsStats, err := stateloader.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
@@ -1040,7 +1043,7 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 					_, pErr = rhsRepl.AdminSplit(ctx, *adminSplitArgs(splitKeyRight), "test")
 					require.NoError(t, pErr.GoError())
 
-					snap = store.TODOEngine().NewSnapshot()
+					snap = stateloader.MakeStateReader(store.TODOEngine().NewSnapshot())
 					defer snap.Close()
 					lhs1Stats, err := stateloader.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
@@ -1426,7 +1429,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	_, pErr = repl.AdminSplit(ctx, *adminSplitArgs(midKey), "test")
 	require.NoError(t, pErr.GoError())
 
-	snap := store.TODOEngine().NewSnapshot()
+	snap := stateloader.MakeStateReader(store.TODOEngine().NewSnapshot())
 	defer snap.Close()
 	msLeft, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -1462,7 +1465,8 @@ func fillRange(
 	src := rand.New(rand.NewSource(0))
 	var key []byte
 	for {
-		ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), store.TODOEngine())
+		ms, err := stateloader.Make(rangeID).LoadMVCCStats(
+			context.Background(), stateloader.MakeStateReader(store.TODOEngine()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4495,7 +4499,8 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 
 			originalRepl := store.LookupReplica(roachpb.RKey(splitKey))
 			require.NotNil(t, originalRepl)
-			origStats, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+			origStats, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(
+				ctx, stateloader.MakeStateReader(store.TODOEngine()))
 			require.NoError(t, err)
 			require.Greater(t, origStats.ContainsEstimates, int64(0), "range expected to have estimated stats")
 
@@ -4505,7 +4510,7 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 				t.Fatal(pErr)
 			}
 
-			snap := store.StateEngine().NewSnapshot()
+			snap := stateloader.MakeStateReader(store.StateEngine().NewSnapshot())
 			defer snap.Close()
 			lhsRepl := store.LookupReplica(originalRepl.Desc().StartKey)
 			rhsRepl := store.LookupReplica(roachpb.RKey(splitKey))

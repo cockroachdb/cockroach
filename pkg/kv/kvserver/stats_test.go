@@ -44,10 +44,10 @@ func TestRangeStatsInit(t *testing.T) {
 		LastUpdateNanos: 11,
 	}
 	rsl := stateloader.Make(tc.repl.RangeID)
-	if err := rsl.SetMVCCStats(ctx, tc.engine, &ms); err != nil {
+	if err := rsl.SetMVCCStats(ctx, stateloader.MakeStateRW(tc.engine), &ms); err != nil {
 		t.Fatal(err)
 	}
-	loadMS, err := rsl.LoadMVCCStats(ctx, tc.engine)
+	loadMS, err := rsl.LoadMVCCStats(ctx, stateloader.MakeStateReader(tc.engine))
 	if err != nil {
 		t.Fatal(err)
 	}

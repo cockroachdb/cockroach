@@ -1366,7 +1366,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// merge below.
 
 	// Get the range stats for both ranges now that we have data.
-	snap := store.TODOEngine().NewSnapshot()
+	snap := stateloader.MakeStateReader(store.TODOEngine().NewSnapshot())
 	defer snap.Close()
 	msA, err := stateloader.Make(lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -1384,7 +1384,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	replMerged := store.LookupReplica(lhsDesc.StartKey)
 
 	// Get the range stats for the merged range and verify.
-	snap = store.TODOEngine().NewSnapshot()
+	snap = stateloader.MakeStateReader(store.TODOEngine().NewSnapshot())
 	defer snap.Close()
 	msMerged, err := stateloader.Make(replMerged.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)

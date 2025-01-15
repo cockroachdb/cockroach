@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -173,7 +174,8 @@ func (r *replicaTruncatorTest) setTruncatedStateAndSideEffects(
 func (r *replicaTruncatorTest) writeRaftStateToEngine(
 	t *testing.T, eng storage.Engine, truncIndex kvpb.RaftIndex, lastLogEntry kvpb.RaftIndex,
 ) {
-	require.NoError(t, r.stateLoader.SetRaftTruncatedState(context.Background(), eng,
+	require.NoError(t, r.stateLoader.SetRaftTruncatedState(context.Background(),
+		logstore.MakeLogWriter(eng),
 		&kvserverpb.RaftTruncatedState{Index: truncIndex}))
 	for i := truncIndex + 1; i <= lastLogEntry; i++ {
 		require.NoError(t, eng.PutUnversioned(r.stateLoader.RaftLogKey(i), []byte("something")))
@@ -183,7 +185,8 @@ func (r *replicaTruncatorTest) writeRaftStateToEngine(
 func (r *replicaTruncatorTest) writeRaftAppliedIndex(
 	t *testing.T, eng storage.Engine, raftAppliedIndex kvpb.RaftIndex, flush bool,
 ) {
-	require.NoError(t, r.stateLoader.SetRangeAppliedState(context.Background(), eng,
+	require.NoError(t, r.stateLoader.SetRangeAppliedState(context.Background(),
+		stateloader.MakeStateRW(eng),
 		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, hlc.Timestamp{}, nil))
 	// Flush to make it satisfy the contract of OnlyReadGuaranteedDurable in
 	// Pebble.
@@ -193,7 +196,8 @@ func (r *replicaTruncatorTest) writeRaftAppliedIndex(
 }
 
 func (r *replicaTruncatorTest) printEngine(t *testing.T, eng storage.Engine) {
-	truncState, err := r.stateLoader.LoadRaftTruncatedState(context.Background(), eng)
+	truncState, err := r.stateLoader.LoadRaftTruncatedState(context.Background(),
+		logstore.MakeLogReader(eng))
 	require.NoError(t, err)
 	fmt.Fprintf(r.buf, "truncated index: %d\n", truncState.Index)
 	prefix := r.stateLoader.RaftLogPrefix()
@@ -223,7 +227,8 @@ func (r *replicaTruncatorTest) printEngine(t *testing.T, eng storage.Engine) {
 	// It is ok to pretend that a regular read is equivalent to
 	// OnlyReadGuaranteedDurable for printing in this test, since we flush in
 	// the code above whenever writing RaftAppliedIndex.
-	as, err := r.stateLoader.LoadRangeAppliedState(context.Background(), eng)
+	as, err := r.stateLoader.LoadRangeAppliedState(context.Background(),
+		stateloader.MakeStateReader(eng))
 	require.NoError(t, err)
 	fmt.Fprintf(r.buf, "durable applied index: %d\n", as.RaftAppliedIndex)
 }

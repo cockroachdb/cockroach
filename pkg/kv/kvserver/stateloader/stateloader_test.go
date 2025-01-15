@@ -18,7 +18,7 @@ func TestUninitializedReplicaState(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 	desc := roachpb.RangeDescriptor{RangeID: 123}
-	exp, err := Make(desc.RangeID).Load(context.Background(), eng, &desc)
+	exp, err := Make(desc.RangeID).Load(context.Background(), MakeStateReader(eng), &desc)
 	require.NoError(t, err)
 	act := UninitializedReplicaState(desc.RangeID)
 	require.Equal(t, exp, act)

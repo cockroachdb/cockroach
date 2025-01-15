@@ -537,7 +537,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		defer eng.Close()
 
 		rsl := stateloader.Make(rangeID)
-		ms, err := rsl.LoadMVCCStats(ctx, eng)
+		ms, err := rsl.LoadMVCCStats(ctx, stateloader.MakeStateReader(eng))
 		require.NoError(t, err)
 
 		// Put some garbage in the stats that we're hoping the consistency queue will
@@ -553,7 +553,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		// Overwrite with the new stats; remember that this range hasn't upreplicated,
 		// so the consistency checker won't see any replica divergence when it runs,
 		// but it should definitely see that its recomputed stats mismatch.
-		require.NoError(t, rsl.SetMVCCStats(ctx, eng, &ms))
+		require.NoError(t, rsl.SetMVCCStats(ctx, stateloader.MakeStateRW(eng), &ms))
 	}()
 
 	// Now that we've tampered with the stats, restart the cluster and extend it

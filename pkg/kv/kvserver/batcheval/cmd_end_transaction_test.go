@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -2265,6 +2266,7 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	db := storage.NewDefaultInMemForTesting()
 	defer db.Close()
 	batch := db.NewBatch()
+	rw := stateloader.MakeStateRW(batch)
 	defer batch.Close()
 
 	rangeLeaseDuration := 99 * time.Nanosecond
@@ -2313,13 +2315,13 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	// Write the range state that will be consulted and copied during the split.
 	err := as.Put(ctx, batch, nil, abortSpanTxnID, &roachpb.AbortSpanEntry{})
 	require.NoError(t, err)
-	err = sl.SetLease(ctx, batch, nil, lease)
+	err = sl.SetLease(ctx, rw, nil, lease)
 	require.NoError(t, err)
-	err = sl.SetGCThreshold(ctx, batch, nil, &gcThreshold)
+	err = sl.SetGCThreshold(ctx, rw, nil, &gcThreshold)
 	require.NoError(t, err)
-	err = sl.SetGCHint(ctx, batch, nil, &gcHint)
+	err = sl.SetGCHint(ctx, rw, nil, &gcHint)
 	require.NoError(t, err)
-	err = sl.SetVersion(ctx, batch, nil, &version)
+	err = sl.SetVersion(ctx, rw, nil, &version)
 	require.NoError(t, err)
 
 	// Run the split trigger, which is normally run as a subset of EndTxn request
@@ -2340,14 +2342,14 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 		Replica:    rightDesc.InternalReplicas[0],
 		Expiration: &hlc.Timestamp{WallTime: manual.Now().Add(rangeLeaseDuration).UnixNano()},
 	}
-	loadedLease, err := slRight.LoadLease(ctx, batch)
+	loadedLease, err := slRight.LoadLease(ctx, rw.Reader())
 	require.NoError(t, err)
 	require.Equal(t, expLease, loadedLease)
-	loadedGCThreshold, err := slRight.LoadGCThreshold(ctx, batch)
+	loadedGCThreshold, err := slRight.LoadGCThreshold(ctx, rw.Reader())
 	require.NoError(t, err)
 	require.NotNil(t, loadedGCThreshold)
 	require.Equal(t, gcThreshold, *loadedGCThreshold)
-	loadedGCHint, err := slRight.LoadGCHint(ctx, batch)
+	loadedGCHint, err := slRight.LoadGCHint(ctx, rw.Reader())
 	require.NoError(t, err)
 	require.NotNil(t, loadedGCHint)
 	require.Equal(t, gcHint, *loadedGCHint)
@@ -2355,17 +2357,17 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 		Term:  stateloader.RaftInitialLogTerm,
 		Index: stateloader.RaftInitialLogIndex,
 	}
-	loadedTruncState, err := slRight.LoadRaftTruncatedState(ctx, batch)
+	loadedTruncState, err := slRight.LoadRaftTruncatedState(ctx, logstore.MakeLogReader(batch))
 	require.NoError(t, err)
 	require.Equal(t, expTruncState, loadedTruncState)
-	loadedVersion, err := slRight.LoadVersion(ctx, batch)
+	loadedVersion, err := slRight.LoadVersion(ctx, rw.Reader())
 	require.NoError(t, err)
 	require.Equal(t, version, loadedVersion)
 	expAppliedState := kvserverpb.RangeAppliedState{
 		RaftAppliedIndexTerm: stateloader.RaftInitialLogTerm,
 		RaftAppliedIndex:     stateloader.RaftInitialLogIndex,
 	}
-	loadedAppliedState, err := slRight.LoadRangeAppliedState(ctx, batch)
+	loadedAppliedState, err := slRight.LoadRangeAppliedState(ctx, rw.Reader())
 	require.NoError(t, err)
 	require.NotNil(t, loadedAppliedState)
 	loadedAppliedState.RangeStats = kvserverpb.MVCCPersistentStats{} // ignore

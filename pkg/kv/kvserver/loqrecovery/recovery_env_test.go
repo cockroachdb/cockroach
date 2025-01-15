@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -329,16 +330,17 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 		}
 
 		sl := stateloader.Make(replica.RangeID)
-		if _, err := sl.Save(ctx, eng, replicaState); err != nil {
+		if _, err := sl.Save(ctx, stateloader.MakeStateRW(eng), replicaState); err != nil {
 			t.Fatalf("failed to save raft replica state into store: %v", err)
 		}
-		if err := sl.SetRaftTruncatedState(ctx, eng, &truncState); err != nil {
+		logRW := logstore.MakeLogWriter(eng)
+		if err := sl.SetRaftTruncatedState(ctx, logRW, &truncState); err != nil {
 			t.Fatalf("failed to save raft truncated state: %v", err)
 		}
-		if err := sl.SetHardState(ctx, eng, hardState); err != nil {
+		if err := sl.SetHardState(ctx, logRW, hardState); err != nil {
 			t.Fatalf("failed to save raft hard state: %v", err)
 		}
-		if err := sl.SetRaftReplicaID(ctx, eng, replicaID); err != nil {
+		if err := sl.SetRaftReplicaID(ctx, logRW, replicaID); err != nil {
 			t.Fatalf("failed to set raft replica ID: %v", err)
 		}
 		for i, entry := range raftLog {
@@ -775,7 +777,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 				descriptorViews = append(descriptorViews, descriptorView(desc))
 
 				sl := stateloader.Make(desc.RangeID)
-				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, store.engine)
+				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, logstore.MakeLogReader(store.engine))
 				if err != nil {
 					t.Fatalf("failed to load Raft replica ID: %v", err)
 				}

@@ -117,7 +117,7 @@ LIMIT
 	require.NoError(t, err)
 	defer it.Close()
 	rsl := logstore.NewStateLoader(rangeID)
-	lastIndex, err := rsl.LoadLastIndex(ctx, eng)
+	lastIndex, err := rsl.LoadLastIndex(ctx, logstore.MakeLogReader(eng))
 	require.NoError(t, err)
 	t.Logf("loaded LastIndex: %d", lastIndex)
 	ok, err := it.SeekGE(lastIndex)
@@ -138,7 +138,7 @@ LIMIT
 		}))
 
 	sl := stateloader.Make(rangeID)
-	lease, err := sl.LoadLease(ctx, eng)
+	lease, err := sl.LoadLease(ctx, stateloader.MakeStateReader(eng))
 	require.NoError(t, err)
 
 	for batchIdx := 0; batchIdx < batches; batchIdx++ {

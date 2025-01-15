@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -93,7 +94,8 @@ func TestStoreRaftReplicaID(t *testing.T) {
 	require.NoError(t, err)
 	repl, err := store.GetReplica(desc.RangeID)
 	require.NoError(t, err)
-	replicaID, err := stateloader.Make(desc.RangeID).LoadRaftReplicaID(ctx, store.TODOEngine())
+	replicaID, err := stateloader.Make(desc.RangeID).LoadRaftReplicaID(
+		ctx, logstore.MakeLogReader(store.TODOEngine()))
 	require.NoError(t, err)
 	require.Equal(t, repl.ReplicaID(), replicaID.ReplicaID)
 
@@ -103,8 +105,8 @@ func TestStoreRaftReplicaID(t *testing.T) {
 	require.NoError(t, err)
 	rhsRepl, err := store.GetReplica(rhsDesc.RangeID)
 	require.NoError(t, err)
-	rhsReplicaID, err :=
-		stateloader.Make(rhsDesc.RangeID).LoadRaftReplicaID(ctx, store.TODOEngine())
+	rhsReplicaID, err := stateloader.Make(rhsDesc.RangeID).LoadRaftReplicaID(
+		ctx, logstore.MakeLogReader(store.TODOEngine()))
 	require.NoError(t, err)
 	require.Equal(t, rhsRepl.ReplicaID(), rhsReplicaID.ReplicaID)
 }

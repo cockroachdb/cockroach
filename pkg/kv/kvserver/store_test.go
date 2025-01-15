@@ -902,8 +902,8 @@ func TestMarkReplicaInitialized(t *testing.T) {
 
 	newRangeID := roachpb.RangeID(3)
 	const replicaID = 1
-	require.NoError(t,
-		logstore.NewStateLoader(newRangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+	require.NoError(t, logstore.NewStateLoader(newRangeID).SetRaftReplicaID(
+		ctx, logstore.MakeLogWriter(store.TODOEngine()), replicaID))
 
 	r, err := newUninitializedReplica(store, newRangeID, replicaID)
 	require.NoError(t, err)
@@ -2790,7 +2790,8 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := *repl.shMu.state.GCThreshold
-		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
+		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(
+			context.Background(), stateloader.MakeStateReader(store.TODOEngine()))
 		repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -4124,7 +4125,8 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.TODOEngine())
+	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(
+		ctx, logstore.MakeLogReader(tc.store.TODOEngine()))
 	require.NoError(t, err)
 	require.Equal(t, &kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
 }

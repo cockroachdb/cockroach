@@ -93,8 +93,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		cpy.StartKey = test.start
 		cpy.EndKey = test.end
 		replicaID := cpy.Replicas().VoterDescriptors()[0].ReplicaID
-		require.NoError(t,
-			logstore.NewStateLoader(cpy.RangeID).SetRaftReplicaID(ctx, tc.store.TODOEngine(), replicaID))
+		require.NoError(t, logstore.NewStateLoader(cpy.RangeID).SetRaftReplicaID(
+			ctx, logstore.MakeLogWriter(tc.store.TODOEngine()), replicaID,
+		))
 		repl, err := loadInitializedReplicaForTesting(ctx, tc.store, &cpy, replicaID)
 		if err != nil {
 			t.Fatal(err)
