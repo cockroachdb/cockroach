@@ -603,6 +603,7 @@ func (ts *testServer) startDefaultTestTenant(
 	}
 
 	params := base.TestTenantArgs{
+		TenantName: ts.params.DefaultTenantName,
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
 		TenantID:                  serverutils.TestTenantID(),
@@ -628,13 +629,17 @@ func (ts *testServer) startDefaultTestTenant(
 	if ts.params.Knobs.Server != nil {
 		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 		params.TestingKnobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
+		params.TestingKnobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle =
+			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle
+		params.TestingKnobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled =
+			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled
 	}
 	return ts.StartTenant(ctx, params)
 }
 
 func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcessTenantArgs {
 	args := base.TestSharedProcessTenantArgs{
-		TenantName:  "test-tenant",
+		TenantName:  ts.params.DefaultTenantName,
 		TenantID:    serverutils.TestTenantID(),
 		Knobs:       ts.params.Knobs,
 		UseDatabase: ts.params.UseDatabase,
@@ -645,6 +650,10 @@ func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcess
 	if ts.params.Knobs.Server != nil {
 		args.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 		args.Knobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
+		args.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle =
+			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle
+		args.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled =
+			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled
 	}
 	return args
 }
@@ -789,6 +798,12 @@ func (ts *testServer) PreStart(ctx context.Context) error {
 	func(args base.TestSharedProcessTenantArgs) {
 		ts.topLevelServer.serverController.mu.Lock()
 		defer ts.topLevelServer.serverController.mu.Unlock()
+		// Note: Since we are fetching default tenant args, only the default tenant
+		// (i.e., demoapp, test-tenant) is present here. If a test starts another
+		// secondary tenant with different arguments (such as testing knobs), those
+		// arguments won't be present in the testArgs map. To prevent the race
+		// condition mentioned earlier, we should disable the server controller
+		// tenant watcher and start those tenants explicitly on every node.
 		ts.topLevelServer.serverController.mu.testArgs[args.TenantName] = args
 	}(ts.getSharedProcessDefaultTenantArgs())
 	return ts.topLevelServer.PreStart(ctx)
@@ -1546,15 +1561,15 @@ func (ts *testServer) StartTenant(
 
 	ie := ts.InternalExecutor().(*sql.InternalExecutor)
 	if !params.DisableCreateTenant {
-		rowCount, err := ie.Exec(
+		row, err := ie.QueryRow(
 			ctx, "testserver-check-tenant-active", nil,
-			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
+			"SELECT name FROM system.tenants WHERE id=$1 AND active=true",
 			params.TenantID.ToUint64(),
 		)
 		if err != nil {
 			return nil, err
 		}
-		if rowCount == 0 {
+		if row == nil {
 			// Tenant doesn't exist. Create it.
 			if _, err := ie.Exec(
 				ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1, $2)",
@@ -1562,7 +1577,7 @@ func (ts *testServer) StartTenant(
 			); err != nil {
 				return nil, err
 			}
-		} else if params.TenantName != "" {
+		} else if params.TenantName != "" && params.TenantName != roachpb.TenantName(tree.MustBeDString(row[0])) {
 			_, err := ie.Exec(ctx, "rename-test-tenant", nil,
 				`ALTER TENANT [$1] RENAME TO $2`,
 				params.TenantID.ToUint64(), params.TenantName)
