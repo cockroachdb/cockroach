@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -1412,8 +1413,9 @@ func splitTriggerHelper(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load replica version")
 		}
-		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
-			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
+		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(ctx,
+			stateloader.MakeStateRW(batch), logstore.MakeLogWriter(batch),
+			*h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*gcThreshold, *gcHint, replicaVersion,
 		)
 		if err != nil {

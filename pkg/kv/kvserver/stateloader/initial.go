@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,7 +35,8 @@ const (
 // are returned.
 func WriteInitialReplicaState(
 	ctx context.Context,
-	readWriter storage.ReadWriter,
+	stateRW StateReadWriter,
+	logWriter logstore.LogWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
@@ -64,7 +64,6 @@ func WriteInitialReplicaState(
 	}
 
 	rsl := Make(desc.RangeID)
-	stateRW := MakeStateRW(readWriter)
 	if existingLease, err := rsl.LoadLease(ctx, stateRW.Reader()); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {
@@ -91,9 +90,7 @@ func WriteInitialReplicaState(
 
 	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
 	// the Raft log engine is separated. Figure out the ordering required here.
-	if err := rsl.SetRaftTruncatedState(
-		ctx, logstore.MakeLogWriter(readWriter), truncState,
-	); err != nil {
+	if err := rsl.SetRaftTruncatedState(ctx, logWriter, truncState); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	newMS, err := rsl.Save(ctx, stateRW, s)
@@ -108,7 +105,8 @@ func WriteInitialReplicaState(
 // bootstrap.
 func WriteInitialRangeState(
 	ctx context.Context,
-	readWriter storage.ReadWriter,
+	stateRW StateReadWriter,
+	logRW logstore.LogReadWriter,
 	desc roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 	replicaVersion roachpb.Version,
@@ -118,9 +116,8 @@ func WriteInitialRangeState(
 	initialGCHint := roachpb.GCHint{}
 	initialMS := enginepb.MVCCStats{}
 
-	if _, err := WriteInitialReplicaState(
-		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
-		replicaVersion,
+	if _, err := WriteInitialReplicaState(ctx, stateRW, logRW.Writer(),
+		initialMS, desc, initialLease, initialGCThreshold, initialGCHint, replicaVersion,
 	); err != nil {
 		return err
 	}
@@ -128,14 +125,12 @@ func WriteInitialRangeState(
 	// TODO(sep-raft-log): when the log storage is separated, the below can't be
 	// written in the same batch. Figure out the ordering required here.
 	sl := Make(desc.RangeID)
-	if err := sl.SynthesizeRaftState(ctx, readWriter); err != nil {
+	if err := sl.SynthesizeRaftState(ctx, stateRW.Reader(), logRW); err != nil {
 		return err
 	}
 	// Maintain the invariant that any replica (uninitialized or initialized),
 	// with persistent state, has a RaftReplicaID.
-	if err := sl.SetRaftReplicaID(
-		ctx, logstore.MakeLogWriter(readWriter), replicaID,
-	); err != nil {
+	if err := sl.SetRaftReplicaID(ctx, logRW.Writer(), replicaID); err != nil {
 		return err
 	}
 	return nil

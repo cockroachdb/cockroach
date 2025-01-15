@@ -589,8 +589,10 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 		NextReplicaID: 2,
 	}
 	const replicaID = 1
-	if err := stateloader.WriteInitialRangeState(
-		ctx, s.TODOEngine(), *desc, replicaID, clusterversion.TestingClusterVersion.Version,
+	if err := stateloader.WriteInitialRangeState(ctx,
+		stateloader.MakeStateRW(s.TODOEngine()),
+		logstore.MakeLogRW(s.TODOEngine()),
+		*desc, replicaID, clusterversion.TestingClusterVersion.Version,
 	); err != nil {
 		panic(err)
 	}

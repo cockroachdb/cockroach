@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -207,8 +208,11 @@ func WriteInitialClusterData(
 			}
 		}
 
-		if err := stateloader.WriteInitialRangeState(
-			ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
+		if err := stateloader.WriteInitialRangeState(ctx,
+			stateloader.MakeStateRW(batch),
+			logstore.MakeLogRW(batch),
+			*desc, firstReplicaID, initialReplicaVersion,
+		); err != nil {
 			return err
 		}
 		computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, now.WallTime)
