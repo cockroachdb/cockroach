@@ -4706,7 +4706,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDString(build.GetInfo().Short()), nil
+				return tree.NewDString(build.GetInfo().Short().StripMarkers()), nil
 			},
 			Info:       "Returns the node's version of CockroachDB.",
 			Volatility: volatility.Volatile,

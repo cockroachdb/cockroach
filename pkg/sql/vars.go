@@ -1582,7 +1582,7 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`crdb_version`: makeReadOnlyVarWithFn(func() string {
-		return build.GetInfo().Short()
+		return build.GetInfo().Short().StripMarkers()
 	}),
 
 	// CockroachDB extension
