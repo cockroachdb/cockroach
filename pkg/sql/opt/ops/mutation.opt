@@ -146,11 +146,10 @@ define MutationPrivate {
     # indexes on the table.
     VectorIndexPutPartitionCols OptionalColList
 
-    # VectorIndexPutCentroidCols are columns from the Input expression
-    # containing the centroids of the partitions that the inserted or updated
-    # rows should be added to. The length is always equal to the number of
-    # vector indexes on the table.
-    VectorIndexPutCentroidCols OptionalColList
+    # VectorIndexPutEncVectorCols are columns from the Input expression
+    # containing the encoded vectors that should be inserted into the index.
+    # he length is always equal to the number of vector indexes on the table.
+    VectorIndexPutEncVectorCols OptionalColList
 
     # CanaryCol is used only with the Upsert operator. It identifies the column
     # that the execution engine uses to decide whether to insert or to update.
