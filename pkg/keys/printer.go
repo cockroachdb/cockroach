@@ -871,12 +871,19 @@ func init() {
 //
 // It prints at most maxChars, truncating components as needed. See
 // TestPrettyPrintRange for some examples.
-func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
+func PrettyPrintRange(start, end roachpb.Key, maxChars int, redact bool) string {
 	var b bytes.Buffer
 	if maxChars < 8 {
 		maxChars = 8
 	}
-	prettyStart := safeFormatInternal(nil /* valDirs */, start, DontQuoteRaw).StripMarkers()
+	redactablePrettyStart := safeFormatInternal(nil /* valDirs */, start, DontQuoteRaw)
+	var prettyStart string
+	if redact {
+		prettyStart = redactablePrettyStart.Redact().StripMarkers()
+	} else {
+		prettyStart = redactablePrettyStart.StripMarkers()
+	}
+
 	if len(end) == 0 {
 		if len(prettyStart) <= maxChars {
 			return prettyStart
@@ -885,7 +892,13 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 		b.WriteRune('…')
 		return b.String()
 	}
-	prettyEnd := safeFormatInternal(nil /* valDirs */, end, DontQuoteRaw).StripMarkers()
+	redactablePrettyEnd := safeFormatInternal(nil /* valDirs */, end, DontQuoteRaw)
+	var prettyEnd string
+	if redact {
+		prettyEnd = redactablePrettyEnd.Redact().StripMarkers()
+	} else {
+		prettyEnd = redactablePrettyEnd.StripMarkers()
+	}
 	i := 0
 	// Find the common prefix.
 	for ; i < len(prettyStart) && i < len(prettyEnd) && prettyStart[i] == prettyEnd[i]; i++ {
