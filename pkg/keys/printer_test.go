@@ -611,7 +611,7 @@ func TestPrettyPrintRange(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		str := keys.PrettyPrintRange(tc.start, tc.end, tc.maxChars)
+		str := keys.PrettyPrintRange(tc.start, tc.end, tc.maxChars, false)
 		if str != tc.expected {
 			t.Errorf("%d: expected:\n%s\ngot:\n%s", i, tc.expected, str)
 		}
