@@ -223,6 +223,11 @@ func processTableDump(
 ) error {
 	f, err := os.Open(path.Join(dir, fileName))
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			fmt.Printf("skipping %s as it doesn't exist\n", fileName)
+			return nil
+		}
+
 		return err
 	}
 	defer f.Close()
@@ -280,6 +285,7 @@ func processTableDump(
 	}
 
 	if len(lines) == 0 {
+		fmt.Printf("skipping %s as it's empty\n", fileName)
 		return nil
 	}
 
@@ -301,8 +307,14 @@ func processTableDump(
 // makeTableIterator returns the headers slice and an iterator
 func makeTableIterator(f io.Reader) ([]string, func(func(string) error) error) {
 	scanner := bufio.NewScanner(f)
-	scanner.Scan() // scan the first line to get the headers
 
+	// some of the rows can be very large, bigger than the bufio.MaxTokenSize
+	// (65kb). So, we need to increase the buffer size and split by lines while
+	// scanning.
+	scanner.Buffer(nil, 5<<20) // 5 MB
+	scanner.Split(bufio.ScanLines)
+
+	scanner.Scan() // scan the first line to get the headers
 	return strings.Split(scanner.Text(), "\t"), func(fn func(string) error) error {
 		for scanner.Scan() {
 			if err := fn(scanner.Text()); err != nil {

@@ -6,9 +6,11 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -75,5 +77,37 @@ func TestTableDumpConsistency(t *testing.T) {
 		table = strings.TrimSuffix(table, ".txt")
 		_, ok := zipInternalTablesPerNode[table]
 		assert.True(t, ok, "table %s is not in table registry", table)
+	}
+}
+
+func TestMakeTableIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tt := []struct {
+		name    string
+		input   io.Reader
+		headers []string
+	}{
+		{
+			name:    "simple",
+			input:   bytes.NewBufferString("h1\th2\th3\nr1c1\tr1c2\tr1c3\nr2c1\tr2c2\tr2c3\n"),
+			headers: []string{"h1", "h2", "h3"},
+		},
+		{
+			name: "token too long",
+			input: bytes.NewBufferString(fmt.Sprintf(
+				"h1\n%s\n", strings.Repeat("A", bufio.MaxScanTokenSize+1),
+			)),
+			headers: []string{"h1"},
+		},
+	}
+
+	for _, tc := range tt {
+		headers, iter := makeTableIterator(tc.input)
+		assert.Equal(t, tc.headers, headers)
+		require.NoError(t, iter(func(row string) error {
+			assert.Len(t, strings.Split(row, "\t"), len(headers))
+			return nil
+		}))
 	}
 }
