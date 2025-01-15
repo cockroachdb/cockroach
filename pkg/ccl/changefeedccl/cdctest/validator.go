@@ -211,8 +211,8 @@ func NewBeforeAfterValidator(
 	return &beforeAfterValidator{
 		sqlDB:          sqlDB,
 		table:          table,
-		fullTableName:  option.FullTableName,
-		keyInValue:     option.KeyInValue,
+		fullTableName:  option.BooleanOptions["full_table_name"],
+		keyInValue:     option.BooleanOptions["key_in_value"],
 		primaryKeyCols: primaryKeyCols,
 		resolved:       make(map[string]hlc.Timestamp),
 	}, nil

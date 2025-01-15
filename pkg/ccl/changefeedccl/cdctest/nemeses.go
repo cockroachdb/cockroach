@@ -20,48 +20,47 @@ import (
 )
 
 type ChangefeedOption struct {
-	FullTableName bool
-	Format        string
-	KeyInValue    bool
+	Format         string
+	BooleanOptions map[string]bool
 }
 
 func newChangefeedOption(testName string) ChangefeedOption {
 	isCloudstorage := strings.Contains(testName, "cloudstorage")
 	isWebhook := strings.Contains(testName, "webhook")
-	cfo := ChangefeedOption{
-		FullTableName: rand.Intn(2) < 1,
 
+	cfo := ChangefeedOption{}
+
+	booleanOptionEligibility := map[string]bool{
+		"full_table_name": true,
 		// Because key_in_value is on by default for cloudstorage and webhook sinks,
 		// the key in the value is extracted and removed from the test feed
 		// messages (see extractKeyFromJSONValue function).
-		// TODO: (#138749) enable testing key_in_value for cloudstorage
-		// and webhook sinks
-		KeyInValue: !isCloudstorage && !isWebhook && rand.Intn(2) < 1,
-		Format:     "json",
+		"key_in_value": !isCloudstorage && !isWebhook,
+	}
+
+	cfo.BooleanOptions = make(map[string]bool)
+	for option, eligible := range booleanOptionEligibility {
+		cfo.BooleanOptions[option] = eligible && rand.Intn(2) < 1
 	}
 
 	if isCloudstorage && rand.Intn(2) < 1 {
 		cfo.Format = "parquet"
+	} else {
+		cfo.Format = "json"
 	}
 
 	return cfo
 }
 
-func (co ChangefeedOption) String() string {
-	return fmt.Sprintf("full_table_name=%t,key_in_value=%t,format=%s",
-		co.FullTableName, co.KeyInValue, co.Format)
-}
-
 func (cfo ChangefeedOption) OptionString() string {
 	options := ""
+	for option, value := range cfo.BooleanOptions {
+		if value {
+			options = options + ", " + option
+		}
+	}
 	if cfo.Format == "parquet" {
-		options = ", format=parquet"
-	}
-	if cfo.FullTableName {
-		options = options + ", full_table_name"
-	}
-	if cfo.KeyInValue {
-		options = options + ", key_in_value"
+		options = options + ", format=parquet"
 	}
 	return options
 }
