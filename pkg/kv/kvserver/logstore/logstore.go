@@ -257,7 +257,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		}
 		state.ByteSize += sideLoadedEntriesSize
 		if state, err = logAppend(
-			ctx, s.StateLoader.RaftLogPrefix(), batch, state, thinEntries,
+			ctx, s.StateLoader.RaftLogPrefix(), MakeLogRW(batch), state, thinEntries,
 		); err != nil {
 			const expl = "during append"
 			return RaftState{}, errors.Wrap(err, expl)
@@ -278,7 +278,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		//
 		// We have both in the same batch, so there's no problem. If that ever
 		// changes, we must write and sync the Entries before the HardState.
-		if err := s.StateLoader.SetHardState(ctx, batch, hs); err != nil {
+		if err := s.StateLoader.SetHardState(ctx, MakeLogWriter(batch), hs); err != nil {
 			const expl = "during setHardState"
 			return RaftState{}, errors.Wrap(err, expl)
 		}
@@ -451,7 +451,7 @@ var logAppendPool = sync.Pool{
 func logAppend(
 	ctx context.Context,
 	raftLogPrefix roachpb.Key,
-	rw storage.ReadWriter,
+	rw LogReadWriter,
 	prev RaftState,
 	entries []raftpb.Entry,
 ) (RaftState, error) {
@@ -649,7 +649,7 @@ func LoadTerm(
 	// Otherwise, the entry at the given index is not found. This can happen if
 	// the index is ahead of lastIndex, or it has been compacted away.
 
-	lastIndex, err := rsl.LoadLastIndex(ctx, reader)
+	lastIndex, err := rsl.LoadLastIndex(ctx, MakeLogReader(reader))
 	if err != nil {
 		return 0, err
 	}
@@ -657,7 +657,7 @@ func LoadTerm(
 		return 0, raft.ErrUnavailable
 	}
 
-	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
+	ts, err := rsl.LoadRaftTruncatedState(ctx, MakeLogReader(reader))
 	if err != nil {
 		return 0, err
 	}
@@ -771,7 +771,7 @@ func LoadEntries(
 	// Did we get any results at all? Because something went wrong.
 	if len(ents) > 0 {
 		// Was the missing index after the last index?
-		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
+		lastIndex, err := rsl.LoadLastIndex(ctx, MakeLogReader(reader))
 		if err != nil {
 			return nil, 0, 0, err
 		}
@@ -784,7 +784,7 @@ func LoadEntries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
+	ts, err := rsl.LoadRaftTruncatedState(ctx, MakeLogReader(reader))
 	if err != nil {
 		return nil, 0, 0, err
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,7 +44,7 @@ func LoadReplicaState(
 	replicaID roachpb.ReplicaID,
 ) (LoadedReplicaState, error) {
 	sl := stateloader.Make(desc.RangeID)
-	id, err := sl.LoadRaftReplicaID(ctx, eng)
+	id, err := sl.LoadRaftReplicaID(ctx, logstore.MakeLogReader(eng))
 	if err != nil {
 		return LoadedReplicaState{}, err
 	}
@@ -53,13 +54,13 @@ func LoadReplicaState(
 	}
 
 	ls := LoadedReplicaState{ReplicaID: replicaID}
-	if ls.hardState, err = sl.LoadHardState(ctx, eng); err != nil {
+	if ls.hardState, err = sl.LoadHardState(ctx, logstore.MakeLogReader(eng)); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, eng); err != nil {
+	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, logstore.MakeLogReader(eng)); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.LastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
+	if ls.LastIndex, err = sl.LoadLastIndex(ctx, logstore.MakeLogReader(eng)); err != nil {
 		return LoadedReplicaState{}, err
 	}
 	if ls.ReplState, err = sl.Load(ctx, eng, desc); err != nil {
@@ -137,7 +138,7 @@ func CreateUninitializedReplica(
 	//   this newer replica is harmless since it just limits the votes for
 	//   this replica.
 	sl := stateloader.Make(rangeID)
-	if err := sl.SetRaftReplicaID(ctx, eng, replicaID); err != nil {
+	if err := sl.SetRaftReplicaID(ctx, logstore.MakeLogWriter(eng), replicaID); err != nil {
 		return err
 	}
 

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -89,7 +90,9 @@ func WriteInitialReplicaState(
 
 	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
 	// the Raft log engine is separated. Figure out the ordering required here.
-	if err := rsl.SetRaftTruncatedState(ctx, readWriter, truncState); err != nil {
+	if err := rsl.SetRaftTruncatedState(
+		ctx, logstore.MakeLogWriter(readWriter), truncState,
+	); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	newMS, err := rsl.Save(ctx, readWriter, s)
@@ -129,7 +132,9 @@ func WriteInitialRangeState(
 	}
 	// Maintain the invariant that any replica (uninitialized or initialized),
 	// with persistent state, has a RaftReplicaID.
-	if err := sl.SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
+	if err := sl.SetRaftReplicaID(
+		ctx, logstore.MakeLogWriter(readWriter), replicaID,
+	); err != nil {
 		return err
 	}
 	return nil

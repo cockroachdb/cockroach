@@ -151,7 +151,7 @@ func (sl StateLoader) SetHardState(
 // taking care that a HardState compatible with the existing data is written.
 func (sl StateLoader) SynthesizeHardState(
 	ctx context.Context,
-	writer storage.Writer,
+	writer LogWriter,
 	oldHS raftpb.HardState,
 	truncState kvserverpb.RaftTruncatedState,
 	raftAppliedIndex kvpb.RaftIndex,
@@ -192,7 +192,7 @@ func (sl StateLoader) SynthesizeHardState(
 
 // SetRaftReplicaID overwrites the RaftReplicaID.
 func (sl StateLoader) SetRaftReplicaID(
-	ctx context.Context, writer storage.Writer, replicaID roachpb.ReplicaID,
+	ctx context.Context, writer LogWriter, replicaID roachpb.ReplicaID,
 ) error {
 	rid := kvserverpb.RaftReplicaID{ReplicaID: replicaID}
 	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
@@ -208,7 +208,7 @@ func (sl StateLoader) SetRaftReplicaID(
 
 // LoadRaftReplicaID loads the RaftReplicaID.
 func (sl StateLoader) LoadRaftReplicaID(
-	ctx context.Context, reader storage.Reader,
+	ctx context.Context, reader LogReader,
 ) (*kvserverpb.RaftReplicaID, error) {
 	var replicaID kvserverpb.RaftReplicaID
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftReplicaIDKey(),

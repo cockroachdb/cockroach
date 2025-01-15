@@ -129,7 +129,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	r.mu.AssertHeld()
 
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.raftMu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
+	hs, err := r.raftMu.stateLoader.LoadHardState(ctx, logstore.MakeLogReader(r.store.LogEngine()))
 	if err != nil {
 		r.reportRaftStorageError(err)
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -664,7 +664,7 @@ func (r *Replica) applySnapshot(
 	if err != nil {
 		log.Fatalf(ctx, "unable to load replica state: %s", err)
 	}
-	truncState, err := sl.LoadRaftTruncatedState(ctx, r.store.TODOEngine())
+	truncState, err := sl.LoadRaftTruncatedState(ctx, logstore.MakeLogReader(r.store.LogEngine()))
 	if err != nil {
 		log.Fatalf(ctx, "unable to load raft truncated state: %s", err)
 	}
@@ -844,7 +844,7 @@ func writeUnreplicatedSST(
 	clearedSpan, err := rewriteRaftState(ctx, id, hs, kvserverpb.RaftTruncatedState{
 		Index: kvpb.RaftIndex(meta.Index),
 		Term:  kvpb.RaftTerm(meta.Term),
-	}, sl, &unreplicatedSST)
+	}, sl, logstore.MakeLogWriter(&unreplicatedSST))
 	if err != nil {
 		return nil, roachpb.Span{}, err
 	}
@@ -867,7 +867,7 @@ func rewriteRaftState(
 	hs raftpb.HardState,
 	ts kvserverpb.RaftTruncatedState,
 	sl *logstore.StateLoader,
-	w storage.Writer,
+	w logstore.LogWriter,
 ) (clearedSpan roachpb.Span, _ error) {
 	// Clearing the unreplicated state.
 	//

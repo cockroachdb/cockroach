@@ -392,11 +392,12 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 func (rsl StateLoader) SynthesizeRaftState(
 	ctx context.Context, readWriter storage.ReadWriter,
 ) error {
-	hs, err := rsl.LoadHardState(ctx, readWriter)
+	hs, err := rsl.LoadHardState(ctx, logstore.MakeLogReader(readWriter))
 	if err != nil {
 		return err
 	}
-	truncState, err := rsl.LoadRaftTruncatedState(ctx, readWriter)
+	truncState, err := rsl.LoadRaftTruncatedState(
+		ctx, logstore.MakeLogReader(readWriter))
 	if err != nil {
 		return err
 	}
@@ -404,5 +405,6 @@ func (rsl StateLoader) SynthesizeRaftState(
 	if err != nil {
 		return err
 	}
-	return rsl.SynthesizeHardState(ctx, readWriter, hs, truncState, as.RaftAppliedIndex)
+	return rsl.SynthesizeHardState(
+		ctx, logstore.MakeLogWriter(readWriter), hs, truncState, as.RaftAppliedIndex)
 }

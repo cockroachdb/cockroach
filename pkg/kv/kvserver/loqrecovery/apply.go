@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -299,7 +300,9 @@ func applyReplicaUpdate(
 		update.NewReplica.NodeID, update.NewReplica.StoreID)
 
 	// Persist the new replica ID.
-	if err := sl.SetRaftReplicaID(ctx, readWriter, update.NewReplica.ReplicaID); err != nil {
+	if err := sl.SetRaftReplicaID(
+		ctx, logstore.MakeLogWriter(readWriter), update.NewReplica.ReplicaID,
+	); err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "setting new replica ID")
 	}
 
@@ -310,14 +313,14 @@ func applyReplicaUpdate(
 
 	// Update the HardState to clear the LeadEpoch, as otherwise we may risk
 	// seeing an epoch regression in raft. See #136908 for more details.
-	hs, err := sl.LoadHardState(ctx, readWriter)
+	hs, err := sl.LoadHardState(ctx, logstore.MakeLogReader(readWriter))
 	if err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "loading HardState")
 	}
 
 	hs.LeadEpoch = 0
 
-	if err := sl.SetHardState(ctx, readWriter, hs); err != nil {
+	if err := sl.SetHardState(ctx, logstore.MakeLogWriter(readWriter), hs); err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "setting HardState")
 	}
 

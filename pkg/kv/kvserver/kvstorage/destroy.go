@@ -106,11 +106,11 @@ func DestroyReplica(
 	rangeID roachpb.RangeID,
 	reader storage.Reader,
 	writer storage.Writer,
-	r LogReader,
 	nextReplicaID roachpb.ReplicaID,
 	opts ClearRangeDataOptions,
 ) error {
-	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(ctx, reader)
+	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(
+		ctx, logstore.MakeLogReader(reader))
 	if err != nil {
 		return err
 	}

@@ -1769,7 +1769,9 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 ) {
 	if ts := r.shMu.state.TruncatedState; ts != nil {
 		log.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
-	} else if loaded, err := r.mu.stateLoader.LoadRaftTruncatedState(ctx, reader); err != nil {
+	} else if loaded, err := r.mu.stateLoader.LoadRaftTruncatedState(
+		ctx, logstore.MakeLogReader(reader),
+	); err != nil {
 		log.Fatalf(ctx, "%s", err)
 	} else if ts := r.shMu.raftTruncState; loaded != ts {
 		log.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
@@ -1833,7 +1835,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.shMu.state.Desc)
 		}
 	}
-	diskReplID, err := r.mu.stateLoader.LoadRaftReplicaID(ctx, reader)
+	diskReplID, err := r.mu.stateLoader.LoadRaftReplicaID(ctx, logstore.MakeLogReader(reader))
 	if err != nil {
 		log.Fatalf(ctx, "%s", err)
 	}

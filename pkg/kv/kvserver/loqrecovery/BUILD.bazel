@@ -28,6 +28,7 @@ go_library(
         "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/logstore",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/raftlog",
         "//pkg/kv/kvserver/stateloader",
