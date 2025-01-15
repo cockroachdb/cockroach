@@ -98,15 +98,27 @@ func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
 // SetClosedTimestampInterval sets the kv.closed_timestamp.target_duration
 // cluster setting to the provided duration.
 func (e *Env) SetClosedTimestampInterval(ctx context.Context, d time.Duration) error {
-	q := fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s'`, d)
-	_, err := e.anyNode().ExecContext(ctx, q)
-	return err
+	return e.SetClusterSetting(ctx, "kv.closed_timestamp.target_duration", d.String())
 }
 
 // ResetClosedTimestampInterval resets the kv.closed_timestamp.target_duration
 // cluster setting to its default value.
 func (e *Env) ResetClosedTimestampInterval(ctx context.Context) error {
-	const q = `SET CLUSTER SETTING kv.closed_timestamp.target_duration TO DEFAULT`
+	return e.SetClusterSettingToDefault(ctx, "kv.closed_timestamp.target_duration")
+}
+
+// SetClusterSetting sets the cluster setting with the provided name to the
+// provided value.
+func (e *Env) SetClusterSetting(ctx context.Context, name, val string) error {
+	q := fmt.Sprintf(`SET CLUSTER SETTING %s = '%s'`, name, val)
+	_, err := e.anyNode().ExecContext(ctx, q)
+	return err
+}
+
+// SetClusterSettingToDefault resets the cluster setting with the provided name
+// to its default value.
+func (e *Env) SetClusterSettingToDefault(ctx context.Context, name string) error {
+	q := fmt.Sprintf(`SET CLUSTER SETTING %s TO DEFAULT`, name)
 	_, err := e.anyNode().ExecContext(ctx, q)
 	return err
 }

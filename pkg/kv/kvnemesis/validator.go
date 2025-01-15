@@ -888,6 +888,14 @@ func (v *validator) processOp(op Operation) {
 		if !transferLeaseResultIsIgnorable(t.Result) {
 			v.failIfError(op, t.Result) // fail on all other errors
 		}
+	case *ChangeSettingOperation:
+		execTimestampStrictlyOptional = true
+		// It's possible that reading the modified setting times out. Ignore these
+		// errors for now, at least until we do some validation that depends on the
+		// cluster settings being fully propagated.
+		if !resultIsErrorStr(t.Result, `setting updated but timed out waiting to read new value`) {
+			v.failIfError(op, t.Result)
+		}
 	case *ChangeZoneOperation:
 		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result) // fail on all errors
