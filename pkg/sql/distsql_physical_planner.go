@@ -2247,6 +2247,30 @@ func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
 		!prohibitParallelScans &&
 		dsp.parallelLocalScansSem.ApproximateQuota() > 0 &&
 		planCtx.spanIter != nil { // This condition can only be false in tests.
+		// Do a quick check whether we will touch at least two ranges. If we
+		// only touch a single range, then we'll end up with a single span
+		// partition, so we can skip the PartitionSpans call below.
+		it, rangeID, foundTwoRanges := planCtx.spanIter, int64(0), false
+		for i := 0; i < len(info.spans) && !foundTwoRanges; i++ {
+			sp := info.spans[i]
+			for it.Seek(ctx, sp, kvcoord.Ascending); it.Valid(); it.Next(ctx) {
+				rID := int64(it.Desc().RangeID)
+				if rangeID == 0 {
+					rangeID = rID
+				} else if rangeID != rID {
+					foundTwoRanges = true
+					break
+				}
+				if sp.EndKey == nil || !it.NeedAnother() {
+					break
+				}
+			}
+		}
+		if !foundTwoRanges {
+			spanPartitions = []SpanPartition{{SQLInstanceID: dsp.gatewaySQLInstanceID, Spans: info.spans}}
+			parallelizeLocal = false
+			return spanPartitions, parallelizeLocal
+		}
 		parallelizeLocal = true
 		// Temporarily unset isLocal so that PartitionSpans divides all spans
 		// according to the respective leaseholders.
