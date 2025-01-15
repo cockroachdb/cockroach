@@ -3107,16 +3107,18 @@ func TestValidateTableDesc(t *testing.T) {
 				desc.NextPolicyID = 3
 				desc.Policies = []descpb.PolicyDescriptor{
 					{
-						ID:      1,
-						Name:    "pol",
-						Type:    catpb.PolicyType_PERMISSIVE,
-						Command: catpb.PolicyCommand_ALL,
+						ID:        1,
+						Name:      "pol",
+						Type:      catpb.PolicyType_PERMISSIVE,
+						Command:   catpb.PolicyCommand_ALL,
+						RoleNames: []string{"u1"},
 					},
 					{
-						ID:      2,
-						Name:    "pol",
-						Type:    catpb.PolicyType_RESTRICTIVE,
-						Command: catpb.PolicyCommand_INSERT,
+						ID:        2,
+						Name:      "pol",
+						Type:      catpb.PolicyType_RESTRICTIVE,
+						Command:   catpb.PolicyCommand_INSERT,
+						RoleNames: []string{"u1"},
 					},
 				}
 			}),
@@ -3126,16 +3128,18 @@ func TestValidateTableDesc(t *testing.T) {
 				desc.NextPolicyID = 11
 				desc.Policies = []descpb.PolicyDescriptor{
 					{
-						ID:      10,
-						Name:    "pol_old",
-						Type:    catpb.PolicyType_RESTRICTIVE,
-						Command: catpb.PolicyCommand_UPDATE,
+						ID:        10,
+						Name:      "pol_old",
+						Type:      catpb.PolicyType_RESTRICTIVE,
+						Command:   catpb.PolicyCommand_UPDATE,
+						RoleNames: []string{"u1"},
 					},
 					{
-						ID:      10,
-						Name:    "pol_new",
-						Type:    catpb.PolicyType_PERMISSIVE,
-						Command: catpb.PolicyCommand_DELETE,
+						ID:        10,
+						Name:      "pol_new",
+						Type:      catpb.PolicyType_PERMISSIVE,
+						Command:   catpb.PolicyCommand_DELETE,
+						RoleNames: []string{"u1"},
 					},
 				}
 			}),
@@ -3175,6 +3179,48 @@ func TestValidateTableDesc(t *testing.T) {
 						Name:    "pol",
 						Type:    catpb.PolicyType_PERMISSIVE,
 						Command: 0,
+					},
+				}
+			}),
+		},
+		{err: `policy "pol" has no roles defined`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.NextPolicyID = 2
+				desc.Policies = []descpb.PolicyDescriptor{
+					{
+						ID:        1,
+						Name:      "pol",
+						Type:      catpb.PolicyType_PERMISSIVE,
+						Command:   catpb.PolicyCommand_DELETE,
+						RoleNames: nil,
+					},
+				}
+			}),
+		},
+		{err: `policy "pol" contains duplicate role name "u1"`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.NextPolicyID = 2
+				desc.Policies = []descpb.PolicyDescriptor{
+					{
+						ID:        1,
+						Name:      "pol",
+						Type:      catpb.PolicyType_RESTRICTIVE,
+						Command:   catpb.PolicyCommand_ALL,
+						RoleNames: []string{"u1", "u2", "u11", "u1"},
+					},
+				}
+			}),
+		},
+		{err: `the public role must be the first role defined in policy "pol"`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.NextPolicyID = 2
+				desc.Policies = []descpb.PolicyDescriptor{
+					{
+						ID:        1,
+						Name:      "pol",
+						Type:      catpb.PolicyType_PERMISSIVE,
+						Command:   catpb.PolicyCommand_INSERT,
+						RoleNames: []string{"u1", "public"},
 					},
 				}
 			}),

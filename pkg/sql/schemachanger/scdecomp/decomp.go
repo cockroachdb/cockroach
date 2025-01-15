@@ -886,6 +886,13 @@ func (w *walkCtx) walkPolicy(tbl catalog.TableDescriptor, p *descpb.PolicyDescri
 		PolicyID: p.ID,
 		Name:     p.Name,
 	})
+	for _, role := range p.RoleNames {
+		w.ev(scpb.Status_PUBLIC, &scpb.PolicyRole{
+			TableID:  tbl.GetID(),
+			PolicyID: p.ID,
+			RoleName: role,
+		})
+	}
 }
 
 func (w *walkCtx) walkForeignKeyConstraint(

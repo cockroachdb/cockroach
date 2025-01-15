@@ -373,6 +373,11 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(PolicyID, "PolicyID"),
 		rel.EntityAttr(Name, "Name"),
 	),
+	rel.EntityMapping(t((*scpb.PolicyRole)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+		rel.EntityAttr(Name, "RoleName"),
+	),
 	// Common elements.
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),

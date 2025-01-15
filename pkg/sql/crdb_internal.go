@@ -6245,6 +6245,17 @@ CREATE TABLE crdb_internal.invalid_objects (
 					catalog.ValidateRolesInDefaultPrivilegeDescriptor(
 						schemaDesc.GetDefaultPrivilegeDescriptor(), roleExists))
 			}
+			if tbDesc, ok := descriptor.(catalog.TableDescriptor); ok {
+				for _, p := range tbDesc.GetPolicies() {
+					for _, r := range p.RoleNames {
+						doError(catalog.ValidateRole(username.MakeSQLUsernameFromPreNormalizedString(r),
+							roleExists, func() error {
+								return errors.AssertionFailedf("policy %q on table %q has a role %q that doesn't exist",
+									p.Name, tbDesc.GetName(), r)
+							}))
+					}
+				}
+			}
 			jobs.ValidateJobReferencesInDescriptor(descriptor, jmg, doError)
 			return err
 		}

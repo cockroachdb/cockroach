@@ -194,32 +194,48 @@ func ValidateOutboundTypeRefBackReference(selfID descpb.ID, typ TypeDescriptor) 
 		typ.GetName(), typ.GetID())
 }
 
+// ValidateRole checks the validity of a single role by its name. The assertGenerator
+// callback provides a way for the caller to specify a custom error and message
+// tailored to their use case. It must return an assertion failure.
+func ValidateRole(
+	role username.SQLUsername,
+	roleExists func(username username.SQLUsername) (bool, error),
+	assertGenerator func() error,
+) error {
+	exists, err := roleExists(role)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if err := assertGenerator(); err != nil && errors.IsAssertionFailure(err) {
+			return err
+		} else {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "assertGenerator() must return an assertion failure")
+		}
+	}
+	return nil
+}
+
 // ValidateRolesInDescriptor validates roles within a descriptor.
 func ValidateRolesInDescriptor(
 	descriptor Descriptor, RoleExists func(username username.SQLUsername) (bool, error),
 ) error {
 	// Validate the owner.
-	exists, err := RoleExists(descriptor.GetPrivileges().Owner())
-	if err != nil {
+	if err := ValidateRole(descriptor.GetPrivileges().Owner(), RoleExists, func() error {
+		return errors.AssertionFailedf("descriptor %q (%d) is owned by a role %q that doesn't exist",
+			descriptor.GetName(), descriptor.GetID(), descriptor.GetPrivileges().Owner())
+	}); err != nil {
 		return err
-	}
-	if !exists {
-		return errors.AssertionFailedf(
-			"descriptor %q (%d) is owned by a role %q that doesn't exist",
-			descriptor.GetName(), descriptor.GetID(), descriptor.GetPrivileges().Owner(),
-		)
 	}
 	// Validate the privileges.
 	for _, priv := range descriptor.GetPrivileges().Users {
-		exists, err := RoleExists(priv.User())
-		if err != nil {
-			return err
-		}
-		if !exists {
+		if err := ValidateRole(priv.User(), RoleExists, func() error {
 			return errors.AssertionFailedf("descriptor %q (%d) has privilege on a role %q that doesn't exist",
 				descriptor.GetName(),
 				descriptor.GetID(),
 				priv.User())
+		}); err != nil {
+			return err
 		}
 	}
 	return nil
