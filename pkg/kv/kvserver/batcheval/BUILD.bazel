@@ -150,6 +150,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/lockspanset",
+        "//pkg/kv/kvserver/logstore",
         "//pkg/kv/kvserver/readsummary",
         "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/kv/kvserver/spanset",

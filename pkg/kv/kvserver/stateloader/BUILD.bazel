@@ -35,6 +35,7 @@ go_test(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/logstore",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/storage",
