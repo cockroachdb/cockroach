@@ -57,7 +57,9 @@ func (desc *wrapper) ValidateTxnCommit(
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+func (desc *wrapper) GetReferencedDescIDs(
+	catalog.ValidationLevel,
+) (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
 	// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
