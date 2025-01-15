@@ -48,9 +48,7 @@ func NewStateLoader(rangeID roachpb.RangeID) StateLoader {
 }
 
 // LoadLastIndex loads the last index.
-func (sl StateLoader) LoadLastIndex(
-	ctx context.Context, reader storage.Reader,
-) (kvpb.RaftIndex, error) {
+func (sl StateLoader) LoadLastIndex(ctx context.Context, reader LogReader) (kvpb.RaftIndex, error) {
 	prefix := sl.RaftLogPrefix()
 	// NB: raft log has no intents.
 	iter, err := reader.NewMVCCIterator(
@@ -90,7 +88,7 @@ func (sl StateLoader) LoadLastIndex(
 
 // LoadRaftTruncatedState loads the truncated state.
 func (sl StateLoader) LoadRaftTruncatedState(
-	ctx context.Context, reader storage.Reader,
+	ctx context.Context, reader LogReader,
 ) (kvserverpb.RaftTruncatedState, error) {
 	var truncState kvserverpb.RaftTruncatedState
 	if _, err := storage.MVCCGetProto(
@@ -104,7 +102,7 @@ func (sl StateLoader) LoadRaftTruncatedState(
 
 // SetRaftTruncatedState overwrites the truncated state.
 func (sl StateLoader) SetRaftTruncatedState(
-	ctx context.Context, writer storage.Writer, truncState *kvserverpb.RaftTruncatedState,
+	ctx context.Context, writer LogWriter, truncState *kvserverpb.RaftTruncatedState,
 ) error {
 	if (*truncState == kvserverpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
@@ -122,7 +120,7 @@ func (sl StateLoader) SetRaftTruncatedState(
 
 // LoadHardState loads the HardState.
 func (sl StateLoader) LoadHardState(
-	ctx context.Context, reader storage.Reader,
+	ctx context.Context, reader LogReader,
 ) (raftpb.HardState, error) {
 	var hs raftpb.HardState
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftHardStateKey(),
@@ -136,7 +134,7 @@ func (sl StateLoader) LoadHardState(
 
 // SetHardState overwrites the HardState.
 func (sl StateLoader) SetHardState(
-	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
+	ctx context.Context, writer LogWriter, hs raftpb.HardState,
 ) error {
 	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
