@@ -267,8 +267,10 @@ func valueFromOverride[T any](name string, parser func(string) (T, error)) (T, b
 func init() {
 	if metamorphicEligible() {
 		if !disableMetamorphicTesting {
-			rng.r, _ = randutil.NewTestRand()
+			var seed int64
+			rng.r, seed = randutil.NewTestRand()
 			metamorphicutil.IsMetamorphicBuild = rng.r.Float64() < IsMetamorphicBuildProbability
+			logf("metamorphic: use COCKROACH_RANDOM_SEED=%d for reproduction\n", seed)
 		}
 
 		if overrideList, ok := envutil.EnvString(MetamorphicOverridesEnvVar, 0); ok {
