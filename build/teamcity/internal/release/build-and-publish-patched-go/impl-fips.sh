@@ -10,7 +10,7 @@ set -xeuo pipefail
 
 GO_FIPS_REPO=https://github.com/golang-fips/go
 GO_FIPS_COMMIT=fc8a2bd706bcd6b18b260a9aea59cf63884acdeb
-GO_VERSION=1.22.8
+GOCOMMIT=$(cat /bootstrap/commit.txt)
 
 # Install build dependencies
 yum install git golang golang-bin openssl openssl-devel -y
@@ -32,7 +32,7 @@ git checkout $GO_FIPS_COMMIT
 rm ./patches/017-fix-linkage.patch
 # Lower the requirements in case we need to bootstrap with an older Go version
 sed -i "s/go mod tidy/go mod tidy -go=1.16/g" scripts/create-secondary-patch.sh
-./scripts/full-initialize-repo.sh "go$GO_VERSION"
+GOLANG_REPO=https://github.com/cockroachdb/go.git ./scripts/full-initialize-repo.sh "$GOCOMMIT"
 cd go/src
 # Apply the CRL patch
 patch -p2 </bootstrap/diff.patch
