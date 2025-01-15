@@ -178,7 +178,7 @@ type Metrics struct {
 // LogStore is a stub of a separated Raft log storage.
 type LogStore struct {
 	RangeID     roachpb.RangeID
-	Engine      storage.Engine
+	Engine      LogEngine
 	Sideload    SideloadStorage
 	StateLoader StateLoader // used only for writes under raftMu
 	SyncWaiter  *SyncWaiterLoop
@@ -200,7 +200,7 @@ type SyncCallback interface {
 	OnLogSync(context.Context, MsgStorageAppendDone, storage.BatchCommitStats)
 }
 
-func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
+func newStoreEntriesBatch(eng LogEngine) storage.Batch {
 	// Use an unindexed batch because we don't need to read our writes, and
 	// it is more efficient.
 	return eng.NewUnindexedBatch()
@@ -604,7 +604,7 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 func LoadTerm(
 	ctx context.Context,
 	rsl StateLoader,
-	eng storage.Engine,
+	eng LogEngine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	index kvpb.RaftIndex,
@@ -614,7 +614,7 @@ func LoadTerm(
 		return kvpb.RaftTerm(entry.Term), nil
 	}
 
-	reader := eng.NewReader(storage.StandardDurability)
+	reader := MakeLogReader(eng.NewReader(storage.StandardDurability))
 	defer reader.Close()
 
 	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
@@ -649,7 +649,7 @@ func LoadTerm(
 	// Otherwise, the entry at the given index is not found. This can happen if
 	// the index is ahead of lastIndex, or it has been compacted away.
 
-	lastIndex, err := rsl.LoadLastIndex(ctx, MakeLogReader(reader))
+	lastIndex, err := rsl.LoadLastIndex(ctx, reader)
 	if err != nil {
 		return 0, err
 	}
@@ -657,7 +657,7 @@ func LoadTerm(
 		return 0, raft.ErrUnavailable
 	}
 
-	ts, err := rsl.LoadRaftTruncatedState(ctx, MakeLogReader(reader))
+	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return 0, err
 	}
@@ -679,7 +679,7 @@ func LoadTerm(
 func LoadEntries(
 	ctx context.Context,
 	rsl StateLoader,
-	eng storage.Engine,
+	eng LogEngine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
@@ -755,7 +755,7 @@ func LoadEntries(
 		return nil
 	}
 
-	reader := eng.NewReader(storage.StandardDurability)
+	reader := MakeLogReader(eng.NewReader(storage.StandardDurability))
 	defer reader.Close()
 	if err := raftlog.Visit(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, 0, 0, err
@@ -771,7 +771,7 @@ func LoadEntries(
 	// Did we get any results at all? Because something went wrong.
 	if len(ents) > 0 {
 		// Was the missing index after the last index?
-		lastIndex, err := rsl.LoadLastIndex(ctx, MakeLogReader(reader))
+		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
 		if err != nil {
 			return nil, 0, 0, err
 		}
@@ -784,7 +784,7 @@ func LoadEntries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := rsl.LoadRaftTruncatedState(ctx, MakeLogReader(reader))
+	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return nil, 0, 0, err
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -45,7 +46,6 @@ type Reader interface {
 //
 // Revisit this.
 type Iterator struct {
-	eng       Reader
 	prefixBuf keys.RangeIDPrefixBuf
 
 	iter storageIter
@@ -67,7 +67,7 @@ type IterOptions struct {
 //
 // Callers that can afford allocating a closure may prefer using Visit.
 func NewIterator(
-	ctx context.Context, rangeID roachpb.RangeID, eng Reader, opts IterOptions,
+	ctx context.Context, rangeID roachpb.RangeID, eng logstore.LogReader, opts IterOptions,
 ) (*Iterator, error) {
 	// TODO(tbg): can pool these most of the things below, incl. the *Iterator.
 	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
@@ -84,7 +84,6 @@ func NewIterator(
 		return nil, err
 	}
 	return &Iterator{
-		eng:       eng,
 		prefixBuf: prefixBuf,
 		iter:      iter,
 	}, nil
@@ -141,12 +140,12 @@ func (it *Iterator) Entry() raftpb.Entry {
 // without returning an error.
 func Visit(
 	ctx context.Context,
-	eng Reader,
+	reader logstore.LogReader,
 	rangeID roachpb.RangeID,
 	lo, hi kvpb.RaftIndex,
 	fn func(raftpb.Entry) error,
 ) error {
-	it, err := NewIterator(ctx, rangeID, eng, IterOptions{Hi: hi})
+	it, err := NewIterator(ctx, rangeID, reader, IterOptions{Hi: hi})
 	if err != nil {
 		return err
 	}

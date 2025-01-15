@@ -209,7 +209,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 	r.raftMu.logStorage = &logstore.LogStore{
 		RangeID:     rangeID,
-		Engine:      store.TODOEngine(),
+		Engine:      store.LogEngine(),
 		Sideload:    r.raftMu.sideloaded,
 		StateLoader: r.raftMu.stateLoader.StateLoader,
 		// NOTE: use the same SyncWaiter loop for all raft log writes performed by a
