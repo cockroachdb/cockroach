@@ -616,27 +616,57 @@ func MemberOfWithAdminOption(
 	roleMembersCache := execCfg.RoleMemberCache
 
 	// Lookup table version.
-	_, tableDesc, err := descs.PrefixAndTable(
+	_, roleMembersTableDesc, err := descs.PrefixAndTable(
 		ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), &roleMembersTableName,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	tableVersion := tableDesc.GetVersion()
-	if tableDesc.IsUncommittedVersion() {
+	tableVersion := roleMembersTableDesc.GetVersion()
+	if roleMembersTableDesc.IsUncommittedVersion() {
 		return resolveMemberOfWithAdminOption(ctx, member, txn)
 	}
 	if txn.SessionData().AllowRoleMembershipsToChangeDuringTransaction {
+		systemUsersTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.UsersTableID)
+		if err != nil {
+			return nil, err
+		}
+
+		roleOptionsTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleOptionsTableID)
+		if err != nil {
+			return nil, err
+		}
+
+		systemUsersTableVersion := systemUsersTableDesc.GetVersion()
+		if systemUsersTableDesc.IsUncommittedVersion() {
+			return resolveMemberOfWithAdminOption(ctx, member, txn)
+		}
+
+		roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
+		if roleOptionsTableDesc.IsUncommittedVersion() {
+			return resolveMemberOfWithAdminOption(ctx, member, txn)
+		}
+
 		defer func() {
 			if retErr != nil {
 				return
 			}
 			txn.Descriptors().ReleaseSpecifiedLeases(ctx, []lease.IDVersion{
 				{
-					Name:    tableDesc.GetName(),
-					ID:      tableDesc.GetID(),
+					Name:    roleMembersTableDesc.GetName(),
+					ID:      roleMembersTableDesc.GetID(),
 					Version: tableVersion,
+				},
+				{
+					Name:    systemUsersTableDesc.GetName(),
+					ID:      systemUsersTableDesc.GetID(),
+					Version: systemUsersTableVersion,
+				},
+				{
+					Name:    roleOptionsTableDesc.GetName(),
+					ID:      roleOptionsTableDesc.GetID(),
+					Version: roleOptionsTableVersion,
 				},
 			})
 		}()
