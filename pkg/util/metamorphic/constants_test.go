@@ -6,8 +6,10 @@
 package metamorphic
 
 import (
+	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,4 +28,26 @@ func TestMetamorphicFromOverride(t *testing.T) {
 		_ = ConstantWithTestRange("val3", 3, 1, 100)
 	)
 	require.Equal(t, 7, v)
+}
+
+// TestMetamorphicRngSeed checks that `constants.rngSeed` corresponds to `randutil.globalSeed`
+func TestMetamorphicRngSeed(t *testing.T) {
+	// Make sure metamorphic testing is enabled.
+	require.True(t, metamorphicEligible())
+	require.False(t, disableMetamorphicTesting)
+	// N.B. We can't access `randutil.globalSeed` directly.
+	// Instead, the call below forces NewTestRand to reseed its iternal RNG with the globalSeed.
+	// The returned seed is _not_ the globalSeed, but one (application of) `Int63` away.
+	testRng, testSeed := randutil.NewTestRand()
+	// Thus, if rngSeed == globalSeed, it implies r(rngSeed).Int63() == testSeed.
+	// N.B. The converse doesn't necessarily hold, as two different seeds could yield the same PRNG sequence. However,
+	// it's extremely improbable. Hence, this assertion should suffice.
+	expectedSeed := rand.New(rand.NewSource(rngSeed)).Int63()
+	require.Equal(t, expectedSeed, testSeed)
+	// On the off-chance there is a collision, let's do 100 iterations. The probability of two different seeds yielding
+	// the same sequence of length 101 is infinitesimally small.
+	r := rand.New(rand.NewSource(expectedSeed))
+	for i := 0; i < 100; i++ {
+		require.Equal(t, r.Int63(), testRng.Int63())
+	}
 }

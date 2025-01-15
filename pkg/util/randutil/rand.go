@@ -99,6 +99,16 @@ func NewLockedPseudoRand() (*rand.Rand, int64) {
 	return rand.New(NewLockedSource(seed)), seed
 }
 
+// NewPseudoRandWithGlobalSeed returns an instance of math/rand.Rand, which is
+// seeded with the global seed.
+// It's _not_ intended to be called directly from a test; use NewTestRand for that.
+// Instead, this function is useful for seeding other random number generators, on which the tests
+// may depend; e.g., metamorphic constants.
+// N.B. unlike NewTestRand, this function _never_ reseeds rng.
+func NewPseudoRandWithGlobalSeed() (*rand.Rand, int64) {
+	return rand.New(rand.NewSource(globalSeed)), globalSeed
+}
+
 // NewTestRand returns an instance of math/rand.Rand seeded from rng, which is
 // seeded with the global seed. If the caller is a test with a different
 // path-qualified name than the previous caller, rng is reseeded from the global
