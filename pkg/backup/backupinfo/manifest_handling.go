@@ -86,15 +86,6 @@ const (
 	BackupProgressDirectory = "progress"
 )
 
-// WriteMetadataSST controls if we write the experimental new format BACKUP
-// metadata file.
-var WriteMetadataSST = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"kv.bulkio.write_metadata_sst.enabled",
-	"write experimental new format BACKUP metadata file",
-	metamorphic.ConstantWithTestBool("write-metadata-sst", false),
-)
-
 // WriteMetadataWithExternalSSTsEnabled controls if we write a `BACKUP_METADATA`
 // file along with external SSTs containing lists of `BackupManifest_Files` and
 // descriptors. This new format of metadata is written in addition to the
@@ -1655,47 +1646,6 @@ func (f *IterFactory) NewFileIter(
 	}
 
 	return newSlicePointerIterator(f.m.Files), nil
-}
-
-// NewDescIter creates a new Iterator over Descriptors.
-func (f *IterFactory) NewDescIter(ctx context.Context) bulk.Iterator[*descpb.Descriptor] {
-	if f.m.HasExternalManifestSSTs {
-		backing := makeBytesIter(ctx, f.store, f.descriptorSSTPath, []byte(sstDescsPrefix), f.encryption, true, f.kmsEnv)
-		it := DescIterator{
-			backing: backing,
-		}
-		it.Next()
-		return &it
-	}
-
-	return newSlicePointerIterator(f.m.Descriptors)
-}
-
-// NewDescriptorChangesIter creates a new Iterator over
-// BackupManifest_DescriptorRevisions. It is assumed that descriptor changes are
-// sorted by DescChangesLess.
-func (f *IterFactory) NewDescriptorChangesIter(
-	ctx context.Context,
-) bulk.Iterator[*backuppb.BackupManifest_DescriptorRevision] {
-	if f.m.HasExternalManifestSSTs {
-		if f.m.MVCCFilter == backuppb.MVCCFilter_Latest {
-			// If the manifest is backuppb.MVCCFilter_Latest, then return an empty
-			// iterator for descriptor changes.
-			var backing []backuppb.BackupManifest_DescriptorRevision
-			return newSlicePointerIterator(backing)
-		}
-
-		backing := makeBytesIter(ctx, f.store, f.descriptorSSTPath, []byte(sstDescsPrefix), f.encryption,
-			false, f.kmsEnv)
-		dri := DescriptorRevisionIterator{
-			backing: backing,
-		}
-
-		dri.Next()
-		return &dri
-	}
-
-	return newSlicePointerIterator(f.m.DescriptorChanges)
 }
 
 // GetBackupManifestIterFactories constructs a mapping from the idx of the
