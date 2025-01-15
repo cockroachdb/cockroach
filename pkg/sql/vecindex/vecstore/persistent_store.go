@@ -8,18 +8,35 @@ package vecstore
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 )
 
 // PersistentStore implements the Store interface for KV backed vector indices.
 type PersistentStore struct {
-	db            *kv.DB // Needed for index maintenance functions
-	quantizer     quantize.Quantizer
-	rootQuantizer quantize.Quantizer
+	db *kv.DB // Used to generate new partition IDs
 
-	prefix roachpb.Key
+	// Used for generating prefixes and reading from the PK to get full length
+	// vectors.
+	codec keys.SQLCodec
+	table catalog.TableDescriptor
+	index catalog.Index
+
+	// The root partition always uses the UnQuantizer while other partitions may use
+	// any quantizer.
+	rootQuantizer quantize.Quantizer
+	quantizer     quantize.Quantizer
+
+	prefix    roachpb.Key            // KV prefix for the vector index.
+	pkPrefix  roachpb.Key            // KV prefix for the primary key.
+	fetchSpec fetchpb.IndexFetchSpec // A pre-built fetch spec for this index.
+	colIdxMap catalog.TableColMap    // A column map for extracting full sized vectors from the PK
 }
 
 var _ Store = (*PersistentStore)(nil)
@@ -27,16 +44,37 @@ var _ Store = (*PersistentStore)(nil)
 // NewPersistentStore creates a vecstore.Store interface backed by the KV for a
 // single vector index.
 func NewPersistentStore(
-	db *kv.DB, quantizer quantize.Quantizer, prefix roachpb.Key,
-) *PersistentStore {
-	ps := PersistentStore{
+	db *kv.DB,
+	quantizer quantize.Quantizer,
+	codec keys.SQLCodec,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+) (ps *PersistentStore, err error) {
+	// TODO (mw5h): Check for staleness of the table descriptor when we create a new persistentStoreTxn.
+	ps = &PersistentStore{
 		db:            db,
+		codec:         codec,
+		table:         table,
+		index:         index,
 		quantizer:     quantizer,
 		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetOriginalDims()),
-		prefix:        prefix,
 	}
 
-	return &ps
+	ps.prefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
+	ps.pkPrefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), table.GetPrimaryIndex().GetID())
+
+	vectorColumnID := ps.index.GetKeyColumnID(ps.index.NumKeyColumns() - 1)
+	ps.colIdxMap.Set(vectorColumnID, 0)
+
+	err = rowenc.InitIndexFetchSpec(
+		&ps.fetchSpec,
+		ps.codec,
+		ps.table,
+		ps.table.GetPrimaryIndex(),
+		[]descpb.ColumnID{vectorColumnID},
+	)
+
+	return ps, err
 }
 
 // Begin is part of the vecstore.Store interface. Begin creates a new KV
