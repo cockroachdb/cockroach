@@ -7,6 +7,7 @@ package cli
 
 import (
 	"os"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,8 +29,8 @@ func TestGenMan(t *testing.T) {
 
 	// Ensure we have a sane number of man pages.
 	count := 0
-	err := filepath.Walk(manpath, func(path string, info os.FileInfo, err error) error {
-		if strings.HasSuffix(path, ".1") && !info.IsDir() {
+	err := filepath.WalkDir(manpath, func(path string, d fs.DirEntry, err error) error {
+		if strings.HasSuffix(path, ".1") && !d.IsDir() {
 			count++
 		}
 		return nil
