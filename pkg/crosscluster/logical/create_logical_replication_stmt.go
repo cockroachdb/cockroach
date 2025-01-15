@@ -55,6 +55,21 @@ var streamCreationHeader = colinfo.ResultColumns{
 	{Name: "job_id", Typ: types.Int},
 }
 
+var checkJobWithSameParent = `
+SELECT
+	t.job_id
+	FROM (
+		SELECT
+			id AS job_id,
+			crdb_internal.pb_to_json(
+				'cockroach.sql.jobs.jobspb.Payload',
+				payload)->'logicalReplicationDetails'->>'parentId' AS parent_id 
+		FROM crdb_internal.system_jobs 
+		WHERE job_type = 'LOGICAL REPLICATION'
+	) AS t
+	WHERE t.parent_id = $1
+`
+
 func createLogicalReplicationStreamPlanHook(
 	ctx context.Context, untypedStmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
@@ -161,6 +176,21 @@ func createLogicalReplicationStreamPlanHook(
 		// machinery for releasing leases assumes that we do not close the planner
 		// txn during statement execution.
 		p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
+
+		if options.ParentID != 0 {
+			row, err := p.ExecCfg().InternalDB.Executor().QueryRow(ctx, "check-parent-job", nil, checkJobWithSameParent, fmt.Sprintf("%d", options.ParentID))
+			if err != nil {
+				return err
+			}
+			if row != nil {
+				// If a job already exists with the same parent ID, then this CREATE
+				// LOGICAL stmt execution is a retry and the replication stream already
+				// exists.
+				jobID := int(*row[0].(*tree.DInt))
+				resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
+				return nil
+			}
+		}
 
 		configUri, err := streamclient.ParseConfigUri(from)
 		if err != nil {
