@@ -10,7 +10,7 @@ set -xeuo pipefail
 
 GO_FIPS_REPO=https://github.com/golang-fips/go
 GO_FIPS_COMMIT=fc8a2bd706bcd6b18b260a9aea59cf63884acdeb
-GO_VERSION=1.22.8
+GOCOMMIT=$(grep -v ^# /bootstrap/commit.txt | head -n1)
 
 # Install build dependencies
 yum install git golang golang-bin openssl openssl-devel -y
@@ -32,10 +32,14 @@ git checkout $GO_FIPS_COMMIT
 rm ./patches/017-fix-linkage.patch
 # Lower the requirements in case we need to bootstrap with an older Go version
 sed -i "s/go mod tidy/go mod tidy -go=1.16/g" scripts/create-secondary-patch.sh
-./scripts/full-initialize-repo.sh "go$GO_VERSION"
+# We need some extra support so we can clone from our fork rather than the
+# upstream go repo (support for GOLANG_REPO).
+# `golang-fips.patch` contains https://github.com/golang-fips/go/pull/255
+# as a direct patch. This can be removed when GO_FIPS_COMMIT advances beyond
+# 12327118900b0833266189a293cba8ad674901c1.
+git apply /bootstrap/golang-fips.patch
+GOLANG_REPO=https://github.com/cockroachdb/go.git ./scripts/full-initialize-repo.sh "$GOCOMMIT"
 cd go/src
-# Apply the CRL patch
-patch -p2 </bootstrap/diff.patch
 # add a special version modifier so we can explicitly use it in bazel
 sed -i '1 s/$/fips/' ../VERSION
 ./make.bash -v
