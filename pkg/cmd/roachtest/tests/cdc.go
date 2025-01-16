@@ -2136,6 +2136,57 @@ func registerCDC(r registry.Registry) {
 			feed.waitForCompletion()
 		},
 	})
+
+	r.Add(registry.TestSpec{
+		Name:  "cdc/kafka-custom-auth",
+		Owner: `cdc`,
+		// Only Kafka 3 supports Arm64, but the broker setup for Oauth used only works with Kafka 2 (?)
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if c.Cloud() == spec.Local && runtime.GOARCH == "arm64" {
+				// N.B. We have to skip locally since amd64 emulation may not be available everywhere.
+				t.L().PrintfCtx(ctx, "Skipping test under ARM64")
+				return
+			}
+
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			// Run tpcc workload for tiny bit.  Roachtest monitor does not
+			// like when there are no tasks that were started with the monitor
+			// (This can be removed once #108530 resolved).
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
+
+			kafkaNode := ct.sinkNodes
+			kafka := kafkaManager{
+				t:              ct.t,
+				c:              ct.cluster,
+				kafkaSinkNodes: kafkaNode,
+				mon:            ct.mon,
+				useKafka2:      true, // The broker-side oauth configuration used only works with Kafka 2
+			}
+			kafka.install(ct.ctx)
+
+			// TODO: how?
+			creds, kafkaEnv := kafka.configureOauth(ct.ctx)
+
+			kafka.start(ctx, "kafka", kafkaEnv)
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType:        kafkaSink,
+				sinkURIOverride: kafka.sinkURLOAuth(ct.ctx, creds),
+				targets:         allTpccTargets,
+				opts:            map[string]string{"initial_scan": "'only'"},
+			})
+
+			feed.waitForCompletion()
+		},
+	})
+
 	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-topics",
 		Owner:            `cdc`,
@@ -2974,6 +3025,7 @@ func (k kafkaManager) configureOauth(ctx context.Context) (clientcredentials.Con
 	// CLASSPATH allows Kafka to load in the custom implementation
 	kafkaEnv := "CLASSPATH='/home/ubuntu/kafka-oauth/target/*'"
 
+	// TODO: and here?
 	// Hydra is used as an open source OAuth server
 	clientID, clientSecret := k.configureHydraOauth(ctx)
 	tokenURL := fmt.Sprintf("http://%s:4444/oauth2/token", nodeIP)
