@@ -993,6 +993,12 @@ quality of service: regular
                               estimated row count: 1
                               label: buffer 1000000
 
+
+# Ensure that the intent on 'parent' is resolved so that we don't see any
+# contention time reported for 'delete range' below.
+statement ok
+SELECT count(*) FROM parent
+
 query T
 EXPLAIN ANALYZE (VERBOSE) DELETE FROM parent WHERE k = 2;
 ----
