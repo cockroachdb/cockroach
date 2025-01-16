@@ -5593,7 +5593,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `param sasl_handshake must be a bool`,
-		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_handshake=maybe`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_user=x&sasl_password=y&sasl_handshake=maybe`,
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `sasl_enabled must be enabled to configure SASL handshake behavior`,
@@ -5625,14 +5625,14 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `sasl_client_id is only a valid parameter for sasl_mechanism=OAUTHBEARER`,
-		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_client_id=a`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_client_id=a`,
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `sasl_enabled must be enabled to configure SASL mechanism`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_mechanism=SCRAM-SHA-256`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, PLAIN or AWS_MSK_IAM`,
+		t, `param sasl_mechanism must be one of AWS_MSK_IAM, OAUTHBEARER, PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported`,
 	)
 	sqlDB.ExpectErrWithTimeout(

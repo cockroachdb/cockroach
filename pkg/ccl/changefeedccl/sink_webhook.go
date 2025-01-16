@@ -41,7 +41,7 @@ type deprecatedWebhookSink struct {
 	format      changefeedbase.FormatType
 
 	// Webhook destination.
-	url        sinkURL
+	url        *changefeedbase.SinkURL
 	authHeader string
 	client     *httputil.Client
 
@@ -225,7 +225,7 @@ func (s *deprecatedWebhookSink) getWebhookSinkConfig(
 
 func makeDeprecatedWebhookSink(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	encodingOpts changefeedbase.EncodingOptions,
 	opts changefeedbase.WebhookSinkOptions,
 	parallelism int,
@@ -299,13 +299,13 @@ func makeDeprecatedWebhookSink(
 	params.Del(changefeedbase.SinkParamClientCert)
 	params.Del(changefeedbase.SinkParamClientKey)
 	sinkURLParsed.RawQuery = params.Encode()
-	sink.url = sinkURL{URL: sinkURLParsed}
+	sink.url = &changefeedbase.SinkURL{URL: sinkURLParsed}
 
 	return sink, nil
 }
 
 func deprecatedMakeWebhookClient(
-	u sinkURL, timeout time.Duration, nm *cidr.NetMetrics,
+	u *changefeedbase.SinkURL, timeout time.Duration, nm *cidr.NetMetrics,
 ) (*httputil.Client, error) {
 	client := &httputil.Client{
 		Client: &http.Client{
@@ -325,16 +325,16 @@ func deprecatedMakeWebhookClient(
 
 	transport := client.Transport.(*http.Transport)
 
-	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
+	if _, err := u.ConsumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
 		return nil, err
 	}
-	if err := u.decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
+	if err := u.DecodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
 		return nil, err
 	}
-	if err := u.decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
+	if err := u.DecodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
 		return nil, err
 	}
-	if err := u.decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
+	if err := u.DecodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
 		return nil, err
 	}
 
