@@ -37,7 +37,8 @@ func CanProvidePhysicalProps(
 	// need to check for that.
 	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
 	canProvideDistribution := e.Op() == opt.DistributeOp || distribution.CanProvide(ctx, evalCtx, e, &required.Distribution)
-	return canProvideOrdering && canProvideDistribution && !required.Pheromone.HasAlternates()
+	canProvidePheromone := !required.Pheromone.HasAlternates()
+	return canProvideOrdering && canProvideDistribution && canProvidePheromone
 }
 
 // BuildChildPhysicalProps returns the set of physical properties required of
@@ -52,6 +53,23 @@ func BuildChildPhysicalProps(
 	mem *memo.Memo, parent memo.RelExpr, nth int, parentProps *physical.Required,
 ) *physical.Required {
 	var childProps physical.Required
+
+	/*
+		// a hack here to handle pheromone alternates...
+		if pheromone.VisibleToPheromone(parent) && parentProps.Pheromone.HasAlternates() {
+			childProps = *parentProps
+			matchingAlternates := parentProps.Pheromone.GetMatchingAlternates(parent.Op())
+			if len(matchingAlternates) == 0 {
+				childProps.Pheromone = &physical.NonePheromone
+			} else {
+				if len(matchingAlternates) <= nth {
+					fmt.Println("BuildChildPhysicalProps cannot find alternate", nth, "in", matchingAlternates)
+				}
+				childProps.Pheromone = matchingAlternates[nth]
+			}
+			return mem.InternPhysicalProps(&childProps)
+		}
+	*/
 
 	// ScalarExprs don't support required physical properties; don't build
 	// physical properties for them.

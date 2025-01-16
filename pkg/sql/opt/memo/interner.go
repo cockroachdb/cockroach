@@ -652,11 +652,9 @@ func (h *hasher) HashDistribution(val physical.Distribution) {
 	}
 }
 
-func (h *hasher) HashPheromone(val physical.Pheromone) {
-	h.HashInt(int(val.Op))
-	for i := range val.Children {
-		h.HashPheromone(val.Children[i])
-	}
+func (h *hasher) HashPheromone(val *physical.Pheromone) {
+	// this is a hack
+	h.HashString(val.String())
 }
 
 func (h *hasher) HashLocking(val opt.Locking) {

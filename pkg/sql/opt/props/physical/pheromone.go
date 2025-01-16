@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -18,8 +17,8 @@ import (
 type Pheromone struct {
 	op        opt.Operator
 	fields    json.JSON
-	children  [3]*Pheromone
-	alternate *Pheromone
+	children  [3]*Pheromone // is 3 right?
+	alternate *Pheromone    // note: using a slice instead would simplify many things
 	reference pheromoneBinding
 }
 
@@ -114,7 +113,7 @@ func PheromoneFromJSON(j json.JSON) (*Pheromone, error) {
 			}
 
 			// first pass: make a new environment frame
-			references := make(map[string][]*pheromoneBinding, j.Len()-1)
+			references := make(map[string][]*pheromoneBinding, max(0, j.Len()-1))
 			if it, err := j.ObjectIter(); it != nil || err != nil {
 				if err != nil {
 					return nil, err
@@ -133,7 +132,7 @@ func PheromoneFromJSON(j json.JSON) (*Pheromone, error) {
 			environment = append(environment, references)
 
 			// second pass: build the bindings and collect references
-			bindings := make([]pheromoneBinding, 0, j.Len()-1)
+			bindings := make([]pheromoneBinding, 0, max(0, j.Len()-1))
 			if it, err := j.ObjectIter(); it != nil || err != nil {
 				if err != nil {
 					return nil, err
@@ -194,13 +193,13 @@ func PheromoneFromJSON(j json.JSON) (*Pheromone, error) {
 				op, err := opt.OperatorFromString(opName)
 				if err != nil {
 					return nil, errors.Wrapf(
-						err, "unknown operator at %s: %v", path, it.Value(),
+						err, "unknown operator at %s: %v", path, opName,
 					)
 				}
 				pattern.op = op
 			}
 
-			fields := json.NewObjectBuilder(j.Len() - 1)
+			fields := json.NewObjectBuilder(max(0, j.Len()-1))
 			for it.Next() {
 				path = fmt.Sprintf("%s.%s", path, it.Key())
 				switch it.Key() {
@@ -240,9 +239,8 @@ func PheromoneFromJSON(j json.JSON) (*Pheromone, error) {
 				default:
 					return nil, errors.Newf("unknown field at %s: %v", path, it.Key())
 				}
-				pattern.fields = fields.Build()
 			}
-
+			pattern.fields = fields.Build()
 			return pattern, nil
 		}
 
@@ -412,11 +410,11 @@ func (p *Pheromone) ToJSON() json.JSON {
 		if p.children[0] != nil {
 			b.Add("left", toJSON(p.children[0]))
 		}
-		if p.children[0] != nil {
-			b.Add("right", toJSON(p.children[0]))
+		if p.children[1] != nil {
+			b.Add("right", toJSON(p.children[1]))
 		}
-		if p.children[0] != nil {
-			b.Add("on", toJSON(p.children[0]))
+		if p.children[2] != nil {
+			b.Add("on", toJSON(p.children[2]))
 		}
 		return b.Build()
 	}
@@ -448,70 +446,82 @@ func (p *Pheromone) Format(buf *bytes.Buffer) {
 }
 
 func (p *Pheromone) Equals(rhs *Pheromone) bool {
-	// is this correct?
-	return p == rhs
-}
-
-func VisibleToPheromone(expr memo.RelExpr) bool {
-	switch expr.(type) {
-	case *memo.NormCycleTestRelExpr:
-		return false
-	case *memo.MemoCycleTestRelExpr:
-		return false
-	case *memo.ProjectExpr:
-		return false
-	case *memo.BarrierExpr:
-		return false
-	case *memo.DistributeExpr:
-		return false
-	case *memo.ExplainExpr:
-		return false
-	default:
-		return true
-	}
+	// this is a hack
+	return p.String() == rhs.String()
 }
 
 func (p *Pheromone) HasAlternates() bool {
-	return p != nil && p != &NonePheromone && p.alternate != &NonePheromone
-}
-
-func (p *Pheromone) Head() *Pheromone {
-	return &Pheromone{
-		op:        p.op,
-		fields:    p.fields,
-		children:  p.children,
-		alternate: &NonePheromone,
-		reference: p.reference,
+	if p == nil || p == &NonePheromone {
+		return false
 	}
+	if p.alternate != &NonePheromone {
+		return true
+	}
+	if p.reference.id != "" {
+		return p.reference.ptr.HasAlternates()
+	}
+	return false
 }
 
-func (p *Pheromone) Tail() *Pheromone {
-	return p.alternate
+func (p *Pheromone) GetMatchingAlternates(op opt.Operator) (alternates []*Pheromone) {
+	if p == nil {
+		return []*Pheromone{nil}
+	}
+	if p == &NonePheromone {
+		return nil
+	}
+	for alt := p; alt != &NonePheromone; alt = alt.alternate {
+		if alt.reference.id != "" {
+			alternates = append(alternates, alt.reference.ptr.GetMatchingAlternates(op)...)
+		} else if alt.Matches(op) {
+			altCopy := new(Pheromone)
+			*altCopy = *alt
+			altCopy.alternate = &NonePheromone
+			alternates = append(alternates, altCopy)
+		}
+	}
+	return alternates
 }
 
-func (p *Pheromone) Matches(expr opt.Expr) bool {
-	// should this be recursive? no, I don't think so: it should only check the topmost p
-	// (only the op and fields)
+func (p *Pheromone) Matches(op opt.Operator) bool {
+	if p.Any() {
+		return true
+	}
+	if p == &NonePheromone {
+		return false
+	}
+	if p.reference.id != "" {
+		return p.reference.ptr.Matches(op)
+	}
+	if p.op != opt.UnknownOp && op != opt.UnknownOp && p.op != op {
+		return false
+	}
+
+	/* TODO
+	switch t := expr.(type) {
+	case *memo.ScanExpr:
+		if table, err := p.fields.FetchValKey("table"); table != nil || err != nil {
+			if err != nil {
+				panic(errors.AssertionFailedf("unexpected %v", err))
+			}
+			if table != t.
+		}
+	}
+	*/
+	return true
 }
 
 func (p *Pheromone) Child(nth int) *Pheromone {
-
-	// we're just considering the first alternate of p
-	// we need to return an alternation that points directly to pattern pheromones
-	// so we need to follow references here
-	// (ideally references wouldn't be part of the pattern at all, but that was too difficult)
-	// actually, we only need to follow the first reference
-	// we can follow the rest of the references later
-	// try to be lazy about following references
-
 	if p.Any() {
 		return nil
 	}
 	if p == &NonePheromone {
 		return &NonePheromone
 	}
-	// if there's alternation, do we need to create new alternation?
-
+	if p.reference.id != "" {
+		return p.reference.ptr.Child(nth)
+	}
+	return p.children[nth]
 }
 
 /*

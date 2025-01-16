@@ -10,6 +10,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
+func VisibleToPheromone(expr memo.RelExpr) bool {
+	switch expr.(type) {
+	case *memo.NormCycleTestRelExpr:
+		return false
+	case *memo.MemoCycleTestRelExpr:
+		return false
+	case *memo.ProjectExpr:
+		return false
+	case *memo.BarrierExpr:
+		return false
+	case *memo.DistributeExpr:
+		return false
+	case *memo.ExplainExpr:
+		return false
+	default:
+		return true
+	}
+}
+
 func BuildChildRequired(
 	parent memo.RelExpr, required *physical.Pheromone, childIdx int,
 ) *physical.Pheromone {
@@ -17,7 +36,7 @@ func BuildChildRequired(
 		return nil
 	}
 
-	if !physical.VisibleToPheromone(parent) {
+	if !VisibleToPheromone(parent) {
 		return required
 	}
 

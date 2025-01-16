@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/pheromone"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -272,9 +273,6 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	// Walk the tree from the root, updating child pointers so that the memo
 	// root points to the lowest cost tree by default (rather than the normalized
 	// tree by default.
-	if !rootProps.Pheromone.Any() {
-		fmt.Println("setting lowest cost tree with", rootProps.Pheromone)
-	}
 	root = o.setLowestCostTree(root, rootProps).(memo.RelExpr)
 	o.mem.SetRoot(root, rootProps)
 
@@ -480,6 +478,10 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 	// Always start with the first expression in the group.
 	grp = grp.FirstExpr()
 
+	if !required.Pheromone.Any() {
+		fmt.Println("optimizing group:", grp, "with", required)
+	}
+
 	// If this group is already fully optimized, then return the already prepared
 	// best expression (won't ever get better than this).
 	state := o.ensureOptState(grp, required)
@@ -588,6 +590,9 @@ func (o *Optimizer) optimizeGroupMember(
 	required *physical.Required,
 	deriveLCP func() (_ props.OrderingChoice, ok bool),
 ) (fullyOptimized bool) {
+	if !required.Pheromone.Any() {
+		fmt.Println("optimizeGroupMember with", member, required)
+	}
 	// Compute the cost for enforcers to provide the required properties. This
 	// may be lower than the expression providing the properties itself. For
 	// example, it might be better to sort the results of a hash join than to
@@ -693,21 +698,53 @@ func (o *Optimizer) enforceProps(
 	required *physical.Required,
 	deriveLCP func() (_ props.OrderingChoice, ok bool),
 ) (fullyOptimized bool) {
+	if !required.Pheromone.Any() {
+		fmt.Println("enforceProps with", member, required)
+	}
+
 	// Strip off one property that can be enforced. Other properties will be
 	// stripped by recursively optimizing the group with successively fewer
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
 
-	// if required.Pheromone has alternates, call optimizeEnforcer in two ways:
-	// 1. with the head
-	// 2. with the tail
+	// if required.Pheromone has alternates, we need to try them each out
 	// we also need CanProvidePhysicalProps to return false if the Pheromone has alternates
-	// so that we only try the head way once
+	// so that we don't recurse during the topmost call to optimizeGroup
 	if required.Pheromone.HasAlternates() {
 		// for each alternate that matches the member:
 		// call o.optimizeGroup with that pheremone (as solo)
 		// then ratchet this state's cost using that one
 		// if none match, call o.optimizeGroup with NonePheromone, then ratchet
+		//
+		// we have to do this here rather than in optimizeEnforcer bc
+		// optimizeEnforcer expects a new enforcer RelExpr, and we don't have one:
+		// we're using the same member RelExpr, but with new physical props
+		fullyOptimized = true
+
+		// use unknown op as a hack to handle invisible operators
+		op := opt.UnknownOp
+		if pheromone.VisibleToPheromone(member) {
+			op = member.Op()
+		}
+
+		matchingAlternates := required.Pheromone.GetMatchingAlternates(op)
+		if len(matchingAlternates) == 0 {
+			// we need to make progress, so just use NonePheromone
+			matchingAlternates = []*physical.Pheromone{&physical.NonePheromone}
+		}
+		for _, alt := range matchingAlternates {
+			newProps := *required
+			newProps.Pheromone = alt
+			innerRequired := o.mem.InternPhysicalProps(&newProps)
+			innerState := o.optimizeGroup(member, innerRequired)
+			if o.ratchetCost(state, innerState.best, innerState.cost) {
+				state.bestPheromone = innerRequired.Pheromone
+			}
+			if !innerState.fullyOptimized {
+				fullyOptimized = false
+			}
+		}
+		return fullyOptimized
 	}
 
 	if !required.Distribution.Any() && member.Op() != opt.ExplainOp {
@@ -821,13 +858,30 @@ func (o *Optimizer) shouldExplore(required *physical.Required) bool {
 // multiple times in the final tree, but with different physical properties
 // required by each of those references.
 func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Required) opt.Expr {
+	if !parentProps.Pheromone.Any() {
+		fmt.Println("setLowestCostTree of", parent, "with", parentProps)
+	}
+
 	var relParent memo.RelExpr
 	var relCost memo.Cost
 	switch t := parent.(type) {
 	case memo.RelExpr:
 		state := o.lookupOptState(t.FirstExpr(), parentProps)
+		if state == nil {
+			fmt.Println("couldn't find", parentProps.Pheromone, "in setLowestCostTree of", parent)
+		}
 		relParent, relCost = state.best, state.cost
 		parent = relParent
+
+		// if the pheremone has alternates, we need to call setLowestCostTree using
+		// the correct alternate, to find the correct state for each child. how do we
+		// find the correct alternate? I guess we need to save that in state, too
+		if parentProps.Pheromone.HasAlternates() {
+			newProps := *parentProps
+			newProps.Pheromone = state.bestPheromone
+			innerRequired := o.mem.InternPhysicalProps(&newProps)
+			return o.setLowestCostTree(parent, innerRequired)
+		}
 
 	case memo.ScalarPropsExpr:
 		// Short-circuit traversal of scalar expressions with no nested subquery,
@@ -1021,6 +1075,8 @@ type groupState struct {
 	// expression for a given group and set of physical properties is the
 	// expression with the lowest cost.
 	cost memo.Cost
+
+	bestPheromone *physical.Pheromone
 
 	// fullyOptimized is set to true once the lowest cost expression has been
 	// found for a memo group, with respect to the required properties. A lower
