@@ -20,6 +20,7 @@ go_library(
         "row_converter.go",
         "truncate.go",
         "updater.go",
+        "vector_index.go",
         "writer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/row",

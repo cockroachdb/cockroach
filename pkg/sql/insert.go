@@ -201,14 +201,27 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// written to when they are partial indexes and the row does not satisfy the
 	// predicate. This set is passed as a parameter to tableInserter.row below.
 	var pm row.PartialIndexUpdateHelper
-	if n := len(r.ti.tableDesc().PartialIndexes()); n > 0 {
+	numPartialIndexes := len(r.ti.tableDesc().PartialIndexes())
+	if numPartialIndexes > 0 {
 		offset := len(r.insertCols) + r.checkOrds.Len()
-		partialIndexPutVals := rowVals[offset : offset+n]
+		partialIndexPutVals := rowVals[offset : offset+numPartialIndexes]
 
 		err := pm.Init(partialIndexPutVals, nil /* partialIndexDelVals */, r.ti.tableDesc())
 		if err != nil {
 			return err
 		}
+	}
+
+	// Keep track of the vector index partitions to update, as well as the
+	// quantized vectors. This information is passed to tableInserter.row below.
+	var vh row.VectorIndexUpdateHelper
+	if n := len(r.ti.tableDesc().VectorIndexes()); n > 0 {
+		// The vector index values are after the partial index values.
+		offset := len(r.insertCols) + r.checkOrds.Len() + numPartialIndexes
+		vectorIndexValStart := rowVals[offset:]
+		putPartitionKeys := vectorIndexValStart[:n]
+		putQuantizedVecs := vectorIndexValStart[n : n*2]
+		vh.InitForPut(putPartitionKeys, putQuantizedVecs, r.ti.tableDesc())
 	}
 
 	// Verify the CHECK constraint results, if any.
@@ -231,7 +244,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, insertVals, pm, r.traceKV); err != nil {
+	if err := r.ti.row(params.ctx, insertVals, pm, vh, r.traceKV); err != nil {
 		return err
 	}
 

@@ -461,6 +461,11 @@ type TableDescriptor interface {
 	// produced by AllIndexes and removing indexes with empty expressions.
 	PartialIndexes() []Index
 
+	// VectorIndexes returns a slice of all vector indexes in the underlying
+	// proto, in their canonical order. This is equivalent to taking the slice
+	// produced by AllIndexes and removing indexes which are not vector indexes.
+	VectorIndexes() []Index
+
 	// PublicNonPrimaryIndexes returns a slice of all active secondary indexes,
 	// in their canonical order. This is equivalent to the Indexes array in the
 	// proto.

@@ -156,6 +156,7 @@ func (rh *RowHelper) encodeIndexes(
 	ctx context.Context,
 	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
+	vh rowenc.VectorIndexEncodingHelper,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (
@@ -167,7 +168,9 @@ func (rh *RowHelper) encodeIndexes(
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowPosition, values, ignoreIndexes, includeEmpty)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(
+		ctx, colIDtoRowPosition, values, vh, ignoreIndexes, includeEmpty,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -271,7 +274,12 @@ func (rh *RowHelper) encodeTombstonesForIndex(
 			}
 			tombstoneTmpForIndex.tmpTombstones = append(tombstoneTmpForIndex.tmpTombstones, key)
 		} else {
-			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values)
+			// An unset VectorIndexEncodingHelper is ok here because we only place
+			// tombstones for forward indexes.
+			var vh rowenc.VectorIndexEncodingHelper
+			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(
+				ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values, vh,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -302,6 +310,7 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	ctx context.Context,
 	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
+	vh rowenc.VectorIndexEncodingHelper,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry, err error) {
@@ -317,7 +326,9 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	for i := range rh.Indexes {
 		index := rh.Indexes[i]
 		if !ignoreIndexes.Contains(int(index.GetID())) {
-			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values, includeEmpty)
+			entries, err := rowenc.EncodeSecondaryIndex(
+				ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values, vh, includeEmpty,
+			)
 			if err != nil {
 				return nil, err
 			}

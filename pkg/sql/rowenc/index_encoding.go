@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -598,37 +599,10 @@ func (a ByID) Len() int           { return len(a) }
 func (a ByID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByID) Less(i, j int) bool { return a[i].ColID < a[j].ColID }
 
-// EncodeInvertedIndexKeys creates a list of inverted index keys by
-// concatenating keyPrefix with the encodings of the column in the
-// index.
-func EncodeInvertedIndexKeys(
-	ctx context.Context,
-	index catalog.Index,
-	colMap catalog.TableColMap,
-	values []tree.Datum,
-	keyPrefix []byte,
-) (key [][]byte, err error) {
-	keyPrefix, err = EncodeInvertedIndexPrefixKeys(index, colMap, values, keyPrefix)
-	if err != nil {
-		return nil, err
-	}
-
-	var val tree.Datum
-	if i, ok := colMap.Get(index.InvertedColumnID()); ok {
-		val = values[i]
-	} else {
-		val = tree.DNull
-	}
-	indexGeoConfig := index.GetGeoConfig()
-	if !indexGeoConfig.IsEmpty() {
-		return EncodeGeoInvertedIndexTableKeys(ctx, val, keyPrefix, indexGeoConfig)
-	}
-	return EncodeInvertedIndexTableKeys(val, keyPrefix, index.GetVersion())
-}
-
-// EncodeInvertedIndexPrefixKeys encodes the non-inverted prefix columns if
-// the given index is a multi-column inverted index.
-func EncodeInvertedIndexPrefixKeys(
+// EncodeIndexPrefixKeys encodes the prefix columns of an inverted or vector
+// index. These are all key columns preceding the indexed inverted/vector
+// column. No-op if the index does not have prefix columns.
+func EncodeIndexPrefixKeys(
 	index catalog.Index, colMap catalog.TableColMap, values []tree.Datum, keyPrefix []byte,
 ) (_ []byte, err error) {
 	numColumns := index.NumKeyColumns()
@@ -651,6 +625,34 @@ func EncodeInvertedIndexPrefixKeys(
 		}
 	}
 	return keyPrefix, nil
+}
+
+// EncodeInvertedIndexKeys creates a list of inverted index keys by
+// concatenating keyPrefix with the encodings of the column in the
+// index.
+func EncodeInvertedIndexKeys(
+	ctx context.Context,
+	index catalog.Index,
+	colMap catalog.TableColMap,
+	values []tree.Datum,
+	keyPrefix []byte,
+) (key [][]byte, err error) {
+	keyPrefix, err = EncodeIndexPrefixKeys(index, colMap, values, keyPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	var val tree.Datum
+	if i, ok := colMap.Get(index.InvertedColumnID()); ok {
+		val = values[i]
+	} else {
+		val = tree.DNull
+	}
+	indexGeoConfig := index.GetGeoConfig()
+	if !indexGeoConfig.IsEmpty() {
+		return EncodeGeoInvertedIndexTableKeys(ctx, val, keyPrefix, indexGeoConfig)
+	}
+	return EncodeInvertedIndexTableKeys(val, keyPrefix, index.GetVersion())
 }
 
 // EncodeInvertedIndexTableKeys produces one inverted index key per element in
@@ -1124,6 +1126,29 @@ func encodeTrigramInvertedIndexTableKeys(
 	return outKeys, nil
 }
 
+func EncodeVectorIndexKey(
+	index catalog.Index,
+	colMap catalog.TableColMap,
+	values []tree.Datum,
+	keyPrefix []byte,
+	vh VectorIndexEncodingHelper,
+) (key []byte, err error) {
+	partitionKeyDatum := vh.PartitionKeys[index.GetID()]
+	if partitionKeyDatum == nil {
+		return nil, errors.AssertionFailedf("unable to determine vector index partition")
+	}
+	if partitionKeyDatum == tree.DNull {
+		// This index is not being updated.
+		return nil, nil
+	}
+	partitionKey := vecstore.PartitionKey(tree.MustBeDInt(partitionKeyDatum))
+	keyPrefix, err = EncodeIndexPrefixKeys(index, colMap, values, keyPrefix)
+	if err != nil {
+		return nil, err
+	}
+	return vecstore.EncodePartitionKey(keyPrefix, partitionKey), nil
+}
+
 // EncodePrimaryIndex constructs a list of k/v pairs for a
 // row encoded as a primary index. This function mirrors the encoding
 // logic in prepareInsertOrUpdateBatch in pkg/sql/row/writer.go.
@@ -1293,6 +1318,7 @@ func EncodeSecondaryIndexKey(
 	secondaryIndex catalog.Index,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
+	vh VectorIndexEncodingHelper,
 ) ([][]byte, bool, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
 
@@ -1301,6 +1327,12 @@ func EncodeSecondaryIndexKey(
 	var err error
 	if secondaryIndex.GetType() == descpb.IndexDescriptor_INVERTED {
 		secondaryKeys, err = EncodeInvertedIndexKeys(ctx, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+		//} else if secondaryIndex.GetType() == descpb.IndexDescriptor_VECTOR {
+		//	var secondaryIndexKey []byte
+		//	secondaryIndexKey, err = EncodeVectorIndexKey(
+		//		secondaryIndex, colMap, values, secondaryIndexKeyPrefix, vh,
+		//	)
+		//	secondaryKeys = [][]byte{secondaryIndexKey}
 	} else {
 		var secondaryIndexKey []byte
 		secondaryIndexKey, containsNull, err = EncodeIndexKey(
@@ -1324,6 +1356,7 @@ func EncodeSecondaryIndex(
 	secondaryIndex catalog.Index,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
+	vh VectorIndexEncodingHelper,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
 	// Use the primary key encoding for covering indexes.
@@ -1331,7 +1364,9 @@ func EncodeSecondaryIndex(
 		return EncodePrimaryIndex(codec, tableDesc, secondaryIndex, colMap, values, includeEmpty)
 	}
 
-	secondaryKeys, containsNull, err := EncodeSecondaryIndexKey(ctx, codec, tableDesc, secondaryIndex, colMap, values)
+	secondaryKeys, containsNull, err := EncodeSecondaryIndexKey(
+		ctx, codec, tableDesc, secondaryIndex, colMap, values, vh,
+	)
 	if err != nil {
 		return []IndexEntry{}, err
 	}
@@ -1361,10 +1396,11 @@ func EncodeSecondaryIndex(
 
 		if tableDesc.NumFamilies() == 1 ||
 			secondaryIndex.GetType() == descpb.IndexDescriptor_INVERTED ||
+			/* secondaryIndex.GetType() == descpb.IndexDescriptor_VECTOR || */
 			secondaryIndex.GetVersion() == descpb.BaseIndexFormatVersion {
 			// We do all computation that affects indexes with families in a separate code path to avoid performance
 			// regression for tables without column families.
-			entry, err := encodeSecondaryIndexNoFamilies(secondaryIndex, colMap, key, values, extraKey)
+			entry, err := encodeSecondaryIndexNoFamilies(secondaryIndex, colMap, key, values, extraKey, vh)
 			if err != nil {
 				return []IndexEntry{}, err
 			}
@@ -1518,6 +1554,7 @@ func encodeSecondaryIndexNoFamilies(
 	key []byte,
 	row []tree.Datum,
 	extraKeyCols []byte,
+	vh VectorIndexEncodingHelper,
 ) (IndexEntry, error) {
 	var (
 		value []byte
@@ -1537,6 +1574,18 @@ func encodeSecondaryIndexNoFamilies(
 		// The zero value for an index-value is a 0-length bytes value.
 		value = []byte{}
 	}
+	//if index.GetType() == descpb.IndexDescriptor_VECTOR {
+	//	// Vector index values begin with the quantized and encoded vector. It is
+	//	// possible that it is not supplied here (e.g. for an index delete).
+	//	if encVector := vh.QuantizedVecs[index.GetID()]; encVector != nil {
+	//		encVectorBytes, ok := tree.AsDBytes(encVector)
+	//		if !ok {
+	//			return IndexEntry{}, errors.AssertionFailedf(
+	//				"unexpected type for vector index value: %T", encVector)
+	//		}
+	//		value = encoding.EncodeUntaggedBytesValue(value, encVectorBytes.UnsafeBytes())
+	//	}
+	//}
 	cols := GetValueColumns(index)
 	value, err = writeColumnValues(value, colMap, row, cols)
 	if err != nil {
@@ -1559,7 +1608,8 @@ func GetValueColumns(index catalog.Index) []ValueEncodedColumn {
 	for i := 0; i < index.NumCompositeColumns(); i++ {
 		id := index.GetCompositeColumnID(i)
 		// Inverted indexes on a composite type (i.e. an array of composite types)
-		// should not add the indexed column to the value.
+		// should not add the indexed column to the value. Vectors are not
+		// composite, so vector indexes do not need a similar check.
 		if index.GetType() == descpb.IndexDescriptor_INVERTED && id == index.InvertedColumnID() {
 			continue
 		}
@@ -1602,6 +1652,7 @@ func EncodeSecondaryIndexes(
 	indexes []catalog.Index,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
+	vh VectorIndexEncodingHelper,
 	secondaryIndexEntries []IndexEntry,
 	includeEmpty bool,
 	indexBoundAccount *mon.BoundAccount,
@@ -1613,7 +1664,9 @@ func EncodeSecondaryIndexes(
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(IndexEntry{}))
 
 	for i := range indexes {
-		entries, err := EncodeSecondaryIndex(ctx, codec, tableDesc, indexes[i], colMap, values, includeEmpty)
+		entries, err := EncodeSecondaryIndex(
+			ctx, codec, tableDesc, indexes[i], colMap, values, vh, includeEmpty,
+		)
 		if err != nil {
 			return secondaryIndexEntries, 0, err
 		}
