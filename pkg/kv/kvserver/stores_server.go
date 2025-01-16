@@ -101,7 +101,7 @@ func (is Server) WaitForApplication(
 				// everything up to this point to disk.
 				//
 				// https://github.com/cockroachdb/cockroach/issues/33120
-				return storage.WriteSyncNoop(s.TODOEngine())
+				return storage.WriteSyncNoop(s.StateEngine())
 			}
 		}
 		if ctx.Err() == nil {
