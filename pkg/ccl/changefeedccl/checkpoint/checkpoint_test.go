@@ -6,6 +6,7 @@
 package checkpoint_test
 
 import (
+	"math"
 	"sort"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -128,14 +130,30 @@ func TestCheckpointMake(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			forEachSpan := func(fn span.Operation) {
-				for _, sp := range tc.spans {
-					fn(sp.span, sp.ts)
-				}
-			}
-
-			actual := checkpoint.Make(tc.frontier, forEachSpan, tc.maxBytes)
+			aggMetrics := checkpoint.NewAggMetrics(aggmetric.MakeBuilder())
+			actual := checkpoint.Make(
+				tc.frontier,
+				func(fn span.Operation) {
+					for _, sp := range tc.spans {
+						fn(sp.span, sp.ts)
+					}
+				},
+				tc.maxBytes,
+				aggMetrics.AddChild(),
+			)
 			require.Equal(t, tc.expected, actual)
+
+			// Verify that metrics were set/not set based on whether a
+			// checkpoint was created.
+			if tc.expected.Timestamp.IsSet() {
+				require.Greater(t, aggMetrics.CreateNanos.CumulativeSnapshot().Mean(), float64(0))
+				require.Greater(t, aggMetrics.TotalBytes.CumulativeSnapshot().Mean(), float64(0))
+				require.Equal(t, float64(len(tc.expected.Spans)), aggMetrics.SpanCount.CumulativeSnapshot().Mean())
+			} else {
+				require.True(t, math.IsNaN(aggMetrics.CreateNanos.CumulativeSnapshot().Mean()))
+				require.True(t, math.IsNaN(aggMetrics.TotalBytes.CumulativeSnapshot().Mean()))
+				require.True(t, math.IsNaN(aggMetrics.SpanCount.CumulativeSnapshot().Mean()))
+			}
 		})
 	}
 }
@@ -175,7 +193,7 @@ func TestCheckpointCatchupTime(t *testing.T) {
 	}
 
 	// Compute the checkpoint.
-	cp := checkpoint.Make(hwm, forEachSpan, maxBytes)
+	cp := checkpoint.Make(hwm, forEachSpan, maxBytes, nil /* metrics */)
 	cpSpans, cpTS := roachpb.Spans(cp.Spans), cp.Timestamp
 	require.Less(t, len(cpSpans), numSpans)
 	require.True(t, hwm.Less(cpTS))
