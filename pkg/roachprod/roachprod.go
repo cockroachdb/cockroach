@@ -1404,6 +1404,25 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 	return nil
 }
 
+// Returns a set of cloud providers for the given clusters, found in the local cache.
+// Typically used in conjunction with ListCloud() to avoid listing across all providers.
+func cachedProvidersForClusters(clusterNames ...string) []string {
+	providers := []string{}
+	for _, clusterName := range clusterNames {
+		c, err := getClusterFromCache(nil, clusterName)
+		if err != nil {
+			continue
+		}
+		// N.B. We can't use c.Clouds() because it may insert a project name.
+		for _, m := range c.VMs {
+			providers = append(providers, m.Provider)
+		}
+	}
+	// Remove dupes, if any.
+	slices.Sort(providers)
+	return slices.Compact(providers)
+}
+
 // Destroy TODO
 func Destroy(
 	l *logger.Logger,
@@ -1463,7 +1482,7 @@ func Destroy(
 				// ListCloud may fail due to a transient provider error, but we may have still
 				// found the cluster(s) we care about. Destroy the cluster(s) we know about
 				// and let the caller retry.
-				cld, _ = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
+				cld, _ = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: cachedProvidersForClusters(name)})
 			}
 			err := destroyCluster(ctx, cld, l, name)
 			if err != nil {
@@ -1617,13 +1636,14 @@ func Create(
 	if err := LoadClusters(); err != nil {
 		return errors.Wrap(err, "problem loading clusters")
 	}
+	includeProviders := cloud.Providers(opts...)
 
 	if !isLocal {
 		// ListCloud may fail due to a transient provider error, but
 		// we may not even be creating a cluster with that provider.
 		// If the cluster does exist, and we didn't find it, it will
 		// fail on the provider's end.
-		cld, _ := cloud.ListCloud(l, vm.ListOptions{})
+		cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeProviders: includeProviders})
 		if _, ok := cld.Clusters[clusterName]; ok {
 			return &ClusterAlreadyExistsError{name: clusterName}
 		}
@@ -3035,7 +3055,7 @@ func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloud.Cluster, 
 	// ListCloud may fail due to a transient provider error, but
 	// we may have still found the cluster we care about. It will
 	// fail below if it can't find the cluster.
-	cld, err := cloud.ListCloud(l, vm.ListOptions{})
+	cld, err := cloud.ListCloud(l, vm.ListOptions{IncludeProviders: cachedProvidersForClusters(clusterName)})
 	c, ok := cld.Clusters[clusterName]
 	if !ok {
 		if err != nil {
