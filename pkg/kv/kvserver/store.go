@@ -3682,9 +3682,10 @@ func (s *Store) computeMetricsLocked(ctx context.Context) (m storage.Metrics, er
 	}
 
 	// Get the latest engine metrics.
-	m = s.TODOEngine().GetMetrics()
+	m = s.StateEngine().GetMetrics()
 	_ = s.TODOEngine() // TODO(sep-raft-log): log engine should also have metrics
 	s.metrics.updateEngineMetrics(m)
+	s.metrics.updateLogEngineMetrics(s.LogEngine().GetMetrics())
 
 	// Get engine Env stats.
 	envStats, err := s.TODOEngine().GetEnvStats()

@@ -1014,6 +1014,12 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLogBatchCommitSyncs = metric.Metadata{
+		Name:        "storage.log.batch-commit.syncs",
+		Help:        "Number of times a log engine batch commit was done with WAL sync.",
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaSSTableZombieBytes = metric.Metadata{
 		Name: "storage.sstable.zombie.bytes",
 		Help: "Bytes in SSTables that have been logically deleted, " +
@@ -2761,6 +2767,7 @@ type StoreMetrics struct {
 	BatchCommitWALRotWaitDuration     *metric.Counter
 	BatchCommitCommitWaitDuration     *metric.Counter
 	BatchCommitSyncs                  *metric.Counter
+	LogBatchCommitSyncs               *metric.Counter
 	SSTableZombieBytes                *metric.Gauge
 	SSTableCompressionSnappy          *metric.Gauge
 	SSTableCompressionZstd            *metric.Gauge
@@ -3483,6 +3490,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BatchCommitWALRotWaitDuration:     metric.NewCounter(metaBatchCommitWALRotDuration),
 		BatchCommitCommitWaitDuration:     metric.NewCounter(metaBatchCommitCommitWaitDuration),
 		BatchCommitSyncs:                  metric.NewCounter(metaBatchCommitSyncs),
+		LogBatchCommitSyncs:               metric.NewCounter(metaLogBatchCommitSyncs),
 		SSTableZombieBytes:                metric.NewGauge(metaSSTableZombieBytes),
 		SSTableCompressionSnappy:          metric.NewGauge(metaSSTableCompressionSnappy),
 		SSTableCompressionZstd:            metric.NewGauge(metaSSTableCompressionZstd),
@@ -3863,6 +3871,9 @@ func (sm *TenantsStorageMetrics) subtractMVCCStats(
 	var neg enginepb.MVCCStats
 	neg.Subtract(delta)
 	sm.incMVCCGauges(ctx, ref, neg)
+}
+func (sm *StoreMetrics) updateLogEngineMetrics(m storage.Metrics) {
+	sm.LogBatchCommitSyncs.Update(int64(m.BatchCommitStats.Syncs))
 }
 
 func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
