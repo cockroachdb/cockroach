@@ -1530,9 +1530,12 @@ func (c *clusterImpl) HealthStatus(
 		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
 	}
 	client := roachtestutil.DefaultHTTPClient(c, l)
+	protocol := "http"
+	if c.IsSecure() {
+		protocol = "https"
+	}
 	getStatus := func(ctx context.Context, nodeIndex, node int) *HealthStatusResult {
-		url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddrs[nodeIndex])
-
+		url := fmt.Sprintf(`%s://%s/health?ready=1`, protocol, adminAddrs[nodeIndex])
 		resp, err := client.Get(ctx, url)
 		if err != nil {
 			return newHealthStatusResult(node, 0, nil, err)
