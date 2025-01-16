@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"net/url"
 	"os"
@@ -111,21 +112,21 @@ func TestCloudStorageSink(t *testing.T) {
 			return false
 		}
 
-		walkFn := func(path string, info os.FileInfo, err error) error {
+		walkDirFn := func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
 			if path == absRoot {
 				return nil
 			}
-			if info.IsDir() && !hasChildDirs(path) {
+			if d.IsDir() && !hasChildDirs(path) {
 				relPath, _ := filepath.Rel(absRoot, path)
 				folders = append(folders, relPath)
 			}
 			return nil
 		}
 
-		require.NoError(t, filepath.Walk(absRoot, walkFn))
+		require.NoError(t, filepath.WalkDir(absRoot, walkDirFn))
 		return folders
 	}
 
@@ -133,11 +134,11 @@ func TestCloudStorageSink(t *testing.T) {
 	// temp dir created above), sorted by the name of the file.
 	slurpDir := func(t *testing.T) []string {
 		var files []string
-		walkFn := func(path string, info os.FileInfo, err error) error {
+		walkDirFn := func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if info.IsDir() {
+			if d.IsDir() {
 				return nil
 			}
 			file, err := os.ReadFile(path)
@@ -152,7 +153,7 @@ func TestCloudStorageSink(t *testing.T) {
 		}
 		absRoot := filepath.Join(externalIODir, testDir(t))
 		require.NoError(t, os.MkdirAll(absRoot, 0755))
-		require.NoError(t, filepath.Walk(absRoot, walkFn))
+		require.NoError(t, filepath.WalkDir(absRoot, walkDirFn))
 		return files
 	}
 
