@@ -11,6 +11,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -203,10 +205,10 @@ func (s *Store) tryGetOrCreateReplica(
 	// be accessed by someone holding a reference to, or currently creating a
 	// Replica for this rangeID, and that's us.
 
-	if err := kvstorage.CreateUninitializedReplica(
-		// TODO(sep-raft-log): needs both engines due to tombstone (which lives on
-		// statemachine).
-		ctx, s.TODOEngine(), s.StoreID(), rangeID, replicaID,
+	if err := kvstorage.CreateUninitializedReplica(ctx,
+		stateloader.MakeStateReader(s.StateEngine()),
+		logstore.MakeLogRW(s.LogEngine()),
+		s.StoreID(), rangeID, replicaID,
 	); err != nil {
 		return nil, false, err
 	}

@@ -38,13 +38,14 @@ type LoadedReplicaState struct {
 // TODO(pavelkalinnikov): integrate with stateloader.
 func LoadReplicaState(
 	ctx context.Context,
-	eng storage.Reader,
+	logReader logstore.LogReader,
+	stateReader stateloader.StateReader,
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 ) (LoadedReplicaState, error) {
 	sl := stateloader.Make(desc.RangeID)
-	id, err := sl.LoadRaftReplicaID(ctx, logstore.MakeLogReader(eng))
+	id, err := sl.LoadRaftReplicaID(ctx, logReader)
 	if err != nil {
 		return LoadedReplicaState{}, err
 	}
@@ -54,16 +55,16 @@ func LoadReplicaState(
 	}
 
 	ls := LoadedReplicaState{ReplicaID: replicaID}
-	if ls.hardState, err = sl.LoadHardState(ctx, logstore.MakeLogReader(eng)); err != nil {
+	if ls.hardState, err = sl.LoadHardState(ctx, logReader); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, logstore.MakeLogReader(eng)); err != nil {
+	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, logReader); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.LastIndex, err = sl.LoadLastIndex(ctx, logstore.MakeLogReader(eng)); err != nil {
+	if ls.LastIndex, err = sl.LoadLastIndex(ctx, logReader); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.ReplState, err = sl.Load(ctx, stateloader.MakeStateReader(eng), desc); err != nil {
+	if ls.ReplState, err = sl.Load(ctx, stateReader, desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
 
@@ -108,7 +109,8 @@ func (r LoadedReplicaState) check(storeID roachpb.StoreID) error {
 // because it has been deleted.
 func CreateUninitializedReplica(
 	ctx context.Context,
-	eng storage.Engine,
+	stateReader stateloader.StateReader,
+	logRW logstore.LogReadWriter,
 	storeID roachpb.StoreID,
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
@@ -118,7 +120,7 @@ func CreateUninitializedReplica(
 	tombstoneKey := keys.RangeTombstoneKey(rangeID)
 	var tombstone kvserverpb.RangeTombstone
 	if ok, err := storage.MVCCGetProto(
-		ctx, eng, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+		ctx, stateReader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 	); err != nil {
 		return err
 	} else if ok && replicaID < tombstone.NextReplicaID {
@@ -138,12 +140,13 @@ func CreateUninitializedReplica(
 	//   this newer replica is harmless since it just limits the votes for
 	//   this replica.
 	sl := stateloader.Make(rangeID)
-	if err := sl.SetRaftReplicaID(ctx, logstore.MakeLogWriter(eng), replicaID); err != nil {
+	if err := sl.SetRaftReplicaID(ctx, logRW.Writer(), replicaID); err != nil {
 		return err
 	}
 
 	// Make sure that storage invariants for this uninitialized replica hold.
 	uninitDesc := roachpb.RangeDescriptor{RangeID: rangeID}
-	_, err := LoadReplicaState(ctx, eng, storeID, &uninitDesc, replicaID)
+	_, err := LoadReplicaState(
+		ctx, logRW.Reader(), stateReader, storeID, &uninitDesc, replicaID)
 	return err
 }
