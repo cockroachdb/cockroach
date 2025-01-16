@@ -528,9 +528,7 @@ func (r *Replica) applySnapshot(
 	}(timeutil.Now())
 
 	clearedSpans := inSnap.clearedSpans
-	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
-		ctx, r.ID(), r.ClusterSettings(), nonemptySnap.Metadata, hs, &r.raftMu.stateLoader.StateLoader,
-	)
+	unreplicatedSSTFile, clearedSpan, err := clearUnreplicatedSST(ctx, r.ID(), r.ClusterSettings())
 	if err != nil {
 		return err
 	}
@@ -540,9 +538,24 @@ func (r *Replica) applySnapshot(
 	if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
 		return err
 	}
+
+	logBatch := r.store.LogEngine().NewWriteBatch()
+	defer logBatch.Close()
+	_, err = rewriteRaftState(ctx, r.ID(), hs, kvserverpb.RaftTruncatedState{
+		Index: kvpb.RaftIndex(nonemptySnap.Metadata.Index),
+		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
+	}, &r.raftMu.stateLoader.StateLoader, logstore.MakeLogWriter(logBatch))
+	if err != nil {
+		return err
+	}
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
 
+	if len(subsumedRepls) > 0 {
+		// Merges should be disabled to avoid hitting this.
+		log.Fatalf(ctx, "subsuming replicas during snapshot under separate raft log is unimplemented, "+
+			"see https://github.com/cockroachdb/cockroach/issues/97609")
+	}
 	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
@@ -644,6 +657,10 @@ func (r *Replica) applySnapshot(
 			// snapshot.
 			writeBytes = uint64(inSnap.SSTSize)
 		}
+	}
+
+	if err := logBatch.Commit(false /* sync */); err != nil {
+		return err
 	}
 	// The "ignored" here is to ignore the writes to create the AC linear models
 	// for LSM writes. Since these writes typically correspond to actual writes
@@ -847,6 +864,31 @@ func writeUnreplicatedSST(
 	}, sl, logstore.MakeLogWriter(&unreplicatedSST))
 	if err != nil {
 		return nil, roachpb.Span{}, err
+	}
+	if err := unreplicatedSST.Finish(); err != nil {
+		return nil, roachpb.Span{}, err
+	}
+	return unreplicatedSSTFile, clearedSpan, nil
+}
+
+func clearUnreplicatedSST(
+	ctx context.Context, id storage.FullReplicaID, st *cluster.Settings,
+) (_ *storage.MemObject, clearedSpan roachpb.Span, _ error) {
+	unreplicatedSSTFile := &storage.MemObject{}
+	unreplicatedSST := storage.MakeIngestionSSTWriter(ctx, st, unreplicatedSSTFile)
+	defer unreplicatedSST.Close()
+	// Clearing the unreplicated state.
+	//
+	// NB: We do not expect to see range keys in the unreplicated state, so
+	// we don't drop a range tombstone across the range key space.
+	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(id.RangeID)
+	unreplicatedStart := unreplicatedPrefixKey
+	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
+	clearedSpan = roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd}
+	if err := unreplicatedSST.ClearRawRange(
+		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
+	); err != nil {
+		return nil, roachpb.Span{}, errors.Wrapf(err, "error clearing the unreplicated space")
 	}
 	if err := unreplicatedSST.Finish(); err != nil {
 		return nil, roachpb.Span{}, err

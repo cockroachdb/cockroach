@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -67,7 +66,7 @@ type IterOptions struct {
 //
 // Callers that can afford allocating a closure may prefer using Visit.
 func NewIterator(
-	ctx context.Context, rangeID roachpb.RangeID, eng logstore.LogReader, opts IterOptions,
+	ctx context.Context, rangeID roachpb.RangeID, eng storage.Reader, opts IterOptions,
 ) (*Iterator, error) {
 	// TODO(tbg): can pool these most of the things below, incl. the *Iterator.
 	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
@@ -140,7 +139,7 @@ func (it *Iterator) Entry() raftpb.Entry {
 // without returning an error.
 func Visit(
 	ctx context.Context,
-	reader logstore.LogReader,
+	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	lo, hi kvpb.RaftIndex,
 	fn func(raftpb.Entry) error,

@@ -18,7 +18,6 @@ go_library(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/kv/kvserver/logstore",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/storage",
