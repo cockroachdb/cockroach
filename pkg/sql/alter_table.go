@@ -1934,12 +1934,15 @@ func dropColumnImpl(
 		return nil, err
 	}
 
-	// We cannot remove this column if there are computed columns or a TTL
-	// expiration expression that use it.
+	// We cannot remove this column if there are computed columns, TTL expiration
+	// expression, or policy expressions that use it.
 	if err := schemaexpr.ValidateColumnHasNoDependents(tableDesc, colToDrop); err != nil {
 		return nil, err
 	}
 	if err := schemaexpr.ValidateTTLExpression(tableDesc, rowLevelTTL, colToDrop, tn, "drop"); err != nil {
+		return nil, err
+	}
+	if err := schemaexpr.ValidatePolicyExpressionsDoNotDependOnColumn(tableDesc, colToDrop, "column", "drop"); err != nil {
 		return nil, err
 	}
 

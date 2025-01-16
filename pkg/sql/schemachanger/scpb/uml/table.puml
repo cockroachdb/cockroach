@@ -305,6 +305,14 @@ Policy :  PolicyID
 Policy :  Type
 Policy :  Command
 
+object PolicyDeps
+
+PolicyDeps :  TableID
+PolicyDeps :  PolicyID
+PolicyDeps : []UsesTypeIDs
+PolicyDeps : []UsesRelationIDs
+PolicyDeps : []UsesFunctionIDs
+
 object PolicyName
 
 PolicyName :  TableID
@@ -608,6 +616,7 @@ AliasType <|-- Owner
 EnumType <|-- Owner
 TablePartitioning <|-- PartitionZoneConfig
 Table <|-- Policy
+Policy <|-- PolicyDeps
 Policy <|-- PolicyName
 Policy <|-- PolicyRole
 Policy <|-- PolicyUsingExpr

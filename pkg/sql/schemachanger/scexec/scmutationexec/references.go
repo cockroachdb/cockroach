@@ -290,6 +290,17 @@ func (i *immediateVisitor) UpdateTableBackReferencesInSequences(
 				}
 				ids.ForEach(forwardRefs.Add)
 			}
+			for _, p := range tbl.GetPolicies() {
+				for _, pexpr := range []string{p.WithCheckExpr, p.UsingExpr} {
+					if pexpr != "" {
+						ids, err := sequenceIDsInExpr(pexpr)
+						if err != nil {
+							return err
+						}
+						ids.ForEach(forwardRefs.Add)
+					}
+				}
+			}
 		}
 	}
 	for _, seqID := range op.SequenceIDs {
@@ -413,6 +424,34 @@ func (i *immediateVisitor) RemoveTriggerBackReferencesInRoutines(
 			return err
 		}
 		fnDesc.RemoveTriggerReference(op.BackReferencedTableID, op.BackReferencedTriggerID)
+	}
+	return nil
+}
+
+func (i *immediateVisitor) AddPolicyBackReferenceInFunctions(
+	ctx context.Context, op scop.AddPolicyBackReferenceInFunctions,
+) error {
+	for _, id := range op.FunctionIDs {
+		fnDesc, err := i.checkOutFunction(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := fnDesc.AddPolicyReference(op.BackReferencedTableID, op.BackReferencedPolicyID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *immediateVisitor) RemovePolicyBackReferenceInFunctions(
+	ctx context.Context, op scop.RemovePolicyBackReferenceInFunctions,
+) error {
+	for _, id := range op.FunctionIDs {
+		fnDesc, err := i.checkOutFunction(ctx, id)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemovePolicyReference(op.BackReferencedTableID, op.BackReferencedPolicyID)
 	}
 	return nil
 }

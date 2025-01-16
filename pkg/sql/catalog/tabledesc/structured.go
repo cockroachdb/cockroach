@@ -293,6 +293,19 @@ func ForEachExprStringInTableDesc(
 		}
 		return f(&t.FuncBody, catalog.PLpgSQLStmt)
 	}
+	doPolicy := func(p *descpb.PolicyDescriptor) error {
+		if p.UsingExpr != "" {
+			if err := f(&p.UsingExpr, catalog.SQLExpr); err != nil {
+				return err
+			}
+		}
+		if p.WithCheckExpr != "" {
+			if err := f(&p.WithCheckExpr, catalog.SQLExpr); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 
 	// Process columns.
 	for i := range desc.Columns {
@@ -351,6 +364,13 @@ func ForEachExprStringInTableDesc(
 			return err
 		}
 	}
+
+	// Process all policies.
+	for i := range desc.Policies {
+		if err := doPolicy(&desc.Policies[i]); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -368,6 +388,10 @@ func (desc *wrapper) GetAllReferencedTableIDs() descpb.IDs {
 	// Add trigger dependencies.
 	for i := range desc.Triggers {
 		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...))
+	}
+	// Add policy dependencies.
+	for i := range desc.Policies {
+		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnRelations...))
 	}
 	// Add view dependencies.
 	ids = ids.Union(catalog.MakeDescriptorIDSet(desc.DependsOn...))
@@ -400,6 +424,11 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOnTypes...))
 	}
 
+	// Add type dependencies from policies.
+	for i := range desc.Policies {
+		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnTypes...))
+	}
+
 	// Add any other type dependencies that are not
 	// used in a column (specifically for views).
 	for _, id := range desc.DependsOnTypes {
@@ -427,6 +456,10 @@ func (desc *wrapper) GetAllReferencedFunctionIDs() (catalog.DescriptorIDSet, err
 	// Add routine dependencies from triggers.
 	for i := range desc.Triggers {
 		ret = ret.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOnRoutines...))
+	}
+	// Add deps from policies
+	for i := range desc.Policies {
+		ret = ret.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnFunctions...))
 	}
 	// TODO(chengxiong): add logic to extract references from indexes when UDFs
 	// are allowed in them.
@@ -457,6 +490,17 @@ func (desc *wrapper) GetAllReferencedFunctionIDsInTrigger(
 ) (fnIDs catalog.DescriptorIDSet) {
 	t := catalog.FindTriggerByID(desc, triggerID)
 	for _, id := range t.DependsOnRoutines {
+		fnIDs.Add(id)
+	}
+	return fnIDs
+}
+
+// GetAllReferencedFunctionIDsInPolicy implements the TableDescriptor interface.
+func (desc *wrapper) GetAllReferencedFunctionIDsInPolicy(
+	policyID descpb.PolicyID,
+) (fnIDs catalog.DescriptorIDSet) {
+	t := catalog.FindPolicyByID(desc, policyID)
+	for _, id := range t.DependsOnFunctions {
 		fnIDs.Add(id)
 	}
 	return fnIDs

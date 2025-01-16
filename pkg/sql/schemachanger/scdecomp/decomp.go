@@ -917,6 +917,15 @@ func (w *walkCtx) walkPolicy(tbl catalog.TableDescriptor, p *descpb.PolicyDescri
 			Expression: *expr,
 		})
 	}
+	if p.UsingExpr != "" || p.WithCheckExpr != "" {
+		w.ev(scpb.Status_PUBLIC, &scpb.PolicyDeps{
+			TableID:         tbl.GetID(),
+			PolicyID:        p.ID,
+			UsesTypeIDs:     p.DependsOnTypes,
+			UsesRelationIDs: p.DependsOnRelations,
+			UsesFunctionIDs: p.DependsOnFunctions,
+		})
+	}
 }
 
 func (w *walkCtx) walkForeignKeyConstraint(
