@@ -197,8 +197,13 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 		require.NoError(t, splitIndex(tc, tableDesc, idx, sps))
 	}
 
+	// Chunks are processed concurrently, so we need to synchronize access to
+	// lastPercentage.
+	var mu syncutil.Mutex
 	var lastPercentage float32
 	assertFractionBetween := func(op string, min float32, max float32) {
+		mu.Lock()
+		defer mu.Unlock()
 		var fraction float32
 		sqlRunner.QueryRow(t, "SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&fraction)
 		t.Logf("fraction during %s: %f", op, fraction)
