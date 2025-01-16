@@ -122,3 +122,16 @@ func (i *immediateVisitor) SetPolicyUsingExpression(
 	policy.UsingExpr = op.Expr
 	return nil
 }
+
+func (i *immediateVisitor) SetPolicyForwardReferences(
+	ctx context.Context, op scop.SetPolicyForwardReferences,
+) error {
+	policy, err := i.checkOutPolicy(ctx, op.Deps.TableID, op.Deps.PolicyID)
+	if err != nil {
+		return err
+	}
+	policy.DependsOnTypes = op.Deps.UsesTypeIDs
+	policy.DependsOnRelations = op.Deps.UsesRelationIDs
+	policy.DependsOnFunctions = op.Deps.UsesFunctionIDs
+	return nil
+}

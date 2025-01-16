@@ -247,6 +247,8 @@ func dropColumn(
 			// Otherwise, it is a dependency on the column used in the expiration
 			// expression.
 			panic(sqlerrors.NewAlterDependsOnExpirationExprError(op, objType, cn.Name, tn.Object(), string(e.ExpirationExpr)))
+		case *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr:
+			panic(sqlerrors.NewAlterDependsOnPolicyExprError(op, objType, cn.Name))
 		default:
 			b.Drop(e)
 		}
@@ -294,7 +296,7 @@ func walkColumnDependencies(
 				*scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression,
 				*scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint,
 				*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.CheckConstraintUnvalidated,
-				*scpb.RowLevelTTL:
+				*scpb.RowLevelTTL, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr:
 				fn(e, op, objType)
 			case *scpb.ColumnType:
 				if elt.ColumnID == col.ColumnID {

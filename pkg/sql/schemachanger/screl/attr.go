@@ -388,6 +388,13 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(PolicyID, "PolicyID"),
 		rel.EntityAttr(Expr, "Expr"),
 	),
+	rel.EntityMapping(t((*scpb.PolicyDeps)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(ReferencedSequenceIDs, "UsesRelationIDs"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),
+	),
 	// Common elements.
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),

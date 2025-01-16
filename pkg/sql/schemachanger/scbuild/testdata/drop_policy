@@ -1,77 +1,122 @@
 setup
 SET enable_row_level_security = true;
+CREATE FUNCTION is_valid(n INT) returns bool as $$ begin return n < 10; end; $$ language plpgsql;
 CREATE TABLE defaultdb.foo (i INT PRIMARY KEY);
 CREATE USER fred;
 CREATE POLICY "first policy" on defaultdb.foo AS PERMISSIVE FOR SELECT TO fred USING (i > 0) WITH CHECK (i % 2 = 0);
 CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT USING (false);
 CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred WITH CHECK (i < 0);
 CREATE POLICY "fourth policy" on defaultdb.foo AS PERMISSIVE TO PUBLIC,SESSION_USER;
+CREATE POLICY "fifth policy" on defaultdb.foo USING (is_valid(i));
+CREATE POLICY "sixth policy" on defaultdb.foo WITH CHECK (is_valid(i));
 ----
 
 build
 DROP POLICY "first policy" on defaultdb.foo;
 ----
-- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[Policy:{DescID: 104, PolicyID: 1}, ABSENT], PUBLIC]
-  {command: 2, policyId: 1, tableId: 104, type: 1}
-- [[PolicyName:{DescID: 104, Name: first policy, PolicyID: 1}, ABSENT], PUBLIC]
-  {name: first policy, policyId: 1, tableId: 104}
-- [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 1}, ABSENT], PUBLIC]
-  {policyId: 1, roleName: fred, tableId: 104}
-- [[PolicyUsingExpr:{DescID: 104, Expr: i > 0:::INT8, PolicyID: 1}, ABSENT], PUBLIC]
-  {expr: 'i > 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 104}
-- [[PolicyWithCheckExpr:{DescID: 104, Expr: (i % 2:::INT8) = 0:::INT8, PolicyID: 1}, ABSENT], PUBLIC]
-  {expr: '(i % 2:::INT8) = 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[Policy:{DescID: 105, PolicyID: 1}, ABSENT], PUBLIC]
+  {command: 2, policyId: 1, tableId: 105, type: 1}
+- [[PolicyName:{DescID: 105, Name: first policy, PolicyID: 1}, ABSENT], PUBLIC]
+  {name: first policy, policyId: 1, tableId: 105}
+- [[PolicyRole:{DescID: 105, Name: fred, PolicyID: 1}, ABSENT], PUBLIC]
+  {policyId: 1, roleName: fred, tableId: 105}
+- [[PolicyUsingExpr:{DescID: 105, Expr: i > 0:::INT8, PolicyID: 1}, ABSENT], PUBLIC]
+  {expr: 'i > 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 105}
+- [[PolicyWithCheckExpr:{DescID: 105, Expr: (i % 2:::INT8) = 0:::INT8, PolicyID: 1}, ABSENT], PUBLIC]
+  {expr: '(i % 2:::INT8) = 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 105}
+- [[PolicyDeps:{DescID: 105, PolicyID: 1}, ABSENT], PUBLIC]
+  {policyId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
 
 build
 DROP POLICY "second policy" on defaultdb.foo CASCADE;
 ----
-- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[Policy:{DescID: 104, PolicyID: 2}, ABSENT], PUBLIC]
-  {command: 3, policyId: 2, tableId: 104, type: 2}
-- [[PolicyName:{DescID: 104, Name: second policy, PolicyID: 2}, ABSENT], PUBLIC]
-  {name: second policy, policyId: 2, tableId: 104}
-- [[PolicyRole:{DescID: 104, Name: public, PolicyID: 2}, ABSENT], PUBLIC]
-  {policyId: 2, roleName: public, tableId: 104}
-- [[PolicyUsingExpr:{DescID: 104, Expr: false, PolicyID: 2}, ABSENT], PUBLIC]
-  {expr: "false", policyId: 2, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[Policy:{DescID: 105, PolicyID: 2}, ABSENT], PUBLIC]
+  {command: 3, policyId: 2, tableId: 105, type: 2}
+- [[PolicyName:{DescID: 105, Name: second policy, PolicyID: 2}, ABSENT], PUBLIC]
+  {name: second policy, policyId: 2, tableId: 105}
+- [[PolicyRole:{DescID: 105, Name: public, PolicyID: 2}, ABSENT], PUBLIC]
+  {policyId: 2, roleName: public, tableId: 105}
+- [[PolicyUsingExpr:{DescID: 105, Expr: false, PolicyID: 2}, ABSENT], PUBLIC]
+  {expr: "false", policyId: 2, tableId: 105}
+- [[PolicyDeps:{DescID: 105, PolicyID: 2}, ABSENT], PUBLIC]
+  {policyId: 2, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
 
 build
 DROP POLICY "third policy" on defaultdb.foo RESTRICT;
 ----
-- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[Policy:{DescID: 104, PolicyID: 3}, ABSENT], PUBLIC]
-  {command: 5, policyId: 3, tableId: 104, type: 1}
-- [[PolicyName:{DescID: 104, Name: third policy, PolicyID: 3}, ABSENT], PUBLIC]
-  {name: third policy, policyId: 3, tableId: 104}
-- [[PolicyRole:{DescID: 104, Name: root, PolicyID: 3}, ABSENT], PUBLIC]
-  {policyId: 3, roleName: root, tableId: 104}
-- [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 3}, ABSENT], PUBLIC]
-  {policyId: 3, roleName: fred, tableId: 104}
-- [[PolicyWithCheckExpr:{DescID: 104, Expr: i < 0:::INT8, PolicyID: 3}, ABSENT], PUBLIC]
-  {expr: 'i < 0:::INT8', policyId: 3, referencedColumnIds: [1], tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[Policy:{DescID: 105, PolicyID: 3}, ABSENT], PUBLIC]
+  {command: 5, policyId: 3, tableId: 105, type: 1}
+- [[PolicyName:{DescID: 105, Name: third policy, PolicyID: 3}, ABSENT], PUBLIC]
+  {name: third policy, policyId: 3, tableId: 105}
+- [[PolicyRole:{DescID: 105, Name: root, PolicyID: 3}, ABSENT], PUBLIC]
+  {policyId: 3, roleName: root, tableId: 105}
+- [[PolicyRole:{DescID: 105, Name: fred, PolicyID: 3}, ABSENT], PUBLIC]
+  {policyId: 3, roleName: fred, tableId: 105}
+- [[PolicyWithCheckExpr:{DescID: 105, Expr: i < 0:::INT8, PolicyID: 3}, ABSENT], PUBLIC]
+  {expr: 'i < 0:::INT8', policyId: 3, referencedColumnIds: [1], tableId: 105}
+- [[PolicyDeps:{DescID: 105, PolicyID: 3}, ABSENT], PUBLIC]
+  {policyId: 3, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
 
 build
 DROP POLICY "fourth policy" on defaultdb.foo;
 ----
-- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[Policy:{DescID: 104, PolicyID: 4}, ABSENT], PUBLIC]
-  {command: 1, policyId: 4, tableId: 104, type: 1}
-- [[PolicyName:{DescID: 104, Name: fourth policy, PolicyID: 4}, ABSENT], PUBLIC]
-  {name: fourth policy, policyId: 4, tableId: 104}
-- [[PolicyRole:{DescID: 104, Name: public, PolicyID: 4}, ABSENT], PUBLIC]
-  {policyId: 4, roleName: public, tableId: 104}
-- [[PolicyRole:{DescID: 104, Name: root, PolicyID: 4}, ABSENT], PUBLIC]
-  {policyId: 4, roleName: root, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[Policy:{DescID: 105, PolicyID: 4}, ABSENT], PUBLIC]
+  {command: 1, policyId: 4, tableId: 105, type: 1}
+- [[PolicyName:{DescID: 105, Name: fourth policy, PolicyID: 4}, ABSENT], PUBLIC]
+  {name: fourth policy, policyId: 4, tableId: 105}
+- [[PolicyRole:{DescID: 105, Name: public, PolicyID: 4}, ABSENT], PUBLIC]
+  {policyId: 4, roleName: public, tableId: 105}
+- [[PolicyRole:{DescID: 105, Name: root, PolicyID: 4}, ABSENT], PUBLIC]
+  {policyId: 4, roleName: root, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+
+build
+DROP POLICY "fifth policy" on defaultdb.foo;
+----
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[Policy:{DescID: 105, PolicyID: 5}, ABSENT], PUBLIC]
+  {command: 1, policyId: 5, tableId: 105, type: 1}
+- [[PolicyName:{DescID: 105, Name: fifth policy, PolicyID: 5}, ABSENT], PUBLIC]
+  {name: fifth policy, policyId: 5, tableId: 105}
+- [[PolicyRole:{DescID: 105, Name: public, PolicyID: 5}, ABSENT], PUBLIC]
+  {policyId: 5, roleName: public, tableId: 105}
+- [[PolicyUsingExpr:{DescID: 105, Expr: [FUNCTION 100104](i), PolicyID: 5}, ABSENT], PUBLIC]
+  {expr: '[FUNCTION 100104](i)', policyId: 5, referencedColumnIds: [1], tableId: 105, usesFunctionIds: [104]}
+- [[PolicyDeps:{DescID: 105, ReferencedFunctionIDs: [104], PolicyID: 5}, ABSENT], PUBLIC]
+  {policyId: 5, tableId: 105, usesFunctionIds: [104]}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+
+build
+DROP POLICY "sixth policy" on defaultdb.foo;
+----
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[Policy:{DescID: 105, PolicyID: 6}, ABSENT], PUBLIC]
+  {command: 1, policyId: 6, tableId: 105, type: 1}
+- [[PolicyName:{DescID: 105, Name: sixth policy, PolicyID: 6}, ABSENT], PUBLIC]
+  {name: sixth policy, policyId: 6, tableId: 105}
+- [[PolicyRole:{DescID: 105, Name: public, PolicyID: 6}, ABSENT], PUBLIC]
+  {policyId: 6, roleName: public, tableId: 105}
+- [[PolicyWithCheckExpr:{DescID: 105, Expr: [FUNCTION 100104](i), PolicyID: 6}, ABSENT], PUBLIC]
+  {expr: '[FUNCTION 100104](i)', policyId: 6, referencedColumnIds: [1], tableId: 105, usesFunctionIds: [104]}
+- [[PolicyDeps:{DescID: 105, ReferencedFunctionIDs: [104], PolicyID: 6}, ABSENT], PUBLIC]
+  {policyId: 6, tableId: 105, usesFunctionIds: [104]}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
