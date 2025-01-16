@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -429,7 +430,7 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 			ctx, txn.KV(), ib.desc, sp, ib.spec.ChunkSize, false, /* traceKV */
 		)
 		return err
-	}); err != nil {
+	}, isql.WithPriority(admissionpb.BulkNormalPri)); err != nil {
 		return nil, nil, 0, err
 	}
 	prepTime := timeutil.Since(start)
