@@ -71,7 +71,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	tracker scexec.BackfillerProgressWriter,
 	job *jobs.Job,
 	descriptor catalog.TableDescriptor,
-) (err error) {
+) (retErr error) {
 	// Potentially install a protected timestamp before the GC interval is hit,
 	// which can help avoid transaction retry errors, with shorter GC intervals.
 	protectedTimestampCleaner := ib.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx,
@@ -81,7 +81,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	defer func() {
 		cleanupError := protectedTimestampCleaner(ctx)
 		if cleanupError != nil {
-			err = errors.CombineErrors(cleanupError, err)
+			retErr = errors.CombineErrors(retErr, cleanupError)
 		}
 	}()
 
@@ -117,18 +117,18 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		return nil
 	}
 	now := ib.execCfg.DB.Clock().Now()
-	run, err := ib.plan(
+	run, retErr := ib.plan(
 		ctx,
 		descriptor,
-		progress.MinimumWriteTimestamp,
 		now,
+		progress.MinimumWriteTimestamp,
 		progress.MinimumWriteTimestamp,
 		spansToDo,
 		progress.DestIndexIDs,
 		updateFunc,
 	)
-	if err != nil {
-		return err
+	if retErr != nil {
+		return retErr
 	}
 	return run(ctx)
 }
