@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // SpanIter is an iterator over a collection of spans.
@@ -22,23 +23,28 @@ type SpanIter func(forEachSpan span.Operation)
 // timestamp of the checkpointed spans. A SpanGroup is used to merge adjacent
 // spans above the high-water mark.
 func Make(
-	frontier hlc.Timestamp, forEachSpan SpanIter, maxBytes int64,
+	frontier hlc.Timestamp, forEachSpan SpanIter, maxBytes int64, metrics *Metrics,
 ) jobspb.ChangefeedProgress_Checkpoint {
+	start := timeutil.Now()
+
 	// Collect leading spans into a SpanGroup to merge adjacent spans and store
-	// the lowest timestamp found
+	// the lowest timestamp found.
 	var checkpointSpanGroup roachpb.SpanGroup
-	checkpointFrontier := hlc.Timestamp{}
+	checkpointTS := hlc.MaxTimestamp
 	forEachSpan(func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
 		if frontier.Less(ts) {
 			checkpointSpanGroup.Add(s)
-			if checkpointFrontier.IsEmpty() || ts.Less(checkpointFrontier) {
-				checkpointFrontier = ts
+			if ts.Less(checkpointTS) {
+				checkpointTS = ts
 			}
 		}
 		return span.ContinueMatch
 	})
+	if checkpointSpanGroup.Len() == 0 {
+		return jobspb.ChangefeedProgress_Checkpoint{}
+	}
 
-	// Ensure we only return up to maxBytes spans
+	// Ensure we only return up to maxBytes spans.
 	var checkpointSpans []roachpb.Span
 	var used int64
 	for _, span := range checkpointSpanGroup.Slice() {
@@ -49,8 +55,16 @@ func Make(
 		checkpointSpans = append(checkpointSpans, span)
 	}
 
-	return jobspb.ChangefeedProgress_Checkpoint{
+	cp := jobspb.ChangefeedProgress_Checkpoint{
 		Spans:     checkpointSpans,
-		Timestamp: checkpointFrontier,
+		Timestamp: checkpointTS,
 	}
+
+	if metrics != nil {
+		metrics.CreateNanos.RecordValue(int64(timeutil.Since(start)))
+		metrics.TotalBytes.RecordValue(int64(cp.Size()))
+		metrics.SpanCount.RecordValue(int64(len(cp.Spans)))
+	}
+
+	return cp
 }

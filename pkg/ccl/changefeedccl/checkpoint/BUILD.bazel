@@ -2,14 +2,21 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "checkpoint",
-    srcs = ["checkpoint.go"],
+    srcs = [
+        "checkpoint.go",
+        "metrics.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/util/hlc",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/span",
+        "//pkg/util/timeutil",
     ],
 )
 
@@ -25,6 +32,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/randutil",
         "//pkg/util/shuffle",
         "//pkg/util/span",
