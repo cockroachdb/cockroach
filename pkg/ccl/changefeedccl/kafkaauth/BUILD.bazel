@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kafkaauth",
+    srcs = [
+        "doc.go",
+        "kafkaauth.go",
+        "sasl_msk.go",
+        "sasl_oauth.go",
+        "sasl_plain.go",
+        "sasl_scram.go",
+        "scram_client.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
+        "@com_github_aws_aws_msk_iam_sasl_signer_go//signer",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_ibm_sarama//:sarama",
+        "@com_github_twmb_franz_go//pkg/kgo",
+        "@com_github_twmb_franz_go//pkg/sasl",
+        "@com_github_twmb_franz_go//pkg/sasl/oauth",
+        "@com_github_twmb_franz_go//pkg/sasl/plain",
+        "@com_github_twmb_franz_go//pkg/sasl/scram",
+        "@com_github_xdg_go_scram//:scram",
+        "@org_golang_x_oauth2//:oauth2",
+        "@org_golang_x_oauth2//clientcredentials",
+    ],
+)

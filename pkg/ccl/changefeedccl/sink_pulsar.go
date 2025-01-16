@@ -296,7 +296,7 @@ func (p *pulsarSink) checkError() error {
 func makePulsarSink(
 	// TODO(jayant): save this context and add logging
 	_ context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	encodingOpts changefeedbase.EncodingOptions,
 	targets changefeedbase.Targets,
 	// TODO(#118862): configure the batching config
@@ -310,7 +310,7 @@ func makePulsarSink(
 	// TODO(#118858): configure auth and validate URL query params
 	unsupportedParams := []string{changefeedbase.SinkParamTopicPrefix, changefeedbase.SinkParamTopicName, changefeedbase.SinkParamSchemaTopic}
 	for _, param := range unsupportedParams {
-		if u.consumeParam(param) != "" {
+		if u.ConsumeParam(param) != "" {
 			return nil, unimplemented.NewWithIssuef(118863, "%s is not yet supported", param)
 		}
 	}
