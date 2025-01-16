@@ -53,6 +53,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   acceptance:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_big_runner_group]
     timeout-minutes: 30
     steps:
@@ -74,6 +75,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   check_generated_code:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
     steps:
@@ -89,6 +91,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   docker_image_amd64:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
     steps:
@@ -110,6 +113,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   examples_orms:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_big_runner_group]
     timeout-minutes: 40
     steps:
@@ -131,6 +135,7 @@ jobs:
         run: ./cockroach/build/github/cleanup-engflow-keys.sh
         if: always()
   lint:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_big_runner_group]
     timeout-minutes: 60
     steps:
@@ -155,6 +160,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   local_roachtest:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_big_runner_group]
     timeout-minutes: 60
     steps:
@@ -176,6 +182,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   local_roachtest_fips:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group_fips]
     timeout-minutes: 60
     steps:
@@ -197,6 +204,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   linux_amd64_build:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
     steps:
@@ -218,6 +226,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   linux_amd64_fips_build:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
     steps:
@@ -239,6 +248,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   linux_arm64_build:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
     steps:
@@ -260,6 +270,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   macos_amd64_build:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
     steps:
@@ -281,6 +292,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   macos_arm64_build:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
     steps:
@@ -302,6 +314,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   unit_tests:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 60
     steps:
@@ -325,6 +338,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   windows_build:
+    if: false  # This will always skip this job
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
     steps:

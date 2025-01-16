@@ -1,0 +1,128 @@
+name: Microbenchmarks CI
+on:
+  pull_request:
+    types: [ opened, reopened, synchronize ]
+    branches: [ master ]
+
+env:
+  HEAD: ${{ github.event.pull_request.head.sha || github.ref }}
+  BUCKET: "cockroach-microbench-ci"
+  PACKAGE: "pkg/sql/tests"
+
+jobs:
+  base:
+    name: build base
+    runs-on: [self-hosted, basic_runner_group]
+    timeout-minutes: 30
+    outputs:
+      merge_base: ${{ steps.build.outputs.merge_base }}
+    steps:
+      - name: Checkout Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.HEAD }}
+      - name: Build
+        id: build
+        uses: ./.github/actions/microbenchmark-build
+        with:
+          ref: base
+          pkg: ${{ env.PACKAGE }}
+
+  head:
+    name: build head
+    runs-on: [self-hosted, basic_runner_group]
+    timeout-minutes: 30
+    outputs:
+      merge_base: ${{ steps.build.outputs.merge_base }}
+    steps:
+      - name: Checkout Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.HEAD }}
+      - name: Build
+        id: build
+        uses: ./.github/actions/microbenchmark-build
+        with:
+          ref: head
+          pkg: ${{ env.PACKAGE }}
+
+  run-group-1:
+    runs-on: [self-hosted, basic_big_runner_group]
+    timeout-minutes: 30
+    needs: [base, head]
+    steps:
+      - name: Checkout Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.HEAD }}
+      - name: Run
+        uses: ./.github/actions/microbenchmark-run
+        with:
+          base: ${{ needs.base.outputs.merge_base }}
+          pkg: ${{ env.PACKAGE }}
+          group: 1
+
+  run-group-2:
+    runs-on: [self-hosted, basic_big_runner_group]
+    timeout-minutes: 30
+    needs: [base, head]
+    steps:
+      - name: Checkout Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.HEAD }}
+      - name: Run
+        uses: ./.github/actions/microbenchmark-run
+        with:
+          base: ${{ needs.base.outputs.merge_base }}
+          pkg: ${{ env.PACKAGE }}
+          group: 2
+
+  compare:
+    runs-on: [self-hosted, basic_runner_group]
+    timeout-minutes: 30
+    needs: [base, run-group-1, run-group-2]
+    steps:
+      - name: Checkout Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - run: ./build/github/get-engflow-keys.sh
+
+      - name: Unique Build ID
+        run: echo "BUILD_ID=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_ENV
+
+      - name: Compare and Post
+        run: build/github/microbenchmarks/compare.sh
+        env:
+          BASE_SHA: ${{ needs.base.outputs.merge_base }}
+          HEAD_SHA: ${{ env.HEAD }}
+
+      - name: Clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+
+  post:
+    runs-on: [ self-hosted, basic_runner_group ]
+    timeout-minutes: 30
+    needs: [ base, run-group-1, run-group-2 ]
+    steps:
+      - name: Checkout Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - run: ./build/github/get-engflow-keys.sh
+
+      - name: Unique Build ID
+        run: echo "BUILD_ID=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_ENV
+
+      - name: Compare and Post
+        run: build/github/microbenchmarks/post.sh
+        env:
+          HEAD_SHA: ${{ env.HEAD }}
+
+      - name: Clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()

@@ -1,0 +1,39 @@
+benchmarks:
+  - display_name: Sysbench
+    labels: ["SQL", "3node", "oltp_read_write"]
+    name: "BenchmarkSysbench/SQL/3node/oltp_read_write"
+    package: "pkg/sql/tests"
+    runner_group: 1
+    measure_count: 10
+    measure:
+      iterations: 250
+    thresholds:
+      "sec/op": .05
+      "B/op": .03
+      "allocs/op": .03
+
+  - display_name: Sysbench
+    labels: ["KV", "1node", "local", "oltp_read_only"]
+    name: "BenchmarkSysbench/KV/1node_local/oltp_read_only"
+    package: "pkg/sql/tests"
+    runner_group: 2
+    measure_count: 10
+    measure:
+      iterations: 800
+    thresholds:
+      "sec/op": .03
+      "B/op": .02
+      "allocs/op": .02
+
+  - display_name: Sysbench
+    labels: ["KV", "1node", "local", "oltp_write_only"]
+    name: "BenchmarkSysbench/KV/1node_local/oltp_write_only"
+    package: "pkg/sql/tests"
+    runner_group: 2
+    measure_count: 10
+    measure:
+      iterations: 800
+    thresholds:
+      "sec/op": .03
+      "B/op": .02
+      "allocs/op": .02
