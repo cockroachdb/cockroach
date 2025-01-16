@@ -6302,12 +6302,9 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 
 	var jobID jobspb.JobID
 
-	// We filter by descriptor_ids because there's a bug where we create an extra
+	// We filter by running because there's a bug where we create an extra
 	// no-op job for the referenced table (#57624).
-	require.NoError(t, sqlDB.QueryRow(`
-SELECT job_id FROM crdb_internal.jobs WHERE description LIKE '%ALTER TABLE%'
-AND descriptor_ids[1] = 'db.t2'::regclass::int`,
-	).Scan(&jobID))
+	require.NoError(t, sqlDB.QueryRow(`SELECT job_id FROM crdb_internal.jobs WHERE description LIKE '%ALTER TABLE%' AND status = 'running'`).Scan(&jobID))
 	tdb.Exec(t, "CANCEL JOB $1", jobID)
 
 	close(continueNotification)
