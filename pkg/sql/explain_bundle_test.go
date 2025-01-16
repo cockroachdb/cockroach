@@ -401,15 +401,15 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "s.foo", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile("s.foo")
+					reg := regexp.MustCompile(`s\.foo`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find definition for 's.foo' function in schema.sql")
 					}
-					reg = regexp.MustCompile("^foo")
+					reg = regexp.MustCompile(`^CREATE FUNCTION public\.foo`)
 					if reg.FindString(contents) != "" {
 						return errors.Errorf("found irrelevant function 'foo' in schema.sql")
 					}
-					reg = regexp.MustCompile("s.a")
+					reg = regexp.MustCompile(`s\.a`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
 					}
@@ -432,15 +432,15 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "s.bar", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile("s.bar")
+					reg := regexp.MustCompile(`s\.bar`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find definition for 's.bar' procedure in schema.sql")
 					}
-					reg = regexp.MustCompile("^bar")
+					reg = regexp.MustCompile(`^CREATE PROCEDURE public\.bar`)
 					if reg.FindString(contents) != "" {
 						return errors.Errorf("Found irrelevant procedure 'bar' in schema.sql")
 					}
-					reg = regexp.MustCompile("s.a")
+					reg = regexp.MustCompile(`s\.a`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
 					}
