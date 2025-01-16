@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -661,14 +662,14 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 
 	// Bugger the backup by removing the SST files. (Note this messes up all of
 	// the backups, but there is only one at this point.)
-	if err := filepath.Walk(tempDir, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.WalkDir(tempDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupbase.BackupManifestName ||
+		if d.Name() == backupbase.BackupManifestName ||
 			!strings.HasSuffix(path, ".sst") ||
-			info.Name() == backupinfo.BackupMetadataDescriptorsListPath ||
-			info.Name() == backupinfo.BackupMetadataFilesListPath {
+			d.Name() == backupinfo.BackupMetadataDescriptorsListPath ||
+			d.Name() == backupinfo.BackupMetadataFilesListPath {
 			return nil
 		}
 		return os.Remove(path)

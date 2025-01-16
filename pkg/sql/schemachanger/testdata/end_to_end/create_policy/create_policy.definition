@@ -3,5 +3,5 @@ CREATE TABLE t1 (tenant_id uuid, c1 int);
 ----
 
 test
-CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR SELECT TO PUBLIC USING (tenant_id = '01538898-f55c-44db-a306-89078e2c430e');
+CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR SELECT USING (tenant_id = '01538898-f55c-44db-a306-89078e2c430e');
 ----

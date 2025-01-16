@@ -2315,11 +2315,11 @@ func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error 
 		return errors.Wrap(err, "cluster.StartE")
 	}
 	// Need to prevent world readable files or lib/pq will complain.
-	return filepath.Walk(c.localCertsDir, func(path string, info fs.FileInfo, err error) error {
+	return filepath.WalkDir(c.localCertsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return errors.Wrap(err, "walking localCertsDir failed")
 		}
-		if info.IsDir() {
+		if d.IsDir() {
 			return nil
 		}
 		return os.Chmod(path, 0600)

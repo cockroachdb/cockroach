@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
     ],

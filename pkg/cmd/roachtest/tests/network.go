@@ -8,6 +8,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -94,7 +95,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	require.NoError(t, err)
 	require.NoError(t, os.RemoveAll(localCertsDir))
 	require.NoError(t, c.Get(ctx, t.L(), certsDir, localCertsDir, c.Node(1)))
-	require.NoError(t, filepath.Walk(localCertsDir, func(path string, info os.FileInfo, err error) error {
+	require.NoError(t, filepath.WalkDir(localCertsDir, func(path string, d fs.DirEntry, err error) error {
 		// Don't change permissions for the certs directory.
 		if path == localCertsDir {
 			return nil

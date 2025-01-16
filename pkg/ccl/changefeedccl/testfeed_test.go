@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"net/url"
 	"os"
@@ -1493,13 +1494,13 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return nil, err
 		}
 
-		if err := filepath.Walk(c.dir, c.walkDir); err != nil {
+		if err := filepath.WalkDir(c.dir, c.walkDir); err != nil {
 			return nil, err
 		}
 	}
 }
 
-func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
+func (c *cloudFeed) walkDir(path string, d fs.DirEntry, err error) error {
 	if strings.HasSuffix(path, `.tmp`) {
 		// File in the process of being written by ExternalStorage. Ignore.
 		return nil
@@ -1520,7 +1521,7 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return err
 	}
 
-	if info.IsDir() {
+	if d.IsDir() {
 		// Nothing to do for directories.
 		return nil
 	}

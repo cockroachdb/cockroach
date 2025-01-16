@@ -14,6 +14,8 @@ CREATE POLICY "first policy" on defaultdb.foo AS PERMISSIVE FOR SELECT TO fred U
   {command: 2, policyId: 1, tableId: 104, type: 1}
 - [[PolicyName:{DescID: 104, Name: first policy, PolicyID: 1}, PUBLIC], ABSENT]
   {name: first policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: fred, tableId: 104}
 
 build
 CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT USING (false);
@@ -26,6 +28,8 @@ CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT USING (
   {command: 3, policyId: 1, tableId: 104, type: 2}
 - [[PolicyName:{DescID: 104, Name: second policy, PolicyID: 1}, PUBLIC], ABSENT]
   {name: second policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: public, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: public, tableId: 104}
 
 build
 CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred WITH CHECK (i < 0);
@@ -38,9 +42,13 @@ CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred WI
   {command: 5, policyId: 1, tableId: 104, type: 1}
 - [[PolicyName:{DescID: 104, Name: third policy, PolicyID: 1}, PUBLIC], ABSENT]
   {name: third policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: root, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: root, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: fred, tableId: 104}
 
 build
-CREATE POLICY "fourth policy" on defaultdb.foo AS PERMISSIVE TO PUBLIC,CURRENT_SESSION;
+CREATE POLICY "fourth policy" on defaultdb.foo AS PERMISSIVE TO PUBLIC,SESSION_USER;
 ----
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
@@ -50,3 +58,7 @@ CREATE POLICY "fourth policy" on defaultdb.foo AS PERMISSIVE TO PUBLIC,CURRENT_S
   {command: 1, policyId: 1, tableId: 104, type: 1}
 - [[PolicyName:{DescID: 104, Name: fourth policy, PolicyID: 1}, PUBLIC], ABSENT]
   {name: fourth policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: public, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: public, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: root, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: root, tableId: 104}

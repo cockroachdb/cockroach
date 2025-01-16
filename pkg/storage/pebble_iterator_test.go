@@ -49,11 +49,11 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 	require.NoError(t, p.Flush())
 
 	// Corrupt the SSTs in the DB.
-	err = filepath.Walk(dataDir, func(path string, info stdfs.FileInfo, err error) error {
+	err = filepath.WalkDir(dataDir, func(path string, d stdfs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !strings.HasSuffix(info.Name(), ".sst") {
+		if !strings.HasSuffix(d.Name(), ".sst") {
 			return nil
 		}
 		file, err := os.OpenFile(path, os.O_WRONLY, 0600)

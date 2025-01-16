@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -2061,18 +2062,11 @@ func (desc *wrapper) validatePolicies() error {
 	names := make(map[string]descpb.PolicyID, len(policies))
 	idToName := make(map[descpb.PolicyID]string, len(policies))
 	for _, p := range policies {
-		if p.ID == 0 {
-			return errors.AssertionFailedf(
-				"policy ID was missing for policy %q",
-				p.Name)
-		} else if p.ID >= desc.NextPolicyID {
-			return errors.AssertionFailedf(
-				"policy %q has ID %d, which is not less than the NextPolicyID value %d for the table",
-				p.Name, p.ID, desc.NextPolicyID)
+		if err := desc.validatePolicy(&p); err != nil {
+			return err
 		}
-		if p.Name == "" {
-			return pgerror.Newf(pgcode.Syntax, "empty policy name")
-		}
+
+		// Perform validation across all policies defined for the table.
 		if otherID, found := names[p.Name]; found && p.ID != otherID {
 			return pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate policy name: %q", p.Name)
@@ -2084,13 +2078,53 @@ func (desc *wrapper) validatePolicies() error {
 				p.ID, p.Name, other)
 		}
 		idToName[p.ID] = p.Name
-		if _, ok := catpb.PolicyType_name[int32(p.Type)]; !ok || p.Type == catpb.PolicyType_POLICYTYPE_UNUSED {
+	}
+	return nil
+}
+
+// validatePolicy will validate a single policy in isolation from other policies in the table.
+func (desc *wrapper) validatePolicy(p *descpb.PolicyDescriptor) error {
+	if p.ID == 0 {
+		return errors.AssertionFailedf(
+			"policy ID was missing for policy %q",
+			p.Name)
+	} else if p.ID >= desc.NextPolicyID {
+		return errors.AssertionFailedf(
+			"policy %q has ID %d, which is not less than the NextPolicyID value %d for the table",
+			p.Name, p.ID, desc.NextPolicyID)
+	}
+	if p.Name == "" {
+		return pgerror.Newf(pgcode.Syntax, "empty policy name")
+	}
+	if _, ok := catpb.PolicyType_name[int32(p.Type)]; !ok || p.Type == catpb.PolicyType_POLICYTYPE_UNUSED {
+		return errors.AssertionFailedf(
+			"policy %q has an unknown policy type %v", p.Name, p.Type)
+	}
+	if _, ok := catpb.PolicyCommand_name[int32(p.Command)]; !ok || p.Command == catpb.PolicyCommand_POLICYCOMMAND_UNUSED {
+		return errors.AssertionFailedf(
+			"policy %q has an unknown policy command %v", p.Name, p.Command)
+	}
+	return desc.validatePolicyRoles(p)
+}
+
+// validatePolicyRoles will validate the roles that are in one policy.
+func (desc *wrapper) validatePolicyRoles(p *descpb.PolicyDescriptor) error {
+	if len(p.RoleNames) == 0 {
+		return errors.AssertionFailedf(
+			"policy %q has no roles defined", p.Name)
+	}
+	rolesInUse := make(map[string]struct{}, len(p.RoleNames))
+	for i, roleName := range p.RoleNames {
+		if _, found := rolesInUse[roleName]; found {
 			return errors.AssertionFailedf(
-				"policy %q has an unknown policy type %v", p.Name, p.Type)
+				"policy %q contains duplicate role name %q", p.Name, roleName)
 		}
-		if _, ok := catpb.PolicyCommand_name[int32(p.Command)]; !ok || p.Command == catpb.PolicyCommand_POLICYCOMMAND_UNUSED {
+		rolesInUse[roleName] = struct{}{}
+		// The public role, if included, must always be the first entry in the
+		// role names slice.
+		if roleName == username.PublicRole && i > 0 {
 			return errors.AssertionFailedf(
-				"policy %q has an unknown policy command %v", p.Name, p.Command)
+				"the public role must be the first role defined in policy %q", p.Name)
 		}
 	}
 	return nil

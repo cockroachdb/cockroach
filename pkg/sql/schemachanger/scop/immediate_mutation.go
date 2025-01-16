@@ -608,6 +608,18 @@ type SetPolicyName struct {
 	Name     string
 }
 
+// AddPolicyRole adds a new role to a policy.
+type AddPolicyRole struct {
+	immediateMutationOp
+	Role scpb.PolicyRole
+}
+
+// RemovePolicyRole removes an existing role from a policy.
+type RemovePolicyRole struct {
+	immediateMutationOp
+	Role scpb.PolicyRole
+}
+
 // UpdateTableBackReferencesInTypes updates back references to a table
 // in the specified types.
 type UpdateTableBackReferencesInTypes struct {
