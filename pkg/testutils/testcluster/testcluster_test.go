@@ -131,7 +131,7 @@ func TestManualReplication(t *testing.T) {
 		}
 	}
 
-	// Transfer the lease to node 1.
+	// Transfer the lease to node 2.
 	target := tc.Target(0)
 	leaseHolder, err := tc.FindRangeLeaseHolder(tableRangeDesc, &target)
 	if err != nil {
@@ -150,11 +150,11 @@ func TestManualReplication(t *testing.T) {
 	// Check that the lease holder has changed. We'll use the old lease holder as
 	// the hint, since it's guaranteed that the old lease holder has applied the
 	// new lease.
-	target = tc.Target(0)
-	leaseHolder, err = tc.FindRangeLeaseHolder(tableRangeDesc, &target)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		leaseHolder, err = tc.FindRangeLeaseHolder(tableRangeDesc, &target)
+		return err
+	})
+
 	if leaseHolder.StoreID != tc.Servers[1].StorageLayer().GetFirstStoreID() {
 		t.Fatalf("expected lease on server idx 1 (node: %d store: %d), but is on node: %+v",
 			tc.Server(1).NodeID(),
