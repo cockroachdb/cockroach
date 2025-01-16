@@ -180,11 +180,14 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		return err
 	}
 
+	updateCols := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) +
+		u.run.checkOrds.Len() + u.run.numPassthrough
+
 	// Run the CHECK constraints, if any. CheckHelper will either evaluate the
 	// constraints itself, or else inspect boolean columns from the input that
 	// contain the results of evaluation.
 	if !u.run.checkOrds.Empty() {
-		checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols)+u.run.numPassthrough:]
+		checkVals := sourceVals[updateCols:]
 		if err := checkMutationInput(
 			params.ctx, params.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
 			u.run.tu.tableDesc(), u.run.checkOrds, checkVals,
@@ -196,16 +199,31 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Create a set of partial index IDs to not add entries or remove entries
 	// from.
 	var pm row.PartialIndexUpdateHelper
-	if n := len(u.run.tu.tableDesc().PartialIndexes()); n > 0 {
-		offset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
+	numPartialIndexes := len(u.run.tu.tableDesc().PartialIndexes())
+	if numPartialIndexes > 0 {
+		offset := updateCols + u.run.checkOrds.Len()
 		partialIndexVals := sourceVals[offset:]
-		partialIndexPutVals := partialIndexVals[:n]
-		partialIndexDelVals := partialIndexVals[n : n*2]
+		partialIndexPutVals := partialIndexVals[:numPartialIndexes]
+		partialIndexDelVals := partialIndexVals[numPartialIndexes : numPartialIndexes*2]
 
 		err := pm.Init(partialIndexPutVals, partialIndexDelVals, u.run.tu.tableDesc())
 		if err != nil {
 			return err
 		}
+	}
+
+	// Keep track of the vector index partitions to update, as well as the
+	// quantized vectors. This information is passed to tableInserter.row below.
+	var vh row.VectorIndexUpdateHelper
+	if n := len(u.run.tu.tableDesc().VectorIndexes()); n > 0 {
+		// The vector index values are after the partial index values.
+		offset := updateCols + u.run.checkOrds.Len() + numPartialIndexes*2
+		vectorIndexVals := sourceVals[offset:]
+		putPartitionVals := vectorIndexVals[:n]
+		putQuantizedVecs := vectorIndexVals[n : n*2]
+		delPartitionVals := vectorIndexVals[n*2 : n*3]
+		vh.InitForPut(putPartitionVals, putQuantizedVecs, u.run.tu.tableDesc())
+		vh.InitForDel(delPartitionVals, u.run.tu.tableDesc())
 	}
 
 	// Error out the update if the enforce_home_region session setting is on and
@@ -215,7 +233,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	}
 
 	// Queue the insert in the KV batch.
-	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, updateValues, pm, u.run.traceKV)
+	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, updateValues, pm, vh, u.run.traceKV)
 	if err != nil {
 		return err
 	}

@@ -418,6 +418,10 @@ func (c *copyMachine) canSupportVectorized(table catalog.TableDescriptor) bool {
 	if c.p.SessionData().VectorizeMode == sessiondatapb.VectorizeOff {
 		return false
 	}
+	if len(table.VectorIndexes()) > 0 {
+		// Columnar vector index encoding is not yet supported.
+		return false
+	}
 	// Vectorized COPY doesn't support foreign key checks, no reason it couldn't
 	// but it doesn't work right now because we don't have the ability to
 	// hold the results in a bufferNode. We wouldn't want to enable it

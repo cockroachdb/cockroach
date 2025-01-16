@@ -609,11 +609,12 @@ func (n *createTableNode) startExec(params runParams) error {
 				// Populate the buffer.
 				copy(rowBuffer, n.input.Values())
 
-				// CREATE TABLE AS does not copy indexes from the input table.
-				// An empty row.PartialIndexUpdateHelper is used here because
-				// there are no indexes, partial or otherwise, to update.
+				// CREATE TABLE AS does not copy indexes from the input table. Empty
+				// partial and vector index helpers are used here because there are no
+				// indexes, partial, vector, or otherwise, to update.
 				var pm row.PartialIndexUpdateHelper
-				if err := ti.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				var vh row.VectorIndexUpdateHelper
+				if err := ti.row(params.ctx, rowBuffer, pm, vh, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
 			}

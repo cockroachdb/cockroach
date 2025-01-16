@@ -749,7 +749,7 @@ func (mb *mutationBuilder) buildInsert(returning *tree.ReturningExprs) {
 	mb.projectPartialIndexPutCols()
 
 	// Project vector index PUT columns.
-	mb.projectVectorIndexCols()
+	mb.projectVectorIndexColsForInsert()
 
 	mb.buildUniqueChecksForInsert()
 
@@ -969,7 +969,7 @@ func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
 	}
 
 	// Project vector index PUT and DEL columns.
-	mb.projectVectorIndexCols()
+	mb.projectVectorIndexColsForUpsert()
 
 	mb.buildUniqueChecksForUpsert()
 

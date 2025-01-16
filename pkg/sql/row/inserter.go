@@ -145,6 +145,7 @@ func (ri *Inserter) InsertRow(
 	b Putter,
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
+	vh VectorIndexUpdateHelper,
 	oth *OriginTimestampCPutHelper,
 	overwrite bool,
 	traceKV bool,
@@ -171,7 +172,7 @@ func (ri *Inserter) InsertRow(
 	// We don't want to insert empty k/v's like this, so we
 	// set includeEmpty to false.
 	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(
-		ctx, ri.InsertColIDtoRowIndex, values, pm.IgnoreForPut, false, /* includeEmpty */
+		ctx, ri.InsertColIDtoRowIndex, values, vh.GetPut(), pm.IgnoreForPut, false, /* includeEmpty */
 	)
 	if err != nil {
 		return err

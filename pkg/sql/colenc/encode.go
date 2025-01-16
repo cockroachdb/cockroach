@@ -433,6 +433,7 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 		return b.encodeInvertedSecondaryIndex(ctx, ind, kys, b.extraKeys)
 	} else if ind.GetType() == descpb.IndexDescriptor_VECTOR {
 		// TODO(drewk): Implement encoding for vector indexes.
+		return errors.AssertionFailedf("vector indexes not supported")
 	} else {
 		keyAndSuffixCols := b.rh.TableDesc.IndexFetchSpecKeyAndSuffixColumns(ind)
 		keyCols := keyAndSuffixCols[:ind.NumKeyColumns()]

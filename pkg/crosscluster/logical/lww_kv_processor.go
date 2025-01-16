@@ -476,13 +476,15 @@ func (p *kvTableWriter) insertRow(ctx context.Context, b *kv.Batch, after cdceve
 
 	var ph row.PartialIndexUpdateHelper
 	// TODO(dt): support partial indexes.
+	var vh row.VectorIndexUpdateHelper
+	// TODO(drewk): support vector indexes.
 	oth := &row.OriginTimestampCPutHelper{
 		OriginTimestamp: after.MvccTimestamp,
 		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
 		// and destination clusters.
 		// ShouldWinTie: true,
 	}
-	return p.ri.InsertRow(ctx, &row.KVBatchAdapter{Batch: b}, p.newVals, ph, oth, false, false)
+	return p.ri.InsertRow(ctx, &row.KVBatchAdapter{Batch: b}, p.newVals, ph, vh, oth, false, false)
 }
 
 func (p *kvTableWriter) updateRow(
@@ -497,13 +499,15 @@ func (p *kvTableWriter) updateRow(
 
 	var ph row.PartialIndexUpdateHelper
 	// TODO(dt): support partial indexes.
+	var vh row.VectorIndexUpdateHelper
+	// TODO(drewk): support vector indexes.
 	oth := &row.OriginTimestampCPutHelper{
 		OriginTimestamp: after.MvccTimestamp,
 		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
 		// and destination clusters.
 		// ShouldWinTie: true,
 	}
-	_, err := p.ru.UpdateRow(ctx, b, p.oldVals, p.newVals, ph, oth, false)
+	_, err := p.ru.UpdateRow(ctx, b, p.oldVals, p.newVals, ph, vh, oth, false)
 	return err
 }
 
@@ -516,6 +520,8 @@ func (p *kvTableWriter) deleteRow(
 
 	var ph row.PartialIndexUpdateHelper
 	// TODO(dt): support partial indexes.
+	var vh row.VectorIndexUpdateHelper
+	// TODO(drewk): support vector indexes.
 	oth := &row.OriginTimestampCPutHelper{
 		PreviousWasDeleted: before.IsDeleted(),
 		OriginTimestamp:    after.MvccTimestamp,
@@ -524,7 +530,7 @@ func (p *kvTableWriter) deleteRow(
 		// ShouldWinTie: true,
 	}
 
-	return p.rd.DeleteRow(ctx, b, p.oldVals, ph, oth, false)
+	return p.rd.DeleteRow(ctx, b, p.oldVals, ph, vh, oth, false)
 }
 
 func (p *kvTableWriter) fillOld(vals cdcevent.Row) error {

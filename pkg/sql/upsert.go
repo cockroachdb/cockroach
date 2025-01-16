@@ -156,13 +156,16 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		}
 	}
 
+	upsertCols := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols)
+	if n.run.tw.canaryOrdinal != -1 {
+		upsertCols++
+	}
+
 	// Create a set of partial index IDs to not add or remove entries from.
 	var pm row.PartialIndexUpdateHelper
-	if numPartialIndexes := len(n.run.tw.tableDesc().PartialIndexes()); numPartialIndexes > 0 {
-		offset := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols) + n.run.checkOrds.Len()
-		if n.run.tw.canaryOrdinal != -1 {
-			offset++
-		}
+	numPartialIndexes := len(n.run.tw.tableDesc().PartialIndexes())
+	if numPartialIndexes > 0 {
+		offset := upsertCols + n.run.checkOrds.Len()
 		partialIndexVals := rowVals[offset:]
 		partialIndexPutVals := partialIndexVals[:numPartialIndexes]
 		partialIndexDelVals := partialIndexVals[numPartialIndexes : numPartialIndexes*2]
@@ -177,9 +180,19 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		rowVals = rowVals[:offset]
 	}
 
-	upsertCols := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols)
-	if n.run.tw.canaryOrdinal != -1 {
-		upsertCols++
+	// Keep track of the vector index partitions to update, as well as the
+	// quantized vectors for puts. This information is passed to tableInserter.row
+	// below.
+	var vh row.VectorIndexUpdateHelper
+	if numVectorIndexes := len(n.run.tw.tableDesc().VectorIndexes()); numVectorIndexes > 0 {
+		// The vector index values are after the partial index values.
+		offset := upsertCols + n.run.checkOrds.Len() + numPartialIndexes*2
+		vectorIndexVals := rowVals[offset:]
+		putPartitionVals := vectorIndexVals[:numVectorIndexes]
+		putQuantizedVecs := vectorIndexVals[numVectorIndexes : numVectorIndexes*2]
+		delPartitionVals := vectorIndexVals[numVectorIndexes*2 : numVectorIndexes*3]
+		vh.InitForPut(putPartitionVals, putQuantizedVecs, n.run.tw.tableDesc())
+		vh.InitForDel(delPartitionVals, n.run.tw.tableDesc())
 	}
 
 	// Verify the CHECK constraints by inspecting boolean columns from the input that
@@ -208,7 +221,7 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
-	return n.run.tw.row(params.ctx, rowVals, pm, n.run.traceKV)
+	return n.run.tw.row(params.ctx, rowVals, pm, vh, n.run.traceKV)
 }
 
 // BatchedCount implements the batchedPlanNode interface.

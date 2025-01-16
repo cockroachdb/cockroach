@@ -206,6 +206,7 @@ func (ru *Updater) UpdateRow(
 	oldValues []tree.Datum,
 	updateValues []tree.Datum,
 	pm PartialIndexUpdateHelper,
+	vh VectorIndexUpdateHelper,
 	oth *OriginTimestampCPutHelper,
 	traceKV bool,
 ) ([]tree.Datum, error) {
@@ -230,8 +231,9 @@ func (ru *Updater) UpdateRow(
 		// deletes of keys that aren't present. We choose to make this
 		// compromise in order to avoid having to read all values of
 		// the row that is being updated.
+		const includeEmpty = true
 		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(
-			ctx, ru.FetchColIDtoRowIndex, oldValues, pm.IgnoreForDel, true, /* includeEmpty */
+			ctx, ru.FetchColIDtoRowIndex, oldValues, vh.GetDel(), pm.IgnoreForDel, includeEmpty,
 		)
 		if err != nil {
 			return nil, err
@@ -288,6 +290,7 @@ func (ru *Updater) UpdateRow(
 				index,
 				ru.FetchColIDtoRowIndex,
 				oldValues,
+				vh.GetDel(),
 				false, /* includeEmpty */
 			)
 			if err != nil {
@@ -304,6 +307,7 @@ func (ru *Updater) UpdateRow(
 				index,
 				ru.FetchColIDtoRowIndex,
 				ru.newValues,
+				vh.GetPut(),
 				false, /* includeEmpty */
 			)
 			if err != nil {
@@ -350,13 +354,15 @@ func (ru *Updater) UpdateRow(
 		}
 	}
 
+  // TODO(drewk): why don't we do this before encoding the secondary index
+  // entries above?
 	putter := &KVBatchAdapter{Batch: batch}
 	if rowPrimaryKeyChanged {
-		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, oth, traceKV); err != nil {
+		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, vh, oth, traceKV); err != nil {
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
-			ctx, putter, ru.newValues, pm, oth, false /* ignoreConflicts */, traceKV,
+			ctx, putter, ru.newValues, pm, vh, oth, false /* ignoreConflicts */, traceKV,
 		); err != nil {
 			return nil, err
 		}
