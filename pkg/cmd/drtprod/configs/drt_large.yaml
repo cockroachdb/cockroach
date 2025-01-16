@@ -19,7 +19,7 @@ environment:
   RUN_DURATION: 12h
   NUM_CONNECTIONS: 500
   NUM_WORKERS: 500
-  MAX_RATE: 1000
+  MAX_RATE: 500
 
 targets:
   - target_name: $CLUSTER
@@ -120,6 +120,18 @@ targets:
         args:
           - $WORKLOAD_CLUSTER
           - workload
+  - target_name: rp
+    steps:
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachprod
+          - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER:1
+          - artifacts/roachtest
+          - roachtest-operations
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
   - target_name: post_tasks
     dependent_targets:
