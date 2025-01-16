@@ -111,3 +111,11 @@ func InsertUnique[T cmp.Ordered](s []T, v T) []T {
 	}
 	return slices.Insert(s, idx, v)
 }
+
+// CopySlice creates a new slice and copies all elements from the provided
+// slice into it
+func CopySlice[T any, S []T](s S) S {
+	newSlice := make([]T, len(s))
+	copy(newSlice, s)
+	return newSlice
+}

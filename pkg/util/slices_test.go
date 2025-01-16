@@ -142,3 +142,25 @@ func TestMapFrom(t *testing.T) {
 		return i, i * i
 	}))
 }
+
+func TestCopySlice(t *testing.T) {
+	expected1 := []int{1, 2, 3}
+	expected2 := []string{"a", "b", "c"}
+	expected3 := []struct {
+		a int
+		b string
+	}{{1, "a"}, {2, "b"}}
+	actual1 := CopySlice(expected1)
+	actual2 := CopySlice(expected2)
+	actual3 := CopySlice(expected3)
+	require.Equal(t, expected1, actual1)
+	require.Equal(t, expected2, actual2)
+	require.Equal(t, expected3, actual3)
+
+	expected1[0] = 999
+	expected2[0] = "999"
+	expected3[0].a = 999
+	require.NotEqual(t, expected1, actual1)
+	require.NotEqual(t, expected2, actual2)
+	require.NotEqual(t, expected3, actual3)
+}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 type baseIterator struct {
@@ -77,7 +78,7 @@ func (s *StmtStatsIterator) Next() bool {
 	}
 
 	statementStats.mu.Lock()
-	data := statementStats.mu.data
+	data := copyData(statementStats)
 	distSQLUsed := statementStats.mu.distSQLUsed
 	vectorized := statementStats.mu.vectorized
 	fullScan := statementStats.mu.fullScan
@@ -103,6 +104,20 @@ func (s *StmtStatsIterator) Next() bool {
 	}
 
 	return true
+}
+
+// copyData Copies the statement stat's data object under the mutex.
+// This function requires that there is a lock on the stats object.
+func copyData(stats *stmtStats) appstatspb.StatementStatistics {
+	stats.mu.AssertHeld()
+	data := stats.mu.data
+	data.Nodes = util.CopySlice(data.Nodes)
+	data.KVNodeIDs = util.CopySlice(data.KVNodeIDs)
+	data.Regions = util.CopySlice(data.Regions)
+	data.PlanGists = util.CopySlice(data.PlanGists)
+	data.IndexRecommendations = util.CopySlice(data.IndexRecommendations)
+	data.Indexes = util.CopySlice(data.Indexes)
+	return data
 }
 
 // Cur returns the appstatspb.CollectedStatementStatistics at the current internal
