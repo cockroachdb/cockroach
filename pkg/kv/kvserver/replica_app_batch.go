@@ -308,7 +308,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		//
 		// Alternatively if we discover that the RHS has already been removed
 		// from this store, clean up its data.
-		splitPreApply(ctx, b.r, b.batch, res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
+		splitPreApply(ctx, b.r,
+			stateloader.MakeStateRW(b.batch), logstore.MakeLogRW(b.batch),
+			res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
