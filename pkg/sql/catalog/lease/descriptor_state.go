@@ -32,7 +32,7 @@ type descriptorState struct {
 	renewalInProgress int32
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 
 		// descriptors sorted by increasing version. This set always
 		// contains a descriptor version with a lease as the latest
@@ -91,8 +91,8 @@ func (t *descriptorState) findForTimestamp(
 	ctx context.Context, timestamp hlc.Timestamp,
 ) (*descriptorVersionState, bool, error) {
 	expensiveLogEnabled := log.ExpensiveLogEnabled(ctx, 2)
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	// Acquire a lease if no descriptor exists in the cache.
 	if len(t.mu.active.data) == 0 {
@@ -259,6 +259,8 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		return s.mu.refcount == 0
 	}
 	maybeMarkRemoveStoredLease := func(s *descriptorVersionState) *storedLease {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
 		// Figure out if we'd like to remove the lease from the store asap (i.e.
 		// when the refcount drops to 0). If so, we'll need to mark the lease as
 		// invalid.
@@ -290,8 +292,6 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		if shouldRemove := decRefCount(s); !shouldRemove {
 			return nil
 		}
-		t.mu.Lock()
-		defer t.mu.Unlock()
 		if l := maybeMarkRemoveStoredLease(s); l != nil {
 			leaseReleased := true
 			// For testing, we will synchronously release leases, but that
@@ -303,7 +303,11 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 				l = nil
 			}
 			if leaseReleased {
-				t.mu.active.remove(s)
+				func() {
+					t.mu.Lock()
+					defer t.mu.Unlock()
+					t.mu.active.remove(s)
+				}()
 			}
 			return l
 		}
