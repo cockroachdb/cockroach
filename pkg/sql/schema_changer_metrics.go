@@ -38,6 +38,12 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaObjects = metric.Metadata{
+		Name:        "sql.schema_changer.object_count",
+		Help:        "Counter of the number of objects in the cluster",
+		Measurement: "Objects",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // SchemaChangerMetrics are metrics corresponding to the schema changer.
@@ -48,6 +54,7 @@ type SchemaChangerMetrics struct {
 	PermanentErrors      *metric.Counter
 	ConstraintErrors     telemetry.Counter
 	UncategorizedErrors  telemetry.Counter
+	ObjectCount          *metric.Gauge
 }
 
 // MetricStruct makes SchemaChangerMetrics a metric.Struct.
@@ -64,5 +71,6 @@ func NewSchemaChangerMetrics() *SchemaChangerMetrics {
 		PermanentErrors:      metric.NewCounter(metaPermanentErrors),
 		ConstraintErrors:     sqltelemetry.SchemaChangeErrorCounter("constraint_violation"),
 		UncategorizedErrors:  sqltelemetry.SchemaChangeErrorCounter("uncategorized"),
+		ObjectCount:          metric.NewGauge(metaObjects),
 	}
 }
