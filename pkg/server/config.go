@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -696,7 +697,7 @@ type sepEngine struct {
 	logEng storage.Engine
 }
 
-var _ kvserver.SeparatedEngine = (*sepEngine)(nil)
+var _ kvstorage.SeparatedEngine = (*sepEngine)(nil)
 
 // LogEngine implements kvserver.SeparatedEngine.
 func (e *sepEngine) LogEngine() storage.Engine {

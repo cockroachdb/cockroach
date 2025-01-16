@@ -209,7 +209,7 @@ func WriteInitialClusterData(
 		}
 
 		logBatch := batch
-		if sepEng, ok := eng.(SeparatedEngine); ok {
+		if sepEng, ok := eng.(kvstorage.SeparatedEngine); ok {
 			logBatch = sepEng.LogEngine().NewBatch()
 			defer logBatch.Close()
 		}

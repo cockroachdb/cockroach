@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1089,6 +1090,9 @@ func (nl *NodeLiveness) updateLiveness(
 func (nl *NodeLiveness) verifyDiskHealth(ctx context.Context) error {
 	resultCs := make([]singleflight.Future, len(nl.engines))
 	for i, eng := range nl.engines {
+		if se, ok := eng.(kvstorage.SeparatedEngine); ok {
+			eng = se.LogEngine()
+		}
 		resultCs[i], _ = nl.engineSyncs.DoChan(ctx,
 			strconv.Itoa(i),
 			singleflight.DoOpts{
