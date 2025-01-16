@@ -146,7 +146,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	newTupleProbability := rng.Float64()
 	nTuples := int(float64(nDistinctBatches*coldata.BatchSize()) / newTupleProbability)
 	const maxNumTuples = 25000
-	spillingMightNotHappen := false
+	spillingMustHappen := true
 	if nTuples > maxNumTuples {
 		// If we happen to set a large value for coldata.BatchSize() and a small
 		// value for newTupleProbability, we might end up with huge number of
@@ -158,11 +158,12 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		// limit to the in-memory distinct. In such (relatively rare) scenario
 		// we cannot check that we spilled every time, yet we might as well run
 		// the correctness check.
-		spillingMightNotHappen = true
+		spillingMustHappen = false
 	}
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
 
-	var numRuns, numSpills int
+	var numRuns int
+	runSpilled := make(map[int]struct{})
 	var semsToCheck []semaphore.Semaphore
 	numForcedRepartitions := rng.Intn(5)
 	colexectestutils.RunTestsWithoutAllNullsInjection(
@@ -183,23 +184,29 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			numRuns++
 			return createExternalDistinct(
 				ctx, flowCtx, input, typs, distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
-				execinfrapb.Ordering{}, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
+				execinfrapb.Ordering{}, queueCfg, sem, func() { runSpilled[numRuns] = struct{}{} }, numForcedRepartitions,
 				&monitorRegistry, &closerRegistry,
 			)
 		},
 	)
-	// We expect to see the disk spiller for each run, and the external distinct
-	// and the disk-backed sort for every time we spilled.
-	require.Equal(t, numRuns+2*numSpills, closerRegistry.NumClosers())
+	if spillingMustHappen {
+		// We expect that we spilled during each run.
+		for run := 1; run <= numRuns; run++ {
+			_, spilled := runSpilled[run]
+			require.Truef(t, spilled, "run %d didn't spill to disk", run)
+		}
+		// For each run we expect to see the following closers:
+		// - the disk spiller for the unordered distinct
+		// - the disk spiller for the disk-backed sort used in the fallback
+		// strategy of the external distinct
+		// - the hash-based partitioner for the external distinct.
+		//
+		// In some scenarios we might also see the external sort there (if the
+		// disk-backed sort actually spills to disk), but we'll ignore that.
+		require.GreaterOrEqual(t, closerRegistry.NumClosers(), 3*numRuns)
+	}
 	for i, sem := range semsToCheck {
 		require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
-	}
-	if !spillingMightNotHappen {
-		// The "randomNullsInjection" subtest might not spill to disk when a
-		// large portion of rows is made NULL, so we allow two cases:
-		// - numSpills == numRuns
-		// - numSpills == numRuns - 1.
-		require.GreaterOrEqual(t, numSpills, numRuns-1, "the spilling didn't occur in all cases")
 	}
 }
 
@@ -236,7 +243,7 @@ func generateRandomDataForUnorderedDistinct(
 		}
 	}
 
-	rand.Shuffle(nTups, func(i, j int) { tups[i], tups[j] = tups[j], tups[i] })
+	rng.Shuffle(nTups, func(i, j int) { tups[i], tups[j] = tups[j], tups[i] })
 	return tups, expected
 }
 

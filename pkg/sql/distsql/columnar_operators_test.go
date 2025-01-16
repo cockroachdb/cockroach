@@ -329,7 +329,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 						}
 						if hashAgg {
 							// Let's shuffle the rows for the hash aggregator.
-							rand.Shuffle(nRows, func(i, j int) {
+							rng.Shuffle(nRows, func(i, j int) {
 								rows[i], rows[j] = rows[j], rows[i]
 							})
 						} else {

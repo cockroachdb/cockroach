@@ -74,6 +74,10 @@ type NewColOperatorArgs struct {
 	TestingKnobs       struct {
 		// SpillingCallbackFn will be called when the spilling from an in-memory
 		// to disk-backed operator occurs. It should only be set in tests.
+		// TODO(yuzefovich): this knob is a bit confusing because it is
+		// currently inherited by "child" disk-backed operators. It is also
+		// called every time when the disk-backed operator spills to disk,
+		// including after it has been reset for reuse.
 		SpillingCallbackFn func()
 		// NumForcedRepartitions specifies a number of "repartitions" that a
 		// disk-backed operator should be forced to perform. "Repartition" can
