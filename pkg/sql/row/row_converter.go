@@ -559,11 +559,16 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		c.EvalCtx.PopIVarContainer()
 	}
 
+	// TODO(drewk): call into the vector index library to determine the partitions
+	// to update.
+	var vh VectorIndexUpdateHelper
+
 	if err := c.ri.InsertRow(
 		ctx,
 		c.kvInserter,
 		insertRow,
 		pm,
+		vh,
 		nil,   /* OriginTimestampCPutHelper */
 		true,  /* ignoreConflicts */
 		false, /* traceKV */

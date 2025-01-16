@@ -44,10 +44,14 @@ func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Conte
 // of a Value field on the context because Value access in context.Context
 // is rather expensive.
 func (td *tableDeleter) row(
-	ctx context.Context, values tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
+	ctx context.Context,
+	values tree.Datums,
+	pm row.PartialIndexUpdateHelper,
+	vh row.VectorIndexUpdateHelper,
+	traceKV bool,
 ) error {
 	td.currentBatchSize++
-	return td.rd.DeleteRow(ctx, td.b, values, pm, nil, traceKV)
+	return td.rd.DeleteRow(ctx, td.b, values, pm, vh, nil, traceKV)
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the

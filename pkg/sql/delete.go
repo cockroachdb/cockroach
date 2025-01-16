@@ -152,13 +152,24 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// This set is passed as a argument to tableDeleter.row below.
 	var pm row.PartialIndexUpdateHelper
 	deleteCols := len(d.run.td.rd.FetchCols) + d.run.numPassthrough
-	if n := len(d.run.td.tableDesc().PartialIndexes()); n > 0 {
-		partialIndexDelVals := sourceVals[deleteCols : deleteCols+n]
+	partialIndexVals := len(d.run.td.tableDesc().PartialIndexes())
+	if partialIndexVals > 0 {
+		partialIndexDelVals := sourceVals[deleteCols : deleteCols+partialIndexVals]
 
 		err := pm.Init(nil /*partialIndexPutVals */, partialIndexDelVals, d.run.td.tableDesc())
 		if err != nil {
 			return err
 		}
+	}
+
+	// Keep track of the vector index partitions to update. This information is
+	// passed to tableInserter.row below.
+	var vh row.VectorIndexUpdateHelper
+	if n := len(d.run.td.tableDesc().VectorIndexes()); n > 0 {
+		// The vector index values are after the partial index values.
+		offset := deleteCols + partialIndexVals
+		delPartitionKeys := sourceVals[offset : offset+n]
+		vh.InitForDel(delPartitionKeys, d.run.td.tableDesc())
 	}
 
 	if len(sourceVals) > deleteCols {
@@ -168,7 +179,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	}
 
 	// Queue the deletion in the KV batch.
-	if err := d.run.td.row(params.ctx, sourceVals, pm, d.run.traceKV); err != nil {
+	if err := d.run.td.row(params.ctx, sourceVals, pm, vh, d.run.traceKV); err != nil {
 		return err
 	}
 

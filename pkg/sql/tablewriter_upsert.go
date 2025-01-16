@@ -158,7 +158,11 @@ func (tu *tableUpserter) makeResultFromRow(
 // of a Value field on the context because Value access in context.Context
 // is rather expensive.
 func (tu *tableUpserter) row(
-	ctx context.Context, row tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
+	ctx context.Context,
+	row tree.Datums,
+	pm row.PartialIndexUpdateHelper,
+	vh row.VectorIndexUpdateHelper,
+	traceKV bool,
 ) error {
 	tu.currentBatchSize++
 
@@ -169,11 +173,11 @@ func (tu *tableUpserter) row(
 	if tu.canaryOrdinal == -1 {
 		// No canary column means that existing row should be overwritten (i.e.
 		// the insert and update columns are the same, so no need to choose).
-		return tu.insertNonConflictingRow(ctx, row[:insertEnd], pm, true /* overwrite */, traceKV)
+		return tu.insertNonConflictingRow(ctx, row[:insertEnd], pm, vh, true /* overwrite */, traceKV)
 	}
 	if row[tu.canaryOrdinal] == tree.DNull {
 		// No conflict, so insert a new row.
-		return tu.insertNonConflictingRow(ctx, row[:insertEnd], pm, false /* overwrite */, traceKV)
+		return tu.insertNonConflictingRow(ctx, row[:insertEnd], pm, vh, false /* overwrite */, traceKV)
 	}
 
 	// If no columns need to be updated, then possibly collect the unchanged row.
@@ -194,6 +198,7 @@ func (tu *tableUpserter) row(
 		row[insertEnd:fetchEnd],
 		row[fetchEnd:updateEnd],
 		pm,
+		vh,
 		traceKV,
 	)
 }
@@ -205,10 +210,11 @@ func (tu *tableUpserter) insertNonConflictingRow(
 	ctx context.Context,
 	insertRow tree.Datums,
 	pm row.PartialIndexUpdateHelper,
+	vh row.VectorIndexUpdateHelper,
 	overwrite, traceKV bool,
 ) error {
 	// Perform the insert proper.
-	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, nil, overwrite, traceKV); err != nil {
+	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, vh, nil, overwrite, traceKV); err != nil {
 		return err
 	}
 
@@ -254,12 +260,13 @@ func (tu *tableUpserter) updateConflictingRow(
 	fetchRow tree.Datums,
 	updateValues tree.Datums,
 	pm row.PartialIndexUpdateHelper,
+	vh row.VectorIndexUpdateHelper,
 	traceKV bool,
 ) error {
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
-	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, nil, traceKV)
+	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, vh, nil, traceKV)
 	if err != nil {
 		return err
 	}
