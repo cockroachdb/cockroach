@@ -877,6 +877,7 @@ GO_TARGETS = [
     "//pkg/ccl/changefeedccl/changefeedvalidators:changefeedvalidators",
     "//pkg/ccl/changefeedccl/checkpoint:checkpoint",
     "//pkg/ccl/changefeedccl/checkpoint:checkpoint_test",
+    "//pkg/ccl/changefeedccl/kafkaauth:kafkaauth",
     "//pkg/ccl/changefeedccl/kvevent:kvevent",
     "//pkg/ccl/changefeedccl/kvevent:kvevent_test",
     "//pkg/ccl/changefeedccl/kvfeed:kvfeed",
