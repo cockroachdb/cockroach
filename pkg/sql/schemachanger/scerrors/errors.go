@@ -173,6 +173,8 @@ type schemaChangerUserError struct {
 	err error
 }
 
+var _ errors.SafeFormatter = &schemaChangerUserError{}
+
 // SchemaChangerUserError wraps an error as user consumable, which will surface
 // it from the declarative schema changer without any wrapping. Normally errors
 // from the declarative schema changer get wrapped with plan details inside
@@ -198,8 +200,14 @@ func UnwrapSchemaChangerUserError(err error) error {
 	return nil
 }
 
+// SafeFormatError is part of the errors.SafeFormatter interface.
+func (e *schemaChangerUserError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("schema change operation encountered an error")
+	return e.err
+}
+
 func (e *schemaChangerUserError) Error() string {
-	return fmt.Sprintf("schema change operation encountered an error: %s", e.err.Error())
+	return fmt.Sprintf("schema change operation encountered an error: %v", e.err)
 }
 
 func (e *schemaChangerUserError) Unwrap() error {
