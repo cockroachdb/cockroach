@@ -67,24 +67,20 @@ func (cfo ChangefeedOption) OptionString() string {
 }
 
 type NemesesOption struct {
-	EnableFpValidator bool
-	EnableSQLSmith    bool
+	EnableSQLSmith bool
 }
 
 var NemesesOptions = []NemesesOption{
 	{
-		EnableFpValidator: true,
-		EnableSQLSmith:    false,
+		EnableSQLSmith: false,
 	},
 	{
-		EnableFpValidator: false,
-		EnableSQLSmith:    true,
+		EnableSQLSmith: true,
 	},
 }
 
 func (no NemesesOption) String() string {
-	return fmt.Sprintf("fp_validator=%t,sql_smith=%t",
-		no.EnableFpValidator, no.EnableSQLSmith)
+	return fmt.Sprintf("sql_smith=%t", no.EnableSQLSmith)
 }
 
 // RunNemesis runs a jepsen-style validation of whether a changefeed meets our
@@ -274,22 +270,16 @@ func RunNemesis(
 	if err != nil {
 		return nil, err
 	}
-
+	fprintV, err := NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
+	if err != nil {
+		return nil, err
+	}
 	validators := Validators{
 		NewOrderValidator(`foo`),
 		baV,
+		fprintV,
 	}
-
-	if nOp.EnableFpValidator {
-		fprintV, err := NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
-		if err != nil {
-			return nil, err
-		}
-		validators = append(validators, fprintV)
-	}
-
 	ns.v = NewCountValidator(validators)
-
 	// Initialize the actual row count, overwriting what the initialization loop did. That
 	// loop has set this to the number of modified rows, which is correct during
 	// changefeed operation, but not for the initial scan, because some of the rows may
