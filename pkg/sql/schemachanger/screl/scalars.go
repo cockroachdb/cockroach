@@ -130,7 +130,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		*scpb.TriggerWhen, *scpb.TriggerFunctionCall, *scpb.TriggerDeps:
 		// These elements need v24.3 so they can be used without checking any version gates.
 		return true
-	case *scpb.NamedRangeZoneConfig, *scpb.Policy, *scpb.PolicyName:
+	case *scpb.NamedRangeZoneConfig, *scpb.Policy, *scpb.PolicyName, *scpb.PolicyRole:
 		return version.IsActive(clusterversion.V25_1)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))

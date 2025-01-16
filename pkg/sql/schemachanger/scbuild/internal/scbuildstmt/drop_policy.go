@@ -39,7 +39,7 @@ func DropPolicy(b BuildCtx, n *tree.DropPolicy) {
 	}
 	policyElems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e.(type) {
-		case *scpb.Policy, *scpb.PolicyName:
+		case *scpb.Policy, *scpb.PolicyName, *scpb.PolicyRole:
 			b.Drop(e)
 		}
 	})
