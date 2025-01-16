@@ -491,7 +491,7 @@ quality of service: regular
 • delete
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
+│ actual row count: 0
 │ from: t137352
 │ auto commit
 │
@@ -541,7 +541,7 @@ quality of service: regular
 • delete
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
+│ actual row count: 0
 │ from: t137352
 │ auto commit
 │
