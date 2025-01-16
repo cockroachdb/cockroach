@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -104,20 +105,25 @@ func ClearRangeData(
 func DestroyReplica(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
-	reader storage.Reader,
-	writer storage.Writer,
+	logRW logstore.LogReadWriter,
+	stateRW stateloader.StateReadWriter,
 	nextReplicaID roachpb.ReplicaID,
 	opts ClearRangeDataOptions,
 ) error {
-	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(
-		ctx, logstore.MakeLogReader(reader))
+	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(ctx, logRW.Reader())
 	if err != nil {
 		return err
 	}
 	if diskReplicaID.ReplicaID >= nextReplicaID {
 		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
 	}
-	if err := ClearRangeData(ctx, rangeID, reader, writer, opts); err != nil {
+
+	if err := ClearRangeData(ctx, rangeID, stateRW.Reader(), stateRW, opts); err != nil {
+		return err
+	}
+	opts.ClearReplicatedByRangeID = false
+	opts.ClearReplicatedBySpan = roachpb.RSpan{}
+	if err := ClearRangeData(ctx, rangeID, logRW.Reader(), logRW, opts); err != nil {
 		return err
 	}
 
@@ -135,7 +141,7 @@ func DestroyReplica(
 	{
 		var tombstone kvserverpb.RangeTombstone
 		if _, err := storage.MVCCGetProto(
-			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+			ctx, stateRW, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		); err != nil {
 			return err
 		}
@@ -148,6 +154,6 @@ func DestroyReplica(
 
 	tombstone := kvserverpb.RangeTombstone{NextReplicaID: nextReplicaID}
 	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, tombstoneKey,
+	return storage.MVCCBlindPutProto(ctx, stateRW, tombstoneKey,
 		hlc.Timestamp{}, &tombstone, storage.MVCCWriteOptions{})
 }

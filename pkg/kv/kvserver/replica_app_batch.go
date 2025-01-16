@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -356,10 +357,14 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// required for correctness, since the merge protocol should guarantee that
 		// no new replicas of the RHS can ever be created, but it doesn't hurt to
 		// be careful.
-		if err := kvstorage.DestroyReplica(ctx, rhsRepl.RangeID, b.batch, b.batch, mergedTombstoneReplicaID, kvstorage.ClearRangeDataOptions{
-			ClearReplicatedByRangeID:   true,
-			ClearUnreplicatedByRangeID: true,
-		}); err != nil {
+		if err := kvstorage.DestroyReplica(ctx, rhsRepl.RangeID,
+			logstore.MakeLogRW(b.batch),
+			stateloader.MakeStateRW(b.batch),
+			mergedTombstoneReplicaID, kvstorage.ClearRangeDataOptions{
+				ClearReplicatedByRangeID:   true,
+				ClearUnreplicatedByRangeID: true,
+			},
+		); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before merge")
 		}
 
@@ -519,11 +524,15 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// We've set the replica's in-mem status to reflect the pending destruction
 		// above, and preDestroyRaftMuLocked will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
-		if err := kvstorage.DestroyReplica(ctx, b.r.RangeID, b.batch, b.batch, change.NextReplicaID(), kvstorage.ClearRangeDataOptions{
-			ClearReplicatedBySpan:      span,
-			ClearReplicatedByRangeID:   true,
-			ClearUnreplicatedByRangeID: true,
-		}); err != nil {
+		if err := kvstorage.DestroyReplica(ctx, b.r.RangeID,
+			logstore.MakeLogRW(b.batch),
+			stateloader.MakeStateRW(b.batch),
+			change.NextReplicaID(), kvstorage.ClearRangeDataOptions{
+				ClearReplicatedBySpan:      span,
+				ClearReplicatedByRangeID:   true,
+				ClearUnreplicatedByRangeID: true,
+			},
+		); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before removal")
 		}
 	}

@@ -986,7 +986,11 @@ func clearSubsumedReplicaDiskData(
 			UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
 		})
 		clearedSpans = append(clearedSpans, subsumedClearedSpans...)
-		if err := kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
+		if err := kvstorage.DestroyReplica(ctx, subDesc.RangeID,
+			logstore.MakeLogRW(nil),      // FIXME: reader
+			stateloader.MakeStateRW(nil), // &subsumedReplSST
+			subsumedNextReplicaID, opts,
+		); err != nil {
 			subsumedReplSST.Close()
 			return nil, err
 		}
