@@ -1500,11 +1500,16 @@ func reconcileJobStateWithLocalState(
 	}
 
 	maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&execCfg.Settings.SV)
-	checkpoint := checkpoint.Make(sf.Frontier(), func(forEachSpan span.Operation) {
-		for _, fs := range localState.aggregatorFrontier {
-			forEachSpan(fs.Span, fs.Timestamp)
-		}
-	}, maxBytes)
+	checkpoint := checkpoint.Make(
+		sf.Frontier(),
+		func(forEachSpan span.Operation) {
+			for _, fs := range localState.aggregatorFrontier {
+				forEachSpan(fs.Span, fs.Timestamp)
+			}
+		},
+		maxBytes,
+		nil, /* metrics */
+	)
 
 	// Update checkpoint.
 	updateHW := highWater.Less(sf.Frontier())
