@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -70,6 +71,7 @@ var (
 )
 
 var errOfflineInitialScanComplete = errors.New("spinning down offline initial scan")
+var maxWait = time.Minute * 5
 
 type logicalReplicationResumer struct {
 	job *jobs.Job
@@ -350,6 +352,12 @@ func (r *logicalReplicationResumer) maybePublishCreatedTables(
 	if details.ReverseStreamCommand != "" && !progress.StartedReverseStream {
 		return errors.AssertionFailedf("attempting to publish descriptors before starting reverse stream")
 	}
+
+	if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, r.job, maxWait); err != nil {
+		return errors.Wrapf(err, "unable to verify that attempted LDR job %d had stopped offline ingesting %s", r.job.ID(), maxWait)
+	}
+	log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
+
 	return sql.DescsTxn(ctx, jobExecCtx.ExecCfg(), func(ctx context.Context, txn isql.Txn, descCol *descs.Collection) error {
 		b := txn.KV().NewBatch()
 		for i := range details.IngestedExternalCatalog.Tables {
@@ -887,6 +895,11 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 		return err
 	}
 	if details.CreateTable && !progress.PublishedNewTables {
+		if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, r.job, maxWait); err != nil {
+			log.Errorf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", r.job.ID(), maxWait, err)
+		} else {
+			log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
+		}
 		if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			return externalcatalog.DropIngestedExternalCatalog(ctx, execCfg, jobExecCtx.User(), details.IngestedExternalCatalog, txn, execCfg.JobRegistry, txn.Descriptors(), fmt.Sprintf("gc for ldr job %d", r.job.ID()))
 		}); err != nil {

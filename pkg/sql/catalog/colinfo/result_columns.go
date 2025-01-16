@@ -302,6 +302,7 @@ var TenantColumnsNoReplication = ResultColumns{
 // TenantColumnsWithReplication is appended to TenantColumns for SHOW VIRTUAL
 // CLUSTER ... WITH REPLICATION STATUS queries.
 var TenantColumnsWithReplication = ResultColumns{
+	{Name: "ingestion_job_id", Typ: types.Int},
 	{Name: "source_tenant_name", Typ: types.String},
 	{Name: "source_cluster_uri", Typ: types.String},
 	// The protected timestamp on the destination cluster, meaning we cannot

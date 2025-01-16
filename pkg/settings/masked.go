@@ -90,14 +90,3 @@ func (s *MaskedSetting) ValueOrigin(ctx context.Context, sv *Values) ValueOrigin
 func (s *MaskedSetting) IsUnsafe() bool {
 	return s.setting.IsUnsafe()
 }
-
-// TestingIsReportable is used in testing for reportability.
-func TestingIsReportable(s Setting) bool {
-	if _, ok := s.(*MaskedSetting); ok {
-		return false
-	}
-	if e, ok := s.(internalSetting); ok {
-		return e.isReportable()
-	}
-	return true
-}
