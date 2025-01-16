@@ -97,6 +97,7 @@ func TestBuildDataDriven(t *testing.T) {
 										sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafeAlways
 										sd.ApplicationName = ""
 										sd.EnableUniqueWithoutIndexConstraints = true
+										sd.RowLevelSecurityEnabled = true
 										sd.SerialNormalizationMode = localData.SerialNormalizationMode
 									},
 								),

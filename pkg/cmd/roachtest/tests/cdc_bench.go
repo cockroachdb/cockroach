@@ -173,8 +173,8 @@ func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSe
 
 	// Checkpoint frequently.  Some of the larger benchmarks might overload the
 	// cluster.  Producing frequent span-level checkpoints helps with recovery.
-	settings.ClusterSettings["changefeed.frontier_checkpoint_frequency"] = "60s"
-	settings.ClusterSettings["changefeed.frontier_highwater_lag_checkpoint_threshold"] = "30s"
+	settings.ClusterSettings["changefeed.span_checkpoint.interval"] = "60s"
+	settings.ClusterSettings["changefeed.span_checkpoint.lag_threshold"] = "30s"
 
 	// Bump up the number of allowed catchup scans.  Doing catchup for 100k ranges with default
 	// configuration (8 client side, 16 per store) takes a while (~1500-2000 ranges per min minutes).
@@ -274,6 +274,7 @@ func runCDCBenchScan(
 		`./cockroach workload init kv --splits %d {pgurl:%d}`, numRanges, nData[0]))
 	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
+	time.Sleep(1 * time.Second)
 	cursor := timeutil.Now() // before data is ingested
 
 	// Ingest data. init allows us to import into the existing table. However,

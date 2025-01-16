@@ -87,6 +87,7 @@ message ElementProto {
     LDRJobIDs ldr_job_ids = 134 [(gogoproto.customname) = "LDRJobIDs", (gogoproto.moretags) = "parent:\"Table\""];
     PartitionZoneConfig partition_zone_config = 135 [(gogoproto.moretags) = "parent:\"TablePartitioning\""];
     Trigger trigger = 136 [(gogoproto.moretags) = "parent:\"Table, View\""];
+    Policy policy = 137 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -166,7 +167,10 @@ message ElementProto {
     TriggerFunctionCall trigger_function_call = 206 [(gogoproto.moretags) = "parent:\"Trigger\""];
     TriggerDeps trigger_deps = 207 [(gogoproto.moretags) = "parent:\"Trigger\""];
 
-    // Next element group start id: 240
+    // Policy elements.
+    PolicyName policy_name = 240 [(gogoproto.moretags) = "parent:\"Policy\""];
+
+    // Next element group start id: 250
   }
 }
 
@@ -355,6 +359,24 @@ message SchemaParent {
 message SchemaChild {
   uint32 child_object_id = 1 [(gogoproto.customname) = "ChildObjectID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 schema_id = 2 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// Policy represents a row-level security policy for a table.
+// Note: This struct only stores the immutable parts of a policy. Any mutable
+// components should be stored in separate elements so that an ALTER can update
+// the policy by add/drop new elements.
+message Policy {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
+  uint32 type = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.PolicyType"];
+  uint32 command = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.PolicyCommand"];
+}
+
+// PolicyName is the name assigned to a specific policy, based on its ID.
+message PolicyName {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
+  string name = 3;
 }
 
 message Sequence {

@@ -303,7 +303,7 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 				ManagerDisableJobCreation:                      true, // disable the automatic job creation
 				JobDisableInternalRetry:                        true,
 				SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
-				JobOnCheckpointInterceptor: func() error {
+				JobOnCheckpointInterceptor: func(_ hlc.Timestamp) error {
 					mu.Lock()
 					defer mu.Unlock()
 
@@ -388,7 +388,7 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 				},
 				ManagerDisableJobCreation:                      true, // disable the automatic job creation
 				SQLWatcherCheckpointNoopsEveryDurationOverride: 10 * time.Millisecond,
-				JobOnCheckpointInterceptor: func() error {
+				JobOnCheckpointInterceptor: func(_ hlc.Timestamp) error {
 					select {
 					case err := <-errCh:
 						return err

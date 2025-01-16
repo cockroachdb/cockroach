@@ -153,7 +153,7 @@ func (sl StateLoader) SetHardState(
 // taking care that a HardState compatible with the existing data is written.
 func (sl StateLoader) SynthesizeHardState(
 	ctx context.Context,
-	readWriter storage.ReadWriter,
+	writer storage.Writer,
 	oldHS raftpb.HardState,
 	truncState kvserverpb.RaftTruncatedState,
 	raftAppliedIndex kvpb.RaftIndex,
@@ -188,7 +188,7 @@ func (sl StateLoader) SynthesizeHardState(
 		newHS.Lead = oldHS.Lead
 		newHS.LeadEpoch = oldHS.LeadEpoch
 	}
-	err := sl.SetHardState(ctx, readWriter, newHS)
+	err := sl.SetHardState(ctx, writer, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
 }
 

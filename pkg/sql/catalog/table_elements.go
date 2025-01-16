@@ -1179,6 +1179,19 @@ func FindTriggerByID(tbl TableDescriptor, id descpb.TriggerID) *descpb.TriggerDe
 	return nil
 }
 
+// FindPolicyByID traverses the slice returned by the GetPolicies method on the
+// table descriptor and returns the first policy that matches the desired ID,
+// or nil if none was found.
+func FindPolicyByID(tbl TableDescriptor, id descpb.PolicyID) *descpb.PolicyDescriptor {
+	policies := tbl.GetPolicies()
+	for i := range policies {
+		if policies[i].ID == id {
+			return &policies[i]
+		}
+	}
+	return nil
+}
+
 // FindFamilyByID traverses the family descriptors on the table descriptor
 // and returns the first column family with the desired ID, or nil if none was
 // found.

@@ -641,6 +641,11 @@ func (f *FuncDepSet) ConstantCols() opt.ColSet {
 // so, then the column is redundant. This algorithm has decent running time, but
 // will not necessarily find the candidate key with the fewest columns.
 func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
+	if f.hasKey == strictKey && f.key.SubsetOf(cols) {
+		// Fast path: take advantage of the reduction that was already performed for
+		// an existing key.
+		cols = f.key
+	}
 	var removed opt.ColSet
 	cols = cols.Copy()
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
@@ -1146,6 +1151,13 @@ func (f *FuncDepSet) AddEquivFrom(fdset *FuncDepSet) {
 // case of constant columns).
 func (f *FuncDepSet) MakeProduct(inner *FuncDepSet) {
 	f.equiv.AppendFromDisjoint(&inner.equiv)
+
+	// Save the old key and clear it so that addDependency doesn't attempt to
+	// reduce it. We'll handle the key below, and key reduction is expensive.
+	// Note that the ColSet used for the key is immutable, so it is safe to keep
+	// the reference to the old key.
+	oldKey, oldHasKey := f.key, f.hasKey
+	f.clearKey()
 	for i := range inner.deps {
 		fd := &inner.deps[i]
 		if fd.isConstant() {
@@ -1155,15 +1167,15 @@ func (f *FuncDepSet) MakeProduct(inner *FuncDepSet) {
 		}
 	}
 
-	if f.hasKey != noKey && inner.hasKey != noKey {
+	if oldHasKey != noKey && inner.hasKey != noKey {
 		// If both sides have a strict key, the union of keys is a strict key.
 		// If one side has a lax key and the other has a lax or strict key, the
 		// union is a lax key.
 		typ := laxKey
-		if f.hasKey == strictKey && inner.hasKey == strictKey {
+		if oldHasKey == strictKey && inner.hasKey == strictKey {
 			typ = strictKey
 		}
-		f.setKey(f.key.Union(inner.key), typ)
+		f.setKey(oldKey.Union(inner.key), typ)
 	} else {
 		f.clearKey()
 	}
@@ -1199,16 +1211,22 @@ func (f *FuncDepSet) MakeApply(inner *FuncDepSet) {
 		// NOTE: the ColSet of an equiv group is immutable.
 		f.addEquivalency(inner.equiv.Group(i))
 	}
+	// Save the old key and clear it so that addDependency doesn't attempt to
+	// reduce it. We'll handle the key below, and key reduction is expensive.
+	// Note that the ColSet used for the key is immutable, so it is safe to keep
+	// the reference to the old key.
+	oldKey, oldHasKey := f.key, f.hasKey
+	f.clearKey()
 	for i := range inner.deps {
 		fd := &inner.deps[i]
-		if !fd.isConstant() && f.hasKey == strictKey {
-			f.addDependency(f.key.Union(fd.from), fd.to, fd.strict)
+		if !fd.isConstant() && oldHasKey == strictKey {
+			f.addDependency(oldKey.Union(fd.from), fd.to, fd.strict)
 		}
 		// TODO(radu): can we use a laxKey here?
 	}
 
-	if f.hasKey == strictKey && inner.hasKey == strictKey {
-		f.setKey(f.key.Union(inner.key), strictKey)
+	if oldHasKey == strictKey && inner.hasKey == strictKey {
+		f.setKey(oldKey.Union(inner.key), strictKey)
 		f.ensureKeyClosure(inner.ColSet())
 	} else {
 		// TODO(radu): can we use a laxKey here?

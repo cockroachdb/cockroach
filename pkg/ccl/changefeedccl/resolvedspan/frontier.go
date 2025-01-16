@@ -295,9 +295,9 @@ func (f *resolvedSpanFrontier) assertBoundaryNotEarlier(
 
 // HasLaggingSpans returns whether the frontier has lagging spans as defined
 // by whether the frontier trails the latest timestamp by at least
-// changefeedbase.FrontierHighwaterLagCheckpointThreshold.
+// changefeedbase.SpanCheckpointLagThreshold.
 func (f *resolvedSpanFrontier) HasLaggingSpans(sv *settings.Values) bool {
-	lagThresholdNanos := int64(changefeedbase.FrontierHighwaterLagCheckpointThreshold.Get(sv))
+	lagThresholdNanos := int64(changefeedbase.SpanCheckpointLagThreshold.Get(sv))
 	if lagThresholdNanos == 0 {
 		return false
 	}

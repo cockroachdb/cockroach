@@ -5,10 +5,6 @@
 new-cluster name=s
 ----
 
-exec-sql
-SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true;
-----
-
 # Automatic collection is disabled to avoid flakiness.
 exec-sql
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;

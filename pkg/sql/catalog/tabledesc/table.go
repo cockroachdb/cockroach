@@ -469,6 +469,12 @@ func ConstraintNamePlaceholder(id descpb.ConstraintID) string {
 	return fmt.Sprintf("crdb_internal_constraint_%d_name_placeholder", id)
 }
 
+// PolicyNamePlaceholder constructs a placeholder name for a policy based
+// on its id.
+func PolicyNamePlaceholder(id descpb.PolicyID) string {
+	return fmt.Sprintf("crdb_internal_policy_%d_name_placeholder", id)
+}
+
 // RenameColumnInTable will rename the column in tableDesc from oldName to
 // newName, including in expressions as well as shard columns.
 // The function is recursive because of this, but there should only be one level

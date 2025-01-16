@@ -35,6 +35,7 @@ go_test(
         "bank_test.go",
         "copy_file_upload_test.go",
         "deadlock_test.go",
+        "dependency_digest_test.go",
         "drop_role_concurrent_session_test.go",
         "empty_query_test.go",
         "enum_test.go",

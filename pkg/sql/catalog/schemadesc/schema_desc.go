@@ -270,13 +270,20 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+func (desc *immutable) GetReferencedDescIDs(
+	level catalog.ValidationLevel,
+) (catalog.DescriptorIDSet, error) {
 	ret := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
-	for _, f := range desc.Functions {
-		for _, sig := range f.Signatures {
-			ret.Add(sig.ID)
+	// We only need to resolve functions in this schema if we are validating
+	// back references as well.
+	if level&catalog.ValidationLevelBackReferences == catalog.ValidationLevelBackReferences {
+		for _, f := range desc.Functions {
+			for _, sig := range f.Signatures {
+				ret.Add(sig.ID)
+			}
 		}
 	}
+
 	return ret, nil
 }
 

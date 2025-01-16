@@ -1174,6 +1174,7 @@ func (r *raft) tickElection() {
 	r.heartbeatElapsed++
 	if r.heartbeatElapsed >= r.heartbeatTimeout {
 		r.heartbeatElapsed = 0
+
 		if r.shouldBcastDeFortify() {
 			r.bcastDeFortify()
 		}
@@ -1207,6 +1208,9 @@ func (r *raft) tickElection() {
 // tickHeartbeat is run by leaders to send a MsgBeat after r.heartbeatTimeout.
 func (r *raft) tickHeartbeat() {
 	assertTrue(r.state == pb.StateLeader, "tickHeartbeat called by non-leader")
+
+	// Compute the LeadSupportUntil on every tick.
+	r.fortificationTracker.ComputeLeadSupportUntil(r.state)
 
 	// Check if we intended to step down. If so, step down if it's safe to do so.
 	// Otherwise, continue doing leader things.
@@ -2754,6 +2758,10 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 		//    leader is gone and stepping up to campaign.
 		r.logger.Panicf("%x leader removed from configuration %s", r.id, r.config)
 	}
+
+	// Config changes might cause the LeadSupportUntil to change, we need to
+	// recalculate it here.
+	r.fortificationTracker.ComputeLeadSupportUntil(r.state)
 
 	if r.isLearner {
 		// This node is leader and was demoted, step down.

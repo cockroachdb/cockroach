@@ -1094,11 +1094,11 @@ func newJobState(
 }
 
 func canCheckpointSpans(sv *settings.Values, lastCheckpoint time.Time) bool {
-	freq := changefeedbase.FrontierCheckpointFrequency.Get(sv)
-	if freq == 0 {
+	interval := changefeedbase.SpanCheckpointInterval.Get(sv)
+	if interval == 0 {
 		return false
 	}
-	return timeutil.Since(lastCheckpoint) > freq
+	return timeutil.Since(lastCheckpoint) > interval
 }
 
 func (j *jobState) canCheckpointSpans() bool {
@@ -1311,9 +1311,9 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 			return
 		}
 		cf.js.job = job
-		if changefeedbase.FrontierCheckpointFrequency.Get(&cf.FlowCtx.Cfg.Settings.SV) == 0 {
+		if changefeedbase.SpanCheckpointInterval.Get(&cf.FlowCtx.Cfg.Settings.SV) == 0 {
 			log.Warning(ctx,
-				"Frontier checkpointing disabled; set changefeed.frontier_checkpoint_frequency to non-zero value to re-enable")
+				"span-level checkpointing disabled; set changefeed.span_checkpoint.interval to positive duration to re-enable")
 		}
 
 		// Recover highwater information from job progress.
@@ -1675,7 +1675,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	// If the highwater has moved an empty checkpoint will be saved
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
 	if updateCheckpoint {
-		maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Get(&cf.FlowCtx.Cfg.Settings.SV)
+		maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&cf.FlowCtx.Cfg.Settings.SV)
 		checkpoint = cf.frontier.MakeCheckpoint(maxBytes)
 	}
 

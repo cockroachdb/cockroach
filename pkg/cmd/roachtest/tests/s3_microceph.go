@@ -26,7 +26,8 @@ import (
 const cephDisksScript = `
 #!/bin/bash
 for l in  a b c; do
-  loop_file="$(sudo mktemp -p /mnt/data1 XXXX.img)"
+  mkdir -p /mnt/data1/disks
+  loop_file="$(sudo mktemp -p /mnt/data1/disks XXXX.img)"
   sudo truncate -s 4G "${loop_file}"
   loop_dev="$(sudo losetup --show -f "${loop_file}")"
   # the block-devices plug doesn't allow accessing /dev/loopX
@@ -36,6 +37,17 @@ for l in  a b c; do
   sudo mknod -m 0660 "/dev/sdi${l}" b 7 "${minor}"
   sudo microceph disk add --wipe "/dev/sdi${l}"
 done`
+
+// cephCleanup remove microceph and the loop devices.
+const cephCleanup = `
+#!/bin/bash
+sudo microceph disable rgw
+sudo snap remove microceph --purge
+for l in  a b c; do
+  sudo rm  -f /dev/sdi${l}
+done
+sudo rm -rf /mnt/data1/disks
+`
 
 const s3cmdSsl = `sudo s3cmd --host localhost --host-bucket="localhost/%%(bucket)" \
                --access_key=%s --secret_key=%s --ca-certs=./certs/ca.crt %s`
@@ -79,6 +91,13 @@ func (m cephManager) getBackupURI(ctx context.Context, dest string) (string, err
 	q.Add(amazon.AWSEndpointParam, endpointURL)
 	uri := fmt.Sprintf("s3://%s/%s?%s", m.bucket, dest, q.Encode())
 	return uri, nil
+}
+
+func (m cephManager) cleanup(ctx context.Context) {
+	tmpDir := "/tmp/"
+	cephCleanupPath := filepath.Join(tmpDir, "cleanup.sh")
+	m.put(ctx, cephCleanup, cephCleanupPath)
+	m.run(ctx, "removing ceph", cephCleanupPath, tmpDir)
 }
 
 // install a single node microCeph cluster.

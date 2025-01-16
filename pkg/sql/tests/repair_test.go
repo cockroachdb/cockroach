@@ -906,8 +906,10 @@ func TestCorruptDescriptorRepair(t *testing.T) {
 	tdb.CheckQueryResults(t, `SELECT * FROM testdb.parent`, [][]string{{"1", "a"}})
 
 	// Dropping the table should fail, because the table descriptor will fail
-	// the validation checks when being read from storage.
-	tdb.ExpectErr(t, "invalid foreign key backreference", `DROP TABLE testdb.parent`)
+	// the validation checks. For the declarative schema changer before the
+	// execution phase the sel validation will fail with a generic error because
+	// all reads are immutable.
+	tdb.ExpectErr(t, "referenced descriptor ID 107: looking up ID 107: descriptor not found", `DROP TABLE testdb.parent`)
 
 	const parentVersion = `SELECT
 				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', sd.descriptor, false)->'table'->>'version'

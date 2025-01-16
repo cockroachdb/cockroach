@@ -1585,13 +1585,6 @@ func TestLogic_routine_schema_change(
 	runLogicTest(t, "routine_schema_change")
 }
 
-func TestLogic_row_level_security(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "row_level_security")
-}
-
 func TestLogic_row_level_ttl(
 	t *testing.T,
 ) {
@@ -2528,13 +2521,6 @@ func TestLogic_vectorize_unsupported(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize_unsupported")
-}
-
-func TestLogic_vectoross(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "vectoross")
 }
 
 func TestLogic_views(

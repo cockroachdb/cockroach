@@ -182,10 +182,17 @@ func (p *partitionedStreamClient) createTopology(
 		SourceTenantID: spec.SourceTenantID,
 	}
 	for _, sp := range spec.Partitions {
-		nodeUri, err := p.clusterUri.ResolveNode(sp.SQLAddress)
-		if err != nil {
-			return Topology{}, err
+		var connUri ClusterUri
+		if p.clusterUri.RoutingMode() == RoutingModeGateway {
+			connUri = p.clusterUri
+		} else {
+			var err error
+			connUri, err = MakeClusterUriForNode(p.clusterUri, sp.SQLAddress)
+			if err != nil {
+				return Topology{}, err
+			}
 		}
+
 		rawSpec, err := protoutil.Marshal(sp.SourcePartition)
 		if err != nil {
 			return Topology{}, err
@@ -194,7 +201,7 @@ func (p *partitionedStreamClient) createTopology(
 			ID:                sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
 			SrcInstanceID:     int(sp.NodeID),
-			ConnUri:           nodeUri,
+			ConnUri:           connUri,
 			SrcLocality:       sp.Locality,
 			Spans:             sp.SourcePartition.Spans,
 		})
@@ -391,6 +398,17 @@ func (p *partitionedStreamClient) CreateForTables(
 		return nil, err
 	}
 	return spec, nil
+}
+func (p *partitionedStreamClient) ExecStatement(
+	ctx context.Context, cmd string, opname string, args ...interface{},
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, opname)
+	defer sp.Finish()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, err := p.mu.srcConn.Exec(ctx, cmd, args...)
+	return err
 }
 
 // PriorReplicationDetails implements the Client interface.

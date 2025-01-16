@@ -224,7 +224,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					)
 				}
 				syncFlowCtx := &execinfra.FlowCtx{Local: false, Gateway: !addAnotherRemote}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncFlowCtx, 0 /* processorID */, testMemAcc, synchronizerInputs, &wg)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncFlowCtx, 0 /* processorID */, testAllocator, typs, synchronizerInputs, &wg)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 
 				runOutboxInbox := func(

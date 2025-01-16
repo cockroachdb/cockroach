@@ -1,8 +1,8 @@
 # gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler,  @com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway
 
-load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 
 proto_library(
     name = "serverpb_proto",
@@ -72,7 +72,6 @@ go_proto_library(
         # NB: The grpc-gateway compiler injects a dependency on the descriptor
         # package that Gazelle isn't prepared to deal with.
         "@com_github_golang_protobuf//descriptor:go_default_library_gen",  # keep
-        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
         "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
@@ -95,6 +94,7 @@ go_proto_library(
         "//pkg/util/log/logpb",
         "//pkg/util/metric",
         "//pkg/util/tracing/tracingpb",
+        "@org_golang_google_genproto_googleapis_api//annotations:go_default_library",
     ],
 )
 

@@ -2013,6 +2013,12 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 		var keyCols opt.ColSet
 		index := tab.Index(i)
 
+		if !index.IsUnique() {
+			// A non-unique index won't add any additional information, since it
+			// relies on the PK columns to form a key.
+			continue
+		}
+
 		if index.IsInverted() {
 			// Skip inverted indexes for now.
 			continue

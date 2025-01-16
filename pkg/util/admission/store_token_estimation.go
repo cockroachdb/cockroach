@@ -197,6 +197,7 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	cumLSMIngestedBytes uint64,
 	cumDiskWrite uint64,
 	admissionStats storeAdmissionStats,
+	unflushedMemTableTooLarge bool,
 ) {
 	if e.cumL0WriteBytes == 0 {
 		e.cumStoreAdmissionStats = admissionStats
@@ -228,8 +229,10 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	// many did go to L0.
 	intIngestedAccountedBytes := int64(admissionStats.ingestedAccountedBytes) -
 		int64(e.cumStoreAdmissionStats.ingestedAccountedBytes)
-	e.atDoneL0WriteTokensLinearModel.updateModelUsingIntervalStats(
-		intL0WriteAccountedBytes, adjustedIntL0WriteBytes, intWorkCount)
+	if !unflushedMemTableTooLarge {
+		e.atDoneL0WriteTokensLinearModel.updateModelUsingIntervalStats(
+			intL0WriteAccountedBytes, adjustedIntL0WriteBytes, intWorkCount)
+	}
 	e.atDoneL0IngestTokensLinearModel.updateModelUsingIntervalStats(
 		intIngestedAccountedBytes, adjustedIntL0IngestedBytes, intWorkCount)
 	// Ingest across all levels model.
@@ -260,7 +263,7 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		int64(e.cumStoreAdmissionStats.aboveRaftStats.writeAccountedBytes)
 	intAboveRaftIngestedAccountedBytes := int64(admissionStats.aboveRaftStats.ingestedAccountedBytes) -
 		int64(e.cumStoreAdmissionStats.aboveRaftStats.ingestedAccountedBytes)
-	if intAboveRaftWorkCount > 1 && intL0TotalBytes > 0 {
+	if intAboveRaftWorkCount > 1 && intL0TotalBytes > 0 && !unflushedMemTableTooLarge {
 		// We don't know how many of the intL0TotalBytes (which is a stat derived
 		// from Pebble stats) are due to above-raft admission. So we simply apply
 		// the linear models to the stats we have and then use the modeled bytes

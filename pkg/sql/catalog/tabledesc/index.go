@@ -510,6 +510,11 @@ func (w index) IsEnforced() bool {
 	return !w.IsMutation() || w.WriteAndDeleteOnly()
 }
 
+// NewTestIndex wraps an index descriptor in an index struct for use in unit tests.
+func NewTestIndex(desc *descpb.IndexDescriptor, ordinal int) index {
+	return index{desc: desc, ordinal: ordinal}
+}
+
 // partitioning is the backing struct for a catalog.Partitioning interface.
 type partitioning struct {
 	desc *catpb.PartitioningDescriptor

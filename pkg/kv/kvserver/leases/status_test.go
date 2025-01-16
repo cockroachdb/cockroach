@@ -69,8 +69,8 @@ func TestStatus(t *testing.T) {
 	leaderLeaseRemote := leaderLease
 	leaderLeaseRemote.Replica = repl2
 
-	raftStatus := func(state raftpb.StateType, term uint64, leadSupport hlc.Timestamp) raft.LeadSupportStatus {
-		var s raft.LeadSupportStatus
+	raftStatus := func(state raftpb.StateType, term uint64, leadSupport hlc.Timestamp) raft.BasicStatus {
+		var s raft.BasicStatus
 		s.ID = raftpb.PeerID(repl1.ReplicaID)
 		s.RaftState = state
 		s.Term = term
@@ -98,7 +98,7 @@ func TestStatus(t *testing.T) {
 		now           hlc.ClockTimestamp
 		minProposedTS hlc.ClockTimestamp
 		reqTS         hlc.Timestamp
-		raftStatus    raft.LeadSupportStatus
+		raftStatus    raft.BasicStatus
 		liveness      livenesspb.Liveness
 		want          kvserverpb.LeaseState
 		wantErr       string

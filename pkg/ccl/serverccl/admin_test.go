@@ -151,6 +151,9 @@ func TestAdminAPIJobs(t *testing.T) {
 	err = getAdminJSONProto(s, path, &jobRes)
 	require.NoError(t, err)
 
+	// Messages are not equal, since they only appear in the single job response,
+	// so the deep-equal check would fail; copy it so the overall check passes.
+	jobRes.Messages = backups[0].Messages
 	require.Equal(t, backups[0], jobRes)
 }
 

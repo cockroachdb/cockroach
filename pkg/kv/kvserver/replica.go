@@ -1686,13 +1686,6 @@ func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
 	return raft.BasicStatus{}
 }
 
-func (r *Replica) raftLeadSupportStatusRLocked() raft.LeadSupportStatus {
-	if rg := r.mu.internalRaftGroup; rg != nil {
-		return rg.LeadSupportStatus()
-	}
-	return raft.LeadSupportStatus{}
-}
-
 // RACv2Status returns the status of the RACv2 range controller of this replica.
 // Returns an empty struct if there is no RACv2 range controller, i.e. this
 // replica is not the leader or is not running RACv2.

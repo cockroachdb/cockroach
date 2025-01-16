@@ -62,6 +62,10 @@ func Init() error {
 	providerInstance.IAMProfile = "roachprod-testing"
 
 	haveRequiredVersion := func() bool {
+		// `aws --version` takes around 400ms on my machine.
+		if os.Getenv("ROACHPROD_SKIP_AWSCLI_CHECK") == "true" {
+			return true
+		}
 		cmd := exec.Command("aws", "--version")
 		output, err := cmd.Output()
 		if err != nil {
@@ -518,7 +522,6 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.Multiple
 	flags.StringVar(&providerInstance.Profile, ProviderName+"-profile", os.Getenv("AWS_PROFILE"),
 		"Profile to manage cluster in")
 	configFlagVal := awsConfigValue{awsConfig: *DefaultConfig}
-	providerInstance.Config = &configFlagVal.awsConfig
 	flags.Var(&configFlagVal, ProviderName+"-config",
 		"Path to json for aws configuration, defaults to predefined configuration")
 }
