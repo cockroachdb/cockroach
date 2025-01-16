@@ -248,6 +248,8 @@ func initStartCmdFlags(startCmd *cobra.Command) {
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
 	startCmd.Flags().IntVar(&startOpts.AdminUIPort,
 		"admin-ui-port", startOpts.AdminUIPort, "port to serve the admin UI on")
+	startCmd.Flags().StringVar(&startOpts.WALFailover,
+		"wal-failover", startOpts.WALFailover, "configures the use and behavior of WAL failover (see cockroach start flags for more details)")
 }
 
 func initStartInstanceCmdFlags(startInstanceCmd *cobra.Command) {
