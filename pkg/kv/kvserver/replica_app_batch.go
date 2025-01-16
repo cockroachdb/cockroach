@@ -40,7 +40,9 @@ type replicaAppBatch struct {
 	applyStats *applyCommittedEntriesStats
 
 	// batch accumulates writes implied by the raft entries in this batch.
-	batch storage.Batch
+	batch    storage.Batch
+	logBatch storage.Batch
+
 	// state is this batch's view of the replica's state. It is copied from
 	// under the Replica.mu when the batch is initialized and is updated in
 	// stageTrivialReplicatedEvalResult.
@@ -310,7 +312,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// Alternatively if we discover that the RHS has already been removed
 		// from this store, clean up its data.
 		splitPreApply(ctx, b.r,
-			stateloader.MakeStateRW(b.batch), logstore.MakeLogRW(b.batch),
+			stateloader.MakeStateRW(b.batch), logstore.MakeLogRW(b.logBatch),
 			res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
 
 		// The rangefeed processor will no longer be provided logical ops for
@@ -358,7 +360,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// no new replicas of the RHS can ever be created, but it doesn't hurt to
 		// be careful.
 		if err := kvstorage.DestroyReplica(ctx, rhsRepl.RangeID,
-			logstore.MakeLogRW(b.batch),
+			logstore.MakeLogRW(b.logBatch),
 			stateloader.MakeStateRW(b.batch),
 			mergedTombstoneReplicaID, kvstorage.ClearRangeDataOptions{
 				ClearReplicatedByRangeID:   true,
@@ -437,7 +439,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		if apply {
 			if apply, err = handleTruncatedStateBelowRaftPreApply(
 				ctx, b.truncState, truncatedState,
-				b.r.raftMu.stateLoader.StateLoader, b.batch,
+				b.r.raftMu.stateLoader.StateLoader, b.logBatch,
 			); err != nil {
 				return errors.Wrap(err, "unable to handle truncated state")
 			}
@@ -643,7 +645,15 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// application of this command. I.e. the loosely coupled truncation migration
 	// mentioned above likely needs to be done first.
 	sync := b.changeRemovesReplica || b.changeTruncatesSideloadedFiles
-	if err := b.batch.Commit(sync); err != nil {
+	if !b.logBatch.Empty() {
+		if err := b.logBatch.Commit(sync); err != nil {
+			return errors.Wrapf(err, "unable to commit Raft entry batch")
+		}
+	}
+	b.logBatch.Close()
+	b.logBatch = nil
+
+	if err := b.batch.Commit(false /* sync */); err != nil {
 		return errors.Wrapf(err, "unable to commit Raft entry batch")
 	}
 	b.batch.Close()
@@ -748,6 +758,9 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 func (b *replicaAppBatch) Close() {
 	if b.batch != nil {
 		b.batch.Close()
+	}
+	if b.logBatch != nil {
+		b.logBatch.Close()
 	}
 	*b = replicaAppBatch{}
 }

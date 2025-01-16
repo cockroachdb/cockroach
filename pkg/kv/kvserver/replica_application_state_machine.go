@@ -140,7 +140,8 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b := &sm.batch
 	b.r = r
 	b.applyStats = &sm.applyStats
-	b.batch = r.store.TODOEngine().NewBatch()
+	b.batch = r.store.StateEngine().NewBatch()
+	b.logBatch = r.store.LogEngine().NewBatch()
 	r.mu.RLock()
 	b.state = r.shMu.state
 	b.truncState = r.shMu.raftTruncState
