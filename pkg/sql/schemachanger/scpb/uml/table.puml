@@ -317,6 +317,18 @@ PolicyRole :  TableID
 PolicyRole :  PolicyID
 PolicyRole :  RoleName
 
+object PolicyUsingExpr
+
+PolicyUsingExpr :  TableID
+PolicyUsingExpr :  PolicyID
+PolicyUsingExpr :  Expression
+
+object PolicyWithCheckExpr
+
+PolicyWithCheckExpr :  TableID
+PolicyWithCheckExpr :  PolicyID
+PolicyWithCheckExpr :  Expression
+
 object PrimaryIndex
 
 PrimaryIndex :  Index
@@ -598,6 +610,8 @@ TablePartitioning <|-- PartitionZoneConfig
 Table <|-- Policy
 Policy <|-- PolicyName
 Policy <|-- PolicyRole
+Policy <|-- PolicyUsingExpr
+Policy <|-- PolicyWithCheckExpr
 Table <|-- PrimaryIndex
 View <|-- PrimaryIndex
 Table <|-- RowLevelTTL

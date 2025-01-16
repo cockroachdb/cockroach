@@ -19,6 +19,10 @@ DROP POLICY "first policy" on defaultdb.foo;
   {name: first policy, policyId: 1, tableId: 104}
 - [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 1}, ABSENT], PUBLIC]
   {policyId: 1, roleName: fred, tableId: 104}
+- [[PolicyUsingExpr:{DescID: 104, Expr: i > 0:::INT8, PolicyID: 1}, ABSENT], PUBLIC]
+  {expr: 'i > 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 104}
+- [[PolicyWithCheckExpr:{DescID: 104, Expr: (i % 2:::INT8) = 0:::INT8, PolicyID: 1}, ABSENT], PUBLIC]
+  {expr: '(i % 2:::INT8) = 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 
@@ -33,6 +37,8 @@ DROP POLICY "second policy" on defaultdb.foo CASCADE;
   {name: second policy, policyId: 2, tableId: 104}
 - [[PolicyRole:{DescID: 104, Name: public, PolicyID: 2}, ABSENT], PUBLIC]
   {policyId: 2, roleName: public, tableId: 104}
+- [[PolicyUsingExpr:{DescID: 104, Expr: false, PolicyID: 2}, ABSENT], PUBLIC]
+  {expr: "false", policyId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 
@@ -49,6 +55,8 @@ DROP POLICY "third policy" on defaultdb.foo RESTRICT;
   {policyId: 3, roleName: root, tableId: 104}
 - [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 3}, ABSENT], PUBLIC]
   {policyId: 3, roleName: fred, tableId: 104}
+- [[PolicyWithCheckExpr:{DescID: 104, Expr: i < 0:::INT8, PolicyID: 3}, ABSENT], PUBLIC]
+  {expr: 'i < 0:::INT8', policyId: 3, referencedColumnIds: [1], tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 

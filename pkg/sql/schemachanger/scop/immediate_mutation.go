@@ -620,6 +620,22 @@ type RemovePolicyRole struct {
 	Role scpb.PolicyRole
 }
 
+// SetPolicyUsingExpression will set a new USING expression for a policy.
+type SetPolicyUsingExpression struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	PolicyID descpb.PolicyID
+	Expr     string
+}
+
+// SetPolicyWithCheckExpression will set a new WITH CHECK expression for a policy.
+type SetPolicyWithCheckExpression struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	PolicyID descpb.PolicyID
+	Expr     string
+}
+
 // UpdateTableBackReferencesInTypes updates back references to a table
 // in the specified types.
 type UpdateTableBackReferencesInTypes struct {

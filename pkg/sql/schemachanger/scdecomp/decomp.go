@@ -893,6 +893,30 @@ func (w *walkCtx) walkPolicy(tbl catalog.TableDescriptor, p *descpb.PolicyDescri
 			RoleName: role,
 		})
 	}
+	if p.UsingExpr != "" {
+		expr, err := w.newExpression(p.UsingExpr)
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "USING expression for policy %q in table %q (%d)",
+				p.Name, tbl.GetName(), tbl.GetID()))
+		}
+		w.ev(scpb.Status_PUBLIC, &scpb.PolicyUsingExpr{
+			TableID:    tbl.GetID(),
+			PolicyID:   p.ID,
+			Expression: *expr,
+		})
+	}
+	if p.WithCheckExpr != "" {
+		expr, err := w.newExpression(p.WithCheckExpr)
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "WITH CHECK expression for policy %q in table %q (%d)",
+				p.Name, tbl.GetName(), tbl.GetID()))
+		}
+		w.ev(scpb.Status_PUBLIC, &scpb.PolicyWithCheckExpr{
+			TableID:    tbl.GetID(),
+			PolicyID:   p.ID,
+			Expression: *expr,
+		})
+	}
 }
 
 func (w *walkCtx) walkForeignKeyConstraint(

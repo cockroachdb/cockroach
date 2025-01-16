@@ -12,7 +12,7 @@ begin transaction #1
 checking for feature: CREATE POLICY
 increment telemetry for sql.schema.create_policy
 checking role/user "public" exists
-## StatementPhase stage 1 of 1 with 3 MutationType ops
+## StatementPhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #104
   ...
      nextIndexId: 2
@@ -26,6 +26,7 @@ upsert descriptor #104
   +    roleNames:
   +    - public
   +    type: PERMISSIVE
+  +    usingExpr: tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID
      primaryIndex:
        constraintId: 1
   ...
@@ -38,7 +39,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+## PreCommitPhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #104
   ...
      nextIndexId: 2
@@ -52,6 +53,7 @@ upsert descriptor #104
   +    roleNames:
   +    - public
   +    type: PERMISSIVE
+  +    usingExpr: tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID
      primaryIndex:
        constraintId: 1
   ...

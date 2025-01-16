@@ -100,3 +100,25 @@ func (i *immediateVisitor) RemovePolicyRole(ctx context.Context, op scop.RemoveP
 		"role %q does not exist in policy %d on table %d",
 		op.Role.RoleName, op.Role.PolicyID, op.Role.TableID)
 }
+
+func (i *immediateVisitor) SetPolicyWithCheckExpression(
+	ctx context.Context, op scop.SetPolicyWithCheckExpression,
+) error {
+	policy, err := i.checkOutPolicy(ctx, op.TableID, op.PolicyID)
+	if err != nil {
+		return err
+	}
+	policy.WithCheckExpr = op.Expr
+	return nil
+}
+
+func (i *immediateVisitor) SetPolicyUsingExpression(
+	ctx context.Context, op scop.SetPolicyUsingExpression,
+) error {
+	policy, err := i.checkOutPolicy(ctx, op.TableID, op.PolicyID)
+	if err != nil {
+		return err
+	}
+	policy.UsingExpr = op.Expr
+	return nil
+}

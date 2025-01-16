@@ -1786,6 +1786,80 @@ func (c *ElementCollection[E]) FilterPolicyRole() *ElementCollection[*PolicyRole
 	return (*ElementCollection[*PolicyRole])(ret)
 }
 
+func (e PolicyUsingExpr) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_PolicyUsingExpr) Element() Element {
+	return e.PolicyUsingExpr
+}
+
+// ForEachPolicyUsingExpr iterates over elements of type PolicyUsingExpr.
+// Deprecated
+func ForEachPolicyUsingExpr(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PolicyUsingExpr),
+) {
+  c.FilterPolicyUsingExpr().ForEach(fn)
+}
+
+// FindPolicyUsingExpr finds the first element of type PolicyUsingExpr.
+// Deprecated
+func FindPolicyUsingExpr(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *PolicyUsingExpr) {
+	if tc := c.FilterPolicyUsingExpr(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*PolicyUsingExpr)
+	}
+	return current, target, element
+}
+
+// PolicyUsingExprElements filters elements of type PolicyUsingExpr.
+func (c *ElementCollection[E]) FilterPolicyUsingExpr() *ElementCollection[*PolicyUsingExpr] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*PolicyUsingExpr)
+		return ok
+	})
+	return (*ElementCollection[*PolicyUsingExpr])(ret)
+}
+
+func (e PolicyWithCheckExpr) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_PolicyWithCheckExpr) Element() Element {
+	return e.PolicyWithCheckExpr
+}
+
+// ForEachPolicyWithCheckExpr iterates over elements of type PolicyWithCheckExpr.
+// Deprecated
+func ForEachPolicyWithCheckExpr(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PolicyWithCheckExpr),
+) {
+  c.FilterPolicyWithCheckExpr().ForEach(fn)
+}
+
+// FindPolicyWithCheckExpr finds the first element of type PolicyWithCheckExpr.
+// Deprecated
+func FindPolicyWithCheckExpr(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *PolicyWithCheckExpr) {
+	if tc := c.FilterPolicyWithCheckExpr(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*PolicyWithCheckExpr)
+	}
+	return current, target, element
+}
+
+// PolicyWithCheckExprElements filters elements of type PolicyWithCheckExpr.
+func (c *ElementCollection[E]) FilterPolicyWithCheckExpr() *ElementCollection[*PolicyWithCheckExpr] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*PolicyWithCheckExpr)
+		return ok
+	})
+	return (*ElementCollection[*PolicyWithCheckExpr])(ret)
+}
+
 func (e PrimaryIndex) element() {}
 
 // Element implements ElementGetter.
@@ -3219,6 +3293,10 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_PolicyName{ PolicyName: t}
 		case *PolicyRole:
 			e.ElementOneOf = &ElementProto_PolicyRole{ PolicyRole: t}
+		case *PolicyUsingExpr:
+			e.ElementOneOf = &ElementProto_PolicyUsingExpr{ PolicyUsingExpr: t}
+		case *PolicyWithCheckExpr:
+			e.ElementOneOf = &ElementProto_PolicyWithCheckExpr{ PolicyWithCheckExpr: t}
 		case *PrimaryIndex:
 			e.ElementOneOf = &ElementProto_PrimaryIndex{ PrimaryIndex: t}
 		case *RowLevelTTL:
@@ -3345,6 +3423,8 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_Policy)(nil)),
 	((*ElementProto_PolicyName)(nil)),
 	((*ElementProto_PolicyRole)(nil)),
+	((*ElementProto_PolicyUsingExpr)(nil)),
+	((*ElementProto_PolicyWithCheckExpr)(nil)),
 	((*ElementProto_PrimaryIndex)(nil)),
 	((*ElementProto_RowLevelTTL)(nil)),
 	((*ElementProto_Schema)(nil)),
@@ -3436,6 +3516,8 @@ func GetElementTypes() []interface{} {
 	((*Policy)(nil)),
 	((*PolicyName)(nil)),
 	((*PolicyRole)(nil)),
+	((*PolicyUsingExpr)(nil)),
+	((*PolicyWithCheckExpr)(nil)),
 	((*PrimaryIndex)(nil)),
 	((*RowLevelTTL)(nil)),
 	((*Schema)(nil)),
