@@ -79,6 +79,7 @@
 /pkg/ccl/importerccl/        @cockroachdb/sql-queries-prs
 
 /pkg/sql/appstatspb           @cockroachdb/obs-prs
+/pkg/sql/contention/          @cockroachdb/obs-prs
 /pkg/sql/execstats/           @cockroachdb/obs-prs
 /pkg/sql/scheduledlogging/    @cockroachdb/obs-prs
 /pkg/sql/sqlstats/            @cockroachdb/obs-prs
