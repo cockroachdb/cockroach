@@ -1932,9 +1932,10 @@ SELECT id FROM system.namespace WHERE name='a'
 
 # The span "sending partial batch" means that the scan was parallelized. We're
 # seeing duplicate "querying next range" entries because we first use the range
-# cache to try to partition the spans in order to have parallel TableReaders (we
-# end up with a single partition though), and then we have a single TableReader
-# performing the scan of two spans in parallel.
+# cache to count the number of ranges affected and then to try to partition the
+# spans in order to have parallel TableReaders (we end up with a single
+# partition though). Then we have a single TableReader performing the scan of
+# two spans in parallel.
 # If this test is failing and doesn't have that span, it means that the scanNode
 # was improperly configured to add a limit to the ScanRequest batch.
 # See #30943 for more details.
@@ -1943,6 +1944,8 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'querying next range at /Table/$t_id3/1%' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
+querying next range at /Table/127/1/0/0
+querying next range at /Table/127/1/10/0
 querying next range at /Table/127/1/0/0
 querying next range at /Table/127/1/10/0
 querying next range at /Table/127/1/0/0
