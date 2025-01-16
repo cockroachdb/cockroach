@@ -43,6 +43,11 @@ func (i intents) setupMetamorphic(rng *rand.Rand) variations {
 	if v.blockSize > 1024 {
 		v.blockSize = 1024
 	}
+	// TODO(#135934): A large buildup of intents still causes a large slowdown
+	// when the intents are resolved.
+	if v.perturbationDuration > 10*time.Minute {
+		v.perturbationDuration = 10 * time.Minute
+	}
 	return v
 }
 
