@@ -51,6 +51,7 @@ go_library(
         "opgen_owner.go",
         "opgen_partition_zone_config.go",
         "opgen_policy.go",
+        "opgen_policy_deps.go",
         "opgen_policy_name.go",
         "opgen_policy_role.go",
         "opgen_policy_using_expression.go",

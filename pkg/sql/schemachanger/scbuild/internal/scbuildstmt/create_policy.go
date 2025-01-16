@@ -7,6 +7,7 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -133,6 +134,12 @@ func addPolicyExpressions(
 ) {
 	tn := n.TableName.ToTableName()
 
+	// We maintain the forward references for both expressions in a single
+	// PolicyDeps elements. These vars are used to manage that.
+	var usesTypeIDs catalog.DescriptorIDSet
+	var usesRelationIDs catalog.DescriptorIDSet
+	var usesFunctionIDs catalog.DescriptorIDSet
+
 	if n.Exprs.Using != nil {
 		expr := validateAndResolveTypesInExpr(b, &tn, tableID, n.Exprs.Using, tree.PolicyUsingExpr)
 		b.Add(&scpb.PolicyUsingExpr{
@@ -140,6 +147,9 @@ func addPolicyExpressions(
 			PolicyID:   policyID,
 			Expression: *expr,
 		})
+		usesTypeIDs = catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...)
+		usesRelationIDs = catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...)
+		usesFunctionIDs = catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...)
 	}
 	if n.Exprs.WithCheck != nil {
 		expr := validateAndResolveTypesInExpr(b, &tn, tableID, n.Exprs.WithCheck, tree.PolicyWithCheckExpr)
@@ -147,6 +157,19 @@ func addPolicyExpressions(
 			TableID:    tableID,
 			PolicyID:   policyID,
 			Expression: *expr,
+		})
+		usesTypeIDs = usesTypeIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...))
+		usesRelationIDs = usesRelationIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...))
+		usesFunctionIDs = usesFunctionIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...))
+	}
+	// If we had at least one expression then we need to add the policy deps.
+	if n.Exprs.Using != nil || n.Exprs.WithCheck != nil {
+		b.Add(&scpb.PolicyDeps{
+			TableID:         tableID,
+			PolicyID:        policyID,
+			UsesTypeIDs:     usesTypeIDs.Ordered(),
+			UsesRelationIDs: usesRelationIDs.Ordered(),
+			UsesFunctionIDs: usesFunctionIDs.Ordered(),
 		})
 	}
 }

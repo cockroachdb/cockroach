@@ -1712,6 +1712,43 @@ func (c *ElementCollection[E]) FilterPolicy() *ElementCollection[*Policy] {
 	return (*ElementCollection[*Policy])(ret)
 }
 
+func (e PolicyDeps) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_PolicyDeps) Element() Element {
+	return e.PolicyDeps
+}
+
+// ForEachPolicyDeps iterates over elements of type PolicyDeps.
+// Deprecated
+func ForEachPolicyDeps(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PolicyDeps),
+) {
+  c.FilterPolicyDeps().ForEach(fn)
+}
+
+// FindPolicyDeps finds the first element of type PolicyDeps.
+// Deprecated
+func FindPolicyDeps(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *PolicyDeps) {
+	if tc := c.FilterPolicyDeps(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*PolicyDeps)
+	}
+	return current, target, element
+}
+
+// PolicyDepsElements filters elements of type PolicyDeps.
+func (c *ElementCollection[E]) FilterPolicyDeps() *ElementCollection[*PolicyDeps] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*PolicyDeps)
+		return ok
+	})
+	return (*ElementCollection[*PolicyDeps])(ret)
+}
+
 func (e PolicyName) element() {}
 
 // Element implements ElementGetter.
@@ -3289,6 +3326,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_PartitionZoneConfig{ PartitionZoneConfig: t}
 		case *Policy:
 			e.ElementOneOf = &ElementProto_Policy{ Policy: t}
+		case *PolicyDeps:
+			e.ElementOneOf = &ElementProto_PolicyDeps{ PolicyDeps: t}
 		case *PolicyName:
 			e.ElementOneOf = &ElementProto_PolicyName{ PolicyName: t}
 		case *PolicyRole:
@@ -3421,6 +3460,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_Owner)(nil)),
 	((*ElementProto_PartitionZoneConfig)(nil)),
 	((*ElementProto_Policy)(nil)),
+	((*ElementProto_PolicyDeps)(nil)),
 	((*ElementProto_PolicyName)(nil)),
 	((*ElementProto_PolicyRole)(nil)),
 	((*ElementProto_PolicyUsingExpr)(nil)),
@@ -3514,6 +3554,7 @@ func GetElementTypes() []interface{} {
 	((*Owner)(nil)),
 	((*PartitionZoneConfig)(nil)),
 	((*Policy)(nil)),
+	((*PolicyDeps)(nil)),
 	((*PolicyName)(nil)),
 	((*PolicyRole)(nil)),
 	((*PolicyUsingExpr)(nil)),

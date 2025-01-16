@@ -729,6 +729,18 @@ message PolicyDescriptor {
   // write operations (e.g., INSERT or UPDATE). If omitted, the UsingExpr
   // will serve as a fallback, provided it is defined.
   optional string with_check_expr = 7 [(gogoproto.nullable) = false];
+
+  // DependsOnTypes are the IDs of all user defined types that the policy
+  // expressions depend on.
+  repeated uint32 depends_on_types = 8 [(gogoproto.casttype) = "ID"];
+
+  // DependsOnFunctions are the IDs of the function that the policy expressions
+  // depend on.
+  repeated uint32 depends_on_functions = 9 [(gogoproto.casttype) = "ID"];
+
+  // DependsOnRelations are the IDs of the tables, views and sequences that the
+  // policy expressions depend on.
+  repeated uint32 depends_on_relations = 10 [(gogoproto.casttype) = "ID"];
 }
 
 // A DescriptorMutation represents a column or an index that
@@ -1806,6 +1818,8 @@ message FunctionDescriptor {
       (gogoproto.casttype) = "ConstraintID"];
     repeated uint32 trigger_ids = 5 [(gogoproto.customname) = "TriggerIDs",
       (gogoproto.casttype) = "TriggerID"];
+    repeated uint32 policy_ids = 6 [(gogoproto.customname) = "PolicyIDs",
+      (gogoproto.casttype) = "PolicyID"];
   }
 
   optional string name = 1 [(gogoproto.nullable) = false];
