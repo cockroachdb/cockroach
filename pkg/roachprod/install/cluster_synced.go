@@ -619,18 +619,23 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 		var cmd string
 		if c.IsLocal() {
 			// Not all shells like brace expansion, so we'll do it here
-			dirs := []string{"data*", "logs*"}
-			if !preserveCerts {
-				dirs = append(dirs, fmt.Sprintf("%s*", CockroachNodeCertsDir))
-				dirs = append(dirs, fmt.Sprintf("%s*", CockroachNodeTenantCertsDir))
+			paths := []string{
+				"data*",
+				"logs*",
+				"cockroach-*.sh",
 			}
-			for _, dir := range dirs {
+			if !preserveCerts {
+				paths = append(paths, fmt.Sprintf("%s*", CockroachNodeCertsDir))
+				paths = append(paths, fmt.Sprintf("%s*", CockroachNodeTenantCertsDir))
+			}
+			for _, dir := range paths {
 				cmd += fmt.Sprintf(`rm -fr %s/%s ;`, c.localVMDir(node), dir)
 			}
 		} else {
 			rmCmds := []string{
 				fmt.Sprintf(`sudo find /mnt/data* -maxdepth 1 -type f -not -name %s -exec rm -f {} \;`, vm.InitializedFile),
 				`sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data}`,
+				`sudo rm -fr cockroach-*.sh`,
 				`sudo rm -fr logs* data*`,
 			}
 			if !preserveCerts {
