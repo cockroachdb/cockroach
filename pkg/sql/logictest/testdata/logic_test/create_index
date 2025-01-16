@@ -564,3 +564,38 @@ statement ok
 DROP TABLE t_disable_full_ts
 
 subtest end
+
+subtest create_index_duplicate_storage_params
+
+statement ok
+CREATE TABLE create_index_duplicate_storage_params_a (
+  a INT PRIMARY KEY,
+  b INT
+);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE INDEX idx_a ON create_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE INDEX IF NOT EXISTS idx_b ON create_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
+
+statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
+CREATE INDEX ON create_index_duplicate_storage_params_a (b) USING HASH WITH (bucket_count=10, bucket_count=12);
+
+subtest end
+
+subtest create_inverted_index_duplicate_storage_params
+
+statement ok
+CREATE TABLE create_inverted_index_duplicate_storage_params_a (
+  a INT PRIMARY KEY,
+  b JSONB
+);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE INVERTED INDEX idx_a ON create_inverted_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+CREATE INVERTED INDEX IF NOT EXISTS idx_b ON create_inverted_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
+
+subtest end

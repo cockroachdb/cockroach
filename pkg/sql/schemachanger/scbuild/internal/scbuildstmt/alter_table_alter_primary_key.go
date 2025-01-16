@@ -277,12 +277,13 @@ func alterPKInPrimaryIndexAndItsTemp(
 // checkForEarlyExit asserts several precondition for a
 // `ALTER PRIMARY KEY`, including
 //  1. no expression columns allowed;
-//  2. no columns that are in `DROPPED` state;
-//  3. no inaccessible columns;
-//  4. no nullable columns;
-//  5. no virtual columns (starting from v22.1);
-//  6. No columns that are scheduled to be dropped (target status set to `ABSENT`);
-//  7. add more here
+//  2. no duplicate storage parameters;
+//  3. no columns that are in `DROPPED` state;
+//  4. no inaccessible columns;
+//  5. no nullable columns;
+//  6. no virtual columns (starting from v22.1);
+//  7. No columns that are scheduled to be dropped (target status set to `ABSENT`);
+//  8. add more here
 //
 // Panic if any precondition is found unmet.
 func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
@@ -295,6 +296,8 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 	); err != nil {
 		panic(err)
 	}
+
+	maybeApplyStorageParameters(b, t.StorageParams, &indexSpec{})
 
 	usedColumns := make(map[tree.Name]bool, len(t.Columns))
 	for _, col := range t.Columns {

@@ -1862,6 +1862,21 @@ func NewTableDesc(
 				}
 				col.ColumnDesc().ComputeExpr = &serializedExpr
 			}
+
+			// Validate storage parameters for
+			// CREATE TABLE ... (x INT PRIMARY KEY USING HASH WITH (...));
+			if d.PrimaryKey.IsPrimaryKey {
+				if err := storageparam.Set(
+					ctx,
+					semaCtx,
+					evalCtx,
+					d.PrimaryKey.StorageParams,
+					&indexstorageparam.Setter{
+						IndexDesc: &descpb.IndexDescriptor{},
+					}); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 
@@ -2112,6 +2127,18 @@ func NewTableDesc(
 				if err := desc.AddSecondaryIndex(idx); err != nil {
 					return nil, err
 				}
+			}
+
+			// Validate storage parameters for
+			// CREATE TABLE ... (x INT, PRIMARY KEY (x) USING HASH WITH (...));
+			if err := storageparam.Set(
+				ctx,
+				semaCtx,
+				evalCtx,
+				d.StorageParams,
+				&indexstorageparam.Setter{IndexDesc: &idx},
+			); err != nil {
+				return nil, err
 			}
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
