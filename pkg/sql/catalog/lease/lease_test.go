@@ -4088,3 +4088,53 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant"))
 	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_one_version"))
 }
+
+// BenchmarkLeaseManager is a micro benchmark focus on lease acquistion
+// and releases. Only focusing on the in memory component of the lease
+// manager with concurrency.
+func BenchmarkLeaseManager(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	removalTracker := lease.NewLeaseRemovalTracker()
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &lease.ManagerTestingKnobs{
+			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
+				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
+			},
+		},
+	}
+	t := newLeaseTest(b, params)
+	defer t.cleanup()
+
+	descID := t.makeTableForTest()
+	ctx := context.Background()
+
+	for _, numThreads := range []int{1, 16, 32, 64, 128} {
+		b.Run(fmt.Sprintf("lease benchmark (threads=%d)", numThreads), func(b *testing.B) {
+			for iter := 0; iter < b.N; iter++ {
+				grp := ctxgroup.WithContext(ctx)
+				startThreads := make(chan struct{})
+				const numAcquires = 100
+				for i := 0; i < numThreads; i++ {
+					grp.GoCtx(func(ctx context.Context) error {
+						<-startThreads
+						for i = 0; i < numAcquires; i++ {
+							ld, err := t.acquire(0, descID)
+							if err != nil {
+								return err
+							}
+							ld.Release(ctx)
+						}
+						return nil
+					})
+				}
+				b.StartTimer()
+				close(startThreads)
+				require.NoError(b, grp.Wait())
+				b.StopTimer()
+			}
+		})
+	}
+}
