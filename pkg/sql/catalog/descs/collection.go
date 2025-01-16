@@ -228,6 +228,23 @@ func (tc *Collection) HasUncommittedDescriptors() bool {
 	return tc.uncommitted.uncommitted.Len() > 0
 }
 
+// HasUncommittedNewOrDroppedDescriptors returns true if the collection contains
+// any uncommitted descriptors that are newly created or dropped.
+func (tc *Collection) HasUncommittedNewOrDroppedDescriptors() bool {
+	isNewDescriptor := false
+	err := tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if desc.GetVersion() == 1 || desc.Dropped() {
+			isNewDescriptor = true
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if err != nil {
+		return false
+	}
+	return isNewDescriptor
+}
+
 // HasUncommittedTypes returns true if the Collection contains uncommitted
 // types.
 func (tc *Collection) HasUncommittedTypes() (has bool) {
