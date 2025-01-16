@@ -119,7 +119,7 @@ func checkIsWithExpression(e scpb.Element) error {
 		if isWithExpression(e) {
 			return nil
 		}
-		return errors.New("should verify isWithExpression but doesn't")
+		return errors.Newf("should verify isWithExpression but doesn't: %T", e)
 	})
 }
 

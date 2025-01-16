@@ -1,0 +1,186 @@
+setup
+CREATE TYPE pt AS (x int, y int);
+CREATE TABLE t1 (tenant_id uuid, c1 pt, c2 text);
+CREATE SEQUENCE seq1;
+CREATE USER user1;
+CREATE USER user2;
+CREATE TYPE greeting AS ENUM('hi', 'howdy', 'hello');
+----
+
+ops
+CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR SELECT TO user1,user2,public USING (tenant_id = '01538898-f55c-44db-a306-89078e2c430e' AND (c1).x > 0) WITH CHECK (nextval('seq1') < 10);
+----
+StatementPhase stage 1 of 1 with 7 MutationType ops
+  transitions:
+    [[Policy:{DescID: 106, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyName:{DescID: 106, Name: policy 1, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyRole:{DescID: 106, Name: user1, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyRole:{DescID: 106, Name: user2, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyRole:{DescID: 106, Name: public, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyUsingExpr:{DescID: 106, Expr: (tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID) AND ((c1).x > 0:::INT8), PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyWithCheckExpr:{DescID: 106, Expr: nextval(107:::REGCLASS) < 10:::INT8, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddPolicy
+      Policy:
+        Command: 2
+        PolicyID: 1
+        TableID: 106
+        Type: 1
+    *scop.SetPolicyName
+      Name: policy 1
+      PolicyID: 1
+      TableID: 106
+    *scop.AddPolicyRole
+      Role:
+        PolicyID: 1
+        RoleName: user1
+        TableID: 106
+    *scop.AddPolicyRole
+      Role:
+        PolicyID: 1
+        RoleName: user2
+        TableID: 106
+    *scop.AddPolicyRole
+      Role:
+        PolicyID: 1
+        RoleName: public
+        TableID: 106
+    *scop.SetPolicyUsingExpression
+      Expr: (tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID) AND ((c1).x > 0:::INT8)
+      PolicyID: 1
+      TableID: 106
+    *scop.SetPolicyWithCheckExpression
+      Expr: nextval(107:::REGCLASS) < 10:::INT8
+      PolicyID: 1
+      TableID: 106
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[Policy:{DescID: 106, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyName:{DescID: 106, Name: policy 1, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyRole:{DescID: 106, Name: user1, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyRole:{DescID: 106, Name: user2, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyRole:{DescID: 106, Name: public, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyUsingExpr:{DescID: 106, Expr: (tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID) AND ((c1).x > 0:::INT8), PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyWithCheckExpr:{DescID: 106, Expr: nextval(107:::REGCLASS) < 10:::INT8, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 7 MutationType ops
+  transitions:
+    [[Policy:{DescID: 106, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyName:{DescID: 106, Name: policy 1, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyRole:{DescID: 106, Name: user1, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyRole:{DescID: 106, Name: user2, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyRole:{DescID: 106, Name: public, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyUsingExpr:{DescID: 106, Expr: (tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID) AND ((c1).x > 0:::INT8), PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyWithCheckExpr:{DescID: 106, Expr: nextval(107:::REGCLASS) < 10:::INT8, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddPolicy
+      Policy:
+        Command: 2
+        PolicyID: 1
+        TableID: 106
+        Type: 1
+    *scop.SetPolicyName
+      Name: policy 1
+      PolicyID: 1
+      TableID: 106
+    *scop.AddPolicyRole
+      Role:
+        PolicyID: 1
+        RoleName: user1
+        TableID: 106
+    *scop.AddPolicyRole
+      Role:
+        PolicyID: 1
+        RoleName: user2
+        TableID: 106
+    *scop.AddPolicyRole
+      Role:
+        PolicyID: 1
+        RoleName: public
+        TableID: 106
+    *scop.SetPolicyUsingExpression
+      Expr: (tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID) AND ((c1).x > 0:::INT8)
+      PolicyID: 1
+      TableID: 106
+    *scop.SetPolicyWithCheckExpression
+      Expr: nextval(107:::REGCLASS) < 10:::INT8
+      PolicyID: 1
+      TableID: 106
+
+ops
+CREATE POLICY "policy 2" on t1 USING (c2::greeting = 'hello'::greeting) WITH CHECK (c2::greeting = 'hi'::greeting);
+----
+StatementPhase stage 1 of 1 with 5 MutationType ops
+  transitions:
+    [[Policy:{DescID: 106, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyName:{DescID: 106, Name: policy 2, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyRole:{DescID: 106, Name: public, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyUsingExpr:{DescID: 106, Expr: c2::@100108 = b'\xc0':::@100108, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyWithCheckExpr:{DescID: 106, Expr: c2::@100108 = b'@':::@100108, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddPolicy
+      Policy:
+        Command: 1
+        PolicyID: 1
+        TableID: 106
+        Type: 1
+    *scop.SetPolicyName
+      Name: policy 2
+      PolicyID: 1
+      TableID: 106
+    *scop.AddPolicyRole
+      Role:
+        PolicyID: 1
+        RoleName: public
+        TableID: 106
+    *scop.SetPolicyUsingExpression
+      Expr: c2::@100108 = b'\xc0':::@100108
+      PolicyID: 1
+      TableID: 106
+    *scop.SetPolicyWithCheckExpression
+      Expr: c2::@100108 = b'@':::@100108
+      PolicyID: 1
+      TableID: 106
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[Policy:{DescID: 106, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyName:{DescID: 106, Name: policy 2, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyRole:{DescID: 106, Name: public, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyUsingExpr:{DescID: 106, Expr: c2::@100108 = b'\xc0':::@100108, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PolicyWithCheckExpr:{DescID: 106, Expr: c2::@100108 = b'@':::@100108, PolicyID: 1}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 5 MutationType ops
+  transitions:
+    [[Policy:{DescID: 106, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyName:{DescID: 106, Name: policy 2, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyRole:{DescID: 106, Name: public, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyUsingExpr:{DescID: 106, Expr: c2::@100108 = b'\xc0':::@100108, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PolicyWithCheckExpr:{DescID: 106, Expr: c2::@100108 = b'@':::@100108, PolicyID: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddPolicy
+      Policy:
+        Command: 1
+        PolicyID: 1
+        TableID: 106
+        Type: 1
+    *scop.SetPolicyName
+      Name: policy 2
+      PolicyID: 1
+      TableID: 106
+    *scop.AddPolicyRole
+      Role:
+        PolicyID: 1
+        RoleName: public
+        TableID: 106
+    *scop.SetPolicyUsingExpression
+      Expr: c2::@100108 = b'\xc0':::@100108
+      PolicyID: 1
+      TableID: 106
+    *scop.SetPolicyWithCheckExpression
+      Expr: c2::@100108 = b'@':::@100108
+      PolicyID: 1
+      TableID: 106

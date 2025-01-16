@@ -715,6 +715,20 @@ message PolicyDescriptor {
 
   // RoleNames is a list of roles that this policy applies to.
   repeated string role_names = 5;
+
+  // The next two fields are the expressions to use for the policy. It is not
+  // correct to use either expression as output to display to a user. User
+  // defined types within the expressions have been serialized in a internal
+  // format. Instead, use one of the schemaexpr.FormatExpr* functions.
+
+  // UsingExpr defines the condition applied to read existing rows. If this
+  // field is omitted, the policy will not be used for reads.
+  optional string using_expr = 6 [(gogoproto.nullable) = false];
+
+  // WithCheck defines the condition applied to validate new rows during
+  // write operations (e.g., INSERT or UPDATE). If omitted, the UsingExpr
+  // will serve as a fallback, provided it is defined.
+  optional string with_check_expr = 7 [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that
