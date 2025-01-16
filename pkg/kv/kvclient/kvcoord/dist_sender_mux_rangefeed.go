@@ -412,6 +412,11 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		// another goroutine loaded it.  That's fine, since we would not
 		// be able to send new request on this stream anymore, and we'll retry
 		// against another node.
+		if closer, ok := mux.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				log.Warningf(ctx, "error closing mux rangefeed client: %v", err)
+			}
+		}
 		m.muxClients.Delete(nodeID)
 
 		if recvErr == io.EOF {
