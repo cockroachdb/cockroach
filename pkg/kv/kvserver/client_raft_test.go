@@ -4649,15 +4649,31 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// waitForLeaseAppliedIndexToStabilize waits for the lease applied index to stabilize.
+			waitForLeaseAppliedIndexToStabilize := func(repl *kvserver.Replica) kvpb.LeaseAppliedIndex {
+				var init kvpb.LeaseAppliedIndex
+				testutils.SucceedsSoon(t, func() error {
+					init = repl.GetLeaseAppliedIndex()
+					deadline := timeutil.Now().Add(6 * time.Second)
+					for timeutil.Now().Before(deadline) {
+						if repl.GetLeaseAppliedIndex() != init {
+							return errors.Errorf("lease applied index not stable yet")
+						}
+						time.Sleep(time.Millisecond)
+					}
+					return nil
+				})
+				return init
+			}
+
 			leaseIndex0 := repl0.GetLeaseAppliedIndex()
 			if leaseType == roachpb.LeaseLeader {
-				// When running with leader leases, when there is no leader, we acquire
-				// an expiration based lease, and then acquiring a leader lease.
-				// Therefore, the lease applied index is incremented by an extra 1.
-				leaseIndex0++
-				// Before blocking requests, make sure that the expiration lease gets
-				// upgraded to a leader lease.
-				tc.WaitForLeaseUpgrade(ctx, t, desc)
+				// Wait for the lease applied index to stabilize. This is important for
+				// leader leases as if there is no leader yet, an expiration lease will
+				// be acquired first, which means that the lease applied index might be
+				// incremented.
+				tc.MaybeWaitForLeaseUpgrade(ctx, t, desc)
+				leaseIndex0 = waitForLeaseAppliedIndexToStabilize(repl0)
 			}
 
 			atomic.StoreInt64(&filterRangeIDAtomic, int64(desc.RangeID))
