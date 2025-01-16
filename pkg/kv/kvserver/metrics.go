@@ -1008,6 +1008,12 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaBatchCommitSyncs = metric.Metadata{
+		Name:        "storage.batch-commit.syncs",
+		Help:        "Number of times a batch commit was done with WAL sync.",
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaSSTableZombieBytes = metric.Metadata{
 		Name: "storage.sstable.zombie.bytes",
 		Help: "Bytes in SSTables that have been logically deleted, " +
@@ -2754,6 +2760,7 @@ type StoreMetrics struct {
 	BatchCommitL0StallDuration        *metric.Counter
 	BatchCommitWALRotWaitDuration     *metric.Counter
 	BatchCommitCommitWaitDuration     *metric.Counter
+	BatchCommitSyncs                  *metric.Counter
 	SSTableZombieBytes                *metric.Gauge
 	SSTableCompressionSnappy          *metric.Gauge
 	SSTableCompressionZstd            *metric.Gauge
@@ -3475,6 +3482,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BatchCommitL0StallDuration:        metric.NewCounter(metaBatchCommitL0StallDuration),
 		BatchCommitWALRotWaitDuration:     metric.NewCounter(metaBatchCommitWALRotDuration),
 		BatchCommitCommitWaitDuration:     metric.NewCounter(metaBatchCommitCommitWaitDuration),
+		BatchCommitSyncs:                  metric.NewCounter(metaBatchCommitSyncs),
 		SSTableZombieBytes:                metric.NewGauge(metaSSTableZombieBytes),
 		SSTableCompressionSnappy:          metric.NewGauge(metaSSTableCompressionSnappy),
 		SSTableCompressionZstd:            metric.NewGauge(metaSSTableCompressionZstd),
@@ -3933,6 +3941,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitL0StallDuration.Update(int64(m.BatchCommitStats.L0ReadAmpWriteStallDuration))
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
+	sm.BatchCommitSyncs.Update(int64(m.BatchCommitStats.Syncs))
 	sm.SSTableZombieBytes.Update(int64(m.Table.ZombieSize))
 	sm.SSTableCompressionSnappy.Update(m.Table.CompressedCountSnappy)
 	sm.SSTableCompressionZstd.Update(m.Table.CompressedCountZstd)

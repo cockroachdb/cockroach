@@ -1634,7 +1634,7 @@ func (p *Pebble) aggregateIterStats(stats IteratorStats) {
 	p.iterStats.InternalSteps += stats.Stats.ForwardStepCount[pebble.InternalIterCall] + stats.Stats.ReverseStepCount[pebble.InternalIterCall]
 }
 
-func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats) {
+func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats, sync bool) {
 	p.batchCommitStats.Lock()
 	p.batchCommitStats.Count++
 	p.batchCommitStats.TotalDuration += stats.TotalDuration
@@ -1644,6 +1644,9 @@ func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats) {
 	p.batchCommitStats.L0ReadAmpWriteStallDuration += stats.L0ReadAmpWriteStallDuration
 	p.batchCommitStats.WALRotationDuration += stats.WALRotationDuration
 	p.batchCommitStats.CommitWaitDuration += stats.CommitWaitDuration
+	if sync {
+		p.batchCommitStats.Syncs++
+	}
 	p.batchCommitStats.Unlock()
 }
 

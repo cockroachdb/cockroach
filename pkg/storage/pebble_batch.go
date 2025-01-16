@@ -69,7 +69,7 @@ type writeBatch struct {
 var _ WriteBatch = (*writeBatch)(nil)
 
 type batchStatsReporter interface {
-	aggregateBatchCommitStats(stats BatchCommitStats)
+	aggregateBatchCommitStats(stats BatchCommitStats, sync bool)
 }
 
 // ApplyBatchRepr implements the Writer interface.
@@ -365,7 +365,7 @@ func (wb *writeBatch) Commit(sync bool) error {
 		panic(err)
 	}
 	wb.batchStatsReporter.aggregateBatchCommitStats(
-		BatchCommitStats{wb.batch.CommitStats()})
+		BatchCommitStats{wb.batch.CommitStats()}, sync)
 	return err
 }
 
@@ -405,7 +405,7 @@ func (wb *writeBatch) SyncWait() error {
 		panic(err)
 	}
 	wb.batchStatsReporter.aggregateBatchCommitStats(
-		BatchCommitStats{wb.batch.CommitStats()})
+		BatchCommitStats{wb.batch.CommitStats()}, true)
 	return err
 }
 

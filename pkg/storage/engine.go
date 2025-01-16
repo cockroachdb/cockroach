@@ -1310,6 +1310,7 @@ type AggregatedIteratorStats struct {
 // histograms once we know which ones are more useful.
 type AggregatedBatchCommitStats struct {
 	Count uint64
+	Syncs uint64
 	BatchCommitStats
 }
 
