@@ -318,7 +318,7 @@ func isTriggerDependent(e scpb.Element) bool {
 
 func isPolicyDependent(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.PolicyName:
+	case *scpb.PolicyName, *scpb.PolicyRole:
 		return true
 	}
 	return false
