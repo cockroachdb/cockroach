@@ -29,6 +29,8 @@ import {
   idAttr,
   getMatchParamByName,
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  TimestampToString,
+  DATE_WITH_SECONDS_FORMAT,
 } from "src/util";
 
 import {
@@ -40,8 +42,13 @@ import {
 } from "../../api";
 import { Timestamp } from "../../timestamp";
 import { isTerminalState } from "../util/jobOptions";
+import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
+
+type JobMessage = cockroach.server.serverpb.IJobMessage;
 
 import { JobProfilerView } from "./jobProfilerView";
+import { EmptyTable } from "src/empty";
+import { Text, TextTypes } from "src/text";
 
 const { TabPane } = Tabs;
 
@@ -151,9 +158,36 @@ export class JobDetails extends React.Component<
       return null;
     }
 
+    const messageColumns =  [
+      {
+        name: "timestamp",
+        title: "When",
+        hideTitleUnderline: true,
+        cell: (x: JobMessage) => <Timestamp
+                  time={TimestampToMoment(x.timestamp, null)}
+                  format={DATE_WITH_SECONDS_FORMAT}
+                />,
+      },
+      {
+        name: "kind",
+        title: "Kind",
+        hideTitleUnderline: true,
+        cell: (x: JobMessage) => x.kind,
+      },
+      {
+        name: "message",
+        title: "Message",
+        hideTitleUnderline: true,
+        cell: (x: JobMessage) => <p className={jobCx("message")}>{x.message}</p>,
+      },
+    ]
+
     return (
       <Row gutter={24}>
-        <Col className="gutter-row" span={24}>
+        <Col className="gutter-row" span={8}>
+          <Text textType={TextTypes.Heading5} className={jobCx("details-header")}>
+            Details
+          </Text>
           <SummaryCard className={cardCx("summary-card")}>
             <SummaryCardItem
               label="Status"
@@ -205,6 +239,19 @@ export class JobDetails extends React.Component<
               />
             )}
           </SummaryCard>
+        </Col>
+        <Col className="gutter-row" span={16}>
+        <Text textType={TextTypes.Heading5} className={jobCx("details-header")}>
+            Events
+        </Text>
+        <SummaryCard className={jobCx("messages-card")}>
+        <SortedTable
+          data={job.messages}
+          columns={messageColumns}
+          tableWrapperClassName={jobCx("job-messages", "sorted-table")}
+          renderNoResult={<EmptyTable title="No messages recorded." />}
+        />
+        </SummaryCard>
         </Col>
       </Row>
     );
