@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -2304,7 +2305,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	//
 	// TODO(sep-raft-log): this will need to learn to stitch and reconcile data from
 	// both engines.
-	repls, err := kvstorage.LoadAndReconcileReplicas(ctx, s.TODOEngine())
+	repls, err := kvstorage.LoadAndReconcileReplicas(ctx, s.LogEngine(), s.StateEngine())
 	if err != nil {
 		return err
 	}
@@ -2321,7 +2322,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			continue
 		}
 		// TODO(pavelkalinnikov): integrate into kvstorage.LoadAndReconcileReplicas.
-		state, err := repl.Load(ctx, s.TODOEngine(), s.StoreID())
+		state, err := repl.Load(ctx,
+			logstore.MakeLogReader(s.LogEngine()),
+			stateloader.MakeStateReader(s.StateEngine()),
+			s.StoreID(),
+		)
 		if err != nil {
 			return err
 		}

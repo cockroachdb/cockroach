@@ -80,7 +80,7 @@ func (r *replicaLogStorage) entriesLocked(
 	// TODO(pav-kv): r.raftMu.bytesAccount is broken - can't rely on raftMu here.
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
-		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+		r.mu.stateLoader.StateLoader, r.store.LogEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
 		&r.raftMu.bytesAccount,
 	)
@@ -117,7 +117,7 @@ func (r *replicaLogStorage) termLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) 
 		return r.shMu.lastTermNotDurable, nil
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+		r.mu.stateLoader.StateLoader, r.store.LogEngine(), r.RangeID,
 		r.store.raftEntryCache, i,
 	)
 }
@@ -225,7 +225,7 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 	// TODO(pav-kv): de-duplicate this code and the one where r.mu must be held.
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
-		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+		r.raftMu.stateLoader.StateLoader, r.store.LogEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
 		&r.raftMu.bytesAccount,
 	)
@@ -252,7 +252,7 @@ func (r *replicaRaftMuLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm
 		return r.shMu.lastTermNotDurable, nil
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+		r.raftMu.stateLoader.StateLoader, r.store.LogEngine(), r.RangeID,
 		r.store.raftEntryCache, i,
 	)
 }

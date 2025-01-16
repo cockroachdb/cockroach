@@ -1779,7 +1779,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	}
 
 	diskState, err := r.mu.stateLoader.Load(
-		ctx, stateloader.MakeStateReader(reader), r.shMu.state.Desc)
+		ctx, stateloader.MakeStateReader(r.store.StateEngine()), r.shMu.state.Desc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}

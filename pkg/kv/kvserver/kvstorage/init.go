@@ -246,7 +246,7 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 // the function returns an error, IterateRangeDescriptorsFromDisk fails with
 // that error.
 func IterateRangeDescriptorsFromDisk(
-	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
+	ctx context.Context, reader stateloader.StateReader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
 	log.Info(ctx, "beginning range descriptor iteration")
 
@@ -398,7 +398,10 @@ func (r Replica) ID() storage.FullReplicaID {
 
 // Load loads the state necessary to instantiate a replica in memory.
 func (r Replica) Load(
-	ctx context.Context, eng storage.Reader, storeID roachpb.StoreID,
+	ctx context.Context,
+	logR logstore.LogReader,
+	stateR stateloader.StateReader,
+	storeID roachpb.StoreID,
 ) (LoadedReplicaState, error) {
 	ls := LoadedReplicaState{
 		ReplicaID: r.ReplicaID,
@@ -406,17 +409,13 @@ func (r Replica) Load(
 	}
 	sl := stateloader.Make(r.Desc.RangeID)
 	var err error
-	if ls.LastIndex, err = sl.LoadLastIndex(
-		ctx, logstore.MakeLogReader(eng),
-	); err != nil {
+	if ls.LastIndex, err = sl.LoadLastIndex(ctx, logR); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.TruncState, err = sl.LoadRaftTruncatedState(
-		ctx, logstore.MakeLogReader(eng),
-	); err != nil {
+	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, logR); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.ReplState, err = sl.Load(ctx, stateloader.MakeStateReader(eng), r.Desc); err != nil {
+	if ls.ReplState, err = sl.Load(ctx, stateR, r.Desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
 
@@ -457,7 +456,9 @@ func (m replicaMap) setDesc(rangeID roachpb.RangeID, desc roachpb.RangeDescripto
 	return nil
 }
 
-func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
+func loadReplicas(
+	ctx context.Context, logR logstore.LogReader, stateR stateloader.StateReader,
+) ([]Replica, error) {
 	s := replicaMap{}
 
 	// INVARIANT: the latest visible committed version of the RangeDescriptor
@@ -468,7 +469,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	{
 		var lastDesc roachpb.RangeDescriptor
 		if err := IterateRangeDescriptorsFromDisk(
-			ctx, eng, func(desc roachpb.RangeDescriptor) error {
+			ctx, stateR, func(desc roachpb.RangeDescriptor) error {
 				if lastDesc.RangeID != 0 && desc.StartKey.Less(lastDesc.EndKey) {
 					return errors.AssertionFailedf("overlapping descriptors %s and %s", lastDesc, desc)
 				}
@@ -491,7 +492,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 		logEvery := log.Every(10 * time.Second)
 		var i int
 		var msg kvserverpb.RaftReplicaID
-		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
+		if err := IterateIDPrefixKeys(ctx, logR, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftReplicaIDKey(rangeID)
 		}, &msg, func(rangeID roachpb.RangeID) error {
 			if logEvery.ShouldLog() && i > 0 { // only log if slow
@@ -508,7 +509,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 		logEvery = log.Every(10 * time.Second)
 		i = 0
 		var hs raftpb.HardState
-		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
+		if err := IterateIDPrefixKeys(ctx, logR, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftHardStateKey(rangeID)
 		}, &hs, func(rangeID roachpb.RangeID) error {
 			if logEvery.ShouldLog() && i > 0 { // only log if slow
@@ -537,13 +538,13 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 // The returned slice is sorted by ReplicaID.
 //
 // TODO(sep-raft-log): consider a callback-visitor pattern here.
-func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
-	ident, err := ReadStoreIdent(ctx, eng)
+func LoadAndReconcileReplicas(ctx context.Context, logE, stateE storage.Engine) ([]Replica, error) {
+	ident, err := ReadStoreIdent(ctx, stateE)
 	if err != nil {
 		return nil, err
 	}
 
-	sl, err := loadReplicas(ctx, eng)
+	sl, err := loadReplicas(ctx, logstore.MakeLogReader(logE), stateloader.MakeStateReader(stateE))
 	if err != nil {
 		return nil, err
 	}

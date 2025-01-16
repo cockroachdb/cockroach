@@ -209,14 +209,14 @@ func (r *Replica) GetSnapshot(
 			ss = rditer.MakeAllKeySpanSet(r.shMu.state.Desc)
 			defer ss.Release()
 		}
-		efos := r.store.TODOEngine().NewEventuallyFileOnlySnapshot(spans)
+		efos := r.store.StateEngine().NewEventuallyFileOnlySnapshot(spans)
 		if util.RaceEnabled {
 			snap = spanset.NewEventuallyFileOnlySnapshot(efos, ss)
 		} else {
 			snap = efos
 		}
 	} else {
-		snap = r.store.TODOEngine().NewSnapshot()
+		snap = r.store.StateEngine().NewSnapshot()
 	}
 	r.raftMu.Unlock()
 
@@ -610,7 +610,7 @@ func (r *Replica) applySnapshot(
 			return errors.AssertionFailedf("expected snapshot with remote files to have excise=true")
 		}
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
+		if ingestStats, err = r.store.StateEngine().IngestAndExciseFiles(
 			ctx,
 			inSnap.SSTStorageScratch.SSTs(),
 			inSnap.sharedSSTs,
@@ -625,7 +625,7 @@ func (r *Replica) applySnapshot(
 		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {
 			if inSnap.doExcise {
 				exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-				if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
+				if ingestStats, err = r.store.StateEngine().IngestAndExciseFiles(
 					ctx,
 					inSnap.SSTStorageScratch.SSTs(),
 					nil, /* sharedSSTs */
@@ -638,13 +638,13 @@ func (r *Replica) applySnapshot(
 				}
 			} else {
 				if ingestStats, err =
-					r.store.TODOEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+					r.store.StateEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
 					return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
 				}
 			}
 		} else {
 			appliedAsWrite = true
-			err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
+			err := r.store.StateEngine().ConvertFilesToBatchAndCommit(
 				ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
 			if err != nil {
 				return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
@@ -677,7 +677,7 @@ func (r *Replica) applySnapshot(
 	// treated as fatal.
 
 	sl := stateloader.Make(desc.RangeID)
-	state, err := sl.Load(ctx, stateloader.MakeStateReader(r.store.TODOEngine()), desc)
+	state, err := sl.Load(ctx, stateloader.MakeStateReader(r.store.StateEngine()), desc)
 	if err != nil {
 		log.Fatalf(ctx, "unable to load replica state: %s", err)
 	}
@@ -698,7 +698,7 @@ func (r *Replica) applySnapshot(
 	// Read the prior read summary for this range, which was included in the
 	// snapshot. We may need to use it to bump our timestamp cache if we
 	// discover that we are the leaseholder as of the snapshot's log index.
-	prioReadSum, err := readsummary.Load(ctx, r.store.TODOEngine(), r.RangeID)
+	prioReadSum, err := readsummary.Load(ctx, r.store.StateEngine(), r.RangeID)
 	if err != nil {
 		log.Fatalf(ctx, "failed to read prior read summary after applying snapshot: %+v", err)
 	}
@@ -817,7 +817,7 @@ func (r *Replica) applySnapshot(
 	// operation can be expensive. This is safe, as we hold the Replica.raftMu
 	// across both Replica.mu critical sections.
 	r.mu.RLock()
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.TODOEngine())
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.LogEngine())
 	r.mu.RUnlock()
 
 	// The rangefeed processor is listening for the logical ops attached to
