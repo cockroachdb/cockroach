@@ -190,6 +190,21 @@
     line-height: 22px;
     color: $colors--neutral-7;
   }
+
+  .job-messages {
+    overflow: scroll;
+    .message {
+      white-space: pre;
+    }
+  }
+
+  .details-header {
+    margin-top: 12px;
+    margin-bottom: 12px;
+  }
+  .messages-card {
+    padding: 0;
+  }
 }
 
 .inline-message {
