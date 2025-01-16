@@ -4395,3 +4395,33 @@ statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
 
 subtest end
+
+subtest alter_table_duplicate_storage_params
+
+statement ok
+CREATE TABLE alter_table_duplicate_storage_params_a (
+  a INT PRIMARY KEY,
+  b TEXT NOT NULL
+);
+
+statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
+ALTER TABLE alter_table_duplicate_storage_params_a SET (fillfactor=20, fillfactor=30);
+
+subtest end
+
+subtest alter_table_alter_primary_key_duplicate_storage_params
+
+statement ok
+CREATE TABLE alter_table_alter_primary_key_duplicate_storage_params_a (
+  a INT PRIMARY KEY,
+  b TEXT NOT NULL
+);
+
+statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
+ALTER TABLE alter_table_alter_primary_key_duplicate_storage_params_a
+  ALTER PRIMARY KEY
+  USING COLUMNS (b)
+  USING HASH
+  WITH (bucket_count=30, bucket_count=20);
+
+subtest end
