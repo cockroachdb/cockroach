@@ -44,7 +44,6 @@ type SampledRow struct {
 type SampleReservoir struct {
 	samples  []SampledRow
 	colTypes []*types.T
-	da       tree.DatumAlloc
 	ra       rowenc.EncDatumRowAlloc
 	memAcc   *mon.BoundAccount
 
@@ -255,7 +254,7 @@ func (sr *SampleReservoir) copyRow(
 		// the encoded bytes. The encoded bytes would have been scanned in a batch
 		// of ~10000 rows, so we must delete the reference to allow the garbage
 		// collector to release the memory from the batch.
-		if err := src[i].EnsureDecoded(sr.colTypes[i], &sr.da); err != nil {
+		if err := src[i].EnsureDecoded(sr.colTypes[i], nil /* da */); err != nil {
 			return err
 		}
 		beforeRowSize += int64(dst[i].Size())
