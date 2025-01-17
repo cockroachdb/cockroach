@@ -50,15 +50,12 @@ func New(
 	)
 }
 
-var _ sqlstats.Provider = &SQLStats{}
-
 // GetController returns a sqlstats.Controller responsible for the current
 // SQLStats.
 func (s *SQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
 	return NewController(s, server)
 }
 
-// Start implements sqlstats.Provider interface.
 func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	// We run a periodic async job to clean up the in-memory stats.
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
@@ -92,8 +89,7 @@ func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	})
 }
 
-// GetApplicationStats implements sqlstats.Provider interface.
-func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats {
+func (s *SQLStats) GetApplicationStats(appName string) *ssmemstorage.Container {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if a, ok := s.mu.apps[appName]; ok {
@@ -111,14 +107,12 @@ func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats
 	return a
 }
 
-// GetLastReset implements sqlstats.Provider interface.
 func (s *SQLStats) GetLastReset() time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.lastReset
 }
 
-// IterateStatementStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateStatementStats(
 	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
 ) error {
@@ -152,7 +146,7 @@ func (s *SQLStats) ConsumeStats(
 	}
 	apps := s.getAppNames(false)
 	for _, app := range apps {
-		container := s.GetApplicationStats(app).(*ssmemstorage.Container)
+		container := s.GetApplicationStats(app)
 		if err := s.MaybeDumpStatsToLog(ctx, app, container, s.flushTarget); err != nil {
 			log.Warningf(ctx, "failed to dump stats to log, %s", err.Error())
 		}
@@ -213,7 +207,6 @@ func (s *SQLStats) StmtStatsIterator(options sqlstats.IteratorOptions) StmtStats
 	return NewStmtStatsIterator(s, options)
 }
 
-// IterateTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateTransactionStats(
 	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) error {
@@ -235,7 +228,6 @@ func (s *SQLStats) TxnStatsIterator(options sqlstats.IteratorOptions) TxnStatsIt
 	return NewTxnStatsIterator(s, options)
 }
 
-// IterateAggregatedTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateAggregatedTransactionStats(
 	ctx context.Context,
 	options sqlstats.IteratorOptions,
@@ -255,7 +247,6 @@ func (s *SQLStats) IterateAggregatedTransactionStats(
 	return nil
 }
 
-// Reset implements sqlstats.Provider interface.
 func (s *SQLStats) Reset(ctx context.Context) error {
 	return s.resetAndMaybeDumpStats(ctx, s.flushTarget)
 }

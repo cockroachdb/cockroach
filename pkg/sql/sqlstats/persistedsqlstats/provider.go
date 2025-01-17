@@ -54,11 +54,10 @@ type Config struct {
 	Knobs *sqlstats.TestingKnobs
 }
 
-// PersistedSQLStats is a sqlstats.Provider that wraps a node-local in-memory
-// sslocal.SQLStats. It behaves similar to a sslocal.SQLStats. However, it
-// periodically writes the in-memory SQL stats into system table for
-// persistence. It also performs the flush operation if it detects memory
-// pressure.
+// PersistedSQLStats wraps a node-local in-memory sslocal.SQLStats. It
+// behaves similar to a sslocal.SQLStats. However, it periodically
+// writes the in-memory SQL stats into system table for persistence. It
+// also performs the flush operation if it detects memory pressure.
 type PersistedSQLStats struct {
 	*sslocal.SQLStats
 
@@ -88,8 +87,6 @@ type PersistedSQLStats struct {
 	upsertTxnStatsStmt  statements.Statement[tree.Statement]
 	upsertStmtStatsStmt statements.Statement[tree.Statement]
 }
-
-var _ sqlstats.Provider = &PersistedSQLStats{}
 
 // New returns a new instance of the PersistedSQLStats.
 func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
@@ -141,7 +138,6 @@ SET
 	return p
 }
 
-// Start implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.startSQLStatsFlushLoop(ctx, stopper)
 	s.jobMonitor.start(ctx, stopper, s.drain, &s.tasksDoneWG)
@@ -250,9 +246,9 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 	}
 }
 
-// GetLocalMemProvider returns a sqlstats.Provider that can only be used to
+// GetLocalMemProvider returns a SQLStats that can only be used to
 // access local in-memory sql statistics.
-func (s *PersistedSQLStats) GetLocalMemProvider() sqlstats.Provider {
+func (s *PersistedSQLStats) GetLocalMemProvider() *sslocal.SQLStats {
 	return s.SQLStats
 }
 

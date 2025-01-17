@@ -141,7 +141,7 @@ func insertData(
 ) (*sqlutils.SQLRunner, *persistedsqlstats.PersistedSQLStats, map[string]int64) {
 	server1 := testCluster.Server(0 /* idx */)
 	sqlConn := sqlutils.MakeSQLRunner(server1.SQLConn(t))
-	sqlStats := server1.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	sqlStats := server1.SQLServer().(*sql.Server).GetSQLStatsProvider()
 
 	sqlConn.Exec(t, `SET application_name = 'TestPersistedSQLStatsRead'`)
 	expectedStmtsNoConst := make(map[string]int64)
