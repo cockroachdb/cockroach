@@ -10,10 +10,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,16 +130,24 @@ CREATE FUNCTION db1.sc2.f1 (input INT) RETURNS INT8
 	}
 	require.Truef(t, foundReusedPlan, "did not find reused plan")
 	changeConn.Exec(t, "CREATE STATISTICS s1 FROM db2.sc3.t1")
-	explainRows = prepareConn.QueryStr(t, "EXPLAIN ANALYZE EXECUTE p1")
-	foundReOptimizedPlan := false
-	for _, row := range explainRows {
-		// New stats were generated so the plan should get re-optimized.
-		if row[0] == "plan type: generic, re-optimized" {
-			foundReOptimizedPlan = true
-			break
+	// Statistics cache is updated via a range feed, so propagation may take
+	// time.
+	testutils.SucceedsSoon(t, func() error {
+		explainRows = prepareConn.QueryStr(t, "EXPLAIN ANALYZE EXECUTE p1")
+		foundReOptimizedPlan := false
+		for _, row := range explainRows {
+			// New stats were generated so the plan should get re-optimized.
+			if row[0] == "plan type: generic, re-optimized" {
+				foundReOptimizedPlan = true
+				break
+			}
 		}
-	}
-	require.Truef(t, foundReOptimizedPlan, "did not find re-optimized plan")
+		if !foundReOptimizedPlan {
+			return errors.AssertionFailedf("did not find re-optimized plan")
+		}
+		return nil
+	})
+
 	// Confirm changing the role will have trouble.
 	prepareConn.Exec(t, "SET ROLE bob")
 	row := query.QueryRow()
