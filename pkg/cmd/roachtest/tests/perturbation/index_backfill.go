@@ -42,6 +42,13 @@ func (b backfill) setupMetamorphic(rng *rand.Rand) variations {
 	if v.mem == spec.Low {
 		v.mem = spec.Standard
 	}
+
+	// TODO(#139319): This can be removed once we stop testing the non "full"
+	// mode. Without full AC, these tests can OOM.
+	if v.numNodes >= 30 && (v.acMode == elasticOnlyBoth || v.acMode == fullNormalElasticRepl) {
+		v.acMode = fullBoth
+	}
+
 	// TODO(#136848): The backfill test will cause WAL failover resulting in
 	// OOMs even with high memory configurations. This test passes without WAL
 	// failover enabled or with more vCPUs per node.
