@@ -16,19 +16,23 @@ import { JobRequest, JobResponse } from "src/api/jobsApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import { CockroachCloudContext } from "src/contexts";
+import { EmptyTable } from "src/empty";
 import jobStyles from "src/jobs/jobs.module.scss";
 import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
 import { JobStatusCell } from "src/jobs/util/jobStatusCell";
 import { Loading } from "src/loading";
+import { SortedTable } from "src/sortedtable";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { UIConfigState } from "src/store";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
+import { Text, TextTypes } from "src/text";
 import {
-  TimestampToMoment,
-  idAttr,
-  getMatchParamByName,
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  DATE_WITH_SECONDS_FORMAT,
+  TimestampToMoment,
+  getMatchParamByName,
+  idAttr,
 } from "src/util";
 
 import {
@@ -42,6 +46,8 @@ import { Timestamp } from "../../timestamp";
 import { isTerminalState } from "../util/jobOptions";
 
 import { JobProfilerView } from "./jobProfilerView";
+
+type JobMessage = JobResponse["messages"][number];
 
 const { TabPane } = Tabs;
 
@@ -151,9 +157,43 @@ export class JobDetails extends React.Component<
       return null;
     }
 
+    const messageColumns = [
+      {
+        name: "timestamp",
+        title: "When",
+        hideTitleUnderline: true,
+        cell: (x: JobMessage) => (
+          <Timestamp
+            time={TimestampToMoment(x.timestamp, null)}
+            format={DATE_WITH_SECONDS_FORMAT}
+          />
+        ),
+      },
+      {
+        name: "kind",
+        title: "Kind",
+        hideTitleUnderline: true,
+        cell: (x: JobMessage) => x.kind,
+      },
+      {
+        name: "message",
+        title: "Message",
+        hideTitleUnderline: true,
+        cell: (x: JobMessage) => (
+          <p className={jobCx("message")}>{x.message}</p>
+        ),
+      },
+    ];
+
     return (
       <Row gutter={24}>
-        <Col className="gutter-row" span={24}>
+        <Col className="gutter-row" span={8}>
+          <Text
+            textType={TextTypes.Heading5}
+            className={jobCx("details-header")}
+          >
+            Details
+          </Text>
           <SummaryCard className={cardCx("summary-card")}>
             <SummaryCardItem
               label="Status"
@@ -204,6 +244,22 @@ export class JobDetails extends React.Component<
                 }
               />
             )}
+          </SummaryCard>
+        </Col>
+        <Col className="gutter-row" span={16}>
+          <Text
+            textType={TextTypes.Heading5}
+            className={jobCx("details-header")}
+          >
+            Events
+          </Text>
+          <SummaryCard className={jobCx("messages-card")}>
+            <SortedTable
+              data={job.messages}
+              columns={messageColumns}
+              tableWrapperClassName={jobCx("job-messages", "sorted-table")}
+              renderNoResult={<EmptyTable title="No messages recorded." />}
+            />
           </SummaryCard>
         </Col>
       </Row>

@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"text/tabwriter"
 	"time"
@@ -321,6 +322,17 @@ type ClusterCreateOpts struct {
 	Nodes                 int
 	CreateOpts            vm.CreateOpts
 	ProviderOptsContainer vm.ProviderOptionsContainer
+}
+
+// Extracts o.CreateOpts.VMProviders from the provided opts.
+func Providers(opts ...*ClusterCreateOpts) []string {
+	providers := []string{}
+	for _, o := range opts {
+		providers = append(providers, o.CreateOpts.VMProviders...)
+	}
+	// Remove dupes, if any.
+	slices.Sort(providers)
+	return slices.Compact(providers)
 }
 
 // CreateCluster TODO(peter): document

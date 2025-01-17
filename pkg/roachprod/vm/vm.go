@@ -621,7 +621,9 @@ func FindActiveAccounts(l *logger.Logger) (map[string]string, error) {
 		err := ProvidersSequential(AllProviderNames(), func(p Provider) error {
 			account, err := p.FindActiveAccount(l)
 			if err != nil {
-				return err
+				l.Printf("WARN: provider=%q has no active account", p.Name())
+				//nolint:returnerrcheck
+				return nil
 			}
 			if len(account) > 0 {
 				source[p.Name()] = account
