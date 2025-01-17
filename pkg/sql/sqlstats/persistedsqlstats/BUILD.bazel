@@ -32,6 +32,8 @@ go_library(
         "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/isql",
+        "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
