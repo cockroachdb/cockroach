@@ -471,6 +471,12 @@ func TestCreateTables(t *testing.T) {
 		eURL := replicationtestutils.GetExternalConnectionURI(t, srv, srv, serverutils.DBName("e"))
 		sqlE.ExpectErr(t, "either BIDIRECTIONAL or UNIDRECTIONAL must be specified", "CREATE LOGICALLY REPLICATED TABLE b.tab4 FROM TABLE tab4 ON $1", eURL.String())
 		sqlE.ExpectErr(t, "UNIDIRECTIONAL and BIDIRECTIONAL cannot be specified together", "CREATE LOGICALLY REPLICATED TABLE tab4 FROM TABLE tab4 ON $1 WITH BIDIRECTIONAL ON $2, UNIDIRECTIONAL", aURL.String(), eURL.String())
+
+		// Reverse stream uri not an external connection
+		eURLRaw, cleanup := srv.PGUrl(t, serverutils.DBName("e"))
+		defer cleanup()
+		sqlE.ExpectErr(t, "reverse stream uri failed validation", "CREATE LOGICALLY REPLICATED TABLE tab4 FROM TABLE tab4 ON $1 WITH BIDIRECTIONAL ON $2", aURL.String(), eURLRaw.String())
+
 	})
 	t.Run("parent id check", func(t *testing.T) {
 		sqlA.Exec(t, "CREATE DATABASE f")

@@ -223,9 +223,9 @@ func createLogicalReplicationStreamPlanHook(
 			srcTableNames[i] = tb.String()
 		}
 		spec, err := client.CreateForTables(ctx, &streampb.ReplicationProducerRequest{
-			TableNames:   srcTableNames,
-			AllowOffline: options.ParentID != 0,
-			// TODO(msbutler): pass reverse stream URI for validation.
+			TableNames:                  srcTableNames,
+			AllowOffline:                options.ParentID != 0,
+			UnvalidatedReverseStreamURI: options.BidirectionalURI(),
 		})
 		if err != nil {
 			return err
