@@ -120,10 +120,12 @@ func dialDRPC(rpcCtx *Context) func(ctx context.Context, target string) (drpcpoo
 				if err != nil {
 					return nil, err
 				}
-				tlsConn := tls.Client(netConn, tlsConfig)
+				// Clone TLS config to avoid modifying a cached TLS config.
+				tlsConfig = tlsConfig.Clone()
 				// TODO(server): remove this hack which is necessary at least in
 				// testing to get TestDRPCSelectQuery to pass.
 				tlsConfig.InsecureSkipVerify = true
+				tlsConn := tls.Client(netConn, tlsConfig)
 				conn = drpcconn.NewWithOptions(tlsConn, opts)
 			}
 
