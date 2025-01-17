@@ -2294,6 +2294,7 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/bank",
 		Owner:            `cdc`,
+		Skip:             "#139109",
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
