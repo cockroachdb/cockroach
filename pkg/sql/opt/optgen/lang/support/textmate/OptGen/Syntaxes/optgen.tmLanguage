@@ -258,7 +258,7 @@
                         Sort |
                         TopK |
                         VectorSearch |
-                        VectorPartitionSearch |
+                        VectorMutationSearch |
                         VectorDistance |
                         VectorCosVectorDistance |
                         VectorNegInnerProduct |
