@@ -99,12 +99,6 @@ func TestOrderValidator(t *testing.T) {
 	})
 }
 
-var standardChangefeedOptions = ChangefeedOption{
-	FullTableName: false,
-	KeyInValue:    false,
-	Format:        "json",
-}
-
 func TestBeforeAfterValidator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -140,30 +134,22 @@ func TestBeforeAfterValidator(t *testing.T) {
 	}
 
 	t.Run(`empty`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		assertValidatorFailures(t, v)
 	})
 	t.Run(`fullTableName`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, ChangefeedOption{
-			FullTableName: true,
-			KeyInValue:    false,
-			Format:        "json",
-		})
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		assertValidatorFailures(t, v)
 	})
 	t.Run(`key_in_value`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, ChangefeedOption{
-			FullTableName: false,
-			KeyInValue:    true,
-			Format:        "json",
-		})
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		assertValidatorFailures(t, v)
 	})
 	t.Run(`during initial`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		// "before" is ignored if missing.
 		noteRow(t, v, `p`, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1], `foo`)
@@ -178,7 +164,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 3]`)
 	})
 	t.Run(`missing before`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" should have been provided.
@@ -189,7 +175,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 [1]`)
 	})
 	t.Run(`incorrect before`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" provided with wrong value.
@@ -200,7 +186,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [5 10]`)
 	})
 	t.Run(`unnecessary before`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" provided but should not have been.
@@ -211,7 +197,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 1]`)
 	})
 	t.Run(`missing after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "after" should have been provided.
@@ -222,7 +208,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 [1]`)
 	})
 	t.Run(`incorrect after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "after" provided with wrong value.
@@ -233,7 +219,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 5]`)
 	})
 	t.Run(`unnecessary after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "after" provided but should not have been.
@@ -244,7 +230,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 3]`)
 	})
 	t.Run(`incorrect before and after`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// "before" and "after" both provided with wrong value.
@@ -258,7 +244,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 4]`)
 	})
 	t.Run(`correct`, func(t *testing.T) {
-		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		noteRow(t, v, `p`, `[1]`, `{}`, ts[0], `foo`)
@@ -297,7 +283,7 @@ func TestBeforeAfterValidatorForGeometry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`, standardChangefeedOptions)
+	v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
 	require.NoError(t, err)
 	assertValidatorFailures(t, v)
 	noteRow(t, v, `p`, `[1]`, `{"after": {"k":1, "geom":{"coordinates": [1,2], "type": "Point"}}}`, ts[0], `foo`)
