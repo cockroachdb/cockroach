@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -200,6 +201,7 @@ func (l *livenessProber) ProbeLivenessWithPhysicalRegion(
 
 	// Region is alive or we hit some other error.
 	if err == nil || !IsQueryTimeoutErr(err) {
+		log.VEventf(ctx, 2, "region probe completed with error: %v", err)
 		return err
 	}
 
@@ -222,10 +224,12 @@ func (l *livenessProber) ProbeLivenessWithPhysicalRegion(
 		if err != nil {
 			return err
 		}
+		log.VEventf(ctx, 2, "marking region %q as dead at time: %s", string(regionBytes), txnTS.String())
 		if err := txn.Run(ctx, ba); err != nil {
 			// Conditional put failing is fine, since it means someone else
 			// has marked the region as dead.
 			if errors.HasType(err, &kvpb.ConditionFailedError{}) {
+				log.VEventf(ctx, 2, "ignoring condition failed for region: %q", string(regionBytes))
 				return nil
 			}
 			return err
