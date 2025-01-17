@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
