@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -454,16 +456,41 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, stopServer := startTestFullServer(t, feedTestOptions{})
+	ctx := context.Background()
+
+	// Useful for debugging.
+	require.NoError(t, log.SetVModule("spanconfigstore=2,store=2,reconciler=3,mvcc_gc_queue=2,kvaccessor=2"))
+
+	settings := cluster.MakeTestingClusterSettings()
+	spanconfigjob.ReconciliationJobCheckpointInterval.Override(ctx, &settings.SV, 1*time.Second)
+
+	// Keep track of where the spanconfig reconciler is up to.
+	lastReconcilerCheckpoint := atomic.Value{}
+	lastReconcilerCheckpoint.Store(hlc.Timestamp{})
+	s, db, stopServer := startTestFullServer(t, feedTestOptions{
+		knobsFn: func(knobs *base.TestingKnobs) {
+			if knobs.SpanConfig == nil {
+				knobs.SpanConfig = &spanconfig.TestingKnobs{}
+			}
+			scKnobs := knobs.SpanConfig.(*spanconfig.TestingKnobs)
+			scKnobs.JobOnCheckpointInterceptor = func(lastCheckpoint hlc.Timestamp) error {
+				now := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+				t.Logf("reconciler checkpoint %s (%s)", lastCheckpoint, now.GoTime().Sub(lastCheckpoint.GoTime()))
+				lastReconcilerCheckpoint.Store(lastCheckpoint)
+				return nil
+			}
+			scKnobs.SQLWatcherCheckpointNoopsEveryDurationOverride = 1 * time.Second
+		},
+		settings: settings,
+	})
+
 	defer stopServer()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
 	sqlDB.Exec(t, "CREATE TABLE foo (a INT, b STRING)")
 	sqlDB.Exec(t, `CREATE USER test`)
 	sqlDB.Exec(t, `GRANT admin TO test`)
 	ts := s.Clock().Now()
-	ctx := context.Background()
 
 	fooDescr := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "d", "foo")
 	var targets changefeedbase.Targets
@@ -471,11 +498,29 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 		TableID: fooDescr.GetID(),
 	})
 
+	// We need to give our PTS record a legit job ID so the protected ts
+	// reconciler doesn't delete it, so start up a dummy changefeed job and use its id.
+	registry := s.JobRegistry().(*jobs.Registry)
+	dummyJobDone := make(chan struct{})
+	defer close(dummyJobDone)
+	registry.TestingWrapResumerConstructor(jobspb.TypeChangefeed,
+		func(raw jobs.Resumer) jobs.Resumer {
+			return &fakeResumer{done: dummyJobDone}
+		})
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR TABLE foo INTO 'null://'`).Scan(&jobID)
+	waitForJobStatus(sqlDB, t, jobID, `running`)
+
 	// Lay protected timestamp record.
-	ptr := createProtectedTimestampRecord(ctx, s.Codec(), 42, targets, ts)
+	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts)
 	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 	}))
+
+	// Set GC TTL to a small value to make the tables GC'd. We need to set this
+	// *after* we set the PTS record so that we dont GC the tables before
+	// the PTS is applied/picked up.
+	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
 
 	// The following code was shameless stolen from
 	// TestShowTenantFingerprintsProtectsTimestamp which almost
@@ -512,7 +557,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 		var rangeID int64
 		row.Scan(&rangeID)
 		refreshPTSReaderCache(s.Clock().Now(), tableName, databaseName)
-		t.Logf("enqueuing range %d for mvccGC", rangeID)
+		t.Logf("enqueuing range %d (table %s.%s) for mvccGC", rangeID, tableName, databaseName)
 		sqlDB.Exec(t, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID)
 	}
 
@@ -526,7 +571,21 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	// Change the user's password to update the users table.
 	sqlDB.Exec(t, `ALTER USER test WITH PASSWORD 'testpass'`)
 
+	// Sleep for enough time to pass the configured GC threshold (1 second).
 	time.Sleep(2 * time.Second)
+
+	// Wait for the spanconfigs to be reconciled.
+	now := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+	t.Logf("waiting for spanconfigs to be reconciled")
+	testutils.SucceedsWithin(t, func() error {
+		lastCheckpoint := lastReconcilerCheckpoint.Load().(hlc.Timestamp)
+		if lastCheckpoint.Less(now) {
+			return errors.Errorf("last checkpoint %s is not less than now %s", lastCheckpoint, now)
+		}
+		t.Logf("last reconciler checkpoint ok at %s", lastCheckpoint)
+		return nil
+	}, 1*time.Minute)
+
 	// If you want to GC all system tables:
 	//
 	// tabs := systemschema.MakeSystemTables()
@@ -535,6 +594,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	// 		gcTestTableRange("system", t.GetName())
 	// 	}
 	// }
+	t.Logf("GC'ing system tables")
 	gcTestTableRange("system", "descriptor")
 	gcTestTableRange("system", "zones")
 	gcTestTableRange("system", "comments")
