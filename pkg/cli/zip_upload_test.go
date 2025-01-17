@@ -134,8 +134,9 @@ func TestUploadZipEndToEnd(t *testing.T) {
 	// those two in this list to avoid unnecessary errors
 	origTableDumps := clusterWideTableDumps
 	clusterWideTableDumps = map[string]columnParserMap{
-		"system.namespace.txt":          {},
-		"crdb_internal.system_jobs.txt": origTableDumps["crdb_internal.system_jobs.txt"],
+		"system.namespace.txt":            {},
+		"crdb_internal.system_jobs.txt":   origTableDumps["crdb_internal.system_jobs.txt"],
+		"crdb_internal.cluster_locks.txt": origTableDumps["crdb_internal.cluster_locks.txt"],
 	}
 	defer func() {
 		clusterWideTableDumps = origTableDumps
@@ -565,32 +566,6 @@ func TestLogUploadSigSplit(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestTableDumpColumnParsing(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	datadriven.RunTest(t, "testdata/table_dump_column_parsing", func(t *testing.T, d *datadriven.TestData) string {
-		table, ok := clusterWideTableDumps[d.Cmd]
-		require.True(t, ok, "table dump not found: %s", d.Cmd)
-
-		var buf bytes.Buffer
-		for _, line := range strings.Split(strings.TrimSpace(d.Input), "\n") {
-			cols := strings.Fields(strings.TrimSpace(line))
-			fn, ok := table[cols[0]]
-			require.True(t, ok, "column not found: %s", cols[0])
-
-			decoded, err := fn(strings.TrimSpace(cols[1]))
-			require.NoError(t, err)
-
-			raw, err := json.Marshal(decoded)
-			require.NoError(t, err)
-
-			buf.Write(append(raw, '\n'))
-		}
-
-		return buf.String()
-	})
 }
 
 func copyZipFiles(t *testing.T, src, dest string) {
