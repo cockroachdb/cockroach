@@ -1466,20 +1466,20 @@ define VectorSearchPrivate {
     TargetNeighborCount int64
 }
 
-# VectorPartitionSearch is used to determine the vector-index partition that
+# VectorMutationSearch is used to determine the vector-index partition that
 # contains (or should contain) each vector from the input. It is used in the
 # input of mutation operators. It always produces exactly one row for each
 # input row, containing the partition key and optionally the centroid of the
 # partition. If the input query vector is NULL, no vector search is performed,
 # and the projected output columns are NULL.
 [Relational]
-define VectorPartitionSearch {
+define VectorMutationSearch {
     Input RelExpr
-    _ VectorPartitionSearchPrivate
+    _ VectorMutationSearchPrivate
 }
 
 [Private]
-define VectorPartitionSearchPrivate {
+define VectorMutationSearchPrivate {
     # Table identifies the table to perform the search in.
     Table TableID
 

@@ -6,7 +6,7 @@ exec-ddl
 CREATE VECTOR INDEX ON t (v);
 ----
 
-# VectorPartitionSearch produces one output row for each input row.
+# VectorMutationSearch produces one output row for each input row.
 build
 INSERT INTO t VALUES (1, '[1, 2, 3]');
 ----
@@ -20,7 +20,7 @@ insert t
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- └── vector-partition-search t@t_v_idx,vector
+ └── vector-mutation-search t@t_v_idx,vector
       ├── columns: column1:5(int!null) v_cast:7(vector!null) vector_index_put_partition1:8(int) vector_index_put_centroid1:9(vector)
       ├── query vector column: v_cast:7
       ├── partition col: vector_index_put_partition1:8
@@ -61,7 +61,7 @@ insert t
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- └── vector-partition-search t@t_v_idx,vector
+ └── vector-mutation-search t@t_v_idx,vector
       ├── columns: column1:5(int!null) v_cast:7(vector!null) vector_index_put_partition1:8(int) vector_index_put_centroid1:9(vector)
       ├── query vector column: v_cast:7
       ├── partition col: vector_index_put_partition1:8
