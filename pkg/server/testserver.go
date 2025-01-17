@@ -619,21 +619,7 @@ func (ts *testServer) startDefaultTestTenant(
 		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
 		Settings:                  tenantSettings,
 	}
-
-	// Since we're creating a tenant, it doesn't make sense to pass through the
-	// Server testing knobs, since the bulk of them only apply to the system
-	// tenant. Any remaining knobs which are required by the tenant should be
-	// passed through here.
-	params.TestingKnobs.Server = &TestingKnobs{}
-
-	if ts.params.Knobs.Server != nil {
-		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
-		params.TestingKnobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
-		params.TestingKnobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle =
-			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle
-		params.TestingKnobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled =
-			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled
-	}
+	ts.setupTenantTestingKnobs(&params.TestingKnobs)
 	return ts.StartTenant(ctx, params)
 }
 
@@ -645,17 +631,24 @@ func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcess
 		UseDatabase: ts.params.UseDatabase,
 		Settings:    ts.params.Settings,
 	}
-	// See comment above on separate process tenant regarding the testing knobs.
-	args.Knobs.Server = &TestingKnobs{}
-	if ts.params.Knobs.Server != nil {
-		args.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
-		args.Knobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
-		args.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle =
-			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle
-		args.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled =
-			ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled
-	}
+	ts.setupTenantTestingKnobs(&args.Knobs)
 	return args
+}
+
+func (ts *testServer) setupTenantTestingKnobs(tenantKnobs *base.TestingKnobs) {
+	// Since we're creating a tenant, it doesn't make sense to pass through the
+	// Server testing k, since the bulk of them only apply to the system
+	// tenant. Any remaining k which are required by the tenant should be
+	// passed through here.
+	tenantKnobs.Server = &TestingKnobs{}
+	if ts.params.Knobs.Server != nil {
+		tenantKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs =
+			ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+		tenantKnobs.Server.(*TestingKnobs).ContextTestingKnobs = rpc.ContextTestingKnobs{
+			InjectedLatencyOracle:  ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle,
+			InjectedLatencyEnabled: ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled,
+		}
+	}
 }
 
 func (ts *testServer) startSharedProcessDefaultTestTenant(
