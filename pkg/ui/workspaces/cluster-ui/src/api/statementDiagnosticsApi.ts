@@ -33,17 +33,24 @@ export async function getStatementDiagnosticsReports(): Promise<StatementDiagnos
     STATEMENT_DIAGNOSTICS_PATH,
   );
   return response.reports.map(report => {
+    const minExecutionLatency = report.min_execution_latency
+      ? moment
+          .duration(report.min_execution_latency?.seconds.toNumber(), "seconds")
+          .add(
+            moment.duration(
+              report.min_execution_latency.nanos / 1e9,
+              "seconds",
+            ),
+          )
+      : null;
     return {
       id: report.id.toString(),
       statement_fingerprint: report.statement_fingerprint,
       completed: report.completed,
       statement_diagnostics_id: report.statement_diagnostics_id.toString(),
-      requested_at: moment.unix(report.requested_at.seconds.toNumber()),
-      min_execution_latency: moment.duration(
-        report.min_execution_latency.seconds.toNumber(),
-        "seconds",
-      ),
-      expires_at: moment.unix(report.expires_at.seconds.toNumber()),
+      requested_at: moment.unix(report.requested_at?.seconds.toNumber()),
+      min_execution_latency: minExecutionLatency,
+      expires_at: moment.unix(report.expires_at?.seconds.toNumber()),
     };
   });
 }
