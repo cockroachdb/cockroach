@@ -32,6 +32,9 @@ sudo apt-get install -y --no-install-recommends \
 # pnpm doesn't provide a Debian repository, and supports either `curl | sh` or `npm install -g` installations.
 curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=8.6.6 sh -
 
+# append new line to bashrc
+echo -e '\n' >> ~/.bashrc
+
 sudo adduser "${USER}" docker
 
 # Configure environment variables.
