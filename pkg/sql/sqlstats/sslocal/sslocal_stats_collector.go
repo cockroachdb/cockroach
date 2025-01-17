@@ -31,7 +31,7 @@ type StatsCollector struct {
 	// so that we can include the transaction fingerprint ID as part of the
 	// statement's key. This container is local per stats collector and
 	// is cleared for reuse after every transaction.
-	currentTransactionStatementStats sqlstats.ApplicationStats
+	currentTransactionStatementStats *ssmemstorage.Container
 
 	// stmtFingerprintID is the fingerprint ID of the current statement we are
 	// recording. Note that we don't observe sql stats for all statements (e.g. COMMIT).
@@ -62,7 +62,7 @@ type StatsCollector struct {
 	// This is the target where the statement stats are flushed to upon
 	// transaction completion. Note that these are the global stats for the
 	// application.
-	flushTarget sqlstats.ApplicationStats
+	flushTarget *ssmemstorage.Container
 
 	// uniqueServerCounts is a pointer to the statement and transaction
 	// fingerprint counters tracked per server.
@@ -75,7 +75,7 @@ type StatsCollector struct {
 // NewStatsCollector returns an instance of StatsCollector.
 func NewStatsCollector(
 	st *cluster.Settings,
-	appStats sqlstats.ApplicationStats,
+	appStats *ssmemstorage.Container,
 	insights *insights.ConcurrentBufferIngester,
 	phaseTime *sessionphase.Times,
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
@@ -127,7 +127,7 @@ func (s *StatsCollector) PreviousPhaseTimes() *sessionphase.Times {
 
 // Reset resets the StatsCollector with a new flushTarget and a new copy
 // of the sessionphase.Times.
-func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *sessionphase.Times) {
+func (s *StatsCollector) Reset(appStats *ssmemstorage.Container, phaseTime *sessionphase.Times) {
 	previousPhaseTime := s.phaseTimes
 	s.flushTarget = appStats
 

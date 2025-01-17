@@ -134,7 +134,7 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	// We run some queries then flush so that we ensure that are some stats in
 	// the system table.
 	helper.sqlDB.Exec(t, "SELECT 1; SELECT 1, 1")
-	helper.server.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, helper.server.AppStopper())
+	helper.server.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider().MaybeFlush(ctx, helper.server.AppStopper())
 	helper.sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 1")
 
 	stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, helper.sqlDB)

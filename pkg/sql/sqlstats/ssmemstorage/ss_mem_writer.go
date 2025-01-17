@@ -35,9 +35,6 @@ var (
 
 var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 
-var _ sqlstats.Writer = &Container{}
-
-// RecordStatement implements sqlstats.Writer interface.
 // RecordStatement saves per-statement statistics.
 //
 // samplePlanDescription can be nil, as these are only sampled periodically
@@ -182,7 +179,6 @@ func (s *Container) RecordStatement(
 	return stats.ID, nil
 }
 
-// RecordStatementExecStats implements sqlstats.Writer interface.
 func (s *Container) RecordStatementExecStats(
 	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
 ) error {
@@ -202,7 +198,6 @@ func (s *Container) RecordStatementExecStats(
 	return nil
 }
 
-// ShouldSample implements sqlstats.Writer interface.
 func (s *Container) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
 ) (previouslySampled, savePlanForStats bool) {
@@ -215,8 +210,7 @@ func (s *Container) ShouldSample(
 	return previouslySampled, savePlanForStats
 }
 
-// RecordTransaction implements sqlstats.Writer interface and saves
-// per-transaction statistics.
+// RecordTransaction saves per-transaction statistics.
 func (s *Container) RecordTransaction(
 	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
