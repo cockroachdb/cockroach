@@ -196,6 +196,15 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 			h.init(mode)
 			defer h.close(makeV2EnabledTestFileName(v2EnabledWhenLeaderLevel, mode, "split_merge"))
 
+			h.comment(`-- Enable verbose logging for relevant RACv2 code files.`)
+			h.query(n1, `
+SELECT crdb_internal.set_vmodule('
+  replica_raft=1,replica_proposal_buf=1,raft_transport=2,
+  kvadmission=1,work_queue=1,replica_flow_control=1,
+  tracker=1,client_raft_helpers_test=1,range_controller=2,
+  token_counter=2,token_tracker=2,processor=2');
+`)
+
 			desc, err := tc.LookupRange(k)
 			require.NoError(t, err)
 
@@ -429,6 +438,15 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 			h := newFlowControlTestHelperV2(t, tc, v2EnabledWhenLeaderLevel)
 			h.init(mode)
 			defer h.close(makeV2EnabledTestFileName(v2EnabledWhenLeaderLevel, mode, "admission_post_split_merge"))
+
+			h.comment(`-- Enable verbose logging for relevant RACv2 code files.`)
+			h.query(n1, `
+SELECT crdb_internal.set_vmodule('
+  replica_raft=1,replica_proposal_buf=1,raft_transport=2,
+  kvadmission=1,work_queue=1,replica_flow_control=1,
+  tracker=1,client_raft_helpers_test=1,range_controller=2,
+  token_counter=2,token_tracker=2,processor=2');
+`)
 
 			desc, err := tc.LookupRange(k)
 			require.NoError(t, err)
@@ -707,6 +725,15 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			h := newFlowControlTestHelperV2(t, tc, v2EnabledWhenLeaderLevel)
 			h.init(mode)
 			defer h.close(makeV2EnabledTestFileName(v2EnabledWhenLeaderLevel, mode, "raft_snapshot"))
+
+			h.comment(`-- Enable verbose logging for relevant RACv2 code files.`)
+			h.query(n1, `
+SELECT crdb_internal.set_vmodule('
+  replica_raft=1,replica_proposal_buf=1,raft_transport=2,
+  kvadmission=1,work_queue=1,replica_flow_control=1,
+  tracker=1,client_raft_helpers_test=1,range_controller=2,
+  token_counter=2,token_tracker=2,processor=2');
+`)
 
 			store := tc.GetFirstStoreFromServer(t, 0)
 
@@ -1059,6 +1086,15 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 				// Note this test behaves identically independent of we transfer the lease
 				// first.
 				defer h.close(makeV2EnabledTestFileName(v2EnabledWhenLeaderLevel, mode, "raft_membership_remove_self"))
+
+				h.comment(`-- Enable verbose logging for relevant RACv2 code files.`)
+				h.query(n1, `
+SELECT crdb_internal.set_vmodule('
+  replica_raft=1,replica_proposal_buf=1,raft_transport=2,
+  kvadmission=1,work_queue=1,replica_flow_control=1,
+  tracker=1,client_raft_helpers_test=1,range_controller=2,
+  token_counter=2,token_tracker=2,processor=2');
+`)
 
 				desc, err := tc.LookupRange(k)
 				require.NoError(t, err)

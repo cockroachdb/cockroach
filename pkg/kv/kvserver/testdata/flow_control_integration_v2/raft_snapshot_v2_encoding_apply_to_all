@@ -1,6 +1,16 @@
 echo
 ----
 ----
+-- Enable verbose logging for relevant RACv2 code files.
+SELECT crdb_internal.set_vmodule('
+  replica_raft=1,replica_proposal_buf=1,raft_transport=2,
+  kvadmission=1,work_queue=1,replica_flow_control=1,
+  tracker=1,client_raft_helpers_test=1,range_controller=2,
+  token_counter=2,token_tracker=2,processor=2');
+
+  0  
+
+
 -- Flow token metrics from n1 after issuing 1 1MiB 5x replicated write
 -- that's not admitted. Since this test is ignoring crashed nodes for token
 -- deduction purposes, we see a deduction of 5MiB tokens.
