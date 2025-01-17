@@ -1050,19 +1050,19 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 	}
 }
 
-// projectVectorIndexCols builds VectorPartitionSearch operators for the input
+// projectVectorIndexCols builds VectorMutationSearch operators for the input
 // of a non-DELETE mutation. See projectVectorIndexColsImpl for details.
 func (mb *mutationBuilder) projectVectorIndexCols() {
 	mb.projectVectorIndexColsImpl(false /* delete */)
 }
 
-// projectVectorIndexCols builds VectorPartitionSearch operators for the input
+// projectVectorIndexCols builds VectorMutationSearch operators for the input
 // of a DELETE mutation. See projectVectorIndexColsImpl for details.
 func (mb *mutationBuilder) projectVectorIndexColsForDelete() {
 	mb.projectVectorIndexColsImpl(true /* delete */)
 }
 
-// projectVectorIndexColsImpl builds VectorPartitionSearch operators that
+// projectVectorIndexColsImpl builds VectorMutationSearch operators that
 // project partitions to be the target of index insertions and deletions for
 // each vector index defined on the target table. This is needed because vector
 // indexes must perform a search to determine which partition a given vector
@@ -1126,7 +1126,7 @@ func (mb *mutationBuilder) projectVectorIndexColsImpl(delete bool) {
 				partitionCol := addCol(fmt.Sprintf("vector_index_del_partition%d", idxOrd+1), types.Int)
 				outCols := mb.outScope.colSet()
 				outCols.Add(partitionCol)
-				mb.outScope.expr = mb.buildVectorPartitionSearch(
+				mb.outScope.expr = mb.buildVectorMutationSearch(
 					mb.outScope.expr, index, delCol, partitionCol, 0 /* centroidCol */, getPKCols(),
 				)
 				mb.vectorIndexDelPartitionColIDs[idxOrd] = partitionCol
@@ -1137,7 +1137,7 @@ func (mb *mutationBuilder) projectVectorIndexColsImpl(delete bool) {
 				outCols := mb.outScope.colSet()
 				outCols.Add(partitionCol)
 				outCols.Add(centroidCol)
-				mb.outScope.expr = mb.buildVectorPartitionSearch(
+				mb.outScope.expr = mb.buildVectorMutationSearch(
 					mb.outScope.expr, index, putCol, partitionCol, centroidCol, opt.ColSet{}, /* pkCols */
 				)
 				mb.vectorIndexPutPartitionColIDs[idxOrd] = partitionCol
@@ -1148,19 +1148,19 @@ func (mb *mutationBuilder) projectVectorIndexColsImpl(delete bool) {
 	}
 }
 
-// buildVectorPartitionSearch builds a VectorPartitionSearch operator that will
+// buildVectorMutationSearch builds a VectorMutationSearch operator that will
 // find the partition (and centroid, if requested) for vectors in the given
 // queryVectorCol.
 //
 // pkCols should only be set for an index del operation. It is used to locate
 // the partition for a specific row in the table.
-func (mb *mutationBuilder) buildVectorPartitionSearch(
+func (mb *mutationBuilder) buildVectorMutationSearch(
 	input memo.RelExpr,
 	index cat.Index,
 	queryVectorCol, partitionCol, centroidCol opt.ColumnID,
 	pkCols opt.ColSet,
 ) memo.RelExpr {
-	private := memo.VectorPartitionSearchPrivate{
+	private := memo.VectorMutationSearchPrivate{
 		Table:          mb.tabID,
 		Index:          index.Ordinal(),
 		QueryVectorCol: queryVectorCol,
@@ -1168,7 +1168,7 @@ func (mb *mutationBuilder) buildVectorPartitionSearch(
 		PartitionCol:   partitionCol,
 		CentroidCol:    centroidCol,
 	}
-	return mb.b.factory.ConstructVectorPartitionSearch(input, &private)
+	return mb.b.factory.ConstructVectorMutationSearch(input, &private)
 }
 
 // computedColumnScope returns a new scope that can be used to build computed
