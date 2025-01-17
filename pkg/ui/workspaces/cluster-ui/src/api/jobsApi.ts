@@ -16,6 +16,7 @@ export type JobsResponse = cockroach.server.serverpb.JobsResponse;
 
 export type JobRequest = cockroach.server.serverpb.JobRequest;
 export type JobResponse = cockroach.server.serverpb.JobResponse;
+
 export type JobResponseWithKey = {
   jobResponse: JobResponse;
   key: string;

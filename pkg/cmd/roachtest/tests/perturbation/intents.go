@@ -33,7 +33,19 @@ func (i intents) setup() variations {
 }
 
 func (i intents) setupMetamorphic(rng *rand.Rand) variations {
-	return i.setup().randomize(rng)
+	v := i.setup()
+	v = v.randomize(rng)
+
+	// TODO(#139187): Large block sizes result in a big slowdown when the intents
+	// are written.
+	// TODO(#139188): Large block sizes result in a big slowdown when the intents
+	// are resolved.
+	v.blockSize = min(v.blockSize, 1024)
+
+	// TODO(#135934): A large buildup of intents still causes a large slowdown
+	// when the intents are resolved.
+	v.perturbationDuration = max(v.perturbationDuration, 10*time.Minute)
+	return v
 }
 
 func (intents) startTargetNode(ctx context.Context, t test.Test, v variations) {
