@@ -1659,11 +1659,11 @@ func (b *logicalPropsBuilder) buildVectorMutationSearchProps(
 	// Output Columns
 	// --------------
 	// VectorMutationSearch passes through all input columns. It also produces
-	// the partition column, and optionally, the centroid column.
+	// the partition column, and optionally, the quantized vector column.
 	rel.OutputCols = inputProps.OutputCols.Copy()
 	rel.OutputCols.Add(search.PartitionCol)
-	if search.CentroidCol != 0 {
-		rel.OutputCols.Add(search.CentroidCol)
+	if search.QuantizedVectorCol != 0 {
+		rel.OutputCols.Add(search.QuantizedVectorCol)
 	}
 
 	// Not Null Columns
