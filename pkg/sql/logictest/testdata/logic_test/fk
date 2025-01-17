@@ -4152,10 +4152,20 @@ subtest 80828
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
 CREATE TABLE parent80828 (id int primary key);
+
+statement ok
 CREATE TABLE child80828 (id INT PRIMARY KEY, pid INT NOT NULL REFERENCES parent80828(id) ON DELETE CASCADE, UNIQUE INDEX (pid));
+
+statement ok
 INSERT INTO parent80828 VALUES (1);
+
+statement ok
 INSERT INTO child80828 VALUES (1, 1);
+
+statement ok
 COMMIT;
 
 statement ok
