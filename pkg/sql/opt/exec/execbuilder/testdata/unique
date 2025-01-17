@@ -619,7 +619,7 @@ quality of service: regular
 ├── • insert
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 1
+│   │ actual row count: 2
 │   │ into: uniq_fk_parent(a, b, c, rowid)
 │   │
 │   └── • buffer
@@ -737,7 +737,7 @@ quality of service: regular
 ├── • insert
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 1
+│   │ actual row count: 2
 │   │ into: uniq_fk_child(a, b, c, rowid)
 │   │
 │   └── • buffer
@@ -2621,7 +2621,7 @@ quality of service: regular
 ├── • update
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 1
+│   │ actual row count: 2
 │   │ table: uniq_fk_parent
 │   │ set: c
 │   │

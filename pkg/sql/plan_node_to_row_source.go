@@ -9,6 +9,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
@@ -165,6 +166,13 @@ func (p *planNodeToRowSource) Start(ctx context.Context) {
 	// This starts all of the nodes below this node.
 	if err := startExec(p.params, p.node); err != nil {
 		p.MoveToDraining(err)
+	}
+}
+
+func init() {
+	colexec.IsFastPathNode = func(rs execinfra.RowSource) bool {
+		p, ok := rs.(*planNodeToRowSource)
+		return ok && p.fastPath
 	}
 }
 

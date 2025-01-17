@@ -122,7 +122,7 @@ quality of service: regular
 │ columns: ()
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
+│ actual row count: 0
 │ vectorized batch count: 0
 │ estimated row count: 0 (missing stats)
 │ table: xy
@@ -336,7 +336,7 @@ quality of service: regular
 │   │ columns: ()
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 1
+│   │ actual row count: 0
 │   │ vectorized batch count: 0
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
@@ -682,7 +682,7 @@ quality of service: regular
 │   │ columns: ()
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 1
+│   │ actual row count: 0
 │   │ vectorized batch count: 0
 │   │ estimated row count: 0 (missing stats)
 │   │ table: parent
