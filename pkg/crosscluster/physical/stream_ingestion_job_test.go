@@ -132,8 +132,8 @@ func TestTenantStreamingFailback(t *testing.T) {
 	sqlA := sqlutils.MakeSQLRunner(aDB)
 	sqlB := sqlutils.MakeSQLRunner(bDB)
 
-	serverAURL := replicationtestutils.GetReplicationUri(t, serverA, serverB, serverutils.User(username.RootUser))
-	serverBURL := replicationtestutils.GetReplicationUri(t, serverB, serverA, serverutils.User(username.RootUser))
+	serverAURL := replicationtestutils.GetReplicationURI(t, serverA, serverB, serverutils.User(username.RootUser))
+	serverBURL := replicationtestutils.GetReplicationURI(t, serverB, serverA, serverutils.User(username.RootUser))
 
 	replicationtestutils.ConfigureDefaultSettings(t, sqlA)
 	replicationtestutils.ConfigureDefaultSettings(t, sqlB)

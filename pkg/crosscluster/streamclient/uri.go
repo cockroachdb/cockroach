@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -71,6 +72,10 @@ func (c *ConfigUri) AsClusterUri(ctx context.Context, db isql.DB) (ClusterUri, e
 		return ClusterUri{}, errors.Wrap(err, "converting external connection into crdb cluster connection")
 	}
 	return ParseClusterUri(ec.ConnectionProto().UnredactedURI())
+}
+
+func (c *ConfigUri) IsExternalOrTestScheme() bool {
+	return c.uri.Scheme == "external" || c.uri.Scheme == "randomgen" && buildutil.CrdbTestBuild
 }
 
 // ClusterUri is a connection uri for a crdb cluster.
