@@ -1012,7 +1012,7 @@ quality of service: regular
 • update
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
+│ actual row count: 0
 │ table: t137352
 │ set: b
 │ auto commit
@@ -1065,7 +1065,7 @@ quality of service: regular
 • update
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
+│ actual row count: 0
 │ table: t137352
 │ set: b
 │ auto commit
@@ -1133,7 +1133,7 @@ quality of service: regular
 • update
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
+│ actual row count: 0
 │ table: t137352
 │ set: b
 │ auto commit
@@ -1199,7 +1199,7 @@ quality of service: regular
 • update
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
+│ actual row count: 0
 │ table: t137352
 │ set: b
 │ auto commit

@@ -194,6 +194,11 @@ func RunNemesis(
 		},
 	}
 
+	if nOp.EnableFpValidator {
+		// TODO(#139351): Fingerprint validator doesn't support user defined types.
+		ns.eventMix[eventCreateEnum{}] = 0
+	}
+
 	// Create the table and set up some initial splits.
 	if _, err := db.Exec(`CREATE TABLE foo (id INT PRIMARY KEY, ts STRING DEFAULT '0')`); err != nil {
 		return nil, err
