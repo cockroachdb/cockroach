@@ -1650,15 +1650,15 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	}
 }
 
-func (b *logicalPropsBuilder) buildVectorPartitionSearchProps(
-	search *VectorPartitionSearchExpr, rel *props.Relational,
+func (b *logicalPropsBuilder) buildVectorMutationSearchProps(
+	search *VectorMutationSearchExpr, rel *props.Relational,
 ) {
 	BuildSharedProps(search, &rel.Shared, b.evalCtx)
 	inputProps := search.Input.Relational()
 
 	// Output Columns
 	// --------------
-	// VectorPartitionSearch passes through all input columns. It also produces
+	// VectorMutationSearch passes through all input columns. It also produces
 	// the partition column, and optionally, the centroid column.
 	rel.OutputCols = inputProps.OutputCols.Copy()
 	rel.OutputCols.Add(search.PartitionCol)
@@ -1690,7 +1690,7 @@ func (b *logicalPropsBuilder) buildVectorPartitionSearchProps(
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildVectorPartitionSearch(search, rel)
+		b.sb.buildVectorMutationSearch(search, rel)
 	}
 }
 
