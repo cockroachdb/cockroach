@@ -55,6 +55,7 @@ func TestMain(m *testing.M) {
 }
 
 func runLogicTest(t *testing.T, file string) {
+	skip.UnderRace(t, "times out and/or hangs")
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }

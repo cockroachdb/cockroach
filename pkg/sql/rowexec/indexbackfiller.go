@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -508,7 +509,7 @@ type indexBatchRetry struct {
 func (b *indexBatchRetry) buildBatchWithRetry(ctx context.Context, db isql.DB) error {
 	r := retry.StartWithCtx(ctx, b.retryOpts)
 	for {
-		if err := db.Txn(ctx, b.buildIndexChunk); err != nil {
+		if err := db.Txn(ctx, b.buildIndexChunk, isql.WithPriority(admissionpb.BulkNormalPri)); err != nil {
 			// Retry for any out of memory error. We want to wait for the goroutine
 			// that processes the prior batches of index entries to free memory.
 			if sqlerrors.IsOutOfMemoryError(err) && b.nextChunkSize > 1 {
