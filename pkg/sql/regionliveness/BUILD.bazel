@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/types",
         "//pkg/util/encoding",
+        "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
