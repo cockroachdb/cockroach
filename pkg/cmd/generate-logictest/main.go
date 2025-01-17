@@ -27,7 +27,7 @@ type testFileTemplateConfig struct {
 	CockroachGoTestserverTest     bool
 	Ccl                           bool
 	ForceProductionValues         bool
-	SkipCclUnderRace              bool
+	SkipUnderRace                 bool
 	UseHeavyPool                  useHeavyPoolCondition
 	Package, TestRuleName, RelDir string
 	ConfigIdx                     int
@@ -188,7 +188,7 @@ func (t *testdir) dump() error {
 			tplCfg.NumCPU = 3
 		}
 		if cfg.Name == "3node-tenant" || strings.HasPrefix(cfg.Name, "multiregion-") {
-			tplCfg.SkipCclUnderRace = true
+			tplCfg.SkipUnderRace = true
 		}
 		tplCfg.UseHeavyPool = useHeavyPoolNever
 		if strings.Contains(cfg.Name, "5node") ||
