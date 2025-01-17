@@ -196,6 +196,9 @@ func createLogicalReplicationStreamPlanHook(
 		if err != nil {
 			return err
 		}
+		if !configUri.IsExternalOrTestScheme() {
+			return errors.New("uri must be an external connection")
+		}
 
 		clusterUri, err := configUri.AsClusterUri(ctx, p.ExecCfg().InternalDB)
 		if err != nil {
@@ -222,6 +225,7 @@ func createLogicalReplicationStreamPlanHook(
 		spec, err := client.CreateForTables(ctx, &streampb.ReplicationProducerRequest{
 			TableNames:   srcTableNames,
 			AllowOffline: options.ParentID != 0,
+			// TODO(msbutler): pass reverse stream URI for validation.
 		})
 		if err != nil {
 			return err
@@ -289,8 +293,6 @@ func createLogicalReplicationStreamPlanHook(
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		var reverseStreamCmd string
 		if stmt.CreateTable && options.BidirectionalURI() != "" {
-			// TODO: validate URI.
-
 			reverseStmt := *stmt
 			reverseStmt.From, reverseStmt.Into = reverseStmt.Into, reverseStmt.From
 			reverseStmt.CreateTable = false
