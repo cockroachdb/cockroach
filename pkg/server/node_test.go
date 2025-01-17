@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -508,6 +510,90 @@ func TestNodeEmitsDiskSlowEvents(t *testing.T) {
 		}
 		if diskSlowCleared.Load() > 1 {
 			return errors.New("emitted too many disk slow cleared events")
+		}
+		return nil
+	})
+}
+
+func TestNodeEmitsLowDiskSpaceEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	stickyRegistry := fs.NewStickyRegistry()
+	memFS := stickyRegistry.Get("foo")
+
+	setDiskFree := func(freePercent int) {
+		const total = 1024 * 1024 * 1024
+		avail := total * uint64(freePercent) / 100
+		memFS.TestingSetDiskUsage(vfs.DiskUsage{
+			AvailBytes: avail,
+			UsedBytes:  total - avail,
+			TotalBytes: total,
+		})
+	}
+	setDiskFree(99)
+
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &TestingKnobs{
+				StickyVFSRegistry: stickyRegistry,
+			},
+		},
+		StoreSpecs: []base.StoreSpec{
+			{
+				InMemory:    true,
+				StickyVFSID: "foo",
+			},
+		},
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer ts.Stopper().Stop(ctx)
+
+	n := ts.Node().(*Node)
+	var eventCount atomic.Uint32
+	n.onStructuredEvent = func(ctx context.Context, event logpb.EventPayload) {
+		if event.CommonDetails().EventType == "low_disk_space" {
+			eventCount.Add(1)
+			_, buf := event.AppendJSONFields(false, nil)
+			t.Logf("received %s event: %s\n", event.CommonDetails().EventType, buf)
+		}
+	}
+
+	setDiskFree(9)
+
+	_, err := ts.SQLConn(t).Exec(`CREATE TABLE kv (k INT, v INT)`)
+	require.NoError(t, err)
+	_, err = ts.SQLConn(t).Exec(`INSERT INTO kv VALUES (1, 1), (50, 50)`)
+	require.NoError(t, err)
+	require.NoError(t, err)
+	_, err = ts.SQLConn(t).Exec(`SELECT crdb_internal.compact_engine_span(
+				1, 1, 
+				(SELECT raw_start_key FROM [SHOW RANGES FROM TABLE kv WITH KEYS] LIMIT 1),
+				(SELECT raw_end_key FROM [SHOW RANGES FROM TABLE kv WITH KEYS] LIMIT 1))`)
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		if eventCount.Load() == 0 {
+			return fmt.Errorf("did not receive low disk space event")
+		}
+		return nil
+	})
+
+	// Once the disk goes below another threshold, we should receive another event
+	// immediately.
+	setDiskFree(1)
+	_, err = ts.SQLConn(t).Exec(`INSERT INTO kv VALUES (30, 30), (60, 60)`)
+	require.NoError(t, err)
+	_, err = ts.SQLConn(t).Exec(`SELECT crdb_internal.compact_engine_span(
+				1, 1, 
+				(SELECT raw_start_key FROM [SHOW RANGES FROM TABLE kv WITH KEYS] LIMIT 1),
+				(SELECT raw_end_key FROM [SHOW RANGES FROM TABLE kv WITH KEYS] LIMIT 1))`)
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		if eventCount.Load() < 2 {
+			return fmt.Errorf("did not receive second low disk space event")
 		}
 		return nil
 	})
