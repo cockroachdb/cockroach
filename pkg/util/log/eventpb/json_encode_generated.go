@@ -3438,6 +3438,59 @@ func (m *LevelStats) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *LowDiskSpace) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.NodeID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NodeID\":"...)
+		b = strconv.AppendInt(b, int64(m.NodeID), 10)
+	}
+
+	if m.StoreID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StoreID\":"...)
+		b = strconv.AppendInt(b, int64(m.StoreID), 10)
+	}
+
+	if m.PercentThreshold != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"PercentThreshold\":"...)
+		b = strconv.AppendInt(b, int64(m.PercentThreshold), 10)
+	}
+
+	if m.AvailableBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"AvailableBytes\":"...)
+		b = strconv.AppendUint(b, uint64(m.AvailableBytes), 10)
+	}
+
+	if m.TotalBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TotalBytes\":"...)
+		b = strconv.AppendUint(b, uint64(m.TotalBytes), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *MVCCIteratorStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	if printComma {
