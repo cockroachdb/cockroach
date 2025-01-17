@@ -62,13 +62,13 @@ const (
 func TestRegionLivenessProber(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// Force extra logging to diagnose flakes.
+	require.NoError(t, log.SetVModule("prober=2"))
 	// This test forces the SQL liveness TTL be a small number,
 	// which makes the heartbeats even more critical. Under stress and
 	// race environments this test becomes even more sensitive, if
 	// we can't send heartbeats within 20 seconds.
-	skip.UnderStress(t)
-	skip.UnderRace(t)
-	skip.UnderDeadlock(t)
+	skip.UnderDuress(t)
 
 	ctx := context.Background()
 
@@ -125,11 +125,6 @@ func TestRegionLivenessProber(t *testing.T) {
 		_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
 		require.NoError(t, err)
 	}
-	// Override the table timeout probe for testing.
-	for _, ts := range tenants {
-		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeout)
-	}
-
 	var cachedRegionProvider *regions.CachedDatabaseRegions
 	cachedRegionProvider, err = regions.NewCachedDatabaseRegions(ctx, tenants[0].DB(), tenants[0].LeaseManager().(*lease.Manager))
 	require.NoError(t, err)
