@@ -265,8 +265,8 @@ LEFT JOIN (
     FROM system.table_statistics 
     GROUP BY "tableID"
 ) ts ON ts."tableID" = t.id
-LEFT JOIN system.namespace db_name ON t."parentID" = db_name.id AND db_name."parentID" = 0
-LEFT JOIN system.namespace schema_name ON t."parentSchemaID" = schema_name.id AND schema_name."parentID" = t."parentID",
+JOIN system.namespace db_name ON t."parentID" = db_name.id AND db_name."parentID" = 0
+JOIN system.namespace schema_name ON t."parentSchemaID" = schema_name.id AND schema_name."parentID" = t."parentID",
 crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', t.descriptor) AS d
 %[1]s
 ORDER BY (t."parentID", t."parentSchemaID", t.name);
