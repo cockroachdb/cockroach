@@ -4596,12 +4596,6 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 
 	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(),
 		func(t *testing.T, leaseType roachpb.LeaseType) {
-			if leaseType == roachpb.LeaseLeader {
-				// TODO(ibrahim): Find out why this test is very slow with leader leases
-				// if run under race/deadlock.
-				skip.UnderRace(t, "slow with leader leases")
-				skip.UnderDeadlock(t, "slow with leader leases")
-			}
 			var filterRangeIDAtomic int64
 
 			ctx := context.Background()
@@ -4629,8 +4623,14 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 						Settings: settings,
 						Knobs: base.TestingKnobs{
 							Store: &kvserver.StoreTestingKnobs{
+								TestingRequestFilter: testingRequestFilter,
+								// This test relies on a stable LAI, so we need to disable GC
+								// queue and async intent resolution to avoid the LAI being
+								// incremented in the middle of the test.
 								DisableReplicaGCQueue: true,
-								TestingRequestFilter:  testingRequestFilter,
+								IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+									DisableAsyncIntentResolution: true,
+								},
 							},
 						},
 					},
@@ -4649,16 +4649,10 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// We wait for lease upgrade to avoid the lease being upgraded after we
+			// capture the LAI.
+			tc.MaybeWaitForLeaseUpgrade(ctx, t, desc)
 			leaseIndex0 := repl0.GetLeaseAppliedIndex()
-			if leaseType == roachpb.LeaseLeader {
-				// When running with leader leases, when there is no leader, we acquire
-				// an expiration based lease, and then acquiring a leader lease.
-				// Therefore, the lease applied index is incremented by an extra 1.
-				leaseIndex0++
-				// Before blocking requests, make sure that the expiration lease gets
-				// upgraded to a leader lease.
-				tc.WaitForLeaseUpgrade(ctx, t, desc)
-			}
 
 			atomic.StoreInt64(&filterRangeIDAtomic, int64(desc.RangeID))
 			type target struct {
