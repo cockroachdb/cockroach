@@ -157,6 +157,11 @@ type TestServerArgs struct {
 	// below for alternative options that suits your test case.
 	DefaultTestTenant DefaultTestTenantOptions
 
+	// DefaultTenantName is the name of the tenant created implicitly according
+	// to DefaultTestTenant. It is typically `test-tenant` for unit tests and
+	// always `demoapp` for the cockroach demo.
+	DefaultTenantName roachpb.TenantName
+
 	// StartDiagnosticsReporting checks cluster.TelemetryOptOut(), and
 	// if not disabled starts the asynchronous goroutine that checks for
 	// CockroachDB upgrades and periodically reports diagnostics to

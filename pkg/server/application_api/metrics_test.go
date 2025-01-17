@@ -212,10 +212,7 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	})
 	t.Run("tenant", func(t *testing.T) {
 		s := srv.ApplicationLayer()
-		// TODO(knz): why is the tenant label missing here?
-		// TODO(herko): it is present when running in shared process mode. Hence why
-		// the test is now forced to run only in external process mode.
-		testFn(s, `tenant=""`)
+		testFn(s, `tenant="test-tenant"`)
 	})
 }
 
