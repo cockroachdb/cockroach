@@ -134,6 +134,22 @@ message DiskSlownessCleared {
   int32 store_id = 3 [(gogoproto.customname) = "StoreID", (gogoproto.jsontag) = ",omitempty"];
 }
 
+// LowDiskSpace is emitted when a store is reaching capacity, as we reach
+// certain thresholds. It is emitted periodically while we are in a low disk
+// state.
+message LowDiskSpace {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The node ID where the event was originated.
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+  int32 store_id = 3 [(gogoproto.customname) = "StoreID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The free space percent threshold that we went under.
+  int32 percent_threshold = 4 [(gogoproto.jsontag) = ",omitempty"];
+  uint64 available_bytes = 5 [(gogoproto.jsontag) = ",omitempty"];
+  uint64 total_bytes = 6 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // CertsReload is recorded when the TLS certificates are
 // reloaded/rotated from disk.
 message CertsReload {

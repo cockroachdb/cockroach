@@ -440,6 +440,7 @@ type Node struct {
 	}
 
 	// Event handler called in logStructuredEvent. Used in tests only.
+	// TODO(radu): this should be a testing knob.
 	onStructuredEvent func(ctx context.Context, event logpb.EventPayload)
 
 	// licenseEnforcer is used to enforce license policies on the cluster
@@ -896,6 +897,9 @@ func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
 	store.TODOEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
 		n.onStoreDiskSlow(n.AnnotateCtx(context.Background()), store.StoreID(), info)
 	})
+	store.TODOEngine().RegisterLowDiskSpaceCallback(func(info pebble.LowDiskSpaceInfo) {
+		n.onLowDiskSpace(n.AnnotateCtx(context.Background()), store.StoreID(), info)
+	})
 	n.stores.AddStore(store)
 	n.recorder.AddStore(store)
 }
@@ -973,6 +977,20 @@ func (n *Node) onStoreDiskSlow(
 		}
 	})
 
+}
+
+func (n *Node) onLowDiskSpace(
+	ctx context.Context, storeID roachpb.StoreID, info pebble.LowDiskSpaceInfo,
+) {
+	ev := &eventpb.LowDiskSpace{
+		StoreID:          int32(storeID),
+		NodeID:           int32(n.Descriptor.NodeID),
+		PercentThreshold: int32(info.PercentThreshold),
+		AvailableBytes:   info.AvailBytes,
+		TotalBytes:       info.TotalBytes,
+	}
+	ev.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+	n.logStructuredEvent(ctx, logpb.EventPayload(ev))
 }
 
 // validateStores iterates over all stores, verifying they agree on node ID.
