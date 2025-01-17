@@ -9,24 +9,25 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 )
 
 // PersistentStore implements the Store interface for KV backed vector indices.
 type PersistentStore struct {
-	db *kv.DB // Used to generate new partition IDs
+	db descs.DB // Used to generate new partition IDs
 
 	// Used for generating prefixes and reading from the PK to get full length
 	// vectors.
-	codec keys.SQLCodec
-	table catalog.TableDescriptor
-	index catalog.Index
+	codec   keys.SQLCodec
+	tableID catid.DescID
+	indexID catid.IndexID
 
 	// The root partition always uses the UnQuantizer while other partitions may use
 	// any quantizer.
@@ -41,47 +42,81 @@ type PersistentStore struct {
 
 var _ Store = (*PersistentStore)(nil)
 
-// NewPersistentStore creates a vecstore.Store interface backed by the KV for a
-// single vector index.
-func NewPersistentStore(
-	db *kv.DB,
+// Create a PersistentStore for an index on the provided table descriptor using
+// the provided column ID as the vector column for the index. This is used in
+// unit tests where full vector index creation capabilities aren't necessarily
+// available.
+func NewPersistentStoreWithColumnID(
+	ctx context.Context,
+	db descs.DB,
 	quantizer quantize.Quantizer,
 	codec keys.SQLCodec,
-	table catalog.TableDescriptor,
-	index catalog.Index,
+	tableDesc catalog.TableDescriptor,
+	indexID catid.IndexID,
+	vectorColumnID descpb.ColumnID,
 ) (ps *PersistentStore, err error) {
-	// TODO (mw5h): Check for staleness of the table descriptor when we create a new persistentStoreTxn.
 	ps = &PersistentStore{
 		db:            db,
 		codec:         codec,
-		table:         table,
-		index:         index,
+		tableID:       tableDesc.GetID(),
+		indexID:       indexID,
 		quantizer:     quantizer,
 		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetOriginalDims()),
 	}
 
-	ps.prefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
-	ps.pkPrefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), table.GetPrimaryIndex().GetID())
+	pk := tableDesc.GetPrimaryIndex()
+	ps.prefix = rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), indexID)
+	ps.pkPrefix = rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), pk.GetID())
 
-	vectorColumnID := ps.index.GetKeyColumnID(ps.index.NumKeyColumns() - 1)
 	ps.colIdxMap.Set(vectorColumnID, 0)
-
 	err = rowenc.InitIndexFetchSpec(
 		&ps.fetchSpec,
 		ps.codec,
-		ps.table,
-		ps.table.GetPrimaryIndex(),
+		tableDesc,
+		pk,
 		[]descpb.ColumnID{vectorColumnID},
 	)
-
 	return ps, err
+}
+
+// NewPersistentStore creates a vecstore.Store interface backed by the KV for a
+// single vector index.
+func NewPersistentStore(
+	ctx context.Context,
+	db descs.DB,
+	quantizer quantize.Quantizer,
+	codec keys.SQLCodec,
+	tableID catid.DescID,
+	indexID catid.IndexID,
+) (ps *PersistentStore, err error) {
+	var tableDesc catalog.TableDescriptor
+	err = db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		var err error
+		tableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, tableID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var index catalog.Index
+	for _, desc := range tableDesc.DeletableNonPrimaryIndexes() {
+		if desc.GetID() == indexID {
+			index = desc
+			break
+		}
+	}
+
+	vectorColumnID := index.VectorColumnID()
+
+	return NewPersistentStoreWithColumnID(ctx, db, quantizer, codec, tableDesc, indexID, vectorColumnID)
 }
 
 // Begin is part of the vecstore.Store interface. Begin creates a new KV
 // transaction on behalf of the user and prepares it to operate on the persistent
 // vector store.
 func (s *PersistentStore) Begin(ctx context.Context) (Txn, error) {
-	return NewPersistentStoreTxn(s, s.db.NewTxn(ctx, "vecstore.PersistentStore begin transaction")), nil
+	return NewPersistentStoreTxn(s, s.db.KV().NewTxn(ctx, "vecstore.PersistentStore begin transaction")), nil
 }
 
 // Commit is part of the vecstore.Store interface. Commit commits the
@@ -98,5 +133,7 @@ func (s *PersistentStore) Abort(ctx context.Context, txn Txn) error {
 
 // MergeStats is part of the vecstore.Store interface.
 func (s *PersistentStore) MergeStats(ctx context.Context, stats *IndexStats, skipMerge bool) error {
-	panic("MergeStats() unimplemented")
+	// TODO(mw5h): Implement MergeStats. We're not panicking here because some tested
+	// functionality needs to call this function but does not depend on the results.
+	return nil
 }
