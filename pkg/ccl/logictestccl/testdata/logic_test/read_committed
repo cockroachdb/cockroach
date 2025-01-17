@@ -483,10 +483,20 @@ SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
 CREATE USER testuser2 WITH VIEWACTIVITY;
+
+statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t(a INT PRIMARY KEY);
+
+statement ok
 INSERT INTO t VALUES(1), (2);
+
+statement ok
 GRANT ALL ON t TO testuser;
+
+statement ok
 GRANT ALL ON t TO testuser2;
 
 user testuser
