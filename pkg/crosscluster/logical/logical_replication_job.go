@@ -172,6 +172,14 @@ func (r *logicalReplicationResumer) ingest(
 	}
 	defer func() { _ = client.Close(ctx) }()
 
+	status, err := client.Heartbeat(ctx, streampb.StreamID(payload.StreamID), progress.ReplicatedTime)
+	if err != nil {
+		log.Warningf(ctx, "could not heartbeat source cluster with stream id %d", payload.StreamID)
+	}
+	if status.StreamStatus == streampb.StreamReplicationStatus_STREAM_INACTIVE {
+		return jobs.MarkAsPermanentJobError(errors.Newf("history retention job is no longer active"))
+	}
+
 	if err := r.maybeStartReverseStream(ctx, jobExecCtx, client); err != nil {
 		return err
 	}
