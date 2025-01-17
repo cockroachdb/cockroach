@@ -160,7 +160,12 @@ func NewInMemoryStore(dims int, seed int64) *InMemoryStore {
 	return st
 }
 
-// BeginTransaction implements the Store interface.
+// Dims returns the number of dimensions in stored vectors.
+func (s *InMemoryStore) Dims() int {
+	return s.dims
+}
+
+// Begin implements the Store interface.
 func (s *InMemoryStore) Begin(ctx context.Context) (Txn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -173,7 +178,7 @@ func (s *InMemoryStore) Begin(ctx context.Context) (Txn, error) {
 	return &elem.Value.activeTxn, nil
 }
 
-// CommitTransaction implements the Store interface.
+// Commit implements the Store interface.
 func (s *InMemoryStore) Commit(ctx context.Context, txn Txn) error {
 	// Release any exclusive partition locks held by the transaction.
 	tx := txn.(*inMemoryTxn)
@@ -233,7 +238,7 @@ func (s *InMemoryStore) Commit(ctx context.Context, txn Txn) error {
 	return nil
 }
 
-// AbortTransaction implements the Store interface.
+// Abort implements the Store interface.
 func (s *InMemoryStore) Abort(ctx context.Context, txn Txn) error {
 	tx := txn.(*inMemoryTxn)
 	if tx.updated {
