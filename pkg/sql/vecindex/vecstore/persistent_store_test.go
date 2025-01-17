@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
@@ -31,6 +32,7 @@ func TestPersistentStore(t *testing.T) {
 
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	internalDB := srv.ApplicationLayer().InternalDB().(descs.DB)
 	codec := srv.ApplicationLayer().Codec()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	defer srv.Stopper().Stop(ctx)
@@ -63,7 +65,15 @@ func TestPersistentStore(t *testing.T) {
 	index := tabledesc.NewTestIndex(&indexDesc, 1)
 
 	quantizer := quantize.NewUnQuantizer(2)
-	store, err := NewPersistentStore(kvDB, quantizer, codec, tableDesc, index)
+	store, err := NewPersistentStoreWithColumnID(
+		ctx,
+		internalDB,
+		quantizer,
+		codec,
+		tableDesc,
+		index.GetID(),
+		col.GetID(),
+	)
 	require.NoError(t, err)
 
 	pk1 := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 11), 0 /* famID */)
