@@ -926,11 +926,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
 		}
-		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`, cdctest.ChangefeedOption{
-			FullTableName: false,
-			KeyInValue:    false,
-			Format:        "json",
-		})
+		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`)
 		if err != nil {
 			return err
 		}
@@ -2294,7 +2290,6 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/bank",
 		Owner:            `cdc`,
-		Skip:             "#139109",
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
