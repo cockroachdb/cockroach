@@ -201,6 +201,29 @@ func TestTerminateGroups(t *testing.T) {
 	<-done
 }
 
+func TestErrorGroups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	m := NewManager(ctx, nilLogger())
+	g := m.NewErrorGroup()
+
+	err := errors.New("test error")
+	g.Go(func(ctx context.Context, l *logger.Logger) error {
+		return err
+	})
+
+	actualErr := g.WaitE()
+	require.ErrorIs(t, actualErr, err)
+
+	select {
+	case <-m.CompletedEvents():
+		t.Fatal("expected no events (errors handled by WaitE)")
+	default:
+	}
+
+	m.Terminate(nilLogger())
+}
+
 func nilLogger() *logger.Logger {
 	lcfg := logger.Config{
 		Stdout: io.Discard,

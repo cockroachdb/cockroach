@@ -263,8 +263,13 @@ func (h *Helper) Go(fn task.Func, opts ...task.Option) {
 }
 
 // NewGroup implements the Group interface.
-func (h *Helper) NewGroup() task.Group {
-	return h.runner.background.NewGroup(h.defaultTaskOptions()...)
+func (h *Helper) NewGroup(opts ...task.Option) task.Group {
+	return h.runner.background.NewGroup(task.OptionList(h.defaultTaskOptions()...), task.OptionList(opts...))
+}
+
+// NewErrorGroup implements the Group interface.
+func (h *Helper) NewErrorGroup(opts ...task.Option) task.ErrorGroup {
+	return h.runner.background.NewErrorGroup(task.OptionList(h.defaultTaskOptions()...), task.OptionList(opts...))
 }
 
 // GoCommand has the same semantics of `GoWithCancel()`; the command passed will
