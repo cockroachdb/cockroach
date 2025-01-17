@@ -2364,6 +2364,7 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	expAppliedState := kvserverpb.RangeAppliedState{
 		RaftAppliedIndexTerm: stateloader.RaftInitialLogTerm,
 		RaftAppliedIndex:     stateloader.RaftInitialLogIndex,
+		LeaseAppliedIndex:    stateloader.InitialLeaseAppliedIndex,
 	}
 	loadedAppliedState, err := slRight.LoadRangeAppliedState(ctx, batch)
 	require.NoError(t, err)
