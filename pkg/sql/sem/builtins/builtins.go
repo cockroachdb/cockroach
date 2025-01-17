@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -8950,6 +8951,28 @@ WHERE object_id = table_descriptor_id
 			},
 			Info:       "Returns whether the given type OID is indexable.",
 			Volatility: volatility.Stable,
+		},
+	),
+	"pheromone_normalize": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "val", Typ: types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				j := tree.MustBeDJSON(args[0]).JSON
+				p, err := physical.PheromoneFromJSON(j)
+				if err != nil {
+					return nil, err
+				}
+				j2 := p.ToJSON()
+				return tree.NewDJSON(j2), nil
+			},
+			Info:       "",
+			Volatility: volatility.Immutable,
 		},
 	),
 }
