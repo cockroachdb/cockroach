@@ -198,8 +198,6 @@ type beforeAfterValidator struct {
 	table          string
 	primaryKeyCols []string
 	resolved       map[string]hlc.Timestamp
-	fullTableName  bool
-	keyInValue     bool
 
 	failures []string
 }
@@ -207,9 +205,7 @@ type beforeAfterValidator struct {
 // NewBeforeAfterValidator returns a Validator verifies that the "before" and
 // "after" fields in each row agree with the source table when performing AS OF
 // SYSTEM TIME lookups before and at the row's timestamp.
-func NewBeforeAfterValidator(
-	sqlDB *gosql.DB, table string, option ChangefeedOption,
-) (Validator, error) {
+func NewBeforeAfterValidator(sqlDB *gosql.DB, table string) (Validator, error) {
 	primaryKeyCols, err := fetchPrimaryKeyCols(sqlDB, table)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetchPrimaryKeyCols failed")
@@ -218,8 +214,6 @@ func NewBeforeAfterValidator(
 	return &beforeAfterValidator{
 		sqlDB:          sqlDB,
 		table:          table,
-		fullTableName:  option.FullTableName,
-		keyInValue:     option.KeyInValue,
 		primaryKeyCols: primaryKeyCols,
 		resolved:       make(map[string]hlc.Timestamp),
 	}, nil
@@ -229,19 +223,6 @@ func NewBeforeAfterValidator(
 func (v *beforeAfterValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
-	if v.fullTableName {
-		if topic != fmt.Sprintf(`d.public.%s`, v.table) {
-			v.failures = append(v.failures, fmt.Sprintf(
-				"topic %s does not match expected table d.public.%s", topic, v.table,
-			))
-		}
-	} else {
-		if topic != v.table {
-			v.failures = append(v.failures, fmt.Sprintf(
-				"topic %s does not match expected table %s", topic, v.table,
-			))
-		}
-	}
 	keyJSON, err := json.ParseJSON(key)
 	if err != nil {
 		return err
@@ -256,26 +237,6 @@ func (v *beforeAfterValidator) NoteRow(
 	valueJSON, err := json.ParseJSON(value)
 	if err != nil {
 		return err
-	}
-
-	if v.keyInValue {
-		keyString := keyJSON.String()
-		keyInValueJSON, err := valueJSON.FetchValKey("key")
-		if err != nil {
-			return err
-		}
-
-		if keyInValueJSON == nil {
-			v.failures = append(v.failures, fmt.Sprintf(
-				"no key in value, expected key value %s", keyString))
-		} else {
-			keyInValueString := keyInValueJSON.String()
-			if keyInValueString != keyString {
-				v.failures = append(v.failures, fmt.Sprintf(
-					"key in value %s does not match expected key value %s",
-					keyInValueString, keyString))
-			}
-		}
 	}
 
 	afterJSON, err := valueJSON.FetchValKey("after")
@@ -385,6 +346,121 @@ func (v *beforeAfterValidator) NoteResolved(partition string, resolved hlc.Times
 
 // Failures implements the Validator interface.
 func (v *beforeAfterValidator) Failures() []string {
+	return v.failures
+}
+
+type keyInValueValidator struct {
+	primaryKeyCols []string
+	failures       []string
+}
+
+// NewKeyInValueValidator returns a Validator that verifies that the emitted row
+// includes the key inside a field named "key" inside the value. It should be
+// used only when key_in_value is specified in the changefeed.
+func NewKeyInValueValidator(sqlDB *gosql.DB, table string) (Validator, error) {
+	primaryKeyCols, err := fetchPrimaryKeyCols(sqlDB, table)
+	if err != nil {
+		return nil, errors.Wrap(err, "fetchPrimaryKeyCols failed")
+	}
+
+	return &keyInValueValidator{
+		primaryKeyCols: primaryKeyCols,
+	}, nil
+}
+
+// NoteRow implements the Validator interface.
+func (v *keyInValueValidator) NoteRow(
+	partition, key, value string, updated hlc.Timestamp, topic string,
+) error {
+	keyJSON, err := json.ParseJSON(key)
+	if err != nil {
+		return err
+	}
+	keyJSONAsArray, ok := keyJSON.AsArray()
+	if !ok || len(keyJSONAsArray) != len(v.primaryKeyCols) {
+		return errors.Errorf(
+			`Not array: expected primary key columns %s got datums %s`,
+			v.primaryKeyCols, keyJSONAsArray)
+	}
+
+	valueJSON, err := json.ParseJSON(value)
+	if err != nil {
+		return err
+	}
+
+	keyString := keyJSON.String()
+	keyInValueJSON, err := valueJSON.FetchValKey("key")
+	if err != nil {
+		return err
+	}
+
+	if keyInValueJSON == nil {
+		return errors.Errorf(
+			"no key in value, expected key value %s", keyString)
+	} else {
+		keyInValueString := keyInValueJSON.String()
+		if keyInValueString != keyString {
+			return errors.Errorf(
+				"key in value %s does not match expected key value %s",
+				keyInValueString, keyString)
+		}
+	}
+
+	return nil
+}
+
+// NoteResolved implements the Validator interface.
+func (v *keyInValueValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return nil
+}
+
+// Failures implements the Validator interface.
+func (v *keyInValueValidator) Failures() []string {
+	return v.failures
+}
+
+type topicValidator struct {
+	table         string
+	fullTableName bool
+
+	failures []string
+}
+
+// NewTopicValidator returns a Validator that verifies that the topic field of
+// the row agrees with the name of the table. In the case the full_table_name
+// option is specified, it checks the topic includes the db and schema name.
+func NewTopicValidator(table string, fullTableName bool) Validator {
+	return &topicValidator{
+		table:         table,
+		fullTableName: fullTableName,
+	}
+}
+
+// NoteRow implements the Validator interface.
+func (v *topicValidator) NoteRow(
+	partition, key, value string, updated hlc.Timestamp, topic string,
+) error {
+	if v.fullTableName {
+		if topic != fmt.Sprintf(`d.public.%s`, v.table) {
+			v.failures = append(v.failures, fmt.Sprintf(
+				"topic %s does not match expected table d.public.%s", topic, v.table))
+		}
+	} else {
+		if topic != v.table {
+			v.failures = append(v.failures, fmt.Sprintf(
+				"topic %s does not match expected table d.public.%s", topic, v.table))
+		}
+	}
+	return nil
+}
+
+// NoteResolved implements the Validator interface.
+func (v *topicValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return nil
+}
+
+// Failures implements the Validator interface.
+func (v *topicValidator) Failures() []string {
 	return v.failures
 }
 
