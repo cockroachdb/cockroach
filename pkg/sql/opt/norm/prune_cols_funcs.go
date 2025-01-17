@@ -69,7 +69,7 @@ func (c *CustomFuncs) neededMutationCols(
 		addCols(private.PartialIndexDelCols)
 	}
 	addCols(private.VectorIndexPutPartitionCols)
-	addCols(private.VectorIndexPutCentroidCols)
+	addCols(private.VectorIndexPutQuantizedVecCols)
 	addCols(private.VectorIndexDelPartitionCols)
 	addCols(private.ReturnCols)
 	addCols(opt.OptionalColList(private.PassthroughCols))
