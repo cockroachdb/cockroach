@@ -198,6 +198,11 @@ func NewVectorIndex(
 	return vi, nil
 }
 
+// Store returns the underlying vector store for the index.
+func (vi *VectorIndex) Store() vecstore.Store {
+	return vi.store
+}
+
 // Options returns the options that specify how the index should be built and
 // searched.
 func (vi *VectorIndex) Options() VectorIndexOptions {
