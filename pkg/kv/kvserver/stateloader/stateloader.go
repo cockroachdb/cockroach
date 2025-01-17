@@ -374,12 +374,13 @@ func (rsl StateLoader) SetForceFlushIndex(
 // empty storage.
 func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState {
 	return kvserverpb.ReplicaState{
-		Desc:           &roachpb.RangeDescriptor{RangeID: rangeID},
-		Lease:          &roachpb.Lease{},
-		TruncatedState: nil, // Invariant: always nil.
-		GCThreshold:    &hlc.Timestamp{},
-		Stats:          &enginepb.MVCCStats{},
-		GCHint:         &roachpb.GCHint{},
+		LeaseAppliedIndex: InitialLeaseAppliedIndex,
+		Desc:              &roachpb.RangeDescriptor{RangeID: rangeID},
+		Lease:             &roachpb.Lease{},
+		TruncatedState:    nil, // Invariant: always nil.
+		GCThreshold:       &hlc.Timestamp{},
+		Stats:             &enginepb.MVCCStats{},
+		GCHint:            &roachpb.GCHint{},
 	}
 }
 

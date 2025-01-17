@@ -26,6 +26,19 @@ const (
 	RaftInitialLogTerm  = 5
 )
 
+const (
+	// InitialLeaseAppliedIndex is the starting LAI of a Range. All proposals are
+	// assigned higher LAIs.
+	//
+	// The LAI=1 is reserved for out-of-order proposals in tests. A bunch of tests
+	// override proposal's LAI to 1, in order to force reproposals. If these
+	// modified proposals race with a "real" proposal with LAI 1, this can cause a
+	// closed timestamp regression.
+	//
+	// https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1881165404
+	InitialLeaseAppliedIndex = 1
+)
+
 // WriteInitialReplicaState sets up a new Range, but without writing an
 // associated Raft state (which must be written separately via
 // SynthesizeRaftState before instantiating a Replica). The main task is to
@@ -50,6 +63,7 @@ func WriteInitialReplicaState(
 	s := kvserverpb.ReplicaState{
 		RaftAppliedIndex:     truncState.Index,
 		RaftAppliedIndexTerm: truncState.Term,
+		LeaseAppliedIndex:    InitialLeaseAppliedIndex,
 		Desc: &roachpb.RangeDescriptor{
 			RangeID: desc.RangeID,
 		},

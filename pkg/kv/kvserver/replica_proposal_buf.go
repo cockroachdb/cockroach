@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -182,14 +184,8 @@ func (b *propBuf) Init(
 	b.settings = settings
 	b.assignedLAI = p.leaseAppliedIndex()
 
-	// Reserve LAI 1 for out-of-order proposals in tests. A bunch of tests
-	// override proposal's LAI to 1, in order to force reproposals. If these
-	// modified proposals race with a "real" proposal with LAI 1, this can cause a
-	// closed timestamp regression.
-	//
-	// https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1881165404
-	if b.testing.leaseIndexFilter != nil {
-		b.forwardAssignedLAILocked(1)
+	if buildutil.CrdbTestBuild && b.assignedLAI < stateloader.InitialLeaseAppliedIndex {
+		panic("LeaseAppliedIndex < InitialLeaseAppliedIndex")
 	}
 }
 
