@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -180,17 +181,7 @@ func (b *propBuf) Init(
 	b.clock = clock
 	b.evalTracker = tracker
 	b.settings = settings
-	b.assignedLAI = p.leaseAppliedIndex()
-
-	// Reserve LAI 1 for out-of-order proposals in tests. A bunch of tests
-	// override proposal's LAI to 1, in order to force reproposals. If these
-	// modified proposals race with a "real" proposal with LAI 1, this can cause a
-	// closed timestamp regression.
-	//
-	// https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1881165404
-	if b.testing.leaseIndexFilter != nil {
-		b.forwardAssignedLAILocked(1)
-	}
+	b.assignedLAI = max(p.leaseAppliedIndex(), stateloader.InitialLeaseAppliedIndex)
 }
 
 // AllocatedIdx returns the highest index that was allocated. This generally
