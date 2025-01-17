@@ -7903,7 +7903,9 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	var wrongLeaseIndex kvpb.LeaseAppliedIndex // populated below
 
 	tc.repl.mu.Lock()
-	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride kvpb.LeaseAppliedIndex) {
+	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(
+		p *ProposalData, _ kvpb.LeaseAppliedIndex,
+	) (indexOverride kvpb.LeaseAppliedIndex) {
 		if v := p.Context().Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
 				return wrongLeaseIndex
@@ -8302,7 +8304,15 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 
 	r := tc.repl
 	r.mu.Lock()
-	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) kvpb.LeaseAppliedIndex {
+	r.mu.proposalBuf.testing.leaseIndexFilter = func(
+		p *ProposalData, current kvpb.LeaseAppliedIndex,
+	) kvpb.LeaseAppliedIndex {
+		// Do not override LAI to 1 unless the state machine has already moved past
+		// this index. We need a guarantee that the overridden LAI will result in a
+		// no-op command.
+		if current < 1 {
+			return 0
+		}
 		// We're going to recognize the first time the commnand for the EndTxn is
 		// proposed and we're going to hackily force a low MaxLeaseIndex, so that
 		// the processing gets rejected further on.

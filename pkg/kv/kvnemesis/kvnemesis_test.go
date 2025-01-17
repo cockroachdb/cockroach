@@ -107,7 +107,15 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 	if p := cfg.invalidLeaseAppliedIndexProb; p > 0 {
 		var mu syncutil.Mutex
 		seen := map[string]int{}
-		storeKnobs.LeaseIndexFilter = func(pd *kvserver.ProposalData) kvpb.LeaseAppliedIndex {
+		storeKnobs.LeaseIndexFilter = func(
+			pd *kvserver.ProposalData, current kvpb.LeaseAppliedIndex,
+		) kvpb.LeaseAppliedIndex {
+			// Do not override LAI to 1 unless the state machine has already moved
+			// past this index. We need a guarantee that the overridden LAI will
+			// result in a no-op command.
+			if current < 1 {
+				return 0
+			}
 			key, n, ok := isOurCommand(pd.Request)
 			if !ok {
 				return 0

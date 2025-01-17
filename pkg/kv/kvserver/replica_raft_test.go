@@ -210,7 +210,15 @@ func testProposalsWithInjectedLeaseIndexAndReproposalError(t *testing.T, pipelin
 	{
 		var mu syncutil.Mutex
 		seen := map[string]int{}
-		cfg.TestingKnobs.LeaseIndexFilter = func(p *ProposalData) kvpb.LeaseAppliedIndex {
+		cfg.TestingKnobs.LeaseIndexFilter = func(
+			p *ProposalData, current kvpb.LeaseAppliedIndex,
+		) kvpb.LeaseAppliedIndex {
+			// Do not override LAI to 1 unless the state machine has already moved
+			// past this index. We need a guarantee that the overridden LAI will
+			// result in a no-op command.
+			if current < 1 {
+				return 0
+			}
 			key, ok := isOurCommand(p.Request)
 			if !ok {
 				return 0

@@ -534,8 +534,8 @@ type StoreTestingKnobs struct {
 	InjectReproposalError func(p *ProposalData) error
 
 	// LeaseIndexFilter can return nonzero to override the automatically assigned
-	// LeaseAppliedIndex.
-	LeaseIndexFilter func(*ProposalData) kvpb.LeaseAppliedIndex
+	// LeaseAppliedIndex. The second parameter is the LAI of the state machine.
+	LeaseIndexFilter func(*ProposalData, kvpb.LeaseAppliedIndex) kvpb.LeaseAppliedIndex
 
 	// FlowControlTestingKnobs provide fine-grained control over the various
 	// kvflowcontrol components for testing.

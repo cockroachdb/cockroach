@@ -99,12 +99,14 @@ type propBuf struct {
 		// leaseIndexFilter can be used by tests to override the max lease index
 		// assigned to a proposal by returning a non-zero lease index.
 		//
-		// If this filter is set, the lease index 1 is reserved for out-of-order
-		// proposals, and propBuf will never submit "real" proposals at index 1.
-		// Returning indices > 1 here is generally unsafe because this may cause
-		// unintended proposal reordering and closed timestamp regressions, as in
-		// https://github.com/cockroachdb/cockroach/issues/118017
-		leaseIndexFilter func(*ProposalData) kvpb.LeaseAppliedIndex
+		// In some tests, the lease index 1 is reserved for injected out-of-order
+		// proposals. The filter must make sure to not override the lease index
+		// unless the current LAI (passed via the second argument) is already >= 1.
+		//
+		// Returning indices > current LAI here is generally unsafe because this may
+		// cause unintended proposal reordering and closed timestamp regressions, as
+		// in https://github.com/cockroachdb/cockroach/issues/118017
+		leaseIndexFilter func(*ProposalData, kvpb.LeaseAppliedIndex) kvpb.LeaseAppliedIndex
 		// insertFilter allows tests to inject errors at Insert() time.
 		insertFilter func(*ProposalData) error
 		// submitProposalFilter can be used by tests to observe and optionally
@@ -181,16 +183,6 @@ func (b *propBuf) Init(
 	b.evalTracker = tracker
 	b.settings = settings
 	b.assignedLAI = p.leaseAppliedIndex()
-
-	// Reserve LAI 1 for out-of-order proposals in tests. A bunch of tests
-	// override proposal's LAI to 1, in order to force reproposals. If these
-	// modified proposals race with a "real" proposal with LAI 1, this can cause a
-	// closed timestamp regression.
-	//
-	// https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1881165404
-	if b.testing.leaseIndexFilter != nil {
-		b.forwardAssignedLAILocked(1)
-	}
 }
 
 // AllocatedIdx returns the highest index that was allocated. This generally
@@ -714,7 +706,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	}
 
 	if filter := b.testing.leaseIndexFilter; filter != nil {
-		if override := filter(p); override != 0 {
+		if override := filter(p, b.p.leaseAppliedIndex()); override != 0 {
 			lai = override
 		}
 	}
