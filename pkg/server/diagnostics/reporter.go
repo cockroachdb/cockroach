@@ -382,7 +382,7 @@ func (r *Reporter) CreateReport(
 		}
 	}
 
-	info.SqlStats, err = r.SQLServer.GetScrubbedReportingStats(ctx, 100 /* limit */)
+	info.SqlStats, err = r.SQLServer.GetScrubbedReportingStats(ctx, 100 /* limit */, false)
 	if err != nil {
 		if log.V(2 /* level */) {
 			log.Warningf(ctx, "unexpected error encountered when getting scrubbed reporting stats: %s", err)

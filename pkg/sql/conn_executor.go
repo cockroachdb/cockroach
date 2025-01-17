@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -707,7 +708,7 @@ func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 func (s *Server) GetScrubbedStmtStats(
 	ctx context.Context,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.sqlStats.GetLocalMemProvider(), math.MaxInt32)
+	return s.getScrubbedStmtStats(ctx, s.sqlStats.GetLocalMemProvider(), math.MaxInt32, true)
 }
 
 // Avoid lint errors.
@@ -754,19 +755,23 @@ func (s *Server) GetUnscrubbedTxnStats(
 // GetScrubbedReportingStats does the same thing as GetScrubbedStmtStats but
 // returns statistics from the reported stats pool.
 func (s *Server) GetScrubbedReportingStats(
-	ctx context.Context, limit int,
+	ctx context.Context, limit int, includeInternal bool,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.reportedStats, limit)
+	return s.getScrubbedStmtStats(ctx, s.reportedStats, limit, includeInternal)
 }
 
 func (s *Server) getScrubbedStmtStats(
-	ctx context.Context, statsProvider sqlstats.Provider, limit int,
+	ctx context.Context, statsProvider sqlstats.Provider, limit int, includeInternal bool,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
 	salt := ClusterSecret.Get(&s.cfg.Settings.SV)
 
 	var scrubbedStats []appstatspb.CollectedStatementStatistics
 	stmtStatsVisitor := func(_ context.Context, stat *appstatspb.CollectedStatementStatistics) error {
 		if limit <= (len(scrubbedStats)) {
+			return nil
+		}
+
+		if !includeInternal && strings.HasPrefix(stat.Key.App, catconstants.InternalAppNamePrefix) {
 			return nil
 		}
 
