@@ -66,6 +66,7 @@ go_library(
         "zip_per_node.go",
         "zip_table_registry.go",
         "zip_upload.go",
+        "zip_upload_table_dumps.go",
         ":gen-keytype-stringer",  # keep
     ],
     # keep
@@ -368,6 +369,7 @@ go_test(
         "zip_table_registry_test.go",
         "zip_tenant_test.go",
         "zip_test.go",
+        "zip_upload_table_dumps_test.go",
         "zip_upload_test.go",
     ],
     data = glob(["testdata/**"]),

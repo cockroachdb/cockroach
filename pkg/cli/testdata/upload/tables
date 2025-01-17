@@ -9,17 +9,19 @@ Logs API Hook: claim_instance_id=NULL	claim_session_id=NULL	created=2024-12-11 0
 Logs API Hook: claim_instance_id=NULL	claim_session_id=NULL	created=2024-12-11 07:39:23.366318	created_by_id=3	created_by_type=node	ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.system_jobs	id=101	last_run=NULL	num_runs=NULL	payload=redacted	progress=map[Details:map[pollJobsStats:map[]] Progress:<nil> modified_micros:1.733902763366318e+15 trace_id:0]	status=running	
 Logs API Hook: claim_instance_id=NULL	claim_session_id=NULL	created=2024-12-11 07:39:23.374069	created_by_id=NULL	created_by_type=NULL	ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.system_jobs	id=103	last_run=NULL	num_runs=NULL	payload=redacted	progress=map[Details:map[update_sql_activity:map[]] Progress:<nil> modified_micros:1.733902763374069e+15 trace_id:0]	status=running	
 Logs API Hook: claim_instance_id=NULL	claim_session_id=NULL	created=2024-12-11 07:39:23.378479	created_by_id=NULL	created_by_type=NULL	ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.system_jobs	id=104	last_run=NULL	num_runs=NULL	payload=redacted	progress=map[Details:map[mvcc_statistics_progress:map[]] Progress:<nil> modified_micros:1.733902763378479e+15 trace_id:0]	status=running	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/1/crdb_internal.node_metrics,node_id:1	name=gossip.connections.incoming	store_id=NULL	value=0	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/1/crdb_internal.node_metrics,node_id:1	name=jobs.row_level_ttl.select_duration-p99.9	store_id=NULL	value=0	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/1/crdb_internal.node_metrics,node_id:1	name=leases.transfers.success	store_id=1	value=0	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/1/crdb_internal.node_metrics,node_id:1	name=range.snapshots.upreplication.sent-bytes	store_id=1	value=0	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/1/crdb_internal.node_metrics,node_id:1	name=sql.restart_savepoint.rollback.count.internal	store_id=NULL	value=0	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/1/crdb_internal.node_metrics,node_id:1	name=storage.iterator.category-pebble-ingest.block-load.latency-sum	store_id=1	value=0	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/2/crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:24.205086	name=statement_diagnostics	node_id=1	parent_id=1	table_id=36	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/2/crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:27.222137	name=rides	node_id=1	parent_id=104	table_id=108	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/2/crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:31.289861	name=settings	node_id=1	parent_id=1	table_id=6	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/2/crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:44.824583	name=descriptor	node_id=1	parent_id=1	table_id=3	
-Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:nodes/2/crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:49.537097	name=external_connections	node_id=1	parent_id=1	table_id=53	
+Logs API Hook: contended=t	database_name=cct_tpcc	ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.cluster_locks	durability=Unreplicated	duration=00:00:00.01032	granted=t	index_name=	isolation_level=SERIALIZABLE	lock_key_pretty="/Table/108/1/""\x80""/27/0"	lock_strength=Exclusive	range_id=240	schema_name=public	table_id=108	table_name=warehouse	ts=2024-11-25 09:11:26.185818	txn_id=948ef211-1fda-41c7-9393-64c46b3e60b6	
+Logs API Hook: contended=t	database_name=cct_tpcc	ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.cluster_locks	durability=Unreplicated	duration=2562047:47:16.854775	granted=f	index_name=	isolation_level=SERIALIZABLE	lock_key_pretty="/Table/108/1/""\x80""/27/0"	lock_strength=Exclusive	range_id=240	schema_name=public	table_id=108	table_name=warehouse	ts=2024-11-25 09:11:26.185818	txn_id=948ef211-1fda-41c7-9393-64c46b3e60b6	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:24.205086	name=statement_diagnostics	node_id=1	parent_id=1	table_id=36	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:27.222137	name=rides	node_id=1	parent_id=104	table_id=108	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:31.289861	name=settings	node_id=1	parent_id=1	table_id=6	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:44.824583	name=descriptor	node_id=1	parent_id=1	table_id=3	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.leases,node_id:2	deleted=f	expiration=2024-12-11 07:44:49.537097	name=external_connections	node_id=1	parent_id=1	table_id=53	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.node_metrics,node_id:1	name=gossip.connections.incoming	store_id=NULL	value=0	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.node_metrics,node_id:1	name=jobs.row_level_ttl.select_duration-p99.9	store_id=NULL	value=0	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.node_metrics,node_id:1	name=leases.transfers.success	store_id=1	value=0	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.node_metrics,node_id:1	name=range.snapshots.upreplication.sent-bytes	store_id=1	value=0	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.node_metrics,node_id:1	name=sql.restart_savepoint.rollback.count.internal	store_id=NULL	value=0	
+Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:crdb_internal.node_metrics,node_id:1	name=storage.iterator.category-pebble-ingest.block-load.latency-sum	store_id=1	value=0	
 Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:system.namespace	id=1	name=system	parentID=0	parentSchemaID=0	
 Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:system.namespace	id=100	name=defaultdb	parentID=0	parentSchemaID=0	
 Logs API Hook: ddtags=env:debug,source:debug-zip,upload_id:abc-20241114000000,cluster:ABC,table:system.namespace	id=102	name=postgres	parentID=0	parentSchemaID=0	
@@ -29,8 +31,10 @@ Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
 Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
 Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
 Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
+Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
 Upload ID: abc-20241114000000
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=tables
+uploaded crdb_internal.cluster_locks.txt
 uploaded crdb_internal.system_jobs.txt
 uploaded nodes/1/crdb_internal.node_metrics.txt
 uploaded nodes/2/crdb_internal.leases.txt
