@@ -45,6 +45,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/version",
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_x_exp//maps",

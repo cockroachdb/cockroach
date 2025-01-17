@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 )
@@ -134,6 +135,9 @@ type StartOpts struct {
 	// enable WAL failover among stores. In a single-store configuration, this
 	// should be set to `path=<path>`.
 	WALFailover string
+	// Populated in Start() by checking the version of the cockroach binary on the first node.
+	// N.B. may be nil if the version cannot be fetched.
+	Version *version.Version
 
 	// -- Options that apply only to the StartServiceForVirtualCluster target --
 	VirtualClusterName     string
@@ -370,6 +374,22 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 	return servicesToRegister, nil
 }
 
+// Attempts to fetch the version of the cockroach binary on the first node.
+// N.B. For mixed-version clusters, it's the user's responsibility to start only the nodes of
+// the same version, at a time.
+func (c *SyncedCluster) fetchVersion(
+	ctx context.Context, l *logger.Logger, startOpts StartOpts,
+) (*version.Version, error) {
+	node := c.Nodes[0]
+	runVersionCmd := cockroachNodeBinary(c, node) + " version --build-tag"
+
+	result, err := c.runCmdOnSingleNode(ctx, l, node, runVersionCmd, defaultCmdOpts("run-cockroach-version"))
+	if err != nil {
+		return nil, err
+	}
+	return version.Parse(strings.TrimSpace(result.CombinedOut))
+}
+
 // Start cockroach on the cluster. For non-multitenant deployments or
 // SQL instances that are deployed as external services, this will
 // start a cockroach process on the nodes. For shared-process
@@ -434,14 +454,20 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 
 	// Start cockroach processes and `init` cluster, if necessary.
 	if startOpts.Target != StartSharedProcessForVirtualCluster {
-		if startOpts.IsRestart {
-			l.Printf("%s (%s): starting cockroach processes", c.Name, startOpts.VirtualClusterName)
-			return c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay("starting nodes"), func(ctx context.Context, node Node) (*RunResultDetails, error) {
-				return c.startNodeWithResult(ctx, l, node, startOpts)
-			})
+		if parsedVersion, err := c.fetchVersion(ctx, l, startOpts); err == nil {
+			// store the version for later checks
+			startOpts.Version = parsedVersion
+		} else {
+			l.Printf("WARN: unable to fetch cockroach version: %s", err)
 		}
 
 		l.Printf("%s (%s): starting cockroach processes", c.Name, startOpts.VirtualClusterName)
+		if startOpts.IsRestart {
+			return c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay("starting nodes"), func(ctx context.Context, node Node) (*RunResultDetails, error) {
+				return c.startNodeWithResult(ctx, l, node, &startOpts)
+			})
+		}
+
 		// For single node non-virtual clusters, `init` can be skipped
 		// because during the c.StartNode call above, the
 		// `--start-single-node` flag will handle all of this for us.
@@ -450,7 +476,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		for _, node := range c.Nodes {
 			// NB: if cockroach started successfully, we ignore the output as it is
 			// some harmless start messaging.
-			if err := c.startNode(ctx, l, node, startOpts); err != nil {
+			if err := c.startNode(ctx, l, node, &startOpts); err != nil {
 				return err
 			}
 			// We reserve a few special operations (bootstrapping, and setting
@@ -759,8 +785,9 @@ func (c *SyncedCluster) ExecSQL(
 	return results, err
 }
 
+// N.B. not thread-safe because startOpts is shared and may be mutated.
 func (c *SyncedCluster) startNodeWithResult(
-	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
+	ctx context.Context, l *logger.Logger, node Node, startOpts *StartOpts,
 ) (*RunResultDetails, error) {
 	startScriptPath := StartScriptPath(startOpts.VirtualClusterName, startOpts.SQLInstance)
 	var runScriptCmd string
@@ -794,15 +821,16 @@ func (c *SyncedCluster) startNodeWithResult(
 	return c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
 }
 
+// N.B. not thread-safe because startOpts is shared and may be mutated.
 func (c *SyncedCluster) startNode(
-	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
+	ctx context.Context, l *logger.Logger, node Node, startOpts *StartOpts,
 ) error {
 	res, err := c.startNodeWithResult(ctx, l, node, startOpts)
 	return errors.CombineErrors(err, res.Err)
 }
 
 func (c *SyncedCluster) generateStartCmd(
-	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
+	ctx context.Context, l *logger.Logger, node Node, startOpts *StartOpts,
 ) (string, error) {
 	args, err := c.generateStartArgs(ctx, l, node, startOpts)
 	if err != nil {
@@ -937,7 +965,7 @@ func execLoggingTemplate(data loggingTemplateData) (string, error) {
 // generateStartArgs generates cockroach binary arguments for starting a node.
 // The first argument is the command (e.g. "start").
 func (c *SyncedCluster) generateStartArgs(
-	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
+	ctx context.Context, l *logger.Logger, node Node, startOpts *StartOpts,
 ) ([]string, error) {
 	var args []string
 
@@ -1060,7 +1088,7 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	if startOpts.Target == StartDefault {
-		args = append(args, c.generateStartFlagsKV(node, startOpts)...)
+		args = append(args, c.generateStartFlagsKV(l, node, startOpts)...)
 	}
 
 	if startOpts.Target == StartDefault || startOpts.Target == StartServiceForVirtualCluster {
@@ -1090,7 +1118,9 @@ func (c *SyncedCluster) generateStartArgs(
 // generateStartFlagsKV generates `cockroach start` arguments that are relevant
 // for the KV and storage layers (and consequently are never used by
 // `cockroach mt start-sql`).
-func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []string {
+func (c *SyncedCluster) generateStartFlagsKV(
+	l *logger.Logger, node Node, startOpts *StartOpts,
+) []string {
 	var args []string
 	var storeDirs []string
 	if idx := argExists(startOpts.ExtraArgs, "--store"); idx == -1 {
@@ -1127,7 +1157,18 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 		}
 	}
 	if startOpts.WALFailover != "" {
-		args = append(args, fmt.Sprintf("--wal-failover=%s", startOpts.WALFailover))
+		// N.B. WALFailover is only supported in v24+.
+		// If version is unknown, we only set WALFailover if StoreCount > 1.
+		// To silence redundant warnings, when other nodes are started, we reset WALFailover.
+		if startOpts.Version != nil && startOpts.Version.Major() < 24 {
+			l.Printf("WARN: WALFailover is only supported in v24+. Ignoring --wal-failover flag.")
+			startOpts.WALFailover = ""
+		} else if startOpts.Version == nil && startOpts.StoreCount <= 1 {
+			l.Printf("WARN: StoreCount <= 1; ignoring --wal-failover flag.")
+			startOpts.WALFailover = ""
+		} else {
+			args = append(args, fmt.Sprintf("--wal-failover=%s", startOpts.WALFailover))
+		}
 	}
 
 	args = append(args, fmt.Sprintf("--cache=%d%%", c.maybeScaleMem(25)))
@@ -1143,7 +1184,7 @@ var maxSQLMemoryRE = regexp.MustCompile(`^--max-sql-memory=(\d+)%$`)
 // generateStartFlagsSQL generates `cockroach start` and `cockroach mt
 // start-sql` arguments that are relevant for the SQL layers, used by both KV
 // and storage layers.
-func (c *SyncedCluster) generateStartFlagsSQL(node Node, startOpts StartOpts) []string {
+func (c *SyncedCluster) generateStartFlagsSQL(node Node, startOpts *StartOpts) []string {
 	var args []string
 	formatArg := func(m int) string {
 		return fmt.Sprintf("--max-sql-memory=%d%%", c.maybeScaleMem(m))
@@ -1172,7 +1213,7 @@ func (c *SyncedCluster) generateStartFlagsSQL(node Node, startOpts StartOpts) []
 	return args
 }
 
-func (c *SyncedCluster) generateLocalityArg(node Node, startOpts StartOpts) string {
+func (c *SyncedCluster) generateLocalityArg(node Node, startOpts *StartOpts) string {
 	if locality := c.locality(node); locality != "" {
 		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
 			return "--locality=" + locality
@@ -1386,7 +1427,7 @@ func (c *SyncedCluster) generateInitCmd(ctx context.Context, node Node) (string,
 }
 
 func (c *SyncedCluster) generateKeyCmd(
-	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
+	ctx context.Context, l *logger.Logger, node Node, startOpts *StartOpts,
 ) (string, error) {
 	if !startOpts.EncryptedStores {
 		return "", nil
