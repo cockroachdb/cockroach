@@ -287,6 +287,7 @@ go_test(
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigjob",
         "//pkg/spanconfig/spanconfigptsreader",
         "//pkg/sql",
         "//pkg/sql/catalog",
