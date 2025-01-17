@@ -38,7 +38,7 @@ const templateText = `
 {{- define "runLogicTest" }}
 {{- if .LogicTest -}}
 func runLogicTest(t *testing.T, file string) {
-	{{if and .SkipCclUnderRace .Ccl}}skip.UnderRace(t, "times out and/or hangs")
+	{{if .SkipUnderRace}}skip.UnderRace(t, "times out and/or hangs")
 	{{end}}skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
@@ -48,7 +48,7 @@ func runLogicTest(t *testing.T, file string) {
 {{- define "runCCLLogicTest" }}
 {{- if .CclLogicTest -}}
 func runCCLLogicTest(t *testing.T, file string) {
-	{{if .SkipCclUnderRace}}skip.UnderRace(t, "times out and/or hangs")
+	{{if .SkipUnderRace}}skip.UnderRace(t, "times out and/or hangs")
 	{{end}}skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(cclLogicTestDir, file))
 }
