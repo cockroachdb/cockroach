@@ -16,11 +16,14 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
@@ -41,6 +44,24 @@ const minPartitionSize = 16
 const maxPartitionSize = 128
 const seed = 42
 
+const (
+	Reset   = "\033[0m"
+	Red     = "\033[31m"
+	Green   = "\033[32m"
+	Yellow  = "\033[33m"
+	Blue    = "\033[34m"
+	Magenta = "\033[35m"
+	Cyan    = "\033[36m"
+	Grey    = "\033[37m"
+	White   = "\033[97m"
+)
+
+const (
+	HideCursor = "\033[?25l"
+	ShowCursor = "\033[?25h"
+)
+
+// Search command options.
 var flagMaxResults = flag.Int("k", 10, "Number of search results, used in recall calculation.")
 var flagBeamSize = flag.Int(
 	"default-beam-size",
@@ -51,16 +72,23 @@ var flagSearchBeamSizes = flag.String(
 	"1,2,4,8,16,32,64,128,256,512",
 	"List of beam sizes used for search.")
 
+// Build command options.
+var flagBuildCount = flag.Int(
+	"build-count",
+	0,
+	"Subset of vectors to use for building the index.")
+
 type dataset struct {
 	Train     vector.Set
 	Test      vector.Set
 	Neighbors [][]int64
 }
 
-// vecbench benchmarks vector index in-memory search performance on a variety of
-// datasets. Datasets are downloaded from the cockroach-fixtures-us-east1 GCP
-// bucket (vecindex directory). Here is a list of available datasets, most of
-// which are derived from datasets on ann-benchmarks.com:
+// vecbench benchmarks vector index in-memory build and search performance on a
+// variety of datasets. Datasets are downloaded from the
+// cockroach-fixtures-us-east1 GCP bucket (vecindex directory). Here is a list
+// of available datasets, most of which are derived from datasets on
+// ann-benchmarks.com:
 //
 //	fashion-mnist-784-euclidean (60K vectors, 784 dims)
 //	gist-960-euclidean (1M vectors, 960 dims)
@@ -76,67 +104,99 @@ type dataset struct {
 // The search benchmark runs over a set of test vectors that are not part of the
 // indexed vectors. It outputs average recall rates across the test vectors for
 // different beam sizes, as well as statistics for each run.
+//
+// The build benchmark can operate over a subset of available vectors for
+// shorter build times.
 
 func main() {
 	flag.Parse()
-
-	ctx := context.Background()
-
 	if flag.NArg() < 1 {
-		fmt.Printf("usage: vecbench search [<dataset-name>]\n")
+		fmt.Printf(Yellow + "usage: vecbench [search | build] [<dataset-name>]\n" + Reset)
 		os.Exit(1)
 	}
 
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Hide the cursor, but ensure it's restored on exit, including Ctrl+C.
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	stopper.RunAsyncTask(ctx, "Ctrl+C", func(context.Context) {
+		select {
+		case <-c:
+			fmt.Print(ShowCursor)
+			fmt.Println()
+			os.Exit(0)
+
+		case <-stopper.ShouldQuiesce():
+			break
+		}
+	})
+	fmt.Print(HideCursor)
+	defer fmt.Print(ShowCursor)
+
 	switch flag.Arg(0) {
+	// Search an index that has been built and cached on disk.
 	case "search":
 		if flag.NArg() == 1 {
 			// Default to default dataset.
-			searchIndex(ctx, defaultDataset)
+			searchIndex(ctx, stopper, defaultDataset)
 		} else {
 			for i, datasetName := range flag.Args()[1:] {
 				if i != 0 {
 					fmt.Println("----------")
 				}
-				searchIndex(ctx, datasetName)
+				searchIndex(ctx, stopper, datasetName)
 			}
 		}
 
+	// Build the index from scratch, possibly on a subset of available vectors.
+	case "build":
+		if flag.NArg() == 1 {
+			// Default to default dataset.
+			_, _ = buildIndex(ctx, stopper, defaultDataset)
+		} else {
+			_, _ = buildIndex(ctx, stopper, flag.Args()[1])
+		}
+
 	default:
-		log.Fatalf("unknown command '%s", flag.Arg(0))
+		fmt.Printf(Red+"unknown command '%s'\n"+Reset, flag.Arg(0))
+		return
 	}
 }
 
 // searchIndex downloads, builds, and searches an index for the given dataset.
-func searchIndex(ctx context.Context, datasetName string) {
+func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string) {
 	indexFileName := fmt.Sprintf("%s/%s.idx", tempDir, datasetName)
-	datasetFileName := fmt.Sprintf("%s/%s.gob", tempDir, datasetName)
+	searchFileName := fmt.Sprintf("%s/%s.search.gob", tempDir, datasetName)
 
-	// If index is not yet built, do so now.
-	buildIndex(ctx, datasetName)
+	// If index file has not been built, then do so now. Otherwise, load it from
+	// disk.
+	var inMemStore *vecstore.InMemoryStore
+	var index *vecindex.VectorIndex
+	_, err := os.Stat(indexFileName)
+	if err != nil {
+		if !oserror.IsNotExist(err) {
+			panic(err)
+		}
 
-	// Load the store from disk file.
-	store := loadStore(indexFileName)
+		inMemStore, index = buildIndex(ctx, stopper, datasetName)
+		saveStore(inMemStore, indexFileName)
+	} else {
+		inMemStore = loadStore(indexFileName)
+		index = createIndex(ctx, stopper, inMemStore)
+	}
 
 	// Load test data.
-	data := loadDataset(datasetFileName)
-
-	quantizer := quantize.NewRaBitQuantizer(data.Test.Dims, seed)
-	indexOptions := vecindex.VectorIndexOptions{
-		MinPartitionSize: minPartitionSize,
-		MaxPartitionSize: maxPartitionSize,
-		BaseBeamSize:     *flagBeamSize,
-		Seed:             seed,
-	}
-	index, err := vecindex.NewVectorIndex(ctx, store, quantizer, &indexOptions, nil /* stopper */)
-	if err != nil {
-		panic(err)
-	}
+	data := loadDataset(searchFileName)
+	fmt.Println()
 
 	doSearch := func(beamSize int) {
 		start := timeutil.Now()
 
-		txn := beginTransaction(ctx, store)
-		defer commitTransaction(ctx, store, txn)
+		txn := beginTransaction(ctx, index.Store())
+		defer commitTransaction(ctx, index.Store(), txn)
 
 		// Search for test vectors.
 		var sumMAP, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions float64
@@ -183,13 +243,16 @@ func searchIndex(ctx context.Context, datasetName string) {
 			float64(count)/elapsed.Seconds())
 	}
 
-	fmt.Printf("%s\n", datasetName)
-	fmt.Printf("%d train vectors, %d test vectors, %d dimensions, %d/%d min/max partitions, base beam size %d\n",
-		data.Train.Count, data.Test.Count, data.Test.Dims,
-		indexOptions.MinPartitionSize, indexOptions.MaxPartitionSize, indexOptions.BaseBeamSize)
+	fmt.Printf(White+"%s\n"+Reset, datasetName)
+	trainVectors := inMemStore.GetAllVectors()
+	fmt.Printf(
+		White+"%d train vectors, %d test vectors, %d dimensions, %d/%d min/max partitions, base beam size %d\n"+Reset,
+		len(trainVectors), data.Test.Count, data.Test.Dims,
+		index.Options().MinPartitionSize, index.Options().MaxPartitionSize,
+		index.Options().BaseBeamSize)
 	fmt.Println(index.FormatStats())
 
-	fmt.Printf("beam\trecall\tleaf\tall\tfull\tpartns\tqps\n")
+	fmt.Printf(White + "beam\trecall\tleaf\tall\tfull\tpartns\tqps\n" + Reset)
 
 	// Search multiple times with different beam sizes.
 	beamSizeStrs := strings.Split(*flagSearchBeamSizes, ",")
@@ -205,21 +268,22 @@ func searchIndex(ctx context.Context, datasetName string) {
 
 // downloadDataset downloads the given dataset from the GCP bucket and unzips
 // it into the tmp directory.
-func downloadDataset(ctx context.Context, datasetName string) {
+func downloadDataset(ctx context.Context, datasetName string) dataset {
 	objectName := fmt.Sprintf("%s/%s.zip", bucketDirName, datasetName)
 	datasetFileName := fmt.Sprintf("%s/%s.gob", tempDir, datasetName)
+	searchFileName := fmt.Sprintf("%s/%s.search.gob", tempDir, datasetName)
 
-	// If dataset file has already been downloaded, then nothing to do.
+	// If dataset file has already been downloaded, then just return it.
 	_, err := os.Stat(datasetFileName)
 	if err != nil {
 		if !oserror.IsNotExist(err) {
 			panic(err)
 		}
 	} else {
-		return
+		return loadDataset(datasetFileName)
 	}
 
-	fmt.Printf("Downloading %s/%s\n", bucketName, objectName)
+	fmt.Printf(Cyan+"Downloading %s/%s\n"+Reset, bucketName, objectName)
 
 	// Create a GCS client using Application Default Credentials.
 	client, err := storage.NewClient(ctx)
@@ -247,17 +311,14 @@ func downloadDataset(ctx context.Context, datasetName string) {
 
 	// Use progressWriter to track download progress
 	var buf bytes.Buffer
-	writer := &progressWriter{
-		Writer: &buf,
-		Total:  attrs.Size,
-	}
+	writer := makeProgressWriter(&buf, attrs.Size)
 
-	if _, err = io.Copy(writer, reader); err != nil {
+	if _, err = io.Copy(&writer, reader); err != nil {
 		log.Fatalf("Failed to copy object data: %v", err)
 	}
 
 	// Open the zip archive.
-	fmt.Printf("\nUnzipping to %s\n", datasetFileName)
+	fmt.Printf(Cyan+"\nUnzipping to %s\n"+Reset, datasetFileName)
 	zipReader, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
 		panic(err)
@@ -290,63 +351,49 @@ func downloadDataset(ctx context.Context, datasetName string) {
 			panic(err)
 		}
 	}
+
+	// Separately store test vectors for searching, so the training data does not
+	// need to be loaded every time.
+	data := loadDataset(datasetFileName)
+	searchData := data
+	searchData.Train = vector.Set{}
+
+	writeFile, err := os.Create(searchFileName)
+	if err != nil {
+		panic(err)
+	}
+	defer writeFile.Close()
+
+	encoder := gob.NewEncoder(writeFile)
+	if err = encoder.Encode(&searchData); err != nil {
+		panic(err)
+	}
+
+	return data
 }
 
 // buildIndex builds a vector index for the given dataset and serializes the
 // built index to the tmp directory.
-func buildIndex(ctx context.Context, datasetName string) {
-	indexFileName := fmt.Sprintf("%s/%s.idx", tempDir, datasetName)
-	datasetFileName := fmt.Sprintf("%s/%s.gob", tempDir, datasetName)
-
-	// If index file has already been built, then nothing to do.
-	_, err := os.Stat(indexFileName)
-	if err != nil {
-		if !oserror.IsNotExist(err) {
-			panic(err)
-		}
-	} else {
-		return
-	}
-
+func buildIndex(
+	ctx context.Context, stopper *stop.Stopper, datasetName string,
+) (*vecstore.InMemoryStore, *vecindex.VectorIndex) {
 	// Ensure dataset file has been downloaded.
-	downloadDataset(ctx, datasetName)
+	data := downloadDataset(ctx, datasetName)
+	if *flagBuildCount != 0 {
+		// Build index from subset of data - first N vectors.
+		n := *flagBuildCount
+		if n > data.Train.Count {
+			n = data.Train.Count
+		}
+		data.Train.SplitAt(n)
+	}
 
-	fmt.Printf("Building index for dataset: %s\n", datasetName)
-
-	// Load data from the downloaded .gob file.
 	startTime := timeutil.Now()
-
-	readFile, err := os.Open(datasetFileName)
-	if err != nil {
-		panic(err)
-	}
-	defer readFile.Close()
-
-	decoder := gob.NewDecoder(readFile)
-	var data dataset
-	if err = decoder.Decode(&data); err != nil {
-		panic(err)
-	}
-
-	readTime := timeutil.Now()
-	fmt.Printf("Loaded %s in %v\n", datasetFileName, readTime.Sub(startTime))
+	fmt.Printf(White+"Building index for dataset: %s\n"+Reset, datasetName)
 
 	// Create index.
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
 	store := vecstore.NewInMemoryStore(data.Train.Dims, seed)
-	quantizer := quantize.NewRaBitQuantizer(data.Train.Dims, seed)
-	options := vecindex.VectorIndexOptions{
-		MinPartitionSize: minPartitionSize,
-		MaxPartitionSize: maxPartitionSize,
-		BaseBeamSize:     *flagBeamSize,
-		Seed:             seed,
-	}
-	index, err := vecindex.NewVectorIndex(ctx, store, quantizer, &options, stopper)
-	if err != nil {
-		panic(err)
-	}
+	index := createIndex(ctx, stopper, store)
 
 	// Create unique primary key for each vector in a single large byte buffer.
 	primaryKeys := make([]byte, data.Train.Count*4)
@@ -364,21 +411,23 @@ func buildIndex(ctx context.Context, datasetName string) {
 			key := primaryKeys[i*4 : i*4+4]
 			vec := data.Train.At(i)
 			store.InsertVector(key, vec)
-			if err = index.Insert(ctx, txn, vec, key); err != nil {
+			if err := index.Insert(ctx, txn, vec, key); err != nil {
 				panic(err)
 			}
 		}
 
 		inserted := insertCount.Add(uint64(end - start))
-		fmt.Printf("\rInserted %d / %d vectors (%.2f%%)", inserted, data.Train.Count,
-			(float64(inserted)/float64(data.Train.Count))*100)
+		elapsed := timeutil.Since(startTime)
+		fmt.Printf(White+"\rInserted %d / %d vectors (%.2f%%) in %v          "+Reset,
+			inserted, data.Train.Count,
+			(float64(inserted)/float64(data.Train.Count))*100, elapsed.Truncate(time.Second))
 	}
 
 	// Insert vectors into the store on multiple goroutines.
 	var wait sync.WaitGroup
 	procs := runtime.GOMAXPROCS(-1)
 	countPerProc := (data.Train.Count + procs) / procs
-	blockSize := options.MinPartitionSize
+	blockSize := index.Options().MinPartitionSize
 	for i := 0; i < data.Train.Count; i += countPerProc {
 		end := min(i+countPerProc, data.Train.Count)
 		wait.Add(1)
@@ -395,18 +444,35 @@ func buildIndex(ctx context.Context, datasetName string) {
 	}
 	wait.Wait()
 
-	buildTime := timeutil.Now()
-	fmt.Printf("\nBuilt index in %v\n", buildTime.Sub(readTime))
+	elapsed := timeutil.Since(startTime)
+	fmt.Printf(White+"\nBuilt index in %v\n"+Reset, roundDuration(elapsed))
+	return store, index
+}
 
-	saveStore(store, indexFileName)
-
-	writeTime := timeutil.Now()
-	fmt.Printf("Wrote index to disk in %v\n", writeTime.Sub(buildTime))
+// createIndex returns a vector index created using the given store.
+func createIndex(
+	ctx context.Context, stopper *stop.Stopper, store vecstore.Store,
+) *vecindex.VectorIndex {
+	inMemStore := store.(*vecstore.InMemoryStore)
+	quantizer := quantize.NewRaBitQuantizer(inMemStore.Dims(), seed)
+	options := vecindex.VectorIndexOptions{
+		MinPartitionSize: minPartitionSize,
+		MaxPartitionSize: maxPartitionSize,
+		BaseBeamSize:     *flagBeamSize,
+		Seed:             seed,
+	}
+	index, err := vecindex.NewVectorIndex(ctx, store, quantizer, &options, stopper)
+	if err != nil {
+		panic(err)
+	}
+	return index
 }
 
 // saveStore serializes the store as a protobuf and saves it to the given file.
-func saveStore(store *vecstore.InMemoryStore, fileName string) {
-	indexBytes, err := store.MarshalBinary()
+func saveStore(inMemStore *vecstore.InMemoryStore, fileName string) {
+	startTime := timeutil.Now()
+
+	indexBytes, err := inMemStore.MarshalBinary()
 	if err != nil {
 		panic(err)
 	}
@@ -421,25 +487,34 @@ func saveStore(store *vecstore.InMemoryStore, fileName string) {
 	if err != nil {
 		panic(err)
 	}
+
+	elapsed := timeutil.Since(startTime)
+	fmt.Printf(Cyan+"Saved index to disk in %v\n"+Reset, roundDuration(elapsed))
 }
 
 // loadStore deserializes a previously saved protobuf of a vector store.
 func loadStore(fileName string) *vecstore.InMemoryStore {
+	startTime := timeutil.Now()
+
 	data, err := os.ReadFile(fileName)
 	if err != nil {
 		panic(err)
 	}
-
 	inMemStore, err := vecstore.LoadInMemoryStore(data)
 	if err != nil {
 		panic(err)
 	}
 
+	elapsed := timeutil.Since(startTime)
+	fmt.Printf(Cyan+"Loaded %s index from disk in %v\n"+Reset, fileName, roundDuration(elapsed))
 	return inMemStore
 }
 
 // loadDataset deserializes a dataset saved as a gob file.
 func loadDataset(fileName string) dataset {
+	startTime := timeutil.Now()
+	fmt.Printf(Cyan+"Loading data from %s\n"+Reset, fileName)
+
 	readFile, err := os.Open(fileName)
 	if err != nil {
 		panic(err)
@@ -452,6 +527,8 @@ func loadDataset(fileName string) dataset {
 		panic(err)
 	}
 
+	elapsed := timeutil.Since(startTime)
+	fmt.Printf(Cyan+"Loaded %s in %v          \n"+Reset, fileName, roundDuration(elapsed))
 	return data
 }
 
@@ -495,18 +572,60 @@ func findMAP(prediction, truth []vecstore.PrimaryKey) float64 {
 
 // progressWriter tracks download progress.
 type progressWriter struct {
-	Writer     io.Writer
-	Total      int64
-	Downloaded int64
+	startTime  time.Time
+	writer     io.Writer
+	total      int64
+	downloaded int64
+}
+
+func makeProgressWriter(writer io.Writer, total int64) progressWriter {
+	return progressWriter{
+		startTime: timeutil.Now(),
+		writer:    writer,
+		total:     total,
+	}
 }
 
 func (pw *progressWriter) Write(p []byte) (int, error) {
-	n, err := pw.Writer.Write(p)
-	pw.Downloaded += int64(n)
+	n, err := pw.writer.Write(p)
+	pw.downloaded += int64(n)
 	pw.printProgress()
 	return n, err
 }
 
 func (pw *progressWriter) printProgress() {
-	fmt.Printf("\rDownloaded %d / %d bytes (%.2f%%)", pw.Downloaded, pw.Total, (float64(pw.Downloaded)/float64(pw.Total))*100)
+	elapsed := timeutil.Since(pw.startTime)
+	fmt.Printf(Cyan+"\rDownloaded %s / %s (%.2f%%) in %v          "+Reset,
+		formatSize(pw.downloaded), formatSize(pw.total),
+		(float64(pw.downloaded)/float64(pw.total))*100, elapsed.Truncate(time.Second))
+}
+
+func roundDuration(duration time.Duration) time.Duration {
+	return duration.Truncate(time.Millisecond)
+}
+
+func formatSize(size int64) string {
+	const (
+		_           = iota // ignore first value by assigning to blank identifier
+		KiB float64 = 1 << (10 * iota)
+		MiB
+		GiB
+		TiB
+		PiB
+	)
+
+	switch {
+	case size < int64(KiB):
+		return fmt.Sprintf("%d B", size)
+	case size < int64(MiB):
+		return fmt.Sprintf("%.2f KiB", float64(size)/KiB)
+	case size < int64(GiB):
+		return fmt.Sprintf("%.2f MiB", float64(size)/MiB)
+	case size < int64(TiB):
+		return fmt.Sprintf("%.2f GiB", float64(size)/GiB)
+	case size < int64(PiB):
+		return fmt.Sprintf("%.2f TiB", float64(size)/TiB)
+	default:
+		return fmt.Sprintf("%.2f PiB", float64(size)/PiB)
+	}
 }
