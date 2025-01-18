@@ -983,6 +983,7 @@ type Pebble struct {
 	storeIDPebbleLog *base.StoreIDContainer
 	replayer         *replay.WorkloadCollector
 	diskSlowFunc     atomic.Pointer[func(vfs.DiskSlowInfo)]
+	lowDiskSpaceFunc atomic.Pointer[func(pebble.LowDiskSpaceInfo)]
 
 	singleDelLogEvery log.EveryN
 }
@@ -1012,6 +1013,13 @@ func (p *Pebble) SetCompactionConcurrency(n uint64) uint64 {
 // registered per Pebble instance.
 func (p *Pebble) RegisterDiskSlowCallback(f func(vfs.DiskSlowInfo)) {
 	p.diskSlowFunc.Store(&f)
+}
+
+// RegisterLowDiskSpaceCallback registers a callback that will be run when a a
+// disk is running out of space. Only one handler can be registered per Pebble
+// instance.
+func (p *Pebble) RegisterLowDiskSpaceCallback(f func(info pebble.LowDiskSpaceInfo)) {
+	p.lowDiskSpaceFunc.Store(&f)
 }
 
 // AdjustCompactionConcurrency adjusts the compaction concurrency up or down by
@@ -1536,6 +1544,11 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			p.mu.Unlock()
 			if cb != nil {
 				cb()
+			}
+		},
+		LowDiskSpace: func(info pebble.LowDiskSpaceInfo) {
+			if fn := p.lowDiskSpaceFunc.Load(); fn != nil {
+				(*fn)(info)
 			}
 		},
 		PossibleAPIMisuse: func(info pebble.PossibleAPIMisuseInfo) {
