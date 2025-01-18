@@ -965,7 +965,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 
 	// Create blob service for inter-node file sharing.
-	blobService, err := blobs.NewBlobService(cfg.Settings.ExternalIODir)
+	blobService, err := blobs.NewBlobService(cfg.ExternalIODir)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating blob service")
 	}
@@ -2080,6 +2080,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.sqlServer.execCfg.InternalDB.CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
 		nil, /* TenantExternalIORecorder */
 		s.appRegistry,
+		s.cfg.ExternalIODir,
 	)
 
 	if err := s.runIdempontentSQLForInitType(ctx, state.initType); err != nil {

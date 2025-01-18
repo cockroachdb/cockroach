@@ -159,7 +159,6 @@ func TestCloudStorageSink(t *testing.T) {
 
 	var noKey []byte
 	settings := cluster.MakeTestingClusterSettings()
-	settings.ExternalIODir = externalIODir
 	opts := changefeedbase.EncodingOptions{
 		Format:     changefeedbase.OptFormatJSON,
 		Envelope:   changefeedbase.OptEnvelopeWrapped,
@@ -170,7 +169,7 @@ func TestCloudStorageSink(t *testing.T) {
 	e, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts})
 	require.NoError(t, err)
 
-	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
+	clientFactory := blobs.TestBlobServiceClient(externalIODir)
 	externalStorageFromURI := func(ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage,
 		error) {
 		var options cloud.ExternalStorageOptions

@@ -32,8 +32,6 @@ type Settings struct {
 	// overwriting the default of a single setting.
 	Manual atomic.Value // bool
 
-	ExternalIODir string
-
 	// Tracks whether a CPU profile is going on and if so, which kind. See
 	// CPUProfileType().
 	// This is used so that we can enable "non-cheap" instrumentation only when it
@@ -174,9 +172,7 @@ func MakeTestingClusterSettingsWithVersions(
 // be used for settings objects that are passed as initial parameters for test
 // clusters; the given Settings object should not be in use by any server.
 func TestingCloneClusterSettings(st *Settings) *Settings {
-	result := &Settings{
-		ExternalIODir: st.ExternalIODir,
-	}
+	result := &Settings{}
 	result.Version = clusterversion.MakeVersionHandle(
 		&result.SV, st.Version.LatestVersion(), st.Version.MinSupportedVersion(),
 	)
