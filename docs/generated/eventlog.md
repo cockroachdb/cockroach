@@ -169,6 +169,29 @@ events.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+### `low_disk_space`
+
+An event of type `low_disk_space` is emitted when a store is reaching capacity, as we reach
+certain thresholds. It is emitted periodically while we are in a low disk
+state.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NodeID` | The node ID where the event was originated. | no |
+| `StoreID` |  | no |
+| `PercentThreshold` | The free space percent threshold that we went under. | no |
+| `AvailableBytes` |  | no |
+| `TotalBytes` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `node_decommissioned`
 
 An event of type `node_decommissioned` is recorded when a node is marked as
