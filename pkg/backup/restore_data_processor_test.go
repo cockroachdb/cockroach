@@ -261,7 +261,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			DB: s.InternalDB().(descs.DB),
 			ExternalStorage: func(ctx context.Context, dest cloudpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
 				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir),
+					s.ClusterSettings(), blobs.TestBlobServiceClient(args.ExternalIODir),
 					nil, /* db */
 					nil, /* limiters */
 					cloud.NilMetrics,
