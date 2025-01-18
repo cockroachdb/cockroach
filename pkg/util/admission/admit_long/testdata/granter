@@ -1,0 +1,791 @@
+init
+----
+
+register-stats-provider
+----
+
+set-stats cpu-millis=200 stores=1:1MiB,2:1MiB
+----
+{CPU:{ProvisionedRate:8000000000 Used:200000000} Disk:map[1:{ProvisionedRate:131072000 Used:1048576} 2:{ProvisionedRate:131072000 Used:1048576}]}
+
+tick
+----
+time=100ms
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=2000ms/s, disk-write: s1: 10 MiB/s s2: 10 MiB/s
+
+register-requester category=compaction store-id=1
+----
+
+register-requester category=compaction store-id=2
+----
+
+try-get request category=compaction store-id=1
+----
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+success: id=1
+
+try-get request category=compaction store-id=1
+----
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+failure
+
+work-done id=1
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:0}
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=2000ms/s, disk-write: s1: 10 MiB/s s2: 10 MiB/s
+
+try-get request category=compaction store-id=1
+----
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+success: id=2
+
+try-get request category=compaction store-id=1
+----
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+failure
+
+set-requester-state category=compaction store-id=1 allowed-without-permission=2 accept-grant=true score=false,2
+----
+allowed-without-permission=2, score={Optional:false Score:2}, accept-grant=true
+
+work-done id=2
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+{Category:0 Store:1}.Grant(3): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+{Category:0 Store:1}.Grant(4): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=2000ms/s, disk-write: s1: 10 MiB/s s2: 10 MiB/s
+
+set-compactions-allowed multiplier=0.12
+----
+compactions: 0.96, snapshots: unlimited
+
+tick
+----
+time=200ms
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+granter-state:
+  allowed-without-permission: compactions=1, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=0ms/s, disk-write: s1: 0 B/s s2: 0 B/s
+delta stats:
+  cpu-forecast (millis): 200
+  disk-forecast (store=1): 1.0 MiB/s
+  disk-forecast (store=2): 1.0 MiB/s
+  category: 0
+    cpu (millis): obs: 0 est: 0 work-wall: 0
+    disk-write (store=1): obs: 0 B est: 0 B work-wall: 0
+  category: 1
+    cpu (millis): obs: 0 est: 0 work-wall: 0
+
+work-done id=4
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+granter-state:
+  allowed-without-permission: compactions=1, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=0ms/s, disk-write: s1: 0 B/s s2: 0 B/s
+
+set-requester-state category=compaction store-id=2 allowed-without-permission=2 accept-grant=true score=true,3
+----
+allowed-without-permission=2, score={Optional:true Score:3}, accept-grant=true
+
+try-get request category=compaction store-id=2
+----
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 2
+failure
+
+work-done id=3
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:2}.GetScore(): {Optional:true Score:3}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+{Category:0 Store:1}.Grant(5): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 2
+granter-state:
+  allowed-without-permission: compactions=1, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=0ms/s, disk-write: s1: 0 B/s s2: 0 B/s
+
+set-requester-state category=compaction store-id=2 score=false,3
+----
+allowed-without-permission=2, score={Optional:false Score:3}, accept-grant=true
+
+work-done id=5
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:2}.GetScore(): {Optional:false Score:3}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 2
+{Category:0 Store:2}.Grant(6): accepted
+{Category:0 Store:2}.GetScore(): {Optional:false Score:3}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 2
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+granter-state:
+  allowed-without-permission: compactions=1, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=0ms/s, disk-write: s1: 0 B/s s2: 0 B/s
+
+unregister-requester category=compaction store-id=2
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+{Category:0 Store:1}.Grant(7): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 2
+
+init
+----
+
+register-stats-provider
+----
+
+register-requester category=compaction store-id=1
+----
+
+try-get request category=compaction store-id=1
+----
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+success: id=1
+
+set-work-usage id=1 start-millis=90 cpu-millis=10 write-bytes=1KiB
+----
+start: 90, end: 0, cpu: 10, write: 1024
+
+set-stats cpu-millis=400 stores=1:1MiB,2:2MiB
+----
+{CPU:{ProvisionedRate:8000000000 Used:400000000} Disk:map[1:{ProvisionedRate:131072000 Used:1048576} 2:{ProvisionedRate:131072000 Used:2097152}]}
+
+tick
+----
+time=100ms
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=4000ms/s, disk-write: s1: 10 MiB/s s2: 20 MiB/s
+
+set-requester-state category=compaction store-id=1 allowed-without-permission=1 accept-grant=true score=false,2
+----
+allowed-without-permission=1, score={Optional:false Score:2}, accept-grant=true
+
+try-get request category=compaction store-id=1
+----
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+failure
+
+set-work-usage id=1 cpu-millis=100 write-bytes=1MiB
+----
+start: 90, end: 0, cpu: 110, write: 1049600
+
+set-stats cpu-millis=450 stores=1:2MiB,2:2MiB
+----
+{CPU:{ProvisionedRate:8000000000 Used:850000000} Disk:map[1:{ProvisionedRate:131072000 Used:3145728} 2:{ProvisionedRate:131072000 Used:4194304}]}
+
+tick
+----
+time=200ms
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(2): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(3): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(4): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(5): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(6): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(7): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=10500ms/s, disk-write: s1: 80 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1000ms/s write: 10 MiB/s
+delta stats:
+  cpu-forecast (millis): 400
+  disk-forecast (store=1): 1.0 MiB/s
+  disk-forecast (store=2): 2.0 MiB/s
+  category: 0
+    cpu (millis): obs: 100 est: 10 work-wall: 100
+    disk-write (store=1): obs: 1.0 MiB est: 1.0 KiB work-wall: 100
+  category: 1
+    cpu (millis): obs: 0 est: 0 work-wall: 0
+
+set-stats cpu-millis=850 stores=1:9MiB,2:2MiB
+----
+{CPU:{ProvisionedRate:8000000000 Used:1700000000} Disk:map[1:{ProvisionedRate:131072000 Used:12582912} 2:{ProvisionedRate:131072000 Used:6291456}]}
+
+set-work-usage id=1 cpu-millis=100 write-bytes=4MiB
+----
+start: 90, end: 0, cpu: 210, write: 5243904
+
+set-work-usage id=2 start-millis=200 cpu-millis=300 write-bytes=4MiB
+----
+start: 200, end: 0, cpu: 300, write: 4194304
+
+set-work-usage id=3 start-millis=200 cpu-millis=300 write-bytes=4MiB
+----
+start: 200, end: 0, cpu: 300, write: 4194304
+
+set-work-usage id=4 start-millis=200 cpu-millis=300 write-bytes=4MiB
+----
+start: 200, end: 0, cpu: 300, write: 4194304
+
+tick
+----
+time=300ms
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=13126ms/s, disk-write: s1: 151 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1542ms/s write: 20 MiB/s
+delta stats:
+  cpu-forecast (millis): 1050
+  disk-forecast (store=1): 8.0 MiB/s
+  disk-forecast (store=2): 2.0 MiB/s
+  category: 0
+    cpu (millis): obs: 1000 est: 700 work-wall: 400
+    disk-write (store=1): obs: 16 MiB est: 7.0 MiB work-wall: 400
+  category: 1
+    cpu (millis): obs: 0 est: 0 work-wall: 0
+
+work-done id=1
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=12126ms/s, disk-write: s1: 111 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1542ms/s write: 20 MiB/s
+
+work-done id=2
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(8): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=10668ms/s, disk-write: s1: 91 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1542ms/s write: 20 MiB/s
+
+work-done id=7
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(9): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=10668ms/s, disk-write: s1: 91 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1542ms/s write: 20 MiB/s
+
+work-done id=6
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(10): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=9223372036854775807, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=10668ms/s, disk-write: s1: 91 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1542ms/s write: 20 MiB/s
+
+set-work-usage id=3 cpu-millis=300 write-bytes=4MiB
+----
+start: 200, end: 0, cpu: 600, write: 8388608
+
+set-work-usage id=4 cpu-millis=300 write-bytes=4MiB
+----
+start: 200, end: 0, cpu: 600, write: 8388608
+
+set-compactions-allowed multiplier=0.2
+----
+compactions: 1.60, snapshots: unlimited
+
+# Started is 3, 4. Unstarted: 5, 8, 9, 10
+set-stats cpu-millis=600 stores=1:8MiB,2:2MiB
+----
+{CPU:{ProvisionedRate:8000000000 Used:2300000000} Disk:map[1:{ProvisionedRate:131072000 Used:20971520} 2:{ProvisionedRate:131072000 Used:8388608}]}
+
+tick
+----
+time=400ms
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=13276ms/s, disk-write: s1: 176 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+delta stats:
+  cpu-forecast (millis): 1066
+  disk-forecast (store=1): 9.1 MiB/s
+  disk-forecast (store=2): 2.0 MiB/s
+  category: 0
+    cpu (millis): obs: 600 est: 1216 work-wall: 200
+    disk-write (store=1): obs: 8.0 MiB est: 16 MiB work-wall: 200
+  category: 1
+    cpu (millis): obs: 0 est: 0 work-wall: 0
+
+work-done id=3
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=10276ms/s, disk-write: s1: 136 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+
+work-done id=4
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=7276ms/s, disk-write: s1: 96 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+
+work-done id=5
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=5457ms/s, disk-write: s1: 72 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+
+work-done id=8
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(11): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=4800ms/s, disk-write: s1: 75 MiB/s s2: 75 MiB/s
+  rate-forecast: cpu=5457ms/s, disk-write: s1: 72 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+
+# Unstarted 9, 10, 11
+set-utilization threshold=0.8
+----
+
+# TODO: check delta stats
+tick
+----
+time=500ms
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(12): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=6400ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=7276ms/s, disk-write: s1: 96 MiB/s s2: 0 B/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+delta stats:
+  cpu-forecast (millis): 545
+  disk-forecast (store=1): 7.2 MiB/s
+  disk-forecast (store=2): 2.0 MiB/s
+  category: 0
+    cpu (millis): obs: 0 est: 545 work-wall: 0
+    disk-write (store=1): obs: 0 B est: 7.2 MiB work-wall: 0
+  category: 1
+    cpu (millis): obs: 0 est: 0 work-wall: 0
+
+# Unstarted 9, 10, 11, 12
+set-go-max-procs procs=10
+----
+compactions: 2.00, snapshots: unlimited
+
+set-stats cpu-provisioned-millis=10000
+----
+{CPU:{ProvisionedRate:10000000000 Used:2300000000} Disk:map[1:{ProvisionedRate:131072000 Used:20971520} 2:{ProvisionedRate:131072000 Used:8388608}]}
+
+# TODO: check delta stats
+# Unstarted 9, 10, 11, 12, 13
+tick
+----
+time=600ms
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(13): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9095ms/s, disk-write: s1: 120 MiB/s s2: 0 B/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+delta stats:
+  cpu-forecast (millis): 727
+  disk-forecast (store=1): 9.6 MiB/s
+  disk-forecast (store=2): 0 B/s
+  category: 0
+    cpu (millis): obs: 0 est: 727 work-wall: 0
+    disk-write (store=1): obs: 0 B est: 9.6 MiB work-wall: 0
+  category: 1
+    cpu (millis): obs: 0 est: 0 work-wall: 0
+
+register-requester category=snapshot store-id=1
+----
+
+try-get request category=snapshot store-id=1
+----
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+success: id=14
+
+set-work-usage id=14 start-millis=650 cpu-millis=100 write-bytes=1MiB
+----
+start: 650, end: 0, cpu: 100, write: 1048576
+
+set-stats cpu-millis=100 stores=1:1MiB,2:2MiB
+----
+{CPU:{ProvisionedRate:10000000000 Used:2400000000} Disk:map[1:{ProvisionedRate:131072000 Used:22020096} 2:{ProvisionedRate:131072000 Used:10485760}]}
+
+# TODO: check delta stats
+# Unstarted 9, 10, 11, 12, 13
+# Started 14.
+tick
+----
+time=700ms
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=11095ms/s, disk-write: s1: 140 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+delta stats:
+  cpu-forecast (millis): 909
+  disk-forecast (store=1): 12 MiB/s
+  disk-forecast (store=2): 0 B/s
+  category: 0
+    cpu (millis): obs: 0 est: 909 work-wall: 0
+    disk-write (store=1): obs: 0 B est: 12 MiB work-wall: 0
+  category: 1
+    cpu (millis): obs: 100 est: 0 work-wall: 50
+    disk-write (store=1): obs: 1.0 MiB est: 0 B work-wall: 50
+
+set-requester-state category=snapshot store-id=1 allowed-without-permission=1 accept-grant=true score=false,4
+----
+allowed-without-permission=1, score={Optional:false Score:4}, accept-grant=true
+
+try-get request category=snapshot store-id=1
+----
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+failure
+
+# Despite being over we grant another one.
+work-done id=14
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.Grant(15): accepted
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=11095ms/s, disk-write: s1: 140 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+# compaction unstarted: 10, 11, 12, 13
+# snapshot unstarted: 15
+work-done id=9
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9276ms/s, disk-write: s1: 116 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+# compaction unstarted: 11, 12, 13, 16
+# snapshot unstarted: 15
+work-done id=10
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(16): accepted
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9276ms/s, disk-write: s1: 116 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+set-requester-state category=compaction store-id=1 accept-grant=false
+----
+allowed-without-permission=1, score={Optional:false Score:2}, accept-grant=false
+
+# compaction unstarted: 11, 12, 13
+# snapshot unstarted: 15, 18
+work-done id=16
+----
+{Category:0 Store:1}.GetScore(): {Optional:false Score:2}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:1}.Grant(17): rejected
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.Grant(18): accepted
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9457ms/s, disk-write: s1: 112 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+register-requester category=compaction store-id=2
+----
+
+set-requester-state category=compaction store-id=2 allowed-without-permission=1 accept-grant=true score=true,3
+----
+allowed-without-permission=1, score={Optional:true Score:3}, accept-grant=true
+
+try-get request category=compaction store-id=2
+----
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+failure
+
+# compaction unstarted: 11, 12
+# snapshot unstarted: 15, 18, 19
+work-done id=13
+----
+{Category:0 Store:2}.GetScore(): {Optional:true Score:3}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.Grant(19): accepted
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9638ms/s, disk-write: s1: 108 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+set-requester-state category=compaction store-id=2 score=false,1
+----
+allowed-without-permission=1, score={Optional:false Score:1}, accept-grant=true
+
+# Not picking store 2 compaction because don't have an estimate.
+# compaction unstarted: 11, 12
+# snapshot unstarted: 15, 18, 20
+work-done id=19
+----
+{Category:0 Store:2}.GetScore(): {Optional:false Score:1}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.Grant(20): accepted
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9638ms/s, disk-write: s1: 108 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+# compaction unstarted: 11, 21 (store 2)
+# snapshot unstarted: 15, 18, 20, 22
+work-done id=12
+----
+{Category:0 Store:2}.GetScore(): {Optional:false Score:1}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:2}.Grant(21): accepted
+{Category:0 Store:2}.GetScore(): {Optional:false Score:1}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.Grant(22): accepted
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=2, snapshots=9223372036854775807
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9819ms/s, disk-write: s1: 104 MiB/s s2: 20 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+set-work-usage id=21 start-millis=750 cpu-millis=200 write-bytes=2MiB
+----
+start: 750, end: 0, cpu: 200, write: 2097152
+
+set-stats cpu-millis=200 stores=1:0MiB,2:2MiB
+----
+{CPU:{ProvisionedRate:10000000000 Used:2600000000} Disk:map[1:{ProvisionedRate:131072000 Used:22020096} 2:{ProvisionedRate:131072000 Used:12582912}]}
+
+set-snapshots-allowed multiplier=0.1
+----
+compactions: 2.00, snapshots: 1.00
+
+set-compactions-allowed multiplier=0.1
+----
+compactions: 1.00, snapshots: 1.00
+
+# TODO: check delta stats
+# compaction unstarted: 11,
+# snapshot unstarted: 15, 18, 20, 22
+# compaction started: 21 (store 2)
+tick
+----
+time=800ms
+{Category:0 Store:2}.GetScore(): {Optional:false Score:1}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=1, snapshots=1
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=13819ms/s, disk-write: s1: 104 MiB/s s2: 40 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:0 Store:2}: cpu=4000ms/s write: 40 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+delta stats:
+  cpu-forecast (millis): 981
+  disk-forecast (store=1): 10 MiB/s
+  disk-forecast (store=2): 2.0 MiB/s
+  category: 0
+    cpu (millis): obs: 200 est: 181 work-wall: 50
+    disk-write (store=1): obs: 0 B est: 2.4 MiB work-wall: 0
+    disk-write (store=2): obs: 2.0 MiB est: 0 B work-wall: 50
+  category: 1
+    cpu (millis): obs: 0 est: 800 work-wall: 0
+    disk-write (store=1): obs: 0 B est: 8.0 MiB work-wall: 0
+
+# compaction unstarted: 11,
+# snapshot unstarted: 15, 18, 20
+# compaction started: 21 (store 2)
+work-done id=22
+----
+{Category:0 Store:2}.GetScore(): {Optional:false Score:1}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=1, snapshots=1
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=11819ms/s, disk-write: s1: 84 MiB/s s2: 40 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:0 Store:2}: cpu=4000ms/s write: 40 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+# compaction unstarted: 11,
+# snapshot unstarted: 15, 18
+# compaction started: 21 (store 2)
+work-done id=20
+----
+{Category:0 Store:2}.GetScore(): {Optional:false Score:1}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=1, snapshots=1
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9819ms/s, disk-write: s1: 64 MiB/s s2: 40 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:0 Store:2}: cpu=4000ms/s write: 40 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+# Despite lower score for compaction it gets picked.
+# compaction unstarted: 11,
+# snapshot unstarted: 15, 18
+# compaction (store 2): 23
+work-done id=21
+----
+{Category:0 Store:2}.GetScore(): {Optional:false Score:1}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:2}.Grant(23): accepted
+{Category:0 Store:2}.GetScore(): {Optional:false Score:1}
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=1, snapshots=1
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9819ms/s, disk-write: s1: 64 MiB/s s2: 40 MiB/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:0 Store:2}: cpu=4000ms/s write: 40 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s
+
+# Make it optional.
+set-requester-state category=compaction store-id=2 score=true,6
+----
+allowed-without-permission=1, score={Optional:true Score:6}, accept-grant=true
+
+# Optional compaction is not picked. Instead the snapshots are picked.
+work-done id=23
+----
+{Category:0 Store:2}.GetScore(): {Optional:true Score:6}
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.Grant(24): accepted
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:1 Store:1}.Grant(25): accepted
+{Category:1 Store:1}.GetScore(): {Optional:false Score:4}
+{Category:1 Store:1}.GetAllowedWithoutPermissionForStore(): 1
+{Category:0 Store:2}.GetAllowedWithoutPermissionForStore(): 1
+granter-state:
+  allowed-without-permission: compactions=1, snapshots=1
+  rate-threshold: cpu=8000ms/s, disk-write: s1: 100 MiB/s s2: 100 MiB/s
+  rate-forecast: cpu=9819ms/s, disk-write: s1: 104 MiB/s s2: 0 B/s
+  rate-estimate: {Category:0 Store:1}: cpu=1819ms/s write: 24 MiB/s
+  rate-estimate: {Category:0 Store:2}: cpu=4000ms/s write: 40 MiB/s
+  rate-estimate: {Category:1 Store:1}: cpu=2000ms/s write: 20 MiB/s

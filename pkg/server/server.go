@@ -105,6 +105,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admit_long"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc/logger"
@@ -288,7 +289,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionOptions.Override(opts)
 	}
 
-	engines, err := cfg.CreateEngines(ctx)
+	longWorkGranter := admit_long.NewLongWorkGranterImpl(st, stopper)
+	engines, err := cfg.CreateEngines(ctx, longWorkGranter)
 	if err != nil {
 		if true {
 			panic(err)
@@ -898,6 +900,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowEvalWaitMetrics:        evalWaitMetrics,
 		KVFlowRangeControllerMetrics: rangeControllerMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
+		LongWorkGranter:              longWorkGranter,
 		RangeCount:                   &atomic.Int64{},
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -1948,15 +1951,23 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	s.raftTransport.SetAdditionalStoreIDs(additionalStoreIDs)
 
 	// Connect the engines to the disk stats map constructor. This needs to
-	// wait until after waitForAdditionalStoreInit returns since it realizes on
+	// wait until after waitForAdditionalStoreInit returns since it relies on
 	// wholly initialized stores (it reads the StoreIdentKeys). It also needs
 	// to come before the call into SetPebbleMetricsProvider, which internally
 	// uses the disk stats map we're initializing.
-	var pmp admission.PebbleMetricsProvider
+	var pmp *nodePebbleMetricsProvider
 	if pmp, err = s.node.registerEnginesForDiskStatsMap(
 		s.cfg.Stores.Specs, s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
+
+	storeRegistries := map[roachpb.StoreID]*metric.Registry{}
+	s.node.stores.VisitStores(func(s *kvserver.Store) error {
+		storeID := s.StoreID()
+		storeRegistries[storeID] = s.Registry()
+		return nil
+	})
+	s.node.storeCfg.LongWorkGranter.RegisterStatsProvider(pmp, s.nodeRegistry, storeRegistries)
 
 	// Set up a store metrics registry provider to register AC store-level
 	// metrics.

@@ -503,3 +503,5 @@ replace github.com/axiomhq/hyperloglog/000 => github.com/axiomhq/hyperloglog v0.
 // See pkg/util/metric/metric.go for usage.
 // See https://github.com/cockroachdb/client_golang/pulls for merged changes.
 replace github.com/prometheus/client_golang => github.com/cockroachdb/client_golang v0.0.0-20250124161916-2d4b7d300341
+
+replace github.com/cockroachdb/pebble => github.com/sumeerbhola/pebble v0.0.0-20250214140443-9c0418dcaa8d

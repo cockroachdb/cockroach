@@ -75,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admit_long"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -328,6 +329,11 @@ var snapshotApplyLimit = settings.RegisterIntSetting(
 	envutil.EnvOrDefaultInt64("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1),
 	settings.NonNegativeInt,
 )
+
+var snapshotApplyLimitUseACEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.store.raft_snapshot.apply_limit.use_admission_control.enabled", "TODO",
+	false)
 
 // SnapshotSendLimit specifies the maximum number of snapshots that are
 // permitted to be sent concurrently.
@@ -1316,6 +1322,8 @@ type StoreConfig struct {
 	// many CPU tokens are granted to elastic work like backups).
 	SchedulerLatencyListener admission.SchedulerLatencyListener
 
+	LongWorkGranter admit_long.WorkGranter
+
 	// SystemConfigProvider is used to drive replication decision-making in the
 	// mixed-version state, before the span configuration infrastructure has been
 	// bootstrapped.
@@ -1639,10 +1647,19 @@ func NewStore(
 	s.raftMetrics = raft.NewMetrics()
 	s.metrics.registry.AddMetricStruct(s.raftMetrics)
 
-	s.snapshotApplyQueue = multiqueue.NewMultiQueue(int(snapshotApplyLimit.Get(&cfg.Settings.SV)))
-	snapshotApplyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		s.snapshotApplyQueue.UpdateConcurrencyLimit(int(snapshotApplyLimit.Get(&cfg.Settings.SV)))
-	})
+	if snapshotApplyLimitUseACEnabled.Get(&cfg.Settings.SV) {
+		granter := multiqueue.NewAdmitLongGranter(
+			cfg.LongWorkGranter, int(snapshotApplyLimit.Get(&cfg.Settings.SV)))
+		snapshotApplyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+			granter.UpdateWithoutPermissionConcurrency(int(snapshotApplyLimit.Get(&cfg.Settings.SV)))
+		})
+		s.snapshotApplyQueue = multiqueue.NewMultiQueueWithGranter(granter)
+	} else {
+		s.snapshotApplyQueue = multiqueue.NewMultiQueue(int(snapshotApplyLimit.Get(&cfg.Settings.SV)))
+		snapshotApplyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+			s.snapshotApplyQueue.UpdateConcurrencyLimit(int(snapshotApplyLimit.Get(&cfg.Settings.SV)))
+		})
+	}
 	s.snapshotSendQueue = multiqueue.NewMultiQueue(int(SnapshotSendLimit.Get(&cfg.Settings.SV)))
 	SnapshotSendLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		s.snapshotSendQueue.UpdateConcurrencyLimit(int(SnapshotSendLimit.Get(&cfg.Settings.SV)))
@@ -2140,6 +2157,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 	s.Ident = &ident
+	s.snapshotApplyQueue.SetStoreID(s.StoreID())
 
 	// Set the store ID for logging.
 	s.cfg.AmbientCtx.AddLogTag("s", s.StoreID())

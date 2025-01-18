@@ -641,6 +641,8 @@ type engineConfig struct {
 	//
 	// A value of 0 disables the limit.
 	blockConcurrencyLimitDivisor int
+
+	compactionScheduler CompactionSchedulerPlus
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -758,6 +760,11 @@ func (p *Pebble) AdjustCompactionConcurrency(delta int64) uint64 {
 func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 	if p == nil {
 		return nil
+	}
+	log.Infof(ctx, "Pebble.SetStoreID %d", storeID)
+	if p.cfg.compactionScheduler != nil {
+		log.Infof(ctx, "Pebble setting compactionScheduler.SetStoreID %d", storeID)
+		p.cfg.compactionScheduler.SetStoreID(roachpb.StoreID(storeID))
 	}
 	p.storeIDPebbleLog.Set(ctx, storeID)
 	// Note that SetCreatorID only does something if remote storage is configured

@@ -136,13 +136,9 @@ func TestMultiQueueCancelInProgress(t *testing.T) {
 
 	a3, _ := queue.Add(a, 5.0, -1)
 	a2, _ := queue.Add(a, 4.0, -1)
-	b1, _ := queue.Add(b, 1.1, -1)
-	b2, _ := queue.Add(b, 2.1, -1)
+	a1, _ := queue.Add(a, 1.1, -1)
+	b1, _ := queue.Add(b, 2.1, -1)
 	c3, _ := queue.Add(c, 2.2, -1)
-	b3, _ := queue.Add(b, 6.1, -1)
-
-	queue.Cancel(b2)
-	queue.Cancel(b1)
 
 	started := 0
 	completed := 0
@@ -185,29 +181,33 @@ func TestMultiQueueCancelInProgress(t *testing.T) {
 	require.True(t, ok)
 	completeTask(a3, a3Permit)
 
-	// Cancel b3 before starting. Should not be able to get permit.
-	queue.Cancel(b3)
-	_, ok = startTask(b3)
+	// Execute a2.
+	a2Permit, ok := startTask(a2)
+	require.True(t, ok)
+	completeTask(a2, a2Permit)
+
+	// Cancel b1 before starting. Should not be able to get permit.
+	queue.Cancel(b1)
+	_, ok = startTask(b1)
 	require.False(t, ok)
 
-	// Now, should be able to execute c3 immediately.
+	// Now, should be able to execute c3.
 	c3Permit, ok := startTask(c3)
 	require.True(t, ok)
 
 	// A and C started
-	require.Equal(t, 2, started)
-	// A completed
-	require.Equal(t, 1, completed)
-
-	// Complete c3 and cancel after completion.
-	completeTask(c3, c3Permit)
-	queue.Cancel(c3)
-
-	// Start a2, which is the final item and also should not block to start.
-	startTask(a2)
-
 	require.Equal(t, 3, started)
+	// A completed
 	require.Equal(t, 2, completed)
+
+	// Complete c3.
+	completeTask(c3, c3Permit)
+
+	// Start a1, which is the final item and also should not block to start.
+	startTask(a1)
+
+	require.Equal(t, 4, started)
+	require.Equal(t, 3, completed)
 }
 
 // TestMultiQueueStress calls Add from multiple threads. It chooses different
@@ -279,9 +279,14 @@ func TestMultiQueueReleaseAfterCancel(t *testing.T) {
 	queue := NewMultiQueue(1)
 
 	task, _ := queue.Add(1, 1, -1)
-	p := <-task.GetWaitChan()
+	<-task.GetWaitChan()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("expected panic")
+		}
+	}()
+	// Not allowed to Cancel after retrieving the Permit.
 	queue.Cancel(task)
-	queue.Release(p)
 }
 
 func TestMultiQueueLen(t *testing.T) {
@@ -297,15 +302,15 @@ func TestMultiQueueLen(t *testing.T) {
 	require.Equal(t, 0, queue.QueueLen())
 	task2, _ := queue.Add(1, 1, -1)
 	require.Equal(t, 0, queue.AvailableLen())
-	require.Equal(t, 1, queue.QueueLen())
+	require.Equal(t, 0, queue.QueueLen())
 	task3, _ := queue.Add(1, 1, -1)
 	require.Equal(t, 0, queue.AvailableLen())
-	require.Equal(t, 2, queue.QueueLen())
+	require.Equal(t, 1, queue.QueueLen())
 
 	queue.Cancel(task1)
 	// Finish task 1, but immediately start task3.
 	require.Equal(t, 0, queue.AvailableLen())
-	require.Equal(t, 1, queue.QueueLen())
+	require.Equal(t, 0, queue.QueueLen())
 
 	p := <-task2.GetWaitChan()
 	queue.Release(p)
@@ -331,18 +336,18 @@ func TestMultiQueueFull(t *testing.T) {
 	task2, err := queue.Add(1, 1, 0)
 	require.NoError(t, err)
 	require.Equal(t, 0, queue.AvailableLen())
-	require.Equal(t, 1, queue.QueueLen())
+	require.Equal(t, 0, queue.QueueLen())
 	// Task 3 would be queued so should not be added.
 	task3, err := queue.Add(1, 1, 0)
 	require.Error(t, err)
 	require.Nil(t, task3)
 	require.Equal(t, 0, queue.AvailableLen())
-	require.Equal(t, 1, queue.QueueLen())
+	require.Equal(t, 0, queue.QueueLen())
 	// Task 4 uses a longer max queue length so should be added.
 	task4, err := queue.Add(1, 1, 1)
 	require.NoError(t, err)
 	require.Equal(t, 0, queue.AvailableLen())
-	require.Equal(t, 2, queue.QueueLen())
+	require.Equal(t, 1, queue.QueueLen())
 
 	queue.Cancel(task1)
 	queue.Cancel(task2)
@@ -352,7 +357,7 @@ func TestMultiQueueFull(t *testing.T) {
 	task5, err := queue.Add(1, 1, 0)
 	require.NoError(t, err)
 	require.Equal(t, 0, queue.AvailableLen())
-	require.Equal(t, 1, queue.QueueLen())
+	require.Equal(t, 0, queue.QueueLen())
 
 	// Cancel all the remaining tasks.
 	queue.Cancel(task4)
@@ -393,16 +398,16 @@ func TestMultiQueueUpdateConcurrencLimit(t *testing.T) {
 	queue := NewMultiQueue(1)
 	// Grow the concurrency limit.
 	queue.UpdateConcurrencyLimit(5)
-	require.Equal(t, 5, queue.remainingRuns)
+	require.Equal(t, 5, queue.AvailableLen())
 	// Shrink the concurrency limit.
 	queue.UpdateConcurrencyLimit(2)
-	require.Equal(t, 2, queue.remainingRuns)
+	require.Equal(t, 2, queue.AvailableLen())
 	// Decrease the remaining runs.
 	_, _ = queue.Add(1, 1, -1)
 	_, _ = queue.Add(2, 1, -1)
 	// Shrink the limit gain, make sure the remainingRuns is non-negative.
 	queue.UpdateConcurrencyLimit(1)
-	require.Equal(t, 0, queue.remainingRuns)
+	require.Equal(t, 0, queue.AvailableLen())
 	// Test the edge case of increasing concurrency limits from 0.
 	// Tasks should be able to execute after limit adjustments.
 	queue = NewMultiQueue(0)
@@ -414,22 +419,22 @@ func TestMultiQueueUpdateConcurrencLimit(t *testing.T) {
 	// task will not increase remaining runs beyond the limit.
 	queue = NewMultiQueue(2)
 	a1, _ = queue.Add(1, 4.0, -1)
-	require.Equal(t, 1, queue.remainingRuns)
-	queue.updateConcurrencyLimitLocked(1)
-	permit := <-a1.GetWaitChan()
+	require.Equal(t, 1, queue.AvailableLen())
+	queue.UpdateConcurrencyLimit(1)
+	// permit := <-a1.GetWaitChan()
 	queue.Cancel(a1)
-	queue.Release(permit)
-	require.Equal(t, 1, queue.remainingRuns)
+	// queue.Release(permit)
+	require.Equal(t, 1, queue.AvailableLen())
 	// Test the case of updating concurrency limit to 0
 	// to freeze the queue.
 	queue = NewMultiQueue(2)
 	queue.UpdateConcurrencyLimit(0)
-	require.Equal(t, 1, queue.QueueLen())
-	require.Equal(t, 0, queue.remainingRuns)
+	require.Equal(t, 0, queue.QueueLen())
+	require.Equal(t, 0, queue.AvailableLen())
 	// Queue is frozen adding a new task will not
 	// trigger execution due to no remaining runs left.
 	_, err := queue.Add(1, 1, 1)
-	require.Equal(t, 2, queue.QueueLen())
+	require.Equal(t, 1, queue.QueueLen())
 	require.NoError(t, err)
 	require.Equal(t, 0, queue.AvailableLen())
 }

@@ -7,7 +7,10 @@ package multiqueue
 
 import (
 	"container/heap"
+	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admit_long"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -16,10 +19,12 @@ import (
 // Task represents a request for a Permit for a piece of work that needs to be
 // done. It is created by a call to MultiQueue.Add. After creation,
 // Task.GetWaitChan is called to get a permit, and after all work related to
-// this task is done, MultiQueue.Release must be called so future tasks can run.
-// Alternatively, if the user decides they no longer want to run their work,
-// MultiQueue.Cancel can be called to release the permit without waiting for the
-// permit.
+// this task is done, MultiQueue.Release must be called so future tasks can
+// run. Alternatively, if the user decides they no longer want to run their
+// work, MultiQueue.Cancel can be called to release the permit without waiting
+// for the permit. MultiQueue.Cancel *must* not be called if the caller has
+// successfully received from GetWaitChan, since that represents the caller
+// has accepted the permit.
 type Task struct {
 	priority  float64
 	queueType int
@@ -83,6 +88,130 @@ func (h *notifyHeap) tryRemove(task *Task) bool {
 	return true
 }
 
+type Granter interface {
+	setRequester(roachpb.StoreID, Requester)
+	tryGet() (bool, admit_long.WorkResourceUsageReporter)
+}
+
+// Requester mutex is ordered before Granter mutex.
+//
+// So hasWaiting and grant must not be called with Granter mutex held.
+type Requester interface {
+	hasWaiting() bool
+	grant(admit_long.WorkResourceUsageReporter) bool
+}
+
+type ConcurrencyLimitGranter struct {
+	requester Requester
+	grantCh   chan struct{}
+	mu        struct {
+		syncutil.Mutex
+		concurrencyLimit int
+		remainingRuns    int
+	}
+}
+
+var _ Granter = &ConcurrencyLimitGranter{}
+
+func newConcurrencyLimitGranter(concurrentLimit int) *ConcurrencyLimitGranter {
+	g := &ConcurrencyLimitGranter{
+		grantCh: make(chan struct{}, 1),
+	}
+	g.mu.concurrencyLimit = concurrentLimit
+	g.mu.remainingRuns = concurrentLimit
+	return g
+}
+
+func (g *ConcurrencyLimitGranter) updateConcurrencyLimit(newLimit int) {
+	g.mu.Lock()
+	diff := newLimit - g.mu.concurrencyLimit
+	tryGrant := diff > 0 && g.mu.remainingRuns == 0
+	g.mu.remainingRuns = g.mu.remainingRuns + diff
+	g.mu.concurrencyLimit = newLimit
+	g.mu.Unlock()
+	if tryGrant {
+		g.tryGrant()
+	}
+}
+
+func (g *ConcurrencyLimitGranter) getConcurrencyLimit() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.mu.concurrencyLimit
+}
+
+func (g *ConcurrencyLimitGranter) getAvailableLen() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return max(0, g.mu.remainingRuns)
+}
+
+func (g *ConcurrencyLimitGranter) tryGrant() {
+	g.grantCh <- struct{}{}
+	defer func() {
+		<-g.grantCh
+	}()
+	// Consider the following sequence:
+	// hasWaiting: true; tryGet: true; grant: false (because waiting work has been canceled)
+	// meanwhile another tryGet has returned false, and there is work waiting.
+	//
+	// Hence, we loop back and call hasWaiting.
+	for g.requester.hasWaiting() {
+		success, reporter := g.tryGet()
+		if !success {
+			return
+		}
+		if !g.requester.grant(reporter) {
+			reporter.WorkDone()
+			g.mu.Lock()
+			g.mu.remainingRuns++
+			g.mu.Unlock()
+		}
+	}
+}
+
+func (g *ConcurrencyLimitGranter) setRequester(_ roachpb.StoreID, requester Requester) {
+	g.requester = requester
+}
+
+func (g *ConcurrencyLimitGranter) tryGet() (bool, admit_long.WorkResourceUsageReporter) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.mu.remainingRuns > 0 {
+		g.mu.remainingRuns--
+		return true, clgReporter{g: g}
+	}
+	return false, nil
+}
+
+func (g *ConcurrencyLimitGranter) done() {
+	g.mu.Lock()
+	g.mu.remainingRuns++
+	tryGrant := g.mu.remainingRuns > 0
+	g.mu.Unlock()
+	// After the Unlock, a tryGet can race ahead and grab a slot. This is fine
+	// since this Granter only deals with a single Requester, and the Requester
+	// is responsible for ensuring ordering among the various work items that
+	// want a slot.
+	if tryGrant {
+		g.tryGrant()
+	}
+}
+
+type clgReporter struct {
+	g *ConcurrencyLimitGranter
+}
+
+var _ admit_long.WorkResourceUsageReporter = clgReporter{}
+
+func (r clgReporter) WorkStart()                                   {}
+func (r clgReporter) MeasureCPU(g int)                             {}
+func (r clgReporter) CumulativeWriteBytes(w admit_long.WriteBytes) {}
+func (r clgReporter) WorkDone() {
+	r.g.done()
+}
+func (r clgReporter) GetIDForDebugging() uint64 { return 0 }
+
 // MultiQueue is a type that round-robins through a set of typed queues, each
 // independently prioritized. A MultiQueue is constructed with a concurrencySem
 // which is the number of concurrent jobs this queue will allow to run. Tasks
@@ -91,40 +220,56 @@ func (h *notifyHeap) tryRemove(task *Task) bool {
 // be run. Once the job is completed, MultiQueue.TaskDone must be called to
 // return the Permit to the queue so that the next Task can be started.
 type MultiQueue struct {
-	mu               syncutil.Mutex
-	concurrencyLimit int
-	remainingRuns    int
-	mapping          map[int]int
-	lastQueueIndex   int
-	outstanding      []notifyHeap
+	granter        Granter
+	mu             syncutil.Mutex
+	mapping        map[int]int
+	lastQueueIndex int
+	outstanding    []notifyHeap
 }
+
+var _ Requester = &MultiQueue{}
 
 // NewMultiQueue creates a new queue. The queue is not started, and start needs
 // to be called on it first.
 func NewMultiQueue(maxConcurrency int) *MultiQueue {
-	queue := MultiQueue{
-		remainingRuns:    maxConcurrency,
-		concurrencyLimit: maxConcurrency,
-		mapping:          make(map[int]int),
-	}
-	queue.lastQueueIndex = -1
+	g := newConcurrencyLimitGranter(maxConcurrency)
+	return NewMultiQueueWithGranter(g)
+}
 
-	return &queue
+func NewMultiQueueWithGranter(g Granter) *MultiQueue {
+	queue := &MultiQueue{
+		granter:        g,
+		mapping:        make(map[int]int),
+		lastQueueIndex: -1,
+	}
+	clg, ok := g.(*ConcurrencyLimitGranter)
+	if ok {
+		// The StoreID does not matter for the ConcurrencyLimitGranter, so register
+		// now -- this also helps with unit tests.
+		clg.setRequester(1, queue)
+	}
+	return queue
+}
+
+func (m *MultiQueue) SetStoreID(storeID roachpb.StoreID) {
+	_, ok := m.granter.(*ConcurrencyLimitGranter)
+	if !ok {
+		m.granter.setRequester(storeID, m)
+	}
 }
 
 // Permit is a token which is returned from a Task.GetWaitChan call.
 type Permit struct {
-	valid bool
+	// valid is only used to guard against double Release.
+	valid    bool
+	Reporter admit_long.WorkResourceUsageReporter
 }
 
-// tryRunNextLocked will run the next task in order round-robin through the
-// queues and in priority order within a queue.
-// MultiQueue.mu lock must be held before calling this function.
-func (m *MultiQueue) tryRunNextLocked() {
-	// If no permits are left, then we can't run anything.
-	if m.remainingRuns <= 0 {
-		return
-	}
+// grant will run the next task in order round-robin through the queues and in
+// priority order within a queue.
+func (m *MultiQueue) grant(reporter admit_long.WorkResourceUsageReporter) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	for i := 0; i < len(m.outstanding); i++ {
 		// Start with the next queue in order and iterate through all empty queues.
@@ -132,29 +277,22 @@ func (m *MultiQueue) tryRunNextLocked() {
 		index := (m.lastQueueIndex + i + 1) % len(m.outstanding)
 		if m.outstanding[index].Len() > 0 {
 			task := heap.Pop(&m.outstanding[index]).(*Task)
-			task.permitC <- &Permit{valid: true}
-			m.remainingRuns--
+			task.permitC <- &Permit{valid: true, Reporter: reporter}
 			m.lastQueueIndex = index
-			return
+			return true
 		}
 	}
+	return false
+}
+
+func (m *MultiQueue) hasWaiting() bool {
+	return m.QueueLen() > 0
 }
 
 // UpdateConcurrencyLimit updates the concurrencyLimit and remainingRuns field.
-// We add the delta from new and old concurrencyLimit to remainingRuns and cap
-// remainingRuns as non-negative integer.
+// We add the delta from new and old concurrencyLimit to remainingRuns.
 func (m *MultiQueue) UpdateConcurrencyLimit(newLimit int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.updateConcurrencyLimitLocked(newLimit)
-}
-
-func (m *MultiQueue) updateConcurrencyLimitLocked(newLimit int) {
-	diff := newLimit - m.concurrencyLimit
-	m.remainingRuns = max(m.remainingRuns+diff, 0)
-	m.concurrencyLimit = newLimit
-	// Attempt to wake the outstanding tasks after concurrency limit adjustment.
-	m.tryRunNextLocked()
+	m.granter.(*ConcurrencyLimitGranter).updateConcurrencyLimit(newLimit)
 }
 
 // Add returns a Task that must be closed (calling m.Release(..)) to
@@ -164,17 +302,31 @@ func (m *MultiQueue) Add(queueType int, priority float64, maxQueueLength int64) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// If there are remainingRuns we can run immediately, otherwise compute the
-	// queue length one we are added. If the queue is too long, return an error
-	// immediately so the caller doesn't have to wait.
-	if m.remainingRuns == 0 && maxQueueLength >= 0 {
-		currentLen := int64(m.queueLenLocked())
-		if currentLen > maxQueueLength {
-			return nil, errors.Newf("queue is too long %d > %d", currentLen, maxQueueLength)
+	currentLen := int64(m.queueLenLocked())
+	queueTask := false
+	var reporter admit_long.WorkResourceUsageReporter
+	if currentLen == 0 {
+		var success bool
+		success, reporter = m.granter.tryGet()
+		if !success {
+			queueTask = true
 		}
+	} else {
+		queueTask = true
 	}
-
-	// The mutex starts locked, unlock it when we are ready to run.
+	if queueTask && maxQueueLength >= 0 && currentLen >= maxQueueLength {
+		return nil, errors.Newf("queue is too long %d > %d", currentLen, maxQueueLength)
+	}
+	newTask := &Task{
+		priority:  priority,
+		permitC:   make(chan *Permit, 1),
+		heapIdx:   -1,
+		queueType: queueType,
+	}
+	if !queueTask {
+		newTask.permitC <- &Permit{valid: true, Reporter: reporter}
+		return newTask, nil
+	}
 	pos, ok := m.mapping[queueType]
 	if !ok {
 		// Append a new entry to both mapping and outstanding each time there is
@@ -183,109 +335,156 @@ func (m *MultiQueue) Add(queueType int, priority float64, maxQueueLength int64) 
 		m.mapping[queueType] = pos
 		m.outstanding = append(m.outstanding, notifyHeap{})
 	}
-	newTask := Task{
-		priority:  priority,
-		permitC:   make(chan *Permit, 1),
-		heapIdx:   -1,
-		queueType: queueType,
-	}
-	heap.Push(&m.outstanding[pos], &newTask)
-
-	// Once we are done adding a task, attempt to signal the next waiting task.
-	m.tryRunNextLocked()
-
-	return &newTask, nil
+	heap.Push(&m.outstanding[pos], newTask)
+	return newTask, nil
 }
 
-// Cancel will cancel a Task that may not have started yet. This is useful if it
-// is determined that it is no longer required to run this Task.
+// Cancel will cancel a Task that has not started yet, that is, either
+// task.permitC has no Permit, or has a Permit that has not been retrieved.
+// This is useful if it is determined that it is no longer required to run
+// this Task.
 func (m *MultiQueue) Cancel(task *Task) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	// Find the right queue and try to remove it. Queues monotonically grow, and a
-	// Task will track its position within the queue.
-	queueIdx := m.mapping[task.queueType]
-	ok := m.outstanding[queueIdx].tryRemove(task)
-	// Close the permit channel so that waiters stop blocking.
-	if ok {
-		close(task.permitC)
-		return
-	}
-	// If we get here, we are racing with the task being started. The concern is
-	// that the caller may also call MultiQueue.Release since the task was
-	// started. Either we get the permit or the caller, so we guarantee only one
-	// release will be called.
-	select {
-	case p, ok := <-task.permitC:
-		// Only release if the channel is open, and we can get the permit.
-		if ok {
+	var permit *Permit
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		// Find the right queue and try to remove it. Queues monotonically grow, and a
+		// Task will track its position within the queue.
+		if task.heapIdx >= 0 {
+			queueIdx := m.mapping[task.queueType]
+			ok := m.outstanding[queueIdx].tryRemove(task)
+			if !ok {
+				panic("task not found in queue")
+			}
+			// Was in the heap, so the channel must be empty.
+			select {
+			case <-task.permitC:
+				panic("channel is not empty")
+			default:
+			}
+			// Close the permit channel. NB: no one should be waiting on this
+			// channel, so this is just defensive.
 			close(task.permitC)
-			m.releaseLocked(p)
+			return
 		}
-	default:
-		// If we are not able to get the permit, this means the permit has already
-		// been given to the caller, and they must call Release on it.
+		// Not in the heap. So must have been granted a Permit that has not been
+		// retrieved.
+		select {
+		case permit = <-task.permitC:
+		default:
+			panic("channel is empty")
+		}
+		close(task.permitC)
+	}()
+	if permit != nil {
+		m.Release(permit)
 	}
 }
 
 // Release needs to be called once the Task that was running has completed and
-// is no longer using system resources. This allows the MultiQueue to call the
-// next Task.
+// is no longer using system resources.
 func (m *MultiQueue) Release(permit *Permit) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.releaseLocked(permit)
-}
-
-func (m *MultiQueue) releaseLocked(permit *Permit) {
 	if !permit.valid {
 		panic("double release of permit")
 	}
 	permit.valid = false
-	// In case that concurrencyLimit shrank in between task's execution.
-	if m.remainingRuns < m.concurrencyLimit {
-		m.remainingRuns++
-	}
-	m.tryRunNextLocked()
+	permit.Reporter.WorkDone()
+	permit.Reporter = nil
 }
 
 // AvailableLen returns the number of additional tasks that can be added without
 // queueing. This will return 0 if there is anything queued.
+//
+// Must only be called for a MultiQueue paired with a ConcurrencyLimitGranter.
 func (m *MultiQueue) AvailableLen() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.remainingRuns
+	return m.granter.(*ConcurrencyLimitGranter).getAvailableLen()
 }
 
-// QueueLen returns the length of the queue if one more task is added. If this
-// returns 0 then a task can be added and run without queueing.
-// NB: The value returned is not a guarantee that queueing will not occur when
-// the request is submitted. Multiple calls to QueueLen could race.
+// QueueLen returns the number of Tasks that are waiting for a Permit.
 func (m *MultiQueue) QueueLen() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.queueLenLocked()
 }
 
-// TODO(lyang24): queueLenLocked method returns the length of the queue as if
-// one more tasks are added. We should look into renaming the method to be
-// closer to its semantics.
 func (m *MultiQueue) queueLenLocked() int {
-	// TODO(lyang24): rename field remainingRuns to runningTasks
-	// and make sure it increment on every execution.
-	// Replace the check with m.runningTasks < m.concurrencyLimit.
-	if m.remainingRuns > 0 {
-		return 0
-	}
-	// Start counting from 1 since we will be the first in the queue if it gets added.
-	count := 1
+	count := 0
 	for i := 0; i < len(m.outstanding); i++ {
 		count += len(m.outstanding[i])
 	}
 	return count
 }
 
-// MaxConcurrency exposes the multi-queue's concurrency limit.
+// MaxConcurrency exposes the multi-queue's concurrency limit. Must only be
+// called for a MultiQueue paired with a ConcurrencyLimitGranter.
 func (m *MultiQueue) MaxConcurrency() int {
-	return m.concurrencyLimit
+	return m.granter.(*ConcurrencyLimitGranter).getConcurrencyLimit()
 }
+
+// Lock ordering:
+// Requester mutex < AdmitLongGranter.mu < admit_long.WorkGranter mutex.
+//
+// AdmitLongGranter.done will call
+// admit_long.WorkGrantHandle.UsageReporter.WorkDone which can call back into
+// AdmitLongGranter and into Requester. So Requester and AdmitLongGranter
+// should not hold any mutexes when calling or forwarding.
+
+type AdmitLongGranter struct {
+	workGranter admit_long.WorkGranter
+	roachpb.StoreID
+	requester                    Requester
+	withoutPermissionConcurrency atomic.Int64
+}
+
+var _ Granter = &AdmitLongGranter{}
+var _ admit_long.WorkRequester = &AdmitLongGranter{}
+
+func NewAdmitLongGranter(
+	granter admit_long.WorkGranter, withoutPermissionConcurrency int,
+) *AdmitLongGranter {
+	g := &AdmitLongGranter{
+		workGranter: granter,
+	}
+	g.withoutPermissionConcurrency.Store(int64(withoutPermissionConcurrency))
+	return g
+}
+
+func (g *AdmitLongGranter) UpdateWithoutPermissionConcurrency(newLimit int) {
+	g.withoutPermissionConcurrency.Store(int64(newLimit))
+}
+
+func (g *AdmitLongGranter) setRequester(storeID roachpb.StoreID, requester Requester) {
+	g.StoreID = storeID
+	g.requester = requester
+	g.workGranter.RegisterRequester(admit_long.WorkCategoryAndStore{
+		Category: admit_long.SnapshotRecv,
+		Store:    g.StoreID,
+	}, g, 1)
+}
+
+func (g *AdmitLongGranter) tryGet() (bool, admit_long.WorkResourceUsageReporter) {
+	return g.workGranter.TryGet(admit_long.WorkCategoryAndStore{
+		Category: admit_long.SnapshotRecv,
+		Store:    g.StoreID,
+	})
+}
+
+func (g *AdmitLongGranter) GetAllowedWithoutPermissionForStore() int {
+	return int(g.withoutPermissionConcurrency.Load())
+}
+
+func (g *AdmitLongGranter) GetScore() (bool, admit_long.WorkScore) {
+	return g.requester.hasWaiting(), admit_long.WorkScore{
+		Optional: false,
+		Score:    0,
+	}
+}
+
+func (g *AdmitLongGranter) Grant(reporter admit_long.WorkResourceUsageReporter) bool {
+	return g.requester.grant(reporter)
+}
+
+//
+// Plumbing to use alternative MultiQueue and Granter.
+
+// TODO: will need to plumb WorkGrantHandle to the caller.

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admit_long"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -676,6 +677,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	stream incomingSnapshotStream,
 	header kvserverpb.SnapshotRequest_Header,
 	recordBytesReceived snapshotRecordMetrics,
+	usageReporter admit_long.WorkResourceUsageReporter,
 ) (IncomingSnapshot, error) {
 	if fn := s.cfg.TestingKnobs.BeforeRecvAcceptedSnapshot; fn != nil {
 		fn()
@@ -739,7 +741,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	var sharedSSTs []pebble.SharedSSTMeta
 	var externalSSTs []pebble.ExternalFile
-	var prevWriteBytes int64
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
 	if snapshotQ == nil {
@@ -785,12 +786,21 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				// TODO(lyang24): maybe avoid decoding engine key twice.
 				// msstw calls (i.e. PutInternalPointKey) can use the decoded engine key here as input.
 
-				writeBytes := msstw.writeBytes - prevWriteBytes
+				writeBytes := msstw.writeBytes
+				if usageReporter != nil {
+					// TODO: should wrap admit_long.WorkResourceUsageReporter since
+					// snapshot receiving should not need to call MeasureCPU with a 0
+					// parameter. Or call both these methods. Simply calling
+					// AddWriteBytes should be sufficient and behind the scene
+					// MeasureCPU should also happen.
+					usageReporter.MeasureCPU(0)
+					usageReporter.CumulativeWriteBytes(admit_long.WriteBytes{Bytes: writeBytes})
+				}
+
 				// Calling nil pacer is a noop.
 				if err := pacer.Pace(ctx, writeBytes, false /* final */); err != nil {
 					return noSnap, errors.Wrapf(err, "snapshot admission pacer")
 				}
-				prevWriteBytes = msstw.writeBytes
 
 				ek, err := batchReader.EngineKey()
 				if err != nil {
@@ -1266,11 +1276,11 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 // foreground traffic.
 func (s *Store) reserveReceiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
-) (_cleanup func(), _err error) {
+) (_cleanup func(), _ admit_long.WorkResourceUsageReporter, _err error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveReceiveSnapshot")
 	defer sp.Finish()
 
-	return s.throttleSnapshot(ctx,
+	cleanup, usageReporter, err := s.throttleSnapshot(ctx,
 		s.snapshotApplyQueue,
 		int(header.SenderQueueName),
 		header.SenderQueuePriority,
@@ -1284,6 +1294,7 @@ func (s *Store) reserveReceiveSnapshot(
 			s.metrics.RangeSnapshotRecvTotalInProgress,
 		},
 	)
+	return cleanup, usageReporter, err
 }
 
 // reserveSendSnapshot throttles outgoing snapshots.
@@ -1296,7 +1307,7 @@ func (s *Store) reserveSendSnapshot(
 		fn()
 	}
 
-	return s.throttleSnapshot(ctx,
+	cleanup, _, err := s.throttleSnapshot(ctx,
 		s.snapshotSendQueue,
 		int(req.SenderQueueName),
 		req.SenderQueuePriority,
@@ -1310,6 +1321,7 @@ func (s *Store) reserveSendSnapshot(
 			s.metrics.RangeSnapshotSendTotalInProgress,
 		},
 	)
+	return cleanup, err
 }
 
 // throttleSnapshot is a helper function to throttle snapshot sending and
@@ -1324,7 +1336,7 @@ func (s *Store) throttleSnapshot(
 	rangeSize int64,
 	rangeID roachpb.RangeID,
 	snapshotMetrics snapshotMetrics,
-) (cleanup func(), funcErr error) {
+) (cleanup func(), usageReporter admit_long.WorkResourceUsageReporter, funcErr error) {
 
 	tBegin := timeutil.Now()
 	var permit *multiqueue.Permit
@@ -1335,7 +1347,7 @@ func (s *Store) throttleSnapshot(
 	if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
 		task, err := snapshotQueue.Add(requestSource, requestPriority, maxQueueLength)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// After this point, the task is on the queue, so any future errors need to
 		// be handled by cancelling the task to release the permit.
@@ -1374,15 +1386,15 @@ func (s *Store) throttleSnapshot(
 		case <-queueCtx.Done():
 			// We need to cancel the task so that it doesn't ever get a permit.
 			if err := ctx.Err(); err != nil {
-				return nil, errors.Wrap(err, "acquiring snapshot reservation")
+				return nil, nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
-			return nil, errors.Wrapf(
+			return nil, nil, errors.Wrapf(
 				queueCtx.Err(),
 				"giving up during snapshot reservation due to cluster setting %q",
 				snapshotReservationQueueTimeoutFraction.Name(),
 			)
 		case <-s.stopper.ShouldQuiesce():
-			return nil, errors.Errorf("stopped")
+			return nil, nil, errors.Errorf("stopped")
 		}
 
 		// Counts non-empty in-progress snapshots.
@@ -1409,6 +1421,10 @@ func (s *Store) throttleSnapshot(
 
 	s.metrics.ReservedReplicaCount.Inc(1)
 	s.metrics.Reserved.Inc(rangeSize)
+	var reporter admit_long.WorkResourceUsageReporter
+	if permit != nil {
+		reporter = permit.Reporter
+	}
 	return func() {
 		s.metrics.ReservedReplicaCount.Dec(1)
 		s.metrics.Reserved.Dec(rangeSize)
@@ -1418,7 +1434,7 @@ func (s *Store) throttleSnapshot(
 			snapshotMetrics.InProgress.Dec(1)
 			snapshotQueue.Release(permit)
 		}
-	}, nil
+	}, reporter, nil
 }
 
 // canAcceptSnapshotLocked returns (_, nil) if the snapshot can be applied to
@@ -1614,11 +1630,16 @@ func (s *Store) receiveSnapshot(
 			header.SenderQueueName, storeID, header.State.Desc.Replicas())
 	}
 
-	cleanup, err := s.reserveReceiveSnapshot(ctx, header)
+	cleanup, usageReporter, err := s.reserveReceiveSnapshot(ctx, header)
 	if err != nil {
 		return err
 	}
-	defer cleanup()
+	if usageReporter != nil {
+		usageReporter.WorkStart()
+	}
+	defer func() {
+		cleanup()
+	}()
 
 	// The comment on ReplicaPlaceholder motivates and documents
 	// ReplicaPlaceholder semantics. Please be familiar with them
@@ -1698,7 +1719,7 @@ func (s *Store) receiveSnapshot(
 			}
 		}
 	}
-	inSnap, err := ss.Receive(ctx, s, stream, *header, recordBytesReceived)
+	inSnap, err := ss.Receive(ctx, s, stream, *header, recordBytesReceived, usageReporter)
 	if err != nil {
 		return err
 	}

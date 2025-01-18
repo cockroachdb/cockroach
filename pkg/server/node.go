@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admit_long"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1356,7 +1357,7 @@ func (mm *diskMonitorManager) Monitor(path string) (kvserver.DiskStatsMonitor, e
 
 func (n *Node) registerEnginesForDiskStatsMap(
 	specs []base.StoreSpec, engines []storage.Engine, diskManager *diskMonitorManager,
-) (admission.PebbleMetricsProvider, error) {
+) (*nodePebbleMetricsProvider, error) {
 	pmp := &nodePebbleMetricsProvider{n: n}
 	if err := pmp.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
 		return nil, err
@@ -1405,6 +1406,44 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 		return nil
 	})
 	return metrics
+}
+
+func (pmp *nodePebbleMetricsProvider) GetStats(
+	scratch map[roachpb.StoreID]admit_long.ResourceStats,
+) admit_long.StatsForResources {
+	userMillis, sysMillis, err := status.GetProcCPUTime(context.Background())
+	if err != nil {
+		// TODO: remove panic.
+		panic(err.Error())
+	}
+	usedCPUNanos := userMillis*1e6 + sysMillis*1e6
+	provisionedCPUNanos := int64(status.GetCPUCapacity() * 1e9)
+
+	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
+		&pmp.n.storeCfg.Settings.SV)
+	storeIDToDiskStats, err := pmp.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth)
+	if err != nil {
+		log.Warningf(context.Background(), "%v",
+			errors.Wrapf(err, "unable to populate disk stats"))
+	}
+	if scratch == nil {
+		scratch = make(map[roachpb.StoreID]admit_long.ResourceStats, len(storeIDToDiskStats))
+	} else {
+		clear(scratch)
+	}
+	for storeID, stats := range storeIDToDiskStats {
+		scratch[storeID] = admit_long.ResourceStats{
+			ProvisionedRate: stats.ProvisionedBandwidth,
+			Used:            int64(stats.BytesRead + stats.BytesWritten),
+		}
+	}
+	return admit_long.StatsForResources{
+		CPU: admit_long.ResourceStats{
+			ProvisionedRate: provisionedCPUNanos,
+			Used:            usedCPUNanos,
+		},
+		Disk: scratch,
+	}
 }
 
 // Close implements admission.PebbleMetricsProvider.

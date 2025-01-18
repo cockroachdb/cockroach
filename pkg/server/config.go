@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admit_long"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -691,7 +692,9 @@ func (e *Engines) Close() {
 }
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
-func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
+func (cfg *Config) CreateEngines(
+	ctx context.Context, granter admit_long.WorkGranter,
+) (Engines, error) {
 	var engines Engines
 	defer engines.Close()
 
@@ -768,6 +771,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storage.Attributes(spec.Attributes),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
+			storage.CompactionScheduler(storage.NewCompactionScheduler(granter)),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
 			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
@@ -832,7 +836,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			addCfgOpt(storage.Caches(pebbleCache, fileCache))
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
 			addCfgOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
-			addCfgOpt(storage.MaxWriterConcurrency(2))
+			addCfgOpt(storage.MaxWriterConcurrency(1))
 			addCfgOpt(storage.RemoteStorageFactory(cfg.EarlyBootExternalStorageAccessor))
 			if sharedStorage != nil {
 				addCfgOpt(storage.SharedStorage(sharedStorage))

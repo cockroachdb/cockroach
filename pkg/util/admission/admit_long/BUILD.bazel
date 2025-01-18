@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "admit_long",
+    srcs = [
+        "granter.go",
+        "measure.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/admission/admit_long",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/grunning",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dustin_go_humanize//:go-humanize",
+    ],
+)
+
+go_test(
+    name = "admit_long_test",
+    srcs = ["granter_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":admit_long"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_stretchr_testify//require",
+    ],
+)

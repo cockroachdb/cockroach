@@ -3196,7 +3196,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	}, 1)
 	require.NoError(t, err)
 	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
-	require.Equal(t, 1, s.snapshotSendQueue.QueueLen())
+	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
 
 	// At this point both the first two tasks will be holding reservations and
 	// waiting for cleanup, a third task will block or fail First send one with
@@ -3209,7 +3209,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	}, 1)
 	require.Error(t, err)
 	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
-	require.Equal(t, 1, s.snapshotSendQueue.QueueLen())
+	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
 
 	// Now add a task that will wait indefinitely for another task to finish.
 	var wg sync.WaitGroup
@@ -3250,7 +3250,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
 	// One remaining task are queued at this point.
-	require.Equal(t, 2, s.snapshotSendQueue.QueueLen())
+	require.Equal(t, 1, s.snapshotSendQueue.QueueLen())
 
 	cleanup1()
 	cleanup2()
@@ -3272,7 +3272,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 	s := tc.store
 
-	cleanupNonEmpty1, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	cleanupNonEmpty1, _, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
 		RangeSize: 10,
 	})
 	if err != nil {
@@ -3291,7 +3291,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		"unexpected snapshots in progress")
 
 	// Ensure we allow a concurrent empty snapshot.
-	cleanupEmpty, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{})
+	cleanupEmpty, _, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3339,7 +3339,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		}
 	}()
 
-	cleanupNonEmpty3, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	cleanupNonEmpty3, _, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
 		RangeSize: 10,
 	})
 	if err != nil {
@@ -3394,7 +3394,7 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	}
 
 	// A snapshot should be allowed.
-	cleanupAccepted, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	cleanupAccepted, _, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
@@ -3468,7 +3468,7 @@ func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
 				if err := func() error {
 					snapCtx, cancel := context.WithTimeout(ctx, timeout)
 					defer cancel()
-					cleanup, err := s.reserveReceiveSnapshot(snapCtx, &kvserverpb.SnapshotRequest_Header{RangeSize: 1})
+					cleanup, _, err := s.reserveReceiveSnapshot(snapCtx, &kvserverpb.SnapshotRequest_Header{RangeSize: 1})
 					if err != nil {
 						if errors.Is(err, context.DeadlineExceeded) {
 							return nil

@@ -242,6 +242,14 @@ func LBaseMaxBytes(v int64) ConfigOption {
 	}
 }
 
+func CompactionScheduler(c CompactionSchedulerPlus) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.opts.Experimental.CompactionScheduler = c
+		cfg.compactionScheduler = c
+		return nil
+	}
+}
+
 func noopConfigOption(*engineConfig) error {
 	return nil
 }
