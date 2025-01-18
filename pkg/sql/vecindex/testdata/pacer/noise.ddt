@@ -1,0 +1,104 @@
+# ----------
+# Add 20% random noise to rate of operation arrival and fixup completion.
+# ----------
+
+# Expect allowed ops/sec to stay ~500 +- the noise.
+plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2
+----
+ Allowed ops per second = 527.74 ops/sec (avg), 501.66 ops/sec (final)
+ 740 ┤    ╭╮╭──╮
+ 710 ┤    │╰╯  ╰╮
+ 679 ┤   ╭╯     ╰─╮
+ 649 ┤   │        ╰─╮
+ 618 ┤  ╭╯          ╰─╮
+ 588 ┤ ╭╯             ╰─╮
+ 558 ┤╭╯                ╰╮                         ╭────────╮              ╭─╮
+ 527 ┤│                  ╰──╮                    ╭─╯        ╰─────╮     ╭──╯ ╰──────╮         ╭
+ 497 ┼╯                     ╰──╮              ╭──╯                ╰─────╯           ╰─────────╯
+ 467 ┤                         ╰───╮╭─────────╯
+ 436 ┤                             ╰╯
+
+# Show actual ops/sec. Note that the scale starts at 0, so it appears smoother.
+plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2 show-actual-ops-per-sec
+----
+ Actual ops per second = 503.46 ops/sec (avg), 485.00 ops/sec (final)
+ 705 ┤         ╭──────╮
+ 634 ┤        ╭╯      ╰───╮
+ 564 ┤       ╭╯           ╰───╮                         ╭────────╮
+ 494 ┤      ╭╯                ╰──────╮          ╭───────╯        ╰─────────────────────────────
+ 423 ┤     ╭╯                        ╰──────────╯
+ 352 ┤    ╭╯
+ 282 ┤   ╭╯
+ 212 ┤  ╭╯
+ 141 ┤ ╭╯
+  70 ┤╭╯
+   0 ┼╯
+
+# Fixup queue size will fluctuate a bit more with noise.
+plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2 show-queue-size
+----
+ Fixup queue size = 4.83 fixups (avg), 5 fixups (final)
+ 7.00 ┤                      ╭───╮
+ 6.30 ┤                 ╭────╯   ╰──────╮               ╭╮         ╭─╮           ╭╮      ╭──╮
+ 5.60 ┤                 │               │               ││         │ │           ││      │  │
+ 4.90 ┤            ╭────╯               ╰──────────╮╭───╯╰─────────╯ ╰─────╮╭────╯╰──────╯  ╰───
+ 4.20 ┤        ╭╮╭─╯                               ╰╯                      ╰╯
+ 3.50 ┤        │││
+ 2.80 ┤       ╭╯╰╯
+ 2.10 ┤     ╭─╯
+ 1.40 ┤     │
+ 0.70 ┤   ╭─╯
+ 0.00 ┼───╯
+
+# Delay will fluctuate a bit more with noise.
+plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2 show-delay-millis
+----
+ Delay (ms) = 1.95 ms (avg), 2.10 ms (final)
+ 2.54 ┤                                  ╭╮  ╭╮
+ 2.41 ┤                             ╭╮╭╮ ││  ││                    ╭╮╭╮                    ╭╮
+ 2.29 ┤                         ╭╮  ││││╭╯│╭╮││  ╭─╮              ╭╯│││            ╭╮      ││
+ 2.16 ┤╭╮                     ╭─╯╰╮ │││╰╯ ╰╯│││╭╮│ │    ╭╮ ╭╮  ╭╮ │ ││╰─╮      ╭╮  ││    ╭─╯│
+ 2.03 ┤││                   ╭╮│   ╰╮│││     ╰╯││││ ╰╮   ││ ││  ││╭╯ ││  │    ╭─╯│  ││  ╭─╯  │ ╭─
+ 1.90 ┼╯│             ╭╮    │╰╯    ╰╯╰╯       ││╰╯  ╰─╮ ││ ││  │╰╯  ││  │╭───╯  │ ╭╯│ ╭╯    │╭╯
+ 1.77 ┤ │╭╮       ╭╮  ││ ╭╮╭╯                 ╰╯      ╰╮││ │╰╮ │    ╰╯  ╰╯      │╭╯ │╭╯     ╰╯
+ 1.64 ┤ ╰╯│       ││╭╮│╰╮│││                           │││╭╯ ╰─╯                ╰╯  ╰╯
+ 1.51 ┤   │ ╭╮  ╭╮│╰╯╰╯ ╰╯╰╯                           ││╰╯
+ 1.38 ┤   │╭╯╰─╮│╰╯                                    ╰╯
+ 1.25 ┤   ╰╯   ╰╯
+
+# ----------
+# Add 60% random noise to rate of operation arrival and fixup completion.
+# ----------
+
+# Halve the fixups per second and show 20 seconds of data rather than 10.
+# Allowed ops/sec should hover ~250.
+plot seconds=60 ops-per-fixup=50 fixups-per-sec=5 noise=0.6
+----
+ Allowed ops per second = 262.72 ops/sec (avg), 255.75 ops/sec (final)
+ 500 ┼─╮
+ 471 ┤ │
+ 442 ┤ │
+ 413 ┤ ╰╮
+ 383 ┤  │
+ 354 ┤  │
+ 325 ┤  │                                                                        ╭╮
+ 296 ┤  ╰╮      ╭─╮       ╭╮               ╭──╮   ╭╮                           ╭─╯╰───╮
+ 267 ┤   ╰╮  ╭╮╭╯ ╰───╮╭──╯╰─╮      ╭╮     │  ╰╮╭─╯╰───╮ ╭──╮  ╭───────────────╯      ╰──╮  ╭──
+ 238 ┤    ╰╮╭╯╰╯      ╰╯     ╰──────╯╰─╮  ╭╯   ╰╯      ╰─╯  ╰──╯                         ╰──╯
+ 209 ┤     ╰╯                          ╰──╯
+
+# Show actual ops/sec.
+plot seconds=60 ops-per-fixup=50 fixups-per-sec=5 noise=0.6 show-actual-ops-per-sec
+----
+ Actual ops per second = 260.58 ops/sec (avg), 260.00 ops/sec (final)
+ 476 ┤ ╭╮
+ 428 ┤ ││
+ 381 ┤╭╯╰╮
+ 333 ┤│  │                                                                       ╭─╮
+ 285 ┤│  ╰╮     ╭─────╮   ╭──╮              ╭──╮  ╭─────╮        ╭╮     ╭─╮    ╭─╯ ╰─────╮
+ 238 ┤│   ╰─────╯     ╰───╯  ╰──────────╮ ╭─╯  ╰──╯     ╰────────╯╰─────╯ ╰────╯         ╰─────
+ 190 ┤│                                 ╰─╯
+ 143 ┤│
+  95 ┤│
+  48 ┤│
+   0 ┼╯
