@@ -1,0 +1,177 @@
+# ----------
+# Start pacer at an allowed rate of 1 ops/sec and ramp to 500 ops/sec.
+# ----------
+
+# Pacer should be able to quickly ramp up from minimum allowed ops/sec in < 10
+# seconds.
+plot initial-ops-per-sec=1 ops-per-fixup=50 fixups-per-sec=10
+----
+ Allowed ops per second = 248.73 ops/sec (avg), 449.50 ops/sec (final)
+ 718 ┤                                                                ╭───╮
+ 646 ┤                                                              ╭─╯   ╰───╮
+ 574 ┤                                                             ╭╯         ╰────╮
+ 503 ┤                                                           ╭─╯               ╰────────╮
+ 431 ┤                                                         ╭─╯                          ╰──
+ 359 ┤                                                       ╭─╯
+ 288 ┤                                                    ╭──╯
+ 216 ┤                                                ╭───╯
+ 144 ┤                                         ╭──────╯
+  73 ┤                           ╭─────────────╯
+   1 ┼───────────────────────────╯
+
+# Queue size should stabilize at ~5 fixups.
+plot initial-ops-per-sec=1 ops-per-fixup=50 fixups-per-sec=10 show-queue-size
+----
+ Fixup queue size = 1.35 fixups (avg), 6 fixups (final)
+ 6.00 ┤                                                                             ╭──╮      ╭─
+ 5.40 ┤                                                                             │  │      │
+ 4.80 ┤                                                                       ╭╮ ╭──╯  ╰──────╯
+ 4.20 ┤                                                                     ╭─╯╰─╯
+ 3.60 ┤                                                                     │
+ 3.00 ┤                                                                   ╭─╯
+ 2.40 ┤                                                                   │
+ 1.80 ┤                                                               ╭╮╭─╯
+ 1.20 ┤                                     ╭╮  ╭╮          ╭╮╭╮╭╮ ╭──╯╰╯
+ 0.60 ┤                                     ││  ││          ││││││ │
+ 0.00 ┼─────────────────────────────────────╯╰──╯╰──────────╯╰╯╰╯╰─╯
+
+# Show the query delay during ramp. It starts at 1 second, but should rapidly
+# drop to ~2 ms.
+plot initial-ops-per-sec=1 ops-per-fixup=50 fixups-per-sec=10 show-delay-millis
+----
+ Delay (ms) = 118.86 ms (avg), 2.25 ms (final)
+ 1000 ┼────────╮
+  900 ┤        │
+  800 ┤        │
+  700 ┤        │
+  601 ┤        │
+  501 ┤        │
+  401 ┤        │
+  301 ┤        │
+  201 ┤        │
+  101 ┤        ╰─────────╮
+    1 ┤                  ╰──────────────────────────────────────────────────────────────────────
+
+# ----------
+# Start pacer at an allowed rate of 1000 ops/sec and drop to 500 ops/sec.
+# ----------
+
+# Pacer should be able to throttle ops/sec in < 10 seconds, without too much
+# over-correction.
+plot initial-ops-per-sec=1000 ops-per-fixup=50 fixups-per-sec=10
+----
+ Allowed ops per second = 538.76 ops/sec (avg), 490.05 ops/sec (final)
+ 1019 ┼──╮
+  960 ┤  ╰─╮
+  901 ┤    ╰─╮
+  842 ┤      ╰╮
+  783 ┤       ╰╮
+  724 ┤        ╰─╮
+  665 ┤          ╰─╮
+  605 ┤            ╰─╮
+  546 ┤              ╰──╮                      ╭────────────╮              ╭─────────╮
+  487 ┤                 ╰──────╮         ╭─────╯            ╰──────────────╯         ╰──────────
+  428 ┤                        ╰─────────╯
+
+# Fixup queue size will rise above allowed level, and ops/sec will be further
+# throttled until queue size drops below threshold.
+plot initial-ops-per-sec=1000 ops-per-fixup=50 fixups-per-sec=10 show-queue-size
+----
+ Fixup queue size = 7.99 fixups (avg), 8 fixups (final)
+ 10.00 ┤            ╭───╮╭──────╮
+  9.00 ┤          ╭─╯   ╰╯      ╰───────╮              ╭╮    ╭──╮                      ╭╮
+  8.00 ┤       ╭──╯                     ╰───────╮ ╭────╯╰────╯  ╰───────╮ ╭─────╮╭─────╯╰────────
+  7.00 ┤      ╭╯                                ╰─╯                     ╰─╯     ╰╯
+  6.00 ┤     ╭╯
+  5.00 ┤    ╭╯
+  4.00 ┤   ╭╯
+  3.00 ┤  ╭╯
+  2.00 ┤ ╭╯
+  1.00 ┤╭╯
+  0.00 ┼╯
+
+# Delay should converge to the ~2 ms range.
+plot initial-ops-per-sec=1000 ops-per-fixup=50 fixups-per-sec=10 show-delay-millis
+----
+ Delay (ms) = 1.91 ms (avg), 2.04 ms (final)
+ 2.34 ┤                       ╭───────────╮
+ 2.10 ┤                 ╭─────╯           ╰────╮            ╭──────────────╮         ╭──────────
+ 1.87 ┤             ╭───╯                      ╰────────────╯              ╰─────────╯
+ 1.64 ┤          ╭──╯
+ 1.40 ┤       ╭──╯
+ 1.17 ┤   ╭───╯
+ 0.93 ┼╮  │
+ 0.70 ┤│  │
+ 0.47 ┤│ ╭╯
+ 0.23 ┤│ │
+ 0.00 ┤╰─╯
+
+# ----------
+# Start pacer at an allowed rate of 2000 ops/sec that is significantly higher
+# than the operation arrival rate.
+# ----------
+
+# Since the allowed rate of 2000 ops/sec is higher than actual ops/sec, this
+# rate should not materially change over the course of the run.
+plot initial-ops-per-sec=2000 ops-per-fixup=50 fixups-per-sec=40
+----
+ Allowed ops per second = 2058.51 ops/sec (avg), 2058.80 ops/sec (final)
+ 2059 ┤╭────────────────────────────────────────────────────────────────────────────────────────
+ 2053 ┤│
+ 2047 ┤│
+ 2041 ┤│
+ 2035 ┤│
+ 2029 ┤│
+ 2024 ┤│
+ 2018 ┤│
+ 2012 ┤│
+ 2006 ┤│
+ 2000 ┼╯
+
+# Actual ops/sec should quickly rise to the max rate of 1000.
+plot initial-ops-per-sec=2000 ops-per-fixup=50 fixups-per-sec=40 show-actual-ops-per-sec
+----
+ Actual ops per second = 949.95 ops/sec (avg), 1000.00 ops/sec (final)
+ 1000 ┤        ╭────────────────────────────────────────────────────────────────────────────────
+  900 ┤       ╭╯
+  800 ┤      ╭╯
+  700 ┤     ╭╯
+  600 ┤    ╭╯
+  500 ┤    │
+  400 ┤   ╭╯
+  300 ┤  ╭╯
+  200 ┤ ╭╯
+  100 ┤╭╯
+    0 ┼╯
+
+# Average fixup queue size should be very low.
+plot initial-ops-per-sec=2000 ops-per-fixup=50 fixups-per-sec=40 show-queue-size
+----
+ Fixup queue size = 0.02 fixups (avg), 1 fixups (final)
+ 1.00 ┤                                                                                        ╭
+ 0.90 ┤                                                                                        │
+ 0.80 ┤       ╭╮                                                                               │
+ 0.70 ┤       ││                                                                               │
+ 0.60 ┤   ╭╮  ││                                                                               │
+ 0.50 ┤   ││  ││                                                                               │
+ 0.40 ┤   ││  ││                                                                           ╭╮  │
+ 0.30 ┤   ││  ││                                                                           ││  │
+ 0.20 ┤   ││  ││  ╭╮                                                                       ││  │
+ 0.10 ┤   ││  ││  ││                                                                       ││  │
+ 0.00 ┼───╯╰──╯╰──╯╰───────────────────────────────────────────────────────────────────────╯╰──╯
+
+# Delay should quickly fall to zero.
+plot initial-ops-per-sec=2000 ops-per-fixup=50 fixups-per-sec=40 show-delay-millis
+----
+ Delay (ms) = 0.00 ms (avg), 0.00 ms (final)
+ 0.50 ┼╮
+ 0.45 ┤│
+ 0.40 ┤│
+ 0.35 ┤│
+ 0.30 ┤│
+ 0.25 ┤│
+ 0.20 ┤│
+ 0.15 ┤│
+ 0.10 ┤│
+ 0.05 ┤│
+ 0.00 ┤╰────────────────────────────────────────────────────────────────────────────────────────
