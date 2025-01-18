@@ -115,11 +115,26 @@ Examples:
 			}
 
 			for _, s := range specs {
-				var skip string
+				var skip, randomized, timeout string
 				if s.Skip != "" {
 					skip = " (skipped: " + s.Skip + ")"
 				}
-				fmt.Printf("%s [%s]%s\n", s.Name, s.Owner, skip)
+				var prefix, separator string
+				longListing := false
+				if s.Randomized {
+					longListing = true
+					randomized = "randomized"
+					separator = ","
+				}
+				if s.Timeout != 0 {
+					longListing = true
+					timeout = fmt.Sprintf("%stimeout: %s", separator, s.Timeout)
+				}
+				if longListing {
+					// N.B. use a prefix to separate the extended listing.
+					prefix = "  "
+				}
+				fmt.Printf("%s [%s]%s %s%s%s\n", s.Name, s.Owner, skip, prefix, randomized, timeout)
 			}
 			return nil
 		},
