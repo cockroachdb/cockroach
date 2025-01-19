@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -1378,6 +1380,10 @@ func (b *changefeedResumer) resumeWithRetries(
 			if ctx.Err() == nil {
 				b.setJobRunningStatus(ctx, time.Time{}, "shutdown due to %s", err)
 			}
+			if strings.HasPrefix(description, "CREATE CHANGEFEED") && errors.HasType(flowErr, (*kvpb.BatchTimestampBeforeGCError)(nil)) {
+				err = errors.Wrap(err, "Could not create changefeed: cursor older than GC threshold. Use a more recent cursor or increase the table's GC TTL")
+			}
+
 			return err
 		}
 
