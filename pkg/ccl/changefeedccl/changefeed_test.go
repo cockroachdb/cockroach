@@ -5225,7 +5225,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 		// second should be returning
 		for {
 			msg, err := dataExpiredRows.Next()
-			if testutils.IsError(err, `must be after replica GC threshold`) {
+			if testutils.IsError(err, `could not create changefeed because cursor is older than GC threshold`) {
 				t.Logf("got expected GC error: %s", err)
 				break
 			}
@@ -5325,7 +5325,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 		for {
 			_, err := dataExpiredRows.Next()
 			if err != nil {
-				require.Regexp(t, `GC threshold`, err)
+				require.Regexp(t, `could not create changefeed because cursor is older than GC threshold`, err)
 				break
 			}
 		}
