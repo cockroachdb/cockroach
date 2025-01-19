@@ -112,7 +112,7 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 	for i := 0; ; i++ {
 		_, err := db.Exec(`CREATE STATISTICS foo FROM t AS OF SYSTEM TIME '-0.1s'`)
 		if err != nil {
-			if !testutils.IsError(err, "batch timestamp .* must be after replica GC threshold") {
+			if !testutils.IsError(err, "Changefeed creation failed: cursor (.*) is older than the GC threshold (.*).*") {
 				// Unexpected error.
 				t.Error(err)
 			}

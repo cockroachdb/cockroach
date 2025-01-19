@@ -5218,14 +5218,14 @@ func TestChangefeedDataTTL(t *testing.T) {
 		dataExpiredRows = <-changefeedInit
 		require.NotNil(t, dataExpiredRows)
 
-		// Verify that, at some point, Next() returns a "must
-		// be after replica GC threshold" error. In the common
+		// Verify that, at some point, Next() returns a "is older
+		// than the GC threshold" error. In the common
 		// case, that'll be the second call, the first will
 		// should return the row from the backfill and the
 		// second should be returning
 		for {
 			msg, err := dataExpiredRows.Next()
-			if testutils.IsError(err, `must be after replica GC threshold`) {
+			if testutils.IsError(err, `is older than the GC threshold`) {
 				t.Logf("got expected GC error: %s", err)
 				break
 			}

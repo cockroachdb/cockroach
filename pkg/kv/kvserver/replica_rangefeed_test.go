@@ -579,7 +579,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			defer stream.Cancel()
 
 			if pErr := waitRangeFeed(t, store, &req, stream); !testutils.IsError(
-				pErr, `must be after replica GC threshold`,
+				pErr, `is older than the GC threshold`,
 			) {
 				return pErr
 			}

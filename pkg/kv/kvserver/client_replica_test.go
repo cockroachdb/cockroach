@@ -4201,7 +4201,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 			return txn
 		}
 		getRejectedMsg = func() string {
-			return tenSecondsAgo.String() + " must be after replica GC threshold "
+			return fmt.Sprintf(".*(%s) is older than the GC threshold.*", tenSecondsAgo.String())
 		}
 		performScan = func() error {
 			txn := mkStaleTxn()

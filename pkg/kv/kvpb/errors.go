@@ -1361,7 +1361,9 @@ func (e *BatchTimestampBeforeGCError) Error() string {
 
 func (e *BatchTimestampBeforeGCError) SafeFormatError(p errors.Printer) (next error) {
 	p.Printf(
-		"batch timestamp %v must be after replica GC threshold %v (r%d: %s)",
+		"Changefeed creation failed: cursor (%v) is older than the GC threshold (%v). "+
+			"Use a more recent cursor or increase the table's GC TTL. "+
+			"Range: %d - Keyspan: %s",
 		e.Timestamp, e.Threshold, e.RangeID,
 		roachpb.RSpan{Key: []byte(e.StartKey), EndKey: []byte(e.EndKey)},
 	)

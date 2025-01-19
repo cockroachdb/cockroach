@@ -511,8 +511,8 @@ func TestExportGCThreshold(t *testing.T) {
 		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
-	if !testutils.IsPError(pErr, "must be after replica GC threshold") {
-		t.Fatalf(`expected "must be after replica GC threshold" error got: %+v`, pErr)
+	if !testutils.IsPError(pErr, "Changefeed creation failed: cursor (.*) is older than the GC threshold (.*).*") {
+		t.Fatalf(`expected "Changefeed creation failed: cursor (.*) is older than the GC threshold (.*).*" error got: %+v`, pErr)
 	}
 }
 

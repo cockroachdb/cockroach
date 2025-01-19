@@ -186,8 +186,8 @@ func TestRevertGCThreshold(t *testing.T) {
 	req2.IgnoreGcThreshold = true
 
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), &req1)
-	if !testutils.IsPError(pErr, "must be after replica GC threshold") {
-		t.Fatalf(`expected "must be after replica GC threshold" error got: %+v`, pErr)
+	if !testutils.IsPError(pErr, "Changefeed creation failed: cursor (.*) is older than the GC threshold (.*).*") {
+		t.Fatalf(`expected "Changefeed creation failed: cursor (.*) is older than the GC threshold (.*).*"" error got: %+v`, pErr)
 	}
 
 	_, pErr = kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), &req2)

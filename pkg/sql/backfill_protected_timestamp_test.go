@@ -166,7 +166,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			return err
 		}
 		const retryTxnErrorSubstring = "restart transaction"
-		const replicaGCError = "must be after replica GC threshold"
+		const replicaGCError = "is older than the GC threshold"
 		for {
 			if _, err := db.ExecContext(ctx, "BEGIN"); err != nil {
 				return err

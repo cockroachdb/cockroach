@@ -9538,7 +9538,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 		})
 
 	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo INTO $1 AS OF SYSTEM TIME '%s'", tsBefore), localFoo+"/fail")
-	testutils.IsError(err, "must be after replica GC threshold")
+	testutils.IsError(err, "is older than the GC threshold")
 
 	_, err = conn.Exec(`ALTER TABLE foo SET (exclude_data_from_backup = true)`)
 	require.NoError(t, err)

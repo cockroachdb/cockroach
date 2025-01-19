@@ -282,7 +282,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &BatchTimestampBeforeGCError{},
-			expect: "batch timestamp 0,0 must be after replica GC threshold 0,0 (r0: ‹/Min›)",
+			expect: "Changefeed creation failed: cursor (0,0) is older than the GC threshold (0,0). Use a more recent cursor or increase the table's GC TTL. Range: 0 - Keyspan: ‹/Min›",
 		},
 		{
 			err:    &TxnAlreadyEncounteredErrorError{},

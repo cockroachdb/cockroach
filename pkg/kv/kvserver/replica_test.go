@@ -8434,6 +8434,8 @@ func TestBatchTimestampBelowGCThreshold(t *testing.T) {
 	key := roachpb.Key("a")
 	keycp := roachpb.Key("c")
 
+	gcThresholdErrPattern := "Changefeed creation failed: cursor (.*) is older than the GC threshold (.*).*"
+
 	va := []byte("a")
 	vb := []byte("b")
 
@@ -8470,7 +8472,7 @@ func TestBatchTimestampBelowGCThreshold(t *testing.T) {
 	// Do the same Get, which should now fail.
 	if _, pErr := tc.SendWrappedWith(kvpb.Header{
 		Timestamp: ts1,
-	}, &gArgs); !testutils.IsPError(pErr, `batch timestamp 0.\d+,\d+ must be after replica GC threshold 0.\d+,\d+`) {
+	}, &gArgs); !testutils.IsPError(pErr, gcThresholdErrPattern) {
 		t.Fatalf("unexpected error: %v", pErr)
 	}
 
@@ -8485,7 +8487,7 @@ func TestBatchTimestampBelowGCThreshold(t *testing.T) {
 	cpArgs := cPutArgs(keycp, vb, va)
 	if _, pErr := tc.SendWrappedWith(kvpb.Header{
 		Timestamp: ts2,
-	}, &cpArgs); !testutils.IsPError(pErr, `batch timestamp 0.\d+,\d+ must be after replica GC threshold 0.\d+,\d+`) {
+	}, &cpArgs); !testutils.IsPError(pErr, gcThresholdErrPattern) {
 		t.Fatalf("unexpected error: %v", pErr)
 	}
 	// Verify a later CPut works.
@@ -8557,7 +8559,7 @@ func TestRefreshFromBelowGCThreshold(t *testing.T) {
 				_, pErr := tc.SendWrappedWith(kvpb.Header{Txn: &txn}, refresh)
 				if testCase.expErr {
 					require.NotNil(t, pErr)
-					require.Regexp(t, `batch timestamp .* must be after replica GC threshold .*`, pErr)
+					require.Regexp(t, `Changefeed creation failed: cursor (.*) is older than the GC threshold (.*).*`, pErr)
 				} else {
 					require.Nil(t, pErr)
 				}
