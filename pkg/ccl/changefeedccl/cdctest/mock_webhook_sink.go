@@ -303,8 +303,11 @@ func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) erro
 		s.mu.notify = nil
 	}
 
-	if _, err := hw.Write(resBody); err != nil {
-		return errors.Wrap(err, "failed to write response body")
+	hw.WriteHeader(statusCode)
+	if hasResBody {
+		if _, err := hw.Write(resBody); err != nil {
+			return errors.Wrap(err, "failed to write response body")
+		}
 	}
 
 	return nil
