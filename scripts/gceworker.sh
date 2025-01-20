@@ -14,6 +14,9 @@ source build/shlib.sh
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GCEWORKER_PROJECT-cockroach-workers}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
 
+DISABLE_COCKROACHDB=${DISABLE_COCKROACHDB-false}
+DISABLE_MANAGED_SERVICE=${DISABLE_MANAGED_SERVICE-false}
+
 USER_ID=$(id -un)
 NAME=${GCEWORKER_NAME-gceworker-${USER_ID//.}}
 FQNAME="${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}"
@@ -99,7 +102,15 @@ case "${cmd}" in
     start_and_wait "${NAME}"
 
     gcloud compute scp --recurse "build/bootstrap" "${NAME}:bootstrap"
-    gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
+    gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="DISABLE_COCKROACHDB=$DISABLE_COCKROACHDB DISABLE_MANAGED_SERVICE=$DISABLE_MANAGED_SERVICE ./bootstrap/bootstrap-debian.sh"
+
+    # Copy the ssh keys to the gceworker, this is needed to clone the managed-service repo
+    echo -n "Enter the path to the ssh key [default ~/.ssh]: "
+    read SSH_KEY_PATH
+    if [ -z "$SSH_KEY_PATH" ]; then
+      SSH_KEY_PATH="$HOME/.ssh"
+    fi
+    gcloud compute scp --recurse "${SSH_KEY_PATH}" "${NAME}:~/.ssh"
 
     if [[ "$COCKROACH_DEV_LICENSE" ]]; then
       gcloud compute ssh "${NAME}" --command="echo COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE >> ~/.bashrc_bootstrap"

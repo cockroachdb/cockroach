@@ -6,8 +6,8 @@
 # included in the /LICENSE file.
 
 #
-# On a Debian/Ubuntu system, bootstraps a docker install and the cockroach
-# repo.
+# On a Debian/Ubuntu system, bootstraps all the requried dependencies for the
+# cockroach & managed-service repo.
 
 set -euxo pipefail
 
@@ -27,17 +27,13 @@ sudo apt-get install -y --no-install-recommends \
   g++ \
   git \
   nodejs \
-  bison
+  bison \
+  protobuf-compiler
 
 # pnpm doesn't provide a Debian repository, and supports either `curl | sh` or `npm install -g` installations.
 curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=8.6.6 sh -
 
 sudo adduser "${USER}" docker
-
-# Configure environment variables.
-echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
-echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
-. ~/.bashrc_bootstrap
 
 # Upgrade cmake.
 trap 'rm -f /tmp/cmake.tgz' EXIT
@@ -55,9 +51,15 @@ sha256sum -c - <<EOF
 EOF
 sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
-# Clone CockroachDB.
-git clone https://github.com/cockroachdb/cockroach "$(go env GOPATH)/src/github.com/cockroachdb/cockroach"
-git -C "$(go env GOPATH)/src/github.com/cockroachdb/cockroach" submodule update --init
+# Install Docker compose.
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.31.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+docker-compose --version
+
+# Install NVM.
+# Note: you still required to run `nvm install <version>` to install a specific version of Node.js.
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+echo -e '\n' >> ~/.bashrc
 
 # Install Bazelisk as Bazel.
 # NOTE: you should keep this in sync with build/packer/teamcity-agent.sh and build/bazelbuilder/Dockerfile -- if
@@ -70,3 +72,25 @@ sudo mv /tmp/bazelisk /usr/bin/bazel
 
 # Install the Unison file-syncer.
 . bootstrap/bootstrap-unison.sh
+
+# Configure environment variables for CockroachDB and Managed Service.
+echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
+echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachlabs/managed-service/bin"' >> ~/.bashrc_bootstrap
+. ~/.bashrc_bootstrap
+
+# If DISABLE_COCKROACHDB is false, clone CockroachDB.
+if [ "${DISABLE_COCKROACHDB:-false}" = "false" ]; then
+  git clone https://github.com/cockroachdb/cockroach "$(go env GOPATH)/src/github.com/cockroachdb/cockroach"
+  git -C "$(go env GOPATH)/src/github.com/cockroachdb/cockroach" submodule update --init
+fi
+
+# If DISABLE_MANAGED_SERVICE is false, clone Managed Service
+if [ "${DISABLE_MANAGED_SERVICE:-false}" = "false" ]; then
+  git clone git@github.com:cockroachlabs/managed-service.git "$(go env GOPATH)/src/github.com/cockroachlabs/managed-service"
+  git -C "$(go env GOPATH)/src/github.com/cockroachlabs/managed-service" submodule update --init
+
+  # Initialize the husky hooks
+  cd "$(go env GOPATH)/src/github.com/cockroachlabs/managed-service"
+  make init
+  cd -
+fi
