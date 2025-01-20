@@ -140,7 +140,7 @@ type VectorIndex struct {
 	quantizer quantize.Quantizer
 	// fixups runs index maintenance operations like split and merge on a
 	// background goroutine.
-	fixups fixupProcessor
+	fixups FixupProcessor
 	// stats maintains locally-cached statistics about the vector index that are
 	// used by adaptive search to improve search accuracy.
 	stats statsManager
@@ -203,6 +203,11 @@ func (vi *VectorIndex) Store() vecstore.Store {
 	return vi.store
 }
 
+// Fixups returns the background fixup processor for the index.
+func (vi *VectorIndex) Fixups() *FixupProcessor {
+	return &vi.fixups
+}
+
 // Options returns the options that specify how the index should be built and
 // searched.
 func (vi *VectorIndex) Options() VectorIndexOptions {
@@ -233,6 +238,11 @@ func (vi *VectorIndex) Close() {
 func (vi *VectorIndex) Insert(
 	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.PrimaryKey,
 ) error {
+	// Potentially throttle insert operation if background work is falling behind.
+	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
+		return err
+	}
+
 	// Search for the leaf partition with the closest centroid to the query
 	// vector.
 	parentSearchCtx := searchContext{
@@ -269,6 +279,11 @@ func (vi *VectorIndex) Insert(
 func (vi *VectorIndex) Delete(
 	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.PrimaryKey,
 ) error {
+	// Potentially throttle delete operation if background work is falling behind.
+	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
+		return err
+	}
+
 	// Search for the vector in the index.
 	searchCtx := searchContext{
 		Txn:      txn,

@@ -37,6 +37,7 @@ go_library(
 go_test(
     name = "vecindex_test",
     srcs = [
+        "fixup_processor_test.go",
         "fixup_worker_test.go",
         "index_stats_test.go",
         "kmeans_test.go",
