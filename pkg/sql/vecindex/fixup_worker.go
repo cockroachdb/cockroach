@@ -23,7 +23,7 @@ import (
 // processes fixups until its context is canceled.
 type fixupWorker struct {
 	// fp points back to the processor that spawned this worker.
-	fp *fixupProcessor
+	fp *FixupProcessor
 	// index points back to the vector index to which fixups are applied.
 	index *VectorIndex
 	// rng is a random number generator. If nil, then the global random number
@@ -39,7 +39,7 @@ type fixupWorker struct {
 }
 
 // NewFixupWorker returns a new worker for the given processor.
-func NewFixupWorker(fp *fixupProcessor) *fixupWorker {
+func NewFixupWorker(fp *FixupProcessor) *fixupWorker {
 	worker := &fixupWorker{
 		fp:    fp,
 		index: fp.index,
