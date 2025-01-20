@@ -107,7 +107,6 @@ func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfi
 	}
 	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
 	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
-	cfg.storeFailures = metric.NewCounter(metric.Metadata{Name: "store_failures"})
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})

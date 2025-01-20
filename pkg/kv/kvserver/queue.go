@@ -329,10 +329,6 @@ type queueConfig struct {
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
 	failures *metric.Counter
-	// storeFailures is a counter of replicas that failed processing due to a
-	// StoreBenignError. These errors must be counted independently of the above
-	// failures metric.
-	storeFailures *metric.Counter
 	// pending is a gauge measuring current replica count pending.
 	pending *metric.Gauge
 	// processingNanos is a counter measuring total nanoseconds spent processing
