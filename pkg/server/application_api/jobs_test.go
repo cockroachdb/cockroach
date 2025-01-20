@@ -77,9 +77,6 @@ func TestAdminAPIJobs(t *testing.T) {
 	now := timeutil.Now()
 	retentionTime := 336 * time.Hour
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails
-		// with it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: &jobs.TestingKnobs{
 				IntervalOverrides: jobs.TestingIntervalOverrides{
@@ -249,8 +246,8 @@ func TestAdminAPIJobs(t *testing.T) {
 		},
 	}
 
-	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
-		for i, testCase := range testCases {
+	for i, testCase := range testCases {
+		testutils.RunTrueAndFalse(t, fmt.Sprintf("%s-isAdmin", testCase.uri), func(t *testing.T, isAdmin bool) {
 			var res serverpb.JobsResponse
 			if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, testCase.uri, &res, isAdmin); err != nil {
 				t.Fatal(err)
@@ -278,19 +275,15 @@ func TestAdminAPIJobs(t *testing.T) {
 			// We don't use require.Equal() because timestamps don't necessarily
 			// compare == due to only one of them having a monotonic clock reading.
 			require.True(t, now.Add(-retentionTime).Equal(res.EarliestRetainedTime))
-		}
-	})
+		})
+	}
 }
 
 func TestAdminAPIJobsDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails
-		// with it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
