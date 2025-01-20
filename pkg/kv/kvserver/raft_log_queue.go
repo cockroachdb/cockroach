@@ -175,7 +175,6 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.RaftLogQueueSuccesses,
 			failures:             store.metrics.RaftLogQueueFailures,
-			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.RaftLogQueuePending,
 			processingNanos:      store.metrics.RaftLogQueueProcessingNanos,
 			disabledConfig:       kvserverbase.RaftLogQueueEnabled,
