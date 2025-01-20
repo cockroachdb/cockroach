@@ -1,0 +1,42 @@
+/* setup */
+CREATE TABLE roaches();
+set enable_row_level_security = on;
+ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
+----
+...
++object {100 101 roaches} -> 104
+
+/* test */
+ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.disable_row_level_security
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert descriptor #104
+  ...
+     replacementOf:
+       time: {}
+  -  rowLevelSecurityEnabled: true
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 1 MutationType op
+upsert descriptor #104
+  ...
+     replacementOf:
+       time: {}
+  -  rowLevelSecurityEnabled: true
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1
