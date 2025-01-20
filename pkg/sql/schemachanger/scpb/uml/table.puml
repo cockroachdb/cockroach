@@ -321,6 +321,10 @@ object PrimaryIndex
 
 PrimaryIndex :  Index
 
+object RowLevelSecurityEnabled
+
+RowLevelSecurityEnabled :  TableID
+
 object RowLevelTTL
 
 RowLevelTTL :  TableID
@@ -600,6 +604,7 @@ Policy <|-- PolicyName
 Policy <|-- PolicyRole
 Table <|-- PrimaryIndex
 View <|-- PrimaryIndex
+Table <|-- RowLevelSecurityEnabled
 Table <|-- RowLevelTTL
 AliasType <|-- SchemaChild
 EnumType <|-- SchemaChild

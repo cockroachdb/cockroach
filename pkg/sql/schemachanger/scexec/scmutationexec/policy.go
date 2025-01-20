@@ -100,3 +100,14 @@ func (i *immediateVisitor) RemovePolicyRole(ctx context.Context, op scop.RemoveP
 		"role %q does not exist in policy %d on table %d",
 		op.Role.RoleName, op.Role.PolicyID, op.Role.TableID)
 }
+
+func (i *immediateVisitor) ToggleRowLevelSecurityMode(
+	ctx context.Context, op scop.ToggleRowLevelSecurityMode,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl.RowLevelSecurityEnabled = op.Enabled
+	return nil
+}
