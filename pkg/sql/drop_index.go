@@ -75,6 +75,23 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 	return &dropIndexNode{n: n, idxNames: idxNames}, nil
 }
 
+// failDropIndexIfSafeUpdates checks if the sql_safe_updates is present, and if so, it
+// will fail the operation.
+func failDropIndexIfSafeUpdates(params runParams) {
+	if params.SessionData().SafeUpdates {
+		panic(
+			pgerror.WithCandidateCode(
+				errors.WithMessage(
+					errors.New(
+						"DROP INDEX"),
+					"rejected (sql_safe_updates = true)",
+				),
+				pgcode.Warning,
+			),
+		)
+	}
+}
+
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
 // This is because DROP INDEX performs multiple KV operations on descriptors
 // and expects to see its own writes.
@@ -82,6 +99,8 @@ func (n *dropIndexNode) ReadingOwnWrites() {}
 
 func (n *dropIndexNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("index"))
+
+	failDropIndexIfSafeUpdates(params)
 
 	if n.n.Concurrently {
 		params.p.BufferClientNotice(
