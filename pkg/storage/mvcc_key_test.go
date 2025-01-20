@@ -94,8 +94,8 @@ func TestMVCCKeyCompare(t *testing.T) {
 
 			// Comparators on encoded keys should be identical.
 			aEnc, bEnc := EncodeMVCCKey(tc.a), EncodeMVCCKey(tc.b)
-			require.Equal(t, tc.expect, EngineKeyCompare(aEnc, bEnc))
-			require.Equal(t, tc.expect == 0, EngineKeyEqual(aEnc, bEnc))
+			require.Equal(t, tc.expect, EngineComparer.Compare(aEnc, bEnc))
+			require.Equal(t, tc.expect == 0, EngineComparer.Equal(aEnc, bEnc))
 		})
 	}
 }
@@ -108,9 +108,9 @@ func TestMVCCKeyCompareRandom(t *testing.T) {
 		aEnc, bEnc := EncodeMVCCKey(a), EncodeMVCCKey(b)
 
 		cmp := a.Compare(b)
-		cmpEnc := EngineKeyCompare(aEnc, bEnc)
+		cmpEnc := EngineComparer.Compare(aEnc, bEnc)
 		eq := a.Equal(b)
-		eqEnc := EngineKeyEqual(aEnc, bEnc)
+		eqEnc := EngineComparer.Equal(aEnc, bEnc)
 		lessAB := a.Less(b)
 		lessBA := b.Less(a)
 
@@ -291,8 +291,8 @@ func TestDecodeUnnormalizedMVCCKey(t *testing.T) {
 			// Re-encode the key into its normal form.
 			reencoded := EncodeMVCCKey(decoded)
 			require.NotEqual(t, encoded, reencoded)
-			require.Equal(t, tc.equalToNormal, EngineKeyEqual(encoded, reencoded))
-			require.Equal(t, tc.equalToNormal, EngineKeyCompare(encoded, reencoded) == 0)
+			require.Equal(t, tc.equalToNormal, EngineComparer.Equal(encoded, reencoded))
+			require.Equal(t, tc.equalToNormal, EngineComparer.Compare(encoded, reencoded) == 0)
 		})
 	}
 }

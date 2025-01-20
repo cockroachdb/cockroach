@@ -63,10 +63,10 @@ func TestKeySchema_KeyWriter(t *testing.T) {
 				}
 				fmt.Fprintf(&buf, "Parse(%q) = hex:%x\n", line, k)
 				kcmp := kw.ComparePrev(k)
-				if v := EngineKeyCompare(k, keyBuf); v < 0 {
-					t.Fatalf("line %d: EngineKeyCompare(%q, hex:%x) = %d", i, line, keyBuf, v)
+				if v := EngineComparer.Compare(k, keyBuf); v < 0 {
+					t.Fatalf("line %d: EngineComparer.Compare(%q, hex:%x) = %d", i, line, keyBuf, v)
 				} else if v != int(kcmp.UserKeyComparison) {
-					t.Fatalf("line %d: EngineKeyCompare(%q, hex:%x) = %d; kcmp.UserKeyComparison = %d",
+					t.Fatalf("line %d: EngineComparer.Compare(%q, hex:%x) = %d; kcmp.UserKeyComparison = %d",
 						i, line, keyBuf, v, kcmp.UserKeyComparison)
 				}
 
@@ -77,11 +77,11 @@ func TestKeySchema_KeyWriter(t *testing.T) {
 					i, row, line, kcmp.PrefixLen, kcmp.CommonPrefixLen)
 
 				keyBuf = kw.MaterializeKey(keyBuf[:0], row)
-				if !EngineKeyEqual(k, keyBuf) {
-					t.Fatalf("line %d: EngineKeyEqual(hex:%x, hex:%x) == false", i, k, keyBuf)
+				if !EngineComparer.Equal(k, keyBuf) {
+					t.Fatalf("line %d: EngineComparer.Equal(hex:%x, hex:%x) == false", i, k, keyBuf)
 				}
-				if v := EngineKeyCompare(k, keyBuf); v != 0 {
-					t.Fatalf("line %d: EngineKeyCompare(hex:%x, hex:%x) = %d", i, k, keyBuf, v)
+				if v := EngineComparer.Compare(k, keyBuf); v != 0 {
+					t.Fatalf("line %d: EngineComparer.Compare(hex:%x, hex:%x) = %d", i, k, keyBuf, v)
 				}
 
 				fmt.Fprintf(&buf, "%02d: MaterializeKey(_, %d) = hex:%x\n", i, row, keyBuf)
@@ -321,7 +321,7 @@ func TestKeySchema_RandomKeys(t *testing.T) {
 	for i := range keys {
 		keys[i] = randomSerializedEngineKey(rng, maxUserKeyLen)
 	}
-	slices.SortFunc(keys, EngineKeyCompare)
+	slices.SortFunc(keys, EngineComparer.Compare)
 
 	var enc colblk.DataBlockEncoder
 	enc.Init(&keySchema)
@@ -338,13 +338,13 @@ func TestKeySchema_RandomKeys(t *testing.T) {
 	var dec colblk.DataBlockDecoder
 	dec.Init(&keySchema, blk)
 	var it colblk.DataBlockIter
-	it.InitOnce(&keySchema, EngineComparer, nil)
+	it.InitOnce(&keySchema, &EngineComparer, nil)
 	require.NoError(t, it.Init(&dec, block.NoTransforms))
 	// Ensure that a scan across the block finds all the relevant keys.
 	var valBuf []byte
 	for k, kv := 0, it.First(); kv != nil; k, kv = k+1, it.Next() {
-		require.True(t, EngineKeyEqual(keys[k], kv.K.UserKey))
-		require.Zero(t, EngineKeyCompare(keys[k], kv.K.UserKey))
+		require.True(t, EngineComparer.Equal(keys[k], kv.K.UserKey))
+		require.Zero(t, EngineComparer.Compare(keys[k], kv.K.UserKey))
 		// Note we allow the key read from the block to be physically different,
 		// because the above randomization generates point keys with the
 		// synthetic bit encoding. However the materialized key should not be
@@ -353,7 +353,8 @@ func TestKeySchema_RandomKeys(t *testing.T) {
 		if n := len(kv.K.UserKey); n > len(keys[k]) {
 			t.Fatalf("key %q is longer than original key %q", kv.K.UserKey, keys[k])
 		}
-		checkEngineKey(kv.K.UserKey)
+		// Check the key is well-formed by calling Split.
+		EngineComparer.Split(kv.K.UserKey)
 
 		// We write keys[k] as the value too, so check that it's verbatim equal.
 		value, callerOwned, err := kv.V.Value(valBuf)
@@ -366,21 +367,21 @@ func TestKeySchema_RandomKeys(t *testing.T) {
 	// Ensure that seeking to each key finds the key.
 	for i := range keys {
 		kv := it.SeekGE(keys[i], 0)
-		require.True(t, EngineKeyEqual(keys[i], kv.K.UserKey))
-		require.Zero(t, EngineKeyCompare(keys[i], kv.K.UserKey))
+		require.True(t, EngineComparer.Equal(keys[i], kv.K.UserKey))
+		require.Zero(t, EngineComparer.Compare(keys[i], kv.K.UserKey))
 	}
 	// Ensure seeking to just the prefix of each key finds a key with the same
 	// prefix.
 	for i := range keys {
-		si := EngineKeySplit(keys[i])
+		si := EngineComparer.Split(keys[i])
 		kv := it.SeekGE(keys[i][:si], 0)
-		require.True(t, EngineKeyEqual(keys[i][:si], pebble.Split(EngineKeySplit).Prefix(kv.K.UserKey)))
+		require.True(t, EngineComparer.Equal(keys[i][:si], EngineComparer.Split.Prefix(kv.K.UserKey)))
 	}
 	// Ensure seeking to the key but in random order finds the key.
 	for _, i := range rng.Perm(len(keys)) {
 		kv := it.SeekGE(keys[i], 0)
-		require.True(t, EngineKeyEqual(keys[i], kv.K.UserKey))
-		require.Zero(t, EngineKeyCompare(keys[i], kv.K.UserKey))
+		require.True(t, EngineComparer.Equal(keys[i], kv.K.UserKey))
+		require.Zero(t, EngineComparer.Compare(keys[i], kv.K.UserKey))
 
 		// We write keys[k] as the value too, so check that it's verbatim equal.
 		value, callerOwned, err := kv.V.Value(valBuf)

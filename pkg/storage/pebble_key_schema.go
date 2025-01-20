@@ -133,7 +133,7 @@ func (kw *cockroachKeyWriter) Reset() {
 }
 
 func (kw *cockroachKeyWriter) ComparePrev(key []byte) colblk.KeyComparison {
-	prefixLen := EngineKeySplit(key)
+	prefixLen := EngineComparer.Split(key)
 	if kw.roachKeys.Rows() == 0 {
 		return colblk.KeyComparison{
 			PrefixLen:         int32(prefixLen),
@@ -162,7 +162,7 @@ func (kw *cockroachKeyWriter) ComparePrev(key []byte) colblk.KeyComparison {
 				return colblk.KeyComparison{
 					PrefixLen:         int32(prefixLen),
 					CommonPrefixLen:   int32(commonPrefixLen),
-					UserKeyComparison: int32(EnginePointSuffixCompare(key[prefixLen:], kw.prevSuffix)),
+					UserKeyComparison: int32(EngineComparer.ComparePointSuffixes(key[prefixLen:], kw.prevSuffix)),
 				}
 			}
 		}
@@ -351,7 +351,7 @@ func (ks *cockroachKeySeeker) IsLowerBound(k []byte, syntheticSuffix []byte) boo
 	// If there's a synthetic suffix, we ignore the block's suffix columns and
 	// compare the key's suffix to the synthetic suffix.
 	if len(syntheticSuffix) > 0 {
-		return EnginePointSuffixCompare(syntheticSuffix, k[len(ek.Key)+1:]) >= 0
+		return EngineComparer.ComparePointSuffixes(syntheticSuffix, k[len(ek.Key)+1:]) >= 0
 	}
 	var wallTime uint64
 	var logicalTime uint32
@@ -372,7 +372,7 @@ func (ks *cockroachKeySeeker) IsLowerBound(k []byte, syntheticSuffix []byte) boo
 		if buildutil.CrdbTestBuild && ks.mvccWallTimes.At(0) != 0 {
 			panic("comparing timestamp with untyped suffix")
 		}
-		return EnginePointSuffixCompare(ks.untypedVersions.At(0), ek.Version) >= 0
+		return EngineComparer.ComparePointSuffixes(ks.untypedVersions.At(0), ek.Version) >= 0
 	}
 
 	// NB: The sign comparison is inverted because suffixes are sorted such that
@@ -391,7 +391,7 @@ func (ks *cockroachKeySeeker) SeekGE(
 		panic(errors.AssertionFailedf("seeking to empty key"))
 	}
 	// TODO(jackson): Inline EngineKeySplit.
-	si := EngineKeySplit(key)
+	si := EngineComparer.Split(key)
 	row, eq := ks.roachKeys.Search(key[:si-1])
 	if eq {
 		return ks.seekGEOnSuffix(row, key[si:]), true
