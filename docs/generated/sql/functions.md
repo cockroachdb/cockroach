@@ -1711,6 +1711,11 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="postgis_wagyu_version"></a><code>postgis_wagyu_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="st_3dlength"></a><code>st_3dlength(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the 3-dimensional or 2-dimensional length of the geometry.</p>
+<p>Note ST_3DLength is only valid for LineString or MultiLineString.
+For 2-D lines it will return the 2-D length (same as ST_Length and ST_Length2D)</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="st_addmeasure"></a><code>st_addmeasure(geometry: geometry, start: <a href="float.html">float</a>, end: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a copy of a LineString or MultiLineString with measure coordinates linearly interpolated between the specified start and end values. Any existing M coordinates will be overwritten.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_addpoint"></a><code>st_addpoint(line_string: geometry, point: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Adds a Point to the end of a LineString.</p>
