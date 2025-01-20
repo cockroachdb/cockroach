@@ -1934,6 +1934,43 @@ func (c *ElementCollection[E]) FilterPrimaryIndex() *ElementCollection[*PrimaryI
 	return (*ElementCollection[*PrimaryIndex])(ret)
 }
 
+func (e RowLevelSecurityEnabled) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_RowLevelSecurityEnabled) Element() Element {
+	return e.RowLevelSecurityEnabled
+}
+
+// ForEachRowLevelSecurityEnabled iterates over elements of type RowLevelSecurityEnabled.
+// Deprecated
+func ForEachRowLevelSecurityEnabled(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *RowLevelSecurityEnabled),
+) {
+  c.FilterRowLevelSecurityEnabled().ForEach(fn)
+}
+
+// FindRowLevelSecurityEnabled finds the first element of type RowLevelSecurityEnabled.
+// Deprecated
+func FindRowLevelSecurityEnabled(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *RowLevelSecurityEnabled) {
+	if tc := c.FilterRowLevelSecurityEnabled(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*RowLevelSecurityEnabled)
+	}
+	return current, target, element
+}
+
+// RowLevelSecurityEnabledElements filters elements of type RowLevelSecurityEnabled.
+func (c *ElementCollection[E]) FilterRowLevelSecurityEnabled() *ElementCollection[*RowLevelSecurityEnabled] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*RowLevelSecurityEnabled)
+		return ok
+	})
+	return (*ElementCollection[*RowLevelSecurityEnabled])(ret)
+}
+
 func (e RowLevelTTL) element() {}
 
 // Element implements ElementGetter.
@@ -3338,6 +3375,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_PolicyWithCheckExpr{ PolicyWithCheckExpr: t}
 		case *PrimaryIndex:
 			e.ElementOneOf = &ElementProto_PrimaryIndex{ PrimaryIndex: t}
+		case *RowLevelSecurityEnabled:
+			e.ElementOneOf = &ElementProto_RowLevelSecurityEnabled{ RowLevelSecurityEnabled: t}
 		case *RowLevelTTL:
 			e.ElementOneOf = &ElementProto_RowLevelTTL{ RowLevelTTL: t}
 		case *Schema:
@@ -3466,6 +3505,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_PolicyUsingExpr)(nil)),
 	((*ElementProto_PolicyWithCheckExpr)(nil)),
 	((*ElementProto_PrimaryIndex)(nil)),
+	((*ElementProto_RowLevelSecurityEnabled)(nil)),
 	((*ElementProto_RowLevelTTL)(nil)),
 	((*ElementProto_Schema)(nil)),
 	((*ElementProto_SchemaChild)(nil)),
@@ -3560,6 +3600,7 @@ func GetElementTypes() []interface{} {
 	((*PolicyUsingExpr)(nil)),
 	((*PolicyWithCheckExpr)(nil)),
 	((*PrimaryIndex)(nil)),
+	((*RowLevelSecurityEnabled)(nil)),
 	((*RowLevelTTL)(nil)),
 	((*Schema)(nil)),
 	((*SchemaChild)(nil)),

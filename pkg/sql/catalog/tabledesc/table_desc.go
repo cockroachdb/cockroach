@@ -712,3 +712,8 @@ func (desc *wrapper) IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool
 func (desc *wrapper) ExternalRowData() *descpb.ExternalRowData {
 	return desc.External
 }
+
+// IsRowLevelSecurityEnabled implements the TableDescriptor interface.
+func (desc *wrapper) IsRowLevelSecurityEnabled() bool {
+	return desc.RowLevelSecurityEnabled
+}

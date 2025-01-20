@@ -1835,7 +1835,7 @@ func failIfRLSIsNotEnabled(b BuildCtx) {
 	}
 	if !b.SessionData().RowLevelSecurityEnabled ||
 		!b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_1) {
-		panic(unimplemented.NewWithIssue(136696, "CREATE POLICY is not yet implemented"))
+		panic(unimplemented.NewWithIssue(73596, "row-level security is not yet implemented"))
 	}
 }
 
