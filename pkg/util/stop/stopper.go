@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -486,6 +487,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
 	go func(taskName string) {
+		growstack.Grow()
 		defer s.runPostlude()
 		defer s.startRegion(ctx, taskName).End()
 		defer sp.Finish()

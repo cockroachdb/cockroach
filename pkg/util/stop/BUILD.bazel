@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/util/debugutil",
+        "//pkg/util/growstack",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
