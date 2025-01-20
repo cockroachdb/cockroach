@@ -468,6 +468,9 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	if tbl.IsSchemaLocked() {
 		w.ev(scpb.Status_PUBLIC, &scpb.TableSchemaLocked{TableID: tbl.GetID()})
 	}
+	if tbl.IsRowLevelSecurityEnabled() {
+		w.ev(scpb.Status_PUBLIC, &scpb.RowLevelSecurityEnabled{TableID: tbl.GetID()})
+	}
 	if tbl.TableDesc().LDRJobIDs != nil {
 		w.ev(scpb.Status_PUBLIC, &scpb.LDRJobIDs{
 			TableID: tbl.GetID(),

@@ -462,4 +462,29 @@ DROP TABLE t1;
 statement ok
 DROP TABLE t2;
 
+subtest alter_table_rls_legacy_unimplemented
+
+statement ok
+SET use_declarative_schema_changer = 'off';
+
+statement ok
+CREATE TABLE roaches();
+
+statement error pq: ALTER TABLE ... ROW LEVEL SECURITY is only implemented in the declarative schema changer
+ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
+
+subtest alter_table_rls_enabled_disabled
+
+statement ok
+ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
+
+statement ok
+ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
+
+statement ok
+DROP TABLE roaches;
+
 subtest end
