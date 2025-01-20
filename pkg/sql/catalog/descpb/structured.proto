@@ -1351,7 +1351,10 @@ message TableDescriptor {
   optional uint32 next_policy_id = 67 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "NextPolicyID", (gogoproto.casttype) = "PolicyID"];
 
-  // Next ID: 68
+  // row_level_security_enabled indicates whether row level security is enabled on this table.
+  optional bool row_level_security_enabled = 68 [(gogoproto.nullable) = false];
+
+  // Next ID: 69
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside

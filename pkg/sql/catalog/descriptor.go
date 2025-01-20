@@ -839,6 +839,9 @@ type TableDescriptor interface {
 	// GetNextPolicyID returns the next unused policy ID for this table.
 	// Policy IDs are unique per table.
 	GetNextPolicyID() descpb.PolicyID
+	// IsRowLevelSecurityEnabled returns true if we have enabled row level
+	// security for the table and false if it is disabled.
+	IsRowLevelSecurityEnabled() bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.
