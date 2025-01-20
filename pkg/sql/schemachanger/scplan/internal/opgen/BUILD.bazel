@@ -72,6 +72,7 @@ go_library(
         "opgen_table_locality_regional_by_row.go",
         "opgen_table_locality_secondary_region.go",
         "opgen_table_partitioning.go",
+        "opgen_table_row_level_security.go",
         "opgen_table_schema_locked.go",
         "opgen_table_zone_config.go",
         "opgen_temporary_index.go",

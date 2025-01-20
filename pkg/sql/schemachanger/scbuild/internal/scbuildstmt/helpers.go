@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -1835,6 +1834,8 @@ func failIfRLSIsNotEnabled(b BuildCtx) {
 	}
 	if !b.SessionData().RowLevelSecurityEnabled ||
 		!b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_1) {
-		panic(unimplemented.NewWithIssue(136696, "CREATE POLICY is not yet implemented"))
+		// TODO: change this to say that row level security needs enable_row_level_security=on to work.
+		// when we complete the epic and enable RLS by default.
+		panic(pgerror.Newf(pgcode.ExperimentalFeature, "row level security is not yet implemented"))
 	}
 }

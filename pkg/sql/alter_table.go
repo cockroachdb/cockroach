@@ -841,6 +841,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			descriptorChanged = true
 		case *tree.AlterTableSetRLSMode:
+			// ToDo: Change this to the below line when it is implemented:
+			// return pgerror.New(pgcode.FeatureNotSupported,
+			//				"ALTER TABLE ... ROW LEVEL SECURITY is only implemented in the declarative schema changer")
 			return unimplemented.NewWithIssuef(
 				136700,
 				"row-level security mode alteration is not supported")

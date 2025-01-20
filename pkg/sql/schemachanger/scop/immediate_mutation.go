@@ -1091,3 +1091,10 @@ type AddPartitionZoneConfig struct {
 	SubzoneSpans         []zonepb.SubzoneSpan
 	SubzoneIndexToDelete int32
 }
+
+// ToggleRowLevelSecurityMode sets the row-level security mode on a table.
+type ToggleRowLevelSecurityMode struct {
+	immediateMutationOp
+	TableID descpb.ID
+	Enabled bool
+}

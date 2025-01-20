@@ -905,7 +905,8 @@ func (r TableRLSMode) SafeValue() {}
 // AlterTableSetRLSMode represents the following alter table command:
 // {ENABLE | DISABLE | FORCE | NO FORCE} ROW LEVEL SECURITY
 type AlterTableSetRLSMode struct {
-	Mode TableRLSMode
+	Table *UnresolvedObjectName
+	Mode  TableRLSMode
 }
 
 // TelemetryName implements the AlterTableCmd interface

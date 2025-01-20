@@ -1,0 +1,18 @@
+/* setup */
+CREATE TABLE roaches();
+----
+...
++object {100 101 roaches} -> 104
+
+/* test */
+ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.disable_row_level_security
+# end StatementPhase
+# begin PreCommitPhase
+# end PreCommitPhase
+commit transaction #1

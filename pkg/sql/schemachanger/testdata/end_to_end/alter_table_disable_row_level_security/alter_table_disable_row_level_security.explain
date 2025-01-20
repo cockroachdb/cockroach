@@ -1,0 +1,13 @@
+/* setup */
+CREATE TABLE roaches();
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹roaches› DISABLE ROW LEVEL SECURITY;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ └── PreCommitPhase
+      └── Stage 1 of 1 in PreCommitPhase
+           └── 1 Mutation operation
+                └── UndoAllInTxnImmediateMutationOpSideEffects
