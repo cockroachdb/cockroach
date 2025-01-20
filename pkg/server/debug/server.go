@@ -200,7 +200,7 @@ func analyzeLSM(dir string, writer io.Writer) error {
 	}
 
 	t := pebbletool.New(
-		pebbletool.Comparers(storage.EngineComparer),
+		pebbletool.Comparers(&storage.EngineComparer),
 		pebbletool.KeySchema(storage.DefaultKeySchema),
 		pebbletool.KeySchemas(storage.KeySchemas...),
 	)
