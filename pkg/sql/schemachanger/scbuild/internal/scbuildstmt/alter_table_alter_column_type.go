@@ -267,7 +267,7 @@ func handleGeneralColumnConversion(
 ) {
 	failIfExplicitTransaction(b)
 	failIfExperimentalSettingNotSet(b, oldColType, newColType)
-	failIfSafeUpdates(b)
+	failIfSafeUpdates(b, t)
 
 	// TODO(#47137): Only support alter statements that only have a single command.
 	switch s := stmt.(type) {
@@ -460,14 +460,21 @@ func failIfExperimentalSettingNotSet(b BuildCtx, oldColType, newColType *scpb.Co
 
 // failIfSafeUpdates checks if the sql_safe_updates is present, and if so, it
 // will fail the operation.
-func failIfSafeUpdates(b BuildCtx) {
+func failIfSafeUpdates(b BuildCtx, n tree.NodeFormatter) {
 	if b.SessionData().SafeUpdates {
+		errorWithMessage := errors.New("")
+		switch n.(type) {
+		case *tree.AlterTableAlterColumnType:
+			errorWithMessage = errors.New("ALTER COLUMN TYPE requiring data rewrite may result in data loss " +
+				"for certain type conversions or when applying a USING clause")
+		case *tree.AlterTableSetRLSMode:
+			errorWithMessage = errors.New("before dropping an index.")
+		}
+
 		panic(
 			pgerror.WithCandidateCode(
 				errors.WithMessage(
-					errors.New(
-						"ALTER COLUMN TYPE requiring data rewrite may result in data loss "+
-							"for certain type conversions or when applying a USING clause"),
+					errorWithMessage,
 					"rejected (sql_safe_updates = true)",
 				),
 				pgcode.Warning,

@@ -36,6 +36,8 @@ import (
 // to search all tables in current db and in schemas in the search path till
 // we first find a table with an index of name `idx`).
 func DropIndex(b BuildCtx, n *tree.DropIndex) {
+	failIfSafeUpdates(b, n)
+
 	if n.Concurrently {
 		b.EvalCtx().ClientNoticeSender.BufferClientNotice(b,
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are dropped concurrently"))
