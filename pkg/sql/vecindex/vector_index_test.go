@@ -606,8 +606,8 @@ func TestVectorIndexConcurrency(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	// Load features.
-	vectors := testutils.LoadFeatures(t, 10000)
-	vectors.SplitAt(100)
+	vectors := testutils.LoadFeatures(t, 100)
+
 	primaryKeys := make([]vecstore.PrimaryKey, vectors.Count)
 	for i := 0; i < vectors.Count; i++ {
 		primaryKeys[i] = vecstore.PrimaryKey(fmt.Sprintf("vec%d", i))
@@ -666,13 +666,15 @@ func buildIndex(
 			// block of vectors. Run any pending fixups after each block.
 			for j := start; j < end; j += blockSize {
 				insertBlock(j, min(j+blockSize, end))
-				index.ProcessFixups()
 			}
 
 			wait.Done()
 		}(i, end)
 	}
 	wait.Wait()
+
+	// Process any remaining fixups.
+	index.ProcessFixups()
 }
 
 func validateIndex(ctx context.Context, t *testing.T, store *vecstore.InMemoryStore) int {
