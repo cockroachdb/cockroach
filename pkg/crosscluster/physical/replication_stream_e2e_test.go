@@ -1117,9 +1117,10 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	rowStr := c.DestSysSQL.QueryStr(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.DestTenantName))
 	require.Equal(t, "2", rowStr[0][0])
 	require.Equal(t, "destination", rowStr[0][1])
-	if rowStr[0][3] == "NULL" {
+	require.Equal(t, fmt.Sprintf("%d", ingestionJobID), rowStr[0][2])
+	if rowStr[0][4] == "NULL" {
 		// There is no source yet, therefore the replication is not fully initialized.
-		require.Equal(t, "initializing replication", rowStr[0][2])
+		require.Equal(t, "initializing replication", rowStr[0][3])
 	}
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -1134,6 +1135,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	var (
 		id             int
 		dest           string
+		jobID          int
 		status         string
 		source         string
 		sourceUri      string
@@ -1143,8 +1145,9 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 		cutoverTime    []byte // should be nil
 	)
 	row := c.DestSysSQL.QueryRow(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.DestTenantName))
-	row.Scan(&id, &dest, &source, &sourceUri, &protectedTime, &maxReplTime, &replicationLag, &cutoverTime, &status)
+	row.Scan(&id, &dest, &jobID, &source, &sourceUri, &protectedTime, &maxReplTime, &replicationLag, &cutoverTime, &status)
 	require.Equal(t, 2, id)
+	require.Equal(t, ingestionJobID, jobID)
 	require.Equal(t, "destination", dest)
 	require.Equal(t, "replicating", status)
 	parsedUri, err := streamclient.ParseClusterUri(c.SrcURL.String())
