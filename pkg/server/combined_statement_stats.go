@@ -45,9 +45,6 @@ const (
 	sortContentionTimeDesc = `(statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC`
 	sortPCTRuntimeDesc     = `((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
                          (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC`
-	sortLatencyInfoP50Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p50')::FLOAT DESC`
-	sortLatencyInfoP90Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p90')::FLOAT DESC`
-	sortLatencyInfoP99Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC`
 	sortLatencyInfoMinDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'min')::FLOAT DESC`
 	sortLatencyInfoMaxDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'max')::FLOAT DESC`
 	sortRowsProcessedDesc  = `((statistics -> 'statistics' -> 'rowsRead' ->> 'mean')::FLOAT + 
@@ -503,7 +500,6 @@ func isSortOptionOnActivityTable(sort serverpb.StatsSortOptions) bool {
 	case serverpb.StatsSortOptions_SERVICE_LAT,
 		serverpb.StatsSortOptions_CPU_TIME,
 		serverpb.StatsSortOptions_EXECUTION_COUNT,
-		serverpb.StatsSortOptions_P99_STMTS_ONLY,
 		serverpb.StatsSortOptions_CONTENTION_TIME,
 		serverpb.StatsSortOptions_PCT_RUNTIME:
 		return true
@@ -519,14 +515,8 @@ func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 		return sortCPUTimeDesc
 	case serverpb.StatsSortOptions_EXECUTION_COUNT:
 		return sortExecCountDesc
-	case serverpb.StatsSortOptions_P99_STMTS_ONLY:
-		return sortLatencyInfoP99Desc
 	case serverpb.StatsSortOptions_CONTENTION_TIME:
 		return sortContentionTimeDesc
-	case serverpb.StatsSortOptions_LATENCY_INFO_P50:
-		return sortLatencyInfoP50Desc
-	case serverpb.StatsSortOptions_LATENCY_INFO_P90:
-		return sortLatencyInfoP90Desc
 	case serverpb.StatsSortOptions_LATENCY_INFO_MIN:
 		return sortLatencyInfoMinDesc
 	case serverpb.StatsSortOptions_LATENCY_INFO_MAX:

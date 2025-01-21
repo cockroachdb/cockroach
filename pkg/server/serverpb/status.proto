@@ -1757,12 +1757,15 @@ enum StatsSortOptions {
   SERVICE_LAT = 0;
   CPU_TIME = 1;
   EXECUTION_COUNT = 2;
-  P99_STMTS_ONLY = 3;
+  reserved 3;
+  reserved "P99_STMTS_ONLY";
   CONTENTION_TIME = 4;
   PCT_RUNTIME = 5;
+  reserved 6;
+  reserved "LATENCY_INFO_P50";
+  reserved 7;
+  reserved "LATENCY_INFO_P90";
   // Sort options only available on default stats tables.
-  LATENCY_INFO_P50 = 6;
-  LATENCY_INFO_P90 = 7;
   LATENCY_INFO_MIN = 8;
   LATENCY_INFO_MAX = 9;
   ROWS_PROCESSED = 10;
