@@ -96,12 +96,7 @@ func registerRebalanceLoad(r registry.Registry) {
 				),
 				// Only use the latest version of each release to work around #127029.
 				mixedversion.AlwaysUseLatestPredecessors,
-				// TODO(kvoli): Re-enable shared process deployments for mixed version
-				// variant #139037.
-				mixedversion.EnabledDeploymentModes(
-					mixedversion.SystemOnlyDeployment,
-					mixedversion.SeparateProcessDeployment,
-				),
+				mixedversion.MinimumSupportedVersion("v23.2.0"),
 			)
 			mvt.OnStartup("maybe enable split/scatter on tenant",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
