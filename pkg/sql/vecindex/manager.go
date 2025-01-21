@@ -29,10 +29,11 @@ type Manager struct {
 		// TODO(drewk): provide a way to remove inactive indexes from the map.
 		indexes map[indexKey]*indexEntry
 	}
-	ctx     context.Context
-	stopper *stop.Stopper
-	codec   keys.SQLCodec
-	db      descs.DB
+	ctx          context.Context
+	stopper      *stop.Stopper
+	codec        keys.SQLCodec
+	db           descs.DB
+	testingKnobs *VecIndexTestingKnobs
 }
 
 // NewManager returns a new vector index manager which maintains per-node
@@ -68,6 +69,11 @@ type indexEntry struct {
 	store    vecstore.Store
 }
 
+// SetTestingKnobs sets the testing knobs for the manager to use in unit tests.
+func (m *Manager) SetTestingKnobs(knobs *VecIndexTestingKnobs) {
+	m.testingKnobs = knobs
+}
+
 // Get returns the VectorIndex for the given table and index. If the index does
 // not currently have an active VectorIndex, one is created and cached.
 func (m *Manager) Get(
@@ -83,6 +89,9 @@ func (m *Manager) Get(
 			// VectorIndex. Wait until that is complete, at which point e.idx will be
 			// populated.
 			log.VEventf(ctx, 1, "waiting for config for index %d of table %d", indexID, tableID)
+			if m.testingKnobs != nil && m.testingKnobs.BeforeVecIndexWait != nil {
+				m.testingKnobs.BeforeVecIndexWait()
+			}
 			e.waitCond.Wait()
 			log.VEventf(ctx, 1, "finished waiting for config for index %d of table %d", indexID, tableID)
 		} else {
@@ -99,6 +108,9 @@ func (m *Manager) Get(
 	idx, err := func() (*VectorIndex, error) {
 		m.mu.Unlock()
 		defer m.mu.Lock()
+		if m.testingKnobs != nil && m.testingKnobs.DuringVecIndexPull != nil {
+			m.testingKnobs.DuringVecIndexPull()
+		}
 		config, err := m.getVecConfig(ctx, tableID, indexID)
 		if err != nil {
 			return nil, err
