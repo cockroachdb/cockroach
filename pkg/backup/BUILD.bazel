@@ -185,7 +185,6 @@ go_test(
         "restore_mid_schema_change_test.go",
         "restore_multiregion_rbr_test.go",
         "restore_old_sequences_test.go",
-        "restore_old_versions_test.go",
         "restore_online_test.go",
         "restore_planning_test.go",
         "restore_progress_test.go",
