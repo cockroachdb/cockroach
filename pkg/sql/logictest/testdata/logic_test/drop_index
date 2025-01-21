@@ -505,3 +505,16 @@ SELECT constraint_name from [SHOW CONSTRAINTS FROM fk_ref_dst];
 fk_ref_dst_pkey
 j_fk
 m_fk
+
+subtest safe_updates_rejects_drop_index
+
+statement ok
+set sql_safe_updates = true;
+set autocommit_before_ddl = true;
+CREATE TABLE roaches(id INT PRIMARY KEY, value STRING);
+CREATE INDEX roaches_value_idx ON roaches(value);
+
+statement error pq: rejected \(sql_safe_updates = true\): DROP INDEX
+DROP INDEX IF EXISTS roaches@roaches_value_idx;
+
+subtest end
