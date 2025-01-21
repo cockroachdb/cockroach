@@ -420,51 +420,62 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 				// the GC to happen before the PTS is setup. The second time we will allow
 				// the PTS to be installed and then cause the GC.
 				for i := 0; i < 2; i++ {
-					<-backfillQueryWait
-					if _, err := db.ExecContext(ctx, "SET sql_safe_updates=off"); err != nil {
-						return err
-					}
-					if _, err := db.ExecContext(ctx, fmt.Sprintf(
-						"BEGIN; DELETE FROM t LIMIT %d; INSERT INTO t VALUES('9999999'); COMMIT",
-						rowsDeletedPerIteration,
-					)); err != nil {
-						return err
-					}
-					if err := refreshTo(ctx, tableKey, ts.Clock().Now()); err != nil {
-						return err
-					}
-					if err := refreshPTSCacheTo(ctx, ts.Clock().Now()); err != nil {
-						return err
-					}
-					if _, err := db.ExecContext(ctx, `
+					i := i
+					if err := func() error {
+						t.Logf("i=%d begin running operations in the middle of backfill", i)
+						<-backfillQueryWait
+						defer func() {
+							backfillQueryResume <- struct{}{}
+							t.Logf("i=%d finished running operations in the middle of backfill", i)
+						}()
+						if _, err := db.ExecContext(ctx, "SET sql_safe_updates=off"); err != nil {
+							return err
+						}
+						if _, err := db.ExecContext(ctx, fmt.Sprintf(
+							"BEGIN; DELETE FROM t LIMIT %d; INSERT INTO t VALUES('9999999'); COMMIT",
+							rowsDeletedPerIteration,
+						)); err != nil {
+							return err
+						}
+						if err := refreshTo(ctx, tableKey, ts.Clock().Now()); err != nil {
+							return err
+						}
+						if err := refreshPTSCacheTo(ctx, ts.Clock().Now()); err != nil {
+							return err
+						}
+						if _, err := db.ExecContext(ctx, `
 SELECT crdb_internal.kv_enqueue_replica(range_id, 'mvccGC', true)
 FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); err != nil {
+							return err
+						}
+						row := db.QueryRowContext(ctx, "SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
+						var count int
+						if err := row.Scan(&count); err != nil {
+							return err
+						}
+						// First iteration is before the PTS is setup, so it will be 0. Second
+						// iteration the PTS should be setup.
+						expectedCount := i
+						if count != expectedCount {
+							return errors.AssertionFailedf("no protected timestamp was set up by the schema change job (expected %d, got : %d)", expectedCount, count)
+						}
+						return nil
+					}(); err != nil {
 						return err
 					}
-					row := db.QueryRowContext(ctx, "SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
-					var count int
-					if err := row.Scan(&count); err != nil {
-						return err
-					}
-					// First iteration is before the PTS is setup, so it will be 0. Second
-					// iteration the PTS should be setup.
-					expectedCount := i
-					if count != expectedCount {
-						return errors.AssertionFailedf("no protected timestamp was set up by the schema change job (expected %d, got : %d)", expectedCount, count)
-					}
-					backfillQueryResume <- struct{}{}
 				}
 				return nil
 			})
 			grp.GoCtx(func(ctx context.Context) error {
 				// Backfill with the PTS being not setup early enough, which will
 				// lead to failure.
+				t.Logf("running backfill with PTS not setup early enough")
 				blockBackFillsForPTSFailure.Swap(true)
 				_, err := db.ExecContext(ctx, tc.backfillSchemaChange)
 				if err == nil || !testutils.IsError(err, "unable to retry backfill since fixed timestamp is before the GC timestamp") {
 					return errors.AssertionFailedf("expected error was not hit")
 				}
-				testutils.SucceedsSoon(t, func() error {
+				err = testutils.SucceedsSoonError(func() error {
 					// Wait until schema change is fully rolled back.
 					var status string
 					err = db.QueryRowContext(ctx, fmt.Sprintf(
@@ -479,8 +490,12 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); er
 					}
 					return nil
 				})
+				if err != nil {
+					return err
+				}
 				// Next backfill with the PTS being setup on time, which should always
 				// succeed.
+				t.Logf("running backfill with PTS setup on time")
 				blockBackFillsForPTSCheck.Swap(true)
 				_, err = db.ExecContext(ctx, tc.backfillSchemaChange)
 				if err != nil {
