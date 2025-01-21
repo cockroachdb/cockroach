@@ -794,11 +794,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	log.Event(ctx, "accepting connections")
 
-	// Start garbage collecting system events.
-	if err := startSystemLogsGC(workersCtx, s.sqlServer); err != nil {
-		return err
-	}
-
 	// Start the SQL subsystem.
 	if err := s.sqlServer.preStart(
 		workersCtx,
@@ -838,6 +833,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			DisableKvLevelAdvancedDebug: true,
 		},
 	); err != nil {
+		return err
+	}
+
+	// Start garbage collecting system events.
+	if err := startSystemLogsGC(workersCtx, s.sqlServer); err != nil {
 		return err
 	}
 
