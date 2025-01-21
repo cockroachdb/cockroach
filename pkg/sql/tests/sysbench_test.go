@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/profile"
 	"github.com/jackc/pgx/v5"
@@ -110,10 +112,10 @@ type sysbenchClient interface {
 
 // sysbenchDriver is capable of running sysbench.
 type sysbenchDriver interface {
-	sysbenchClient
-
 	// Prepares the schema and connection for the workload.
 	prep(rng *rand.Rand)
+	// newClient returns a sysbenchClient.
+	newClient() sysbenchClient
 }
 
 const (
@@ -175,7 +177,42 @@ func newTestCluster(
 // TODO(nvanbenschoten): add a variant of this driver which bypasses the gRPC
 // local fast-path optimization.
 type sysbenchSQL struct {
-	ctx  context.Context
+	ctx     context.Context
+	stopper *stop.Stopper
+	pgURL   url.URL
+}
+
+func newSysbenchSQL(nodes int, localRPCFastPath bool) sysbenchDriverConstructor {
+	return func(ctx context.Context, b *testing.B) (sysbenchDriver, func()) {
+		tc := newTestCluster(b, nodes, localRPCFastPath)
+		try0(tc.WaitForFullReplication())
+		pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(sysbenchDB))
+		cleanup := func() {
+			cleanupURL()
+			tc.Stopper().Stop(ctx)
+		}
+		return &sysbenchSQL{
+			ctx:     ctx,
+			stopper: tc.Stopper(),
+			pgURL:   pgURL,
+		}, cleanup
+	}
+}
+
+func (s *sysbenchSQL) newClient() sysbenchClient {
+	conn := try(pgx.Connect(s.ctx, s.pgURL.String()))
+	s.stopper.AddCloser(stop.CloserFn(func() { _ = conn.Close(s.ctx) }))
+	c := &sysbenchSQLClient{
+		sysbenchSQL: s,
+		conn:        conn,
+	}
+	c.prepConn()
+	return c
+}
+
+type sysbenchSQLClient struct {
+	*sysbenchSQL
+
 	conn *pgx.Conn
 	stmt struct {
 		begin          string
@@ -192,77 +229,61 @@ type sysbenchSQL struct {
 	}
 }
 
-func newSysbenchSQL(nodes int, localRPCFastPath bool) sysbenchDriverConstructor {
-	return func(ctx context.Context, b *testing.B) (sysbenchDriver, func()) {
-		tc := newTestCluster(b, nodes, localRPCFastPath)
-		try0(tc.WaitForFullReplication())
-		pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(sysbenchDB))
-		conn := try(pgx.Connect(ctx, pgURL.String()))
-		cleanup := func() {
-			cleanupURL()
-			tc.Stopper().Stop(ctx)
-		}
-		return &sysbenchSQL{
-			ctx:  ctx,
-			conn: conn,
-		}, cleanup
-	}
-}
-
-func (s *sysbenchSQL) Begin() {
+func (s *sysbenchSQLClient) Begin() {
 	try(s.conn.Exec(s.ctx, s.stmt.begin))
 }
 
-func (s *sysbenchSQL) Commit() {
+func (s *sysbenchSQLClient) Commit() {
 	try(s.conn.Exec(s.ctx, s.stmt.commit))
 }
 
-func (s *sysbenchSQL) PointSelect(t tableNum, id rowID) {
+func (s *sysbenchSQLClient) PointSelect(t tableNum, id rowID) {
 	try(s.conn.Exec(s.ctx, s.stmt.pointSelect[t], id))
 }
 
-func (s *sysbenchSQL) SimpleRange(t tableNum, id rowID, id2 rowID) {
+func (s *sysbenchSQLClient) SimpleRange(t tableNum, id rowID, id2 rowID) {
 	try(s.conn.Exec(s.ctx, s.stmt.simpleRange[t], id, id2))
 }
 
-func (s *sysbenchSQL) SumRange(t tableNum, id rowID, id2 rowID) {
+func (s *sysbenchSQLClient) SumRange(t tableNum, id rowID, id2 rowID) {
 	try(s.conn.Exec(s.ctx, s.stmt.sumRange[t], id, id2))
 }
 
-func (s *sysbenchSQL) OrderRange(t tableNum, id rowID, id2 rowID) {
+func (s *sysbenchSQLClient) OrderRange(t tableNum, id rowID, id2 rowID) {
 	try(s.conn.Exec(s.ctx, s.stmt.orderRange[t], id, id2))
 }
 
-func (s *sysbenchSQL) DistinctRange(t tableNum, id rowID, id2 rowID) {
+func (s *sysbenchSQLClient) DistinctRange(t tableNum, id rowID, id2 rowID) {
 	try(s.conn.Exec(s.ctx, s.stmt.distinctRange[t], id, id2))
 }
 
-func (s *sysbenchSQL) IndexUpdate(t tableNum, id rowID) {
+func (s *sysbenchSQLClient) IndexUpdate(t tableNum, id rowID) {
 	try(s.conn.Exec(s.ctx, s.stmt.indexUpdate[t], id))
 }
 
-func (s *sysbenchSQL) NonIndexUpdate(t tableNum, id rowID, cValue cValue) {
+func (s *sysbenchSQLClient) NonIndexUpdate(t tableNum, id rowID, cValue cValue) {
 	try(s.conn.Exec(s.ctx, s.stmt.nonIndexUpdate[t], id, cValue))
 }
 
-func (s *sysbenchSQL) DeleteInsert(t tableNum, id rowID, k kValue, c cValue, pad padValue) {
+func (s *sysbenchSQLClient) DeleteInsert(t tableNum, id rowID, k kValue, c cValue, pad padValue) {
 	try(s.conn.Exec(s.ctx, s.stmt.delete[t], id))
 	try(s.conn.Exec(s.ctx, s.stmt.insert[t], id, k, c, pad))
 }
 
 func (s *sysbenchSQL) prep(rng *rand.Rand) {
 	s.prepSchema(rng)
-	s.prepConn()
 }
 
 func (s *sysbenchSQL) prepSchema(rng *rand.Rand) {
+	conn := try(pgx.Connect(s.ctx, s.pgURL.String()))
+	defer func() { _ = conn.Close(s.ctx) }()
 	// Create the database.
-	try(s.conn.Exec(s.ctx, sysbenchCreateDB))
+	try(conn.Exec(s.ctx, sysbenchCreateDB))
 
 	// NOTE: this is faster without parallelism, for some reason.
 	for i := range sysbenchTables {
 		// Create the table.
-		try(s.conn.Exec(s.ctx, fmt.Sprintf(sysbenchCreateTable, i)))
+		try(conn.Exec(s.ctx, fmt.Sprintf(sysbenchCreateTable, i)))
 
 		// Import rows into the table.
 		table := pgx.Identifier{fmt.Sprintf(sysbenchTableFmt, i)}
@@ -274,17 +295,17 @@ func (s *sysbenchSQL) prepSchema(rng *rand.Rand) {
 			pad := randPadValue(rng)
 			return []any{id, k, c, pad}, nil
 		})
-		try(s.conn.CopyFrom(s.ctx, table, cols, rows))
+		try(conn.CopyFrom(s.ctx, table, cols, rows))
 
 		// Create the secondary index on the table.
-		try(s.conn.Exec(s.ctx, fmt.Sprintf(sysbenchCreateIndex, i)))
+		try(conn.Exec(s.ctx, fmt.Sprintf(sysbenchCreateIndex, i)))
 
 		// Collect table statistics.
-		try(s.conn.Exec(s.ctx, fmt.Sprintf(sysbenchAnalyze, i)))
+		try(conn.Exec(s.ctx, fmt.Sprintf(sysbenchAnalyze, i)))
 	}
 }
 
-func (s *sysbenchSQL) prepConn() {
+func (s *sysbenchSQLClient) prepConn() {
 	s.stmt.begin = try(s.conn.Prepare(s.ctx, "begin", sysbenchStmtBegin)).Name
 	s.stmt.commit = try(s.conn.Prepare(s.ctx, "commit", sysbenchStmtCommit)).Name
 	for i := range sysbenchTables {
@@ -320,7 +341,6 @@ func (s *sysbenchSQL) prepConn() {
 type sysbenchKV struct {
 	ctx         context.Context
 	db          *kv.DB
-	txn         *kv.Txn
 	pkPrefix    [sysbenchTables]roachpb.Key
 	indexPrefix [sysbenchTables]roachpb.Key
 }
@@ -339,15 +359,24 @@ func newSysbenchKV(nodes int, localRPCFastPath bool) sysbenchDriverConstructor {
 	}
 }
 
-func (s *sysbenchKV) Begin() {
+func (s *sysbenchKV) newClient() sysbenchClient {
+	return &sysbenchKVClient{sysbenchKV: s}
+}
+
+type sysbenchKVClient struct {
+	*sysbenchKV
+	txn *kv.Txn
+}
+
+func (s *sysbenchKVClient) Begin() {
 	s.txn = s.db.NewTxn(s.ctx, "sysbench")
 }
 
-func (s *sysbenchKV) Commit() {
+func (s *sysbenchKVClient) Commit() {
 	try0(s.txn.Commit(s.ctx))
 }
 
-func (s *sysbenchKV) PointSelect(t tableNum, id rowID) {
+func (s *sysbenchKVClient) PointSelect(t tableNum, id rowID) {
 	key := s.pkKey(t, id)
 	var val kv.KeyValue
 	if s.txn != nil {
@@ -360,33 +389,33 @@ func (s *sysbenchKV) PointSelect(t tableNum, id rowID) {
 	}
 }
 
-func (s *sysbenchKV) scanRange(t tableNum, id rowID, id2 rowID) {
+func (s *sysbenchKVClient) scanRange(t tableNum, id rowID, id2 rowID) {
 	start := s.pkKey(t, id)
 	end := s.pkKey(t, id2)
 	try(s.txn.Scan(s.ctx, start, end, 0 /* maxRows */))
 }
 
-func (s *sysbenchKV) SimpleRange(t tableNum, id rowID, id2 rowID) {
+func (s *sysbenchKVClient) SimpleRange(t tableNum, id rowID, id2 rowID) {
 	s.scanRange(t, id, id2)
 	// Ignore SQL-level post-processing.
 }
 
-func (s *sysbenchKV) SumRange(t tableNum, id rowID, id2 rowID) {
+func (s *sysbenchKVClient) SumRange(t tableNum, id rowID, id2 rowID) {
 	s.scanRange(t, id, id2)
 	// Ignore SQL-level post-processing.
 }
 
-func (s *sysbenchKV) OrderRange(t tableNum, id rowID, id2 rowID) {
+func (s *sysbenchKVClient) OrderRange(t tableNum, id rowID, id2 rowID) {
 	s.scanRange(t, id, id2)
 	// Ignore SQL-level post-processing.
 }
 
-func (s *sysbenchKV) DistinctRange(t tableNum, id rowID, id2 rowID) {
+func (s *sysbenchKVClient) DistinctRange(t tableNum, id rowID, id2 rowID) {
 	s.scanRange(t, id, id2)
 	// Ignore SQL-level post-processing.
 }
 
-func (s *sysbenchKV) IndexUpdate(t tableNum, id rowID) {
+func (s *sysbenchKVClient) IndexUpdate(t tableNum, id rowID) {
 	// Read the primary key, increment the k value, and replace.
 	pkKey := s.pkKey(t, id)
 	val := try(s.txn.GetForUpdate(s.ctx, pkKey, kvpb.BestEffort))
@@ -418,7 +447,7 @@ func (s *sysbenchKV) IndexUpdate(t tableNum, id rowID) {
 	}
 }
 
-func (s *sysbenchKV) NonIndexUpdate(t tableNum, id rowID, _ cValue) {
+func (s *sysbenchKVClient) NonIndexUpdate(t tableNum, id rowID, _ cValue) {
 	// Read the primary key and write it back.
 	pkKey := s.pkKey(t, id)
 	val := try(s.txn.GetForUpdate(s.ctx, pkKey, kvpb.BestEffort))
@@ -430,7 +459,7 @@ func (s *sysbenchKV) NonIndexUpdate(t tableNum, id rowID, _ cValue) {
 	try0(s.txn.Put(s.ctx, pkKey, pkValue))
 }
 
-func (s *sysbenchKV) DeleteInsert(t tableNum, id rowID, newK kValue, _ cValue, _ padValue) {
+func (s *sysbenchKVClient) DeleteInsert(t tableNum, id rowID, newK kValue, _ cValue, _ padValue) {
 	// Read the primary key and delete both keys from the old row.
 	pkKey := s.pkKey(t, id)
 	// NOTE: we don't use GetForUpdate. See #50181.
@@ -548,7 +577,7 @@ func (s *sysbenchKV) prepDataset(rng *rand.Rand) {
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L419
-func sysbenchExecutePointSelects(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchExecutePointSelects(s sysbenchClient, rng *rand.Rand) {
 	t := randTableNum(rng)
 	for range sysbenchPointSelects {
 		s.PointSelect(t, randRowID(rng))
@@ -566,27 +595,27 @@ func sysbenchExecuteRange(op func(tableNum, rowID, rowID), count int, rng *rand.
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L443
-func sysbenchExecuteSimpleRanges(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchExecuteSimpleRanges(s sysbenchClient, rng *rand.Rand) {
 	sysbenchExecuteRange(s.SimpleRange, sysbenchSimpleRanges, rng)
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L447
-func sysbenchExecuteSumRanges(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchExecuteSumRanges(s sysbenchClient, rng *rand.Rand) {
 	sysbenchExecuteRange(s.SumRange, sysbenchSumRanges, rng)
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L451
-func sysbenchExecuteOrderRanges(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchExecuteOrderRanges(s sysbenchClient, rng *rand.Rand) {
 	sysbenchExecuteRange(s.OrderRange, sysbenchOrderRanges, rng)
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L455
-func sysbenchExecuteDistinctRanges(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchExecuteDistinctRanges(s sysbenchClient, rng *rand.Rand) {
 	sysbenchExecuteRange(s.DistinctRange, sysbenchDistinctRanges, rng)
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L459
-func sysbenchExecuteIndexUpdates(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchExecuteIndexUpdates(s sysbenchClient, rng *rand.Rand) {
 	t := randTableNum(rng)
 	for range sysbenchIndexUpdates {
 		s.IndexUpdate(t, randRowID(rng))
@@ -594,7 +623,7 @@ func sysbenchExecuteIndexUpdates(s sysbenchDriver, rng *rand.Rand) {
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L469
-func sysbenchExecuteNonIndexUpdates(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchExecuteNonIndexUpdates(s sysbenchClient, rng *rand.Rand) {
 	t := randTableNum(rng)
 	for range sysbenchNonIndexUpdates {
 		s.NonIndexUpdate(t, randRowID(rng), randCValue(rng))
@@ -602,7 +631,7 @@ func sysbenchExecuteNonIndexUpdates(s sysbenchDriver, rng *rand.Rand) {
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L480
-func sysbenchExecuteDeleteInserts(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchExecuteDeleteInserts(s sysbenchClient, rng *rand.Rand) {
 	t := randTableNum(rng)
 	for range sysbenchDeleteInserts {
 		id := randRowID(rng)
@@ -614,10 +643,10 @@ func sysbenchExecuteDeleteInserts(s sysbenchDriver, rng *rand.Rand) {
 }
 
 // sysbenchWorkload executes a single transaction of a sysbench workload.
-type sysbenchWorkload func(sysbenchDriver, *rand.Rand)
+type sysbenchWorkload func(sysbenchClient, *rand.Rand)
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_read_only.lua
-func sysbenchOltpReadOnly(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchOltpReadOnly(s sysbenchClient, rng *rand.Rand) {
 	s.Begin()
 	sysbenchExecutePointSelects(s, rng)
 	sysbenchExecuteSimpleRanges(s, rng)
@@ -628,7 +657,7 @@ func sysbenchOltpReadOnly(s sysbenchDriver, rng *rand.Rand) {
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_write_only.lua
-func sysbenchOltpWriteOnly(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchOltpWriteOnly(s sysbenchClient, rng *rand.Rand) {
 	s.Begin()
 	sysbenchExecuteIndexUpdates(s, rng)
 	sysbenchExecuteNonIndexUpdates(s, rng)
@@ -637,7 +666,7 @@ func sysbenchOltpWriteOnly(s sysbenchDriver, rng *rand.Rand) {
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_read_write.lua#L44
-func sysbenchOltpReadWrite(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchOltpReadWrite(s sysbenchClient, rng *rand.Rand) {
 	s.Begin()
 	sysbenchExecutePointSelects(s, rng)
 	sysbenchExecuteSimpleRanges(s, rng)
@@ -651,13 +680,13 @@ func sysbenchOltpReadWrite(s sysbenchDriver, rng *rand.Rand) {
 }
 
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_point_select.lua#L32
-func sysbenchOltpPointSelect(s sysbenchDriver, rng *rand.Rand) {
+func sysbenchOltpPointSelect(s sysbenchClient, rng *rand.Rand) {
 	// Run one point select per transaction, regardless of sysbenchPointSelects,
 	// just like https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_point_select.lua#L25-L26
 	s.PointSelect(randTableNum(rng), randRowID(rng))
 }
 
-func sysbenchOltpBeginCommit(s sysbenchDriver, _ *rand.Rand) {
+func sysbenchOltpBeginCommit(s sysbenchClient, _ *rand.Rand) {
 	s.Begin()
 	s.Commit()
 }
@@ -706,8 +735,9 @@ func BenchmarkSysbench(b *testing.B) {
 					defer startAllocsProfile(b).Stop(b)
 					defer b.StopTimer()
 					b.ResetTimer()
+					s := sys.newClient()
 					for i := 0; i < b.N; i++ {
-						workload.opFn(sys, rng)
+						workload.opFn(s, rng)
 					}
 				})
 			}
