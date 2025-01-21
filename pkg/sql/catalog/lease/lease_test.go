@@ -2574,7 +2574,13 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 			desc.State = next
 			return descsCol.WriteDesc(ctx, false /* kvTrace */, desc, txn.KV())
 		}))
-
+		// Wait for the initial version of the descriptor if it's going from DROPPED
+		// to public. This transition doesn't occur in the real world, so the the
+		// descriptor txn will not wait for the initial version.
+		if expected == descpb.DescriptorState_DROP && next == descpb.DescriptorState_PUBLIC {
+			require.NoError(t,
+				execCfg.LeaseManager.WaitForInitialVersion(ctx, testTableID(), retry.Options{}, nil))
+		}
 		// Wait for the lease manager's refresh worker to have processed the
 		// descriptor update.
 		<-blockDescRefreshed
