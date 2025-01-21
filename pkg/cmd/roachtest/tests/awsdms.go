@@ -583,7 +583,7 @@ func setupDMSReplicationInstance(
 		createReplOut, err := dmsCli.CreateReplicationInstance(
 			ctx,
 			&dms.CreateReplicationInstanceInput{
-				ReplicationInstanceClass:      proto.String("dms.c4.large"),
+				ReplicationInstanceClass:      proto.String("dms.c5.large"),
 				ReplicationInstanceIdentifier: proto.String(awsdmsRoachtestDMSReplicationInstanceName(t.BuildVersion())),
 			},
 		)
