@@ -506,7 +506,7 @@ func testEndToEndDLQ(t *testing.T, mode string) {
 
 	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.retry_queue_duration = '100ms'")
 	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.retry_queue_backoff  = '1ms'")
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	type testCase struct {
 		tableName         string
@@ -568,9 +568,6 @@ func testEndToEndDLQ(t *testing.T, mode string) {
 		}
 		tests = append(tests, test)
 	}
-
-	dbBURL, cleanup := s.PGUrl(t, serverutils.DBName("b"))
-	defer cleanup()
 
 	for _, tc := range tests {
 		if tc.sql != "" {

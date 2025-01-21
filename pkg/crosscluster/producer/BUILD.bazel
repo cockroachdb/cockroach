@@ -18,6 +18,7 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/crosscluster",
         "//pkg/crosscluster/replicationutils",
+        "//pkg/crosscluster/streamclient",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprotectedts",

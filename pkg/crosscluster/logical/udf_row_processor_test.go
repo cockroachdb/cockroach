@@ -85,7 +85,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 		sqlA, tableName, numInserts, nil)
 	require.NoError(t, err)
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 
 	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s WITH FUNCTION repl_apply FOR TABLE %[1]s", tableName)
 	var jobBID jobspb.JobID
@@ -126,7 +126,7 @@ func TestUDFInsertOnly(t *testing.T) {
 		$$ LANGUAGE plpgsql
 		`)
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 
 	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s WITH DEFAULT FUNCTION = 'funcs.repl_apply'", tableName)
 	var jobBID jobspb.JobID
@@ -175,7 +175,7 @@ func TestUDFPreviousValue(t *testing.T) {
 		$$ LANGUAGE plpgsql
 		`)
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 
 	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s WITH FUNCTION repl_apply FOR TABLE %[1]s", tableName)
 	var jobBID jobspb.JobID

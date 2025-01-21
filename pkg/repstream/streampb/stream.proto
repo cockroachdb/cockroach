@@ -85,6 +85,9 @@ message ReplicationProducerRequest {
   repeated string table_names = 4;
 
   bool allow_offline = 5;
+  
+  // Sent during bidirectional LDR setup to validate the reverse stream URI.
+  string unvalidated_reverse_stream_uri = 6 [(gogoproto.customname) = "UnvalidatedReverseStreamURI"];
 }
 
 enum ReplicationType {

@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"sync"
 	"time"
 
@@ -27,6 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	leftExternalConn  = url.URL{Scheme: "external", Host: "replication-uri-left"}
+	rightExternalConn = url.URL{Scheme: "external", Host: "replication-uri-right"}
 )
 
 type ycsbWorkload struct {
@@ -771,6 +777,7 @@ func setupLDR(
 	dbName, tableNamesStr := ldrWorkload.dbName, tableNamesToStr(ldrWorkload.dbName, ldrWorkload.tableNames)
 
 	startLDR := func(targetDB *sqlutils.SQLRunner, sourceURL string) int {
+
 		options := ""
 		if ldrConfig.mode != Default {
 			options = fmt.Sprintf("WITH mode='%s'", ldrConfig.mode)
@@ -785,8 +792,13 @@ func setupLDR(
 		r.Scan(&jobID)
 		return jobID
 	}
-	rightJobID := startLDR(setup.right.sysSQL, setup.left.PgURLForDatabase(dbName))
-	leftJobID := startLDR(setup.left.sysSQL, setup.right.PgURLForDatabase(dbName))
+	externalConnCmd := "CREATE EXTERNAL CONNECTION IF NOT EXISTS '%s' AS '%s'"
+	setup.right.sysSQL.Exec(t, fmt.Sprintf(externalConnCmd, leftExternalConn.Host, setup.left.PgURLForDatabase(dbName)))
+	setup.left.sysSQL.Exec(t, fmt.Sprintf(externalConnCmd, rightExternalConn.Host, setup.right.PgURLForDatabase(dbName)))
+	t.L().Printf("created external connections")
+
+	rightJobID := startLDR(setup.right.sysSQL, leftExternalConn.String())
+	leftJobID := startLDR(setup.left.sysSQL, rightExternalConn.String())
 
 	// TODO(ssd): We wait for the replicated time to
 	// avoid starting the workload here until we
