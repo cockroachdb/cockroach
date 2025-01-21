@@ -383,6 +383,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		PrevLeaseExpired:      status.IsExpired(),
 		NextLeaseHolder:       nextLeaseHolder,
 		BypassSafetyChecks:    bypassSafetyChecks,
+		DesiredLeaseType:      p.repl.desiredLeaseTypeRLocked(),
 	}
 	out, err := leases.VerifyAndBuild(ctx, st, nl, in)
 	if err != nil {
