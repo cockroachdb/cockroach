@@ -1157,7 +1157,10 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
-
+	// This test relies on the initial version not being acquired.
+	if _, err := sqlDB.Exec("SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
 BEGIN;
 CREATE DATABASE t;
@@ -1168,7 +1171,6 @@ COMMIT;
 `); err != nil {
 		t.Fatal(err)
 	}
-
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv")
 	var updated bool
 	if err := crdb.ExecuteTx(context.Background(), sqlDB, nil, func(tx *gosql.Tx) error {
@@ -1193,7 +1195,6 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 			}
 			updated = true
 		}
-
 		// This select will see version 1 of the table. It will first
 		// acquire a lease on version 2 and note that the table descriptor is
 		// invalid for the transaction, so it will read the previous version
