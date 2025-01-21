@@ -16,6 +16,7 @@ upload-logs
   }
 }
 ----
+=== uploading logs
 Create DD Archive: https://api.us5.datadoghq.com/api/v2/logs/config/archives
 Create DD Archive: {"data":{"type":"archives","attributes":{"name":"abc-20241114000000","query":"-*","destination":{"type":"gcs","path":"ABC/abc-20241114000000","bucket":"debugzip-archives","integration":{"project_id":"arjun-sandbox-424904","client_email":"datadog-archive@arjun-sandbox-424904.iam.gserviceaccount.com"}}}}}
 GCS Upload: ABC/abc-20241114000000/dt=20240716/hour=17/1/cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log:
@@ -43,6 +44,7 @@ upload-logs log-format=crdb-v2
   }
 }
 ----
+=== uploading logs
 Failed to upload logs: decoding on line 2: malformed log entry
 Upload ID: abc-20241114000000
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs --log-format=crdb-v2
@@ -77,6 +79,7 @@ upload-logs log-format=crdb-v1
   }
 }
 ----
+=== uploading logs
 Create DD Archive: https://api.us5.datadoghq.com/api/v2/logs/config/archives
 Create DD Archive: {"data":{"type":"archives","attributes":{"name":"abc-20241114000000","query":"-*","destination":{"type":"gcs","path":"ABC/abc-20241114000000","bucket":"debugzip-archives","integration":{"project_id":"arjun-sandbox-424904","client_email":"datadog-archive@arjun-sandbox-424904.iam.gserviceaccount.com"}}}}}
 GCS Upload: ABC/abc-20241114000000/dt=20240716/hour=17/1/cockroach.node1.username.2024-07-16T17_51_43Z.048498.log:
@@ -107,6 +110,7 @@ upload-logs
   }
 }
 ----
+=== uploading logs
 Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
 Logs API Hook: {"goroutine":100,"file":"server/env_sampler.go","line":125,"message":"failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: /proc/self/cgroup: open /proc/self/cgroup: no such file or directory","counter":33,"tenant_id":"1","timestamp":0,"severity":"WARNING","channel":"DEV","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000"}
 Logs API Hook: {"goroutine":100,"file":"server/node.go","line":533,"message":"initialized store s1","counter":24,"tenant_id":"1","timestamp":0,"severity":"INFO","channel":"DEV","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000"}
@@ -134,6 +138,7 @@ upload-logs
   }
 }
 ----
+=== uploading logs
 Create DD Archive: https://api.us5.datadoghq.com/api/v2/logs/config/archives
 Create DD Archive: {"data":{"type":"archives","attributes":{"name":"abc-20241114000000","query":"-*","destination":{"type":"gcs","path":"ABC/abc-20241114000000","bucket":"debugzip-archives","integration":{"project_id":"arjun-sandbox-424904","client_email":"datadog-archive@arjun-sandbox-424904.iam.gserviceaccount.com"}}}}}
 GCS Upload: ABC/abc-20241114000000/dt=20240716/hour=17/1/cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log:

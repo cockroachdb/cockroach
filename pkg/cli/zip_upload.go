@@ -20,6 +20,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -131,7 +132,7 @@ var debugZipUploadOpts = struct {
 // var zipArtifactTypes = []string{"profiles", "logs"}
 // TODO(arjunmahishi): Removing the profiles upload for now. It has started
 // failing for some reason. Will fix this later
-var zipArtifactTypes = []string{"logs"}
+var zipArtifactTypes = []string{"logs", "tables"}
 
 // uploadZipArtifactFuncs is a registry of handler functions for each artifact type.
 // While adding/removing functions from here, make sure to update
@@ -148,6 +149,8 @@ var uploadZipArtifactFuncs = map[string]uploadZipArtifactFunc{
 var defaultDDTags = []string{"service:CRDB-SH", "env:debug", "source:cockroachdb"}
 
 func runDebugZipUpload(cmd *cobra.Command, args []string) error {
+	runtime.GOMAXPROCS(system.NumCPU())
+
 	if err := validateZipUploadReadiness(); err != nil {
 		return err
 	}
@@ -164,6 +167,8 @@ func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 	// run the upload functions for each artifact type. This can run sequentially.
 	// All the concurrency is contained within the upload functions.
 	for _, artType := range artifactsToUpload {
+		fmt.Printf("\n=== uploading %s\n\n", artType)
+
 		if err := uploadZipArtifactFuncs[artType](cmd.Context(), uploadID, args[0]); err != nil {
 			// Log the error and continue with the next artifact
 			fmt.Printf("Failed to upload %s: %s\n", artType, err)
@@ -620,51 +625,71 @@ func uploadZipTables(ctx context.Context, uploadID string, debugDirPath string) 
 	var (
 		totalJobs   = len(clusterWideTableDumps) + len(nodeTableDumps)
 		noOfWorkers = min(debugZipUploadOpts.maxConcurrentUploads, totalJobs)
-		workChan    = make(chan string, totalJobs)
-		errChan     = make(chan error, totalJobs)
-
-		errTables []string
+		readChan    = make(chan string, totalJobs)              // exact required size
+		uploadChan  = make(chan *tableDumpChunk, noOfWorkers*2) // 2x the number of workers to keep them busy
+		readWG      = sync.WaitGroup{}
+		uploadWG    = sync.WaitGroup{}
 	)
 
+	// function to queue work to the upload pool. This function is called by the
+	// read pool workers
+	uploadTableChunk := func(chunk *tableDumpChunk) {
+		uploadWG.Add(1)
+		uploadChan <- chunk
+	}
+
+	// start the read pool
 	for i := 0; i < noOfWorkers; i++ {
 		go func() {
-			for fileName := range workChan {
-				var wrappedErr error
-				if err := processTableDump(
-					ctx, debugDirPath, fileName, uploadID, clusterWideTableDumps[fileName],
-				); err != nil {
-					wrappedErr = fmt.Errorf("%s: %w", fileName, err)
-				}
+			for fileName := range readChan {
+				func() {
+					defer readWG.Done()
 
-				errChan <- wrappedErr
+					if err := processTableDump(
+						ctx, debugDirPath, fileName, uploadID, clusterWideTableDumps[fileName], uploadTableChunk,
+					); err != nil {
+						fmt.Fprintf(os.Stderr, "failed to read %s: %s\n", fileName, err)
+					}
+				}()
 			}
 		}()
 	}
 
+	// start the upload pool
+	for i := 0; i < noOfWorkers*100; i++ {
+		go func() {
+			for chunk := range uploadChan {
+				func() {
+					defer uploadWG.Done()
+
+					if _, err := uploadLogsToDatadog(
+						chunk.payload, debugZipUploadOpts.ddAPIKey, debugZipUploadOpts.ddSite,
+					); err != nil {
+						fmt.Fprintf(os.Stderr, "failed to upload a part of %s: %s\n", chunk.tableName, err)
+					}
+				}()
+			}
+		}()
+	}
+
+	// queue work to the read pool
+	readWG.Add(len(clusterWideTableDumps))
 	for fileName := range clusterWideTableDumps {
-		workChan <- fileName
+		readChan <- fileName
 	}
-
+	readWG.Add(len(nodeTableDumps))
 	for _, fileName := range nodeTableDumps {
-		workChan <- fileName
+		readChan <- fileName
 	}
 
-	for i := 0; i < totalJobs; i++ {
-		if err := <-errChan; err != nil {
-			errTables = append(errTables, err.Error())
-		}
-	}
+	readWG.Wait()
+	close(readChan)
 
-	if len(errTables) > 0 {
-		fmt.Println("Failed to upload the following table dumps:")
-		for _, err := range errTables {
-			fmt.Printf("\t- %s\n", err)
-		}
-		fmt.Println()
-	}
+	uploadWG.Wait()
+	close(uploadChan)
 
-	close(workChan)
-	close(errChan)
+	fmt.Printf("\nView as tables here: https://us5.datadoghq.com/dashboard/ipq-44t-ez8/table-dumps-from-debug-zip?tpl_var_upload_id%%5B0%%5D=%s\n", uploadID)
+	fmt.Printf("View as logs here: https://us5.datadoghq.com/logs?query=source:debug-zip&upload_id:%s\n", uploadID)
 	return nil
 }
 

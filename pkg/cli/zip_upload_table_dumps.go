@@ -38,6 +38,11 @@ type columnParserMap map[string]tsvColumnParserFn
 // column should be skipped.
 type skipColumn struct{}
 
+type tableDumpChunk struct {
+	payload   []byte
+	tableName string
+}
+
 // clusterWideTableDumps is a map of table dumps and their column parsers.
 // Column parsers are required for columns that require special interpretation.
 // For example, columns that are protobufs. If the parser is not present for a
@@ -219,10 +224,17 @@ func makeProtoColumnParser[T protoutil.Message]() tsvColumnParserFn {
 }
 
 func processTableDump(
-	ctx context.Context, dir, fileName, uploadID string, parsers columnParserMap,
+	ctx context.Context,
+	dir, fileName, uploadID string,
+	parsers columnParserMap,
+	uploadFn func(*tableDumpChunk),
 ) error {
 	f, err := os.Open(path.Join(dir, fileName))
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+
 		return err
 	}
 	defer f.Close()
@@ -251,6 +263,11 @@ func processTableDump(
 			ddTagsTag: strings.Join(tags, ","),
 		}
 		for i, h := range header {
+			if cols[i] == "NULL" {
+				headerColumnMapping[h] = nil
+				continue
+			}
+
 			if parser, ok := parsers[h]; ok {
 				colBytes, err := parser(cols[i])
 				if err != nil {
@@ -273,36 +290,42 @@ func processTableDump(
 			return err
 		}
 
+		if len(lines) == datadogMaxLogLinesPerReq {
+			uploadFn(&tableDumpChunk{
+				payload:   makeDDMultiLineLogPayload(lines),
+				tableName: tableName,
+			})
+			lines = lines[:0]
+			return nil
+		}
+
 		lines = append(lines, jsonRow)
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	if len(lines) == 0 {
-		return nil
+	// flush the remaining lines if any
+	if len(lines) > 0 {
+		uploadFn(&tableDumpChunk{
+			payload:   makeDDMultiLineLogPayload(lines),
+			tableName: tableName,
+		})
 	}
-
-	// datadog's logs API only allows 1000 lines of logs per request. So, split
-	// the lines into batches of 1000.
-	for i := 0; i < len(lines); i += datadogMaxLogLinesPerReq {
-		end := min(i+datadogMaxLogLinesPerReq, len(lines))
-		if _, err := uploadLogsToDatadog(
-			makeDDMultiLineLogPayload(lines[i:end]), debugZipUploadOpts.ddAPIKey, debugZipUploadOpts.ddSite,
-		); err != nil {
-			return err
-		}
-	}
-
-	fmt.Printf("uploaded %s\n", fileName)
 	return nil
 }
 
 // makeTableIterator returns the headers slice and an iterator
 func makeTableIterator(f io.Reader) ([]string, func(func(string) error) error) {
 	scanner := bufio.NewScanner(f)
-	scanner.Scan() // scan the first line to get the headers
 
+	// some of the rows can be very large, bigger than the bufio.MaxTokenSize
+	// (65kb). So, we need to increase the buffer size and split by lines while
+	// scanning.
+	scanner.Buffer(nil, 5<<20) // 5 MB
+	scanner.Split(bufio.ScanLines)
+
+	scanner.Scan() // scan the first line to get the headers
 	return strings.Split(scanner.Text(), "\t"), func(fn func(string) error) error {
 		for scanner.Scan() {
 			if err := fn(scanner.Text()); err != nil {

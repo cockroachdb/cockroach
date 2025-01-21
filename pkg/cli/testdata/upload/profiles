@@ -11,6 +11,7 @@ upload-profiles
   }
 }
 ----
+=== uploading profiles
 Upload ID: abc-20241114000000
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=profiles
 {"start":"","end":"","attachments":["cpu.pprof","heap.pprof"],"tags_profiler":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
@@ -35,6 +36,7 @@ upload-profiles tags=foo:bar
   }
 }
 ----
+=== uploading profiles
 Upload ID: abc-20241114000000
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=foo:bar --cluster=ABC --include=profiles
 {"start":"","end":"","attachments":["cpu.pprof","heap.pprof"],"tags_profiler":"cluster:ABC,env:debug,foo:bar,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
@@ -53,6 +55,7 @@ upload-profiles tags=customer:user-given-name,cluster:XYZ
   }
 }
 ----
+=== uploading profiles
 Upload ID: abc-20241114000000
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=customer:user-given-name,cluster:XYZ --cluster=ABC --include=profiles
 {"start":"","end":"","attachments":["cpu.pprof"],"tags_profiler":"cluster:XYZ,customer:user-given-name,env:debug,foo:bar,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
@@ -66,6 +69,7 @@ upload-profiles
   }
 }
 ----
+=== uploading profiles
 Upload ID: abc-20241114000000
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=profiles
 
@@ -83,6 +87,7 @@ upload-profiles tags=env:SH
   }
 }
 ----
+=== uploading profiles
 Upload ID: abc-20241114000000
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=env:SH --cluster=ABC --include=profiles
 {"start":"","end":"","attachments":["cpu.pprof","heap.pprof"],"tags_profiler":"cluster:ABC,env:SH,node_id:1,service:CRDB-SH,source:cockroachdb,upload_id:abc-20241114000000","family":"go","version":"4"}
@@ -101,6 +106,7 @@ upload-profiles tags=ERR
   }
 }
 ----
+=== uploading profiles
 Failed to upload profiles: failed to upload profiles of node 1: status: 400, body: 'runtime' is a required field
 Upload ID: abc-20241114000000
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=ERR --cluster=ABC --include=profiles
