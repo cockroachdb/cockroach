@@ -1453,7 +1453,7 @@ func init() {
 	// to write those files.
 	pebbleTool := tool.New(
 		tool.Mergers(storage.MVCCMerger),
-		tool.DefaultComparer(storage.EngineComparer),
+		tool.DefaultComparer(&storage.EngineComparer),
 		tool.KeySchema(storage.DefaultKeySchema),
 		tool.KeySchemas(storage.KeySchemas...),
 		tool.FS(pebbleToolFS),

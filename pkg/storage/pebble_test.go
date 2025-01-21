@@ -88,6 +88,7 @@ func TestEngineComparer(t *testing.T) {
 	ts5 := hlc.Timestamp{WallTime: 1}
 
 	syntheticBit := []byte{1}
+	var zeroLogical [mvccEncodedTimeLogicalLen]byte
 	ts2a := appendBytesToTimestamp(ts2, syntheticBit)
 	ts3a := appendBytesToTimestamp(ts3, zeroLogical[:])
 	ts3b := appendBytesToTimestamp(ts3, slices.Concat(zeroLogical[:], syntheticBit))
@@ -189,7 +190,7 @@ func TestEngineComparer(t *testing.T) {
 	for _, v := range []any{ts1, ts2, ts2a, ts3, ts3a, ts3b, ts4, ts5, lock1, lock2} {
 		suffixes = append(suffixes, encodeVersion(v))
 	}
-	require.NoError(t, pebble.CheckComparer(EngineComparer, prefixes, suffixes))
+	require.NoError(t, pebble.CheckComparer(&EngineComparer, prefixes, suffixes))
 }
 
 func TestPebbleIterReuse(t *testing.T) {
@@ -534,7 +535,7 @@ func BenchmarkMVCCKeyCompare(b *testing.B) {
 	keys := makeRandEncodedKeys()
 	b.ResetTimer()
 	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
-		_ = EngineKeyCompare(keys[i%len(keys)], keys[j%len(keys)])
+		_ = EngineComparer.Compare(keys[i%len(keys)], keys[j%len(keys)])
 	}
 }
 
@@ -542,7 +543,7 @@ func BenchmarkMVCCKeyEqual(b *testing.B) {
 	keys := makeRandEncodedKeys()
 	b.ResetTimer()
 	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
-		_ = EngineKeyEqual(keys[i%len(keys)], keys[j%len(keys)])
+		_ = EngineComparer.Equal(keys[i%len(keys)], keys[j%len(keys)])
 	}
 }
 
