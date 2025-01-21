@@ -92,8 +92,7 @@ func randPadValue(rng *rand.Rand) padValue {
 	return padValue(randutil.RandString(rng, 59, randutil.PrintableKeyAlphabet))
 }
 
-// sysbenchDriver is capable of running sysbench.
-type sysbenchDriver interface {
+type sysbenchClient interface {
 	// Transaction orchestration operations.
 	Begin()
 	Commit()
@@ -107,6 +106,11 @@ type sysbenchDriver interface {
 	IndexUpdate(tableNum, rowID)
 	NonIndexUpdate(tableNum, rowID, cValue)
 	DeleteInsert(tableNum, rowID, kValue, cValue, padValue)
+}
+
+// sysbenchDriver is capable of running sysbench.
+type sysbenchDriver interface {
+	sysbenchClient
 
 	// Prepares the schema and connection for the workload.
 	prep(rng *rand.Rand)
