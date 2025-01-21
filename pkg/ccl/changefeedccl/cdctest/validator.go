@@ -523,23 +523,19 @@ func (v *FingerprintValidator) fetchTableColTypes(
 	tableName string, updated hlc.Timestamp,
 ) (map[string]*types.T, error) {
 	parts := strings.Split(tableName, ".")
-	var table string
-	switch len(parts) {
-	case 1:
-		table = parts[0]
-	case 2:
-		table = parts[1]
-	default:
-		return nil, errors.Errorf("could not parse table %s", parts)
+	var dbName string
+	if len(parts) == 2 {
+		dbName = parts[0] + "."
 	}
 
 	colToType := make(map[string]*types.T)
-	if err := v.sqlDBFunc(func(db *gosql.DB) error {
+	if err := v.sqlDBFunc(func(sqlDB *gosql.DB) error {
 		var rows *gosql.Rows
 		queryStr := fmt.Sprintf(`SELECT a.attname AS column_name, t.oid AS type_oid, t.typname AS type_name
-		FROM pg_attribute a JOIN pg_type t ON a.atttypid = t.oid AS OF SYSTEM TIME '%s'
-		WHERE a.attrelid = $1::regclass AND a.attnum > 0`, updated.AsOfSystemTime())
-		rows, err := db.Query(queryStr, table)
+		FROM %spg_catalog.pg_attribute a JOIN %spg_catalog.pg_type t ON a.atttypid = t.oid AS OF SYSTEM TIME '%s'
+		WHERE a.attrelid = $1::regclass AND a.attnum > 0`, dbName, dbName, updated.AsOfSystemTime())
+
+		rows, err := sqlDB.Query(queryStr, tableName)
 		if err != nil {
 			return err
 		}
@@ -571,7 +567,7 @@ func (v *FingerprintValidator) fetchTableColTypes(
 			colToType[keyColumn] = types.OidToType[oid.Oid(oidNum)]
 		}
 		if len(results) == 0 {
-			return errors.Errorf("no columns found for table %s", table)
+			return errors.Errorf("no columns found for table %s", tableName)
 		}
 		return nil
 	}); err != nil {
