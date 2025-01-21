@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -44,12 +45,9 @@ func TestStartupInjectedFailureSingleNode(t *testing.T) {
 	args := base.TestClusterArgs{
 		ReusableListenerReg: lisReg,
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: "1",
-				},
-			},
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{
+				{InMemory: true, StickyVFSID: "1"},
+			}},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: reg,

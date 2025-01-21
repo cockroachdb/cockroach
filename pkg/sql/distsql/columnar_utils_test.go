@@ -82,7 +82,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreConfig, nil /* statsCollector */)
 	if err != nil {
 		return err
 	}

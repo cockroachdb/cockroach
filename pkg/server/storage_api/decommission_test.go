@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/decommissioning"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -289,9 +290,9 @@ func decommissionTsArgs(region string, attrs ...string) base.TestServerArgs {
 				},
 			},
 		},
-		StoreSpecs: []base.StoreSpec{
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{
 			{InMemory: true, Attributes: roachpb.Attributes{Attrs: attrs}},
-		},
+		}},
 	}
 }
 

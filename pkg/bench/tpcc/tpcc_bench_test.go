@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -59,7 +60,7 @@ func BenchmarkTPCC(b *testing.B) {
 				{dstEngineEnvVar, td},
 			}).Run())
 			return base.TestServerArgs{
-				StoreSpecs: []base.StoreSpec{{Path: td}},
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: td}}},
 			}, cleanup
 		}),
 		setupServer(func(tb testing.TB, s serverutils.TestServerInterface) {

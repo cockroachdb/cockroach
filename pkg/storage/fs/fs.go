@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -57,26 +57,6 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic)
 
-// InitEnvsFromStoreSpecs constructs Envs for all the provided store specs.
-func InitEnvsFromStoreSpecs(
-	ctx context.Context,
-	specs []base.StoreSpec,
-	rw RWMode,
-	stickyRegistry StickyRegistry,
-	diskWriteStats disk.WriteStatsManager,
-) (Envs, error) {
-	envs := make(Envs, len(specs))
-	for i := range specs {
-		var err error
-		envs[i], err = InitEnvFromStoreSpec(ctx, specs[i], rw, stickyRegistry, diskWriteStats)
-		if err != nil {
-			envs.CloseAll()
-			return nil, err
-		}
-	}
-	return envs, nil
-}
-
 // Envs holds a set of Env.
 type Envs []*Env
 
@@ -95,33 +75,36 @@ func (e Envs) CloseAll() {
 // stickyRegistry may be nil iff the spec's StickyVFSID field is unset.
 func InitEnvFromStoreSpec(
 	ctx context.Context,
-	spec base.StoreSpec,
+	store configpb.Store,
 	rw RWMode,
 	stickyRegistry StickyRegistry,
 	diskWriteStats disk.WriteStatsManager,
 ) (*Env, error) {
 	fs := vfs.Default
-	dir := spec.Path
-	if spec.InMemory {
-		if spec.StickyVFSID != "" {
+	var dir string
+	if store.InMemory {
+		if store.StickyVFSID != "" {
 			if stickyRegistry == nil {
 				return nil, errors.Errorf("missing StickyVFSRegistry")
 			}
-			fs = stickyRegistry.Get(spec.StickyVFSID)
+			fs = stickyRegistry.Get(store.StickyVFSID)
 		} else {
 			fs = vfs.NewMem()
 		}
+	} else {
+		dir = store.Path
 	}
+
 	return InitEnv(ctx, fs, dir, EnvConfig{
-		RW:                rw,
-		EncryptionOptions: spec.EncryptionOptions,
+		RW:         rw,
+		Encryption: &store.Encryption,
 	}, diskWriteStats)
 }
 
 // EnvConfig provides additional configuration settings for Envs.
 type EnvConfig struct {
-	RW                RWMode
-	EncryptionOptions []byte
+	RW         RWMode
+	Encryption *configpb.EncryptionOptions
 }
 
 // InitEnv initializes a new virtual filesystem environment.
@@ -203,7 +186,7 @@ func InitEnv(
 	// configuration was provided, resolveEncryptedEnvOptions will validate that
 	// there is no file registry.
 	e.Registry, e.Encryption, err = resolveEncryptedEnvOptions(
-		ctx, e.UnencryptedFS, dir, cfg.EncryptionOptions, cfg.RW)
+		ctx, e.UnencryptedFS, dir, cfg.Encryption.AsBytes(), cfg.RW)
 	if err != nil {
 		return nil, err
 	}

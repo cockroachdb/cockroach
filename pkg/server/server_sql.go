@@ -539,7 +539,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	var jobAdoptionStopFile string
-	for _, spec := range cfg.Stores.Specs {
+	for _, spec := range cfg.StorageConfig.Stores {
 		if !spec.InMemory && spec.Path != "" {
 			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
 			break

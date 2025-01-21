@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -23,7 +24,7 @@ import (
 func NewTempEngine(
 	ctx context.Context,
 	tempStorage base.TempStorageConfig,
-	storeSpec base.StoreSpec,
+	storeSpec configpb.Store,
 	diskWriteStats disk.WriteStatsManager,
 ) (diskmap.Factory, vfs.FS, error) {
 	return NewPebbleTempEngine(ctx, tempStorage, storeSpec, diskWriteStats)
@@ -57,7 +58,7 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 func NewPebbleTempEngine(
 	ctx context.Context,
 	tempStorage base.TempStorageConfig,
-	storeSpec base.StoreSpec,
+	storeSpec configpb.Store,
 	diskWriteStats disk.WriteStatsManager,
 ) (diskmap.Factory, vfs.FS, error) {
 	return newPebbleTempEngine(ctx, tempStorage, storeSpec, diskWriteStats)
@@ -66,7 +67,7 @@ func NewPebbleTempEngine(
 func newPebbleTempEngine(
 	ctx context.Context,
 	tempStorage base.TempStorageConfig,
-	storeSpec base.StoreSpec,
+	storeSpec configpb.Store,
 	diskWriteStats disk.WriteStatsManager,
 ) (*pebbleTempEngine, vfs.FS, error) {
 	var baseFS vfs.FS
@@ -83,7 +84,7 @@ func newPebbleTempEngine(
 		RW: fs.ReadWrite,
 		// Adopt the encryption options of the provided store spec so that
 		// temporary data is encrypted if the store is encrypted.
-		EncryptionOptions: storeSpec.EncryptionOptions,
+		Encryption: &tempStorage.Spec.Encryption,
 	}, diskWriteStats)
 	if err != nil {
 		return nil, nil, err

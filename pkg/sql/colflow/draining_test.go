@@ -43,7 +43,7 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(1))
 
 	// Set up a two node cluster.
-	tempStorageConfig := base.TempStorageConfig{InMemory: true, Mon: diskMonitor, Settings: st, Spec: base.DefaultTestStoreSpec}
+	tempStorageConfig := base.TempStorageConfig{InMemory: true, Mon: diskMonitor, Settings: st, Spec: base.DefaultTestStoreConfig}
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings:          st,

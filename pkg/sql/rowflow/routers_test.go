@@ -773,7 +773,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreConfig, nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}

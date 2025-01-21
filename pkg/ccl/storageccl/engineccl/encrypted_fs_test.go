@@ -17,12 +17,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -237,26 +236,23 @@ func TestPebbleEncryption(t *testing.T) {
 	keyFile128 := "111111111111111111111111111111111234567890123456"
 	writeToFile(t, stickyRegistry.Get(stickyVFSID), "16.key", []byte(keyFile128))
 
-	encOptionsBytes, err := protoutil.Marshal(&baseccl.EncryptionOptions{
-		KeySource: baseccl.EncryptionKeySource_KeyFiles,
-		KeyFiles: &baseccl.EncryptionKeyFiles{
+	encOptions := configpb.EncryptionOptions{
+		KeySource: configpb.EncryptionKeySource_KeyFiles,
+		KeyFiles: &configpb.EncryptionKeyFiles{
 			CurrentKey: "16.key",
 			OldKey:     "plain",
 		},
 		DataKeyRotationPeriod: 1000, // arbitrary seconds
-	})
-	require.NoError(t, err)
+	}
 
 	func() {
 		// Initialize the filesystem env.
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
-			base.StoreSpec{
-				InMemory:          true,
-				Attributes:        roachpb.Attributes{},
-				Size:              base.SizeSpec{InBytes: 512 << 20},
-				EncryptionOptions: encOptionsBytes,
-				StickyVFSID:       stickyVFSID,
+			configpb.Store{
+				InMemory:    true,
+				StickyVFSID: stickyVFSID,
+				Encryption:  encOptions,
 			},
 			fs.ReadWrite,
 			stickyRegistry, /* sticky registry */
@@ -300,12 +296,10 @@ func TestPebbleEncryption(t *testing.T) {
 		// Initialize the filesystem env again, replaying the file registries.
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
-			base.StoreSpec{
-				InMemory:          true,
-				Attributes:        roachpb.Attributes{},
-				Size:              base.SizeSpec{InBytes: 512 << 20},
-				EncryptionOptions: encOptionsBytes,
-				StickyVFSID:       stickyVFSID,
+			configpb.Store{
+				InMemory:    true,
+				StickyVFSID: stickyVFSID,
+				Encryption:  encOptions,
 			},
 			fs.ReadWrite,
 			stickyRegistry, /* sticky registry */
@@ -375,26 +369,23 @@ func TestPebbleEncryption2(t *testing.T) {
 	addKeyAndValidate := func(
 		key string, val string, encKeyFile string, oldEncFileKey string,
 	) {
-		encOptionsBytes, err := protoutil.Marshal(&baseccl.EncryptionOptions{
-			KeySource: baseccl.EncryptionKeySource_KeyFiles,
-			KeyFiles: &baseccl.EncryptionKeyFiles{
+		encOptions := configpb.EncryptionOptions{
+			KeySource: configpb.EncryptionKeySource_KeyFiles,
+			KeyFiles: &configpb.EncryptionKeyFiles{
 				CurrentKey: encKeyFile,
 				OldKey:     oldEncFileKey,
 			},
 			DataKeyRotationPeriod: 1000,
-		})
-		require.NoError(t, err)
+		}
 
 		// Initialize the filesystem env.
 		ctx := context.Background()
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
-			base.StoreSpec{
-				InMemory:          true,
-				Attributes:        roachpb.Attributes{},
-				Size:              base.SizeSpec{InBytes: 512 << 20},
-				EncryptionOptions: encOptionsBytes,
-				StickyVFSID:       stickyVFSID,
+			configpb.Store{
+				InMemory:    true,
+				StickyVFSID: stickyVFSID,
+				Encryption:  encOptions,
 			},
 			fs.ReadWrite,
 			stickyRegistry, /* sticky registry */
@@ -564,9 +555,9 @@ func makeEncryptedTestFS(t *testing.T, errorProb float64, errorRand *rand.Rand) 
 	require.NoError(t, dir.Sync())
 	require.NoError(t, dir.Close())
 
-	var encOptions baseccl.EncryptionOptions
-	encOptions.KeySource = baseccl.EncryptionKeySource_KeyFiles
-	encOptions.KeyFiles = &baseccl.EncryptionKeyFiles{
+	var encOptions configpb.EncryptionOptions
+	encOptions.KeySource = configpb.EncryptionKeySource_KeyFiles
+	encOptions.KeyFiles = &configpb.EncryptionKeyFiles{
 		CurrentKey: "16.key",
 		OldKey:     "plain",
 	}

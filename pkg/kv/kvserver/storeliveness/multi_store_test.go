@@ -17,6 +17,7 @@ import (
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -149,9 +150,9 @@ func makeMultiStoreArgs(storeKnobs *kvserver.StoreTestingKnobs) base.TestCluster
 		serverArgs := base.TestServerArgs{Knobs: knobs}
 		for storeIdx := 0; storeIdx < numStoresPerNode; storeIdx++ {
 			id := strconv.Itoa(srvIdx*numStoresPerNode + storeIdx + 1)
-			serverArgs.StoreSpecs = append(
-				serverArgs.StoreSpecs,
-				base.StoreSpec{InMemory: true, StickyVFSID: id},
+			serverArgs.StoreConfig.Stores = append(
+				serverArgs.StoreConfig.Stores,
+				configpb.Store{InMemory: true, StickyVFSID: id},
 			)
 		}
 		clusterArgs.ServerArgsPerNode[srvIdx] = serverArgs

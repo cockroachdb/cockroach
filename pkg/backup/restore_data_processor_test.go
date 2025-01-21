@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -248,7 +249,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	// stores because RocksDB's InMemoryEnv doesn't support NewRandomRWFile
 	// (which breaks the global-seqno rewrite used when the added sstable
 	// overlaps with existing data in the RocksDB instance). #16345.
-	args.StoreSpecs = []base.StoreSpec{{InMemory: false, Path: filepath.Join(dir, "testserver")}}
+	args.StoreConfig.Stores = []configpb.Store{{Path: filepath.Join(dir, "testserver")}}
 	srv, _, kvDB := serverutils.StartServer(t, args)
 	defer srv.Stopper().Stop(ctx)
 

@@ -63,6 +63,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/storage/configpb",
         "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",

@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -6730,7 +6731,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 
 	// Should have laid down marker file to prevent startup.
-	_, err := tc.engine.Env().Stat(base.PreventedStartupFile(tc.engine.GetAuxiliaryDir()))
+	_, err := tc.engine.Env().Stat(configpb.PreventedStartupFile(tc.engine.GetAuxiliaryDir()))
 	require.NoError(t, err)
 
 	// Should have triggered fatal error.

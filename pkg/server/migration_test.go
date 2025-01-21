@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -126,7 +127,7 @@ func TestSyncAllEngines(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	vfsRegistry := fs.NewStickyRegistry(fs.UseStrictMemFS)
-	storeSpec := base.DefaultTestStoreSpec
+	storeSpec := base.DefaultTestStoreConfig
 	storeSpec.StickyVFSID = "sync-all-engines"
 	testServerArgs := base.TestServerArgs{
 		Settings: cluster.MakeTestingClusterSettingsWithVersions(
@@ -134,7 +135,7 @@ func TestSyncAllEngines(t *testing.T) {
 			clusterversion.MinSupported.Version(),
 			false, /* initializeVersion */
 		),
-		StoreSpecs: []base.StoreSpec{storeSpec},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{storeSpec}},
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
 				ClusterVersionOverride: clusterversion.PreviousRelease.Version(),
@@ -302,14 +303,14 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numStores = 3
-	var storeSpecs []base.StoreSpec
+	var storeSpecs []configpb.Store
 	for i := 0; i < numStores; i++ {
-		storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
+		storeSpecs = append(storeSpecs, configpb.Store{InMemory: true})
 	}
 
 	intercepted := 0
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		StoreSpecs: storeSpecs,
+		StoreConfig: configpb.Storage{Stores: storeSpecs},
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				PurgeOutdatedReplicasInterceptor: func() {

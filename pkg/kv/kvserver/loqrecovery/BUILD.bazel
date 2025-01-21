@@ -102,6 +102,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/storage",
+        "//pkg/storage/configpb",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/testutils",

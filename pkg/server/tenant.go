@@ -646,11 +646,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}.Iter()
 
 	encryptedStore := false
-	for _, storeSpec := range s.sqlServer.cfg.Stores.Specs {
+	for _, storeSpec := range s.sqlServer.cfg.StorageConfig.Stores {
 		if storeSpec.InMemory {
 			continue
 		}
-		if storeSpec.IsEncrypted() {
+		if storeSpec.Encryption.KeyFiles != nil {
 			encryptedStore = true
 		}
 
@@ -725,8 +725,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// We can now connect the metric registries to the recorder.
 	s.recorder.AddNode(
 		metric.NewRegistry(), // node registry -- unused here
-		s.registry,
-		logRegistry, s.sysRegistry,
+		s.registry, logRegistry, s.sysRegistry,
 		roachpb.NodeDescriptor{
 			NodeID: s.rpcContext.NodeID.Get(),
 		},

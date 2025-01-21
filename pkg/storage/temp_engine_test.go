@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -31,7 +32,7 @@ func TestNewPebbleTempEngine(t *testing.T) {
 	db, filesystem, err := NewPebbleTempEngine(context.Background(), base.TempStorageConfig{
 		Path:     tempDir,
 		Settings: cluster.MakeTestingClusterSettings(),
-	}, base.StoreSpec{Path: tempDir}, diskWriteStats)
+	}, configpb.Store{Path: tempDir}, diskWriteStats)
 	if err != nil {
 		t.Fatalf("error encountered when invoking NewRocksDBTempEngine: %+v", err)
 	}

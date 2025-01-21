@@ -38,7 +38,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	tempEngine, _, err := storage.NewTempEngine(
 		ctx,
 		base.DefaultTestTempStorageConfig(st),
-		base.DefaultTestStoreSpec,
+		base.DefaultTestStoreConfig,
 		nil, /* statsCollector */
 	)
 	require.NoError(t, err)

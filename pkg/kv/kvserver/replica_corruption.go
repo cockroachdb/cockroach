@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -47,7 +47,7 @@ func (r *Replica) setCorruptRaftMuLocked(
 
 	auxDir := r.store.TODOEngine().GetAuxiliaryDir()
 	_ = r.store.TODOEngine().Env().MkdirAll(auxDir, os.ModePerm)
-	path := base.PreventedStartupFile(auxDir)
+	path := configpb.PreventedStartupFile(auxDir)
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:
 

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -119,7 +120,7 @@ func TestClusterConnectivity(t *testing.T) {
 	baseServerArgs := base.TestServerArgs{
 		// We're going to manually control initialization in this test.
 		NoAutoInitializeCluster: true,
-		StoreSpecs:              []base.StoreSpec{{InMemory: true}},
+		StoreConfig:             configpb.Storage{Stores: []configpb.Store{{InMemory: true}}},
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				ContextTestingKnobs: rpc.ContextTestingKnobs{
@@ -294,9 +295,7 @@ func TestJoinVersionGate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	commonArg := base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
-			{InMemory: true},
-		},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{InMemory: true}}},
 	}
 
 	numNodes := 3

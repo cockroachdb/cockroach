@@ -9,8 +9,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -295,11 +295,11 @@ func init() {
 func newEncryptedEnv(
 	unencryptedFS vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
 ) (*fs.EncryptionEnv, error) {
-	options := &baseccl.EncryptionOptions{}
+	options := &configpb.EncryptionOptions{}
 	if err := protoutil.Unmarshal(optionBytes, options); err != nil {
 		return nil, err
 	}
-	if options.KeySource != baseccl.EncryptionKeySource_KeyFiles {
+	if options.KeySource != configpb.EncryptionKeySource_KeyFiles {
 		return nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
 	}
 	storeKeyManager := &StoreKeyManager{

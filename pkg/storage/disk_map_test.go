@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -177,7 +178,7 @@ func TestPebbleMap(t *testing.T) {
 	e, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
+	}, configpb.Store{}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +197,7 @@ func TestPebbleMultiMap(t *testing.T) {
 	e, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
+	}, configpb.Store{}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +216,7 @@ func TestPebbleMapClose(t *testing.T) {
 	e, _, err := newPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
+	}, configpb.Store{}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +323,7 @@ func BenchmarkPebbleMapWrite(b *testing.B) {
 	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.DefaultTestStoreSpec, disk.NewWriteStatsManager(vfs.Default))
+	}, base.DefaultTestStoreConfig, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -363,7 +364,7 @@ func BenchmarkPebbleMapIteration(b *testing.B) {
 	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.DefaultTestStoreSpec, disk.NewWriteStatsManager(vfs.Default))
+	}, base.DefaultTestStoreConfig, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		b.Fatal(err)
 	}

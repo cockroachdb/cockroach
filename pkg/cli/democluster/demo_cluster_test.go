@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -129,16 +130,16 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 
-			assert.Len(t, actual.StoreSpecs, 1)
+			assert.Len(t, actual.StoreConfig.Stores, 1)
 			assert.Equal(
 				t,
 				fmt.Sprintf("demo-server%d", tc.serverIdx),
-				actual.StoreSpecs[0].StickyVFSID,
+				actual.StoreConfig.Stores[0].StickyVFSID,
 			)
 
 			// We cannot compare these.
 			actual.Stopper = nil
-			actual.StoreSpecs = nil
+			actual.StoreConfig = configpb.Storage{}
 			actual.Knobs.JobsTestingKnobs = nil
 
 			assert.Equal(t, tc.expected, actual)

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -190,19 +191,22 @@ func makeSharedProcessTenantServerConfig(
 	//
 	// First, determine if there's a disk store or whether we will
 	// use an in-memory store.
-	candidateSpec := kvServerCfg.Stores.Specs[0]
-	for _, storeSpec := range kvServerCfg.Stores.Specs {
+	var candidateSpec *configpb.Store
+	for _, storeSpec := range kvServerCfg.StorageConfig.Stores {
+		if candidateSpec == nil {
+			candidateSpec = &storeSpec
+		}
 		if storeSpec.InMemory {
 			continue
 		}
-		candidateSpec = storeSpec
+		candidateSpec = &storeSpec
 		break
 	}
 	// Then construct a spec. The logic above either selected an
 	// in-memory store (e.g. in tests) or the first on-disk store. In
 	// the on-disk case, we reuse the original spec; this propagates
 	// all the common store parameters.
-	storeSpec := candidateSpec
+	storeSpec := *candidateSpec
 	if !storeSpec.InMemory {
 		storeDir := filepath.Join(storeSpec.Path, "tenant-"+tenantID.String())
 		if err := os.MkdirAll(storeDir, 0755); err != nil {
@@ -312,11 +316,10 @@ func makeSharedProcessTenantServerConfig(
 	if !tempStorageCfg.InMemory {
 		useStore := tempStorageCfg.Spec
 		// TODO(knz): Make tempDir configurable.
-		tempDir := useStore.Path
-		if tempStorageCfg.Path, err = fs.CreateTempDir(tempDir, TempDirPrefix, stopper); err != nil {
-			return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
-		}
 		if useStore.Path != "" {
+			if tempStorageCfg.Path, err = fs.CreateTempDir(useStore.Path, TempDirPrefix, stopper); err != nil {
+				return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
+			}
 			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
 			if err := fs.RecordTempDir(recordPath, tempStorageCfg.Path); err != nil {
 				return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not record temp dir")

@@ -33,9 +33,12 @@ func init() {
 // specs with the parsed stores and populates some fields in the StoreSpec and
 // WAL failover config.
 func populateStoreSpecsEncryption() error {
-	return baseccl.PopulateWithEncryptionOpts(
-		cli.GetServerCfgStores(),
-		cli.GetWALFailoverConfig(),
-		encryptionSpecs,
-	)
+	// FIXME: Populate the StorageConfig with the encryption specs. This needs
+	// to be done after the storage is set up correctly.
+	return nil
+	// return baseccl.PopulateWithEncryptionOpts(
+	// 	cli.GetServerCfgStores(),
+	// 	cli.GetWALFailoverConfig(),
+	// 	encryptionSpecs,
+	// )
 }

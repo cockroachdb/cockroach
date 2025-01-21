@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -608,10 +609,10 @@ func TestAdminRelocateRangeLaterallyAmongStores(t *testing.T) {
 	// Set up a test cluster with each node having 2 stores.
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{
 				{InMemory: true},
 				{InMemory: true},
-			},
+			}},
 		},
 		ReplicationMode: base.ReplicationManual,
 	}

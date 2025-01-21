@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -75,11 +76,10 @@ type TestServerArgs struct {
 	// will be set to the address of the cluster's first node.
 	JoinAddr string
 
-	// StoreSpecs define the stores for this server. If you want more than
-	// one store per node, populate this array with StoreSpecs each
-	// representing a store. If no StoreSpecs are provided then a single
-	// DefaultTestStoreSpec will be used.
-	StoreSpecs []StoreSpec
+	// StoreConfig define the stores for this server. If you want more than one
+	// store per node, populate this struct appropriately If no StoreConfig is
+	// provided then a single DefaultTestStoreConfig will be used.
+	StoreConfig configpb.Storage
 
 	// Locality is optional and will set the server's locality.
 	Locality roachpb.Locality
@@ -486,25 +486,23 @@ func InternalNonDefaultDecision(
 }
 
 var (
-	// DefaultTestStoreSpec is just a single in memory store of 512 MiB
+	// DefaultTestStoreConfig is just a single in memory store of 512 MiB
 	// with no special attributes.
-	DefaultTestStoreSpec = StoreSpec{
-		InMemory: true,
-		Size: SizeSpec{
-			InBytes: 512 << 20,
-		},
+	DefaultTestStoreConfig = configpb.Store{
+		InMemory:   true,
+		Properties: configpb.DiskProperties{Capacity: 512 << 20},
 	}
 )
 
 // DefaultTestTempStorageConfig is the associated temp storage for
-// DefaultTestStoreSpec that is in-memory.
+// DefaultTestStoreConfig that is in-memory.
 // It has a maximum size of 100MiB.
 func DefaultTestTempStorageConfig(st *cluster.Settings) TempStorageConfig {
 	return DefaultTestTempStorageConfigWithSize(st, DefaultInMemTempStorageMaxSizeBytes)
 }
 
 // DefaultTestTempStorageConfigWithSize is the associated temp storage for
-// DefaultTestStoreSpec that is in-memory with the customized maximum size.
+// DefaultTestStoreConfig that is in-memory with the customized maximum size.
 func DefaultTestTempStorageConfigWithSize(
 	st *cluster.Settings, maxSizeBytes int64,
 ) TempStorageConfig {
@@ -518,7 +516,7 @@ func DefaultTestTempStorageConfigWithSize(
 	return TempStorageConfig{
 		InMemory: true,
 		Mon:      monitor,
-		Spec:     DefaultTestStoreSpec,
+		Spec:     DefaultTestStoreConfig,
 		Settings: st,
 	}
 }

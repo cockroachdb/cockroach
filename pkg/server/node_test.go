@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -139,20 +140,18 @@ func TestBootstrapNewStore(t *testing.T) {
 	// Start server with persisted store so that it gets bootstrapped.
 	{
 		s := serverutils.StartServerOnly(t, base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{Path: path},
-			},
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: path}}},
 		})
 		s.Stopper().Stop(ctx)
 	}
 
-	specs := []base.StoreSpec{
+	specs := []configpb.Store{
 		{Path: path},
 		{InMemory: true},
 		{InMemory: true},
 	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		StoreSpecs: specs,
+		StoreConfig: configpb.Storage{Stores: specs},
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -186,7 +185,7 @@ func TestStartManyStores(t *testing.T) {
 	path, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	specs := []base.StoreSpec{
+	specs := []configpb.Store{
 		{Path: path},
 		{InMemory: true},
 		{InMemory: true},
@@ -211,7 +210,7 @@ func TestStartManyStores(t *testing.T) {
 	}
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		StoreSpecs: specs,
+		StoreConfig: configpb.Storage{Stores: specs},
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -247,10 +246,10 @@ func TestNodeJoin(t *testing.T) {
 	// one will join the first.
 	perNode := map[int]base.TestServerArgs{}
 	perNode[0] = base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{
 			{InMemory: true},
 			{InMemory: true},
-		},
+		}},
 	}
 	perNode[1] = perNode[0]
 
@@ -267,7 +266,7 @@ func TestNodeJoin(t *testing.T) {
 	// Verify all stores are initialized.
 	for i := 0; i < numNodes; i++ {
 		testutils.SucceedsSoon(t, func() error {
-			exp := len(perNode[i].StoreSpecs)
+			exp := len(perNode[i].StoreConfig.Stores)
 			sc := s.Server(i).GetStores().(*kvserver.Stores).GetStoreCount()
 			if sc != exp {
 				return errors.Errorf("%d: saw only %d out of %d stores", i, sc, exp)
@@ -540,12 +539,9 @@ func TestNodeEmitsLowDiskSpaceEvents(t *testing.T) {
 				StickyVFSRegistry: stickyRegistry,
 			},
 		},
-		StoreSpecs: []base.StoreSpec{
-			{
-				InMemory:    true,
-				StickyVFSID: "foo",
-			},
-		},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{
+			{InMemory: true, StickyVFSID: "foo"},
+		}},
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	})
 	defer ts.Stopper().Stop(ctx)
@@ -1035,12 +1031,12 @@ func TestGetTenantWeights(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	specs := []base.StoreSpec{
+	specs := []configpb.Store{
 		{InMemory: true},
 		{InMemory: true},
 	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		StoreSpecs: specs,
+		StoreConfig: configpb.Storage{Stores: specs},
 	})
 	defer s.Stopper().Stop(ctx)
 	// Wait until both stores are started properly.
@@ -1140,20 +1136,22 @@ func TestDiskStatsMap(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	specs := []base.StoreSpec{
-		{
-			ProvisionedRateSpec: base.ProvisionedRateSpec{
-				ProvisionedBandwidth: 0,
-			},
-			Path: "foo",
-		},
-		{
-			ProvisionedRateSpec: base.ProvisionedRateSpec{
-				ProvisionedBandwidth: 200,
-			},
-			Path: "bar",
-		},
-	}
+	// FIXME: Should these be options to the engine?
+	// specs := []base.StoreSpec{
+	// 	{
+	// 		ProvisionedRateSpec: base.ProvisionedRateSpec{
+	// 			ProvisionedBandwidth: 0,
+	// 		},
+	// 		Path: "foo",
+	// 	},
+	// 	{
+	// 		ProvisionedRateSpec: base.ProvisionedRateSpec{
+	// 			ProvisionedBandwidth: 200,
+	// 		},
+	// 		Path: "bar",
+	// 	},
+	// }
+
 	// Engines.
 	engines := []storage.Engine{
 		storage.NewDefaultInMemForTesting(),
@@ -1183,7 +1181,7 @@ func TestDiskStatsMap(t *testing.T) {
 		monitors: map[string]*testDiskStatsMonitor{},
 	}
 	// diskStatsMap initialized with these two stores.
-	require.NoError(t, dsm.initDiskStatsMap(specs, engines, diskManager))
+	require.NoError(t, dsm.initDiskStatsMap(engines, diskManager))
 
 	// Populate disk monitor stats.
 	diskManager.injectStats(map[string]disk.Stats{

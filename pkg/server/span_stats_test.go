@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -73,10 +74,13 @@ func TestSpanStatsFanOut(t *testing.T) {
 	ctx := context.Background()
 	const numNodes = 3
 	serverArgs := base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec},
+		StoreConfig: configpb.Storage{
+			Stores: []configpb.Store{
+				base.DefaultTestStoreConfig,
+				base.DefaultTestStoreConfig,
+				base.DefaultTestStoreConfig,
+			},
+		},
 	}
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
@@ -241,10 +245,13 @@ func TestSpanStatsMultiStoreReplicationOff(t *testing.T) {
 	ctx := context.Background()
 	const numNodes = 3
 	serverArgs := base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec},
+		StoreConfig: configpb.Storage{
+			Stores: []configpb.Store{
+				base.DefaultTestStoreConfig,
+				base.DefaultTestStoreConfig,
+				base.DefaultTestStoreConfig,
+			},
+		},
 	}
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
