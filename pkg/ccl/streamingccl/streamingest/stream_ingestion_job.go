@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -39,6 +40,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+var maxIngestionProcessorShutdownWait = 5 * time.Minute
 
 type streamIngestionResumer struct {
 	job *jobs.Job
@@ -480,6 +483,10 @@ func maybeRevertToCutoverTimestamp(
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
 	}
+	if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, ingestionJob, maxIngestionProcessorShutdownWait); err != nil {
+		return cutoverTimestamp, false, errors.Wrapf(err, "unable to verify that attempted LDR job %d had stopped offline ingesting %s", ingestionJob.ID(), maxIngestionProcessorShutdownWait)
+	}
+	log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", ingestionJob.ID())
 
 	minProgressUpdateInterval := 15 * time.Second
 	progMetric := p.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicationCutoverProgress
@@ -571,6 +578,14 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 		telemetry.Count("physical_replication.canceled")
 	} else {
 		telemetry.Count("physical_replication.failed")
+	}
+
+	// Ensure no sip processors are still ingesting data, so a subsequent DROP
+	// TENANT cmd will cleanly wipe out all data.
+	if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, s.job, maxIngestionProcessorShutdownWait); err != nil {
+		log.Warningf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", s.job.ID(), maxIngestionProcessorShutdownWait, err)
+	} else {
+		log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", s.job.ID())
 	}
 
 	return execCfg.InternalDB.Txn(ctx, func(
