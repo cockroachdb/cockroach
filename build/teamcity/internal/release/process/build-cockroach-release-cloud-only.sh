@@ -90,3 +90,21 @@ if [ $error = 1 ]; then
   exit 1
 fi
 tc_end_block "Verify docker images"
+
+tc_start_block "Metadata"
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+metadata_file="artifacts/metadata.json"
+mkdir -p artifacts
+cat > "$metadata_file" << EOF
+{
+  "sha": "$BUILD_VCS_NUMBER",
+  "timestamp": "$timestamp",
+  "tag": "$TC_BUILD_BRANCH",
+  "version": "$version",
+  "cloud_release": "$cloud_release",
+  "image": "$manifest"
+}
+EOF
+# Run jq to pretty print and validate JSON
+jq . "$metadata_file"
+tc_end_block "Metadata"
