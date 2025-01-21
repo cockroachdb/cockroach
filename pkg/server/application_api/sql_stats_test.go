@@ -1425,7 +1425,6 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(0)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(1)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(2)},
-				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(3)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(4)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(5)},
 			},
@@ -1441,7 +1440,6 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(0)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(1)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(2)},
-				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(3)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(4)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(5)},
 			},
@@ -1454,8 +1452,6 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 			expectedTxnsTable:  server.CrdbInternalTxnStatsPersisted,
 			// These sort options do not exist on the activity table.
 			reqs: []serverpb.CombinedStatementsStatsRequest{
-				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(6)},
-				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(7)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(8)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(9)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(10)},
@@ -1495,7 +1491,6 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(0)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(1)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(2)},
-				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(3)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(4)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(5)},
 			},
