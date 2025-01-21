@@ -162,7 +162,7 @@ func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -271,8 +271,8 @@ func testLogicalStreamIngestionJobBasic(t *testing.T, mode string) {
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var (
 		jobAID jobspb.JobID
@@ -315,8 +315,8 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var (
 		jobAID jobspb.JobID
@@ -371,7 +371,7 @@ func TestCreateTables(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	sqlA := sqlDBs[0]
-	aURL := replicationtestutils.GetReplicationUri(t, srv, srv, serverutils.DBName("a"))
+	aURL := replicationtestutils.GetExternalConnectionURI(t, srv, srv, serverutils.DBName("a"))
 
 	t.Run("basic", func(t *testing.T) {
 		// Ensure the offline scan replicates index spans.
@@ -447,9 +447,8 @@ func TestCreateTables(t *testing.T) {
 		sqlA.Exec(t, "INSERT INTO tab3 VALUES (1, 'hello')")
 
 		sqlA.Exec(t, "CREATE DATABASE d")
+		dURL := replicationtestutils.GetExternalConnectionURI(t, srv, srv, serverutils.DBName("d"))
 		sqlD := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("d")))
-		dURL, cleanup := srv.PGUrl(t, serverutils.DBName("d"))
-		defer cleanup()
 
 		var jobID jobspb.JobID
 		sqlD.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab3 FROM TABLE tab3 ON $1 WITH BIDIRECTIONAL ON $2", aURL.String(), dURL.String()).Scan(&jobID)
@@ -469,16 +468,20 @@ func TestCreateTables(t *testing.T) {
 
 		sqlA.Exec(t, "CREATE DATABASE e")
 		sqlE := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("e")))
-		eURL, cleanup := srv.PGUrl(t, serverutils.DBName("e"))
-		defer cleanup()
+		eURL := replicationtestutils.GetExternalConnectionURI(t, srv, srv, serverutils.DBName("e"))
 		sqlE.ExpectErr(t, "either BIDIRECTIONAL or UNIDRECTIONAL must be specified", "CREATE LOGICALLY REPLICATED TABLE b.tab4 FROM TABLE tab4 ON $1", eURL.String())
 		sqlE.ExpectErr(t, "UNIDIRECTIONAL and BIDIRECTIONAL cannot be specified together", "CREATE LOGICALLY REPLICATED TABLE tab4 FROM TABLE tab4 ON $1 WITH BIDIRECTIONAL ON $2, UNIDIRECTIONAL", aURL.String(), eURL.String())
+
+		// Reverse stream uri not an external connection
+		eURLRaw, cleanup := srv.PGUrl(t, serverutils.DBName("e"))
+		defer cleanup()
+		sqlE.ExpectErr(t, "reverse stream uri failed validation", "CREATE LOGICALLY REPLICATED TABLE tab4 FROM TABLE tab4 ON $1 WITH BIDIRECTIONAL ON $2", aURL.String(), eURLRaw.String())
+
 	})
 	t.Run("parent id check", func(t *testing.T) {
 		sqlA.Exec(t, "CREATE DATABASE f")
 		sqlF := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("f")))
-		fURL, cleanup := srv.PGUrl(t, serverutils.DBName("f"))
-		defer cleanup()
+		fURL := replicationtestutils.GetExternalConnectionURI(t, srv, srv, serverutils.DBName("f"))
 
 		sqlF.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
 
@@ -515,8 +518,8 @@ func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var (
 		jobAID jobspb.JobID
@@ -551,7 +554,7 @@ func TestLogicalStreamIngestionCancelUpdatesProducerJob(t *testing.T) {
 
 	dbA.Exec(t, "SET CLUSTER SETTING physical_replication.producer.stream_liveness_track_frequency='50ms'")
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 
 	var jobBID jobspb.JobID
 	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
@@ -580,7 +583,7 @@ func TestRestoreFromLDR(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, args, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 
 	var jobBID jobspb.JobID
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
@@ -610,7 +613,7 @@ func TestImportIntoLDR(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, args, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 
 	var jobBID jobspb.JobID
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
@@ -634,7 +637,7 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 	server := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer server.Stopper().Stop(ctx)
 	s := server.Server(0).ApplicationLayer()
-	url := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	url := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 	urlA := url.String()
 
 	_, err := server.Conns[0].Exec("CREATE DATABASE a")
@@ -669,6 +672,12 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 			"cannot CREATE LOGICAL REPLICATION STREAM in a multi-statement transaction"))
 	})
 
+	t.Run("not external conn", func(t *testing.T) {
+		sourceURI, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+		defer cleanup()
+		dbB.ExpectErr(t, "uri must be an external connection", "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", sourceURI.String())
+	})
+
 }
 
 func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
@@ -697,7 +706,7 @@ family f2(other_payload, v2))
 
 	serverASQL.Exec(t, "INSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (1, 'hello', 'ruroh1')")
 
-	serverAURL := replicationtestutils.GetReplicationUri(t, s, s)
+	serverAURL := replicationtestutils.GetExternalConnectionURI(t, s, s)
 	serverAURL.Path = "a"
 
 	var jobBID jobspb.JobID
@@ -729,7 +738,7 @@ func TestLogicalReplicationWithPhantomDelete(t *testing.T) {
 	tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
-	serverAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	serverAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 
 	for _, mode := range []string{"validated", "immediate"} {
 		t.Run(mode, func(t *testing.T) {
@@ -768,8 +777,8 @@ func TestFilterRangefeedInReplicationStream(t *testing.T) {
 
 	dbA, dbB, dbC := dbs[0], dbs[1], dbs[2]
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var jobAID, jobBID, jobCID jobspb.JobID
 
@@ -834,7 +843,7 @@ func TestRandomTables(t *testing.T) {
 	var tableName, streamStartStmt string
 	rng, _ := randutil.NewPseudoRand()
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 
 	// Keep retrying until the random table satisfies all the static checks
 	// we make when creating the replication stream.
@@ -989,7 +998,7 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	baseTableName := "rand_table"
 	rng, _ := randutil.NewPseudoRand()
 	numInserts := 20
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
 	for i, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tableName := fmt.Sprintf("%s%d", baseTableName, i)
@@ -1079,8 +1088,8 @@ func TestLogicalAutoReplan(t *testing.T) {
 	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_threshold", 0)
 	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_frequency", time.Millisecond*500)
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var (
 		jobAID jobspb.JobID
@@ -1143,7 +1152,7 @@ func TestLogicalJobResiliency(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 3)
 	defer server.Stopper().Stop(ctx)
 
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	CreateScatteredTable(t, dbB, 2, "B")
 
@@ -1194,8 +1203,8 @@ func TestHeartbeatCancel(t *testing.T) {
 
 	serverutils.SetClusterSetting(t, server, "logical_replication.consumer.heartbeat_frequency", time.Second*1)
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var (
 		jobAID jobspb.JobID
@@ -1383,7 +1392,7 @@ func TestForeignKeyConstraints(t *testing.T) {
 	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	dbA.Exec(t, "CREATE TABLE test(a int primary key, b int)")
 
@@ -1533,7 +1542,7 @@ func CreateScatteredTable(t *testing.T, db *sqlutils.SQLRunner, numNodes int, db
 func GetPGURLs(t *testing.T, s serverutils.ApplicationLayerInterface, dbNames []string) []url.URL {
 	result := []url.URL{}
 	for _, name := range dbNames {
-		resultURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName(name))
+		resultURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName(name))
 		result = append(result, resultURL)
 	}
 	return result
@@ -1686,8 +1695,8 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	dbB.Exec(t, lwwFunc)
 	dbA.Exec(t, lwwFunc)
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"))
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var (
 		jobAID jobspb.JobID
@@ -1805,8 +1814,8 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbAURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("a"), serverutils.UserPassword(username.RootUser, "password"))
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"), serverutils.UserPassword(username.RootUser, "password"))
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"), serverutils.UserPassword(username.RootUser, "password"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"), serverutils.UserPassword(username.RootUser, "password"))
 
 	var (
 		jobAID jobspb.JobID
@@ -1946,7 +1955,7 @@ func TestUserPrivileges(t *testing.T) {
 	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	// Create user with no privileges
 	dbA.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
@@ -2024,7 +2033,7 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var jobAID jobspb.JobID
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
@@ -2065,7 +2074,7 @@ func TestUserDefinedTypes(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	// Create the same user-defined type both tables.
 	dbA.Exec(t, "CREATE TYPE my_enum AS ENUM ('one', 'two', 'three')")
@@ -2138,15 +2147,18 @@ func TestLogicalReplicationGatewayRoute(t *testing.T) {
 	ts, s, runners, dbs := setupServerWithNumDBs(t, context.Background(), args, 1, 2)
 	defer ts.Stopper().Stop(context.Background())
 
-	url, cleanup := s.PGUrl(t, serverutils.DBName(dbs[1]))
+	sourceUrl, cleanup := s.PGUrl(t, serverutils.DBName(dbs[1]))
 	defer cleanup()
 
-	q := url.Query()
+	q := sourceUrl.Query()
 	q.Set(streamclient.RoutingModeKey, string(streamclient.RoutingModeGateway))
-	url.RawQuery = q.Encode()
+	sourceUrl.RawQuery = q.Encode()
+
+	externalUri := url.URL{Scheme: "external", Host: "replication-uri"}
+	runners[1].Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION '%s' AS '%s'", externalUri.Host, sourceUrl.String()))
 
 	var jobID jobspb.JobID
-	runners[0].QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", url.String()).Scan(&jobID)
+	runners[0].QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", externalUri.String()).Scan(&jobID)
 	runners[1].Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 
 	now := s.Clock().Now()
@@ -2176,7 +2188,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbBURL := replicationtestutils.GetReplicationUri(t, s, s, serverutils.DBName("b"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	// Column families are not allowed.
 	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN new_col INT NOT NULL CREATE FAMILY f1")

@@ -43,7 +43,7 @@ func TestCreateTenantFromReplicationUsingID(t *testing.T) {
 	sqlA := sqlutils.MakeSQLRunner(aDB)
 	sqlB := sqlutils.MakeSQLRunner(bDB)
 
-	serverAURL := replicationtestutils.GetReplicationUri(t, serverA, serverB, serverutils.User(username.RootUser))
+	serverAURL := replicationtestutils.GetReplicationURI(t, serverA, serverB, serverutils.User(username.RootUser))
 
 	verifyCreatedTenant := func(t *testing.T, db *sqlutils.SQLRunner, id int64, fn func()) {
 		const query = "SELECT count(*), count(CASE WHEN id = $1 THEN 1 END) FROM system.tenants"
