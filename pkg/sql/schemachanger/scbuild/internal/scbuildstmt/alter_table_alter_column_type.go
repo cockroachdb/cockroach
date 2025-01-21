@@ -267,7 +267,7 @@ func handleGeneralColumnConversion(
 ) {
 	failIfExplicitTransaction(b)
 	failIfExperimentalSettingNotSet(b, oldColType, newColType)
-	failIfSafeUpdates(b)
+	failIfSafeUpdates(b, t)
 
 	// TODO(#47137): Only support alter statements that only have a single command.
 	switch s := stmt.(type) {
@@ -455,24 +455,6 @@ func failIfExperimentalSettingNotSet(b BuildCtx, oldColType, newColType *scpb.Co
 				"you can enable alter column type general support by running "+
 					"`SET enable_experimental_alter_column_type_general = true`"),
 			pgcode.ExperimentalFeature))
-	}
-}
-
-// failIfSafeUpdates checks if the sql_safe_updates is present, and if so, it
-// will fail the operation.
-func failIfSafeUpdates(b BuildCtx) {
-	if b.SessionData().SafeUpdates {
-		panic(
-			pgerror.WithCandidateCode(
-				errors.WithMessage(
-					errors.New(
-						"ALTER COLUMN TYPE requiring data rewrite may result in data loss "+
-							"for certain type conversions or when applying a USING clause"),
-					"rejected (sql_safe_updates = true)",
-				),
-				pgcode.Warning,
-			),
-		)
 	}
 }
 
