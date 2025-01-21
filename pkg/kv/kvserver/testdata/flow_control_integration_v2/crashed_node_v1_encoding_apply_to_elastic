@@ -14,10 +14,15 @@ echo
 -- Flow token metrics from n1 after issuing 5 1MiB 3x replicated writes
 -- that are yet to get admitted. We see 5*1MiB*3=15MiB deductions of
 -- {regular,elastic} tokens with no corresponding returns.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%tokens%'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%tokens%'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 9.0 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 15 MiB   
@@ -45,14 +50,20 @@ ORDER BY name ASC;
 
 
 -- Observe the per-stream tracked tokens on n1, before n2 is crashed.
-SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
+SELECT
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  store_id,
+  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+FROM
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 5.0 MiB               
-  75       | 2        | 5.0 MiB               
-  75       | 3        | 5.0 MiB               
+  a        | 1        | 5.0 MiB               
+  a        | 2        | 5.0 MiB               
+  a        | 3        | 5.0 MiB               
 
 
 -- (Crashing n2)
@@ -60,21 +71,32 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
 -- Observe the per-stream tracked tokens on n1, after n2 crashed. We're no
 -- longer tracking the 5MiB held by n2.
-SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
+SELECT
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  store_id,
+  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+FROM
+  crdb_internal.kv_flow_control_handles_v2
+ORDER BY
+  range_id, store_id;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  75       | 1        | 5.0 MiB               
-  75       | 3        | 5.0 MiB               
+  a        | 1        | 5.0 MiB               
+  a        | 3        | 5.0 MiB               
 
 
 -- Flow token metrics from n1 after n2 crashed. Observe that we've returned the
 -- 5MiB previously held by n2.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%tokens%'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%tokens%'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 14 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 15 MiB   
