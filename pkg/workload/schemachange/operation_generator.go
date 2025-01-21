@@ -346,13 +346,13 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
-	constaintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
+	constraintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
 
 	columnExistsOnTable, err := og.columnExistsOnTable(ctx, tx, tableName, columnForConstraint.name)
 	if err != nil {
 		return nil, err
 	}
-	constraintExists, err := og.constraintExists(ctx, tx, constaintName)
+	constraintExists, err := og.constraintExists(ctx, tx, tableName.ObjectName, tree.Name(constraintName))
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +391,7 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constaintName, columnForConstraint.name)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constraintName, columnForConstraint.name)
 	return stmt, nil
 }
 
@@ -871,7 +871,7 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	if err != nil {
 		return nil, err
 	}
-	constraintExists, err := og.constraintExists(ctx, tx, string(constraintName))
+	constraintExists, err := og.constraintExists(ctx, tx, childTable.ObjectName, constraintName)
 	if err != nil {
 		return nil, err
 	}
