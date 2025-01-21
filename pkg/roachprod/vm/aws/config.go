@@ -151,6 +151,7 @@ func (s *availabilityZones) UnmarshalJSON(data []byte) error {
 type awsConfigValue struct {
 	path string
 	awsConfig
+	provider *Provider
 }
 
 // Set is part of the pflag.Value interface.
@@ -175,7 +176,7 @@ func (c *awsConfigValue) Set(path string) (err error) {
 		return err
 	}
 	// Update the provider's config with the user-specified config.
-	providerInstance.Config = &c.awsConfig
+	c.provider.Config = &c.awsConfig
 	return nil
 }
 

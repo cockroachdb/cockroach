@@ -353,10 +353,6 @@ type ProviderOpts interface {
 	// ConfigureCreateFlags configures a FlagSet with any options relevant to the
 	// `create` command.
 	ConfigureCreateFlags(*pflag.FlagSet)
-	// ConfigureClusterFlags configures a FlagSet with any options relevant to
-	// cluster manipulation commands (`create`, `destroy`, `list`, `sync` and
-	// `gc`).
-	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
 	// ConfigureClusterCleanupFlags configures a FlagSet with any options relevant to
 	// commands (`gc`)
 	ConfigureClusterCleanupFlags(*pflag.FlagSet)
@@ -468,6 +464,10 @@ type ServiceAddress struct {
 
 // A Provider is a source of virtual machines running on some hosting platform.
 type Provider interface {
+	// ConfigureProviderFlags is used to specify flags that apply to the provider
+	// instance and should be used for all clusters managed by the provider.
+	ConfigureProviderFlags(*pflag.FlagSet, MultipleProjectsOption)
+
 	CreateProviderOpts() ProviderOpts
 	CleanSSH(l *logger.Logger) error
 

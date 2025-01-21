@@ -157,11 +157,12 @@ func initCreateCmdFlags(createCmd *cobra.Command) {
 
 	// Allow each Provider to inject additional configuration flags
 	for _, providerName := range vm.AllProviderNames() {
-		if vm.Providers[providerName].Active() {
+		provider := vm.Providers[providerName]
+		if provider.Active() {
 			providerOptsContainer[providerName].ConfigureCreateFlags(createCmd.Flags())
 			// createCmd only accepts a single GCE project, as opposed to all the other
 			// commands.
-			providerOptsContainer[providerName].ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
+			provider.ConfigureProviderFlags(createCmd.Flags(), vm.SingleProject)
 		}
 	}
 }
@@ -170,7 +171,8 @@ func initClusterFlagsForMultiProjects(
 	rootCmd *cobra.Command, excludeFromClusterFlagsMulti []*cobra.Command,
 ) {
 	for _, providerName := range vm.AllProviderNames() {
-		if vm.Providers[providerName].Active() {
+		provider := vm.Providers[providerName]
+		if provider.Active() {
 			for _, cmd := range rootCmd.Commands() {
 				excludeCmd := false
 				for _, c := range excludeFromClusterFlagsMulti {
@@ -182,7 +184,7 @@ func initClusterFlagsForMultiProjects(
 				if excludeCmd {
 					continue
 				}
-				providerOptsContainer[providerName].ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
+				provider.ConfigureProviderFlags(cmd.Flags(), vm.AcceptMultipleProjects)
 			}
 		}
 	}

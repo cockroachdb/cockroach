@@ -981,6 +981,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 // (Provider.Projects).
 type ProjectsVal struct {
 	AcceptMultipleProjects bool
+	Provider               *Provider
 }
 
 // DefaultZones is the list of  zones used by default for cluster creation.
@@ -1023,7 +1024,7 @@ func (v ProjectsVal) Set(projects string) error {
 	if !v.AcceptMultipleProjects && len(prj) > 1 {
 		return fmt.Errorf("multiple GCE projects not supported for command")
 	}
-	providerInstance.Projects = prj
+	v.Provider.Projects = prj
 	return nil
 }
 
@@ -1110,8 +1111,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		false, "Enables the cron service (it is disabled by default)")
 }
 
-// ConfigureClusterFlags implements vm.ProviderFlags.
-func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
+// ConfigureProviderFlags implements Provider
+func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
 	var usage string
 	if opt == vm.SingleProject {
 		usage = "GCE project to manage"
@@ -1127,9 +1128,8 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		usage)
 
 	// Flags about DNS override the default values in
-	// providerInstance.dnsProvider.
-
-	dnsProviderInstance := providerInstance.dnsProvider
+	// dnsProvider.
+	dnsProviderInstance := p.dnsProvider
 	flags.StringVar(
 		&dnsProviderInstance.dnsProject, ProviderName+"-dns-project",
 		dnsProviderInstance.dnsProject,
@@ -1161,16 +1161,15 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 	)
 
 	// Flags about the GCE project to use override the defaults in
-	// providerInstance.
-
+	// the provider.
 	flags.StringVar(
-		&providerInstance.metadataProject, ProviderName+"-metadata-project",
-		providerInstance.metadataProject,
+		&p.metadataProject, ProviderName+"-metadata-project",
+		p.metadataProject,
 		"google cloud project to use to store and fetch SSH keys",
 	)
 	flags.StringVar(
-		&providerInstance.defaultProject, ProviderName+"-default-project",
-		providerInstance.defaultProject,
+		&p.defaultProject, ProviderName+"-default-project",
+		p.defaultProject,
 		"google cloud project to use to run core roachprod services",
 	)
 }

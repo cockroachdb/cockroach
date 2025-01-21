@@ -55,6 +55,10 @@ func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
 	return DefaultProviderOpts()
 }
 
+// ConfigureProviderFlags implements vm.ProviderFlags and is a no-op.
+func (p *Provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
+}
+
 // ConfigureCreateFlags implements vm.ProviderFlags.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.DurationVar(&providerInstance.OperationTimeout, ProviderName+"-timeout", providerInstance.OperationTimeout,
@@ -80,10 +84,6 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Number of IOPS provisioned for ultra disk, only used if network-disk-type=ultra-disk")
 	flags.StringVar(&o.DiskCaching, ProviderName+"-disk-caching", "none",
 		"Disk caching behavior for attached storage.  Valid values are: none, read-only, read-write.  Not applicable to Ultra disks.")
-}
-
-// ConfigureClusterFlags implements vm.ProviderFlags and is a no-op.
-func (o *ProviderOpts) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
 
 // ConfigureClusterCleanupFlags is part of ProviderOpts.

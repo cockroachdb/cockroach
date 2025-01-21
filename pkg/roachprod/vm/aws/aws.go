@@ -335,7 +335,8 @@ func (p *Provider) GetPreemptedSpotVMs(
 //
 // Sample error message:
 //
-// ‹An error occurred (InvalidInstanceID.NotFound) when calling the DescribeInstances operation: The instance IDs 'i-02e9adfac0e5fa18f, i-0bc7869fda0299caa' do not exist›
+// ‹An error occurred (InvalidInstanceID.NotFound) when calling the DescribeInstances operation: The instance IDs 'i-02e9adfac0e5fa18f, i-0bc7869fda0299caa'
+// do not exist›
 func getInstanceIDsNotFound(errorMsg string) []string {
 	// Regular expression pattern to find instance IDs between single quotes
 	re := regexp.MustCompile(`'([^']*)'`)
@@ -514,22 +515,24 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		false, "use AWS Spot VMs, which are significantly cheaper, but can be preempted by AWS.")
 	flags.StringVar(&providerInstance.IAMProfile, ProviderName+"-iam-profile", providerInstance.IAMProfile,
 		"the IAM instance profile to associate with created VMs if non-empty")
-
-}
-
-// ConfigureClusterFlags implements vm.ProviderOpts.
-func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
-	flags.StringVar(&providerInstance.Profile, ProviderName+"-profile", os.Getenv("AWS_PROFILE"),
-		"Profile to manage cluster in")
-	configFlagVal := awsConfigValue{awsConfig: *DefaultConfig}
-	flags.Var(&configFlagVal, ProviderName+"-config",
-		"Path to json for aws configuration, defaults to predefined configuration")
 }
 
 // ConfigureClusterCleanupFlags implements ProviderOpts.
 func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
 	flags.StringSliceVar(&providerInstance.AccountIDs, ProviderName+"-account-ids", []string{},
 		"AWS account ids as a comma-separated string")
+}
+
+// ConfigureProviderFlags is part of the vm.Provider interface.
+func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
+	flags.StringVar(&p.Profile, ProviderName+"-profile", os.Getenv("AWS_PROFILE"),
+		"Profile to manage cluster in")
+	configFlagVal := awsConfigValue{
+		awsConfig: *DefaultConfig,
+		provider:  p,
+	}
+	flags.Var(&configFlagVal, ProviderName+"-config",
+		"Path to json for aws configuration, defaults to predefined configuration")
 }
 
 // CleanSSH is part of vm.Provider.  This implementation is a no-op,
