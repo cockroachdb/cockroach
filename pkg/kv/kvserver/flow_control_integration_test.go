@@ -88,6 +88,13 @@ func TestFlowControlBasicV2(t *testing.T) {
 									OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 										return v2EnabledWhenLeaderLevel
 									},
+									OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+										// This test asserts on the exact values of tracked tokens. In
+										// non-test code, the tokens deducted are a few bytes off (give
+										// or take) from the size of the proposals. We don't care about
+										// such differences.
+										return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+									},
 								},
 							},
 							AdmissionControl: &admission.TestingKnobs{
@@ -122,7 +129,7 @@ func TestFlowControlBasicV2(t *testing.T) {
 
 				h.comment(`-- (Issuing + admitting a 1MiB, triply replicated write...)`)
 				h.log("sending put request")
-				h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+				h.put(ctx, k, 1, testFlowModeToPri(mode))
 				h.log("sent put request")
 
 				h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
@@ -182,6 +189,13 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 								OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 									return v2EnabledWhenLeaderLevel
 								},
+								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+									// This test asserts on the exact values of tracked tokens. In
+									// non-test code, the tokens deducted are a few bytes off (give
+									// or take) from the size of the proposals. We don't care about
+									// such differences.
+									return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+								},
 							},
 						},
 					},
@@ -207,7 +221,7 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 			// drained.
 			h.resetV2TokenMetrics(ctx)
 			h.comment("(Sending 1 MiB put request to pre-split range.)")
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
 			h.comment("(Sent 1 MiB put request to pre-split range.)")
 
 			h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
@@ -222,13 +236,16 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 			left, right := tc.SplitRangeOrFatal(t, k.Next())
 			h.waitForConnectedStreams(ctx, right.RangeID, 3, 0 /* serverIdx */)
 
-			h.comment("(Sending 2 MiB put request to post-split LHS range.)")
-			h.put(ctx, k, 2<<20 /* 2MiB */, testFlowModeToPri(mode))
-			h.comment("(Sent 2 MiB put request to post-split LHS range.)")
+			h.comment("(Sending 2 x 1 MiB put request to post-split LHS range.)")
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
+			h.comment("(Sent 2 x 1 MiB put request to post-split LHS range.)")
 
-			h.comment("(Sending 3 MiB put request to post-split RHS range.)")
-			h.put(ctx, roachpb.Key(right.StartKey), 3<<20 /* 3MiB */, testFlowModeToPri(mode))
-			h.comment("(Sent 3 MiB put request to post-split RHS range.)")
+			h.comment("(Sending 3 x 1 MiB put request to post-split RHS range.)")
+			h.put(ctx, roachpb.Key(right.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(right.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(right.StartKey), 1, testFlowModeToPri(mode))
+			h.comment("(Sent 3 x 1 MiB put request to post-split RHS range.)")
 
 			h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
 			h.comment(`
@@ -245,9 +262,12 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 			h.comment(`-- (Merging ranges.)`)
 			merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
 
-			h.comment("(Sending 4 MiB put request to post-merge range.)")
-			h.put(ctx, roachpb.Key(merged.StartKey), 4<<20 /* 4MiB */, testFlowModeToPri(mode))
-			h.comment("(Sent 4 MiB put request to post-merge range.)")
+			h.comment("(Sending 4 x 1 MiB put request to post-merge range.)")
+			h.put(ctx, roachpb.Key(merged.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(merged.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(merged.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(merged.StartKey), 1, testFlowModeToPri(mode))
+			h.comment("(Sent 4 x 1 MiB put request to post-merge range.)")
 
 			h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
 			h.comment(`
@@ -292,6 +312,13 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 								OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 									return v2EnabledWhenLeaderLevel
 								},
+								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+									// This test asserts on the exact values of tracked tokens. In
+									// non-test code, the tokens deducted are a few bytes off (give
+									// or take) from the size of the proposals. We don't care about
+									// such differences.
+									return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+								},
 							},
 						},
 						AdmissionControl: &admission.TestingKnobs{
@@ -326,7 +353,7 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 			h.comment(`-- (Issuing 5 1MiB, 3x replicated write that's not admitted.)`)
 			h.log("sending put requests")
 			for i := 0; i < 5; i++ {
-				h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+				h.put(ctx, k, 1, testFlowModeToPri(mode))
 			}
 			h.log("sent put requests")
 
@@ -403,14 +430,12 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 								OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 									return v2EnabledWhenLeaderLevel
 								},
-								OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
-									// This test sends several puts, with each put potentially
-									// diverging by a few bytes between runs, in aggregate this
-									// can accumulate to enough tokens to produce a diff in
-									// metrics. Round the token deductions to the nearest MiB avoid
-									// this.
-									return kvflowcontrol.Tokens(
-										int64(math.Round(float64(tokens)/float64(1<<20))) * 1 << 20)
+								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+									// This test asserts on the exact values of tracked tokens. In
+									// non-test code, the tokens deducted are a few bytes off (give
+									// or take) from the size of the proposals. We don't care about
+									// such differences.
+									return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
 								},
 							},
 						},
@@ -444,8 +469,8 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 			h.resetV2TokenMetrics(ctx)
 
 			h.comment(`(Sending 2 x 1 MiB put request to pre-split range)`)
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
-			h.put(ctx, k.Next(), 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
+			h.put(ctx, k.Next(), 1, testFlowModeToPri(mode))
 			h.comment(`(Sent 2 x 1 MiB put request to pre-split range)`)
 
 			h.comment(`
@@ -460,13 +485,16 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 			left, right := tc.SplitRangeOrFatal(t, k.Next())
 			h.waitForConnectedStreams(ctx, right.RangeID, 3, 0 /* serverIdx */)
 
-			h.comment(`(Sending 2 MiB put request to post-split LHS range)`)
-			h.put(ctx, k, 2<<20 /* 2MiB */, testFlowModeToPri(mode))
-			h.comment(`(Sent 2 MiB put request to post-split LHS range)`)
+			h.comment(`(Sending 2 x 1 MiB put request to post-split LHS range)`)
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
+			h.comment(`(Sent 2 x 1 MiB put request to post-split LHS range)`)
 
-			h.comment(`(Sending 3 MiB put request to post-split RHS range)`)
-			h.put(ctx, roachpb.Key(right.StartKey), 3<<20 /* 3MiB */, testFlowModeToPri(mode))
-			h.comment(`(Sent 3 MiB put request to post-split RHS range)`)
+			h.comment(`(Sending 3 x 1 MiB put request to post-split RHS range)`)
+			h.put(ctx, roachpb.Key(right.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(right.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(right.StartKey), 1, testFlowModeToPri(mode))
+			h.comment(`(Sent 3 x 1 MiB put request to post-split RHS range)`)
 
 			h.comment(`
 -- Flow token metrics from n1 after further issuing 2MiB and 3MiB writes to
@@ -482,9 +510,12 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 			h.comment(`-- (Merging ranges.)`)
 			merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
 
-			h.comment(`(Sending 4 MiB put request to post-merge range)`)
-			h.put(ctx, roachpb.Key(merged.StartKey), 4<<20 /* 4MiB */, testFlowModeToPri(mode))
-			h.comment(`(Sent 4 MiB put request to post-merge range)`)
+			h.comment(`(Sending 4 x 1 MiB put request to post-merge range)`)
+			h.put(ctx, roachpb.Key(merged.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(merged.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(merged.StartKey), 1, testFlowModeToPri(mode))
+			h.put(ctx, roachpb.Key(merged.StartKey), 1, testFlowModeToPri(mode))
+			h.comment(`(Sent 4 x 1 MiB put request to post-merge range)`)
 
 			h.comment(`
 -- Flow token metrics from n1 after issuing 4MiB of replicated writes to
@@ -549,6 +580,13 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 								OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 									return v2EnabledWhenLeaderLevel
 								},
+								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+									// This test asserts on the exact values of tracked tokens. In
+									// non-test code, the tokens deducted are a few bytes off (give
+									// or take) from the size of the proposals. We don't care about
+									// such differences.
+									return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+								},
 							},
 						},
 						AdmissionControl: &admission.TestingKnobs{
@@ -583,7 +621,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 			h.comment(`-- (Issuing 5x1MiB, 3x replicated writes that are not admitted.)`)
 			h.log("sending put requests")
 			for i := 0; i < 5; i++ {
-				h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+				h.put(ctx, k, 1, testFlowModeToPri(mode))
 			}
 			h.log("sent put requests")
 
@@ -913,6 +951,13 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 								OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 									return v2EnabledWhenLeaderLevel
 								},
+								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+									// This test asserts on the exact values of tracked tokens. In
+									// non-test code, the tokens deducted are a few bytes off (give
+									// or take) from the size of the proposals. We don't care about
+									// such differences.
+									return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+								},
 							},
 						},
 						AdmissionControl: &admission.TestingKnobs{
@@ -947,7 +992,7 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 			h.resetV2TokenMetrics(ctx)
 
 			h.comment(`-- (Issuing 1x1MiB, 3x replicated write that's not admitted.)`)
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
 
 			h.comment(`
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
@@ -966,7 +1011,7 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
 			h.comment(`-- (Issuing 1x1MiB, 4x replicated write that's not admitted.)`)
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
 
 			h.comment(`
 -- Observe the individual tracked tokens per-stream on the scratch range. s1-s3
@@ -984,7 +1029,7 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 			h.waitForConnectedStreams(ctx, desc.RangeID, 4, 0 /* serverIdx */)
 
 			h.comment(`-- (Issuing 1x1MiB, 4x replicated write (w/ one non-voter) that's not admitted.`)
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
 
 			h.comment(`
 -- Observe the individual tracked tokens per-stream on the scratch range. s1-s2
@@ -1043,6 +1088,13 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 									OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 										return v2EnabledWhenLeaderLevel
 									},
+									OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+										// This test asserts on the exact values of tracked tokens. In
+										// non-test code, the tokens deducted are a few bytes off (give
+										// or take) from the size of the proposals. We don't care about
+										// such differences.
+										return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+									},
 								},
 							},
 							AdmissionControl: &admission.TestingKnobs{
@@ -1080,7 +1132,7 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 				h.resetV2TokenMetrics(ctx)
 
 				h.comment(`-- (Issuing 1x1MiB, 3x replicated write that's not admitted.)`)
-				h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+				h.put(ctx, k, 1, testFlowModeToPri(mode))
 
 				h.comment(`
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
@@ -1172,6 +1224,13 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 								OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 									return v2EnabledWhenLeaderLevel
 								},
+								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+									// This test asserts on the exact values of tracked tokens. In
+									// non-test code, the tokens deducted are a few bytes off (give
+									// or take) from the size of the proposals. We don't care about
+									// such differences.
+									return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+								},
 							},
 						},
 						AdmissionControl: &admission.TestingKnobs{
@@ -1203,7 +1262,7 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 			h.resetV2TokenMetrics(ctx)
 
 			h.comment(`-- (Issuing 1x1MiB, 3x replicated elastic write that's not admitted.)`)
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
 
 			h.comment(`
 -- Flow token metrics from n1 after issuing 1x1MiB elastic 3x replicated write
@@ -1213,7 +1272,7 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 			h.query(n1, v2FlowTokensQueryStr)
 
 			h.comment(`-- (Issuing 1x1MiB, 3x replicated write that's not admitted.)`)
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
 
 			h.comment(`
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
@@ -1323,7 +1382,7 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 			h.resetV2TokenMetrics(ctx)
 
 			h.comment(`-- (Issuing 1x1MiB, 3x replicated elastic write that's not admitted.)`)
-			h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.BulkNormalPri)
+			h.put(ctx, k, 1, admissionpb.BulkNormalPri)
 			h.comment(`
 -- Flow token metrics from n1 after issuing 1x1MiB elastic 3x replicated write
 -- that's not admitted. We see 1*1MiB*3=3MiB deductions of elastic tokens with
@@ -1346,7 +1405,7 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 
 			h.comment(`-- (Issuing another 1x1MiB 3x elastic write.)`)
 			disableWorkQueueGranting.Store(true)
-			h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.BulkNormalPri)
+			h.put(ctx, k, 1, admissionpb.BulkNormalPri)
 			h.query(n1, v2FlowTokensQueryStr)
 
 			h.comment(`
@@ -1398,6 +1457,13 @@ func TestFlowControlTransferLeaseV2(t *testing.T) {
 								OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 									return v2EnabledWhenLeaderLevel
 								},
+								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+									// This test asserts on the exact values of tracked tokens. In
+									// non-test code, the tokens deducted are a few bytes off (give
+									// or take) from the size of the proposals. We don't care about
+									// such differences.
+									return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+								},
 							},
 						},
 						AdmissionControl: &admission.TestingKnobs{
@@ -1429,7 +1495,7 @@ func TestFlowControlTransferLeaseV2(t *testing.T) {
 			h.resetV2TokenMetrics(ctx)
 
 			h.comment(`-- (Issuing 1x1MiB, 3x replicated write that's not admitted.)`)
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
 
 			h.comment(`
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
@@ -1494,6 +1560,13 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 								OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 									return v2EnabledWhenLeaderLevel
 								},
+								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+									// This test asserts on the exact values of tracked tokens. In
+									// non-test code, the tokens deducted are a few bytes off (give
+									// or take) from the size of the proposals. We don't care about
+									// such differences.
+									return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+								},
 							},
 						},
 						AdmissionControl: &admission.TestingKnobs{
@@ -1526,7 +1599,7 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 			h.resetV2TokenMetrics(ctx)
 
 			h.comment(`-- (Issuing 1x1MiB, 3x replicated write that's not admitted.)`)
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
 
 			h.comment(`
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
@@ -1556,7 +1629,7 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 -- (Issuing another 1x1MiB, 3x replicated write that's admitted via 
 -- the work queue on the leaseholder. It shouldn't deduct any tokens.)
 `)
-			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
+			h.put(ctx, k, 1, testFlowModeToPri(mode))
 
 			h.comment(`
 -- Looking at n1's flow token metrics, there's no change. No additional tokens
@@ -1652,7 +1725,7 @@ func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 				// send queue and delay sending + tracking. We need to determine why this
 				// occasionally occurs under race.
 				time.Sleep(1 * time.Millisecond)
-				h.put(ctx, k, 1<<10 /* 1KiB */, testFlowModeToPri(mode))
+				h.put(ctx, k, 1, testFlowModeToPri(mode))
 			}
 			h.log("sent put requests")
 

@@ -55,16 +55,16 @@ ORDER BY
 -- (Splitting range.)
 
 
-(Sending 2 MiB put request to post-split LHS range.)
+(Sending 2 x 1 MiB put request to post-split LHS range.)
 
 
-(Sent 2 MiB put request to post-split LHS range.)
+(Sent 2 x 1 MiB put request to post-split LHS range.)
 
 
-(Sending 3 MiB put request to post-split RHS range.)
+(Sending 3 x 1 MiB put request to post-split RHS range.)
 
 
-(Sent 3 MiB put request to post-split RHS range.)
+(Sent 3 x 1 MiB put request to post-split RHS range.)
 
 
 -- Flow token metrics from n1 after further issuing 2MiB and 3MiB writes to
@@ -126,10 +126,10 @@ ORDER BY
 -- (Merging ranges.)
 
 
-(Sending 4 MiB put request to post-merge range.)
+(Sending 4 x 1 MiB put request to post-merge range.)
 
 
-(Sent 4 MiB put request to post-merge range.)
+(Sent 4 x 1 MiB put request to post-merge range.)
 
 
 -- Flow token metrics from n1 after issuing 4MiB of replicated writes to
