@@ -208,6 +208,8 @@ func TestUploadZipEndToEnd(t *testing.T) {
 				}
 			case "upload-tables":
 				includeFlag = "--include=tables"
+			case "upload-misc":
+				includeFlag = "--include=misc"
 			}
 
 			debugDir, cleanup := setupZipDir(t, testInput)
@@ -398,10 +400,8 @@ func setupDDLogsHook(t *testing.T, req *http.Request) ([]byte, error) {
 
 			fmt.Println("Logs API Hook:", string(raw))
 		}
-	}
-
-	// capture the body contents for the table dump upload use case
-	if bytes.Contains(body.Bytes(), []byte("source:debug-zip")) {
+	} else if bytes.Contains(body.Bytes(), []byte("source:debug-zip")) {
+		// capture the body contents for the table dump upload use case
 		var lines []map[string]any
 		require.NoError(t, json.Unmarshal(body.Bytes(), &lines))
 
@@ -419,6 +419,8 @@ func setupDDLogsHook(t *testing.T, req *http.Request) ([]byte, error) {
 			}
 			fmt.Println()
 		}
+	} else {
+		fmt.Printf("body: %s\n", body.String())
 	}
 
 	return []byte("200 OK"), nil
@@ -574,6 +576,8 @@ func copyZipFiles(t *testing.T, src, dest string) {
 	paths, err := expandPatterns([]string{
 		path.Join(src, "*.txt"),
 		path.Join(src, "nodes/*/*.txt"),
+		path.Join(src, "*.json"),
+		path.Join(src, "reports/*.json"),
 	})
 	require.NoError(t, err)
 

@@ -1,0 +1,11 @@
+{
+  "key_values": {
+    "admission.disk_bandwidth_tokens.elastic.enabled": {
+      "value": "true",
+      "type": "b",
+      "description": "when true, and provisioned bandwidth for the disk corresponding to a store is configured, tokens for elastic work will be limited if disk bandwidth becomes a bottleneck",
+      "public": true,
+      "name": "admission.disk_bandwidth_tokens.elastic.enabled"
+    }
+  }
+}

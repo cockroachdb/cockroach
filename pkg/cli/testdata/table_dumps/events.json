@@ -1,0 +1,11 @@
+{
+  "events": [
+    {
+      "timestamp": "2025-01-21T05:17:42.857695Z",
+      "event_type": "node_restart",
+      "reporting_id": 1,
+      "info": "{\"EventType\":\"node_restart\",\"LastUp\":1737426359068817000,\"NodeID\":1,\"StartedAt\":1737436662756679000,\"Timestamp\":1737436662857695000}",
+      "unique_id": "Kmuncp6KTf+KWiuO3I4aww=="
+    }
+  ]
+}
