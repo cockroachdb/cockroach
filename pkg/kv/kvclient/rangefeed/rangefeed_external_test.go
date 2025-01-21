@@ -1585,7 +1585,7 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 			require.False(t, commitTS.LessEq(c.ResolvedTS),
 				"repl %s emitted checkpoint %s beyond write timestamp %s", repl3, c.ResolvedTS, commitTS)
 		case v := <-valueC:
-			require.Fail(t, "repl3 emitted premature value %s", v)
+			require.Failf(t, "repl3 emitted premature value", "value: %#+v", v)
 		case <-waitC:
 			done = true
 		}

@@ -104,7 +104,6 @@ func newConsistencyQueue(store *Store) *consistencyQueue {
 			acceptsUnsplitRanges:                true,
 			successes:                           store.metrics.ConsistencyQueueSuccesses,
 			failures:                            store.metrics.ConsistencyQueueFailures,
-			storeFailures:                       store.metrics.StoreFailures,
 			pending:                             store.metrics.ConsistencyQueuePending,
 			processingNanos:                     store.metrics.ConsistencyQueueProcessingNanos,
 			processTimeoutFunc:                  makeRateLimitedTimeoutFunc(consistencyCheckRate),

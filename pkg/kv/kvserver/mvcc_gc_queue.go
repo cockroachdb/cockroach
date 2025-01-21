@@ -199,7 +199,6 @@ func newMVCCGCQueue(store *Store) *mvccGCQueue {
 			},
 			successes:       store.metrics.MVCCGCQueueSuccesses,
 			failures:        store.metrics.MVCCGCQueueFailures,
-			storeFailures:   store.metrics.StoreFailures,
 			pending:         store.metrics.MVCCGCQueuePending,
 			processingNanos: store.metrics.MVCCGCQueueProcessingNanos,
 			disabledConfig:  kvserverbase.MVCCGCQueueEnabled,

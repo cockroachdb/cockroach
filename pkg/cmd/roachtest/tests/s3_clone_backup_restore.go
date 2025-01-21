@@ -10,6 +10,8 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"os"
+	"path"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -65,6 +67,42 @@ func registerBackupS3Clones(r registry.Registry) {
 			},
 		})
 	}
+
+	r.Add(registry.TestSpec{
+		Name:                      "backup/minio",
+		Owner:                     registry.OwnerFieldEng,
+		Cluster:                   r.MakeClusterSpec(4, spec.WorkloadNodeCount(1)),
+		EncryptionSupport:         registry.EncryptionMetamorphic,
+		Leases:                    registry.MetamorphicLeases,
+		CompatibleClouds:          registry.Clouds(spec.GCE),
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			v := s3BackupRestoreValidator{
+				t:            t,
+				c:            c,
+				crdbNodes:    c.CRDBNodes(),
+				csvPort:      8081,
+				importNode:   c.Node(1),
+				rows:         1000,
+				workloadNode: c.WorkloadNode(),
+			}
+			v.startCluster(ctx)
+			mgr := minioManager{
+				t:      t,
+				c:      c,
+				bucket: backupTestingBucket,
+				// For now, we use the workload node as the minio cluster
+				minioNodes: c.Node(c.Spec().NodeCount),
+				key:        randomString(32),
+				secret:     randomString(64),
+			}
+			mgr.install(ctx)
+			defer mgr.cleanup(ctx)
+			v.validateBackupRestore(ctx, mgr)
+		},
+	})
+
 }
 
 // s3Provider defines the methods that the S3 object store has to provide
@@ -227,6 +265,32 @@ func (v *s3BackupRestoreValidator) runWorload(ctx context.Context, duration time
 		Flag("duration", duration.String()).
 		String()
 	return v.c.RunE(ctx, option.WithNodes(v.workloadNode), cmd)
+}
+
+func installCa(ctx context.Context, t test.Test, c cluster.Cluster) error {
+	localCertsDir, err := os.MkdirTemp("", "roachtest-certs")
+	if err != nil {
+		return err
+	}
+	// get the ca file from one of the nodes.
+	caFile := path.Join(localCertsDir, "ca.crt")
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+	if err := c.Get(ctx, t.L(), "certs/ca.crt", caFile, c.Node(1)); err != nil {
+		return err
+	}
+	caCert, err := os.ReadFile(caFile)
+	if err != nil {
+		return err
+	}
+	// Disabling caching for Custom CA, see https://github.com/cockroachdb/cockroach/issues/125051.
+	if _, err := conn.ExecContext(ctx, "set cluster setting cloudstorage.s3.session_reuse.enabled = false"); err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, "set cluster setting cloudstorage.http.custom_ca=$1", caCert); err != nil {
+		return err
+	}
+	return nil
 }
 
 // randomString returns a random string with the given size.

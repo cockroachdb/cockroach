@@ -125,7 +125,6 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 			acceptsUnsplitRanges:                false,
 			successes:                           store.metrics.MergeQueueSuccesses,
 			failures:                            store.metrics.MergeQueueFailures,
-			storeFailures:                       store.metrics.StoreFailures,
 			pending:                             store.metrics.MergeQueuePending,
 			processingNanos:                     store.metrics.MergeQueueProcessingNanos,
 			purgatory:                           store.metrics.MergeQueuePurgatory,
