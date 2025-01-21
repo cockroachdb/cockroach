@@ -786,6 +786,7 @@ func init() {
 		statementBundleRecreateCmd,
 		lsNodesCmd,
 		statusNodeCmd,
+		debugZipCmd,
 	}
 	sqlCmds = append(sqlCmds, authCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
@@ -816,7 +817,11 @@ func init() {
 		// 'root'.
 		cliflagcfg.StringFlag(f, &cliCtx.clientOpts.User, cliflags.User)
 
-		cliflagcfg.VarFlag(f, clienturl.NewURLParser(cmd, &cliCtx.clientOpts, true /* strictTLS */, func(format string, args ...interface{}) {
+		var strictTLS = true
+		if cmd == debugZipCmd {
+			strictTLS = false
+		}
+		cliflagcfg.VarFlag(f, clienturl.NewURLParser(cmd, &cliCtx.clientOpts, strictTLS /* strictTLS */, func(format string, args ...interface{}) {
 			fmt.Fprintf(stderr, format, args...)
 		}), cliflags.URL)
 
