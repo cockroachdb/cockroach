@@ -28,6 +28,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -132,7 +133,7 @@ var debugZipUploadOpts = struct {
 // var zipArtifactTypes = []string{"profiles", "logs"}
 // TODO(arjunmahishi): Removing the profiles upload for now. It has started
 // failing for some reason. Will fix this later
-var zipArtifactTypes = []string{"logs", "tables"}
+var zipArtifactTypes = []string{"logs", "tables", "misc"}
 
 // uploadZipArtifactFuncs is a registry of handler functions for each artifact type.
 // While adding/removing functions from here, make sure to update
@@ -141,6 +142,61 @@ var uploadZipArtifactFuncs = map[string]uploadZipArtifactFunc{
 	"profiles": uploadZipProfiles,
 	"logs":     uploadZipLogs,
 	"tables":   uploadZipTables,
+	"misc":     uploadMiscFiles,
+}
+
+func uploadMiscFiles(ctx context.Context, uuid string, dirPath string) error {
+	files := []struct {
+		fileName string
+		message  any
+	}{
+		{settingsFile, &serverpb.SettingsResponse{}},
+		{eventsFile, &serverpb.EventsResponse{}},
+		{rangeLogFile, &serverpb.RangeLogResponse{}},
+		{path.Join("reports", problemRangesFile), &serverpb.ProblemRangesResponse{}},
+	}
+
+	for _, file := range files {
+		if err := parseJSONFile(dirPath, file.fileName, file.message); err != nil {
+			fmt.Fprintf(os.Stderr, "parsing failed for file: %s with error: %s\n", file.fileName, err)
+			continue
+		}
+
+		if err := uploadJSONFile(file.fileName, file.message, uuid); err != nil {
+			fmt.Fprintf(os.Stderr, "upload failed for file: %s with error: %s\n", file.fileName, err)
+		} else {
+			fmt.Fprintf(os.Stderr, "uploaded %s\n", file.fileName)
+		}
+	}
+	return nil
+}
+
+func uploadJSONFile(fileName string, message any, uuid string) error {
+
+	body, err := json.Marshal(struct {
+		Message any    `json:"message"`
+		DDTags  string `json:"ddtags"`
+	}{
+		Message: message,
+		DDTags: strings.Join(appendUserTags(
+			append([]string{}, makeDDTag(uploadIDTag, uuid),
+				makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
+				makeDDTag("file_name", fileName),
+			), // system generated tags
+			debugZipUploadOpts.tags..., // user provided tags
+		), ","),
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = uploadLogsToDatadog(
+		body, debugZipUploadOpts.ddAPIKey, debugZipUploadOpts.ddSite,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // default datadog tags. Source has to be "cockroachdb" for the logs to be
