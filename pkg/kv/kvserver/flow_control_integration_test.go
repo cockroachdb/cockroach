@@ -2323,6 +2323,8 @@ ORDER BY streams DESC;
 func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// TODO(pav-kv): remove when flakes are fixed.
+	defer setRACv2DebugVModule(t)()
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2546,6 +2548,8 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// TODO(pav-kv): remove when flakes are fixed.
+	defer setRACv2DebugVModule(t)()
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2813,6 +2817,8 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 func TestFlowControlRaftSnapshotV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// TODO(#138103): remove when flakes are fixed.
+	defer setRACv2DebugVModule(t)()
 
 	const numServers int = 5
 
@@ -3235,6 +3241,8 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// TODO(pav-kv): remove when flakes are fixed.
+	defer setRACv2DebugVModule(t)()
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -7108,4 +7116,15 @@ func BenchmarkFlowControlV2Basic(b *testing.B) {
 			b.StopTimer()
 		})
 	})
+}
+
+func setRACv2DebugVModule(t *testing.T) (reset func()) {
+	t.Helper()
+	old := log.GetVModule()
+	require.NoError(t, log.SetVModule("replica_raft=1,replica_proposal_buf=1,"+
+		"raft_transport=2,kvadmission=1,work_queue=1,replica_flow_control=1,"+
+		"tracker=1,client_raft_helpers_test=1,range_controller=2,"+
+		"token_counter=2,token_tracker=2,processor=2",
+	))
+	return func() { log.SetVModule(old) }
 }
