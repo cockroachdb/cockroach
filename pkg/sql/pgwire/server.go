@@ -193,8 +193,11 @@ const (
 )
 
 // cancelMaxWait is the amount of time a draining server gives to sessions to
-// react to cancellation and return before a forceful shutdown.
-const cancelMaxWait = 1 * time.Second
+// react to cancellation and return before a forceful shutdown. It is natural to
+// set it to twice the maximum duration that a conn may be oblivious to having
+// had its context canceled. If it takes much longer than that, the connection
+// is not reacting as expected to cancellation.
+const cancelMaxWait = 2 * readTimeout
 
 // baseSQLMemoryBudget is the amount of memory pre-allocated in each connection.
 var baseSQLMemoryBudget = envutil.EnvOrDefaultInt64("COCKROACH_BASE_SQL_MEMORY_BUDGET",
