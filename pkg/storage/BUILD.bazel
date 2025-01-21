@@ -96,6 +96,7 @@ go_library(
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//batchrepr",
         "@com_github_cockroachdb_pebble//bloom",
+        "@com_github_cockroachdb_pebble//cockroachkvs",
         "@com_github_cockroachdb_pebble//objstorage",
         "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
         "@com_github_cockroachdb_pebble//objstorage/remote",

@@ -2476,7 +2476,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 			b.Fatal(err)
 		}
 		sort.Slice(kvPairs, func(i, j int) bool {
-			cmp := EngineKeyCompare(kvPairs[i].key, kvPairs[j].key)
+			cmp := EngineComparer.Compare(kvPairs[i].key, kvPairs[j].key)
 			if cmp == 0 {
 				// Should not happen since we resolve in a different batch from the
 				// one where we wrote the intent.
