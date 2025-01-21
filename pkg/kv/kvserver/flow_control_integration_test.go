@@ -206,9 +206,9 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 			// formed when adding one of the replicas, before being quickly
 			// drained.
 			h.resetV2TokenMetrics(ctx)
-			h.log("sending put request to pre-split range")
+			h.comment("(Sending 1 MiB put request to pre-split range.)")
 			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
-			h.log("sent put request to pre-split range")
+			h.comment("(Sent 1 MiB put request to pre-split range.)")
 
 			h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
 			h.comment(`
@@ -222,13 +222,13 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 			left, right := tc.SplitRangeOrFatal(t, k.Next())
 			h.waitForConnectedStreams(ctx, right.RangeID, 3, 0 /* serverIdx */)
 
-			h.log("sending 2MiB put request to post-split LHS")
+			h.comment("(Sending 2 MiB put request to post-split LHS range.)")
 			h.put(ctx, k, 2<<20 /* 2MiB */, testFlowModeToPri(mode))
-			h.log("sent 2MiB put request to post-split LHS")
+			h.comment("(Sent 2 MiB put request to post-split LHS range.)")
 
-			h.log("sending 3MiB put request to post-split RHS")
+			h.comment("(Sending 3 MiB put request to post-split RHS range.)")
 			h.put(ctx, roachpb.Key(right.StartKey), 3<<20 /* 3MiB */, testFlowModeToPri(mode))
-			h.log("sent 3MiB put request to post-split RHS")
+			h.comment("(Sent 3 MiB put request to post-split RHS range.)")
 
 			h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
 			h.comment(`
@@ -245,9 +245,9 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 			h.comment(`-- (Merging ranges.)`)
 			merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
 
-			h.log("sending 4MiB put request to post-merge range")
+			h.comment("(Sending 4 MiB put request to post-merge range.)")
 			h.put(ctx, roachpb.Key(merged.StartKey), 4<<20 /* 4MiB */, testFlowModeToPri(mode))
-			h.log("sent 4MiB put request to post-merged range")
+			h.comment("(Sent 4 MiB put request to post-merge range.)")
 
 			h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
 			h.comment(`
@@ -443,10 +443,10 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 			// drained.
 			h.resetV2TokenMetrics(ctx)
 
-			h.log("sending put request to pre-split range")
+			h.comment(`(Sending 2 x 1 MiB put request to pre-split range)`)
 			h.put(ctx, k, 1<<20 /* 1MiB */, testFlowModeToPri(mode))
 			h.put(ctx, k.Next(), 1<<20 /* 1MiB */, testFlowModeToPri(mode))
-			h.log("sent put request to pre-split range")
+			h.comment(`(Sent 2 x 1 MiB put request to pre-split range)`)
 
 			h.comment(`
 -- Flow token metrics from n1 after issuing a 2*1MiB 3x replicated write
@@ -460,13 +460,13 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 			left, right := tc.SplitRangeOrFatal(t, k.Next())
 			h.waitForConnectedStreams(ctx, right.RangeID, 3, 0 /* serverIdx */)
 
-			h.log("sending 2MiB put request to post-split LHS")
+			h.comment(`(Sending 2 MiB put request to post-split LHS range)`)
 			h.put(ctx, k, 2<<20 /* 2MiB */, testFlowModeToPri(mode))
-			h.log("sent 2MiB put request to post-split LHS")
+			h.comment(`(Sent 2 MiB put request to post-split LHS range)`)
 
-			h.log("sending 3MiB put request to post-split RHS")
+			h.comment(`(Sending 3 MiB put request to post-split RHS range)`)
 			h.put(ctx, roachpb.Key(right.StartKey), 3<<20 /* 3MiB */, testFlowModeToPri(mode))
-			h.log("sent 3MiB put request to post-split RHS")
+			h.comment(`(Sent 3 MiB put request to post-split RHS range)`)
 
 			h.comment(`
 -- Flow token metrics from n1 after further issuing 2MiB and 3MiB writes to
@@ -482,9 +482,9 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 			h.comment(`-- (Merging ranges.)`)
 			merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
 
-			h.log("sending 4MiB put request to post-merge range")
+			h.comment(`(Sending 4 MiB put request to post-merge range)`)
 			h.put(ctx, roachpb.Key(merged.StartKey), 4<<20 /* 4MiB */, testFlowModeToPri(mode))
-			h.log("sent 4MiB put request to post-merged range")
+			h.comment(`(Sent 4 MiB put request to post-merge range)`)
 
 			h.comment(`
 -- Flow token metrics from n1 after issuing 4MiB of replicated writes to

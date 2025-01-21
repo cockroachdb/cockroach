@@ -8,6 +8,12 @@
 echo
 ----
 ----
+(Sending 1 MiB put request to pre-split range.)
+
+
+(Sent 1 MiB put request to pre-split range.)
+
+
 -- Flow token metrics from n1 after issuing + admitting the 1MiB 3x
 -- replicated write to the pre-split range. There should be 3MiB of
 -- {regular,elastic} tokens {deducted,returned}.
@@ -47,6 +53,18 @@ ORDER BY
 
 
 -- (Splitting range.)
+
+
+(Sending 2 MiB put request to post-split LHS range.)
+
+
+(Sent 2 MiB put request to post-split LHS range.)
+
+
+(Sending 3 MiB put request to post-split RHS range.)
+
+
+(Sent 3 MiB put request to post-split RHS range.)
 
 
 -- Flow token metrics from n1 after further issuing 2MiB and 3MiB writes to
@@ -106,6 +124,12 @@ ORDER BY
 
 
 -- (Merging ranges.)
+
+
+(Sending 4 MiB put request to post-merge range.)
+
+
+(Sent 4 MiB put request to post-merge range.)
 
 
 -- Flow token metrics from n1 after issuing 4MiB of replicated writes to
