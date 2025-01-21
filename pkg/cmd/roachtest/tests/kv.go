@@ -606,6 +606,12 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// meet its qps targets.
 			require.NoError(t, roachtestutil.ProfileTopStatements(ctx, c, t.L(), roachtestutil.ProfDbName("kv")))
 			defer func() {
+				// In cases where the test fails, the supplied context will be
+				// cancelled, and we'll be left with squat. Download profiles using a
+				// separate context.
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				defer cancel()
+
 				if err := roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()); err != nil {
 					t.L().PrintfCtx(ctx, "failed to download stmt bundles: %v", err)
 				}
