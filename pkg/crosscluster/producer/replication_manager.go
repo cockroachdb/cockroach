@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -66,6 +67,10 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	}
 
 	execConfig := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+
+	if !execConfig.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_1.Version()) {
+		return streampb.ReplicationProducerSpec{}, errors.New("source of ldr stream be finalized on 25.1")
+	}
 
 	if execConfig.Codec.IsSystem() && !kvserver.RangefeedEnabled.Get(&execConfig.Settings.SV) {
 		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be enabled on the source cluster for logical replication")
