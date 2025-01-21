@@ -21,22 +21,42 @@ import (
 var useGatewayRoutingMode = metamorphic.ConstantWithTestBool("stream-use-gateway-routing-mode", false)
 var useExternalConnection = metamorphic.ConstantWithTestBool("stream-use-external-connection", true)
 
-func GetReplicationUri(
+func GetExternalConnectionURI(
 	t *testing.T,
 	sourceCluster serverutils.ApplicationLayerInterface,
 	destCluster serverutils.ApplicationLayerInterface,
 	sourceConnOptions ...serverutils.SQLConnOption,
 ) url.URL {
+	return getReplicationURI(t, sourceCluster, destCluster, useGatewayRoutingMode, true, sourceConnOptions...)
+}
+
+func GetReplicationURI(
+	t *testing.T,
+	sourceCluster serverutils.ApplicationLayerInterface,
+	destCluster serverutils.ApplicationLayerInterface,
+	sourceConnOptions ...serverutils.SQLConnOption,
+) url.URL {
+	return getReplicationURI(t, sourceCluster, destCluster, useGatewayRoutingMode, useExternalConnection, sourceConnOptions...)
+}
+
+func getReplicationURI(
+	t *testing.T,
+	sourceCluster serverutils.ApplicationLayerInterface,
+	destCluster serverutils.ApplicationLayerInterface,
+	useGateway bool,
+	useExternal bool,
+	sourceConnOptions ...serverutils.SQLConnOption,
+) url.URL {
 	sourceURI, cleanup := sourceCluster.PGUrl(t, sourceConnOptions...)
 	t.Cleanup(cleanup)
 
-	if useGatewayRoutingMode {
+	if useGateway {
 		query := sourceURI.Query()
 		query.Set(streamclient.RoutingModeKey, string(streamclient.RoutingModeGateway))
 		sourceURI.RawQuery = query.Encode()
 	}
 
-	if useExternalConnection {
+	if useExternal {
 		conn := destCluster.SQLConn(t)
 		defer conn.Close()
 
@@ -45,6 +65,5 @@ func GetReplicationUri(
 		require.NoError(t, err)
 		return externalUri
 	}
-
 	return sourceURI
 }
