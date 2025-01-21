@@ -1011,11 +1011,13 @@ SELECT COALESCE(
 }
 
 func (og *operationGenerator) constraintExists(
-	ctx context.Context, tx pgx.Tx, constraintName string,
+	ctx context.Context, tx pgx.Tx, tableName, constraintName tree.Name,
 ) (bool, error) {
+	// Note: information_schema.table_constraints contains constraints that are
+	// in the dropping state, but pg_constraint.constraints does not.
 	return og.scanBool(ctx, tx, `SELECT EXISTS(
-		SELECT * FROM pg_catalog.pg_constraint WHERE conname = $1
-	 )`, constraintName)
+		SELECT * FROM information_schema.table_constraints WHERE table_name = $1 AND constraint_name = $2
+	 )`, string(tableName), string(constraintName))
 }
 
 func (og *operationGenerator) rowsSatisfyFkConstraint(
