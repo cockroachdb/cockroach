@@ -120,8 +120,6 @@ targets:
         args:
           - $WORKLOAD_CLUSTER
           - workload
-  - target_name: rp
-    steps:
       - command: put
         args:
           - $WORKLOAD_CLUSTER
