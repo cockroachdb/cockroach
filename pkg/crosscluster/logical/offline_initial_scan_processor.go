@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -197,6 +198,8 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTags(ctx, tags)
 
 	ctx = o.StartInternal(ctx, offlineInitialScanProcessorName)
+
+	defer o.FlowCtx.Cfg.JobRegistry.MarkAsIngesting(catpb.JobID(o.spec.JobID))()
 
 	if err := o.setup(ctx); err != nil {
 		o.MoveToDrainingAndLogError(err)
