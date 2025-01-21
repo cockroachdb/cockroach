@@ -405,11 +405,11 @@ func (s *ClusterSpec) RoachprodOpts(
 	var err error
 	switch cloud {
 	case AWS:
-		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, requestedArch)
+		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, selectedArch)
 	case GCE:
-		workloadMachineType, _ = SelectGCEMachineType(s.WorkloadNodeCPUs, s.Mem, requestedArch)
+		workloadMachineType, _ = SelectGCEMachineType(s.WorkloadNodeCPUs, s.Mem, selectedArch)
 	case Azure:
-		workloadMachineType, _, err = SelectAzureMachineType(s.WorkloadNodeCPUs, s.Mem, requestedArch)
+		workloadMachineType, _, err = SelectAzureMachineType(s.WorkloadNodeCPUs, s.Mem, selectedArch)
 	}
 	if err != nil {
 		return vm.CreateOpts{}, nil, nil, "", err
