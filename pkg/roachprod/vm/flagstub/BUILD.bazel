@@ -9,5 +9,6 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )

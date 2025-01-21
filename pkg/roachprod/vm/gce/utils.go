@@ -348,14 +348,14 @@ func writeStartupScript(
 	return tmpfile.Name(), nil
 }
 
-// SyncDNS replaces the configured DNS zone with the supplied hosts.
-func SyncDNS(l *logger.Logger, vms vm.List) error {
-	return providerInstance.dnsProvider.syncPublicDNS(l, vms)
+// SyncDNS implements the InfraProvider interface.
+func (p *Provider) SyncDNS(l *logger.Logger, vms vm.List) error {
+	return p.dnsProvider.syncPublicDNS(l, vms)
 }
 
-// DNSDomain returns the configured DNS domain for public DNS A records.
-func DNSDomain() string {
-	return providerInstance.dnsProvider.publicDomain
+// DNSDomain implements the InfraProvider interface.
+func (p *Provider) DNSDomain() string {
+	return p.dnsProvider.publicDomain
 }
 
 type AuthorizedKey struct {
@@ -417,14 +417,12 @@ func (ak AuthorizedKeys) AsProjectMetadata() []byte {
 	return buf.Bytes()
 }
 
-// GetUserAuthorizedKeys retrieves reads a list of user public keys from the
-// gcloud cockroach-ephemeral project and returns them formatted for use in
-// an authorized_keys file.
-func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
+// GetUserAuthorizedKeys implements the InfraProvider interface.
+func (p *Provider) GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 	var outBuf bytes.Buffer
 	// The below command will return a stream of user:pubkey as text.
 	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
-		"--project="+providerInstance.metadataProject,
+		"--project="+p.metadataProject,
 		"--format=value(commonInstanceMetadata.ssh-keys)")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &outBuf
@@ -482,7 +480,7 @@ func GetUserAuthorizedKeys() (AuthorizedKeys, error) {
 // keys are stored in the project metadata for the roachprod's
 // `DefaultProject`.
 func AddUserAuthorizedKey(ak AuthorizedKey) error {
-	existingKeys, err := GetUserAuthorizedKeys()
+	existingKeys, err := Infrastructure.GetUserAuthorizedKeys()
 	if err != nil {
 		return err
 	}
