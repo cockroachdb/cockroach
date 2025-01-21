@@ -8,6 +8,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion:clusterversion_proto",
         "//pkg/jobs/jobspb:jobspb_proto",
         "//pkg/kv/kvpb:kvpb_proto",
         "//pkg/roachpb:roachpb_proto",
@@ -27,6 +28,7 @@ go_proto_library(
     proto = ":streampb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",

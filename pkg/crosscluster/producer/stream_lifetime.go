@@ -84,6 +84,11 @@ func StartReplicationProducerJob(
 	if tenantID.IsSystem() && !kvserver.RangefeedEnabled.Get(&evalCtx.Settings.SV) {
 		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be true to start a replication job")
 	}
+	currentVersion := execConfig.Settings.Version.ActiveVersion(ctx).Version
+	if req.DestClusterVersion.Version != (roachpb.Version{}) && req.DestClusterVersion.Major < currentVersion.Major {
+		return streampb.ReplicationProducerSpec{}, errors.Errorf(
+			"destination cluster is running on an older major version (%s) than the source cluster (%s)", req.DestClusterVersion, currentVersion)
+	}
 
 	var replicationStartTime hlc.Timestamp
 	if !req.ReplicationStartTime.IsEmpty() {
