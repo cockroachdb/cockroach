@@ -335,8 +335,8 @@ func (c *baseInternalClient) MuxRangeFeed(
 var batchStreamPoolingEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"rpc.batch_stream_pool.enabled",
-	"if true, use pooled gRPC streams to execute Batch RPCs",
-	metamorphic.ConstantWithTestBool("rpc.batch_stream_pool.enabled", true),
+	"if true, use pooled gRPC streams to execute Batch RPCs (experimental)",
+	metamorphic.ConstantWithTestBool("rpc.batch_stream_pool.enabled", false),
 )
 
 func shouldUseBatchStreamPoolClient(ctx context.Context, st *cluster.Settings) bool {
