@@ -28,9 +28,14 @@ do
   #  us to reach the specified region, and then add the actual number of workers
   #  we want to run.
   EFFECTIVE_NUM_WORKERS=$(($(($TPCC_WAREHOUSES/$NUM_REGIONS))*$(($NODE-1))+$NUM_WORKERS))
-  PGURLS_REGION=$(./bin/drtprod pgurl $CLUSTER:$NODE_OFFSET-$LAST_NODE_IN_REGION | sed "s/'//g; s/^/'/; s/$/'/")
   cat <<EOF >/tmp/tpcc_run.sh
 #!/usr/bin/env bash
+
+export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
+./roachprod sync
+PGURLS=\$(./roachprod pgurl $CLUSTER:$NODE_OFFSET-$LAST_NODE_IN_REGION | sed s/\'//g)
+read -r -a PGURLS_REGION <<< "\$PGURLS"
+
 j=0
 while true; do
   echo ">> Starting tpcc workload"
@@ -47,7 +52,7 @@ while true; do
       --partitions=$NUM_REGIONS \
       --partition-affinity=$(($NODE-1)) \
       --tolerate-errors \
-      $PGURLS_REGION \
+      \${PGURLS_REGION[@]} \
       --survival-goal region \
       --regions=$REGIONS
 done
