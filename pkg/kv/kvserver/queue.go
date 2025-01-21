@@ -329,10 +329,6 @@ type queueConfig struct {
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
 	failures *metric.Counter
-	// storeFailures is a counter of replicas that failed processing due to a
-	// StoreBenignError. These errors must be counted independently of the above
-	// failures metric.
-	storeFailures *metric.Counter
 	// pending is a gauge measuring current replica count pending.
 	pending *metric.Gauge
 	// processingNanos is a counter measuring total nanoseconds spent processing
@@ -1170,17 +1166,12 @@ func (bq *baseQueue) finishProcessingReplica(
 	// Handle failures.
 	if err != nil {
 		benign := benignerror.IsBenign(err)
-		storeBenign := benignerror.IsStoreBenign(err)
 
 		// Increment failures metric.
 		//
 		// TODO(tschottdorf): once we start asserting zero failures in tests
 		// (and production), move benign failures into a dedicated category.
 		bq.failures.Inc(1)
-		if storeBenign {
-			bq.storeFailures.Inc(1)
-			requeue = true
-		}
 
 		// Determine whether a failure is a purgatory error. If it is, add
 		// the failing replica to purgatory. Note that even if the item was
