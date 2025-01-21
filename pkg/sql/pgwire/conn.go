@@ -45,6 +45,10 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+// readTimeout is the timeout after which readTimeoutConn checks the
+// connection for cancellation.
+const readTimeout = 1 * time.Second
+
 // conn implements a pgwire network connection (version 3 of the protocol,
 // implemented by Postgres v7.4 and later). conn.serve() reads protocol
 // messages, transforms them into commands that it pushes onto a StmtBuf (where
@@ -1491,7 +1495,6 @@ func (c *readTimeoutConn) Read(b []byte) (int, error) {
 	// read before checking for exit conditions. The tradeoff is between the
 	// time it takes to react to session context cancellation and the overhead
 	// of waking up and checking for exit conditions.
-	const readTimeout = 1 * time.Second
 
 	// Remove the read deadline when returning from this function to avoid
 	// unexpected behavior.
