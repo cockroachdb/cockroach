@@ -1838,3 +1838,30 @@ func failIfRLSIsNotEnabled(b BuildCtx) {
 		panic(unimplemented.NewWithIssue(136696, "CREATE POLICY is not yet implemented"))
 	}
 }
+
+// failIfSafeUpdates checks if the sql_safe_updates is present, and if so, it
+// will fail the operation.
+func failIfSafeUpdates(b BuildCtx, n tree.NodeFormatter) {
+	if b.SessionData().SafeUpdates {
+		var errorWithMessage error
+		switch n.(type) {
+		case *tree.AlterTableAlterColumnType:
+			errorWithMessage = errors.New("ALTER COLUMN TYPE requiring data rewrite may result in data loss " +
+				"for certain type conversions or when applying a USING clause")
+		case *tree.DropIndex:
+			errorWithMessage = errors.New("DROP INDEX")
+		default:
+			panic(errors.AssertionFailedf("programming error: unexpected node type %T", n))
+		}
+
+		panic(
+			pgerror.WithCandidateCode(
+				errors.WithMessage(
+					errorWithMessage,
+					"rejected (sql_safe_updates = true)",
+				),
+				pgcode.Warning,
+			),
+		)
+	}
+}
