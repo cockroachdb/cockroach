@@ -19,15 +19,20 @@ echo
 
 
 -- Observe the newly split off replica, with its own three streams.
-SELECT range_id, count(*) AS streams
-    FROM crdb_internal.kv_flow_control_handles_v2
-GROUP BY (range_id)
-ORDER BY streams DESC;
+SELECT
+  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
+  count(*) AS streams
+FROM
+  crdb_internal.kv_flow_control_handles_v2
+GROUP BY
+  range_id
+ORDER BY
+  range_id;
 
   range_id | stream_count  
 -----------+---------------
-  70       | 3             
-  71       | 3             
+  a        | 3             
+  b        | 3             
 
 
 (Sent 1 MiB BulkNormalPri put request to post-split LHS range)
@@ -38,11 +43,16 @@ ORDER BY streams DESC;
 
 -- Send queue and flow token metrics from n1, post-split and 1 MiB put on
 -- each side.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%send_queue%'
-     AND name != 'kvflowcontrol.send_queue.count'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%send_queue%'
+  AND name != 'kvflowcontrol.send_queue.count'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.send_queue.bytes                                    | 0 B  
   kvflowcontrol.send_queue.prevent.count                            | 0 B  
@@ -51,13 +61,16 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B  
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B  
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B  
-SELECT store_id,
-     crdb_internal.humanize_bytes(available_eval_regular_tokens),
-     crdb_internal.humanize_bytes(available_eval_elastic_tokens),
-     crdb_internal.humanize_bytes(available_send_regular_tokens),
-     crdb_internal.humanize_bytes(available_send_elastic_tokens)
-  FROM crdb_internal.kv_flow_controller_v2
-  ORDER BY store_id ASC;
+SELECT
+  store_id,
+  crdb_internal.humanize_bytes(available_eval_regular_tokens),
+  crdb_internal.humanize_bytes(available_eval_elastic_tokens),
+  crdb_internal.humanize_bytes(available_send_regular_tokens),
+  crdb_internal.humanize_bytes(available_send_elastic_tokens)
+FROM
+  crdb_internal.kv_flow_controller_v2
+ORDER BY
+  store_id ASC;
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
@@ -71,11 +84,16 @@ SELECT store_id,
 
 -- Send queue and flow token metrics from n1, post-split-merge.
 -- We expect to not see a force flush of the send queue for s3 again.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%send_queue%'
-     AND name != 'kvflowcontrol.send_queue.count'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%send_queue%'
+  AND name != 'kvflowcontrol.send_queue.count'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.send_queue.bytes                                    | 0 B  
   kvflowcontrol.send_queue.prevent.count                            | 0 B  
@@ -84,13 +102,16 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B  
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B  
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B  
-SELECT store_id,
-     crdb_internal.humanize_bytes(available_eval_regular_tokens),
-     crdb_internal.humanize_bytes(available_eval_elastic_tokens),
-     crdb_internal.humanize_bytes(available_send_regular_tokens),
-     crdb_internal.humanize_bytes(available_send_elastic_tokens)
-  FROM crdb_internal.kv_flow_controller_v2
-  ORDER BY store_id ASC;
+SELECT
+  store_id,
+  crdb_internal.humanize_bytes(available_eval_regular_tokens),
+  crdb_internal.humanize_bytes(available_eval_elastic_tokens),
+  crdb_internal.humanize_bytes(available_send_regular_tokens),
+  crdb_internal.humanize_bytes(available_send_elastic_tokens)
+FROM
+  crdb_internal.kv_flow_controller_v2
+ORDER BY
+  store_id ASC;
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
@@ -104,11 +125,16 @@ SELECT store_id,
 
 -- Send queue and flow token metrics from n1, post-split-merge. 
 -- We do not expect to see the send queue develop for s3.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%send_queue%'
-     AND name != 'kvflowcontrol.send_queue.count'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%send_queue%'
+  AND name != 'kvflowcontrol.send_queue.count'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.send_queue.bytes                                    | 0 B  
   kvflowcontrol.send_queue.prevent.count                            | 0 B  
@@ -117,13 +143,16 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B  
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B  
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B  
-SELECT store_id,
-     crdb_internal.humanize_bytes(available_eval_regular_tokens),
-     crdb_internal.humanize_bytes(available_eval_elastic_tokens),
-     crdb_internal.humanize_bytes(available_send_regular_tokens),
-     crdb_internal.humanize_bytes(available_send_elastic_tokens)
-  FROM crdb_internal.kv_flow_controller_v2
-  ORDER BY store_id ASC;
+SELECT
+  store_id,
+  crdb_internal.humanize_bytes(available_eval_regular_tokens),
+  crdb_internal.humanize_bytes(available_eval_elastic_tokens),
+  crdb_internal.humanize_bytes(available_send_regular_tokens),
+  crdb_internal.humanize_bytes(available_send_elastic_tokens)
+FROM
+  crdb_internal.kv_flow_controller_v2
+ORDER BY
+  store_id ASC;
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
@@ -149,10 +178,15 @@ post-merge response br=(err: <nil>), *kvpb.PutResponse pErr=<nil>
 
 
 -- Flow token metrics from n1, all tokens should be returned.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%tokens%'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%tokens%'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 9.0 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 21 MiB   
