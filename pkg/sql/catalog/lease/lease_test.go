@@ -1157,33 +1157,35 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
-
+	// We will intentionally put t2 in a different database, so that wait for
+	// initial version does not apply. Otherwise, a newly published version of kv
+	// will be instantly acquired, since the schema will be leased after the insert
+	// into timestamp.
 	if _, err := sqlDB.Exec(`
 BEGIN;
 CREATE DATABASE t;
+CREATE SCHEMA t.sc1;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.sc1.timestamp (k CHAR PRIMARY KEY, v CHAR);
 INSERT INTO t.kv VALUES ('a', 'b');
 COMMIT;
 `); err != nil {
 		t.Fatal(err)
 	}
-
+	leaseMgr := s.LeaseManager().(*lease.Manager)
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv")
 	var updated bool
 	if err := crdb.ExecuteTx(context.Background(), sqlDB, nil, func(tx *gosql.Tx) error {
 		// Insert an entry so that the transaction is guaranteed to be
 		// assigned a timestamp.
 		if _, err := tx.Exec(`
-INSERT INTO t.timestamp VALUES ('a', 'b');
+INSERT INTO t.sc1.timestamp VALUES ('a', 'b');
 `); err != nil {
 			return errors.WithStack(err)
 		}
-
 		// Increment the table version after the txn has started. Only do this once
 		// even if there's a retry.
 		if !updated {
-			leaseMgr := s.LeaseManager().(*lease.Manager)
 			if _, err := leaseMgr.Publish(
 				context.Background(), tableDesc.GetID(), func(catalog.MutableDescriptor) error {
 					// Do nothing: increments the version.
@@ -1193,7 +1195,6 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 			}
 			updated = true
 		}
-
 		// This select will see version 1 of the table. It will first
 		// acquire a lease on version 2 and note that the table descriptor is
 		// invalid for the transaction, so it will read the previous version
