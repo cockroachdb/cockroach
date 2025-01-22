@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -40,6 +41,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+var maxIngestionProcessorShutdownWait = 5 * time.Minute
 
 type streamIngestionResumer struct {
 	job *jobs.Job
@@ -501,6 +504,11 @@ func maybeRevertToCutoverTimestamp(
 			return cutoverTimestamp, false, errors.Wrapf(err, "failed to stop reader tenant")
 		}
 	}
+	if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, ingestionJob, maxIngestionProcessorShutdownWait); err != nil {
+		return cutoverTimestamp, false, errors.Wrapf(err, "unable to verify that attempted LDR job %d had stopped offline ingesting %s", ingestionJob.ID(), maxIngestionProcessorShutdownWait)
+	}
+	log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", ingestionJob.ID())
+
 	log.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
@@ -593,12 +601,8 @@ func stopTenant(ctx context.Context, execCfg *sql.ExecutorConfig, tenantID roach
 	return nil
 }
 
-// OnFailOrCancel is part of the jobs.Resumer interface.
-// There is a known race between the ingestion processors shutting down, and
-// OnFailOrCancel being invoked. As a result of which we might see some keys
-// leftover in the keyspace if a ClearRange were to be issued here. In general
-// the tenant keyspace of a failed/canceled ingestion job should be treated as
-// corrupted, and the tenant should be dropped before resuming the ingestion.
+// OnFailOrCancel is part of the jobs.Resumer interface. After ingestion job
+// fails or gets cancelled, the tenant should be dropped.
 func (s *streamIngestionResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, _ error,
 ) error {
@@ -627,6 +631,14 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 		telemetry.Count("physical_replication.failed")
 	}
 
+	// Ensure no sip processors are still ingesting data, so a subsequent DROP
+	// TENANT cmd will cleanly wipe out all data.
+	if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, s.job, maxIngestionProcessorShutdownWait); err != nil {
+		log.Warningf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", s.job.ID(), maxIngestionProcessorShutdownWait, err)
+	} else {
+		log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", s.job.ID())
+	}
+
 	return execCfg.InternalDB.Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) error {
@@ -648,7 +660,6 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 				return err
 			}
 		}
-
 		return nil
 	})
 }
