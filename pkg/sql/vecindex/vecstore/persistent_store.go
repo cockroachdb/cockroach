@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -16,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
 // PersistentStore implements the Store interface for KV backed vector indices.
@@ -110,7 +113,7 @@ func NewPersistentStore(
 // transaction on behalf of the user and prepares it to operate on the persistent
 // vector store.
 func (s *PersistentStore) Begin(ctx context.Context) (Txn, error) {
-	return NewPersistentStoreTxn(s, s.db.KV().NewTxn(ctx, "vecstore.PersistentStore begin transaction")), nil
+	return newPersistentStoreTxn(s, s.db.KV().NewTxn(ctx, "vecstore.PersistentStore begin transaction")), nil
 }
 
 // Commit is part of the vecstore.Store interface. Commit commits the
@@ -130,4 +133,36 @@ func (s *PersistentStore) MergeStats(ctx context.Context, stats *IndexStats, ski
 	// TODO(mw5h): Implement MergeStats. We're not panicking here because some tested
 	// functionality needs to call this function but does not depend on the results.
 	return nil
+}
+
+// WrapTxn wraps the passed KV transaction in a vecstore.Txn. This allows vector
+// search operations to be performed in an existing transaction.
+func (s *PersistentStore) WrapTxn(txn *kv.Txn) Txn {
+	return newPersistentStoreTxn(s, txn)
+}
+
+// QuantizeAndEncode returns the quantized and encoded form of the given vector.
+// TODO(drewk): this probably needs some refactoring.
+func (s *PersistentStore) QuantizeAndEncode(
+	ctx context.Context, partition PartitionKey, centroid, v vector.T,
+) (quantized []byte, err error) {
+	workspace := &internal.Workspace{}
+	ctx = internal.WithWorkspace(ctx, workspace)
+
+	// Determine the correct quantizer for the partition.
+	var quantizer quantize.Quantizer
+	if partition == RootKey {
+		quantizer = s.rootQuantizer
+	} else {
+		quantizer = s.quantizer
+	}
+
+	// Randomize the query vector, if the quantizer requires it.
+	tempRandomized := workspace.AllocVector(quantizer.GetRandomDims())
+	defer workspace.FreeVector(tempRandomized)
+	quantizer.RandomizeVector(ctx, v, tempRandomized, false /* invert */)
+
+	// Quantizer and encode the randomized vector.
+	codec := newPersistentStoreCodec(quantizer)
+	return codec.encodeVector(ctx, tempRandomized, centroid)
 }

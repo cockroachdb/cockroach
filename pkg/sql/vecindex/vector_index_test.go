@@ -187,7 +187,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 
 	// Search the index within a transaction.
 	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-	err = s.Index.Search(s.Ctx, txn, vector, &searchSet, options)
+	err = s.Index.Search(s.Ctx, txn, vector, &searchSet, options, vecstore.LeafLevel)
 	require.NoError(s.T, err)
 	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -457,7 +457,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		truth := calcTruth(queryVector, data)
 
 		// Calculate prediction set for the vector.
-		err = s.Index.Search(s.Ctx, txn, queryVector, &searchSet, options)
+		err = s.Index.Search(s.Ctx, txn, queryVector, &searchSet, options, vecstore.LeafLevel)
 		require.NoError(s.T, err)
 		results := searchSet.PopResults()
 

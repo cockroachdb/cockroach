@@ -1089,3 +1089,38 @@ message InsertSpec {
   // Whether the insert should be autocommitted.
   optional bool auto_commit = 4 [(gogoproto.nullable) = false];
 }
+
+// VectorSearchSpec is the specification for a vector-search operator, which
+// traverses a CSPANN index tree to find candidate nearest neighbors for a query
+// vector. It returns the primary keys of the candidate rows.
+message VectorSearchSpec {
+  optional uint32 table_id = 1 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "TableID",
+                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  optional uint32 index_id = 2 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "IndexID",
+                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  repeated cockroach.sql.sqlbase.IndexFetchSpec.KeyColumn primary_key_columns = 3;
+  // QueryVector is the vector to search for.
+  repeated float query_vector = 4;
+  // TargetNeighborCount is the number of nearest neighbors to search for.
+  optional uint64 target_neighbor_count = 5 [(gogoproto.nullable) = false];
+}
+
+// VectorMutationSearchSpec is the specification for a vector-mutation-search
+// operator, which traverses a CSPANN index tree to find the partitions where
+// input query vectors belong, so that the vectors can be added to or removed
+// from the index. It returns the set of input columns, plus the key of the
+// discovered partition, and optionally the quantized vector.
+message VectorMutationSearchSpec {
+  optional uint32 table_id = 1 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "TableID",
+                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  optional uint32 index_id = 2 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "IndexID",
+                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  optional uint32 query_vector_column_ordinal = 3 [(gogoproto.nullable) = false];
+  repeated uint32 primary_key_column_ordinals = 4;
+  repeated cockroach.sql.sqlbase.IndexFetchSpec.KeyColumn primary_key_columns = 5;
+  optional bool is_index_put = 6 [(gogoproto.nullable) = false];
+}

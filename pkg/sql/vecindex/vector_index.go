@@ -77,7 +77,7 @@ type SearchOptions struct {
 	BaseBeamSize int
 	// SkipRerank does not rerank search results using the original full-size
 	// vectors. While this speeds up the search, it can also significantly
-	// reduce accuracy. It is currently only used for testing.
+	// reduce accuracy.
 	SkipRerank bool
 	// ReturnVectors specifies whether to return the original full-size vectors
 	// in search results. If this is a leaf-level search then the returned
@@ -346,11 +346,15 @@ func (vi *VectorIndex) Search(
 	queryVector vector.T,
 	searchSet *vecstore.SearchSet,
 	options SearchOptions,
+	level vecstore.Level,
 ) error {
+	if level == vecstore.InvalidLevel {
+		panic(errors.AssertionFailedf("caller passed invalid level %d", level))
+	}
 	searchCtx := searchContext{
 		Txn:      txn,
 		Original: queryVector,
-		Level:    vecstore.LeafLevel,
+		Level:    level,
 		Options:  options,
 	}
 	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
