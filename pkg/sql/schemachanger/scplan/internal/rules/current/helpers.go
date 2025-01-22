@@ -20,8 +20,7 @@ const (
 )
 
 // rulesVersionKey version of elements used by this rule set.
-// TODO(spilchen): Need to update this to V25_2 when it is available.
-var rulesVersionKey = clusterversion.V25_1
+var rulesVersionKey = clusterversion.V25_2
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
 // failing to unify if the passed element is part of a descriptor and
