@@ -1676,7 +1676,6 @@ func (rc *rangeController) StatusRaftMuLocked() serverpb.RACStatus {
 			defer rs.sendStream.mu.Unlock()
 			s.IndexToSend = rs.sendStream.mu.sendQueue.indexToSend
 			s.NextRaftIndexInitial = rs.sendStream.mu.nextRaftIndexInitial
-			s.NextRaftIndex = rs.sendStream.mu.sendQueue.nextRaftIndex
 			s.ForceFlushStopIndex = uint64(rs.sendStream.mu.sendQueue.forceFlushStopIndex)
 			// Don't waste space if there are no tokens held.
 			if tokens := rs.sendStream.mu.eval.tokensDeducted[:]; holdsTokens(tokens) {
