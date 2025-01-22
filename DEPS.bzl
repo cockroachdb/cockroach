@@ -7769,10 +7769,10 @@ def go_deps():
         name = "com_github_prometheus_client_golang",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/prometheus/client_golang",
-        sha256 = "0167cee686b836da39815e4a7ea64ecc245f6a3fb9b3c3f729941ed55da7dd4f",
-        strip_prefix = "github.com/prometheus/client_golang@v1.16.0",
+        sha256 = "b4fc2d09aab49c3315b442db09b08bbc7f164d5536404443cbb57203d1cd461f",
+        strip_prefix = "github.com/cockroachdb/client_golang@v0.0.0-20250124161916-2d4b7d300341",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/prometheus/client_golang/com_github_prometheus_client_golang-v1.16.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/client_golang/com_github_cockroachdb_client_golang-v0.0.0-20250124161916-2d4b7d300341.zip",
         ],
     )
     go_repository(
@@ -7846,16 +7846,6 @@ def go_deps():
         strip_prefix = "github.com/prometheus/statsd_exporter@v0.21.0",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/prometheus/statsd_exporter/com_github_prometheus_statsd_exporter-v0.21.0.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_prometheus_tsdb",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/prometheus/tsdb",
-        sha256 = "360ce38297a00439c4bfbbded7b750f6d45582d581cde70572a003bcbc8b0c7b",
-        strip_prefix = "github.com/prometheus/tsdb@v0.7.1",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/prometheus/tsdb/com_github_prometheus_tsdb-v0.7.1.zip",
         ],
     )
     go_repository(
