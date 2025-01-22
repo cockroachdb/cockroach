@@ -67,6 +67,20 @@ func (w sysbenchWorkload) String() string {
 	return sysbenchWorkloadName[w]
 }
 
+type rpc int
+
+const (
+	gRPC rpc = iota
+	drpc
+)
+
+func (rf rpc) String() string {
+	if rf == drpc {
+		return "drpc"
+	}
+	return "gRPC"
+}
+
 type sysbenchOptions struct {
 	workload     sysbenchWorkload
 	distribution string // default `uniform`
@@ -75,6 +89,7 @@ type sysbenchOptions struct {
 	tables       int
 	rowsPerTable int
 	usePostgres  bool
+	rf           rpc
 	extra        extraSetup // invoked before the workload starts
 }
 
@@ -150,7 +165,11 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 	} else {
 		t.Status("installing cockroach")
-		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
+		settings := install.MakeClusterSettings()
+		if opts.rf == drpc {
+			settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_DRPC_ENABLED=true")
+		}
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.CRDBNodes())
 		if len(c.CRDBNodes()) >= 3 {
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), c.Conn(ctx, t.L(), 1))
 			require.NoError(t, err)
@@ -277,18 +296,23 @@ func registerSysbench(r registry.Registry) {
 			if d.extra.nameSuffix != "" {
 				benchname += d.extra.nameSuffix
 			}
-			r.Add(registry.TestSpec{
-				Name:                      fmt.Sprintf("%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, d.n, d.cpus, conc),
-				Benchmark:                 true,
-				Owner:                     registry.OwnerTestEng,
-				Cluster:                   r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
-				CompatibleClouds:          registry.OnlyGCE,
-				Suites:                    registry.Suites(registry.Nightly),
-				TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runSysbench(ctx, t, c, opts)
-				},
-			})
+
+			for _, rf := range []rpc{gRPC, drpc} {
+				rpcOpts := opts
+				rpcOpts.rf = rf
+				r.Add(registry.TestSpec{
+					Name:                      fmt.Sprintf("%s/%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, rf, d.n, d.cpus, conc),
+					Benchmark:                 true,
+					Owner:                     registry.OwnerTestEng,
+					Cluster:                   r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
+					CompatibleClouds:          registry.OnlyGCE,
+					Suites:                    registry.Suites(registry.Nightly),
+					TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runSysbench(ctx, t, c, rpcOpts)
+					},
+				})
+			}
 
 			// Add a variant of each test that uses PostgreSQL instead of CockroachDB.
 			if d.n == 1 {
