@@ -859,6 +859,19 @@ func BenchmarkSysbench(b *testing.B) {
 							}
 						}()
 
+						var benchtime string
+						require.NoError(b, sniffArgs(os.Args[1:], "test.benchtime", &benchtime))
+						if strings.HasSuffix(benchtime, "x") && b.N == 1 && benchtime != "1x" {
+							// The Go benchmark harness invokes tests first with b.N == 1 which
+							// helps it adjust the number of iterations to run to the benchtime.
+							// But if we specify the number of iterations, there's no point in
+							// it doing that, so we no-op on the first run.
+							// This speeds up benchmarking (by several seconds per subtest!)
+							// since it avoids setting up an extra test cluster.
+							b.Log("skipping benchmark on initial run; benchtime specifies an iteration count")
+							return
+						}
+
 						ctx := context.Background()
 						sys, cleanup := driver.constructorFn(ctx, b)
 						defer cleanup()
