@@ -936,3 +936,28 @@ func TestHistogramVec(t *testing.T) {
 		require.Equal(t, float64(1), *metrics[1].Histogram.SampleSum)
 	})
 }
+
+func BenchmarkHistogramRecordValue(b *testing.B) {
+	h := NewHistogram(HistogramOptions{
+		Metadata: Metadata{
+			Name:       "my.test.metric",
+			MetricType: prometheusgo.MetricType_HISTOGRAM,
+		},
+		Duration:     0,
+		BucketConfig: IOLatencyBuckets,
+		Mode:         HistogramModePrometheus,
+	})
+
+	b.ResetTimer()
+
+	b.Run("insert integers", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			h.RecordValue(int64(i))
+		}
+	})
+	b.Run("insert zero", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			h.RecordValue(0)
+		}
+	})
+}
