@@ -125,7 +125,7 @@ func registerFollowerReads(r registry.Registry) {
 			4, /* nodeCount */
 			spec.CPU(2),
 		),
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run:              runFollowerReadsMixedVersionSingleRegionTest,
