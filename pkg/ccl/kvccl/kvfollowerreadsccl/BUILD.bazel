@@ -44,8 +44,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":kvfollowerreadsccl"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "large"},
-        "//conditions:default": {"test.Pool": "default"},
+        "//conditions:default": {"test.Pool": "large"},
     }),
     deps = [
         "//pkg/base",
