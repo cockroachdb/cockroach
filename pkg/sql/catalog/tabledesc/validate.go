@@ -131,6 +131,18 @@ func (desc *wrapper) GetReferencedDescIDs(
 			ids.Add(id)
 		}
 	}
+	// Add policy dependencies.
+	for _, p := range desc.Policies {
+		for _, id := range p.DependsOnTypes {
+			ids.Add(id)
+		}
+		for _, id := range p.DependsOnRelations {
+			ids.Add(id)
+		}
+		for _, id := range p.DependsOnFunctions {
+			ids.Add(id)
+		}
+	}
 	return ids, nil
 }
 
@@ -245,6 +257,19 @@ func (desc *wrapper) ValidateForwardReferences(
 			vea.Report(catalog.ValidateOutboundFunctionRef(id, vdg))
 		}
 	}
+
+	for i := range desc.Policies {
+		policy := &desc.Policies[i]
+		for _, id := range policy.DependsOnTypes {
+			vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
+		}
+		for _, id := range policy.DependsOnRelations {
+			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
+		}
+		for _, id := range policy.DependsOnFunctions {
+			vea.Report(catalog.ValidateOutboundFunctionRef(id, vdg))
+		}
+	}
 }
 
 // ValidateBackReferences implements the catalog.Descriptor interface.
@@ -329,6 +354,33 @@ func (desc *wrapper) ValidateBackReferences(
 		default:
 			vea.Report(errors.AssertionFailedf("table is depended on by unexpected %s %s (%d)",
 				depDesc.DescriptorType(), depDesc.GetName(), depDesc.GetID()))
+		}
+	}
+
+	// Check back-references in policies
+	for _, p := range desc.Policies {
+		for _, fnID := range p.DependsOnFunctions {
+			fn, err := vdg.GetFunctionDescriptor(fnID)
+			if err != nil {
+				vea.Report(err)
+				continue
+			}
+			vea.Report(desc.validateOutboundFuncRefBackReference(fn))
+		}
+		for _, id := range p.DependsOnTypes {
+			typ, err := vdg.GetTypeDescriptor(id)
+			if err != nil {
+				vea.Report(err)
+				continue
+			}
+			vea.Report(desc.validateOutboundTypeRefBackReference(typ))
+		}
+		for _, id := range p.DependsOnRelations {
+			ref, _ := vdg.GetTableDescriptor(id)
+			if ref == nil {
+				continue
+			}
+			vea.Report(catalog.ValidateOutboundTableRefBackReference(desc.GetID(), ref))
 		}
 	}
 }
@@ -2104,7 +2156,13 @@ func (desc *wrapper) validatePolicy(p *descpb.PolicyDescriptor) error {
 		return errors.AssertionFailedf(
 			"policy %q has an unknown policy command %v", p.Name, p.Command)
 	}
-	return desc.validatePolicyRoles(p)
+	if err := desc.validatePolicyRoles(p); err != nil {
+		return err
+	}
+	if err := desc.validatePolicyExprs(p); err != nil {
+		return err
+	}
+	return nil
 }
 
 // validatePolicyRoles will validate the roles that are in one policy.
@@ -2125,6 +2183,46 @@ func (desc *wrapper) validatePolicyRoles(p *descpb.PolicyDescriptor) error {
 		if roleName == username.PublicRole && i > 0 {
 			return errors.AssertionFailedf(
 				"the public role must be the first role defined in policy %q", p.Name)
+		}
+	}
+	return nil
+}
+
+// validatePolicyExprs will validate the expressions within the policy.
+func (desc *wrapper) validatePolicyExprs(p *descpb.PolicyDescriptor) error {
+	if p.WithCheckExpr != "" {
+		_, err := parser.ParseExpr(p.WithCheckExpr)
+		if err != nil {
+			return errors.Wrapf(err, "WITH CHECK expression %q is invalid", p.WithCheckExpr)
+		}
+	}
+	if p.UsingExpr != "" {
+		_, err := parser.ParseExpr(p.UsingExpr)
+		if err != nil {
+			return errors.Wrapf(err, "USING expression %q is invalid", p.UsingExpr)
+		}
+	}
+
+	// Ensure the validity of policy back-references. The existence and status of
+	// referenced objects are verified during the execution of
+	// ValidateForwardReferences and ValidateBackwardReferences for the table.
+	var seenIDs catalog.DescriptorIDSet
+	for _, id := range []struct {
+		idName string
+		ids    []descpb.ID
+	}{
+		{"type", p.DependsOnTypes},
+		{"functions", p.DependsOnFunctions},
+		{"relations", p.DependsOnRelations},
+	} {
+		for idx, depID := range id.ids {
+			if depID == descpb.InvalidID {
+				return errors.Newf("invalid %s id %d in depends-on references #%d", id.idName, id, idx)
+			}
+			if seenIDs.Contains(depID) {
+				return errors.Newf("%s id %d in depends-on references #%d is duplicated", id.idName, depID, idx)
+			}
+			seenIDs.Add(depID)
 		}
 	}
 	return nil

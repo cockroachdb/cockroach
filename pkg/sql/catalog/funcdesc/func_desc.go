@@ -425,6 +425,24 @@ func (desc *immutable) validateInboundTableRef(
 			triggerID, backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
 		)
 	}
+	for _, policyID := range by.PolicyIDs {
+		if catalog.FindPolicyByID(backRefTbl, policyID) == nil {
+			return errors.AssertionFailedf(
+				"depended-on-by relation %q (%d) does not have a policy with ID %d",
+				backRefTbl.GetName(), by.ID, policyID,
+			)
+		}
+		fnIDs := backRefTbl.GetAllReferencedFunctionIDsInPolicy(policyID)
+		if fnIDs.Contains(desc.GetID()) {
+			foundInTable = true
+			continue
+		}
+		return errors.AssertionFailedf(
+			"policy %d in depended-on-by relation %q (%d) does not have reference to function %q (%d)",
+			policyID, backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
+		)
+	}
+
 	if foundInTable {
 		return nil
 	}
@@ -781,6 +799,51 @@ func (desc *Mutable) RemoveTriggerReference(id descpb.ID, triggerID descpb.Trigg
 			for j := range dep.TriggerIDs {
 				if dep.TriggerIDs[j] == triggerID {
 					dep.TriggerIDs = append(dep.TriggerIDs[:j], dep.TriggerIDs[j+1:]...)
+					desc.maybeRemoveTableReference(id)
+					return
+				}
+			}
+		}
+	}
+}
+
+// AddPolicyReference adds back reference to a policy to the function.
+func (desc *Mutable) AddPolicyReference(id descpb.ID, policyID descpb.PolicyID) error {
+	for _, dep := range desc.DependsOn {
+		if dep == id {
+			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
+				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
+			)
+		}
+	}
+	defer sort.Slice(desc.DependedOnBy, func(i, j int) bool {
+		return desc.DependedOnBy[i].ID < desc.DependedOnBy[j].ID
+	})
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			for _, prevID := range desc.DependedOnBy[i].PolicyIDs {
+				if prevID == policyID {
+					return nil
+				}
+			}
+			desc.DependedOnBy[i].PolicyIDs = append(desc.DependedOnBy[i].PolicyIDs, policyID)
+			return nil
+		}
+	}
+	desc.DependedOnBy = append(desc.DependedOnBy,
+		descpb.FunctionDescriptor_Reference{ID: id, PolicyIDs: []descpb.PolicyID{policyID}},
+	)
+	return nil
+}
+
+// RemovePolicyReference removes back reference to a table's policy from the function.
+func (desc *Mutable) RemovePolicyReference(id descpb.ID, policyID descpb.PolicyID) {
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			dep := &desc.DependedOnBy[i]
+			for j := range dep.PolicyIDs {
+				if dep.PolicyIDs[j] == policyID {
+					dep.PolicyIDs = append(dep.PolicyIDs[:j], dep.PolicyIDs[j+1:]...)
 					desc.maybeRemoveTableReference(id)
 					return
 				}

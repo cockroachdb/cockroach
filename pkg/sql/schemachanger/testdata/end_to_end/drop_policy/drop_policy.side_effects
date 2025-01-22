@@ -16,11 +16,11 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP POLICY
 increment telemetry for sql.schema.drop_policy
-## StatementPhase stage 1 of 1 with 4 MutationType ops
+## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
   ...
-       - public
        type: PERMISSIVE
+       usingExpr: "true"
   -  - command: INSERT
   -    id: 2
   -    name: policy 2
@@ -28,6 +28,7 @@ upsert descriptor #104
   -    - user1
   -    - user2
   -    type: PERMISSIVE
+  -    withCheckExpr: "true"
      primaryIndex:
        constraintId: 1
   ...
@@ -40,11 +41,11 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+## PreCommitPhase stage 2 of 2 with 5 MutationType ops
 upsert descriptor #104
   ...
-       - public
        type: PERMISSIVE
+       usingExpr: "true"
   -  - command: INSERT
   -    id: 2
   -    name: policy 2
@@ -52,6 +53,7 @@ upsert descriptor #104
   -    - user1
   -    - user2
   -    type: PERMISSIVE
+  -    withCheckExpr: "true"
      primaryIndex:
        constraintId: 1
   ...

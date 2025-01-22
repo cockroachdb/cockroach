@@ -620,6 +620,29 @@ type RemovePolicyRole struct {
 	Role scpb.PolicyRole
 }
 
+// SetPolicyUsingExpression will set a new USING expression for a policy.
+type SetPolicyUsingExpression struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	PolicyID descpb.PolicyID
+	Expr     string
+}
+
+// SetPolicyWithCheckExpression will set a new WITH CHECK expression for a policy.
+type SetPolicyWithCheckExpression struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	PolicyID descpb.PolicyID
+	Expr     string
+}
+
+// SetPolicyForwardReferences sets new forward references to relations, types,
+// and routines for the expressions in a policy.
+type SetPolicyForwardReferences struct {
+	immediateMutationOp
+	Deps scpb.PolicyDeps
+}
+
 // UpdateTableBackReferencesInTypes updates back references to a table
 // in the specified types.
 type UpdateTableBackReferencesInTypes struct {
@@ -722,6 +745,24 @@ type RemoveTriggerBackReferencesInRoutines struct {
 	BackReferencedTableID   descpb.ID
 	BackReferencedTriggerID descpb.TriggerID
 	RoutineIDs              []descpb.ID
+}
+
+// AddPolicyBackReferenceInFunctions adds back references to a policy from
+// referenced functions.
+type AddPolicyBackReferenceInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID  descpb.ID
+	BackReferencedPolicyID descpb.PolicyID
+	FunctionIDs            []descpb.ID
+}
+
+// RemovePolicyBackReferenceInFunctions removes back-references to a policy
+// from referenced functions.
+type RemovePolicyBackReferenceInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID  descpb.ID
+	BackReferencedPolicyID descpb.PolicyID
+	FunctionIDs            []descpb.ID
 }
 
 // SetColumnName renames a column.

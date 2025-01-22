@@ -80,8 +80,13 @@ func DequalifyAndValidateExprImpl(
 		return "", nil, colIDs, err
 	}
 
-	if err := funcdesc.MaybeFailOnUDFUsage(typedExpr, context, version); err != nil {
-		return "", nil, colIDs, unimplemented.NewWithIssue(83234, "usage of user-defined function from relations not supported")
+	// TODO(87699): We can remove this once we have forward/backward references to
+	// functions. We skip this for policies because we have those references in
+	// place already.
+	if context != tree.PolicyUsingExpr && context != tree.PolicyWithCheckExpr {
+		if err := funcdesc.MaybeFailOnUDFUsage(typedExpr, context, version); err != nil {
+			return "", nil, colIDs, unimplemented.NewWithIssue(87699, "usage of user-defined function from relations not supported")
+		}
 	}
 
 	// We need to do the rewrite here before the expression is serialized because
@@ -546,6 +551,35 @@ func ValidateComputedColumnExpressionDoesNotDependOnColumn(
 			} else if hasRef {
 				return sqlerrors.NewDependentBlocksOpError(op, objType,
 					string(dependentCol.ColName()), "computed column", string(col.ColName()))
+			}
+		}
+	}
+	return nil
+}
+
+// ValidatePolicyExpressionsDoNotDependOnColumn will check if the dependendCol
+// has a dependency on any expressions defined for row-level security policies.
+func ValidatePolicyExpressionsDoNotDependOnColumn(
+	tableDesc catalog.TableDescriptor, dependentCol catalog.Column, objType, op string,
+) error {
+	for _, p := range tableDesc.GetPolicies() {
+		checkExpr := func(expr string) error {
+			if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, expr, dependentCol.GetID()); err != nil {
+				return err
+			} else if hasRef {
+				return sqlerrors.NewAlterDependsOnPolicyExprError(op, objType,
+					string(dependentCol.ColName()))
+			}
+			return nil
+		}
+		if p.UsingExpr != "" {
+			if err := checkExpr(p.UsingExpr); err != nil {
+				return err
+			}
+		}
+		if p.WithCheckExpr != "" {
+			if err := checkExpr(p.WithCheckExpr); err != nil {
+				return err
 			}
 		}
 	}
