@@ -26,6 +26,10 @@ import (
 
 // testPredecessorMapping is a test-only artificial mapping from
 // release series to an arbitrary release in the previous series.
+//
+// TODO(radu): we use this mapping starting with the current version, so we need
+// to keep updating it. Ideally, all unit tests would use a fixed "current"
+// version so this doesn't need to change.
 var testPredecessorMapping = map[string]*clusterupgrade.Version{
 	"19.2": clusterupgrade.MustParseVersion("v19.1.8"),
 	"21.1": clusterupgrade.MustParseVersion("v19.2.16"),
@@ -37,7 +41,7 @@ var testPredecessorMapping = map[string]*clusterupgrade.Version{
 	"24.1": clusterupgrade.MustParseVersion("v23.2.4"),
 	"24.2": clusterupgrade.MustParseVersion("v24.1.1"),
 	"24.3": clusterupgrade.MustParseVersion("v24.2.2"),
-	"25.1": clusterupgrade.MustParseVersion("v24.3.0"),
+	"25.2": clusterupgrade.MustParseVersion("v24.3.0"),
 }
 
 //go:embed testdata/test_releases.yaml

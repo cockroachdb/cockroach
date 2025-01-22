@@ -32,5 +32,5 @@
 "24.3":
   latest: 24.3.3
   predecessor: "24.2"
-"25.1":
+"25.2":
   predecessor: "24.3"

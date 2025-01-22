@@ -220,6 +220,11 @@ const (
 	// V25_1_JobsBackfill backfills the new jobs tables and columns.
 	V25_1_JobsBackfill
 
+	// V25_1 is CockroachDB v25.1. It's used for all v25.1.x patch releases.
+	V25_1
+
+	V25_2_Start
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -268,6 +273,11 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_1_JobsWritesFence:           {Major: 24, Minor: 3, Internal: 16},
 	V25_1_JobsBackfill:              {Major: 24, Minor: 3, Internal: 18},
 
+	V25_1: {Major: 25, Minor: 1, Internal: 0},
+
+	// v25.2 versions. Internal versions must be even.
+	V25_2_Start: {Major: 25, Minor: 1, Internal: 2},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -285,13 +295,13 @@ const MinSupported Key = V24_3
 // have at least an RC build published).
 const PreviousRelease Key = V24_3
 
-// V25_1 is a placeholder that will eventually be replaced by the actual 25.1
+// V25_2 is a placeholder that will eventually be replaced by the actual 25.2
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
 // a cluster is running 24.3 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 25.1.
-const V25_1 = Latest
+// only need to check that the cluster has upgraded to 25.2.
+const V25_2 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only

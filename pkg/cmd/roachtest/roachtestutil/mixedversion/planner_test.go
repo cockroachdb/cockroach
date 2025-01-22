@@ -429,7 +429,7 @@ func testPredecessorFunc(
 ) (*clusterupgrade.Version, error) {
 	pred, ok := testPredecessorMapping[v.Series()]
 	if !ok {
-		return nil, fmt.Errorf("no known predecessor for %q", v)
+		return nil, fmt.Errorf("no known predecessor for %q (%q series)", v, v.Series())
 	}
 
 	return pred, nil

@@ -90,6 +90,9 @@ var upgrades = []upgradebase.Upgrade{
 		backfillJobsTablesAndColumns,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore jobs tables"),
 	),
+
+	newFirstUpgrade(clusterversion.V25_2_Start.Version()),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
