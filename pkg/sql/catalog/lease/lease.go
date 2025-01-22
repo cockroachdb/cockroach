@@ -1346,6 +1346,7 @@ func (m *Manager) AcquireByName(
 				if t := m.findDescriptorState(descVersion.GetID(), false /* create */); t != nil {
 					if err := t.maybeQueueLeaseRenewal(
 						ctx, m, descVersion.GetID(), name); err != nil {
+						descVersion.Release(ctx)
 						return nil, err
 					}
 				}
@@ -1513,6 +1514,7 @@ func (m *Manager) Acquire(
 				durationUntilExpiry := time.Duration(desc.getExpiration(ctx).WallTime - timestamp.WallTime)
 				if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
 					if err := t.maybeQueueLeaseRenewal(ctx, m, id, desc.GetName()); err != nil {
+						desc.Release(ctx)
 						return nil, err
 					}
 				}
@@ -1694,11 +1696,14 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 						if err != nil {
 							log.Warningf(ctx, "error fetching lease for descriptor %s", err)
 						}
-					} else {
-						if err := purgeOldVersions(ctx, db, desc.GetID(), dropped, desc.GetVersion(), m); err != nil {
-							log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
-								desc.GetID(), desc.GetName(), err)
-						}
+					}
+					// Even if an initial acquisition happens above, we need to purge old
+					// descriptor versions, which could have been acquired concurrently.
+					// For example the range feed sees version 2 and a query concurrently
+					// acquires version 1.
+					if err := purgeOldVersions(ctx, db, desc.GetID(), dropped, desc.GetVersion(), m); err != nil {
+						log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
+							desc.GetID(), desc.GetName(), err)
 					}
 				}
 				// New descriptors may appear in the future if the descriptor table is
