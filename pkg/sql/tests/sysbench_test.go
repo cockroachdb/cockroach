@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/profile"
 	"github.com/jackc/pgx/v5"
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
 
@@ -775,20 +774,8 @@ func benchmemFile(b testing.TB) string {
 	b.Helper()
 	var benchMemFile string
 	var outputDir string
-	pf := pflag.NewFlagSet("test", pflag.ContinueOnError)
-	pf.StringVar(&benchMemFile, "test.memprofile", "", "")
-	pf.StringVar(&outputDir, "test.outputdir", "", "")
-	var args []string
-	for _, arg := range os.Args[1:] {
-		if strings.HasPrefix(arg, "-") {
-			if !strings.HasPrefix(arg, "-test.memprofile") && !strings.HasPrefix(arg, "-test.outputdir") {
-				continue
-			}
-			arg = "-" + arg
-		}
-		args = append(args, arg)
-	}
-	require.NoError(b, pf.Parse(args))
+	require.NoError(b, sniffArgs(os.Args[1:], "test.memprofile", &benchMemFile))
+	require.NoError(b, sniffArgs(os.Args[1:], "test.outputdir", &outputDir))
 
 	if benchMemFile == "" {
 		return ""
