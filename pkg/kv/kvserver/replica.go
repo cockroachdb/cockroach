@@ -2444,12 +2444,23 @@ func (r *Replica) getReplicaDescriptorByIDRLocked(
 			replicaID, fallback, r.shMu.state.Desc.Replicas())
 }
 
+var checkAbortSpan = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.check_abort_span",
+	"enables detection of cases in which a transaction was aborted before it returns potentially invalid reads",
+	true,
+)
+
 // checkIfTxnAborted checks the txn AbortSpan for the given
 // transaction. In case the transaction has been aborted, return a
 // transaction abort error.
 func checkIfTxnAborted(
 	ctx context.Context, rec batcheval.EvalContext, reader storage.Reader, txn roachpb.Transaction,
 ) *kvpb.Error {
+	if !checkAbortSpan.Get(&rec.ClusterSettings().SV) {
+		return nil
+	}
+
 	var entry roachpb.AbortSpanEntry
 	aborted, err := rec.AbortSpan().Get(ctx, reader, txn.ID, &entry)
 	if err != nil {
