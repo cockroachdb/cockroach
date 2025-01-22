@@ -122,9 +122,9 @@ func (psc *persistentStoreCodec) encodeVectorFromSet(
 	return nil, errors.Errorf("unknown quantizer type %T", psc.quantizer)
 }
 
-// NewPersistentStoreTxn wraps a PersistentStore transaction around a kv
+// newPersistentStoreTxn wraps a PersistentStore transaction around a kv
 // transaction for use with the vecstore API.
-func NewPersistentStoreTxn(store *PersistentStore, kv *kv.Txn) *persistentStoreTxn {
+func newPersistentStoreTxn(store *PersistentStore, kv *kv.Txn) *persistentStoreTxn {
 	psTxn := persistentStoreTxn{
 		kv:        kv,
 		store:     store,
