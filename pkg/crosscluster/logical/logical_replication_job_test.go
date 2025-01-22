@@ -2468,3 +2468,29 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 }
+
+func TestFailDestAfterSourceFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := testClusterBaseClusterArgs
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, args, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+
+	var jobBID jobspb.JobID
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+	dbB.Exec(t, "PAUSE JOB $1", jobBID)
+
+	producerJobID := replicationutils.GetProducerJobIDFromLDRJob(t, dbA, jobBID)
+	dbA.Exec(t, "CANCEL JOB $1", producerJobID)
+	jobutils.WaitForJobToCancel(t, dbA, producerJobID)
+
+	dbB.Exec(t, "RESUME JOB $1", jobBID)
+	jobutils.WaitForJobToFail(t, dbB, jobBID)
+}
