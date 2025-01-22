@@ -654,6 +654,17 @@ func (u *unknownTable) Trigger(i int) cat.Trigger {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
+// IsRowLevelSecurityEnabled is part of the cat.Table interface
+func (u *unknownTable) IsRowLevelSecurityEnabled() bool { return false }
+
+// PolicyCount is part of the cat.Table interface
+func (u *unknownTable) PolicyCount(polType tree.PolicyType) int { return 0 }
+
+// Policy is part of the cat.Table interface
+func (u *unknownTable) Policy(polType tree.PolicyType, i int) cat.Policy {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
 var _ cat.Table = &unknownTable{}
 
 // unknownTable implements the cat.Index interface and is used to represent
