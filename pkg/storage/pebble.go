@@ -353,6 +353,15 @@ var EngineComparer = func() pebble.Comparer {
 	return c
 }()
 
+// KeySchemas holds the set of KeySchemas understandable by CockroachDB.
+var KeySchemas = []*pebble.KeySchema{&cockroachkvs.KeySchema}
+
+// TODO(jackson): We need to rethink uses of DefaultKeySchema when we introduce
+// a new key schema.
+
+// DefaultKeySchema is the name of the default key schema.
+var DefaultKeySchema = cockroachkvs.KeySchema.Name
+
 // MVCCMerger is a pebble.Merger object that implements the merge operator used
 // by Cockroach.
 var MVCCMerger = &pebble.Merger{
@@ -489,7 +498,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	opts := &pebble.Options{
 		Comparer:   &EngineComparer,
 		FS:         vfs.Default,
-		KeySchema:  keySchema.Name,
+		KeySchema:  DefaultKeySchema,
 		KeySchemas: sstable.MakeKeySchemas(KeySchemas...),
 		// A value of 2 triggers a compaction when there is 1 sub-level.
 		L0CompactionThreshold: 2,
