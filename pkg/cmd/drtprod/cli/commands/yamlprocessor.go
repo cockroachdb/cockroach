@@ -14,9 +14,16 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/helpers"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v2"
+)
+
+const (
+	// the following are the status of the target execution
+	targetResultSuccess = iota // the target has succeeded
+	targetResultFailure        // the target has failed
 )
 
 // commandExecutor is responsible for executing the shell commands
@@ -52,6 +59,12 @@ You can also specify the rollback commands in case of a step failure.
 	return cobraCmd
 }
 
+// targetStatus maintains the registry of target to status mapping
+type targetStatus struct {
+	syncutil.Mutex
+	statusRegistry map[string]int
+}
+
 // step represents an individual step in the YAML configuration.
 // It can include an ActionStep and additional information for error handling and rollback.
 type step struct {
@@ -66,10 +79,11 @@ type step struct {
 
 // target defines a target cluster with associated steps to be executed.
 type target struct {
-	TargetName       string   `yaml:"target_name"`       // Name of the target cluster
-	DependentTargets []string `yaml:"dependent_targets"` // targets should complete before starting this target
-	Steps            []step   `yaml:"steps"`             // Steps to execute on the target cluster
-	commands         []*command
+	TargetName             string   `yaml:"target_name"`              // Name of the target cluster
+	DependentTargets       []string `yaml:"dependent_targets"`        // targets should complete before starting this target
+	IgnoreDependentFailure bool     `yaml:"ignore_dependent_failure"` // ignore and continue even dependent targets have failed
+	Steps                  []step   `yaml:"steps"`                    // Steps to execute on the target cluster
+	commands               []*command
 }
 
 // yamlConfig represents the structure of the entire YAML configuration file.
@@ -142,6 +156,10 @@ func setEnv(environment map[string]string, displayOnly bool) error {
 func processTargets(
 	ctx context.Context, targets []target, displayOnly bool, userProvidedTargetNames []string,
 ) error {
+	sr := &targetStatus{
+		Mutex:          syncutil.Mutex{},
+		statusRegistry: make(map[string]int),
+	}
 	// targetNameMap is used to check all targets that are provided as user input
 	targetNameMap := make(map[string]struct{})
 	for _, tn := range userProvidedTargetNames {
@@ -172,18 +190,44 @@ func processTargets(
 			// defer complete the wait group for the dependent targets to proceed
 			defer waitGroupTracker[t.TargetName].Done()
 			defer wg.Done()
+			// currentTargetStatus maintains the status of the current target
+			currentTargetStatus := targetResultSuccess
 			for _, dt := range t.DependentTargets {
 				if twg, ok := waitGroupTracker[dt]; ok {
-					fmt.Printf("%s: waiting on <%s>\n", t.TargetName, dt)
+					fmt.Printf("[%s] waiting on <%s>\n", t.TargetName, dt)
 					// wait on the dependent targets
 					// it would not matter if we wait sequentially as all dependent targets need to complete
 					twg.Wait()
+					//	if we reach here, the dependent target execution has finished. So, there will be an entry in the
+					// status registry for the dependent target. The only reason why an entry could be missing is that the
+					// dependent target is not selected by the user in -t option.
+					sr.Lock()
+					status, exists := sr.statusRegistry[dt]
+					sr.Unlock()
+					// We need to check if we need to ignore the dependent target failure
+					if !t.IgnoreDependentFailure && exists && status == targetResultFailure {
+						fmt.Printf("[%s] Not proceeding as the dependent target %s was not successful.", t.TargetName, dt)
+						// if the dependent target has failed, the current target is marked as failure
+						currentTargetStatus = targetResultFailure
+						break
+					}
 				}
 			}
-			err := executeCommands(ctx, t.TargetName, t.commands)
-			if err != nil {
-				fmt.Printf("%s: Error executing commands: %v\n", t.TargetName, err)
+			var err error
+			// currentTargetStatus must be success for executing further commands
+			if currentTargetStatus == targetResultSuccess {
+				err = executeCommands(ctx, t.TargetName, t.commands)
 			}
+			// statusRegistry will get updated concurrently and so, we need to ensure we lock
+			sr.Lock()
+			defer sr.Unlock()
+			// err can be nil if the commands were not executed as the dependent target has failed
+			if err != nil || currentTargetStatus == targetResultFailure {
+				fmt.Printf("[%s] Error executing commands: %v\n", t.TargetName, err)
+				sr.statusRegistry[t.TargetName] = targetResultFailure
+				return
+			}
+			sr.statusRegistry[t.TargetName] = targetResultSuccess
 		}(t)
 	}
 	// final wait for all targets to complete
