@@ -330,6 +330,11 @@ type raft struct {
 
 	state pb.StateType
 
+	// idxPreLeading is the highest log index on the raft node before the leader became leader
+	// Updated only when the raft node becomes leader
+	// Only used for term check comparison before committing entry(s) in maybeCommit() when raft is in leader state
+	idxPreLeading uint64
+
 	// isLearner is true if the local raft node is a learner.
 	isLearner bool
 
@@ -1028,7 +1033,12 @@ func (r *raft) maybeCommit() bool {
 	// replicas; once an entry from the current term has been committed in this
 	// way, then all prior entries are committed indirectly because of the Log
 	// Matching Property.
-	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
+	//
+	// Instead of comparing the term of the entry we want to commit with the current term of the leader,
+	// (which may trigger a storage read to know the term number of the entry we want to commit,
+	// because the entry might already have been persisted to stable storage and deleted from memory)
+	// we keep the index of the highest entry of the current leader node before it became leader
+	if index <= r.idxPreLeading {
 		return false
 	}
 	r.raftLog.commitTo(LogMark{Term: r.Term, Index: index})
@@ -1359,6 +1369,9 @@ func (r *raft) becomeLeader() {
 	// pending log entries, and scanning the entire tail of the log
 	// could be expensive.
 	r.pendingConfIndex = r.raftLog.lastIndex()
+
+	// See comments on raft.idxPreLeading
+	r.idxPreLeading = r.raftLog.lastIndex()
 
 	emptyEnt := pb.Entry{Data: nil}
 	if !r.appendEntry(emptyEnt) {
