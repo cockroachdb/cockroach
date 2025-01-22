@@ -863,48 +863,63 @@ func BenchmarkSysbench(b *testing.B) {
 						sys, cleanup := driver.constructorFn(ctx, b)
 						defer cleanup()
 
-						rng := rand.New(rand.NewSource(0))
-						sys.prep(rng)
+						sys.prep(rand.New(rand.NewSource(0)))
 
 						defer startAllocsProfile(b).Stop(b)
 						defer b.StopTimer()
 						b.ResetTimer()
-						if !parallel {
-							s := sys.newClient()
-							for i := 0; i < b.N; i++ {
-								if err := workload.opFn(s, rng); err != nil {
-									// Don't expect any concurrency errors in single-threaded
-									// mode.
-									b.Fatal(err)
-								}
-							}
-						} else {
-							var seed atomic.Int64
-							var errs atomic.Int64
-							b.RunParallel(func(pb *testing.PB) {
-								goro := goid.Get()
 
-								rng := rand.New(rand.NewSource(seed.Add(1)))
+						var id atomic.Int64
+						var errs atomic.Int64
+						if parallel {
+							b.RunParallel(func(pb *testing.PB) {
+								seed := id.Add(1) - 1
 								s := sys.newClient()
 								defer func() { _ = s.Close() }()
 
-								for pb.Next() {
-									if err := workload.opFn(s, rng); err != nil {
-										b.Logf("goro%d: op: %v", goro, err)
-										if err := s.Close(); err != nil {
-											b.Errorf("goro%d: closing: %v", goro, err)
-										}
-										errs.Add(1)
-									}
-								}
+								runSysbench(b, workload.opFn, s, &errs, pb.Next, seed)
 							})
-							b.ReportMetric(float64(errs.Load())/float64(b.N), "errs/op")
+						} else {
+							s := sys.newClient()
+							defer func() { _ = s.Close() }()
+
+							var i int
+							runSysbench(b, workload.opFn, s, nil /* errors are fatal */, func() bool {
+								i++
+								return i <= b.N
+							}, 0)
 						}
+						b.ReportMetric(float64(errs.Load())/float64(b.N), "errs/op")
 					})
 				}
 			})
 		}
 	})
+}
+
+func runSysbench(
+	b testing.TB,
+	opFn sysbenchWorkload,
+	s sysbenchClient,
+	errs *atomic.Int64, // if nil, errors are fatal
+	next func() bool, // like pb.Next
+	seed int64,
+) {
+	goro := goid.Get()
+	rng := rand.New(rand.NewSource(seed))
+
+	for next() {
+		if err := opFn(s, rng); err != nil {
+			if errs == nil {
+				b.Fatal(err)
+			}
+			errs.Add(1)
+			b.Logf("goro%d: op: %v", goro, err)
+			if err := s.Close(); err != nil {
+				b.Errorf("goro%d: closing: %v", goro, err)
+			}
+		}
+	}
 }
 
 func try0(err error) {
