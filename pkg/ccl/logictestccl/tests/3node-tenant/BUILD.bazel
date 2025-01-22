@@ -10,7 +10,7 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
-    exec_properties = {"test.Pool": "large"},
+    exec_properties = {"test.Pool": "heavy"},
     shard_count = 48,
     tags = ["cpu:2"],
     deps = [
