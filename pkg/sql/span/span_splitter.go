@@ -86,7 +86,7 @@ func MakeSplitterBase(
 	// If we're looking at a secondary index...
 	if index.GetID() != table.GetPrimaryIndexID() {
 
-		// * The index cannot be inverted.
+		// * The index cannot be inverted or a vector index.
 		if index.GetType() != descpb.IndexDescriptor_FORWARD {
 			return NoopSplitter()
 		}

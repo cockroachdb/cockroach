@@ -267,9 +267,11 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	case *memo.LockExpr:
 		ep, outputCols, err = b.buildLock(t)
 
-	case *memo.VectorSearchExpr, *memo.VectorMutationSearchExpr:
-		err = unimplemented.New("vector index search",
-			"execution planning for vector index search is not yet implemented")
+	case *memo.VectorSearchExpr:
+		ep, outputCols, err = b.buildVectorSearch(t)
+
+	case *memo.VectorMutationSearchExpr:
+		ep, outputCols, err = b.buildVectorMutationSearch(t)
 
 	case *memo.BarrierExpr:
 		ep, outputCols, err = b.buildBarrier(t)
@@ -3824,6 +3826,97 @@ func (b *Builder) buildBarrier(
 	// BarrierExpr is only used as an optimization barrier. In the execution plan,
 	// it is replaced with its input.
 	return b.buildRelational(barrier.Input)
+}
+
+func (b *Builder) buildVectorSearch(
+	search *memo.VectorSearchExpr,
+) (_ execPlan, _ colOrdMap, _ error) {
+	md := b.mem.Metadata()
+	table := md.Table(search.Table)
+	index := table.Index(search.Index)
+	if !index.IsVector() {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+			"vector search is only supported on vector indexes")
+	}
+	for col, ok := search.Cols.Next(0); ok; col, ok = search.Cols.Next(col + 1) {
+		if !md.TableMeta(search.Table).IndexKeyColumns(cat.PrimaryIndex).Contains(col) {
+			return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+				"vector search output column %d is not a primary key column", col)
+		}
+	}
+	outColOrds, outColMap := b.getColumns(search.Cols, search.Table)
+	ctx := buildScalarCtx{}
+	queryVector, err := b.buildScalar(&ctx, search.QueryVector)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	targetNeighborCount := uint64(search.TargetNeighborCount)
+
+	var res execPlan
+	res.root, err = b.factory.ConstructVectorSearch(
+		table, index, outColOrds, search.PrefixConstraint, queryVector, targetNeighborCount,
+	)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	return res, outColMap, nil
+}
+
+func (b *Builder) buildVectorMutationSearch(
+	search *memo.VectorMutationSearchExpr,
+) (_ execPlan, outputCols colOrdMap, err error) {
+	md := b.mem.Metadata()
+	table := md.Table(search.Table)
+	index := table.Index(search.Index)
+	if !index.IsVector() {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+			"vector mutation search is only supported on vector indexes")
+	}
+
+	input, inputCols, err := b.buildRelational(search.Input)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	// Produce the output column map. All input columns are passed through.
+	// The operator will project a partition column and (optionally) a quantized
+	// vector column.
+	outputCols = inputCols
+	outputCols.Set(search.PartitionCol, inputCols.MaxOrd()+1)
+	if search.QuantizedVectorCol != 0 {
+		outputCols.Set(search.QuantizedVectorCol, inputCols.MaxOrd()+2)
+	}
+
+	// Resolve the column ordinals for the input columns.
+	prefixKeyCols := make([]exec.NodeColumnOrdinal, len(search.PrefixKeyCols))
+	for i, c := range search.PrefixKeyCols {
+		prefixKeyCols[i], err = getNodeColumnOrdinal(inputCols, c)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
+	}
+	queryVectorCol, err := getNodeColumnOrdinal(inputCols, search.QueryVectorCol)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	pkCols := search.PrimaryKeyCols
+	primaryKeyCols := make([]exec.NodeColumnOrdinal, 0, pkCols.Len())
+	for col, ok := pkCols.Next(0); ok; col, ok = pkCols.Next(col + 1) {
+		pkCol, err := getNodeColumnOrdinal(inputCols, col)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
+		primaryKeyCols = append(primaryKeyCols, pkCol)
+	}
+	isIndexPut := search.QuantizedVectorCol != 0
+
+	var res execPlan
+	res.root, err = b.factory.ConstructVectorMutationSearch(
+		input, table, index, prefixKeyCols, queryVectorCol, primaryKeyCols, isIndexPut,
+	)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	return res, outputCols, nil
 }
 
 // needProjection figures out what projection is needed on top of the input plan
