@@ -8,5 +8,7 @@ go_library(
     deps = [
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props/physical",
+        "//pkg/util/json",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

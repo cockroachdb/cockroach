@@ -70,17 +70,20 @@ const (
 	// ExplainGist generates a plan "gist".
 	ExplainGist
 
+	ExplainPheromone
+
 	numExplainModes = iota
 )
 
 var explainModeStrings = [...]string{
-	ExplainPlan:    "PLAN",
-	ExplainDistSQL: "DISTSQL",
-	ExplainOpt:     "OPT",
-	ExplainVec:     "VEC",
-	ExplainDebug:   "DEBUG",
-	ExplainDDL:     "DDL",
-	ExplainGist:    "GIST",
+	ExplainPlan:      "PLAN",
+	ExplainDistSQL:   "DISTSQL",
+	ExplainOpt:       "OPT",
+	ExplainVec:       "VEC",
+	ExplainDebug:     "DEBUG",
+	ExplainDDL:       "DDL",
+	ExplainGist:      "GIST",
+	ExplainPheromone: "PHEROMONE",
 }
 
 var explainModeStringMap = func() map[string]ExplainMode {
@@ -260,8 +263,8 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		opts.Mode = ExplainPlan
 	}
 	if opts.Flags[ExplainFlagJSON] {
-		if opts.Mode != ExplainDistSQL {
-			return nil, pgerror.Newf(pgcode.Syntax, "the JSON flag can only be used with DISTSQL")
+		if opts.Mode != ExplainDistSQL && opts.Mode != ExplainPheromone {
+			return nil, pgerror.Newf(pgcode.Syntax, "the JSON flag can only be used with DISTSQL or PHEROMONE")
 		}
 		if analyze {
 			return nil, pgerror.Newf(pgcode.Syntax, "the JSON flag cannot be used with ANALYZE")

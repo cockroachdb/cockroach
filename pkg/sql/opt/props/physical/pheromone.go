@@ -8,6 +8,7 @@ package physical
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -38,6 +39,15 @@ var NonePheromone = Pheromone{}
 
 func (p *Pheromone) Any() bool {
 	return p == nil
+}
+
+func PheromoneFromFields(op opt.Operator, fields json.JSON, children [3]*Pheromone) *Pheromone {
+	return &Pheromone{
+		op:        op,
+		fields:    fields,
+		children:  children,
+		alternate: &NonePheromone,
+	}
 }
 
 func PheromoneFromJSON(j json.JSON) (*Pheromone, error) {
@@ -169,6 +179,10 @@ func PheromoneFromJSON(j json.JSON) (*Pheromone, error) {
 
 			return body, nil
 		}
+
+		// TODO: {"_not": <body>} matches if the body does not match
+		// this will require a change to the pheromone structure to support negated
+		// alternation like {"_not": [a, b, c, ...]}
 
 		// {"_op": <operator>, fields...} is a pattern matching an operator
 		if it, err := j.ObjectIter(); it != nil || err != nil {
@@ -498,14 +512,507 @@ func (p *Pheromone) Matches(op opt.Operator) bool {
 	}
 
 	/* TODO
-	switch t := expr.(type) {
-	case *memo.ScanExpr:
-		if table, err := p.fields.FetchValKey("table"); table != nil || err != nil {
-			if err != nil {
-				panic(errors.AssertionFailedf("unexpected %v", err))
-			}
-			if table != t.
-		}
+	switch t := e.(type) {
+	case *NormCycleTestRelExpr:
+		return in.InternNormCycleTestRel(t)
+	case *MemoCycleTestRelExpr:
+		return in.InternMemoCycleTestRel(t)
+	case *InsertExpr:
+		return in.InternInsert(t)
+	case *UpdateExpr:
+		return in.InternUpdate(t)
+	case *UpsertExpr:
+		return in.InternUpsert(t)
+	case *DeleteExpr:
+		return in.InternDelete(t)
+	case *FKChecksExpr:
+		return in.InternFKChecks(t)
+	case *FKChecksItem:
+		return in.InternFKChecksItem(t)
+	case *FastPathUniqueChecksExpr:
+		return in.InternFastPathUniqueChecks(t)
+	case *FastPathUniqueChecksItem:
+		return in.InternFastPathUniqueChecksItem(t)
+	case *UniqueChecksExpr:
+		return in.InternUniqueChecks(t)
+	case *UniqueChecksItem:
+		return in.InternUniqueChecksItem(t)
+	case *LockExpr:
+		return in.InternLock(t)
+	case *ScanExpr:
+		return in.InternScan(t)
+	case *PlaceholderScanExpr:
+		return in.InternPlaceholderScan(t)
+	case *SequenceSelectExpr:
+		return in.InternSequenceSelect(t)
+	case *ValuesExpr:
+		return in.InternValues(t)
+	case *LiteralValuesExpr:
+		return in.InternLiteralValues(t)
+	case *SelectExpr:
+		return in.InternSelect(t)
+	case *ProjectExpr:
+		return in.InternProject(t)
+	case *InvertedFilterExpr:
+		return in.InternInvertedFilter(t)
+	case *InnerJoinExpr:
+		return in.InternInnerJoin(t)
+	case *LeftJoinExpr:
+		return in.InternLeftJoin(t)
+	case *RightJoinExpr:
+		return in.InternRightJoin(t)
+	case *FullJoinExpr:
+		return in.InternFullJoin(t)
+	case *SemiJoinExpr:
+		return in.InternSemiJoin(t)
+	case *AntiJoinExpr:
+		return in.InternAntiJoin(t)
+	case *IndexJoinExpr:
+		return in.InternIndexJoin(t)
+	case *LookupJoinExpr:
+		return in.InternLookupJoin(t)
+	case *InvertedJoinExpr:
+		return in.InternInvertedJoin(t)
+	case *MergeJoinExpr:
+		return in.InternMergeJoin(t)
+	case *ZigzagJoinExpr:
+		return in.InternZigzagJoin(t)
+	case *InnerJoinApplyExpr:
+		return in.InternInnerJoinApply(t)
+	case *LeftJoinApplyExpr:
+		return in.InternLeftJoinApply(t)
+	case *SemiJoinApplyExpr:
+		return in.InternSemiJoinApply(t)
+	case *AntiJoinApplyExpr:
+		return in.InternAntiJoinApply(t)
+	case *GroupByExpr:
+		return in.InternGroupBy(t)
+	case *ScalarGroupByExpr:
+		return in.InternScalarGroupBy(t)
+	case *DistinctOnExpr:
+		return in.InternDistinctOn(t)
+	case *EnsureDistinctOnExpr:
+		return in.InternEnsureDistinctOn(t)
+	case *UpsertDistinctOnExpr:
+		return in.InternUpsertDistinctOn(t)
+	case *EnsureUpsertDistinctOnExpr:
+		return in.InternEnsureUpsertDistinctOn(t)
+	case *UnionExpr:
+		return in.InternUnion(t)
+	case *IntersectExpr:
+		return in.InternIntersect(t)
+	case *ExceptExpr:
+		return in.InternExcept(t)
+	case *UnionAllExpr:
+		return in.InternUnionAll(t)
+	case *IntersectAllExpr:
+		return in.InternIntersectAll(t)
+	case *ExceptAllExpr:
+		return in.InternExceptAll(t)
+	case *LocalityOptimizedSearchExpr:
+		return in.InternLocalityOptimizedSearch(t)
+	case *LimitExpr:
+		return in.InternLimit(t)
+	case *OffsetExpr:
+		return in.InternOffset(t)
+	case *TopKExpr:
+		return in.InternTopK(t)
+	case *Max1RowExpr:
+		return in.InternMax1Row(t)
+	case *OrdinalityExpr:
+		return in.InternOrdinality(t)
+	case *ProjectSetExpr:
+		return in.InternProjectSet(t)
+	case *WindowExpr:
+		return in.InternWindow(t)
+	case *WithExpr:
+		return in.InternWith(t)
+	case *WithScanExpr:
+		return in.InternWithScan(t)
+	case *RecursiveCTEExpr:
+		return in.InternRecursiveCTE(t)
+	case *VectorSearchExpr:
+		return in.InternVectorSearch(t)
+	case *VectorPartitionSearchExpr:
+		return in.InternVectorPartitionSearch(t)
+	case *BarrierExpr:
+		return in.InternBarrier(t)
+	case *FakeRelExpr:
+		return in.InternFakeRel(t)
+	case *SubqueryExpr:
+		return in.InternSubquery(t)
+	case *AnyExpr:
+		return in.InternAny(t)
+	case *ExistsExpr:
+		return in.InternExists(t)
+	case *VariableExpr:
+		return in.InternVariable(t)
+	case *ConstExpr:
+		return in.InternConst(t)
+	case *NullExpr:
+		return in.InternNull(t)
+	case *TrueExpr:
+		return in.InternTrue(t)
+	case *FalseExpr:
+		return in.InternFalse(t)
+	case *PlaceholderExpr:
+		return in.InternPlaceholder(t)
+	case *TupleExpr:
+		return in.InternTuple(t)
+	case *ProjectionsExpr:
+		return in.InternProjections(t)
+	case *ProjectionsItem:
+		return in.InternProjectionsItem(t)
+	case *AggregationsExpr:
+		return in.InternAggregations(t)
+	case *AggregationsItem:
+		return in.InternAggregationsItem(t)
+	case *FiltersExpr:
+		return in.InternFilters(t)
+	case *FiltersItem:
+		return in.InternFiltersItem(t)
+	case *ZipExpr:
+		return in.InternZip(t)
+	case *ZipItem:
+		return in.InternZipItem(t)
+	case *AndExpr:
+		return in.InternAnd(t)
+	case *OrExpr:
+		return in.InternOr(t)
+	case *RangeExpr:
+		return in.InternRange(t)
+	case *NotExpr:
+		return in.InternNot(t)
+	case *IsTupleNullExpr:
+		return in.InternIsTupleNull(t)
+	case *IsTupleNotNullExpr:
+		return in.InternIsTupleNotNull(t)
+	case *EqExpr:
+		return in.InternEq(t)
+	case *LtExpr:
+		return in.InternLt(t)
+	case *GtExpr:
+		return in.InternGt(t)
+	case *LeExpr:
+		return in.InternLe(t)
+	case *GeExpr:
+		return in.InternGe(t)
+	case *NeExpr:
+		return in.InternNe(t)
+	case *InExpr:
+		return in.InternIn(t)
+	case *NotInExpr:
+		return in.InternNotIn(t)
+	case *LikeExpr:
+		return in.InternLike(t)
+	case *NotLikeExpr:
+		return in.InternNotLike(t)
+	case *ILikeExpr:
+		return in.InternILike(t)
+	case *NotILikeExpr:
+		return in.InternNotILike(t)
+	case *SimilarToExpr:
+		return in.InternSimilarTo(t)
+	case *NotSimilarToExpr:
+		return in.InternNotSimilarTo(t)
+	case *RegMatchExpr:
+		return in.InternRegMatch(t)
+	case *NotRegMatchExpr:
+		return in.InternNotRegMatch(t)
+	case *RegIMatchExpr:
+		return in.InternRegIMatch(t)
+	case *NotRegIMatchExpr:
+		return in.InternNotRegIMatch(t)
+	case *IsExpr:
+		return in.InternIs(t)
+	case *IsNotExpr:
+		return in.InternIsNot(t)
+	case *ContainsExpr:
+		return in.InternContains(t)
+	case *ContainedByExpr:
+		return in.InternContainedBy(t)
+	case *JsonExistsExpr:
+		return in.InternJsonExists(t)
+	case *JsonAllExistsExpr:
+		return in.InternJsonAllExists(t)
+	case *JsonSomeExistsExpr:
+		return in.InternJsonSomeExists(t)
+	case *OverlapsExpr:
+		return in.InternOverlaps(t)
+	case *BBoxCoversExpr:
+		return in.InternBBoxCovers(t)
+	case *BBoxIntersectsExpr:
+		return in.InternBBoxIntersects(t)
+	case *TSMatchesExpr:
+		return in.InternTSMatches(t)
+	case *VectorDistanceExpr:
+		return in.InternVectorDistance(t)
+	case *VectorCosDistanceExpr:
+		return in.InternVectorCosDistance(t)
+	case *VectorNegInnerProductExpr:
+		return in.InternVectorNegInnerProduct(t)
+	case *AnyScalarExpr:
+		return in.InternAnyScalar(t)
+	case *BitandExpr:
+		return in.InternBitand(t)
+	case *BitorExpr:
+		return in.InternBitor(t)
+	case *BitxorExpr:
+		return in.InternBitxor(t)
+	case *PlusExpr:
+		return in.InternPlus(t)
+	case *MinusExpr:
+		return in.InternMinus(t)
+	case *MultExpr:
+		return in.InternMult(t)
+	case *DivExpr:
+		return in.InternDiv(t)
+	case *FloorDivExpr:
+		return in.InternFloorDiv(t)
+	case *ModExpr:
+		return in.InternMod(t)
+	case *PowExpr:
+		return in.InternPow(t)
+	case *ConcatExpr:
+		return in.InternConcat(t)
+	case *LShiftExpr:
+		return in.InternLShift(t)
+	case *RShiftExpr:
+		return in.InternRShift(t)
+	case *FetchValExpr:
+		return in.InternFetchVal(t)
+	case *FetchTextExpr:
+		return in.InternFetchText(t)
+	case *FetchValPathExpr:
+		return in.InternFetchValPath(t)
+	case *FetchTextPathExpr:
+		return in.InternFetchTextPath(t)
+	case *UnaryMinusExpr:
+		return in.InternUnaryMinus(t)
+	case *UnaryPlusExpr:
+		return in.InternUnaryPlus(t)
+	case *UnaryComplementExpr:
+		return in.InternUnaryComplement(t)
+	case *UnarySqrtExpr:
+		return in.InternUnarySqrt(t)
+	case *UnaryCbrtExpr:
+		return in.InternUnaryCbrt(t)
+	case *CastExpr:
+		return in.InternCast(t)
+	case *AssignmentCastExpr:
+		return in.InternAssignmentCast(t)
+	case *IfErrExpr:
+		return in.InternIfErr(t)
+	case *CaseExpr:
+		return in.InternCase(t)
+	case *WhenExpr:
+		return in.InternWhen(t)
+	case *ArrayExpr:
+		return in.InternArray(t)
+	case *IndirectionExpr:
+		return in.InternIndirection(t)
+	case *ArrayFlattenExpr:
+		return in.InternArrayFlatten(t)
+	case *FunctionExpr:
+		return in.InternFunction(t)
+	case *CollateExpr:
+		return in.InternCollate(t)
+	case *CoalesceExpr:
+		return in.InternCoalesce(t)
+	case *ColumnAccessExpr:
+		return in.InternColumnAccess(t)
+	case *ArrayAggExpr:
+		return in.InternArrayAgg(t)
+	case *ArrayCatAggExpr:
+		return in.InternArrayCatAgg(t)
+	case *AvgExpr:
+		return in.InternAvg(t)
+	case *BitAndAggExpr:
+		return in.InternBitAndAgg(t)
+	case *BitOrAggExpr:
+		return in.InternBitOrAgg(t)
+	case *BoolAndExpr:
+		return in.InternBoolAnd(t)
+	case *BoolOrExpr:
+		return in.InternBoolOr(t)
+	case *ConcatAggExpr:
+		return in.InternConcatAgg(t)
+	case *CorrExpr:
+		return in.InternCorr(t)
+	case *CountExpr:
+		return in.InternCount(t)
+	case *CountRowsExpr:
+		return in.InternCountRows(t)
+	case *CovarPopExpr:
+		return in.InternCovarPop(t)
+	case *CovarSampExpr:
+		return in.InternCovarSamp(t)
+	case *RegressionAvgXExpr:
+		return in.InternRegressionAvgX(t)
+	case *RegressionAvgYExpr:
+		return in.InternRegressionAvgY(t)
+	case *RegressionInterceptExpr:
+		return in.InternRegressionIntercept(t)
+	case *RegressionR2Expr:
+		return in.InternRegressionR2(t)
+	case *RegressionSlopeExpr:
+		return in.InternRegressionSlope(t)
+	case *RegressionSXXExpr:
+		return in.InternRegressionSXX(t)
+	case *RegressionSXYExpr:
+		return in.InternRegressionSXY(t)
+	case *RegressionSYYExpr:
+		return in.InternRegressionSYY(t)
+	case *RegressionCountExpr:
+		return in.InternRegressionCount(t)
+	case *MaxExpr:
+		return in.InternMax(t)
+	case *MinExpr:
+		return in.InternMin(t)
+	case *SumIntExpr:
+		return in.InternSumInt(t)
+	case *SumExpr:
+		return in.InternSum(t)
+	case *SqrDiffExpr:
+		return in.InternSqrDiff(t)
+	case *VarianceExpr:
+		return in.InternVariance(t)
+	case *VarPopExpr:
+		return in.InternVarPop(t)
+	case *StdDevExpr:
+		return in.InternStdDev(t)
+	case *StdDevPopExpr:
+		return in.InternStdDevPop(t)
+	case *STMakeLineExpr:
+		return in.InternSTMakeLine(t)
+	case *STExtentExpr:
+		return in.InternSTExtent(t)
+	case *STUnionExpr:
+		return in.InternSTUnion(t)
+	case *STCollectExpr:
+		return in.InternSTCollect(t)
+	case *XorAggExpr:
+		return in.InternXorAgg(t)
+	case *JsonAggExpr:
+		return in.InternJsonAgg(t)
+	case *JsonbAggExpr:
+		return in.InternJsonbAgg(t)
+	case *JsonObjectAggExpr:
+		return in.InternJsonObjectAgg(t)
+	case *JsonbObjectAggExpr:
+		return in.InternJsonbObjectAgg(t)
+	case *MergeAggregatedStmtMetadataExpr:
+		return in.InternMergeAggregatedStmtMetadata(t)
+	case *MergeStatsMetadataExpr:
+		return in.InternMergeStatsMetadata(t)
+	case *MergeStatementStatsExpr:
+		return in.InternMergeStatementStats(t)
+	case *MergeTransactionStatsExpr:
+		return in.InternMergeTransactionStats(t)
+	case *StringAggExpr:
+		return in.InternStringAgg(t)
+	case *ConstAggExpr:
+		return in.InternConstAgg(t)
+	case *ConstNotNullAggExpr:
+		return in.InternConstNotNullAgg(t)
+	case *AnyNotNullAggExpr:
+		return in.InternAnyNotNullAgg(t)
+	case *FirstAggExpr:
+		return in.InternFirstAgg(t)
+	case *PercentileDiscExpr:
+		return in.InternPercentileDisc(t)
+	case *PercentileContExpr:
+		return in.InternPercentileCont(t)
+	case *AggDistinctExpr:
+		return in.InternAggDistinct(t)
+	case *AggFilterExpr:
+		return in.InternAggFilter(t)
+	case *WindowFromOffsetExpr:
+		return in.InternWindowFromOffset(t)
+	case *WindowToOffsetExpr:
+		return in.InternWindowToOffset(t)
+	case *WindowsExpr:
+		return in.InternWindows(t)
+	case *WindowsItem:
+		return in.InternWindowsItem(t)
+	case *RankExpr:
+		return in.InternRank(t)
+	case *RowNumberExpr:
+		return in.InternRowNumber(t)
+	case *DenseRankExpr:
+		return in.InternDenseRank(t)
+	case *PercentRankExpr:
+		return in.InternPercentRank(t)
+	case *CumeDistExpr:
+		return in.InternCumeDist(t)
+	case *NtileExpr:
+		return in.InternNtile(t)
+	case *LagExpr:
+		return in.InternLag(t)
+	case *LeadExpr:
+		return in.InternLead(t)
+	case *FirstValueExpr:
+		return in.InternFirstValue(t)
+	case *LastValueExpr:
+		return in.InternLastValue(t)
+	case *NthValueExpr:
+		return in.InternNthValue(t)
+	case *UDFCallExpr:
+		return in.InternUDFCall(t)
+	case *TxnControlExpr:
+		return in.InternTxnControl(t)
+	case *KVOptionsExpr:
+		return in.InternKVOptions(t)
+	case *KVOptionsItem:
+		return in.InternKVOptionsItem(t)
+	case *ScalarListExpr:
+		return in.InternScalarList(t)
+	case *CreateTableExpr:
+		return in.InternCreateTable(t)
+	case *CreateViewExpr:
+		return in.InternCreateView(t)
+	case *CreateFunctionExpr:
+		return in.InternCreateFunction(t)
+	case *CreateTriggerExpr:
+		return in.InternCreateTrigger(t)
+	case *ExplainExpr:
+		return in.InternExplain(t)
+	case *ShowTraceForSessionExpr:
+		return in.InternShowTraceForSession(t)
+	case *OpaqueRelExpr:
+		return in.InternOpaqueRel(t)
+	case *OpaqueMutationExpr:
+		return in.InternOpaqueMutation(t)
+	case *OpaqueDDLExpr:
+		return in.InternOpaqueDDL(t)
+	case *AlterTableSplitExpr:
+		return in.InternAlterTableSplit(t)
+	case *AlterTableUnsplitExpr:
+		return in.InternAlterTableUnsplit(t)
+	case *AlterTableUnsplitAllExpr:
+		return in.InternAlterTableUnsplitAll(t)
+	case *AlterTableRelocateExpr:
+		return in.InternAlterTableRelocate(t)
+	case *ControlJobsExpr:
+		return in.InternControlJobs(t)
+	case *ControlSchedulesExpr:
+		return in.InternControlSchedules(t)
+	case *CancelQueriesExpr:
+		return in.InternCancelQueries(t)
+	case *CancelSessionsExpr:
+		return in.InternCancelSessions(t)
+	case *ExportExpr:
+		return in.InternExport(t)
+	case *ShowCompletionsExpr:
+		return in.InternShowCompletions(t)
+	case *CreateStatisticsExpr:
+		return in.InternCreateStatistics(t)
+	case *AlterRangeRelocateExpr:
+		return in.InternAlterRangeRelocate(t)
+	case *CallExpr:
+		return in.InternCall(t)
+	default:
+		panic(errors.AssertionFailedf("unhandled op: %s", e.Op()))
 	}
 	*/
 	return true
@@ -522,6 +1029,99 @@ func (p *Pheromone) Child(nth int) *Pheromone {
 		return p.reference.ptr.Child(nth)
 	}
 	return p.children[nth]
+}
+
+func (p *Pheromone) Merge(o *Pheromone) *Pheromone {
+	if p == nil || o == nil {
+		return nil
+	}
+	if o == &NonePheromone {
+		return p
+	}
+	if p == &NonePheromone {
+		return o
+	}
+
+	// how to deal with recursion and alternates?
+
+	// alternates: build new alternate list, searching through
+	// both sides to find matches
+	// (or maybe we can simply eliminate duplicates??)
+	// (maybe we sort by operator, and then try to merge adjacent operators)
+
+	// recursion: if the recursion is equal, pick one side, otherwise don't bother
+	// (ideally we would use different names if the bound patterns are equal but I
+	// don't want to bother figuring out the remapping right now)
+
+	var alternates []*Pheromone
+	for alt := p; alt != &NonePheromone; alt = alt.alternate {
+		alternates = append(alternates, &Pheromone{
+			op:        alt.op,
+			fields:    alt.fields,
+			children:  alt.children,
+			alternate: &NonePheromone,
+			reference: alt.reference,
+		})
+	}
+	for alt := o; alt != &NonePheromone; alt = alt.alternate {
+		alternates = append(alternates, &Pheromone{
+			op:        alt.op,
+			fields:    alt.fields,
+			children:  alt.children,
+			alternate: &NonePheromone,
+			reference: alt.reference,
+		})
+	}
+	sort.Slice(alternates, func(i, j int) bool {
+		a := alternates[i]
+		b := alternates[j]
+		if a.reference.id != "" || b.reference.id != "" {
+			return a.reference.id < b.reference.id
+		}
+		if a.op != b.op {
+			return a.op < b.op
+		}
+		cmp, err := a.fields.Compare(b.fields)
+		if err != nil {
+			panic(err)
+		}
+		return cmp < 0
+	})
+
+	mergeIntoLeft := func(a, b *Pheromone) bool {
+		if a.reference.id != "" || b.reference.id != "" {
+			// in general we could use a more sophisticated merging algorithm for
+			// references. this will only catch duplicate references in the exact same
+			// place in the tree
+			return a.Equals(b)
+		}
+		if a.op != b.op {
+			return false
+		}
+		cmp, err := a.fields.Compare(b.fields)
+		if err != nil {
+			panic(err)
+		}
+		if cmp != 0 {
+			return false
+		}
+		a.children[0] = a.children[0].Merge(b.children[0])
+		a.children[1] = a.children[1].Merge(b.children[1])
+		a.children[2] = a.children[2].Merge(b.children[2])
+		return true
+	}
+
+	var i int
+	for j := range alternates {
+		a := alternates[i]
+		b := alternates[j]
+		if !mergeIntoLeft(a, b) {
+			a.alternate = b
+			i = j
+		}
+	}
+
+	return alternates[0]
 }
 
 /*

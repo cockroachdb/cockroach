@@ -8975,6 +8975,35 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Immutable,
 		},
 	),
+	"pheromone_merge": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "a", Typ: types.Jsonb},
+				{Name: "b", Typ: types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				j1 := tree.MustBeDJSON(args[0]).JSON
+				j2 := tree.MustBeDJSON(args[1]).JSON
+				a, err := physical.PheromoneFromJSON(j1)
+				if err != nil {
+					return nil, err
+				}
+				b, err := physical.PheromoneFromJSON(j2)
+				if err != nil {
+					return nil, err
+				}
+				p := a.Merge(b)
+				j3 := p.ToJSON()
+				return tree.NewDJSON(j3), nil
+			},
+			Info:       "",
+			Volatility: volatility.Immutable,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
