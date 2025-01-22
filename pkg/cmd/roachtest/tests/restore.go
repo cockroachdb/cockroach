@@ -8,6 +8,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"math/rand"
@@ -149,10 +150,10 @@ func registerRestore(r registry.Registry) {
 			jobIDCh := make(chan jobspb.JobID)
 			jobCompleteCh := make(chan struct{}, 1)
 
-			pauseAtProgress := []float32{0.2, 0.45, 0.7}
+			pauseAtProgress := []float64{0.2, 0.45, 0.7}
 			for i := range pauseAtProgress {
 				// Add up to 10% to the pause point.
-				pauseAtProgress[i] = pauseAtProgress[i] + float32(rand.Intn(10))/100
+				pauseAtProgress[i] = pauseAtProgress[i] + float64(rand.Intn(10))/100
 			}
 			pauseIndex := 0
 			// Spin up go routine which pauses and resumes the Restore job three times.
@@ -179,11 +180,11 @@ func registerRestore(r registry.Registry) {
 					case <-jobCompleteCh:
 						return nil
 					case <-jobProgressTick.C:
-						var fraction float32
+						var fraction gosql.NullFloat64
 						sql.QueryRow(t, `SELECT fraction_completed FROM [SHOW JOB $1]`,
 							jobID).Scan(&fraction)
 						t.L().Printf("RESTORE Progress %.2f", fraction)
-						if fraction < pauseAtProgress[pauseIndex] {
+						if !fraction.Valid || fraction.Float64 < pauseAtProgress[pauseIndex] {
 							continue
 						}
 						t.L().Printf("pausing RESTORE job since progress is greater than %.2f", pauseAtProgress[pauseIndex])
