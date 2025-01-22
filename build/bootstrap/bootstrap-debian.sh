@@ -6,8 +6,8 @@
 # included in the /LICENSE file.
 
 #
-# On a Debian/Ubuntu system, bootstraps a docker install and the cockroach
-# repo.
+# On a Debian/Ubuntu system, bootstraps all the required dependencies for the
+# cockroach & managed-service repos.
 
 set -euxo pipefail
 
@@ -35,12 +35,6 @@ echo -e '\n' >> ~/.bashrc
 
 sudo adduser "${USER}" docker
 
-# Configure environment variables.
-echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
-echo -e '\n' >> ~/.bashrc
-echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
-. ~/.bashrc_bootstrap
-
 # Upgrade cmake.
 trap 'rm -f /tmp/cmake.tgz' EXIT
 curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-3.20.3-Linux-x86_64.tar.gz >/tmp/cmake.tgz
@@ -57,9 +51,15 @@ sha256sum -c - <<EOF
 EOF
 sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
-# Clone CockroachDB.
-git clone https://github.com/cockroachdb/cockroach "$(go env GOPATH)/src/github.com/cockroachdb/cockroach"
-git -C "$(go env GOPATH)/src/github.com/cockroachdb/cockroach" submodule update --init
+# Install Docker compose.
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.31.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+docker-compose --version
+
+# Install NVM.
+# Note: you still required to run `nvm install <version>` to install a specific version of Node.js.
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+echo -e '\n' >> ~/.bashrc
 
 # Install Bazelisk as Bazel.
 # NOTE: you should keep this in sync with build/packer/teamcity-agent.sh and build/bazelbuilder/Dockerfile -- if
@@ -72,3 +72,15 @@ sudo mv /tmp/bazelisk /usr/bin/bazel
 
 # Install the Unison file-syncer.
 . bootstrap/bootstrap-unison.sh
+
+# Configure environment variables for CockroachDB and Managed Service.
+echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
+echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachlabs/managed-service/bin"' >> ~/.bashrc_bootstrap
+echo -e '\n' >> ~/.bashrc
+echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
+. ~/.bashrc_bootstrap
+
+git clone https://github.com/cockroachdb/cockroach "$(go env GOPATH)/src/github.com/cockroachdb/cockroach"
+git -C "$(go env GOPATH)/src/github.com/cockroachdb/cockroach" submodule update --init
+
+git clone git@github.com:cockroachlabs/managed-service.git "$(go env GOPATH)/src/github.com/cockroachlabs/managed-service"

@@ -74,6 +74,19 @@ case "${cmd}" in
       read COCKROACH_DEV_LICENSE
     fi
 
+    DEFAULT_SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+    echo "Enter the absolute path to your private SSH key (required for cloning the private repo)."
+    echo -n "Path [default: $DEFAULT_SSH_KEY_PATH]: "
+    read SSH_KEY_FILE_PATH
+    if [ -z "$SSH_KEY_FILE_PATH" ]; then
+      SSH_KEY_FILE_PATH=$DEFAULT_SSH_KEY_PATH
+    fi
+
+    if [ ! -f "$SSH_KEY_FILE_PATH" ]; then
+      echo "The SSH key file does not exist: $SSH_KEY_FILE_PATH"
+      exit 1
+    fi
+
     gsuite_account_for_label="$(gcloud auth list | \
         grep '^\*' | \
         sed -e 's/\* *//' -e 's/@/__at__/g' -e 's/\./__dot__/g'\
@@ -98,6 +111,12 @@ case "${cmd}" in
     # Retry while vm and sshd start up.
     start_and_wait "${NAME}"
 
+    # Copy the ssh keys to the gceworker, this is needed to clone the managed-service repo
+    # Note: ssh-keyscan is needed to avoid the "Host key verification failed" error 
+    # when cloning the managed-service repo non-interactively
+    gcloud compute ssh "${NAME}" --command="mkdir -p ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts"
+    gcloud compute scp "${SSH_KEY_FILE_PATH}" "${NAME}:~/.ssh/"
+  
     gcloud compute scp --recurse "build/bootstrap" "${NAME}:bootstrap"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
 
