@@ -8,6 +8,7 @@ package vecindex
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -37,6 +39,11 @@ const (
 // indicates the background goroutine has fallen far behind.
 const maxFixups = 200
 
+// opsPerSecPerProc specifies how many insert and delete operations per second
+// that each processor is expected to drive. If this is in the ballpark, the
+// pacer will be able to more quickly converge to the right level of throttling.
+const opsPerSecPerProc = 500
+
 // fixup describes an index fixup so that it can be enqueued for processing.
 // Each fixup type needs to have some subset of the fields defined.
 type fixup struct {
@@ -52,7 +59,7 @@ type fixup struct {
 	VectorKey vecstore.PrimaryKey
 }
 
-// fixupProcessor applies index fixups in a background goroutine. Fixups repair
+// FixupProcessor applies index fixups in a background goroutine. Fixups repair
 // issues like dangling vectors and maintain the index by splitting and merging
 // partitions. Rather than interrupt a search or insert by performing a fixup in
 // a foreground goroutine, the fixup is enqueued and run later in a background
@@ -66,7 +73,7 @@ type fixup struct {
 // cause problems.
 //
 // All entry methods (i.e. capitalized methods) in fixupProcess are thread-safe.
-type fixupProcessor struct {
+type FixupProcessor struct {
 	// --------------------------------------------------
 	// These read-only fields can be read on any goroutine.
 	// --------------------------------------------------
@@ -81,6 +88,9 @@ type fixupProcessor struct {
 	// seed, if non-zero, specifies that a deterministic random number generator
 	// should be used by the fixup processor. This is useful in testing.
 	seed int64
+	// minDelay specifies the minimum delay for insert and delete operations.
+	// This is used for testing.
+	minDelay time.Duration
 
 	// --------------------------------------------------
 	// These fields can be accessed on any goroutine.
@@ -118,6 +128,9 @@ type fixupProcessor struct {
 		// waitForFixups broadcasts to any waiters when all fixups are processed.
 		// This is used for testing.
 		waitForFixups sync.Cond
+		// pacer limits vector insert/delete throughput if background fixups are
+		// falling behind.
+		pacer pacer
 	}
 }
 
@@ -125,7 +138,7 @@ type fixupProcessor struct {
 // background workers. If "seed" is non-zero, then the fixup processor will use
 // a deterministic random number generator. Otherwise, it will use the global
 // random number generator.
-func (fp *fixupProcessor) Init(
+func (fp *FixupProcessor) Init(
 	ctx context.Context, stopper *stop.Stopper, index *VectorIndex, seed int64,
 ) {
 	// Background workers should spin down when the stopper begins to quiesce.
@@ -136,6 +149,11 @@ func (fp *fixupProcessor) Init(
 	fp.index = index
 	fp.seed = seed
 
+	// Initialize the pacer with initial allowed ops/sec proportional to the
+	// number of processors.
+	initialOpsPerSec := runtime.GOMAXPROCS(-1) * opsPerSecPerProc
+	fp.mu.pacer.Init(initialOpsPerSec, 0, crtime.NowMono)
+
 	fp.fixups = make(chan fixup, maxFixups)
 	fp.fixupsLimitHit = log.Every(time.Second)
 
@@ -144,8 +162,58 @@ func (fp *fixupProcessor) Init(
 	fp.mu.waitForFixups.L = &fp.mu
 }
 
+// QueueSize returns the current size of the fixup queue.
+func (fp *FixupProcessor) QueueSize() int {
+	fp.mu.Lock()
+	defer fp.mu.Unlock()
+
+	return fp.countFixupsLocked()
+}
+
+// AllowedOpsPerSec returns the ops/sec currently allowed by the pacer.
+func (fp *FixupProcessor) AllowedOpsPerSec() float64 {
+	fp.mu.Lock()
+	defer fp.mu.Unlock()
+
+	return fp.mu.pacer.allowedOpsPerSec
+}
+
+// DelayInsertOrDelete is called when a vector is about to be inserted into the
+// index or deleted from it. It will block for however long the pacer determines
+// is needed to allow background index maintenance work to keep up.
+func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
+	// Get the amount of time to wait. Do this in a separate function so that
+	// the mutex is not held while waiting.
+	delay := func() time.Duration {
+		fp.mu.Lock()
+		defer fp.mu.Unlock()
+
+		return fp.mu.pacer.OnInsertOrDelete(fp.countFixupsLocked())
+	}()
+
+	// Enforce min delay (used for testing).
+	delay = max(delay, fp.minDelay)
+
+	// Wait out the delay or until the context is canceled.
+	select {
+	case <-time.After(delay):
+		break
+
+	case <-ctx.Done():
+		fp.mu.Lock()
+		defer fp.mu.Unlock()
+
+		// Notify the pacer that the operation was canceled so that it can adjust
+		// the token bucket.
+		fp.mu.pacer.OnInsertOrDeleteCanceled()
+		return ctx.Err()
+	}
+
+	return nil
+}
+
 // AddSplit enqueues a split fixup for later processing.
-func (fp *fixupProcessor) AddSplit(
+func (fp *FixupProcessor) AddSplit(
 	ctx context.Context, parentPartitionKey vecstore.PartitionKey, partitionKey vecstore.PartitionKey,
 ) {
 	fp.addFixup(ctx, fixup{
@@ -156,7 +224,7 @@ func (fp *fixupProcessor) AddSplit(
 }
 
 // AddMerge enqueues a merge fixup for later processing.
-func (fp *fixupProcessor) AddMerge(
+func (fp *FixupProcessor) AddMerge(
 	ctx context.Context, parentPartitionKey vecstore.PartitionKey, partitionKey vecstore.PartitionKey,
 ) {
 	fp.addFixup(ctx, fixup{
@@ -167,7 +235,7 @@ func (fp *fixupProcessor) AddMerge(
 }
 
 // AddDeleteVector enqueues a vector deletion fixup for later processing.
-func (fp *fixupProcessor) AddDeleteVector(
+func (fp *FixupProcessor) AddDeleteVector(
 	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.PrimaryKey,
 ) {
 	fp.addFixup(ctx, fixup{
@@ -179,7 +247,7 @@ func (fp *fixupProcessor) AddDeleteVector(
 
 // Suspend blocks all background workers from processing fixups until Process is
 // called to let them run. This is useful for testing.
-func (fp *fixupProcessor) Suspend() {
+func (fp *FixupProcessor) Suspend() {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
@@ -194,7 +262,7 @@ func (fp *fixupProcessor) Suspend() {
 // workers. If background workers have been suspended, they are temporarily
 // allowed to run until all fixups have been processed. This is useful for
 // testing.
-func (fp *fixupProcessor) Process() {
+func (fp *FixupProcessor) Process() {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
@@ -206,7 +274,7 @@ func (fp *fixupProcessor) Process() {
 	}
 
 	// Wait for all fixups to be processed.
-	for len(fp.mu.pendingVectors) > 0 || len(fp.mu.pendingPartitions) > 0 {
+	for fp.countFixupsLocked() > 0 {
 		fp.mu.waitForFixups.Wait()
 	}
 
@@ -219,12 +287,12 @@ func (fp *fixupProcessor) Process() {
 // addFixup enqueues the given fixup for later processing, assuming there is not
 // already a duplicate fixup that's pending. It also starts a background worker
 // to process the fixup, if needed and allowed.
-func (fp *fixupProcessor) addFixup(ctx context.Context, fixup fixup) {
+func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
 	// Check whether fixup limit has been reached.
-	if len(fp.mu.pendingPartitions)+len(fp.mu.pendingVectors) >= maxFixups {
+	if fp.countFixupsLocked() >= maxFixups {
 		// Don't enqueue the fixup.
 		if fp.fixupsLimitHit.ShouldLog() {
 			log.Warning(ctx, "reached limit of unprocessed fixups")
@@ -254,6 +322,9 @@ func (fp *fixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	// maxFixups capacity.
 	fp.fixups <- fixup
 
+	// Notify the pacer that a fixup was just added.
+	fp.mu.pacer.OnFixup(fp.countFixupsLocked())
+
 	// If there is an idle worker available, nothing more to do.
 	if fp.mu.runningWorkers < fp.mu.totalWorkers {
 		return
@@ -280,7 +351,7 @@ func (fp *fixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 // nextFixup fetches the next fixup in the queue so that it can be processed by
 // a background worker. It blocks until there is a fixup available (ok=true) or
 // until the processor shuts down (ok=false).
-func (fp *fixupProcessor) nextFixup(ctx context.Context) (next fixup, ok bool) {
+func (fp *FixupProcessor) nextFixup(ctx context.Context) (next fixup, ok bool) {
 	select {
 	case next = <-fp.fixups:
 		// Within the scope of the mutex, increment running workers and check
@@ -312,7 +383,7 @@ func (fp *fixupProcessor) nextFixup(ctx context.Context) (next fixup, ok bool) {
 }
 
 // removeFixup removes a pending fixup that has been processed by a worker.
-func (fp *fixupProcessor) removeFixup(toRemove fixup) {
+func (fp *FixupProcessor) removeFixup(toRemove fixup) {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
@@ -326,8 +397,18 @@ func (fp *fixupProcessor) removeFixup(toRemove fixup) {
 
 	fp.mu.runningWorkers--
 
+	// Notify the pacer that a fixup was just removed.
+	fp.mu.pacer.OnFixup(fp.countFixupsLocked())
+
 	// If there are no more pending fixups, notify any waiters.
-	if len(fp.mu.pendingPartitions) == 0 && len(fp.mu.pendingVectors) == 0 {
+	if fp.countFixupsLocked() == 0 {
 		fp.mu.waitForFixups.Broadcast()
 	}
+}
+
+// countFixupsLocked returns the number of fixups that are pending, including
+// those that are currently being processed as well as those that are waiting to
+// be processed.
+func (fp *FixupProcessor) countFixupsLocked() int {
+	return len(fp.mu.pendingPartitions) + len(fp.mu.pendingVectors)
 }

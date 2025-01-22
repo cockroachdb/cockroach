@@ -20,7 +20,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -60,6 +60,8 @@ const (
 	HideCursor = "\033[?25l"
 	ShowCursor = "\033[?25h"
 )
+
+var flagHideCharts = flag.Bool("hide-charts", false, "Hide time series charts during index build.")
 
 // Search command options.
 var flagMaxResults = flag.Int("k", 10, "Number of search results, used in recall calculation.")
@@ -388,9 +390,6 @@ func buildIndex(
 		data.Train.SplitAt(n)
 	}
 
-	startTime := timeutil.Now()
-	fmt.Printf(White+"Building index for dataset: %s\n"+Reset, datasetName)
-
 	// Create index.
 	store := vecstore.NewInMemoryStore(data.Train.Dims, seed)
 	index := createIndex(ctx, stopper, store)
@@ -400,6 +399,9 @@ func buildIndex(
 	for i := 0; i < data.Train.Count; i++ {
 		binary.BigEndian.PutUint32(primaryKeys[i*4:], uint32(i))
 	}
+
+	// Compute percentile latencies.
+	estimator := NewPercentileEstimator(1000)
 
 	// Insert block of vectors within the scope of a transaction.
 	var insertCount atomic.Uint64
@@ -411,41 +413,82 @@ func buildIndex(
 			key := primaryKeys[i*4 : i*4+4]
 			vec := data.Train.At(i)
 			store.InsertVector(key, vec)
+			startMono := crtime.NowMono()
 			if err := index.Insert(ctx, txn, vec, key); err != nil {
 				panic(err)
 			}
+			estimator.Add(startMono.Elapsed().Seconds())
 		}
-
-		inserted := insertCount.Add(uint64(end - start))
-		elapsed := timeutil.Since(startTime)
-		fmt.Printf(White+"\rInserted %d / %d vectors (%.2f%%) in %v          "+Reset,
-			inserted, data.Train.Count,
-			(float64(inserted)/float64(data.Train.Count))*100, elapsed.Truncate(time.Second))
+		insertCount.Add(uint64(end - start))
 	}
 
+	// Set up time series charts.
+	cp := chartPrinter{Footer: 2, Hide: *flagHideCharts}
+	throughput := cp.AddChart("ops/sec")
+	fixups := cp.AddChart("fixup queue size")
+	throttled := cp.AddChart("pacer ops/sec")
+	p50 := cp.AddChart("p50 ms latency")
+	p90 := cp.AddChart("p90 ms latency")
+	p99 := cp.AddChart("p99 ms latency")
+
+	fmt.Printf(White+"Building index for dataset: %s\n"+Reset, datasetName)
+	startAt := crtime.NowMono()
+
 	// Insert vectors into the store on multiple goroutines.
-	var wait sync.WaitGroup
 	procs := runtime.GOMAXPROCS(-1)
 	countPerProc := (data.Train.Count + procs) / procs
 	blockSize := index.Options().MinPartitionSize
 	for i := 0; i < data.Train.Count; i += countPerProc {
 		end := min(i+countPerProc, data.Train.Count)
-		wait.Add(1)
 		go func(start, end int) {
 			// Break vector group into individual transactions that each insert a
 			// block of vectors. Run any pending fixups after each block.
 			for j := start; j < end; j += blockSize {
 				insertBlock(j, min(j+blockSize, end))
-				index.ProcessFixups()
 			}
-
-			wait.Done()
 		}(i, end)
 	}
-	wait.Wait()
 
-	elapsed := timeutil.Since(startTime)
-	fmt.Printf(White+"\nBuilt index in %v\n"+Reset, roundDuration(elapsed))
+	// Compute ops per second.
+	var lastInserted int
+
+	// Update progress every second.
+	lastProgressAt := startAt
+	for {
+		time.Sleep(time.Second)
+
+		// Calculate exactly how long it's been since last progress update.
+		now := crtime.NowMono()
+		sinceProgress := now.Sub(lastProgressAt)
+		lastProgressAt = now
+
+		// Calculate ops per second over the last second.
+		totalInserted := int(insertCount.Load())
+		opsPerSec := float64(totalInserted-lastInserted) / sinceProgress.Seconds()
+		lastInserted = totalInserted
+
+		cp.AddSample(throughput, opsPerSec)
+		cp.AddSample(fixups, float64(index.Fixups().QueueSize()))
+		cp.AddSample(throttled, index.Fixups().AllowedOpsPerSec())
+		cp.AddSample(p50, estimator.Estimate(0.50)*1000)
+		cp.AddSample(p90, estimator.Estimate(0.90)*1000)
+		cp.AddSample(p99, estimator.Estimate(0.99)*1000)
+		cp.Plot()
+
+		sinceStart := now.Sub(startAt)
+		fmt.Printf(White+"\rInserted %d / %d vectors (%.2f%%) in %v"+Reset,
+			totalInserted, data.Train.Count, (float64(totalInserted)/float64(data.Train.Count))*100,
+			sinceStart.Truncate(time.Second))
+
+		if totalInserted >= data.Train.Count {
+			break
+		}
+	}
+
+	// Wait for any remaining background fixups to be processed.
+	index.ProcessFixups()
+
+	fmt.Printf(White+"\nBuilt index in %v\n"+Reset, roundDuration(startAt.Elapsed()))
 	return store, index
 }
 
