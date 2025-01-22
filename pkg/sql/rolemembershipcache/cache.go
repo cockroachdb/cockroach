@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -102,12 +103,33 @@ func (m *MembershipCache) RunAtCacheReadTS(
 	}
 
 	// If we found a historical timestamp to use, run in a different transaction.
-	return db.DescsTxn(ctx, func(ctx context.Context, newTxn descs.Txn) error {
+	if err := db.DescsTxn(ctx, func(ctx context.Context, newTxn descs.Txn) error {
 		if err := newTxn.KV().SetFixedTimestamp(ctx, readTS); err != nil {
 			return err
 		}
 		return f(ctx, newTxn)
-	})
+	}); err != nil {
+		if errors.HasType(err, (*kvpb.BatchTimestampBeforeGCError)(nil)) {
+			// If we picked a timestamp that has already been GC'd, then we modify
+			// cache to mark it as stale so it's refreshed on the next access,
+			// release the lease, and retry.
+			func() {
+				m.Lock()
+				defer m.Unlock()
+				m.tableVersion = 0
+			}()
+			txn.Descriptors().ReleaseSpecifiedLeases(ctx, []lease.IDVersion{
+				{
+					Name:    tableDesc.GetName(),
+					ID:      tableDesc.GetID(),
+					Version: tableDesc.GetVersion(),
+				},
+			})
+			return m.RunAtCacheReadTS(ctx, db, txn, f)
+		}
+		return err
+	}
+	return nil
 }
 
 // GetRolesForMember looks up all the roles 'member' belongs to (direct and
