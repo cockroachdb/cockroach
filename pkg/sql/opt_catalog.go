@@ -823,6 +823,10 @@ type optTable struct {
 
 	triggers []optTrigger
 
+	// Row-level security (RLS) fields
+	rlsEnabled bool
+	policies   map[tree.PolicyType][]optPolicy
+
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
 	colMap catalog.TableColMap
@@ -1146,6 +1150,12 @@ func newOptTable(
 	// Move all triggers into the opt table.
 	ot.triggers = getOptTriggers(desc.GetTriggers())
 
+	// Store row-level security information
+	// TODO(136717): Update this to utilize the tableDescriptor's field for
+	// indicating if RLS is enabled once the field is added.
+	ot.rlsEnabled = false
+	ot.policies = getOptPolicies(desc.GetPolicies())
+
 	// Add stats last, now that other metadata is initialized.
 	if stats != nil {
 		ot.stats = make([]optTableStat, len(stats))
@@ -1464,6 +1474,17 @@ func (ot *optTable) TriggerCount() int {
 // Trigger is part of the cat.Table interface.
 func (ot *optTable) Trigger(i int) cat.Trigger {
 	return &ot.triggers[i]
+}
+
+// IsRowLevelSecurityEnabled is part of the cat.Table interface.
+func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
+
+// PolicyCount is part of the cat.Table interface
+func (ot *optTable) PolicyCount(polType tree.PolicyType) int { return len(ot.policies[polType]) }
+
+// Policy is part of the cat.Table interface
+func (ot *optTable) Policy(polType tree.PolicyType, i int) cat.Policy {
+	return &ot.policies[polType][i]
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -2574,6 +2595,17 @@ func (ot *optVirtualTable) Trigger(i int) cat.Trigger {
 	panic(errors.AssertionFailedf("no triggers"))
 }
 
+// IsRowLevelSecurityEnabled is part of the cat.Table interface.
+func (ot *optVirtualTable) IsRowLevelSecurityEnabled() bool { return false }
+
+// PolicyCount is part of the cat.Table interface
+func (ot *optVirtualTable) PolicyCount(polType tree.PolicyType) int { return 0 }
+
+// Policy is part of the cat.Table interface
+func (ot *optVirtualTable) Policy(polType tree.PolicyType, i int) cat.Policy {
+	panic(errors.AssertionFailedf("no policies"))
+}
+
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy
 // PK column.
@@ -2923,6 +2955,79 @@ func getOptTriggers(descTriggers []descpb.TriggerDescriptor) []optTrigger {
 		}
 	}
 	return triggers
+}
+
+// optPolicy is a wrapper around descpb.PolicyDescriptor that implements the
+// cat.Policy interface.
+type optPolicy struct {
+	name          tree.Name
+	usingExpr     string
+	withCheckExpr string
+	roles         map[string]struct{} // If roles is nil, then the policy applies to all (aka public)
+	command       catpb.PolicyCommand
+}
+
+var _ cat.Policy = &optPolicy{}
+
+// Name implements the cat.Policy interface.
+func (o *optPolicy) Name() tree.Name {
+	return o.name
+}
+
+// GetUsingExpr implements the cat.Policy interface.
+func (o *optPolicy) GetUsingExpr() string {
+	return o.usingExpr
+}
+
+// GetWithCheckExpr implements the cat.Policy interface.
+func (o *optPolicy) GetWithCheckExpr() string {
+	return o.withCheckExpr
+}
+
+// GetPolicyCommand implements the cat.Policy interface.
+func (o *optPolicy) GetPolicyCommand() catpb.PolicyCommand { return o.command }
+
+// AppliesToRole implements the cat.Policy interface.
+func (o *optPolicy) AppliesToRole(user username.SQLUsername) bool {
+	// If no roles are specified, assume the policy applies to all users (public role).
+	if o.roles == nil {
+		return true
+	}
+	_, found := o.roles[user.Normalized()]
+	return found
+}
+
+// getOptPolicies maps from descpb.PolicyDescriptor to optPolicy
+func getOptPolicies(descPolicies []descpb.PolicyDescriptor) map[tree.PolicyType][]optPolicy {
+	policies := make(map[tree.PolicyType][]optPolicy, 2)
+	policies[tree.PolicyTypePermissive] = make([]optPolicy, 0, len(descPolicies))
+	policies[tree.PolicyTypeRestrictive] = make([]optPolicy, 0, len(descPolicies))
+	for i := range descPolicies {
+		descPolicy := &descPolicies[i]
+		roles := make(map[string]struct{})
+		for _, r := range descPolicy.RoleNames {
+			if r == username.PublicRole {
+				// If the public role is defined, there is no need to check the
+				// remaining roles since the policy applies to everyone. We will clear
+				// out the roles map to signal that all roles apply.
+				roles = nil
+				break
+			}
+			roles[r] = struct{}{}
+		}
+		targetPolicyType := tree.PolicyTypePermissive
+		if descPolicy.Type == catpb.PolicyType_RESTRICTIVE {
+			targetPolicyType = tree.PolicyTypeRestrictive
+		}
+		policies[targetPolicyType] = append(policies[targetPolicyType], optPolicy{
+			name:          tree.Name(descPolicy.Name),
+			usingExpr:     descPolicy.UsingExpr,
+			withCheckExpr: descPolicy.WithCheckExpr,
+			command:       descPolicy.Command,
+			roles:         roles,
+		})
+	}
+	return policies
 }
 
 // collectTypes walks the given column's default and computed expression,
