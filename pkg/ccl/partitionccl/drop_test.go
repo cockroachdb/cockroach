@@ -170,8 +170,8 @@ SELECT job_id
 				`SELECT status FROM [SHOW JOB $1]`,
 				id,
 			).Scan(&status)
-			if status != string(jobs.StatusSucceeded) {
-				return errors.Errorf("expected %q, got %q", jobs.StatusSucceeded, status)
+			if status != string(jobs.StateSucceeded) {
+				return errors.Errorf("expected %q, got %q", jobs.StateSucceeded, status)
 			}
 			return nil
 		})

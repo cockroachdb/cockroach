@@ -327,10 +327,10 @@ func runCDCBenchScan(
 	m.Go(func(ctx context.Context) error {
 		t.L().Printf("waiting for changefeed to finish")
 		info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
-			switch jobs.Status(info.status) {
-			case jobs.StatusSucceeded:
+			switch jobs.State(info.status) {
+			case jobs.StateSucceeded:
 				return true, nil
-			case jobs.StatusPending, jobs.StatusRunning:
+			case jobs.StatePending, jobs.StateRunning:
 				return false, nil
 			default:
 				return false, errors.Errorf("unexpected changefeed status %q", info.status)
@@ -497,8 +497,8 @@ func runCDCBenchWorkload(
 		// ranges it was found to sometimes lag by over 8 minutes.
 		m.Go(func(ctx context.Context) error {
 			info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
-				switch jobs.Status(info.status) {
-				case jobs.StatusPending, jobs.StatusRunning:
+				switch jobs.State(info.status) {
+				case jobs.StatePending, jobs.StateRunning:
 					doneValue := done.Load()
 					return doneValue != nil && info.GetHighWater().After(doneValue.(time.Time)), nil
 				default:
@@ -518,8 +518,8 @@ func runCDCBenchWorkload(
 		t.L().Printf("waiting for changefeed watermark to reach current time (%s)",
 			now.Format(time.RFC3339))
 		info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
-			switch jobs.Status(info.status) {
-			case jobs.StatusPending, jobs.StatusRunning:
+			switch jobs.State(info.status) {
+			case jobs.StatePending, jobs.StateRunning:
 				return info.GetHighWater().After(now), nil
 			default:
 				return false, errors.Errorf("unexpected changefeed status %s", info.status)

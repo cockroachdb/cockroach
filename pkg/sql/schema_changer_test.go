@@ -2915,7 +2915,7 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 						job_type = 'NEW SCHEMA CHANGE' AND
 						status = $1 AND
 						description NOT LIKE 'ROLL BACK%'
-				)`, jobs.StatusRunning); err != nil {
+				)`, jobs.StateRunning); err != nil {
 					t.Error(err)
 				}
 				return nil
@@ -3019,7 +3019,7 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StateSucceeded, jobs.Record{
 			Description:   "CLEANUP JOB for 'ALTER TABLE t.public.test ALTER PRIMARY KEY USING COLUMNS (k)'",
 			Username:      username.RootUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
@@ -3903,7 +3903,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StateRunning, jobs.Record{
 			Description:   "GC for TRUNCATE TABLE t.public.test",
 			Username:      username.RootUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
@@ -4028,7 +4028,7 @@ func TestTruncateCompletion(t *testing.T) {
 	// TODO (lucy): This test API should use an offset starting from the
 	// most recent job instead.
 	schemaChangeJobOffset := 0
-	if err := jobutils.VerifySystemJob(t, sqlRun, schemaChangeJobOffset+2, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, schemaChangeJobOffset+2, jobspb.TypeSchemaChange, jobs.StateSucceeded, jobs.Record{
 		Username:    username.RootUserName(),
 		Description: "TRUNCATE TABLE t.public.test",
 		DescriptorIDs: descpb.IDs{
@@ -4377,7 +4377,7 @@ func TestCancelSchemaChange(t *testing.T) {
 						job_type = 'SCHEMA CHANGE' AND
 						status = $1 AND
 						description NOT LIKE 'ROLL BACK%'
-				)`, jobs.StatusRunning)
+				)`, jobs.StateRunning)
 				return nil
 			},
 		},
@@ -4439,7 +4439,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			}
 			testutils.SucceedsSoon(t, func() error {
 				return jobutils.VerifySystemJob(
-					t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusCanceled,
+					t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StateCanceled,
 					jobs.Record{
 						Username:    username.RootUserName(),
 						Description: tc.sql,
@@ -4464,7 +4464,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			}
 		} else {
 			sqlDB.Exec(t, tc.sql)
-			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StateSucceeded, jobs.Record{
 				Username:    username.RootUserName(),
 				Description: tc.sql,
 				DescriptorIDs: descpb.IDs{
@@ -5621,7 +5621,7 @@ func TestMultipleRevert(t *testing.T) {
 						job_type = 'SCHEMA CHANGE' AND
 						status = $1 AND
 						description NOT LIKE 'ROLL BACK%'
-				)`, jobs.StatusRunning); err != nil {
+				)`, jobs.StateRunning); err != nil {
 						t.Error(err)
 					}
 					ranCancelCommand = true
@@ -5839,12 +5839,12 @@ DROP TABLE t.test;`)
 	close(continueNotification)
 	require.NoError(t, g.Wait())
 
-	var status jobs.Status
+	var status jobs.State
 	var jobError string
 	require.NoError(t, sqlDB.QueryRow(`
 SELECT status, error FROM crdb_internal.jobs WHERE description LIKE '%CREATE UNIQUE INDEX%'
 `).Scan(&status, &jobError))
-	require.Equal(t, jobs.StatusFailed, status)
+	require.Equal(t, jobs.StateFailed, status)
 	require.Regexp(t, "violates unique constraint", jobError)
 }
 
@@ -6045,7 +6045,7 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 	jobKnobs := jobs.NewTestingKnobsWithShortIntervals()
 	jobKnobs.BeforeUpdate = func(orig, updated jobs.JobMetadata) (err error) {
 		withJobsToFail(func(m map[jobspb.JobID]struct{}) {
-			if _, ok := m[orig.ID]; ok && updated.Status == jobs.StatusCanceled {
+			if _, ok := m[orig.ID]; ok && updated.State == jobs.StateCanceled {
 				delete(m, orig.ID)
 				err = errors.Errorf("boom")
 			}
@@ -6109,10 +6109,10 @@ SELECT job_id FROM crdb_internal.jobs
 	// Do this after the above change to ensure that all canceled states have
 	// been reached.
 	for _, id := range jobIDs {
-		var status jobs.Status
+		var status jobs.State
 		tdb.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", id).
 			Scan(&status)
-		require.Equal(t, jobs.StatusCanceled, status)
+		require.Equal(t, jobs.StateCanceled, status)
 	}
 	withJobsToFail(func(m map[jobspb.JobID]struct{}) {
 		require.Len(t, m, 0)
@@ -6200,13 +6200,13 @@ SELECT job_id FROM crdb_internal.jobs
 	// Do this after the above change to ensure that all canceled states have
 	// been reached.
 	for i, id := range jobIDs {
-		var status jobs.Status
+		var status jobs.State
 		tdb.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", id).
 			Scan(&status)
 		if shouldCancel[i] {
-			require.Equal(t, jobs.StatusCanceled, status)
+			require.Equal(t, jobs.StateCanceled, status)
 		} else {
-			require.Equal(t, jobs.StatusSucceeded, status)
+			require.Equal(t, jobs.StateSucceeded, status)
 		}
 	}
 
@@ -6278,11 +6278,11 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 	close(continueNotification)
 	require.NoError(t, g.Wait())
 
-	var status jobs.Status
+	var status jobs.State
 	var error string
 	tdb.QueryRow(t, "SELECT status, error FROM crdb_internal.jobs WHERE job_id = $1", jobID).
 		Scan(&status, &error)
-	require.Equal(t, status, jobs.StatusCanceled)
+	require.Equal(t, status, jobs.StateCanceled)
 	require.Equal(t, error, "job canceled by user")
 }
 
@@ -6379,7 +6379,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 					_, _ = db.Exec(`SET use_declarative_schema_changer = 'off'; ` + scStmt)
 				}(tc.scStmt)
 				// Verify that the job is in retry state while reverting.
-				const query = `SELECT true FROM crdb_internal.jobs WHERE status = '` + string(jobs.StatusReverting) + `' AND description ~ '%s'`
+				const query = `SELECT true FROM crdb_internal.jobs WHERE status = '` + string(jobs.StateReverting) + `' AND description ~ '%s'`
 				sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf(query, tc.jobRegex), [][]string{{"true"}})
 			})
 		}

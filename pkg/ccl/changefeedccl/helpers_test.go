@@ -760,8 +760,8 @@ func loadProgress(
 	jobID := jobFeed.JobID()
 	job, err := jobRegistry.LoadJob(context.Background(), jobID)
 	require.NoError(t, err)
-	if job.Status().Terminal() {
-		t.Errorf("tried to load progress for job %v but it has reached terminal status %s with error %s", job, job.Status(), jobFeed.FetchTerminalJobErr())
+	if job.State().Terminal() {
+		t.Errorf("tried to load progress for job %v but it has reached terminal status %s with error %s", job, job.State(), jobFeed.FetchTerminalJobErr())
 	}
 	return job.Progress()
 }
@@ -1371,15 +1371,15 @@ func checkS3Credentials(t *testing.T) (bucket string, accessKey string, secretKe
 	return bucket, accessKey, secretKey
 }
 
-func waitForJobStatus(
-	runner *sqlutils.SQLRunner, t *testing.T, id jobspb.JobID, targetStatus jobs.Status,
+func waitForJobState(
+	runner *sqlutils.SQLRunner, t *testing.T, id jobspb.JobID, targetState jobs.State,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		var jobStatus string
+		var jobState string
 		query := `SELECT status FROM [SHOW CHANGEFEED JOB $1]`
-		runner.QueryRow(t, query, id).Scan(&jobStatus)
-		if targetStatus != jobs.Status(jobStatus) {
-			return errors.Errorf("Expected status:%s but found status:%s", targetStatus, jobStatus)
+		runner.QueryRow(t, query, id).Scan(&jobState)
+		if targetState != jobs.State(jobState) {
+			return errors.Errorf("Expected status:%s but found status:%s", targetState, jobState)
 		}
 		return nil
 	})

@@ -441,8 +441,8 @@ func (f *jobFeed) status() (status string, err error) {
 	return
 }
 
-func (f *jobFeed) WaitDurationForStatus(
-	dur time.Duration, statusPred func(status jobs.Status) bool,
+func (f *jobFeed) WaitDurationForState(
+	dur time.Duration, statusPred func(status jobs.State) bool,
 ) error {
 	if f.jobID == jobspb.InvalidJobID {
 		// Job may not have been started.
@@ -455,15 +455,15 @@ func (f *jobFeed) WaitDurationForStatus(
 		if status, err = f.status(); err != nil {
 			return err
 		}
-		if statusPred(jobs.Status(status)) {
+		if statusPred(jobs.State(status)) {
 			return nil
 		}
 		return errors.Newf("still waiting for job status; current %s", status)
 	}, dur)
 }
 
-func (f *jobFeed) WaitForStatus(statusPred func(status jobs.Status) bool) error {
-	return f.WaitDurationForStatus(testutils.SucceedsSoonDuration(), statusPred)
+func (f *jobFeed) WaitForState(statusPred func(status jobs.State) bool) error {
+	return f.WaitDurationForState(testutils.SucceedsSoonDuration(), statusPred)
 }
 
 // Pause implements the TestFeed interface.
@@ -472,7 +472,7 @@ func (f *jobFeed) Pause() error {
 	if err != nil {
 		return err
 	}
-	return f.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusPaused })
+	return f.WaitForState(func(s jobs.State) bool { return s == jobs.StatePaused })
 }
 
 // Resume implements the TestFeed interface.
@@ -481,7 +481,7 @@ func (f *jobFeed) Resume() error {
 	if err != nil {
 		return err
 	}
-	return f.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusRunning })
+	return f.WaitForState(func(s jobs.State) bool { return s == jobs.StateRunning })
 }
 
 // Details implements FeedJob interface.
@@ -586,14 +586,14 @@ func (f *jobFeed) Close() error {
 		if err != nil {
 			return err
 		}
-		if status == string(jobs.StatusSucceeded) {
+		if status == string(jobs.StateSucceeded) {
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			f.mu.terminalErr = errors.New("changefeed completed")
 			close(f.shutdown)
 			return nil
 		}
-		if status == string(jobs.StatusFailed) {
+		if status == string(jobs.StateFailed) {
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			f.mu.terminalErr = errors.New("changefeed failed")
@@ -603,7 +603,7 @@ func (f *jobFeed) Close() error {
 		if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {
 			log.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
 		} else {
-			return f.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusCanceled })
+			return f.WaitForState(func(s jobs.State) bool { return s == jobs.StateCanceled })
 		}
 	}
 

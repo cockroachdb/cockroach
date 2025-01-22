@@ -1143,7 +1143,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 				if err := sc.job.WithTxn(txn).FractionProgressed(
 					ctx, jobs.FractionUpdater(fractionCompleted),
 				); err != nil {
-					return jobs.SimplifyInvalidStatusError(err)
+					return jobs.SimplifyInvalidStateError(err)
 				}
 			}
 			return nil

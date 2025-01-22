@@ -2439,7 +2439,7 @@ func TestImportCSVStmt(t *testing.T) {
 			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE "parentID" = $1 AND "parentSchemaID" = $2`,
 				intodbID, publicSchemaID).Scan(&tableID)
 
-			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StateSucceeded, jobs.Record{
 				Username:      username.RootUserName(),
 				Description:   fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
 				DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
@@ -3044,7 +3044,7 @@ func TestImportIntoCSV(t *testing.T) {
 				r := sqlDB.QueryRow(t, "SELECT status FROM [SHOW JOBS] WHERE job_id = $1", jobID)
 				var status string
 				r.Scan(&status)
-				if status == string(jobs.StatusPauseRequested) {
+				if status == string(jobs.StatePauseRequested) {
 					return errors.New("still has pause-requested status")
 				}
 				return nil
@@ -3264,7 +3264,7 @@ func TestImportIntoCSV(t *testing.T) {
 			)
 
 			jobPrefix := `IMPORT INTO defaultdb.public.t(a, b)`
-			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StateSucceeded, jobs.Record{
 				Username:      username.RootUserName(),
 				Description:   fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
 				DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
@@ -3427,7 +3427,7 @@ func TestImportIntoCSV(t *testing.T) {
 		if err := g.Wait(); err != nil {
 			t.Fatal(err)
 		}
-		waitForJobResult(t, tc, jobspb.JobID(jobID), jobs.StatusSucceeded)
+		waitForJobResult(t, tc, jobspb.JobID(jobID), jobs.StateSucceeded)
 
 		// Expect it to succeed on re-attempt.
 		sqlDB.QueryRow(t, `SELECT 1 FROM t`).Scan(&unused)
@@ -4768,7 +4768,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 
 			// Get number of sequence value chunks which have been reserved.
 			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool {
-				return jobs.StatusPaused == js.status
+				return jobs.StatePaused == js.status
 			})
 			// We expect two chunk entries since our breakpoint is at 7*batchSize.
 			// [1, 10] and [11, 100]
@@ -4792,7 +4792,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 			if err := registry.Unpause(ctx, nil, jobID); err != nil {
 				t.Fatal(err)
 			}
-			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
+			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StateSucceeded == js.status })
 			// No additional chunks should have been allocated on job resumption since
 			// we already have enough chunks of the sequence values to cover all the
 			// rows.
@@ -6458,11 +6458,11 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 		doneSchemaDropQuery := fmt.Sprintf(
 			"SELECT count(*) FROM crdb_internal.jobs WHERE job_type = '%s' AND status = '%s' AND description"+
-				" LIKE '%s'", "SCHEMA CHANGE", jobs.StatusSucceeded, "dropping schemas%")
+				" LIKE '%s'", "SCHEMA CHANGE", jobs.StateSucceeded, "dropping schemas%")
 
 		doneDatabaseUpdateQuery := fmt.Sprintf(
 			"SELECT count(*) FROM crdb_internal.jobs WHERE job_type = '%s' AND status = '%s' AND description"+
-				" LIKE '%s'", "SCHEMA CHANGE", jobs.StatusSucceeded, "updating parent database%")
+				" LIKE '%s'", "SCHEMA CHANGE", jobs.StateSucceeded, "updating parent database%")
 
 		sqlDB.CheckQueryResultsRetry(t, doneGCQuery, [][]string{{"1"}})
 		sqlDB.CheckQueryResultsRetry(t, doneSchemaDropQuery, [][]string{{"1"}})
@@ -6920,7 +6920,7 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 }
 
 func waitForJobResult(
-	t *testing.T, tc serverutils.TestClusterInterface, id jobspb.JobID, expected jobs.Status,
+	t *testing.T, tc serverutils.TestClusterInterface, id jobspb.JobID, expected jobs.State,
 ) {
 	// Force newly created job to be adopted and verify its result.
 	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
@@ -6958,7 +6958,7 @@ func TestDetachedImport(t *testing.T) {
 	// DETACHED import w/out transaction is okay.
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
-	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
+	waitForJobResult(t, tc, jobID, jobs.StateSucceeded)
 
 	sqlDB.Exec(t, "DROP table simple")
 	sqlDB.Exec(t, "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea)")
@@ -6977,25 +6977,25 @@ func TestDetachedImport(t *testing.T) {
 	}
 	err = crdb.ExecuteTx(ctx, connDB, nil, importWithDetached)
 	require.NoError(t, err)
-	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
+	waitForJobResult(t, tc, jobID, jobs.StateSucceeded)
 
 	sqlDB.Exec(t, "DROP table simple")
 	sqlDB.Exec(t, "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea)")
 
 	// Detached import should fail when the table already exists.
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
-	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
+	waitForJobResult(t, tc, jobID, jobs.StateSucceeded)
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
-	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
+	waitForJobResult(t, tc, jobID, jobs.StateFailed)
 
 	sqlDB.Exec(t, "DROP table simple")
 	sqlDB.Exec(t, "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea)")
 
 	// Detached import into should fail when there are key collisions.
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
-	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
+	waitForJobResult(t, tc, jobID, jobs.StateSucceeded)
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
-	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
+	waitForJobResult(t, tc, jobID, jobs.StateFailed)
 }
 
 func TestImportRowErrorLargeRows(t *testing.T) {
@@ -7086,7 +7086,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	sqlDB.QueryRow(t, importQuery, simpleOcf).Scan(&jobID, &unused, &unused, &unused, &unused,
 		&unused)
 
-	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
+	expectedStatus := []string{string(jobs.StateSucceeded), string(jobs.StateRunning)}
 	expectedRecoveryEvent := eventpb.RecoveryEvent{
 		RecoveryType: importJobRecoveryEventType,
 		NumRows:      int64(1000),
@@ -7105,8 +7105,8 @@ func TestImportJobEventLogging(t *testing.T) {
 	row.Scan(&jobID)
 
 	expectedStatus = []string{
-		string(jobs.StatusFailed), string(jobs.StatusReverting),
-		string(jobs.StatusRunning),
+		string(jobs.StateFailed), string(jobs.StateReverting),
+		string(jobs.StateRunning),
 	}
 	expectedRecoveryEvent = eventpb.RecoveryEvent{
 		RecoveryType: importJobRecoveryEventType,

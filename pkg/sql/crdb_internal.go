@@ -1295,7 +1295,7 @@ func makeLegacyJobsTableRows(
 			// Convert the job into datums, where protobufs will be intentionally,
 			// marshalled.
 			id = tree.NewDInt(tree.DInt(job.JobID))
-			status = tree.NewDString(string(jobs.StatusPending))
+			status = tree.NewDString(string(jobs.StatePending))
 			created = tree.MustMakeDTimestampTZ(timeutil.Unix(0, p.txn.ReadTimestamp().WallTime), time.Microsecond)
 			progressBytes, payloadBytes, err = getPayloadAndProgressFromJobsRecord(p, job)
 			if err != nil {
@@ -1380,9 +1380,9 @@ func makeLegacyJobsTableRows(
 				}
 
 				if s, ok := status.(*tree.DString); ok {
-					if jobs.Status(*s) == jobs.StatusRunning && len(progress.RunningStatus) > 0 {
+					if jobs.State(*s) == jobs.StateRunning && len(progress.RunningStatus) > 0 {
 						runningStatus = tree.NewDString(progress.RunningStatus)
-					} else if jobs.Status(*s) == jobs.StatusPaused && payload != nil && payload.PauseReason != "" {
+					} else if jobs.State(*s) == jobs.StatePaused && payload != nil && payload.PauseReason != "" {
 						errorStr = tree.NewDString(fmt.Sprintf("%s: %s", jobs.PauseRequestExplained, payload.PauseReason))
 					}
 				}
@@ -1554,7 +1554,7 @@ LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
 				tree.NewDString(payloadType.String()),
 				tree.NewDString(job.Description),
 				tree.NewDString(job.Username.Normalized()),
-				tree.NewDString(string(jobs.StatusPending)),
+				tree.NewDString(string(jobs.StatePending)),
 				tree.DNull,
 				tree.MustMakeDTimestampTZ(p.txn.ReadTimestamp().GoTime(), time.Microsecond),
 				tree.DNull,
@@ -6197,7 +6197,7 @@ func (m marshaledJobMetadataMap) GetJobMetadata(
 	if ujm.status == nil {
 		return nil, errors.New("missing status")
 	}
-	md.Status = jobs.Status(*ujm.status)
+	md.State = jobs.State(*ujm.status)
 	md.Payload, err = jobs.UnmarshalPayload(ujm.payloadBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "corrupt payload bytes")

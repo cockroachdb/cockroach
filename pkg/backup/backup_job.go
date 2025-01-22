@@ -979,7 +979,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	return b.maybeNotifyScheduledJobCompletion(
-		ctx, jobs.StatusSucceeded, p.ExecCfg().JobsKnobs(), p.ExecCfg().InternalDB,
+		ctx, jobs.StateSucceeded, p.ExecCfg().JobsKnobs(), p.ExecCfg().InternalDB,
 	)
 }
 
@@ -1002,7 +1002,7 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 		return ctx.Err()
 	case resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(b.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDString(string(jobs.StateSucceeded)),
 		tree.NewDFloat(tree.DFloat(1.0)),
 		tree.NewDInt(tree.DInt(b.backupStats.Rows)),
 	}:
@@ -1908,7 +1908,7 @@ func (b *backupResumer) readManifestOnResume(
 }
 
 func (b *backupResumer) maybeNotifyScheduledJobCompletion(
-	ctx context.Context, jobStatus jobs.Status, knobs *jobs.TestingKnobs, db isql.DB,
+	ctx context.Context, jobState jobs.State, knobs *jobs.TestingKnobs, db isql.DB,
 ) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
 	if knobs != nil && knobs.JobSchedulerEnv != nil {
@@ -1936,7 +1936,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		}
 
 		scheduleID := jobspb.ScheduleID(tree.MustBeDInt(datums[0]))
-		if err := jobs.NotifyJobTermination(ctx, txn, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID); err != nil {
+		if err := jobs.NotifyJobTermination(ctx, txn, env, b.job.ID(), jobState, b.job.Details(), scheduleID); err != nil {
 			return errors.Wrapf(err,
 				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}
@@ -1980,7 +1980,7 @@ func (b *backupResumer) OnFailOrCancel(
 	// job is being run under fails. This could happen if the schedule is dropped
 	// while the job is executing.
 	if err := b.maybeNotifyScheduledJobCompletion(
-		ctx, jobs.StatusFailed, cfg.JobsKnobs(), cfg.InternalDB,
+		ctx, jobs.StateFailed, cfg.JobsKnobs(), cfg.InternalDB,
 	); err != nil {
 		log.Errorf(ctx, "failed to notify job %d on completion of OnFailOrCancel: %+v",
 			b.job.ID(), err)

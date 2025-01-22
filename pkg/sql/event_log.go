@@ -370,7 +370,7 @@ func LogEventForJobs(
 	jobID int64,
 	payload jobspb.Payload,
 	user username.SQLUsername,
-	status jobs.Status,
+	status jobs.State,
 ) error {
 	event.CommonDetails().Timestamp = txn.KV().ReadTimestamp().WallTime
 	jobCommon, ok := event.(eventpb.EventWithCommonJobPayload)
