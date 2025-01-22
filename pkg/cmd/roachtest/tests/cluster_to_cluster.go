@@ -778,14 +778,14 @@ func (rd *replicationDriver) stopReplicationStream(
 			return res.Err()
 		}
 		require.NoError(rd.t, res.Scan(&status, &payloadBytes))
-		if jobs.Status(status) == jobs.StatusFailed {
+		if jobs.State(status) == jobs.StateFailed {
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
 				rd.t.Fatalf("job failed: %s", payload.Error)
 			}
 			rd.t.Fatalf("job failed")
 		}
-		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+		if e, a := jobs.StateSucceeded, jobs.State(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
@@ -1552,7 +1552,7 @@ func getPhase(rd *replicationDriver, dstJobID jobspb.JobID) c2cPhase {
 	var jobStatus string
 	rd.setup.dst.sysSQL.QueryRow(rd.t, `SELECT status FROM [SHOW JOB $1]`,
 		dstJobID).Scan(&jobStatus)
-	require.Equal(rd.t, jobs.StatusRunning, jobs.Status(jobStatus))
+	require.Equal(rd.t, jobs.StateRunning, jobs.State(jobStatus))
 
 	streamIngestProgress := getJobProgress(rd.t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
 

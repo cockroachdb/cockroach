@@ -155,7 +155,7 @@ func TestRegistryGC(t *testing.T) {
 		return fmt.Sprintf("%s_%s", prefix, mutOptions.string())
 	}
 
-	writeJob := func(name string, created, finished time.Time, status Status, mutOptions mutationOptions) string {
+	writeJob := func(name string, created, finished time.Time, state State, mutOptions mutationOptions) string {
 		tableName := constructTableName(name, mutOptions)
 		if _, err := sqlDB.Exec(fmt.Sprintf(`
 CREATE DATABASE IF NOT EXISTS t;
@@ -197,7 +197,7 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 
 		var id jobspb.JobID
 		db.QueryRow(t,
-			`INSERT INTO system.jobs (status, created, job_type) VALUES ($1, $2, 'SCHEMA CHANGE') RETURNING id`, status, created).Scan(&id)
+			`INSERT INTO system.jobs (status, created, job_type) VALUES ($1, $2, 'SCHEMA CHANGE') RETURNING id`, state, created).Scan(&id)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyPayloadKey(), payload)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, id, GetLegacyProgressKey(), progress)
 		return strconv.Itoa(int(id))
@@ -215,21 +215,21 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 				hasMutation: hasMutation,
 				hasDropJob:  hasDropJob,
 			}
-			oldRunningJob := writeJob("old_running", muchEarlier, time.Time{}, StatusRunning, mutOptions)
-			oldSucceededJob := writeJob("old_succeeded", muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded, mutOptions)
+			oldRunningJob := writeJob("old_running", muchEarlier, time.Time{}, StateRunning, mutOptions)
+			oldSucceededJob := writeJob("old_succeeded", muchEarlier, muchEarlier.Add(time.Minute), StateSucceeded, mutOptions)
 			oldFailedJob := writeJob("old_failed", muchEarlier, muchEarlier.Add(time.Minute),
-				StatusFailed, mutOptions)
+				StateFailed, mutOptions)
 			oldRevertFailedJob := writeJob("old_revert_failed", muchEarlier, muchEarlier.Add(time.Minute),
-				StatusRevertFailed, mutOptions)
+				StateRevertFailed, mutOptions)
 			oldCanceledJob := writeJob("old_canceled", muchEarlier, muchEarlier.Add(time.Minute),
-				StatusCanceled, mutOptions)
-			newRunningJob := writeJob("new_running", earlier, earlier.Add(time.Minute), StatusRunning,
+				StateCanceled, mutOptions)
+			newRunningJob := writeJob("new_running", earlier, earlier.Add(time.Minute), StateRunning,
 				mutOptions)
-			newSucceededJob := writeJob("new_succeeded", earlier, earlier.Add(time.Minute), StatusSucceeded, mutOptions)
-			newFailedJob := writeJob("new_failed", earlier, earlier.Add(time.Minute), StatusFailed, mutOptions)
-			newRevertFailedJob := writeJob("new_revert_failed", earlier, earlier.Add(time.Minute), StatusRevertFailed, mutOptions)
+			newSucceededJob := writeJob("new_succeeded", earlier, earlier.Add(time.Minute), StateSucceeded, mutOptions)
+			newFailedJob := writeJob("new_failed", earlier, earlier.Add(time.Minute), StateFailed, mutOptions)
+			newRevertFailedJob := writeJob("new_revert_failed", earlier, earlier.Add(time.Minute), StateRevertFailed, mutOptions)
 			newCanceledJob := writeJob("new_canceled", earlier, earlier.Add(time.Minute),
-				StatusCanceled, mutOptions)
+				StateCanceled, mutOptions)
 
 			selectJobsQuery := `SELECT id FROM system.jobs WHERE job_type = 'SCHEMA CHANGE' ORDER BY id`
 			db.CheckQueryResults(t, selectJobsQuery, [][]string{
@@ -299,7 +299,7 @@ func TestRegistryGCPagination(t *testing.T) {
 		var jobID jobspb.JobID
 		db.QueryRow(t,
 			`INSERT INTO system.jobs (status, created) VALUES ($1, $2) RETURNING id`,
-			StatusCanceled, timeutil.Now().Add(-time.Hour)).Scan(&jobID)
+			StateCanceled, timeutil.Now().Add(-time.Hour)).Scan(&jobID)
 		db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
 			jobID, GetLegacyPayloadKey(), payload)
 	}
@@ -307,7 +307,7 @@ func TestRegistryGCPagination(t *testing.T) {
 	ts := timeutil.Now()
 	require.NoError(t, s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(-10*time.Minute)))
 	var count int
-	db.QueryRow(t, `SELECT count(1) FROM system.jobs WHERE status = $1`, StatusCanceled).Scan(&count)
+	db.QueryRow(t, `SELECT count(1) FROM system.jobs WHERE status = $1`, StateCanceled).Scan(&count)
 	require.Zero(t, count)
 }
 
@@ -993,10 +993,10 @@ func TestJobIdleness(t *testing.T) {
 	}
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	waitUntilStatus := func(t *testing.T, jobID jobspb.JobID, status Status) {
+	waitUntilState := func(t *testing.T, jobID jobspb.JobID, state State) {
 		tdb.CheckQueryResultsRetry(t,
 			fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", jobID),
-			[][]string{{string(status)}})
+			[][]string{{string(state)}})
 	}
 
 	t.Run("MarkIdle", func(t *testing.T) {
@@ -1037,19 +1037,19 @@ func TestJobIdleness(t *testing.T) {
 		}{
 			{"pause", func(jobID jobspb.JobID) {
 				resumeErrChan <- MarkPauseRequestError(errors.Errorf("pause error"))
-				waitUntilStatus(t, jobID, StatusPaused)
+				waitUntilState(t, jobID, StatePaused)
 			}},
 			{"succeeded", func(jobID jobspb.JobID) {
 				resumeErrChan <- nil
-				waitUntilStatus(t, jobID, StatusSucceeded)
+				waitUntilState(t, jobID, StateSucceeded)
 			}},
 			{"failed", func(jobID jobspb.JobID) {
 				resumeErrChan <- errors.Errorf("error")
-				waitUntilStatus(t, jobID, StatusFailed)
+				waitUntilState(t, jobID, StateFailed)
 			}},
 			{"cancel", func(jobID jobspb.JobID) {
 				resumeErrChan <- errJobCanceled
-				waitUntilStatus(t, jobID, StatusCanceled)
+				waitUntilState(t, jobID, StateCanceled)
 			}},
 		} {
 			t.Run(test.name, func(t *testing.T) {
@@ -1113,7 +1113,7 @@ func TestDisablingJobAdoptionClearsClaimSessionID(t *testing.T) {
 	// session.
 	tdb.Exec(t,
 		"INSERT INTO system.jobs (id, status, created, claim_session_id) values ($1, $2, $3, $4)",
-		1, StatusRunning, timeutil.Now(), session.ID(),
+		1, StateRunning, timeutil.Now(), session.ID(),
 	)
 
 	// We expect the adopt loop to clear the claim session since job adoption is

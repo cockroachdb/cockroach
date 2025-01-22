@@ -102,20 +102,20 @@ RETURNING id;
 `
 	// Disallow clean up of claimed jobs
 	jobs.CancellationsUpdateLimitSetting.Override(ctx, &s.ClusterSettings().SV, 0)
-	terminalStatuses := []jobs.Status{jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed}
-	terminalIDs := make([]jobspb.JobID, len(terminalStatuses))
-	terminalClaims := make([][]byte, len(terminalStatuses))
+	terminalStates := []jobs.State{jobs.StateSucceeded, jobs.StateCanceled, jobs.StateFailed}
+	terminalIDs := make([]jobspb.JobID, len(terminalStates))
+	terminalClaims := make([][]byte, len(terminalStates))
 	mkSessionID := func() []byte {
 		sessionID, err := slstorage.MakeSessionID([]byte("us"), uuid.MakeV4())
 		require.NoError(t, err)
 		return []byte(sessionID)
 	}
-	for i, s := range terminalStatuses {
+	for i, s := range terminalStates {
 		terminalClaims[i] = mkSessionID() // bogus claim
 		tdb.QueryRow(t, insertQuery, s, terminalClaims[i], 42).Scan(&terminalIDs[i])
 	}
 	var nonTerminalID jobspb.JobID
-	tdb.QueryRow(t, insertQuery, jobs.StatusRunning, mkSessionID(), 42).Scan(&nonTerminalID)
+	tdb.QueryRow(t, insertQuery, jobs.StateRunning, mkSessionID(), 42).Scan(&nonTerminalID)
 
 	checkClaimEqual := func(id jobspb.JobID, exp []byte) error {
 		const getClaimQuery = `SELECT claim_session_id FROM system.jobs WHERE id = $1`

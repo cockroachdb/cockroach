@@ -125,7 +125,7 @@ func alterChangefeedPlanHook(
 			return errors.Errorf(`job %d is not changefeed job`, jobID)
 		}
 
-		if job.Status() != jobs.StatusPaused {
+		if job.State() != jobs.StatePaused {
 			return errors.Errorf(`job %d is not paused`, jobID)
 		}
 

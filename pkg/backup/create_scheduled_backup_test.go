@@ -149,7 +149,7 @@ func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID jobs
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 		var unused int64
 		return h.sqlDB.DB.QueryRowContext(context.Background(),
-			query, jobs.StatusSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&unused)
+			query, jobs.StateSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&unused)
 	})
 }
 
@@ -164,7 +164,7 @@ func (h *testHelper) waitForSuccessfulScheduledJobCount(
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 		var count int
 		err := h.sqlDB.DB.QueryRowContext(context.Background(),
-			query, jobs.StatusSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&count)
+			query, jobs.StateSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&count)
 		require.NoError(t, err)
 		if count != expectedCount {
 			return errors.Newf("expected %d jobs; found %d", expectedCount, count)

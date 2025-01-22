@@ -449,8 +449,8 @@ func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.T
 	if sp.StreamReplication == nil {
 		return roachpb.TenantID{}, errors.AssertionFailedf("unexpected nil StreamReplication in producer job %d payload", producerJobID)
 	}
-	if job.Status() != jobs.StatusRunning {
-		return roachpb.TenantID{}, jobIsNotRunningError(producerJobID, job.Status(), "stream events")
+	if job.State() != jobs.StateRunning {
+		return roachpb.TenantID{}, jobIsNotRunningError(producerJobID, job.State(), "stream events")
 	}
 
 	// Validate that the requested spans are a subset of the

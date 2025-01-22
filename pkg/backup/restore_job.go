@@ -1520,7 +1520,7 @@ func createImportingDescriptors(
 			err := r.job.WithTxn(txn).SetDetails(ctx, details)
 
 			// Emit to the event log now that the job has finished preparing descs.
-			emitRestoreJobEvent(ctx, p, jobs.StatusRunning, r.job)
+			emitRestoreJobEvent(ctx, p, jobs.StateRunning, r.job)
 
 			return err
 		})
@@ -1883,7 +1883,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg(), preData, mainData); err != nil {
 			return err
 		}
-		emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+		emitRestoreJobEvent(ctx, p, jobs.StateSucceeded, r.job)
 		return nil
 	}
 
@@ -2082,7 +2082,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	// Emit an event now that the restore job has completed.
-	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+	emitRestoreJobEvent(ctx, p, jobs.StateSucceeded, r.job)
 
 	// Restore used all available SQL instances.
 	_, sqlInstanceIDs, err := p.DistSQLPlanner().SetupAllNodesPlanning(ctx, p.ExtendedEvalContext(), p.ExecCfg())
@@ -2194,7 +2194,7 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 		} else {
 			return tree.Datums{
 				tree.NewDInt(tree.DInt(r.job.ID())),
-				tree.NewDString(string(jobs.StatusSucceeded)),
+				tree.NewDString(string(jobs.StateSucceeded)),
 				tree.NewDFloat(tree.DFloat(1.0)),
 				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
 			}
@@ -2600,13 +2600,13 @@ func prefetchDescriptors(
 }
 
 func emitRestoreJobEvent(
-	ctx context.Context, p sql.JobExecContext, status jobs.Status, job *jobs.Job,
+	ctx context.Context, p sql.JobExecContext, state jobs.State, job *jobs.Job,
 ) {
 	// Emit to the event log now that we have completed the prepare step.
 	var restoreEvent eventpb.Restore
 	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return sql.LogEventForJobs(ctx, p.ExecCfg(), txn, &restoreEvent, int64(job.ID()),
-			job.Payload(), p.User(), status)
+			job.Payload(), p.User(), state)
 	}); err != nil {
 		log.Warningf(ctx, "failed to log event: %v", err)
 	}
@@ -2630,7 +2630,7 @@ func (r *restoreResumer) OnFailOrCancel(
 	}
 
 	// Emit to the event log that the job has started reverting.
-	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
+	emitRestoreJobEvent(ctx, p, jobs.StateReverting, r.job)
 
 	telemetry.Count("restore.total.failed")
 	telemetry.CountBucketed("restore.duration-sec.failed",
@@ -2695,7 +2695,7 @@ func (r *restoreResumer) OnFailOrCancel(
 	}
 
 	// Emit to the event log that the job has completed reverting.
-	emitRestoreJobEvent(ctx, p, jobs.StatusFailed, r.job)
+	emitRestoreJobEvent(ctx, p, jobs.StateFailed, r.job)
 	return nil
 }
 

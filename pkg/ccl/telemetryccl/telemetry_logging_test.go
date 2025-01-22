@@ -366,7 +366,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
 		}
-		waitForJobResult(t, testCluster, jobspb.JobID(jobID), jobs.StatusSucceeded)
+		waitForJobResult(t, testCluster, jobspb.JobID(jobID), jobs.StateSucceeded)
 		t.Logf("finished:%q\n", tc.query)
 
 		execTimestamp++
@@ -415,7 +415,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 }
 
 func waitForJobResult(
-	t *testing.T, tc serverutils.TestClusterInterface, id jobspb.JobID, expected jobs.Status,
+	t *testing.T, tc serverutils.TestClusterInterface, id jobspb.JobID, expected jobs.State,
 ) {
 	// Force newly created job to be adopted and verify its result.
 	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()

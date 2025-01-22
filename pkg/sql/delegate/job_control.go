@@ -41,10 +41,10 @@ func (d *delegator) delegateJobControl(stmt ControlJobsDelegate) (tree.Statement
 	// from the control specific methods in pkg/jobs/jobs.go. All other states are
 	// either invalid starting states or result in no-ops.
 
-	validStartStatusForCommand := map[tree.JobCommand][]jobs.Status{
-		tree.PauseJob:  {jobs.StatusPending, jobs.StatusRunning, jobs.StatusReverting},
-		tree.ResumeJob: {jobs.StatusPaused},
-		tree.CancelJob: {jobs.StatusPending, jobs.StatusRunning, jobs.StatusPaused},
+	validStartStatusForCommand := map[tree.JobCommand][]jobs.State{
+		tree.PauseJob:  {jobs.StatePending, jobs.StateRunning, jobs.StateReverting},
+		tree.ResumeJob: {jobs.StatePaused},
+		tree.CancelJob: {jobs.StatePending, jobs.StateRunning, jobs.StatePaused},
 	}
 
 	var filterExprs []string

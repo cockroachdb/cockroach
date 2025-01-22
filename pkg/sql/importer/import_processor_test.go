@@ -627,7 +627,7 @@ func setImportReaderParallelism(parallelism int32) func() {
 // Queries the status and the import progress of the job.
 type jobState struct {
 	err    error
-	status jobs.Status
+	status jobs.State
 	prog   jobspb.ImportProgress
 }
 
@@ -649,7 +649,7 @@ SELECT status, payload, progress FROM crdb_internal.system_jobs WHERE id = $1
 		return
 	}
 
-	if js.status == jobs.StatusFailed {
+	if js.status == jobs.StateFailed {
 		payload := &jobspb.Payload{}
 		js.err = protoutil.Unmarshal(payloadBytes, payload)
 		if js.err == nil {
@@ -774,7 +774,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	unblockImport()
 
 	// Get updated resume position counter.
-	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusPaused == js.status })
+	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatePaused == js.status })
 	resumePos := js.prog.ResumePos[0]
 	t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
 
@@ -782,7 +782,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	if err := registry.Unpause(ctx, nil, jobID); err != nil {
 		t.Fatal(err)
 	}
-	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
+	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StateSucceeded == js.status })
 
 	// Verify that the import proceeded from the resumeRow position.
 	assert.Equal(t, importSummary.Rows, int64(csv1.numRows)-resumePos)
@@ -875,7 +875,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 
 	// All files should have been processed,
 	// and the resume position set to maxInt64.
-	js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusPaused == js.status })
+	js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatePaused == js.status })
 	for _, pos := range js.prog.ResumePos {
 		assert.True(t, pos == math.MaxInt64)
 	}
@@ -887,7 +887,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	if err := registry.Unpause(ctx, nil, jobID); err != nil {
 		t.Fatal(err)
 	}
-	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
+	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StateSucceeded == js.status })
 
 	// Verify that after resume we have not processed any additional rows.
 	assert.Zero(t, importSummary.Rows)
