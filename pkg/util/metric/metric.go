@@ -373,7 +373,7 @@ var _ IHistogram = (*Histogram)(nil)
 // New buckets are created using TestHistogramBuckets.
 type Histogram struct {
 	Metadata
-	cum prometheus.Histogram
+	cum prometheus.HistogramInternal
 
 	// TODO(obs-inf): the way we implement windowed histograms is not great.
 	// We could "just" double the rotation interval (so that the histogram really
@@ -388,7 +388,7 @@ type Histogram struct {
 		// is held while rotating.
 		syncutil.RWMutex
 		*tick.Ticker
-		prev, cur prometheus.Histogram
+		prev, cur prometheus.HistogramInternal
 	}
 }
 
@@ -441,11 +441,12 @@ func (h *Histogram) Windowed() prometheus.Histogram {
 // RecordValue adds the given value to the histogram.
 func (h *Histogram) RecordValue(n int64) {
 	v := float64(n)
-	h.cum.Observe(v)
+	b := h.cum.FindBucket(v)
+	h.cum.ObserveInternal(v, b)
 
 	h.windowed.RLock()
 	defer h.windowed.RUnlock()
-	h.windowed.cur.Observe(v)
+	h.windowed.cur.ObserveInternal(v, b)
 }
 
 // GetType returns the prometheus type enum for this metric.
