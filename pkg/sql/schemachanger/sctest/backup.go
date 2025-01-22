@@ -433,7 +433,7 @@ func exerciseBackupRestore(
 			tdb.Exec(t, fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", cs.DatabaseName))
 			if rc.restoreFlavor == restoreAllTablesInDatabase {
 				// Database must be created explicitly pre-RESTORE in this case.
-				tdb.Exec(t, fmt.Sprintf("CREATE DATABASE %q", cs.DatabaseName))
+				tdb.Exec(t, cs.CreateDatabaseStmt)
 			}
 
 			// RESTORE.

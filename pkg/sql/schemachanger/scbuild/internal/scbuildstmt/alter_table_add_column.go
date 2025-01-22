@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,7 +47,6 @@ func alterTableAddColumn(
 	if t.ColumnDef.Unique.IsUnique {
 		panicIfRegionChangeUnderwayOnRBRTable(b, "add a UNIQUE COLUMN", tbl.TableID)
 	}
-	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
 
 	// Check column non-existence.
 	elts := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{
@@ -101,11 +99,11 @@ func alterTableAddColumn(
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
 	{
-		tableElts := b.QueryByID(tbl.TableID)
-		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
-			panic(scerrors.NotImplementedErrorf(d,
-				"regional by row partitioning is not supported"))
-		}
+		// tableElts := b.QueryByID(tbl.TableID)
+		// if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
+		// 	panic(scerrors.NotImplementedErrorf(d,
+		// 		"regional by row partitioning is not supported"))
+		// }
 	}
 	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx(), tree.ColumnDefaultExprInAddColumn)
 	if err != nil {
