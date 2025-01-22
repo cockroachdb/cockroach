@@ -5225,7 +5225,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 		// second should be returning
 		for {
 			msg, err := dataExpiredRows.Next()
-			if testutils.IsError(err, `must be after replica GC threshold`) {
+			if testutils.IsError(err, `Could not create changefeed: cursor older than GC threshold. Use a more recent cursor or increase the table's GC TTL`) {
 				t.Logf("got expected GC error: %s", err)
 				break
 			}
@@ -5253,6 +5253,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 	// TODO(samiskin): Tenant test disabled because this test requires
 	// forceTableGC which doesn't work on tenants
 	cdcTestWithSystem(t, testFn, feedTestForceSink("sinkless"), feedTestNoTenants)
+
 }
 
 // TestChangefeedSchemaTTL ensures that changefeeds fail with an error in the case
@@ -5325,7 +5326,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 		for {
 			_, err := dataExpiredRows.Next()
 			if err != nil {
-				require.Regexp(t, `GC threshold`, err)
+				require.Regexp(t, `Could not create changefeed: cursor older than GC threshold. Use a more recent cursor or increase the table's GC TTL`, err)
 				break
 			}
 		}

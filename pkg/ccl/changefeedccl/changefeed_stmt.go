@@ -1383,7 +1383,6 @@ func (b *changefeedResumer) resumeWithRetries(
 			if strings.HasPrefix(description, "CREATE CHANGEFEED") && errors.HasType(flowErr, (*kvpb.BatchTimestampBeforeGCError)(nil)) {
 				err = errors.Wrap(err, "Could not create changefeed: cursor older than GC threshold. Use a more recent cursor or increase the table's GC TTL")
 			}
-
 			return err
 		}
 
