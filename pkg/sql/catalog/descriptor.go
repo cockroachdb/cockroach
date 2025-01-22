@@ -652,6 +652,10 @@ type TableDescriptor interface {
 	// functions referenced in this table.
 	GetAllReferencedFunctionIDs() (DescriptorIDSet, error)
 
+	// GetAllReferencedFunctionIDsInPolicy returns descriptor IDs of all user
+	// defined functions referenced in this policy.
+	GetAllReferencedFunctionIDsInPolicy(policyID descpb.PolicyID) DescriptorIDSet
+
 	// GetAllReferencedFunctionIDsInConstraint returns descriptor IDs of all user
 	// defined functions referenced in this check constraint.
 	GetAllReferencedFunctionIDsInConstraint(

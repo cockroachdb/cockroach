@@ -375,6 +375,17 @@ func NewAlterDependsOnExpirationExprError(
 	)
 }
 
+// NewAlterDependsOnPolicyExprError generates an error when a column change
+// is prevented because the column is referenced in a row-level security
+// policy expression.
+func NewAlterDependsOnPolicyExprError(op, objType, colName string) error {
+	return pgerror.Newf(
+		pgcode.InvalidTableDefinition,
+		`cannot %s %s %q because it is referenced in a policy expression`,
+		redact.SafeString(op), redact.SafeString(objType), colName,
+	)
+}
+
 // NewColumnReferencedByComputedColumnError is returned when dropping a column
 // and that column being dropped is referenced by a computed column. Note that
 // the cockroach behavior where this error is returned does not match the

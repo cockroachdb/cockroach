@@ -305,6 +305,14 @@ Policy :  PolicyID
 Policy :  Type
 Policy :  Command
 
+object PolicyDeps
+
+PolicyDeps :  TableID
+PolicyDeps :  PolicyID
+PolicyDeps : []UsesTypeIDs
+PolicyDeps : []UsesRelationIDs
+PolicyDeps : []UsesFunctionIDs
+
 object PolicyName
 
 PolicyName :  TableID
@@ -316,6 +324,18 @@ object PolicyRole
 PolicyRole :  TableID
 PolicyRole :  PolicyID
 PolicyRole :  RoleName
+
+object PolicyUsingExpr
+
+PolicyUsingExpr :  TableID
+PolicyUsingExpr :  PolicyID
+PolicyUsingExpr :  Expression
+
+object PolicyWithCheckExpr
+
+PolicyWithCheckExpr :  TableID
+PolicyWithCheckExpr :  PolicyID
+PolicyWithCheckExpr :  Expression
 
 object PrimaryIndex
 
@@ -596,8 +616,11 @@ AliasType <|-- Owner
 EnumType <|-- Owner
 TablePartitioning <|-- PartitionZoneConfig
 Table <|-- Policy
+Policy <|-- PolicyDeps
 Policy <|-- PolicyName
 Policy <|-- PolicyRole
+Policy <|-- PolicyUsingExpr
+Policy <|-- PolicyWithCheckExpr
 Table <|-- PrimaryIndex
 View <|-- PrimaryIndex
 Table <|-- RowLevelTTL
