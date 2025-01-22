@@ -31,11 +31,13 @@ sudo apt-get install -y --no-install-recommends \
 
 # pnpm doesn't provide a Debian repository, and supports either `curl | sh` or `npm install -g` installations.
 curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=8.6.6 sh -
+echo -e '\n' >> ~/.bashrc
 
 sudo adduser "${USER}" docker
 
 # Configure environment variables.
 echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
+echo -e '\n' >> ~/.bashrc
 echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
 . ~/.bashrc_bootstrap
 
