@@ -666,6 +666,7 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 		locking,
 		h.mb.b.allocScope(),
 		true, /* disableNotVisibleIndex */
+		cat.PolicyScopeExempt,
 	), ordinals
 }
 
