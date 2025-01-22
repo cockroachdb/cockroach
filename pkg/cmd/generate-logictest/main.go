@@ -196,7 +196,8 @@ func (t *testdir) dump() error {
 			(strings.HasPrefix(cfg.Name, "local-") && !tplCfg.Ccl) ||
 			(cfg.Name == "local" && !tplCfg.Ccl) {
 			tplCfg.UseHeavyPool = useHeavyPoolForExpensiveConfig
-		} else if strings.Contains(cfg.Name, "cockroach-go-testserver") {
+		} else if strings.Contains(cfg.Name, "cockroach-go-testserver") ||
+			strings.Contains(cfg.Name, "3node-tenant") {
 			tplCfg.UseHeavyPool = useHeavyPoolAlways
 		}
 		subdir := filepath.Join(t.dir, cfg.Name)
