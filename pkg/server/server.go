@@ -129,6 +129,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	sentry "github.com/getsentry/sentry-go"
+	"golang.org/x/exp/trace"
 	"google.golang.org/grpc/codes"
 )
 
@@ -232,6 +233,16 @@ type topLevelServer struct {
 // channel and calling stopper.Stop().
 func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error) {
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
+	// Start the flight recorder. We aren't going to actually use it.
+	fr := trace.NewFlightRecorder()
+	if err := fr.Start(); err != nil {
+		return nil, err
+	}
+	stopper.AddCloser(stop.CloserFn(func() {
+		if err := fr.Stop(); err != nil {
+			log.Errorf(context.TODO(), "could not unlock file lock on temporary directory: %s", err.Error())
+		}
+	}))
 
 	if err := cfg.ValidateAddrs(ctx); err != nil {
 		return nil, err
