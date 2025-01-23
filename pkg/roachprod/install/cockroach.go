@@ -789,6 +789,7 @@ func (c *SyncedCluster) ExecSQL(
 func (c *SyncedCluster) startNodeWithResult(
 	ctx context.Context, l *logger.Logger, node Node, startOpts *StartOpts,
 ) (*RunResultDetails, error) {
+	l.Printf("starting node %d", node)
 	startScriptPath := StartScriptPath(startOpts.VirtualClusterName, startOpts.SQLInstance)
 	var runScriptCmd string
 	if c.IsLocal() {
@@ -1011,8 +1012,12 @@ func (c *SyncedCluster) generateStartArgs(
 			loggingConfigFile := fmt.Sprintf("cockroachdb-logging%s.yaml",
 				virtualClusterDirSuffix(startOpts.VirtualClusterName, startOpts.SQLInstance))
 
-			if err := c.PutString(ctx, l, Nodes{node}, loggingConfig, loggingConfigFile, 0644); err != nil {
-				return nil, errors.Wrap(err, "failed writing remote logging configuration: %w")
+			// To speed up the startup time of nodes in large cluster, the cockroachdb-logging.yaml file is copied
+			// to all nodes in parallel.
+			if c.Nodes[0] == node {
+				if err := c.PutString(ctx, l, c.Nodes, loggingConfig, loggingConfigFile, 0644); err != nil {
+					return nil, errors.Wrap(err, "failed writing remote logging configuration: %w")
+				}
 			}
 
 			args = append(args, "--log-config-file", loggingConfigFile)
