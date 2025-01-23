@@ -340,7 +340,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	}
 	var cols tree.IndexElemList
 	seen := map[tree.Name]bool{}
-	inverted := false
+	indexType := tree.IndexTypeForward
 	unique := s.coin()
 	for len(cols) < 1 || s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
@@ -351,7 +351,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		// If this is the first column and it's invertible (i.e., JSONB), make an inverted index.
 		if len(cols) == 0 &&
 			colinfo.ColumnTypeIsOnlyInvertedIndexable(tree.MustBeStaticallyKnownType(col.Type)) {
-			inverted = true
+			indexType = tree.IndexTypeInverted
 			unique = false
 			cols = append(cols, tree.IndexElem{
 				Column: col.Name,
@@ -366,7 +366,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		}
 	}
 	var storing tree.NameList
-	for !inverted && s.coin() {
+	for indexType == tree.IndexTypeForward && s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
@@ -390,7 +390,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		Unique:       unique,
 		Columns:      cols,
 		Storing:      storing,
-		Inverted:     inverted,
+		Type:         indexType,
 		Concurrently: s.coin(),
 		Invisibility: invisibility,
 	}, true

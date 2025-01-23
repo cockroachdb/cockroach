@@ -184,7 +184,7 @@ func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 		var indexFlags tree.IndexFlags
 		indexNames := make([]tree.Name, 0, len(indexes))
 		for _, index := range indexes {
-			if !index.Inverted {
+			if index.Type == tree.IndexTypeForward {
 				indexNames = append(indexNames, index.Name)
 			}
 		}
@@ -499,10 +499,14 @@ func (s *Smither) extractIndexes(
 				return nil, err
 			}
 			if _, ok := indexes[idx]; !ok {
+				indexType := tree.IndexTypeForward
+				if inverted {
+					indexType = tree.IndexTypeInverted
+				}
 				indexes[idx] = &tree.CreateIndex{
-					Name:     idx,
-					Table:    *t.TableName,
-					Inverted: inverted,
+					Name:  idx,
+					Table: *t.TableName,
+					Type:  indexType,
 				}
 			}
 			create := indexes[idx]

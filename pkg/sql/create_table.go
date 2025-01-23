@@ -1886,7 +1886,7 @@ func NewTableDesc(
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
-			if d.Vector {
+			if d.Type == tree.IndexTypeVector {
 				return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
 			}
 			// If the index is named, ensure that the name is unique. Unnamed
@@ -1910,14 +1910,14 @@ func NewTableDesc(
 				&desc,
 				&n.Table,
 				d.Columns,
-				d.Inverted,
+				d.Type,
 				true, /* isNewTable */
 				semaCtx,
 				version,
 			); err != nil {
 				return nil, err
 			}
-			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Type, version); err != nil {
 				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
@@ -1927,7 +1927,7 @@ func NewTableDesc(
 				NotVisible:       d.Invisibility.Value != 0.0,
 				Invisibility:     d.Invisibility.Value,
 			}
-			if d.Inverted {
+			if d.Type == tree.IndexTypeInverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
 			}
 			columns := d.Columns
@@ -1941,7 +1941,7 @@ func NewTableDesc(
 			if err := idx.FillColumns(columns); err != nil {
 				return nil, err
 			}
-			if d.Inverted {
+			if d.Type == tree.IndexTypeInverted {
 				column, err := catalog.MustFindColumnByName(&desc, idx.InvertedColumnName())
 				if err != nil {
 					return nil, err
@@ -2030,14 +2030,14 @@ func NewTableDesc(
 				&desc,
 				&n.Table,
 				d.Columns,
-				false, /* isInverted */
-				true,  /* isNewTable */
+				d.Type,
+				true, /* isNewTable */
 				semaCtx,
 				version,
 			); err != nil {
 				return nil, err
 			}
-			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Type, version); err != nil {
 				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
@@ -2770,9 +2770,18 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					// we'll just generate a new one.
 					continue
 				}
+				var indexType tree.IndexType
+				switch idx.GetType() {
+				case descpb.IndexDescriptor_FORWARD:
+					indexType = tree.IndexTypeForward
+				case descpb.IndexDescriptor_INVERTED:
+					indexType = tree.IndexTypeInverted
+				default:
+					return nil, errors.AssertionFailedf("unknown index descriptor type %v", idx.GetType())
+				}
 				indexDef := tree.IndexTableDef{
 					Name:         tree.Name(idx.GetName()),
-					Inverted:     idx.GetType() == descpb.IndexDescriptor_INVERTED,
+					Type:         indexType,
 					Storing:      make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
 					Columns:      make(tree.IndexElemList, 0, idx.NumKeyColumns()),
 					Invisibility: tree.IndexInvisibility{Value: idx.GetInvisibility()},
@@ -2811,7 +2820,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				}
 				// The last column of an inverted index cannot have an explicit
 				// direction.
-				if indexDef.Inverted {
+				if indexDef.Type == tree.IndexTypeInverted {
 					indexDef.Columns[len(indexDef.Columns)-1].Direction = tree.DefaultDirection
 				}
 				for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {

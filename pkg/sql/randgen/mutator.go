@@ -806,13 +806,13 @@ func postgresCreateTableMutator(
 				// TODO(rafi): Postgres supports inverted indexes with a different
 				// syntax than Cockroach. Maybe we could add it later.
 				// The syntax is `CREATE INDEX name ON table USING gin(column)`.
-				if !def.Inverted {
+				if def.Type == tree.IndexTypeForward {
 					mutated = append(mutated, &tree.CreateIndex{
-						Name:     def.Name,
-						Table:    mutatedStmt.Table,
-						Inverted: def.Inverted,
-						Columns:  newCols,
-						Storing:  def.Storing,
+						Name:    def.Name,
+						Table:   mutatedStmt.Table,
+						Type:    def.Type,
+						Columns: newCols,
+						Storing: def.Storing,
 						// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 					})
 				}
@@ -857,12 +857,12 @@ func postgresCreateTableMutator(
 					break
 				}
 				mutated = append(mutated, &tree.CreateIndex{
-					Name:     def.Name,
-					Table:    mutatedStmt.Table,
-					Unique:   true,
-					Inverted: def.Inverted,
-					Columns:  newCols,
-					Storing:  def.Storing,
+					Name:    def.Name,
+					Table:   mutatedStmt.Table,
+					Unique:  true,
+					Type:    def.Type,
+					Columns: newCols,
+					Storing: def.Storing,
 					// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 				})
 				changed = true
@@ -1031,7 +1031,8 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 	for _, stmt := range stmts {
 		switch ast := stmt.(type) {
 		case *tree.CreateIndex:
-			if ast.Inverted {
+			if ast.Type != tree.IndexTypeForward {
+				// Only forward indexes support STORING columns for now.
 				continue
 			}
 			info, ok := tables[ast.Table.ObjectName]
@@ -1062,7 +1063,8 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 						idx = &defType.IndexTableDef
 					}
 				}
-				if idx == nil || idx.Inverted {
+				if idx == nil || idx.Type != tree.IndexTypeForward {
+					// STORING is not currently supported by non-forward indexes.
 					continue
 				}
 				// If we don't have a storing list, make one with 50% chance.

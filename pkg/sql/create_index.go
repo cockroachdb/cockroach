@@ -143,9 +143,10 @@ func makeIndexDescriptor(
 			`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
 		)
 	}
-	if n.Vector {
+	if n.Type == tree.IndexTypeVector {
 		return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
 	}
+
 	// Since we mutate the columns below, we make copies of them
 	// here so that on retry we do not attempt to validate the
 	// mutated columns.
@@ -172,7 +173,7 @@ func makeIndexDescriptor(
 		tableDesc,
 		tn,
 		columns,
-		n.Inverted,
+		n.Type,
 		false, /* isNewTable */
 		params.p.SemaCtx(),
 		activeVersion,
@@ -194,7 +195,7 @@ func makeIndexDescriptor(
 		return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name)
 	}
 
-	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Inverted, params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)); err != nil {
+	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Type, params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)); err != nil {
 		return nil, err
 	}
 
@@ -208,7 +209,7 @@ func makeIndexDescriptor(
 		Invisibility:      n.Invisibility.Value,
 	}
 
-	if n.Inverted {
+	if n.Type == tree.IndexTypeInverted {
 		if n.Sharded != nil {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding")
 		}
@@ -317,7 +318,7 @@ func checkIndexColumns(
 	desc catalog.TableDescriptor,
 	columns tree.IndexElemList,
 	storing tree.NameList,
-	inverted bool,
+	indexType tree.IndexType,
 	version clusterversion.ClusterVersion,
 ) error {
 	for i, colDef := range columns {
@@ -331,7 +332,7 @@ func checkIndexColumns(
 				"cannot index system column %v", colDef.Column,
 			)
 		}
-		if colDef.OpClass != "" && (i < len(columns)-1 || !inverted) {
+		if colDef.OpClass != "" && (i < len(columns)-1 || indexType != tree.IndexTypeInverted) {
 			return pgerror.New(pgcode.DatatypeMismatch,
 				"operator classes are only allowed for the last column of an inverted index")
 		}
@@ -478,7 +479,7 @@ func replaceExpressionElemsWithVirtualCols(
 	desc *tabledesc.Mutable,
 	tn *tree.TableName,
 	elems tree.IndexElemList,
-	isInverted bool,
+	indexType tree.IndexType,
 	isNewTable bool,
 	semaCtx *tree.SemaContext,
 	version clusterversion.ClusterVersion,
@@ -543,7 +544,7 @@ func replaceExpressionElemsWithVirtualCols(
 				)
 			}
 
-			if !isInverted && !colinfo.ColumnTypeIsIndexable(typ) {
+			if indexType != tree.IndexTypeInverted && !colinfo.ColumnTypeIsIndexable(typ) {
 				if colinfo.ColumnTypeIsInvertedIndexable(typ) {
 					return errors.WithHint(
 						pgerror.Newf(
@@ -563,7 +564,7 @@ func replaceExpressionElemsWithVirtualCols(
 				)
 			}
 
-			if isInverted {
+			if indexType == tree.IndexTypeInverted {
 				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
 					return errors.WithHint(
 						pgerror.Newf(
