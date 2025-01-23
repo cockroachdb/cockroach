@@ -780,20 +780,18 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 	appStats := sqlStats.GetApplicationStats(appName)
 
-	sqlRun.Exec(t, `SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = true;`)
 	sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0;`)
 
-	validateSample := func(fingerprint string, implicitTxn bool, expectedPreviouslySampledState bool, expectedSavePlanForStatsState bool) {
+	validateSample := func(fingerprint string, implicitTxn bool, expectedPreviouslySampledState bool) {
 
-		previouslySampled, savePlanForStats := appStats.ShouldSample(
+		previouslySampled := appStats.ShouldSample(
 			fingerprint,
 			implicitTxn,
 			dbName,
 		)
 
-		errMessage := fmt.Sprintf("validate: %s, implicit: %t expected sample before: %t, actual sample before: %t, exptected save plan: %t actual save plan: %t\n",
-			fingerprint, implicitTxn, expectedPreviouslySampledState, previouslySampled, expectedSavePlanForStatsState, savePlanForStats)
-		require.Equal(t, expectedSavePlanForStatsState, savePlanForStats, errMessage)
+		errMessage := fmt.Sprintf("validate: %s, implicit: %t expected sample before: %t, actual sample before: %t\n",
+			fingerprint, implicitTxn, expectedPreviouslySampledState, previouslySampled)
 		require.Equal(t, expectedPreviouslySampledState, previouslySampled, errMessage)
 	}
 
@@ -801,7 +799,7 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 
 	// Logical plan should be sampled here, since we have not collected logical plan
 	// at all.
-	validateSample("SELECT _", true, false, true)
+	validateSample("SELECT _", true, false)
 
 	// Execute the query to trigger a collection of logical plan.
 	// (db_name=defaultdb implicitTxn=true fingerprint=SELECT _)
@@ -810,11 +808,11 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 
 	// Ensure that if a query is to be subsequently executed, it will not cause
 	// logical plan sampling.
-	validateSample("SELECT _", true, true, false)
+	validateSample("SELECT _", true, true)
 
 	// However, if we are to execute the same statement but under explicit
 	// transaction, the plan will still need to be sampled.
-	validateSample("SELECT _", false, false, true)
+	validateSample("SELECT _", false, false)
 
 	// Execute the statement under explicit transaction.
 	// (db_name=defaultdb implicitTxn=false fingerprint=SELECT _)
@@ -826,7 +824,7 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 
 	// Ensure that the subsequent execution of the query will not cause logical plan
 	// collection.
-	validateSample("SELECT _", false, true, false)
+	validateSample("SELECT _", false, true)
 
 	// Set the time to the future and ensure we will resample the logical plan.
 	setTime("2021-09-20T15:05:01Z")
@@ -836,15 +834,15 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;")
 	require.NoError(t, err)
 
-	validateSample("SELECT _", true, true, true)
+	validateSample("SELECT _", true, true)
 
 	// implicit txn
 	_, err = conn.ExecContext(ctx, "SELECT 1")
 	require.NoError(t, err)
-	validateSample("SELECT _", true, true, false)
+	validateSample("SELECT _", true, true)
 
 	// explicit txn
-	validateSample("SELECT _", false, true, true)
+	validateSample("SELECT _", false, true)
 
 	tx, err = conn.BeginTx(ctx, &gosql.TxOptions{})
 	require.NoError(t, err)
@@ -854,7 +852,7 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 
 	// Ensure that the subsequent execution of the query will not cause logical plan
 	// collection.
-	validateSample("SELECT _", false, true, false)
+	validateSample("SELECT _", false, true)
 }
 
 func TestPersistedSQLStats_Flush(t *testing.T) {

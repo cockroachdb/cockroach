@@ -99,12 +99,6 @@ func (s *Container) RecordStatement(
 		stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
 		stats.mu.data.FailureCount++
 	}
-	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
-	if value.Plan != nil {
-		stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
-		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
-		s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
-	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
 	} else if int64(value.AutoRetryCount) > stats.mu.data.MaxRetries {
@@ -203,16 +197,13 @@ func (s *Container) RecordStatementExecStats(
 }
 
 // ShouldSample implements sqlstats.Writer interface.
-func (s *Container) ShouldSample(
-	fingerprint string, implicitTxn bool, database string,
-) (previouslySampled, savePlanForStats bool) {
-	lastSampled, previouslySampled := s.getLogicalPlanLastSampled(sampledPlanKey{
+func (s *Container) ShouldSample(fingerprint string, implicitTxn bool, database string) bool {
+	_, previouslySampled := s.getLogicalPlanLastSampled(sampledPlanKey{
 		stmtNoConstants: fingerprint,
 		implicitTxn:     implicitTxn,
 		database:        database,
 	})
-	savePlanForStats = s.shouldSaveLogicalPlanDescription(lastSampled)
-	return previouslySampled, savePlanForStats
+	return previouslySampled
 }
 
 // RecordTransaction implements sqlstats.Writer interface and saves
