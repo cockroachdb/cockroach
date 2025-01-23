@@ -40,6 +40,9 @@ type VerifyInput struct {
 
 	// BypassSafetyChecks configures lease transfers to skip safety checks.
 	BypassSafetyChecks bool
+
+	// DesiredLeaseType is the desired lease type for the replica.
+	DesiredLeaseType roachpb.LeaseType
 }
 
 // toBuildInput converts a VerifyInput to an BuildInput. This is a lossy
@@ -105,7 +108,8 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 	// is this replica that became the leader.
 	//
 	// [^1]: however, if the leader is not known and RejectLeaseOnLeaderUnknown
-	// cluster setting is true, we reject the proposal.
+	// cluster setting is true, or if the replica's desired lease type is a leader
+	// lease, we reject the proposal.
 	// TODO(nathan): make this behaviour default. Right now, it is hidden behind
 	// an experimental cluster setting. See #120073 and #118435. We attempted to
 	// address this in #127082, but there was fallout, so we reverted that change.
@@ -176,8 +180,13 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 		}
 	}
 
+	desiresLeaderLease := i.DesiredLeaseType == roachpb.LeaseLeader
 	reject := false
-	if !leaderKnown && st.RejectLeaseOnLeaderUnknown {
+	if !leaderKnown && (desiresLeaderLease || st.RejectLeaseOnLeaderUnknown) {
+		// If a leader lease is desired, and we don't know who the leader is, we do
+		// not try proposing a lease acquisition request. The lease should be
+		// acquired by the leader, so we want the client to try another replica who
+		// might be the leader itself or knows who the leader is.
 		log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; the leader is unknown")
 		reject = true
 	} else if leaderEligibleForLease {

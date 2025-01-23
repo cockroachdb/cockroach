@@ -597,7 +597,7 @@ go_test(
         "@com_github_gogo_protobuf//proto",
         "@com_github_gorilla_mux//:mux",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
-        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_kr_pretty//:pretty",
         "@com_github_pires_go_proxyproto//:go-proxyproto",
         "@com_github_prometheus_client_model//go",

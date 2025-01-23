@@ -34,6 +34,7 @@ go_library(
         "@com_github_jackc_pgconn//:pgconn",
         "@com_github_jackc_pgtype//:pgtype",
         "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_otan_gopgkrb5//:gopgkrb5",
     ],
 )

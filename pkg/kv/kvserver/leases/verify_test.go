@@ -196,6 +196,25 @@ func TestVerify(t *testing.T) {
 				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
 				expRedirect: roachpb.ReplicaDescriptor{},
 			},
+			{
+				name: "follower, unknown leader, reject leader lease on leader unknown",
+				st: func() Settings {
+					st := defaultSettings()
+					return st
+				}(),
+				input: func() VerifyInput {
+					in := defaultFollowerInput()
+					// Unknown leader.
+					in.RaftStatus.Lead = raft.None
+					// Leader lease.
+					in.DesiredLeaseType = roachpb.LeaseLeader
+					return in
+				}(),
+				// Rejection if the leader is unknown. However, we don't know who to
+				// redirect to, so we don't include a hint.
+				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
+				expRedirect: roachpb.ReplicaDescriptor{},
+			},
 		})
 	})
 
