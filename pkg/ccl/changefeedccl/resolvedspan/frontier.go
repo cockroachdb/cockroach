@@ -170,8 +170,10 @@ func (f *CoordinatorFrontier) InBackfill(r jobspb.ResolvedSpan) bool {
 }
 
 // MakeCheckpoint creates a checkpoint based on the current state of the frontier.
-func (f *CoordinatorFrontier) MakeCheckpoint(maxBytes int64) jobspb.ChangefeedProgress_Checkpoint {
-	return checkpoint.Make(f.Frontier(), f.Entries, maxBytes)
+func (f *CoordinatorFrontier) MakeCheckpoint(
+	maxBytes int64, metrics *checkpoint.Metrics,
+) jobspb.ChangefeedProgress_Checkpoint {
+	return checkpoint.Make(f.Frontier(), f.Entries, maxBytes, metrics)
 }
 
 // spanFrontier is a type alias to make it possible to embed and forward calls
