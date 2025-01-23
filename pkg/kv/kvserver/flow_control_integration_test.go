@@ -214,6 +214,10 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 
 			desc, err := tc.LookupRange(k)
 			require.NoError(t, err)
+			h.enableVerboseRaftMsgLoggingForRange(desc.RangeID)
+			// NB: There will be no other splits and rangeIDs are allocated
+			// sequentially.
+			h.enableVerboseRaftMsgLoggingForRange(desc.RangeID + 1)
 
 			h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
 			// Reset the token metrics, since a send queue may have instantly
@@ -461,6 +465,10 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 
 			desc, err := tc.LookupRange(k)
 			require.NoError(t, err)
+			h.enableVerboseRaftMsgLoggingForRange(desc.RangeID)
+			// NB: There will be no other splits and rangeIDs are allocated
+			// sequentially.
+			h.enableVerboseRaftMsgLoggingForRange(desc.RangeID + 1)
 
 			h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
 			// Reset the token metrics, since a send queue may have instantly
@@ -764,6 +772,7 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			tc.AddVotersOrFatal(t, k, tc.Targets(3, 4)...)
 			repl := store.LookupReplica(roachpb.RKey(k))
 			require.NotNil(t, repl)
+			h.enableVerboseRaftMsgLoggingForRange(repl.Desc().RangeID)
 			h.waitForConnectedStreams(ctx, repl.RangeID, 5, 0 /* serverIdx */)
 			// Reset the token metrics, since a send queue may have instantly
 			// formed when adding one of the replicas, before being quickly
@@ -1122,6 +1131,7 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 
 				desc, err := tc.LookupRange(k)
 				require.NoError(t, err)
+				h.enableVerboseRaftMsgLoggingForRange(desc.RangeID)
 
 				// Make sure the lease is on n1 and that we're triply connected.
 				tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(0))
