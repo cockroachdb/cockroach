@@ -402,9 +402,8 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		if log.V(2) {
-			log.Infof(ctx, "kv feed encountered table events at or before %s: %#v", schemaChangeTS, events)
-		}
+		log.Infof(ctx, "kv feed encountered table events at or before %s: %#v", schemaChangeTS, events)
+
 		var tables []redact.RedactableString
 		for _, event := range events {
 			tables = append(tables, redact.Sprintf("table %q (id %d, version %d -> %d)",
@@ -460,6 +459,8 @@ func isPrimaryKeyChange(
 			hasNoColumnChanges = hasNoColumnChanges && noColumnChange
 		}
 	}
+	log.Infof(context.Background(),
+		"isPrimaryIndexChange: %v, hasNoColumnChanges: %v, events: %v", isPrimaryIndexChange, hasNoColumnChanges, events)
 	return isPrimaryIndexChange, isPrimaryIndexChange && hasNoColumnChanges
 }
 
@@ -487,6 +488,7 @@ func (f *kvFeed) scanIfShould(
 	ctx context.Context, initialScan bool, initialScanOnly bool, highWater hlc.Timestamp,
 ) ([]roachpb.Span, hlc.Timestamp, error) {
 	scanTime := highWater.Next()
+	log.Infof(ctx, "kv feed started scanning at highwater %v and scanTime %v\n", highWater, scanTime)
 
 	events, err := f.tableFeed.Peek(ctx, scanTime)
 	if err != nil {
@@ -740,6 +742,7 @@ func copyFromSourceToDestUntilTableEvent(
 			}
 
 			if len(nextEvents) > 0 {
+				log.Infof(ctx, "table events found at %s: %v", ts, nextEvents)
 				boundary = &errTableEventReached{nextEvents[0]}
 			}
 
@@ -793,6 +796,7 @@ func copyFromSourceToDestUntilTableEvent(
 				skipEvent = true
 
 				if _, ok := boundary.(*errEndTimeReached); ok {
+					log.Infof(ctx, "err end time reached at %s", boundaryResolvedTimestamp)
 					// We know we've hit the end time boundary. In this case, we do not want to
 					// skip this event because we want to make sure we emit checkpoint at
 					// exactly boundaryResolvedTimestamp. This checkpoint can be used to

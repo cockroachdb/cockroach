@@ -30,7 +30,7 @@ func TestChangefeedNemeses(t *testing.T) {
 		//}
 		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 			rng, seed := randutil.NewPseudoRand()
-			t.Logf("random seed: %d", seed)
+			t.Logf("random seed: %d", seed) // 1978358769996757239, 2155178151422551038
 
 			sqlDB := sqlutils.MakeSQLRunner(s.DB)
 			withLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)

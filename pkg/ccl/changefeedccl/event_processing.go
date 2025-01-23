@@ -332,6 +332,12 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		prevSchemaTimestamp = schemaTimestamp.Prev()
 	}
 
+	log.Infof(ctx, "kvEventToRowConsumer.ConsumeEvent: %v\n", ev.KV())
+	log.Infof(ctx, "schemaTimestamp: %v\n", schemaTimestamp)
+	log.Infof(ctx, "prevSchemaTimestamp: %v\n", prevSchemaTimestamp)
+	log.Infof(ctx, "backfillTs: %v\n", ev.BackfillTimestamp())
+
+	log.Infof(ctx, "decoding not a prev row: %v with schema ts: %v, current row: %v\n", ev.KV(), schemaTimestamp, cdcevent.CurrentRow)
 	updatedRow, err := c.decoder.DecodeKV(ctx, ev.KV(), cdcevent.CurrentRow, schemaTimestamp, keyOnly)
 	if err != nil {
 		// Column families are stored contiguously, so we'll get
@@ -347,6 +353,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		if !c.details.Opts.GetFilters().WithDiff {
 			return cdcevent.Row{}, nil
 		}
+		log.Infof(ctx, "decoding a prev row: %v\n", ev.PrevKeyValue())
 		return c.decoder.DecodeKV(ctx, ev.PrevKeyValue(), cdcevent.PrevRow, prevSchemaTimestamp, keyOnly)
 	}()
 	if err != nil {
@@ -359,6 +366,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	}
 
 	if c.evaluator != nil {
+		log.Infof(ctx, "evaluating row WHATTT: %v\n", *c.evaluator)
 		updatedRow, err = c.evaluator.Eval(ctx, updatedRow, prevRow)
 		if err != nil {
 			return err

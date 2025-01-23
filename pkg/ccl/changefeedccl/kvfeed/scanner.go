@@ -59,11 +59,11 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	if log.V(2) {
-		var sp roachpb.Spans = cfg.Spans
-		log.Infof(ctx, "performing scan on %s at %v withDiff %v",
-			sp, cfg.Timestamp, cfg.WithDiff)
-	}
+	//if log.V(2) {
+	var sp roachpb.Spans = cfg.Spans
+	log.Infof(ctx, "performing scan on %s at %v withDiff %v",
+		sp, cfg.Timestamp, cfg.WithDiff)
+	//}
 
 	sender := p.db.NonTransactionalSender()
 	distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
@@ -173,6 +173,7 @@ func (p *scanRequestScanner) exportSpan(
 	sink kvevent.Writer,
 	knobs TestingKnobs,
 ) error {
+	log.Infof(ctx, `exporting span %s at %s`, span, ts)
 	txn := p.db.NewTxn(ctx, "changefeed backfill")
 	if log.V(2) {
 		log.Infof(ctx, `sending ScanRequest %s at %s`, span, ts)

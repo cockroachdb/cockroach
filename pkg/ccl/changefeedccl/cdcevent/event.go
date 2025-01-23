@@ -557,6 +557,7 @@ func (d *eventDecoder) DecodeKV(
 	err = changefeedbase.WithTerminalError(errors.Wrapf(err,
 		"error decoding key %s@%s (hex_kv: %x)",
 		keys.PrettyPrint(nil, kv.Key), kv.Value.Timestamp, kvBytes))
+	fmt.Printf("terminal error decoding KV: %v", err)
 	log.Errorf(ctx, "terminal error decoding KV: %v", err)
 	return Row{}, err
 }
@@ -568,7 +569,14 @@ func (d *eventDecoder) decodeKV(
 	if err := d.initForKey(ctx, kv.Key, schemaTS, keyOnly); err != nil {
 		return Row{}, err
 	}
-
+	switch rt {
+	case CurrentRow:
+		log.Infof(ctx, "decoding a current row: kv.Key: %v, kv.Value: %v, schemaTS: %v\n", kv.Key, kv.Value, schemaTS)
+		//fmt.Printf("decoding a current row: kv.Key: %v, kv.Value: %v, schemaTS: %v\n", kv.Key, kv.Value, schemaTS)
+	case PrevRow:
+		log.Infof(ctx, "decoding a prev row: kv.Key: %v, kv.Value: %v, schemaTS: %v\n", kv.Key, kv.Value, schemaTS)
+		//fmt.Printf("decoding a prev row: kv.Key: %v, kv.Value: %v, schemaTS: %v\n", kv.Key, kv.Value, schemaTS)
+	}
 	d.kvProvider.KVs = d.kvProvider.KVs[:0]
 	d.kvProvider.KVs = append(d.kvProvider.KVs, kv)
 	if err := d.fetcher.ConsumeKVProvider(ctx, &d.kvProvider); err != nil {
@@ -608,6 +616,9 @@ func (d *eventDecoder) initForKey(
 	if err != nil {
 		return err
 	}
+	log.Infof(ctx, "fetcher: %v", fetcher)
+	log.Infof(ctx, "family: %v", family)
+	log.Infof(ctx, "systemColumns: %v", systemColumns)
 
 	d.schemaTS = schemaTS
 	d.desc = desc
