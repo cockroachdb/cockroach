@@ -704,7 +704,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
 	sendEntries := pr.ShouldSendEntries(last, r.lazyReplication)
-	sendProbe := !sendEntries && pr.ShouldSendProbe(last, commit, true /* advanceCommit */)
+	sendProbe := !sendEntries && pr.ShouldSendProbe(last, commit)
 	if !sendEntries && !sendProbe {
 		return false
 	}
@@ -784,14 +784,9 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 func (r *raft) sendHeartbeat(to pb.PeerID) {
 	pr := r.trk.Progress(to)
 	r.send(pb.Message{
-		To:   to,
-		Type: pb.MsgHeartbeat,
-		// NOTE: Starting from V24_3_AdvanceCommitIndexViaMsgApps, heartbeats do not
-		// advance the commit index. Instead, MsgApp are used for that purpose.
-		// TODO(iskettaneh): Remove the commit from the heartbeat message in versions
-		// >= 25.1.
-		Commit: 0,
-		Match:  pr.Match,
+		To:    to,
+		Type:  pb.MsgHeartbeat,
+		Match: pr.Match,
 	})
 }
 
@@ -2460,6 +2455,7 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 	// commit index if accTerm >= m.Term.
 	// TODO(pav-kv): move this logic to raftLog.commitTo, once the accTerm has
 	// migrated to raftLog/unstable.
+	// TODO(pav-kv): heartbeats no longer send the commit index. Remove this code.
 	mark := LogMark{Term: m.Term, Index: min(m.Commit, r.raftLog.lastIndex())}
 	if mark.Term == r.raftLog.accTerm() {
 		r.raftLog.commitTo(mark)
