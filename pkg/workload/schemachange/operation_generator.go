@@ -982,13 +982,20 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 	}
 
+	// TODO(andyk): Do we need to include vector indexes?
+	indexType := tree.IndexTypeForward
+	if og.randIntn(10) == 0 {
+		// 10% INVERTED
+		indexType = tree.IndexTypeInverted
+	}
+
 	def := &tree.CreateIndex{
 		Name:         tree.Name(indexName),
 		Table:        *tableName,
-		Unique:       og.randIntn(4) == 0,  // 25% UNIQUE
-		Inverted:     og.randIntn(10) == 0, // 10% INVERTED
-		IfNotExists:  og.randIntn(2) == 0,  // 50% IF NOT EXISTS
-		Invisibility: invisibility,         // 5% NOT VISIBLE
+		Unique:       og.randIntn(4) == 0, // 25% UNIQUE
+		Type:         indexType,
+		IfNotExists:  og.randIntn(2) == 0, // 50% IF NOT EXISTS
+		Invisibility: invisibility,        // 5% NOT VISIBLE
 	}
 
 	regionColumn := tree.Name("")
@@ -1020,7 +1027,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		if columnNames[i].name == regionColumn && i != 0 {
 			duplicateRegionColumn = true
 		}
-		if def.Inverted {
+		if def.Type == tree.IndexTypeInverted {
 			// We can have an inverted index on a set of columns if the last column
 			// is an inverted indexable type and the preceding columns are not.
 			invertedIndexableType := colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ)
@@ -1137,10 +1144,10 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		stmt.expectedExecErrors.addAll(codesWithConditions{
 			{code: pgcode.DuplicateRelation, condition: indexExists},
 			// Inverted indexes do not support stored columns.
-			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Inverted},
+			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Type == tree.IndexTypeInverted},
 			// Inverted indexes cannot be unique.
-			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Inverted},
-			{code: pgcode.InvalidSQLStatementName, condition: def.Inverted && len(def.Storing) > 0},
+			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Type == tree.IndexTypeInverted},
+			{code: pgcode.InvalidSQLStatementName, condition: def.Type == tree.IndexTypeInverted && len(def.Storing) > 0},
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
 			{code: pgcode.FeatureNotSupported, condition: regionColStored},

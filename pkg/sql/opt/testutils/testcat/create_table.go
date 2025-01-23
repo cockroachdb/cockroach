@@ -883,8 +883,8 @@ func (tt *Table) addIndexWithVersion(
 	idx := &Index{
 		IdxName:      tt.makeIndexName(def.Name, def.Columns, typ),
 		Unique:       typ != nonUniqueIndex,
-		Inverted:     def.Inverted,
-		Vector:       def.Vector,
+		Inverted:     def.Type == tree.IndexTypeInverted,
+		Vector:       def.Type == tree.IndexTypeVector,
 		IdxZone:      cat.EmptyZone(),
 		table:        tt,
 		version:      version,
@@ -912,9 +912,10 @@ func (tt *Table) addIndexWithVersion(
 	for i, colDef := range def.Columns {
 		isLastIndexCol := i == len(def.Columns)-1
 		if isLastIndexCol {
-			if def.Inverted {
+			switch def.Type {
+			case tree.IndexTypeInverted:
 				idx.invertedOrd = i
-			} else if def.Vector {
+			case tree.IndexTypeVector:
 				idx.vectorOrd = i
 			}
 		}
@@ -924,7 +925,7 @@ func (tt *Table) addIndexWithVersion(
 			notNullIndex = false
 		}
 
-		if isLastIndexCol && def.Inverted {
+		if isLastIndexCol && def.Type == tree.IndexTypeInverted {
 			switch tt.Columns[col.InvertedSourceColumnOrdinal()].DatumType().Family() {
 			case types.GeometryFamily:
 				// Don't use the default config because it creates a huge number of spans.
@@ -1069,9 +1070,10 @@ func (tt *Table) addIndexWithVersion(
 
 	// Add storing columns.
 	for _, name := range def.Storing {
-		if def.Inverted {
+		switch def.Type {
+		case tree.IndexTypeInverted:
 			panic("inverted indexes don't support stored columns")
-		} else if def.Vector {
+		case tree.IndexTypeVector:
 			panic("vector indexes don't support stored columns")
 		}
 		// Only add storing columns that weren't added as part of adding implicit
