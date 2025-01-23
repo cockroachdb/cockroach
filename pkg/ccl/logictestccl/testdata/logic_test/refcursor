@@ -630,7 +630,7 @@ CREATE INDEX ON t115701_no_index (r);
 statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
 CREATE INDEX ON t115701_no_index (x, r, y);
 
-statement error pgcode 0A000 pq: column r of type refcursor\[\] is not allowed as the last column in an inverted index
+statement error pgcode 0A000 pq: column r of type refcursor\[\] is not allowed as the last column in an inverted or vector index
 CREATE INDEX ON t115701_no_index USING GIN (r)
 
 skipif config local-legacy-schema-changer
