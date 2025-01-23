@@ -40,11 +40,31 @@ environment:
 	t.Run("expect partial failure and rollback", func(t *testing.T) {
 		name1Commands := make([]string, 0)
 		name2Commands := make([]string, 0)
+		depN1Commands := make([]string, 0)
+		depN1N2Commands := make([]string, 0)
+		depN1N2IgnoreFailureCommands := make([]string, 0)
+		depNotPresentCommands := make([]string, 0)
 		commandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
 			if strings.HasPrefix(logPrefix, "name_value1") {
 				name1Commands = append(name1Commands, (&command{name: cmd, args: args}).String())
 			} else if strings.HasPrefix(logPrefix, "name_value2") {
 				name2Commands = append(name2Commands, (&command{name: cmd, args: args}).String())
+			} else if strings.HasPrefix(logPrefix, "dependent_target_n1") {
+				// expect that "name_value1" is complete by now
+				require.Equal(t, 8, len(name1Commands))
+				depN1Commands = append(depN1Commands, (&command{name: cmd, args: args}).String())
+			} else if strings.HasPrefix(logPrefix, "dependent_target_n2_n1") {
+				// expect that "name_value1" and "name_value2" is complete by now
+				require.Equal(t, 8, len(name1Commands))
+				require.Equal(t, 1, len(name2Commands))
+				depN1N2Commands = append(depN1N2Commands, (&command{name: cmd, args: args}).String())
+			} else if strings.HasPrefix(logPrefix, "dependent_target_ignore_failure_n2_n1") {
+				// expect that "name_value1" and "name_value2" is complete by now
+				require.Equal(t, 8, len(name1Commands))
+				require.Equal(t, 1, len(name2Commands))
+				depN1N2IgnoreFailureCommands = append(depN1N2IgnoreFailureCommands, (&command{name: cmd, args: args}).String())
+			} else if strings.HasPrefix(logPrefix, "dependent_target_not_present") {
+				depNotPresentCommands = append(depNotPresentCommands, (&command{name: cmd, args: args}).String())
 			}
 			if cmd == "dummy_script1" || cmd == "script33" || args[0] == "rb_dummy2" {
 				return fmt.Errorf("error while processing script %s", cmd)
@@ -53,7 +73,10 @@ environment:
 		}
 		require.Nil(t, processYaml(ctx, getTestYaml(), false, nil))
 		require.Equal(t, 8, len(name1Commands))
-		require.Equal(t, 1, len(name2Commands))
+		require.Equal(t, 0, len(depN1Commands))
+		require.Equal(t, 0, len(depN1N2Commands))
+		require.Equal(t, 1, len(depNotPresentCommands))
+		require.Equal(t, 1, len(depN1N2IgnoreFailureCommands))
 		// the flags are maintained as map and can be in any sequence
 		require.True(t, strings.HasPrefix(name1Commands[0], "drtprod dummy1 name_value1 arg11"))
 		require.True(t, strings.Contains(name1Commands[0], "--clouds=gce"))
@@ -78,6 +101,7 @@ environment:
 		depN1Commands := make([]string, 0)
 		depN1N2Commands := make([]string, 0)
 		depNotPresentCommands := make([]string, 0)
+		depN1N2IgnoreFailureCommands := make([]string, 0)
 		commandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
 			if strings.HasPrefix(logPrefix, "name_value1") {
 				name1Commands = append(name1Commands, (&command{name: cmd, args: args}).String())
@@ -92,6 +116,11 @@ environment:
 				require.Equal(t, 6, len(name1Commands))
 				require.Equal(t, 1, len(name2Commands))
 				depN1N2Commands = append(depN1N2Commands, (&command{name: cmd, args: args}).String())
+			} else if strings.HasPrefix(logPrefix, "dependent_target_ignore_failure_n2_n1") {
+				// expect that "name_value1" and "name_value2" is complete by now
+				require.Equal(t, 6, len(name1Commands))
+				require.Equal(t, 1, len(name2Commands))
+				depN1N2IgnoreFailureCommands = append(depN1N2IgnoreFailureCommands, (&command{name: cmd, args: args}).String())
 			} else if strings.HasPrefix(logPrefix, "dependent_target_not_present") {
 				depNotPresentCommands = append(depNotPresentCommands, (&command{name: cmd, args: args}).String())
 			}
@@ -103,6 +132,7 @@ environment:
 		require.Equal(t, 1, len(depN1Commands))
 		require.Equal(t, 1, len(depN1N2Commands))
 		require.Equal(t, 1, len(depNotPresentCommands))
+		require.Equal(t, 1, len(depN1N2IgnoreFailureCommands))
 		// the flags are maintained as map and can be in any sequence
 		require.True(t, strings.HasPrefix(name1Commands[0], "drtprod dummy1 name_value1 arg11"))
 		require.True(t, strings.Contains(name1Commands[0], "--clouds=gce"))
@@ -181,6 +211,17 @@ targets:
       args:
         - $NAME_2
         - arg12
+  - target_name: dependent_target_ignore_failure_n2_n1
+    dependent_targets:
+      - $NAME_2
+      - name_value1
+      - name_value1
+    ignore_dependent_failure: true
+    steps:
+    - command: dummy3
+      args:
+        - $NAME_2
+        - arg20
   - target_name: dependent_target_not_present
     dependent_targets:
       - not_present
