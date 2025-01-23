@@ -315,10 +315,15 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 }
 
 // maybeQueueLeaseRenewal queues a lease renewal if there is not already a lease
-// renewal in progress.
+// renewal in progress. On error the leased descriptor will be released.
 func (t *descriptorState) maybeQueueLeaseRenewal(
-	ctx context.Context, m *Manager, id descpb.ID, name string,
-) error {
+	ctx context.Context, m *Manager, ld LeasedDescriptor,
+) (retError error) {
+	defer func() {
+		if retError != nil {
+			ld.Release(ctx)
+		}
+	}()
 	if !atomic.CompareAndSwapInt32(&t.renewalInProgress, 0, 1) {
 		return nil
 	}
@@ -330,7 +335,7 @@ func (t *descriptorState) maybeQueueLeaseRenewal(
 	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
 	return t.stopper.RunAsyncTask(newCtx,
 		"lease renewal", func(ctx context.Context) {
-			t.startLeaseRenewal(ctx, m, id, name)
+			t.startLeaseRenewal(ctx, m, ld.GetID(), ld.GetName())
 		})
 }
 
