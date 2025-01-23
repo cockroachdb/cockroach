@@ -333,7 +333,7 @@ go_test(
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//types",
-        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//:pq",
         "@com_github_robfig_cron_v3//:cron",
