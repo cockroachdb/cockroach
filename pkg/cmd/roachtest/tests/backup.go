@@ -256,34 +256,6 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 }
 
-// fingerprint returns a fingerprint of `db.table`.
-func fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string, error) {
-	// See #113816 for why this is needed for now (probably until #94850 is
-	// resolved).
-	_, err := conn.Exec("SET direct_columnar_scans_enabled = false;")
-	if err != nil {
-		return "", err
-	}
-
-	var b strings.Builder
-
-	query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table)
-	rows, err := conn.QueryContext(ctx, query)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name, fp string
-		if err := rows.Scan(&name, &fp); err != nil {
-			return "", err
-		}
-		fmt.Fprintf(&b, "%s: %s\n", name, fp)
-	}
-
-	return b.String(), rows.Err()
-}
-
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
 // artifact directory and returns a method that when invoked records a tick.
 func initBulkJobPerfArtifacts(
@@ -424,11 +396,11 @@ func registerBackup(r registry.Registry) {
 					}
 
 					table := "bank"
-					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
+					originalBank, err := roachtestutil.Fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restore, err := fingerprint(ctx, conn, "restoreDB" /* db */, table)
+					restore, err := roachtestutil.Fingerprint(ctx, conn, "restoreDB" /* db */, table)
 					if err != nil {
 						return err
 					}
@@ -530,15 +502,15 @@ func registerBackup(r registry.Registry) {
 
 					t.Status(`fingerprint`)
 					table := "bank"
-					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
+					originalBank, err := roachtestutil.Fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreA, err := fingerprint(ctx, conn, "restoreA" /* db */, table)
+					restoreA, err := roachtestutil.Fingerprint(ctx, conn, "restoreA" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreB, err := fingerprint(ctx, conn, "restoreB" /* db */, table)
+					restoreB, err := roachtestutil.Fingerprint(ctx, conn, "restoreB" /* db */, table)
 					if err != nil {
 						return err
 					}
@@ -682,7 +654,7 @@ func runBackupMVCCRangeTombstones(
 		require.NoError(t, conn.QueryRowContext(ctx, `SELECT now()`).Scan(&ts))
 
 		t.Status(fmt.Sprintf("fingerprinting %s.%s at time '%s'", database, table, name))
-		fp, err := fingerprint(ctx, conn, database, table)
+		fp, err := roachtestutil.Fingerprint(ctx, conn, database, table)
 		require.NoError(t, err)
 		t.Status("fingerprint:\n", fp)
 
