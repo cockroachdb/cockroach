@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -853,7 +854,7 @@ func newOptTable(
 	// Add one for each inverted index column.
 	secondaryIndexes := ot.desc.DeletableNonPrimaryIndexes()
 	for _, index := range secondaryIndexes {
-		if index.GetType() == descpb.IndexDescriptor_INVERTED {
+		if index.GetType() == idxtype.INVERTED {
 			numCols++
 		}
 	}
@@ -1002,7 +1003,7 @@ func newOptTable(
 				}
 			}
 		}
-		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
+		if idx.GetType() == idxtype.INVERTED {
 			// The inverted column of an inverted index is special: in the
 			// descriptors, it looks as if the table column is part of the
 			// index; in fact the key contains values *derived* from that
@@ -1674,7 +1675,7 @@ func (oi *optIndex) IsUnique() bool {
 
 // IsInverted is part of the cat.Index interface.
 func (oi *optIndex) IsInverted() bool {
-	return oi.idx.GetType() == descpb.IndexDescriptor_INVERTED
+	return oi.idx.GetType() == idxtype.INVERTED
 }
 
 // IsVector is part of the cat.Index interface.

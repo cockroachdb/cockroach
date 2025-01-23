@@ -13,6 +13,7 @@ import "util/hlc/timestamp.proto";
 import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/enum.proto";
+import "sql/sem/idxtype/idxtype.proto";
 import "sql/sem/semenumpb/constraint.proto";
 import "sql/sem/semenumpb/trigger.proto";
 import "sql/catalog/catpb/privilege.proto";
@@ -322,12 +323,6 @@ message InterleaveDescriptor {
 message IndexDescriptor {
   option (gogoproto.equal) = true;
 
-  // The type of the index.
-  enum Type {
-    FORWARD = 0;
-    INVERTED = 1;
-  }
-
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "IndexID"];
@@ -421,8 +416,8 @@ message IndexDescriptor {
   // is partitioned into spans of keys each addressable by zone configs.
   optional cockroach.sql.catalog.catpb.PartitioningDescriptor partitioning = 15 [(gogoproto.nullable) = false];
 
-  // Type is the type of index, inverted or forward.
-  optional Type type = 16 [(gogoproto.nullable)=false];
+  // Type is the type of index, forward, inverted, vector, etc.
+  optional cockroach.sql.sem.idxtype.T type = 16 [(gogoproto.nullable)=false];
 
   // CreatedExplicitly specifies whether this index was created explicitly
   // (i.e. via 'CREATE INDEX' statement).

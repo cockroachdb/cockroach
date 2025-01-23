@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -1466,9 +1467,9 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 			continue
 		}
 		switch idx.GetType() {
-		case descpb.IndexDescriptor_FORWARD:
+		case idxtype.FORWARD:
 			forwardIndexes = append(forwardIndexes, idx)
-		case descpb.IndexDescriptor_INVERTED:
+		case idxtype.INVERTED:
 			invertedIndexes = append(invertedIndexes, idx)
 		}
 	}

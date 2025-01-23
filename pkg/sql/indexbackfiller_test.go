@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -255,7 +256,7 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 					KeySuffixColumnIDs: []descpb.ColumnID{
 						mut.Columns[0].ID,
 					},
-					Type:         descpb.IndexDescriptor_FORWARD,
+					Type:         idxtype.FORWARD,
 					EncodingType: catenumpb.SecondaryIndexEncoding,
 				}
 				mut.NextIndexID++
@@ -339,7 +340,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 						columnWithDefault.ID,
 						computedColumnNotInPrimaryIndex.ID,
 					},
-					Type:         descpb.IndexDescriptor_FORWARD,
+					Type:         idxtype.FORWARD,
 					EncodingType: catenumpb.PrimaryIndexEncoding,
 				}
 				mut.NextIndexID++

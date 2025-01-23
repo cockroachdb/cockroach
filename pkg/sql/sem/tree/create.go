@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -223,12 +224,12 @@ func (l *IndexElemList) doc(p *PrettyCfg) pretty.Doc {
 	return p.commaSeparated(d...)
 }
 
-type IndexType uint8
+type IndexType = idxtype.T
 
 const (
-	IndexTypeForward IndexType = iota
-	IndexTypeInverted
-	IndexTypeVector
+	IndexTypeForward  = idxtype.FORWARD
+	IndexTypeInverted = idxtype.INVERTED
+	IndexTypeVector   = idxtype.VECTOR
 )
 
 type IndexInvisibility struct {

@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -1928,7 +1929,7 @@ func NewTableDesc(
 				Invisibility:     d.Invisibility.Value,
 			}
 			if d.Type == tree.IndexTypeInverted {
-				idx.Type = descpb.IndexDescriptor_INVERTED
+				idx.Type = idxtype.INVERTED
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -2371,7 +2372,7 @@ func NewTableDesc(
 		if idx.IsSharded() {
 			telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 		}
-		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
+		if idx.GetType() == idxtype.INVERTED {
 			telemetry.Inc(sqltelemetry.InvertedIndexCounter)
 			geoConfig := idx.GetGeoConfig()
 			if !geoConfig.IsEmpty() {
@@ -2770,18 +2771,9 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					// we'll just generate a new one.
 					continue
 				}
-				var indexType tree.IndexType
-				switch idx.GetType() {
-				case descpb.IndexDescriptor_FORWARD:
-					indexType = tree.IndexTypeForward
-				case descpb.IndexDescriptor_INVERTED:
-					indexType = tree.IndexTypeInverted
-				default:
-					return nil, errors.AssertionFailedf("unknown index descriptor type %v", idx.GetType())
-				}
 				indexDef := tree.IndexTableDef{
 					Name:         tree.Name(idx.GetName()),
-					Type:         indexType,
+					Type:         idx.GetType(),
 					Storing:      make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
 					Columns:      make(tree.IndexElemList, 0, idx.NumKeyColumns()),
 					Invisibility: tree.IndexInvisibility{Value: idx.GetInvisibility()},

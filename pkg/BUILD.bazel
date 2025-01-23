@@ -2211,6 +2211,8 @@ GO_TARGETS = [
     "//pkg/sql/sem/eval/eval_test:eval_test_test",
     "//pkg/sql/sem/eval:eval",
     "//pkg/sql/sem/eval:eval_test",
+    "//pkg/sql/sem/idxtype:idxtype",
+    "//pkg/sql/sem/idxtype:idxtypepb",
     "//pkg/sql/sem/normalize:normalize",
     "//pkg/sql/sem/normalize:normalize_test",
     "//pkg/sql/sem/plpgsqltree/utils:utils",

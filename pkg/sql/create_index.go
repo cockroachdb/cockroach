@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
@@ -222,7 +223,7 @@ func makeIndexDescriptor(
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique")
 		}
 
-		indexDesc.Type = descpb.IndexDescriptor_INVERTED
+		indexDesc.Type = idxtype.INVERTED
 		invCol := columns[len(columns)-1]
 		column, err := catalog.MustFindColumnByTreeName(tableDesc, invCol.Column)
 		if err != nil {
@@ -286,7 +287,7 @@ func makeIndexDescriptor(
 	}
 
 	// Increment telemetry once a descriptor has been successfully created.
-	if indexDesc.Type == descpb.IndexDescriptor_INVERTED {
+	if indexDesc.Type == idxtype.INVERTED {
 		telemetry.Inc(sqltelemetry.InvertedIndexCounter)
 		if indexDesc.GeoConfig.IsGeometry() {
 			telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
@@ -785,7 +786,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 
-	if indexDesc.Type == descpb.IndexDescriptor_INVERTED && indexDesc.Partitioning.NumColumns != 0 {
+	if indexDesc.Type == idxtype.INVERTED && indexDesc.Partitioning.NumColumns != 0 {
 		telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
 	}
 

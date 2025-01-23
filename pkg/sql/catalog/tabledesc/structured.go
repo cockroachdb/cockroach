@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -790,7 +791,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		// index encoding. It is the set difference of the primary key minus the
 		// non-inverted columns in the index's key.
 		colIDs := idx.CollectKeyColumnIDs()
-		isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED
+		isInverted := idx.GetType() == idxtype.INVERTED
 		invID := catid.ColumnID(0)
 		if isInverted {
 			invID = idx.InvertedColumnID()
@@ -1186,7 +1187,7 @@ func (desc *Mutable) AddFamily(fam descpb.ColumnFamilyDescriptor) {
 // AddPrimaryIndex adds a primary index to a mutable table descriptor, assuming
 // that none has yet been set, and performs some sanity checks.
 func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
-	if idx.Type == descpb.IndexDescriptor_INVERTED {
+	if idx.Type == idxtype.INVERTED {
 		return fmt.Errorf("primary index cannot be inverted")
 	}
 	if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
@@ -1226,7 +1227,7 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 
 // AddSecondaryIndex adds a secondary index to a mutable table descriptor.
 func (desc *Mutable) AddSecondaryIndex(idx descpb.IndexDescriptor) error {
-	if idx.Type == descpb.IndexDescriptor_FORWARD {
+	if idx.Type == idxtype.FORWARD {
 		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
 		}
@@ -2084,11 +2085,11 @@ func (desc *Mutable) AddIndexMutation(
 
 func (desc *Mutable) checkValidIndex(idx *descpb.IndexDescriptor) error {
 	switch idx.Type {
-	case descpb.IndexDescriptor_FORWARD:
+	case idxtype.FORWARD:
 		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
 		}
-	case descpb.IndexDescriptor_INVERTED:
+	case idxtype.INVERTED:
 		if err := checkColumnsValidForInvertedIndex(
 			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
 		); err != nil {

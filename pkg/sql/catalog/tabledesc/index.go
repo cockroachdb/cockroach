@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -126,7 +127,7 @@ func (w index) GetPredicate() string {
 }
 
 // GetType returns the type of index, inverted or forward.
-func (w index) GetType() descpb.IndexDescriptor_Type {
+func (w index) GetType() idxtype.T {
 	return w.desc.Type
 }
 
@@ -211,7 +212,7 @@ func (w index) InvertedColumnKeyType() *types.T {
 //
 // Panics if the index is not inverted.
 func (w index) InvertedColumnKind() catpb.InvertedIndexColumnKind {
-	if w.desc.Type != descpb.IndexDescriptor_INVERTED {
+	if w.desc.Type != idxtype.INVERTED {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	if len(w.desc.InvertedColumnKinds) == 0 {

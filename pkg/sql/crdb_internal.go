@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -4270,7 +4271,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.NewDString(idx.GetName()),
 							idxType,
 							tree.MakeDBool(tree.DBool(idx.IsUnique())),
-							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
+							tree.MakeDBool(idx.GetType() == idxtype.INVERTED),
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
 							tree.MakeDBool(idxInvisibility == 0.0),
 							tree.NewDFloat(tree.DFloat(1-idxInvisibility)),
