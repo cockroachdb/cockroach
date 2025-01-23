@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -616,13 +617,13 @@ func randIndexTableDefFromCols(
 		// The last index column can be inverted-indexable, which makes the
 		// index an inverted index.
 		if colinfo.ColumnTypeIsOnlyInvertedIndexable(semType) {
-			def.Type = tree.IndexTypeInverted
+			def.Type = idxtype.INVERTED
 			stopPrefix = true
 		} else if isLastCol && !stopPrefix && invertedIndexable {
 			// With 1/4 probability, choose to use an inverted index for a column type
 			// that is both inverted indexable and forward indexable.
 			if rng.Intn(4) == 0 {
-				def.Type = tree.IndexTypeInverted
+				def.Type = idxtype.INVERTED
 				stopPrefix = true
 				if semType.Family() == types.StringFamily {
 					elem.OpClass = "gin_trgm_ops"
@@ -631,7 +632,7 @@ func randIndexTableDefFromCols(
 		}
 
 		// Last column for inverted indexes must always be ascending.
-		if i == nCols-1 && def.Type == tree.IndexTypeInverted {
+		if i == nCols-1 && def.Type == idxtype.INVERTED {
 			elem.Direction = tree.Ascending
 		}
 
@@ -644,7 +645,7 @@ func randIndexTableDefFromCols(
 
 	// An inverted index column cannot be DESC, so use either the default
 	// direction or ASC.
-	if def.Type == tree.IndexTypeInverted {
+	if def.Type == idxtype.INVERTED {
 		dir := tree.Direction(rng.Intn(int(tree.Ascending) + 1))
 		def.Columns[len(def.Columns)-1].Direction = dir
 	}
