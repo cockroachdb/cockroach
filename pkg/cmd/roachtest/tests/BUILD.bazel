@@ -317,7 +317,7 @@ go_library(
         "@com_github_google_go_cmp//cmp",
         "@com_github_ibm_sarama//:sarama",
         "@com_github_jackc_pgtype//:pgtype",
-        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//:pq",
         "@com_github_montanaflynn_stats//:stats",

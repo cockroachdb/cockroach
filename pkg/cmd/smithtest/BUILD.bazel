@@ -13,7 +13,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_go_github//github",
         "@com_github_jackc_pgconn//:pgconn",
-        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_lib_pq//:pq",
         "@com_github_pkg_browser//:browser",
     ],
