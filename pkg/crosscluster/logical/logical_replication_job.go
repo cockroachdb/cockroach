@@ -85,12 +85,16 @@ func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interfac
 	return r.handleResumeError(ctx, jobExecCtx, r.ingestWithRetries(ctx, jobExecCtx))
 }
 
-// The ingestion job should never fail, only pause, as progress should never be lost.
+// The ingestion job should always pause, unless the error is marked as a permanent job error.
 func (r *logicalReplicationResumer) handleResumeError(
 	ctx context.Context, execCtx sql.JobExecContext, err error,
 ) error {
 	if err == nil {
 		return nil
+	}
+	if jobs.IsPermanentJobError(err) {
+		r.updateRunningStatus(ctx, redact.Sprintf("permanent error: %s", err.Error()))
+		return err
 	}
 	r.updateRunningStatus(ctx, redact.Sprintf("pausing after error: %s", err.Error()))
 	return jobs.MarkPauseRequestError(err)
@@ -167,6 +171,14 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 	defer func() { _ = client.Close(ctx) }()
+
+	status, err := client.Heartbeat(ctx, streampb.StreamID(payload.StreamID), progress.ReplicatedTime)
+	if err != nil {
+		log.Warningf(ctx, "could not heartbeat source cluster with stream id %d", payload.StreamID)
+	}
+	if status.StreamStatus == streampb.StreamReplicationStatus_STREAM_INACTIVE {
+		return jobs.MarkAsPermanentJobError(errors.Newf("history retention job is no longer active"))
+	}
 
 	if err := r.maybeStartReverseStream(ctx, jobExecCtx, client); err != nil {
 		return err
