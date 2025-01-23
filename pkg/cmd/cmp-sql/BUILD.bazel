@@ -9,7 +9,7 @@ go_library(
         "//pkg/util/randutil",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_jackc_pgtype//:pgtype",
-        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
     ],
 )
 
