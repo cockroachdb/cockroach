@@ -965,7 +965,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shurcooL/httpfs/com_github_shurcool_httpfs-v0.0.0-20190707220628-8d4bc4ba7749.zip": "a2079dbd8c236262ecbb22312467265fbbddd9b5ee789531c5f7f24fbdda174b",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shurcooL/sanitized_anchor_name/com_github_shurcool_sanitized_anchor_name-v1.0.0.zip": "0af034323e0627a9e94367f87aa50ce29e5b165d54c8da2926cbaffd5834f757",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shurcooL/vfsgen/com_github_shurcool_vfsgen-v0.0.0-20200824052919-0d455de96546.zip": "98198ecd8f122d1266ff2db193f1aae8a88f2f299bfc34b06ef356694cca537d",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sirupsen/logrus/com_github_sirupsen_logrus-v1.9.0.zip": "bf01c93f49912b88ee2e95dc99cab91a503ec3b526d1c756145391d555b98d14",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sirupsen/logrus/com_github_sirupsen_logrus-v1.9.1.zip": "0d36e981b0d2e186fafe7e1ca7faf111a0f61a011ee9f713659e61da623dbde9",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sjmudd/stopwatch/com_github_sjmudd_stopwatch-v0.0.0-20170613150411-f380bf8a9be1.zip": "69e0ed207172b04161ccb26977f4c657fbee77296eca0b7ff84f8b1f2c2a6847",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/slack-go/slack/com_github_slack_go_slack-v0.9.5.zip": "2b1cc2d4107c7017f1348beefeb23db1cdbecf94b32590da364daed420371cde",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/slok/go-http-metrics/com_github_slok_go_http_metrics-v0.10.0.zip": "bf2e2b626e4fbd9735165494c574f2474f400786d8bd96b6b4648eba352c817b",
