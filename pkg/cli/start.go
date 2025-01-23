@@ -1172,6 +1172,10 @@ func startShutdownAsync(
 	}()
 }
 
+// cgoAllocConfStr is populated from start_jemalloc.go if we are using jemalloc.
+// Otherwise, it stays empty.
+var cgoAllocConfStr string
+
 // reportServerInfo prints out the server version and network details
 // in a standardized format.
 func reportServerInfo(
@@ -1189,6 +1193,9 @@ func reportServerInfo(
 	buf.Printf("CockroachDB %s starting at %s (took %0.1fs)\n", serverType, timeutil.Now(), timeutil.Since(startTime).Seconds())
 	buf.Printf("build:\t%s %s @ %s (%s)\n",
 		redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
+	if cgoAllocConfStr != "" {
+		buf.Printf("malloc_conf:\t%s\n", redact.Safe(cgoAllocConfStr))
+	}
 	buf.Printf("webui:\t%s\n", log.SafeManaged(serverCfg.AdminURL()))
 
 	// (Re-)compute the client connection URL. We cannot do this

@@ -391,11 +391,12 @@ message RACStatus {
   message Stream {
     uint64 index_to_send = 1;
     uint64 next_raft_index_initial = 2;
-    uint64 next_raft_index = 3;
     uint64 force_flush_stop_index = 4;
 
     repeated int64 eval_tokens_held = 5;
     repeated int64 send_tokens_held = 6;
+
+    reserved 3;
   }
   map<uint64, Stream> streams = 6 [ (gogoproto.nullable) = false ];
 }
