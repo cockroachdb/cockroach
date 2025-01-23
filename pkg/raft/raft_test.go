@@ -2566,7 +2566,7 @@ func TestPreCandidateIgnoresDefortification(t *testing.T) {
 
 func TestLeaderAppResp(t *testing.T) {
 	// initial progress: match = 0; next = 3
-	tests := []struct {
+	for _, tt := range []struct {
 		index  uint64
 		reject bool
 		// progress
@@ -2586,9 +2586,7 @@ func TestLeaderAppResp(t *testing.T) {
 		// Next is then 4 (an Entry at 4 does not exist, indicating the follower
 		// will be up to date should it process the emitted MsgApp).
 		{0, false, 0, 4, 1, 0, 0},
-	}
-
-	for _, tt := range tests {
+	} {
 		t.Run("", func(t *testing.T) {
 			// sm term is 1 after it becomes the leader.
 			// thus the last log term must be 1 to be committed.
@@ -2600,23 +2598,20 @@ func TestLeaderAppResp(t *testing.T) {
 			sm.becomeCandidate()
 			sm.becomeLeader()
 			sm.readMessages()
-			require.NoError(t, sm.Step(
-				pb.Message{
-					From:       2,
-					Type:       pb.MsgAppResp,
-					Index:      tt.index,
-					Term:       sm.Term,
-					Reject:     tt.reject,
-					RejectHint: tt.index,
-				},
-			))
+			require.NoError(t, sm.Step(pb.Message{
+				From:       2,
+				Type:       pb.MsgAppResp,
+				Index:      tt.index,
+				Term:       sm.Term,
+				Reject:     tt.reject,
+				RejectHint: tt.index,
+			}))
 
 			p := sm.trk.Progress(2)
 			require.Equal(t, tt.wmatch, p.Match)
 			require.Equal(t, tt.wnext, p.Next)
 
 			msgs := sm.readMessages()
-
 			require.Len(t, msgs, tt.wmsgNum)
 			for _, msg := range msgs {
 				require.Equal(t, tt.windex, msg.Index, "%v", DescribeMessage(msg, nil))
