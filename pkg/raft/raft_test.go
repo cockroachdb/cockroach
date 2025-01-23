@@ -1237,48 +1237,65 @@ func TestProposalByProxy(t *testing.T) {
 }
 
 func TestCommit(t *testing.T) {
+	m := func(indices ...uint64) []uint64 { return indices }
 	for _, tt := range []struct {
-		matches []uint64
-		logs    []pb.Entry
-		smTerm  uint64
-		w       uint64
+		term  uint64     // term before becoming leader
+		log   []pb.Entry // log before becoming leader
+		app   []pb.Entry // appended entries after becoming leader
+		match []uint64   // match indices for all peers
+		want  uint64     // expected commit index
 	}{
-		// single
-		{[]uint64{1}, index(1).terms(1), 1, 1},
-		{[]uint64{1}, index(1).terms(1), 2, 0},
-		{[]uint64{2}, index(1).terms(1, 2), 2, 2},
-		{[]uint64{1}, index(1).terms(2), 2, 1},
+		// single node
+		{term: 0, match: m(0), want: 0},
+		{term: 0, match: m(1), want: 1},
+		{term: 1, log: index(1).terms(1), match: m(1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2), want: 2},
+		{term: 1, log: index(1).terms(1), app: index(3).terms(2), match: m(1), want: 0},
+		{term: 1, log: index(1).terms(1), app: index(3).terms(2), match: m(2), want: 2},
+		{term: 1, log: index(1).terms(1), app: index(3).terms(2), match: m(3), want: 3},
 
-		// odd
-		{[]uint64{2, 1, 1}, index(1).terms(1, 2), 1, 1},
-		{[]uint64{2, 1, 1}, index(1).terms(1, 1), 2, 0},
-		{[]uint64{2, 1, 2}, index(1).terms(1, 2), 2, 2},
-		{[]uint64{2, 1, 2}, index(1).terms(1, 1), 2, 0},
+		// odd number of nodes
+		{term: 1, log: index(1).terms(1), match: m(1, 1, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 2), want: 2},
+		{term: 1, log: index(1).terms(1), match: m(2, 2, 2), want: 2},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(2, 2, 2), want: 0},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(3, 3, 2), want: 3},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(4, 4, 5), want: 4},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(5, 4, 5), want: 5},
 
-		// even
-		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 2), 1, 1},
-		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 1), 2, 0},
-		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 2), 1, 1},
-		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 1), 2, 0},
-		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 2), 2, 2},
-		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 1), 2, 0},
+		// even number of nodes
+		{term: 1, log: index(1).terms(1), match: m(1, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 1, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 2, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 2, 2), want: 2},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(2, 2, 2, 1), want: 0},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(3, 2, 2, 3), want: 0},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(3, 3, 1, 3), want: 3},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(4, 4, 4, 5), want: 4},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(5, 4, 5, 5), want: 5},
 	} {
 		t.Run("", func(t *testing.T) {
 			storage := newTestMemoryStorage(withPeers(1))
-			require.NoError(t, storage.Append(tt.logs))
-			require.NoError(t, storage.SetHardState(pb.HardState{Term: tt.smTerm}))
-
+			require.NoError(t, storage.Append(tt.log))
+			require.NoError(t, storage.SetHardState(pb.HardState{Term: tt.term}))
 			sm := newTestRaft(1, 10, 2, storage)
-			for j := 0; j < len(tt.matches); j++ {
-				id := pb.PeerID(j + 1)
+			sm.becomeCandidate()
+			sm.becomeLeader()
+			require.Equal(t, tt.term+1, sm.Term)
+			require.True(t, sm.appendEntry(tt.app...))
+
+			for i, match := range tt.match {
+				id := pb.PeerID(i + 1)
 				if id > 1 {
 					sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
 				}
+				require.LessOrEqual(t, match, sm.raftLog.lastIndex())
 				pr := sm.trk.Progress(id)
-				pr.Match, pr.Next = tt.matches[j], tt.matches[j]+1
+				pr.MaybeUpdate(match)
 			}
 			sm.maybeCommit()
-			assert.Equal(t, tt.w, sm.raftLog.committed)
+			assert.Equal(t, tt.want, sm.raftLog.committed)
 		})
 	}
 }
