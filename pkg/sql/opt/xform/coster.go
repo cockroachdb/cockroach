@@ -7,7 +7,6 @@ package xform
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"math/rand"
 
@@ -633,7 +632,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 
 	if pheromone.VisibleToPheromone(candidate) &&
 		!required.Pheromone.Any() && !required.Pheromone.Matches(candidate.Op()) {
-		fmt.Println("setting pheromone mismatch penalty for", candidate, "due to mismatch with", required.Pheromone)
+		//fmt.Println("setting pheromone mismatch penalty for", candidate, "due to mismatch with", required.Pheromone)
 		cost.Flags.PheromoneMismatchPenalty = true
 	}
 

@@ -7,7 +7,6 @@ package xform
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -265,9 +264,9 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	// Now optimize the entire expression tree.
 	root := o.mem.RootExpr().(memo.RelExpr)
 	rootProps := o.mem.RootProps()
-	if !rootProps.Pheromone.Any() {
-		fmt.Println("optimizing root group with", rootProps.Pheromone)
-	}
+	//if !rootProps.Pheromone.Any() {
+	//	fmt.Println("optimizing root group with", rootProps.Pheromone)
+	//}
 	o.optimizeGroup(root, rootProps)
 
 	// Walk the tree from the root, updating child pointers so that the memo
@@ -478,9 +477,9 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 	// Always start with the first expression in the group.
 	grp = grp.FirstExpr()
 
-	if !required.Pheromone.Any() {
-		fmt.Println("optimizing group:", grp, "with", required)
-	}
+	//if !required.Pheromone.Any() {
+	//	fmt.Println("optimizing group:", grp, "with", required)
+	//}
 
 	// If this group is already fully optimized, then return the already prepared
 	// best expression (won't ever get better than this).
@@ -590,9 +589,9 @@ func (o *Optimizer) optimizeGroupMember(
 	required *physical.Required,
 	deriveLCP func() (_ props.OrderingChoice, ok bool),
 ) (fullyOptimized bool) {
-	if !required.Pheromone.Any() {
-		fmt.Println("optimizeGroupMember with", member, required)
-	}
+	//if !required.Pheromone.Any() {
+	//	fmt.Println("optimizeGroupMember with", member, required)
+	//}
 	// Compute the cost for enforcers to provide the required properties. This
 	// may be lower than the expression providing the properties itself. For
 	// example, it might be better to sort the results of a hash join than to
@@ -698,9 +697,9 @@ func (o *Optimizer) enforceProps(
 	required *physical.Required,
 	deriveLCP func() (_ props.OrderingChoice, ok bool),
 ) (fullyOptimized bool) {
-	if !required.Pheromone.Any() {
-		fmt.Println("enforceProps with", member, required)
-	}
+	//if !required.Pheromone.Any() {
+	//	fmt.Println("enforceProps with", member, required)
+	//}
 
 	// Strip off one property that can be enforced. Other properties will be
 	// stripped by recursively optimizing the group with successively fewer
@@ -858,18 +857,18 @@ func (o *Optimizer) shouldExplore(required *physical.Required) bool {
 // multiple times in the final tree, but with different physical properties
 // required by each of those references.
 func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Required) opt.Expr {
-	if !parentProps.Pheromone.Any() {
-		fmt.Println("setLowestCostTree of", parent, "with", parentProps)
-	}
+	//if !parentProps.Pheromone.Any() {
+	//	fmt.Println("setLowestCostTree of", parent, "with", parentProps)
+	//}
 
 	var relParent memo.RelExpr
 	var relCost memo.Cost
 	switch t := parent.(type) {
 	case memo.RelExpr:
 		state := o.lookupOptState(t.FirstExpr(), parentProps)
-		if state == nil {
-			fmt.Println("couldn't find", parentProps.Pheromone, "in setLowestCostTree of", parent)
-		}
+		//if state == nil {
+		//	fmt.Println("couldn't find", parentProps.Pheromone, "in setLowestCostTree of", parent)
+		//}
 		relParent, relCost = state.best, state.cost
 		parent = relParent
 
