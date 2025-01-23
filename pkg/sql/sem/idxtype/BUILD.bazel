@@ -1,0 +1,34 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "idxtype_proto",
+    srcs = ["idxtype.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_library(
+    name = "idxtype",
+    embed = [":idxtype_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype",
+    visibility = ["//visibility:public"],
+)
+
+go_proto_library(
+    name = "idxtype_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype",
+    proto = ":idxtype_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
+)
+
+go_library(
+    name = "idxtypepb",
+    srcs = ["idxtype.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtypepb",
+    visibility = ["//visibility:public"],
+)

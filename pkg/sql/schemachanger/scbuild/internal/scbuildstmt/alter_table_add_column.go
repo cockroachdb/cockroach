@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -680,7 +681,7 @@ func addSecondaryIndexTargetsForAddColumn(
 		TableID:       tbl.TableID,
 		IndexID:       desc.ID,
 		IsUnique:      desc.Unique,
-		IsInverted:    desc.Type == descpb.IndexDescriptor_INVERTED,
+		IsInverted:    desc.Type == idxtype.INVERTED,
 		SourceIndexID: newPrimaryIdx.IndexID,
 		IsNotVisible:  desc.NotVisible,
 		Invisibility:  desc.Invisibility,

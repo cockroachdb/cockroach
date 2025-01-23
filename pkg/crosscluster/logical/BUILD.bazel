@@ -156,6 +156,7 @@ go_test(
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/stats",
         "//pkg/testutils",
