@@ -256,15 +256,22 @@ func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, erro
 		return Rec{}, err
 	}
 
+	indexType := tree.IndexTypeForward
+	if ir.index.IsInverted() {
+		indexType = tree.IndexTypeInverted
+	} else if ir.index.IsVector() {
+		indexType = tree.IndexTypeVector
+	}
+
 	// Formats index recommendation to its final output struct Rec.
 	switch recType {
 	case TypeCreateIndex:
 		createCmd := tree.CreateIndex{
-			Table:    tableName,
-			Columns:  indexCols,
-			Storing:  storing,
-			Unique:   false,
-			Inverted: ir.index.IsInverted(),
+			Table:   tableName,
+			Columns: indexCols,
+			Storing: storing,
+			Unique:  false,
+			Type:    indexType,
 		}
 		sb.WriteString(createCmd.String())
 		sb.WriteByte(';')
@@ -281,8 +288,8 @@ func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, erro
 			Columns: indexCols,
 			Storing: storing,
 			// Maintain uniqueness and inverted if the existing index is unique.
-			Unique:   existingIndex.IsUnique(),
-			Inverted: ir.index.IsInverted(),
+			Unique: existingIndex.IsUnique(),
+			Type:   indexType,
 		}
 		sb.WriteString(createCmd.String())
 		sb.WriteByte(';')

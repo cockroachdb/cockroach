@@ -228,7 +228,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	if opt.IsSet(TableOptPrimaryIndexRequired) || (rng.Intn(8) != 0) {
 		for {
 			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, opt)
-			canUseIndex := ok && !indexDef.Inverted
+			canUseIndex := ok && indexDef.Type == tree.IndexTypeForward
 			if canUseIndex {
 				// Although not necessary for Cockroach to function correctly,
 				// but for ease of use for any code that introspects on the
@@ -260,7 +260,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 		if !ok {
 			continue
 		}
-		if indexDef.Inverted && pk != nil {
+		if indexDef.Type == tree.IndexTypeInverted && pk != nil {
 			// Inverted indexes aren't permitted to be created on primary key columns.
 			col := indexDef.Columns[len(indexDef.Columns)-1]
 			foundOverlap := false
@@ -276,7 +276,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 		}
 		// Make forward indexes unique 50% of the time. Inverted indexes cannot
 		// be unique.
-		unique := !indexDef.Inverted && rng.Intn(2) == 0
+		unique := indexDef.Type == tree.IndexTypeForward && rng.Intn(2) == 0
 		if unique {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: indexDef,
@@ -616,13 +616,13 @@ func randIndexTableDefFromCols(
 		// The last index column can be inverted-indexable, which makes the
 		// index an inverted index.
 		if colinfo.ColumnTypeIsOnlyInvertedIndexable(semType) {
-			def.Inverted = true
+			def.Type = tree.IndexTypeInverted
 			stopPrefix = true
 		} else if isLastCol && !stopPrefix && invertedIndexable {
 			// With 1/4 probability, choose to use an inverted index for a column type
 			// that is both inverted indexable and forward indexable.
 			if rng.Intn(4) == 0 {
-				def.Inverted = true
+				def.Type = tree.IndexTypeInverted
 				stopPrefix = true
 				if semType.Family() == types.StringFamily {
 					elem.OpClass = "gin_trgm_ops"
@@ -631,7 +631,7 @@ func randIndexTableDefFromCols(
 		}
 
 		// Last column for inverted indexes must always be ascending.
-		if i == nCols-1 && def.Inverted {
+		if i == nCols-1 && def.Type == tree.IndexTypeInverted {
 			elem.Direction = tree.Ascending
 		}
 
@@ -644,7 +644,7 @@ func randIndexTableDefFromCols(
 
 	// An inverted index column cannot be DESC, so use either the default
 	// direction or ASC.
-	if def.Inverted {
+	if def.Type == tree.IndexTypeInverted {
 		dir := tree.Direction(rng.Intn(int(tree.Ascending) + 1))
 		def.Columns[len(def.Columns)-1].Direction = dir
 	}
