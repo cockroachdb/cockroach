@@ -25,9 +25,9 @@ func TestChangefeedNemeses(t *testing.T) {
 	skip.UnderRace(t, "takes >1 min under race")
 
 	testutils.RunValues(t, "nemeses_options=", cdctest.NemesesOptions, func(t *testing.T, nop cdctest.NemesesOption) {
-		if nop.EnableSQLSmith == true {
-			skip.WithIssue(t, 137125)
-		}
+		//if nop.EnableSQLSmith == true {
+		//	skip.WithIssue(t, 137125)
+		//}
 		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 			rng, seed := randutil.NewPseudoRand()
 			t.Logf("random seed: %d", seed)
