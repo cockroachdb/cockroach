@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -81,7 +82,7 @@ func TestIndexForDisplay(t *testing.T) {
 
 	// JSONB INVERTED INDEX baz (a)
 	jsonbInvertedIndex := baseIndex
-	jsonbInvertedIndex.Type = descpb.IndexDescriptor_INVERTED
+	jsonbInvertedIndex.Type = idxtype.INVERTED
 	jsonbInvertedIndex.KeyColumnNames = []string{"a"}
 	jsonbInvertedIndex.KeyColumnIDs = descpb.ColumnIDs{1}
 

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1299,7 +1300,7 @@ func EncodeSecondaryIndexKey(
 	var containsNull = false
 	var secondaryKeys [][]byte
 	var err error
-	if secondaryIndex.GetType() == descpb.IndexDescriptor_INVERTED {
+	if secondaryIndex.GetType() == idxtype.INVERTED {
 		secondaryKeys, err = EncodeInvertedIndexKeys(ctx, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 	} else {
 		var secondaryIndexKey []byte
@@ -1360,7 +1361,7 @@ func EncodeSecondaryIndex(
 		}
 
 		if tableDesc.NumFamilies() == 1 ||
-			secondaryIndex.GetType() == descpb.IndexDescriptor_INVERTED ||
+			secondaryIndex.GetType() == idxtype.INVERTED ||
 			secondaryIndex.GetVersion() == descpb.BaseIndexFormatVersion {
 			// We do all computation that affects indexes with families in a separate code path to avoid performance
 			// regression for tables without column families.
@@ -1560,7 +1561,7 @@ func GetValueColumns(index catalog.Index) []ValueEncodedColumn {
 		id := index.GetCompositeColumnID(i)
 		// Inverted indexes on a composite type (i.e. an array of composite types)
 		// should not add the indexed column to the value.
-		if index.GetType() == descpb.IndexDescriptor_INVERTED && id == index.InvertedColumnID() {
+		if index.GetType() == idxtype.INVERTED && id == index.InvertedColumnID() {
 			continue
 		}
 		cols = append(cols, ValueEncodedColumn{ColID: id, IsComposite: true})

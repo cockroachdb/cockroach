@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -99,7 +100,7 @@ func (desc *IndexDescriptor) GetName() string {
 // index. This is always the last column in ColumnIDs. Panics if the index is
 // not inverted.
 func (desc *IndexDescriptor) InvertedColumnID() ColumnID {
-	if desc.Type != IndexDescriptor_INVERTED {
+	if desc.Type != idxtype.INVERTED {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return desc.KeyColumnIDs[len(desc.KeyColumnIDs)-1]
@@ -109,7 +110,7 @@ func (desc *IndexDescriptor) InvertedColumnID() ColumnID {
 // index. This is always the last column in KeyColumnNames. Panics if the index is
 // not inverted.
 func (desc *IndexDescriptor) InvertedColumnName() string {
-	if desc.Type != IndexDescriptor_INVERTED {
+	if desc.Type != idxtype.INVERTED {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return desc.KeyColumnNames[len(desc.KeyColumnNames)-1]
@@ -120,7 +121,7 @@ func (desc *IndexDescriptor) InvertedColumnName() string {
 //
 // Panics if the index is not inverted.
 func (desc *IndexDescriptor) InvertedColumnKeyType() *types.T {
-	if desc.Type != IndexDescriptor_INVERTED {
+	if desc.Type != idxtype.INVERTED {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return types.EncodedKey
