@@ -1,1 +1,3 @@
 # intentionally empty (this file is mounted as .bazelrc.user for cross builds)
+
+startup --host_jvm_args="-XX:UseSVE=0"
