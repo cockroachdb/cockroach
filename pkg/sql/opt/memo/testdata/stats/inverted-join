@@ -157,31 +157,32 @@ FROM json_arr1 AS t1
 JOIN json_arr2 AS t2
 ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
 ----
-inner-join (lookup json_arr1 [as=t1])
+inner-join (cross)
  ├── columns: k:1(int!null) j:2(jsonb) a:3(string[]!null) k:8(int!null) j:9(jsonb) a:10(string[])
- ├── key columns: [13] = [1]
- ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=3.666667]
+ ├── stats: [rows=0.099]
  ├── key: (1,8)
  ├── fd: (1)-->(2,3), (8)-->(9,10)
- ├── inner-join (inverted json_arr1@a_idx,inverted [as=t1])
- │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
- │    ├── inverted-expr
- │    │    └── (t1.a:15 @> t2.a:10) AND (t1.a:15 @> ARRAY['foo']) [type=bool]
- │    ├── stats: [rows=33.33333, distinct(13)=32.9462, null(13)=0]
- │    ├── key: (8,13)
- │    ├── fd: (8)-->(9,10)
- │    ├── scan json_arr2 [as=t2]
- │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
- │    │    ├── constraint: /8: [/6 - ]
- │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
- │    │    ├── key: (8)
- │    │    └── fd: (8)-->(9,10)
- │    └── filters (true)
+ ├── index-join json_arr1
+ │    ├── columns: t1.k:1(int!null) t1.j:2(jsonb) t1.a:3(string[]!null)
+ │    ├── immutable
+ │    ├── stats: [rows=9.9]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan json_arr1@a_idx,inverted [as=t1]
+ │         ├── columns: t1.k:1(int!null)
+ │         ├── inverted constraint: /7/1
+ │         │    └── spans: ["foo", "foo"]
+ │         ├── stats: [rows=10, distinct(7)=10, null(7)=0]
+ │         └── key: (1)
+ ├── scan json_arr2 [as=t2]
+ │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
+ │    ├── constraint: /8: [/6 - ]
+ │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9,10)
  └── filters
-      ├── t1.a:3 @> t2.a:10 [type=bool, outer=(3,10), immutable]
-      └── t1.a:3 @> ARRAY['foo'] [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+      └── t1.a:3 @> t2.a:10 [type=bool, outer=(3,10), immutable]
 
 opt
 SELECT t2.k
@@ -192,25 +193,25 @@ ON t1.a @> t2.a AND t1.j @> t2.j AND t2.k > 5
 project
  ├── columns: k:8(int!null)
  ├── immutable
- ├── stats: [rows=33.33333]
+ ├── stats: [rows=10]
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t1.j:2(jsonb) t1.a:3(string[]) t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=33.33333]
+      ├── stats: [rows=10]
       ├── fd: (8)-->(9,10)
       ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 @> t2.j:9 [type=bool]
-      │    ├── stats: [rows=33.33333, distinct(13)=32.9462, null(13)=0]
+      │    ├── stats: [rows=10, distinct(13)=10, null(13)=0]
       │    ├── key: (8,13)
       │    ├── fd: (8)-->(9,10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       │    │    ├── constraint: /8: [/6 - ]
-      │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
+      │    │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,10)
       │    └── filters (true)
@@ -227,13 +228,13 @@ ON t1.j <@ t2.j
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=3333.333]
+ ├── stats: [rows=1000]
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t1.k:1(int!null) t1.j:2(jsonb) t2.j:9(jsonb)
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=3333.333]
+      ├── stats: [rows=1000]
       ├── fd: (1)-->(2)
       ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.j:9(jsonb) t1.k:13(int!null)
@@ -253,31 +254,49 @@ FROM json_arr1 AS t1
 JOIN json_arr2 AS t2
 ON t1.a <@ t2.a AND t1.a <@ '{"foo"}'::string[] AND t2.k > 5
 ----
-inner-join (lookup json_arr1 [as=t1])
+inner-join (cross)
  ├── columns: k:1(int!null) j:2(jsonb) a:3(string[]) k:8(int!null) j:9(jsonb) a:10(string[])
- ├── key columns: [13] = [1]
- ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=370.3704]
+ ├── stats: [rows=10]
  ├── key: (1,8)
  ├── fd: (1)-->(2,3), (8)-->(9,10)
- ├── inner-join (inverted json_arr1@a_idx,inverted [as=t1])
- │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
- │    ├── inverted-expr
- │    │    └── (t1.a:15 <@ t2.a:10) AND (t1.a:15 <@ ARRAY['foo']) [type=bool]
- │    ├── stats: [rows=33.33333, distinct(13)=32.9462, null(13)=0]
- │    ├── key: (8,13)
- │    ├── fd: (8)-->(9,10)
- │    ├── scan json_arr2 [as=t2]
- │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
- │    │    ├── constraint: /8: [/6 - ]
- │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
- │    │    ├── key: (8)
- │    │    └── fd: (8)-->(9,10)
- │    └── filters (true)
+ ├── select
+ │    ├── columns: t1.k:1(int!null) t1.j:2(jsonb) t1.a:3(string[])
+ │    ├── immutable
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── index-join json_arr1
+ │    │    ├── columns: t1.k:1(int!null) t1.j:2(jsonb) t1.a:3(string[])
+ │    │    ├── stats: [rows=10]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3)
+ │    │    └── inverted-filter
+ │    │         ├── columns: t1.k:1(int!null)
+ │    │         ├── inverted expression: /7
+ │    │         │    ├── tight: false, unique: false
+ │    │         │    └── union spans
+ │    │         │         ├── ["foo", "foo"]
+ │    │         │         └── [[], []]
+ │    │         ├── stats: [rows=10]
+ │    │         ├── key: (1)
+ │    │         └── scan json_arr1@a_idx,inverted [as=t1]
+ │    │              ├── columns: t1.k:1(int!null) a_inverted_key:7(encodedkey!null)
+ │    │              ├── inverted constraint: /7/1
+ │    │              │    └── spans
+ │    │              │         ├── ["foo", "foo"]
+ │    │              │         └── [[], []]
+ │    │              └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(7)=10, null(7)=0]
+ │    └── filters
+ │         └── t1.a:3 <@ ARRAY['foo'] [type=bool, outer=(3), immutable]
+ ├── scan json_arr2 [as=t2]
+ │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
+ │    ├── constraint: /8: [/6 - ]
+ │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9,10)
  └── filters
-      ├── t1.a:3 <@ t2.a:10 [type=bool, outer=(3,10), immutable]
-      └── t1.a:3 <@ ARRAY['foo'] [type=bool, outer=(3), immutable]
+      └── t1.a:3 <@ t2.a:10 [type=bool, outer=(3,10), immutable]
 
 opt
 SELECT t2.k
@@ -288,25 +307,25 @@ ON t1.a <@ t2.a AND t1.j <@ t2.j AND t2.k > 5
 project
  ├── columns: k:8(int!null)
  ├── immutable
- ├── stats: [rows=370.3704]
+ ├── stats: [rows=10]
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t1.j:2(jsonb) t1.a:3(string[]) t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=370.3704]
+      ├── stats: [rows=10]
       ├── fd: (8)-->(9,10)
       ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 <@ t2.j:9 [type=bool]
-      │    ├── stats: [rows=33.33333, distinct(13)=32.9462, null(13)=0]
+      │    ├── stats: [rows=10, distinct(13)=10, null(13)=0]
       │    ├── key: (8,13)
       │    ├── fd: (8)-->(9,10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       │    │    ├── constraint: /8: [/6 - ]
-      │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
+      │    │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,10)
       │    └── filters (true)

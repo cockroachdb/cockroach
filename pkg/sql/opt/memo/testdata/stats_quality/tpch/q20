@@ -107,14 +107,14 @@ sort
            │         │         ├── key columns: [16] = [23]
            │         │         ├── lookup columns are key
            │         │         ├── immutable
-           │         │         ├── stats: [rows=0.004990918, distinct(16)=4e-05, null(16)=0, distinct(17)=0.00499092, null(17)=0, distinct(18)=0.00499092, null(18)=0, distinct(23)=4e-05, null(23)=0, distinct(24)=7.51679e-09, null(24)=0, distinct(52)=0.00499092, null(52)=0]
+           │         │         ├── stats: [rows=0.001497276, distinct(16)=4e-05, null(16)=0, distinct(17)=0.00149728, null(17)=0, distinct(18)=0.00149728, null(18)=0, distinct(23)=4e-05, null(23)=0, distinct(24)=7.51679e-09, null(24)=0, distinct(52)=0.00149728, null(52)=0]
            │         │         ├── key: (17,23)
            │         │         ├── fd: (16,17)-->(18,52), (23)-->(24), (16)==(23), (23)==(16)
            │         │         ├── select
            │         │         │    ├── save-table-name: q20_select_8
            │         │         │    ├── columns: ps_partkey:16(int!null) ps_suppkey:17(int!null) ps_availqty:18(int!null) sum:52(float!null)
            │         │         │    ├── immutable
-           │         │         │    ├── stats: [rows=124.773, distinct(16)=124.773, null(16)=0, distinct(17)=124.773, null(17)=0, distinct(18)=124.773, null(18)=0, distinct(52)=124.773, null(52)=0]
+           │         │         │    ├── stats: [rows=37.43189, distinct(16)=37.4319, null(16)=0, distinct(17)=37.4319, null(17)=0, distinct(18)=37.4319, null(18)=0, distinct(52)=37.4319, null(52)=0]
            │         │         │    ├── key: (16,17)
            │         │         │    ├── fd: (16,17)-->(18,52)
            │         │         │    ├── group-by (hash)
@@ -272,10 +272,10 @@ column_names   row_count  distinct_count  null_count
 {sum}          542095     246             0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_availqty}  125.00         4336.76 <==    125.00              79.36 <==           0.00            1.00
-{ps_partkey}   125.00         4336.76 <==    125.00              1577.58 <==         0.00            1.00
-{ps_suppkey}   125.00         4336.76 <==    125.00              79.36 <==           0.00            1.00
-{sum}          125.00         4336.76 <==    125.00              1.97 <==            0.00            1.00
+{ps_availqty}  37.00          14651.22 <==   37.00               268.11 <==          0.00            1.00
+{ps_partkey}   37.00          14651.22 <==   37.00               5329.65 <==         0.00            1.00
+{ps_suppkey}   37.00          14651.22 <==   37.00               268.11 <==          0.00            1.00
+{sum}          37.00          14651.22 <==   37.00               6.65 <==            0.00            1.00
 
 ----Stats for q20_group_by_9----
 column_names   row_count  distinct_count  null_count

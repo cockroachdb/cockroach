@@ -54,7 +54,7 @@ ORDER BY
 sort
  ├── save-table-name: q16_sort_1
  ├── columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null) supplier_cnt:29(int!null)
- ├── stats: [rows=9929.297, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=9929.3, null(29)=0, distinct(11-13)=9929.3, null(11-13)=0]
+ ├── stats: [rows=3109.741, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=3109.74, null(29)=0, distinct(11-13)=3109.74, null(11-13)=0]
  ├── key: (11-13)
  ├── fd: (11-13)-->(29)
  ├── ordering: -29,+11,+12,+13
@@ -62,35 +62,35 @@ sort
       ├── save-table-name: q16_group_by_2
       ├── columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null) count:29(int!null)
       ├── grouping columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
-      ├── stats: [rows=9929.297, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=9929.3, null(29)=0, distinct(11-13)=9929.3, null(11-13)=0]
+      ├── stats: [rows=3109.741, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=3109.74, null(29)=0, distinct(11-13)=3109.74, null(11-13)=0]
       ├── key: (11-13)
       ├── fd: (11-13)-->(29)
       ├── distinct-on
       │    ├── save-table-name: q16_distinct_on_3
       │    ├── columns: ps_suppkey:2(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
       │    ├── grouping columns: ps_suppkey:2(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
-      │    ├── stats: [rows=28797.62, distinct(2)=9375.8, null(2)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11-13)=9929.3, null(11-13)=0, distinct(2,11-13)=28797.6, null(2,11-13)=0]
+      │    ├── stats: [rows=11546.75, distinct(2)=6822.6, null(2)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11-13)=3109.74, null(11-13)=0, distinct(2,11-13)=11546.7, null(2,11-13)=0]
       │    ├── key: (2,11-13)
       │    └── anti-join (hash)
       │         ├── save-table-name: q16_anti_join_4
       │         ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:8(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
-      │         ├── stats: [rows=28797.62, distinct(1)=10657.8, null(1)=0, distinct(2)=9375.8, null(2)=0, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11-13)=9929.3, null(11-13)=0, distinct(2,11-13)=28797.6, null(2,11-13)=0]
+      │         ├── stats: [rows=11546.75, distinct(1)=3197.56, null(1)=0, distinct(2)=6822.6, null(2)=0, distinct(8)=3197.56, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11-13)=3109.74, null(11-13)=0, distinct(2,11-13)=11546.7, null(2,11-13)=0]
       │         ├── key: (2,8)
       │         ├── fd: (8)-->(11-13), (1)==(8), (8)==(1)
       │         ├── inner-join (lookup partsupp)
       │         │    ├── save-table-name: q16_lookup_join_5
       │         │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:8(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
       │         │    ├── key columns: [8] = [1]
-      │         │    ├── stats: [rows=42797.83, distinct(1)=10657.8, null(1)=0, distinct(2)=9787.31, null(2)=0, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0]
+      │         │    ├── stats: [rows=12839.35, distinct(1)=3197.56, null(1)=0, distinct(2)=7201.01, null(2)=0, distinct(8)=3197.56, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0]
       │         │    ├── key: (2,8)
       │         │    ├── fd: (8)-->(11-13), (1)==(8), (8)==(1)
       │         │    ├── select
       │         │    │    ├── save-table-name: q16_select_6
       │         │    │    ├── columns: p_partkey:8(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
-      │         │    │    ├── stats: [rows=10658.85, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11,13)=199.999, null(11,13)=0, distinct(11-13)=10639.6, null(11-13)=0]
-      │         │    │    │   histogram(11)=  0    407.17    7376.2      0       0         0         2446    429.55
-      │         │    │    │                 <--- 'Brand#11' -------- 'Brand#45' --- e'Brand#45\x00' ------ 'Brand#55'
-      │         │    │    │   histogram(13)=  0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4
+      │         │    │    ├── stats: [rows=3197.656, distinct(8)=3197.56, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11,13)=199.999, null(11,13)=0, distinct(11-13)=3195.94, null(11-13)=0]
+      │         │    │    │   histogram(11)=  0    122.15    2212.9      0       0         0         733.79    128.87
+      │         │    │    │                 <--- 'Brand#11' -------- 'Brand#45' --- e'Brand#45\x00' -------- 'Brand#55'
+      │         │    │    │   histogram(13)=  0 399.71 0 399.71 0 399.71 0 399.71 0 399.71 0 399.71 0 399.71 0 399.71
       │         │    │    │                 <---- 3 ------ 9 ------ 14 ----- 19 ----- 23 ----- 36 ----- 45 ----- 49 -
       │         │    │    ├── key: (8)
       │         │    │    ├── fd: (8)-->(11-13)
@@ -116,7 +116,7 @@ sort
       │         ├── select
       │         │    ├── save-table-name: q16_select_8
       │         │    ├── columns: s_suppkey:19(int!null) s_comment:25(varchar!null)
-      │         │    ├── stats: [rows=3333.333, distinct(19)=3328.26, null(19)=0, distinct(25)=3333.33, null(25)=0]
+      │         │    ├── stats: [rows=1000, distinct(19)=999.583, null(19)=0, distinct(25)=1000, null(25)=0]
       │         │    ├── key: (19)
       │         │    ├── fd: (19)-->(25)
       │         │    ├── scan supplier
@@ -144,10 +144,10 @@ column_names    row_count  distinct_count  null_count
 {supplier_cnt}  18314      15              0
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}       9929.00        1.84           25.00               1.04                0.00            1.00
-{p_size}        9929.00        1.84           8.00                1.00                0.00            1.00
-{p_type}        9929.00        1.84           150.00              1.03                0.00            1.00
-{supplier_cnt}  9929.00        1.84           9929.00             661.93 <==          0.00            1.00
+{p_brand}       3110.00        5.89 <==       25.00               1.04                0.00            1.00
+{p_size}        3110.00        5.89 <==       8.00                1.00                0.00            1.00
+{p_type}        3110.00        5.89 <==       150.00              1.03                0.00            1.00
+{supplier_cnt}  3110.00        5.89 <==       3110.00             207.33 <==          0.00            1.00
 
 ----Stats for q16_group_by_2----
 column_names  row_count  distinct_count  null_count
@@ -157,10 +157,10 @@ column_names  row_count  distinct_count  null_count
 {p_type}      18314      145             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count}       9929.00        1.84           9929.00             661.93 <==          0.00            1.00
-{p_brand}     9929.00        1.84           25.00               1.04                0.00            1.00
-{p_size}      9929.00        1.84           8.00                1.00                0.00            1.00
-{p_type}      9929.00        1.84           150.00              1.03                0.00            1.00
+{count}       3110.00        5.89 <==       3110.00             207.33 <==          0.00            1.00
+{p_brand}     3110.00        5.89 <==       25.00               1.04                0.00            1.00
+{p_size}      3110.00        5.89 <==       8.00                1.00                0.00            1.00
+{p_type}      3110.00        5.89 <==       150.00              1.03                0.00            1.00
 
 ----Stats for q16_distinct_on_3----
 column_names  row_count  distinct_count  null_count
@@ -170,10 +170,10 @@ column_names  row_count  distinct_count  null_count
 {ps_suppkey}  118250     9916            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     28798.00       4.11 <==       25.00               1.04                0.00            1.00
-{p_size}      28798.00       4.11 <==       8.00                1.00                0.00            1.00
-{p_type}      28798.00       4.11 <==       150.00              1.03                0.00            1.00
-{ps_suppkey}  28798.00       4.11 <==       9376.00             1.06                0.00            1.00
+{p_brand}     11547.00       10.24 <==      25.00               1.04                0.00            1.00
+{p_size}      11547.00       10.24 <==      8.00                1.00                0.00            1.00
+{p_type}      11547.00       10.24 <==      150.00              1.03                0.00            1.00
+{ps_suppkey}  11547.00       10.24 <==      6823.00             1.45                0.00            1.00
 
 ----Stats for q16_anti_join_4----
 column_names  row_count  distinct_count  null_count
@@ -185,12 +185,12 @@ column_names  row_count  distinct_count  null_count
 {ps_suppkey}  118274     9916            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     28798.00       4.11 <==       25.00               1.04                0.00            1.00
-{p_partkey}   28798.00       4.11 <==       10658.00            2.76 <==            0.00            1.00
-{p_size}      28798.00       4.11 <==       8.00                1.00                0.00            1.00
-{p_type}      28798.00       4.11 <==       150.00              1.03                0.00            1.00
-{ps_partkey}  28798.00       4.11 <==       10658.00            2.76 <==            0.00            1.00
-{ps_suppkey}  28798.00       4.11 <==       9376.00             1.06                0.00            1.00
+{p_brand}     11547.00       10.24 <==      25.00               1.04                0.00            1.00
+{p_partkey}   11547.00       10.24 <==      3198.00             9.20 <==            0.00            1.00
+{p_size}      11547.00       10.24 <==      8.00                1.00                0.00            1.00
+{p_type}      11547.00       10.24 <==      150.00              1.03                0.00            1.00
+{ps_partkey}  11547.00       10.24 <==      3198.00             9.20 <==            0.00            1.00
+{ps_suppkey}  11547.00       10.24 <==      6823.00             1.45                0.00            1.00
 
 ----Stats for q16_lookup_join_5----
 column_names  row_count  distinct_count  null_count
@@ -202,12 +202,12 @@ column_names  row_count  distinct_count  null_count
 {ps_suppkey}  118324     9920            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     42798.00       2.76 <==       25.00               1.04                0.00            1.00
-{p_partkey}   42798.00       2.76 <==       10658.00            2.76 <==            0.00            1.00
-{p_size}      42798.00       2.76 <==       8.00                1.00                0.00            1.00
-{p_type}      42798.00       2.76 <==       150.00              1.03                0.00            1.00
-{ps_partkey}  42798.00       2.76 <==       10658.00            2.76 <==            0.00            1.00
-{ps_suppkey}  42798.00       2.76 <==       9787.00             1.01                0.00            1.00
+{p_brand}     12839.00       9.22 <==       25.00               1.04                0.00            1.00
+{p_partkey}   12839.00       9.22 <==       3198.00             9.20 <==            0.00            1.00
+{p_size}      12839.00       9.22 <==       8.00                1.00                0.00            1.00
+{p_type}      12839.00       9.22 <==       150.00              1.03                0.00            1.00
+{ps_partkey}  12839.00       9.22 <==       3198.00             9.20 <==            0.00            1.00
+{ps_suppkey}  12839.00       9.22 <==       7201.00             1.38                0.00            1.00
 
 ----Stats for q16_select_6----
 column_names  row_count  distinct_count  null_count
@@ -217,10 +217,10 @@ column_names  row_count  distinct_count  null_count
 {p_type}      29581      145             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     10659.00       2.78 <==       25.00               1.04                0.00            1.00
-{p_partkey}   10659.00       2.78 <==       10658.00            2.76 <==            0.00            1.00
-{p_size}      10659.00       2.78 <==       8.00                1.00                0.00            1.00
-{p_type}      10659.00       2.78 <==       150.00              1.03                0.00            1.00
+{p_brand}     3198.00        9.25 <==       25.00               1.04                0.00            1.00
+{p_partkey}   3198.00        9.25 <==       3198.00             9.20 <==            0.00            1.00
+{p_size}      3198.00        9.25 <==       8.00                1.00                0.00            1.00
+{p_type}      3198.00        9.25 <==       150.00              1.03                0.00            1.00
 
 ----Stats for q16_scan_7----
 column_names  row_count  distinct_count  null_count
@@ -241,8 +241,8 @@ column_names  row_count  distinct_count  null_count
 {s_suppkey}   4          4               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_comment}   3333.00        833.25 <==     3333.00             833.25 <==          0.00            1.00
-{s_suppkey}   3333.00        833.25 <==     3328.00             832.00 <==          0.00            1.00
+{s_comment}   1000.00        250.00 <==     1000.00             250.00 <==          0.00            1.00
+{s_suppkey}   1000.00        250.00 <==     1000.00             250.00 <==          0.00            1.00
 
 ----Stats for q16_scan_9----
 column_names  row_count  distinct_count  null_count

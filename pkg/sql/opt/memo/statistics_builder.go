@@ -34,7 +34,10 @@ const (
 	// This is the value used for inequality filters such as x < 1 in
 	// "Access Path Selection in a Relational Database Management System"
 	// by Pat Selinger et al.
-	unknownFilterSelectivity = 1.0 / 3.0
+	// unknownFilterSelectivity = 1.0 / 3.0
+	// TODO: We need to do something about range filters outside the histogram.
+	// 1/3 selectivity for these seems too low.
+	unknownFilterSelectivity = 1.0 / 10.0
 
 	// This is the selectivity used for trigram similarity filters, like s %
 	// 'foo'.
@@ -999,8 +1002,11 @@ func (sb *statisticsBuilder) constrainScan(
 				s.RowCount = max(inputHist.ValuesCount(), 1)
 				if colStat, ok := s.ColStats.Lookup(colSet); ok {
 					colStat.Histogram = inputHist.InvertedFilter(sb.ctx, scan.InvertedConstraint)
-					histCols.Add(invertedConstrainedCol)
-					sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
+					// TODO: Put this behind a session setting.
+					if colStat.Histogram.ValuesCount() > 0 {
+						histCols.Add(invertedConstrainedCol)
+						sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
+					}
 				}
 			} else {
 				// Just assume a single closed span such as ["\xfd", "\xfe").
@@ -4000,6 +4006,10 @@ func (sb *statisticsBuilder) updateHistogram(
 	if inputHist != nil && ok {
 		if _, _, ok := inputHist.CanFilter(sb.ctx, c); ok {
 			colStat.Histogram = inputHist.Filter(sb.ctx, c)
+			// TODO: Put this behind a session setting.
+			if colStat.Histogram.ValuesCount() == 0 {
+				return false
+			}
 			sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
 			return true
 		}

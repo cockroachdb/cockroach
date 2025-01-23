@@ -57,14 +57,8 @@ sort
       │    │    ├── immutable
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: sc_id:1!null sc_name:2!null in_id:5!null in_sc_id:7!null co_id:10!null co_in_id:13!null s_symb:21!null s_co_id:26!null tr_s_symb:41!null tr_qty:42!null tr_bid_price:43!null tr_b_id:44!null b_id:47!null b_name:49!null
-      │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    ├── fd: ()-->(1,2,7), (10)-->(13), (21)-->(26), (47)-->(49), (44)==(47), (47)==(44), (21)==(41), (41)==(21), (10)==(26), (26)==(10), (5)==(13), (13)==(5), (1)==(7), (7)==(1)
-      │    │    │    ├── scan sector@sector_sc_name_key
-      │    │    │    │    ├── columns: sc_id:1!null sc_name:2!null
-      │    │    │    │    ├── constraint: /2: [/'Energy' - /'Energy']
-      │    │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    │    ├── key: ()
-      │    │    │    │    └── fd: ()-->(1,2)
       │    │    │    ├── inner-join (lookup industry)
       │    │    │    │    ├── columns: in_id:5!null in_sc_id:7!null co_id:10!null co_in_id:13!null s_symb:21!null s_co_id:26!null tr_s_symb:41!null tr_qty:42!null tr_bid_price:43!null tr_b_id:44!null b_id:47!null b_name:49!null
       │    │    │    │    ├── key columns: [13] = [5]
@@ -92,6 +86,12 @@ sort
       │    │    │    │    │    │    └── filters (true)
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters (true)
+      │    │    │    ├── scan sector@sector_sc_name_key
+      │    │    │    │    ├── columns: sc_id:1!null sc_name:2!null
+      │    │    │    │    ├── constraint: /2: [/'Energy' - /'Energy']
+      │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    ├── key: ()
+      │    │    │    │    └── fd: ()-->(1,2)
       │    │    │    └── filters
       │    │    │         └── sc_id:1 = in_sc_id:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │    │    └── projections
@@ -835,42 +835,45 @@ project
  │    ├── project
  │    │    ├── columns: column43:43!null column45:45!null
  │    │    ├── immutable
- │    │    ├── inner-join (lookup last_trade)
+ │    │    ├── inner-join (lookup daily_market)
  │    │    │    ├── columns: symb:9!null dm_date:10!null dm_s_symb:11!null dm_close:12!null lt_s_symb:18!null lt_price:20!null s_symb:25!null s_num_out:31!null
- │    │    │    ├── key columns: [25] = [18]
+ │    │    │    ├── key columns: [61 18] = [10 11]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── fd: ()-->(10), (11)-->(12), (18)-->(20), (25)-->(31), (9)==(11,18,25), (11)==(9,18,25), (18)==(9,11,25), (25)==(9,11,18)
- │    │    │    ├── inner-join (lookup security)
- │    │    │    │    ├── columns: symb:9!null dm_date:10!null dm_s_symb:11!null dm_close:12!null s_symb:25!null s_num_out:31!null
- │    │    │    │    ├── key columns: [9] = [25]
- │    │    │    │    ├── lookup columns are key
- │    │    │    │    ├── fd: ()-->(10), (11)-->(12), (25)-->(31), (9)==(11,25), (11)==(9,25), (25)==(9,11)
- │    │    │    │    ├── inner-join (lookup daily_market)
- │    │    │    │    │    ├── columns: symb:9!null dm_date:10!null dm_s_symb:11!null dm_close:12!null
- │    │    │    │    │    ├── key columns: [55 9] = [10 11]
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "lookup_join_const_col_@10":61!null symb:9!null lt_s_symb:18!null lt_price:20!null s_symb:25!null s_num_out:31!null
+ │    │    │    │    ├── fd: ()-->(61), (18)-->(20), (25)-->(31), (9)==(18,25), (18)==(9,25), (25)==(9,18)
+ │    │    │    │    ├── inner-join (lookup last_trade)
+ │    │    │    │    │    ├── columns: symb:9!null lt_s_symb:18!null lt_price:20!null s_symb:25!null s_num_out:31!null
+ │    │    │    │    │    ├── key columns: [25] = [18]
  │    │    │    │    │    ├── lookup columns are key
- │    │    │    │    │    ├── fd: ()-->(10), (11)-->(12), (9)==(11), (11)==(9)
- │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: "lookup_join_const_col_@10":55!null symb:9!null
- │    │    │    │    │    │    ├── fd: ()-->(55)
- │    │    │    │    │    │    ├── inner-join (cross)
- │    │    │    │    │    │    │    ├── columns: wi_wl_id:1!null wi_s_symb:2!null wl_c_id:6!null
- │    │    │    │    │    │    │    ├── fd: ()-->(1,6)
- │    │    │    │    │    │    │    ├── scan watch_item
- │    │    │    │    │    │    │    │    ├── columns: wi_wl_id:1!null wi_s_symb:2!null
- │    │    │    │    │    │    │    │    ├── constraint: /1/2: [/0 - /0]
- │    │    │    │    │    │    │    │    ├── key: (2)
- │    │    │    │    │    │    │    │    └── fd: ()-->(1)
- │    │    │    │    │    │    │    ├── scan watch_list@watch_list_wl_c_id_idx
- │    │    │    │    │    │    │    │    ├── columns: wl_c_id:6!null
- │    │    │    │    │    │    │    │    ├── constraint: /6/5: [/0 - /0]
- │    │    │    │    │    │    │    │    └── fd: ()-->(6)
- │    │    │    │    │    │    │    └── filters (true)
- │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         ├── '2020-06-17' [as="lookup_join_const_col_@10":55]
- │    │    │    │    │    │         └── wi_s_symb:2 [as=symb:9, outer=(2)]
+ │    │    │    │    │    ├── fd: (18)-->(20), (25)-->(31), (9)==(18,25), (18)==(9,25), (25)==(9,18)
+ │    │    │    │    │    ├── inner-join (lookup security)
+ │    │    │    │    │    │    ├── columns: symb:9!null s_symb:25!null s_num_out:31!null
+ │    │    │    │    │    │    ├── key columns: [9] = [25]
+ │    │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    │    ├── fd: (25)-->(31), (9)==(25), (25)==(9)
+ │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    ├── columns: symb:9!null
+ │    │    │    │    │    │    │    ├── inner-join (cross)
+ │    │    │    │    │    │    │    │    ├── columns: wi_wl_id:1!null wi_s_symb:2!null wl_c_id:6!null
+ │    │    │    │    │    │    │    │    ├── fd: ()-->(1,6)
+ │    │    │    │    │    │    │    │    ├── scan watch_item
+ │    │    │    │    │    │    │    │    │    ├── columns: wi_wl_id:1!null wi_s_symb:2!null
+ │    │    │    │    │    │    │    │    │    ├── constraint: /1/2: [/0 - /0]
+ │    │    │    │    │    │    │    │    │    ├── key: (2)
+ │    │    │    │    │    │    │    │    │    └── fd: ()-->(1)
+ │    │    │    │    │    │    │    │    ├── scan watch_list@watch_list_wl_c_id_idx
+ │    │    │    │    │    │    │    │    │    ├── columns: wl_c_id:6!null
+ │    │    │    │    │    │    │    │    │    ├── constraint: /6/5: [/0 - /0]
+ │    │    │    │    │    │    │    │    │    └── fd: ()-->(6)
+ │    │    │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │         └── wi_s_symb:2 [as=symb:9, outer=(2)]
+ │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    └── filters (true)
- │    │    │    │    └── filters (true)
+ │    │    │    │    └── projections
+ │    │    │    │         └── '2020-06-17' [as="lookup_join_const_col_@10":61]
  │    │    │    └── filters (true)
  │    │    └── projections
  │    │         ├── s_num_out:31 * dm_close:12 [as=column43:43, outer=(12,31), immutable]
@@ -1006,56 +1009,60 @@ project
  │    ├── project
  │    │    ├── columns: column69:69!null column71:71!null
  │    │    ├── immutable
- │    │    ├── inner-join (lookup last_trade)
+ │    │    ├── inner-join (lookup daily_market)
  │    │    │    ├── columns: symb:35!null dm_date:36!null dm_s_symb:37!null dm_close:38!null lt_s_symb:44!null lt_price:46!null s_symb:51!null s_num_out:57!null
- │    │    │    ├── key columns: [51] = [44]
+ │    │    │    ├── key columns: [89 44] = [36 37]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── key: (51)
  │    │    │    ├── fd: ()-->(36), (37)-->(38), (44)-->(46), (51)-->(57), (35)==(37,44,51), (37)==(35,44,51), (44)==(35,37,51), (51)==(35,37,44)
- │    │    │    ├── inner-join (lookup security)
- │    │    │    │    ├── columns: symb:35!null dm_date:36!null dm_s_symb:37!null dm_close:38!null s_symb:51!null s_num_out:57!null
- │    │    │    │    ├── key columns: [35] = [51]
- │    │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "lookup_join_const_col_@36":89!null symb:35!null lt_s_symb:44!null lt_price:46!null s_symb:51!null s_num_out:57!null
  │    │    │    │    ├── key: (51)
- │    │    │    │    ├── fd: ()-->(36), (37)-->(38), (51)-->(57), (35)==(37,51), (37)==(35,51), (51)==(35,37)
- │    │    │    │    ├── inner-join (lookup daily_market)
- │    │    │    │    │    ├── columns: symb:35!null dm_date:36!null dm_s_symb:37!null dm_close:38!null
- │    │    │    │    │    ├── key columns: [83 35] = [36 37]
+ │    │    │    │    ├── fd: ()-->(89), (44)-->(46), (51)-->(57), (35)==(44,51), (44)==(35,51), (51)==(35,44)
+ │    │    │    │    ├── inner-join (lookup last_trade)
+ │    │    │    │    │    ├── columns: symb:35!null lt_s_symb:44!null lt_price:46!null s_symb:51!null s_num_out:57!null
+ │    │    │    │    │    ├── key columns: [51] = [44]
  │    │    │    │    │    ├── lookup columns are key
- │    │    │    │    │    ├── key: (37)
- │    │    │    │    │    ├── fd: ()-->(36), (37)-->(38), (35)==(37), (37)==(35)
- │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: "lookup_join_const_col_@36":83!null symb:35!null
- │    │    │    │    │    │    ├── key: (35)
- │    │    │    │    │    │    ├── fd: ()-->(83)
- │    │    │    │    │    │    ├── inner-join (lookup security@security_s_co_id_s_issue_key)
- │    │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null s_symb:17!null s_co_id:22!null
- │    │    │    │    │    │    │    ├── key columns: [6] = [22]
- │    │    │    │    │    │    │    ├── key: (17)
- │    │    │    │    │    │    │    ├── fd: ()-->(1,2,9), (17)-->(22), (6)==(22), (22)==(6), (1)==(9), (9)==(1)
- │    │    │    │    │    │    │    ├── inner-join (lookup company@company_co_in_id_idx)
- │    │    │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null
- │    │    │    │    │    │    │    │    ├── lookup expression
- │    │    │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │    │    │         ├── (co_id:6 >= 1) AND (co_id:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
- │    │    │    │    │    │    │    │    │         └── in_id:1 = co_in_id:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
- │    │    │    │    │    │    │    │    ├── cardinality: [0 - 5000]
- │    │    │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    │    │    ├── fd: ()-->(1,2,9), (1)==(9), (9)==(1)
- │    │    │    │    │    │    │    │    ├── scan industry@industry_in_name_key
- │    │    │    │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null
- │    │    │    │    │    │    │    │    │    ├── constraint: /2: [/'Software' - /'Software']
- │    │    │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    │    │    │    │    │    ├── key: ()
- │    │    │    │    │    │    │    │    │    └── fd: ()-->(1,2)
- │    │    │    │    │    │    │    │    └── filters (true)
- │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │         └── (s_co_id:22 >= 1) AND (s_co_id:22 <= 5000) [outer=(22), constraints=(/22: [/1 - /5000]; tight)]
- │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         ├── '2020-06-17' [as="lookup_join_const_col_@36":83]
- │    │    │    │    │    │         └── s_symb:17 [as=symb:35, outer=(17)]
+ │    │    │    │    │    ├── key: (51)
+ │    │    │    │    │    ├── fd: (44)-->(46), (51)-->(57), (35)==(44,51), (44)==(35,51), (51)==(35,44)
+ │    │    │    │    │    ├── inner-join (lookup security)
+ │    │    │    │    │    │    ├── columns: symb:35!null s_symb:51!null s_num_out:57!null
+ │    │    │    │    │    │    ├── key columns: [35] = [51]
+ │    │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    │    ├── key: (51)
+ │    │    │    │    │    │    ├── fd: (51)-->(57), (35)==(51), (51)==(35)
+ │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    ├── columns: symb:35!null
+ │    │    │    │    │    │    │    ├── key: (35)
+ │    │    │    │    │    │    │    ├── inner-join (lookup security@security_s_co_id_s_issue_key)
+ │    │    │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null s_symb:17!null s_co_id:22!null
+ │    │    │    │    │    │    │    │    ├── key columns: [6] = [22]
+ │    │    │    │    │    │    │    │    ├── key: (17)
+ │    │    │    │    │    │    │    │    ├── fd: ()-->(1,2,9), (17)-->(22), (6)==(22), (22)==(6), (1)==(9), (9)==(1)
+ │    │    │    │    │    │    │    │    ├── inner-join (lookup company@company_co_in_id_idx)
+ │    │    │    │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null
+ │    │    │    │    │    │    │    │    │    ├── lookup expression
+ │    │    │    │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │    │    │    │         ├── (co_id:6 >= 1) AND (co_id:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
+ │    │    │    │    │    │    │    │    │    │         └── in_id:1 = co_in_id:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │    │    │    │    │    │    │    │    ├── cardinality: [0 - 5000]
+ │    │    │    │    │    │    │    │    │    ├── key: (6)
+ │    │    │    │    │    │    │    │    │    ├── fd: ()-->(1,2,9), (1)==(9), (9)==(1)
+ │    │    │    │    │    │    │    │    │    ├── scan industry@industry_in_name_key
+ │    │    │    │    │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null
+ │    │    │    │    │    │    │    │    │    │    ├── constraint: /2: [/'Software' - /'Software']
+ │    │    │    │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    │    │    │    │    └── fd: ()-->(1,2)
+ │    │    │    │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │    │         └── (s_co_id:22 >= 1) AND (s_co_id:22 <= 5000) [outer=(22), constraints=(/22: [/1 - /5000]; tight)]
+ │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │         └── s_symb:17 [as=symb:35, outer=(17)]
+ │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    └── filters (true)
- │    │    │    │    └── filters (true)
+ │    │    │    │    └── projections
+ │    │    │    │         └── '2020-06-17' [as="lookup_join_const_col_@36":89]
  │    │    │    └── filters (true)
  │    │    └── projections
  │    │         ├── s_num_out:57 * dm_close:38 [as=column69:69, outer=(38,57), immutable]
@@ -1201,38 +1208,42 @@ project
  │    ├── project
  │    │    ├── columns: column40:40!null column42:42!null
  │    │    ├── immutable
- │    │    ├── inner-join (lookup last_trade)
+ │    │    ├── inner-join (lookup daily_market)
  │    │    │    ├── columns: symb:6!null dm_date:7!null dm_s_symb:8!null dm_close:9!null lt_s_symb:15!null lt_price:17!null s_symb:22!null s_num_out:28!null
- │    │    │    ├── key columns: [22] = [15]
+ │    │    │    ├── key columns: [58 15] = [7 8]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── key: (22)
  │    │    │    ├── fd: ()-->(7), (8)-->(9), (15)-->(17), (22)-->(28), (6)==(8,15,22), (8)==(6,15,22), (15)==(6,8,22), (22)==(6,8,15)
- │    │    │    ├── inner-join (lookup security)
- │    │    │    │    ├── columns: symb:6!null dm_date:7!null dm_s_symb:8!null dm_close:9!null s_symb:22!null s_num_out:28!null
- │    │    │    │    ├── key columns: [6] = [22]
- │    │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "lookup_join_const_col_@7":58!null symb:6!null lt_s_symb:15!null lt_price:17!null s_symb:22!null s_num_out:28!null
  │    │    │    │    ├── key: (22)
- │    │    │    │    ├── fd: ()-->(7), (8)-->(9), (22)-->(28), (6)==(8,22), (8)==(6,22), (22)==(6,8)
- │    │    │    │    ├── inner-join (lookup daily_market)
- │    │    │    │    │    ├── columns: symb:6!null dm_date:7!null dm_s_symb:8!null dm_close:9!null
- │    │    │    │    │    ├── key columns: [52 6] = [7 8]
+ │    │    │    │    ├── fd: ()-->(58), (15)-->(17), (22)-->(28), (6)==(15,22), (15)==(6,22), (22)==(6,15)
+ │    │    │    │    ├── inner-join (lookup last_trade)
+ │    │    │    │    │    ├── columns: symb:6!null lt_s_symb:15!null lt_price:17!null s_symb:22!null s_num_out:28!null
+ │    │    │    │    │    ├── key columns: [22] = [15]
  │    │    │    │    │    ├── lookup columns are key
- │    │    │    │    │    ├── key: (8)
- │    │    │    │    │    ├── fd: ()-->(7), (8)-->(9), (6)==(8), (8)==(6)
- │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: "lookup_join_const_col_@7":52!null symb:6!null
- │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    ├── fd: ()-->(52)
- │    │    │    │    │    │    ├── scan holding_summary
- │    │    │    │    │    │    │    ├── columns: hs_ca_id:1!null hs_s_symb:2!null
- │    │    │    │    │    │    │    ├── constraint: /1/2: [/0 - /0]
- │    │    │    │    │    │    │    ├── key: (2)
- │    │    │    │    │    │    │    └── fd: ()-->(1)
- │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         ├── '2020-06-17' [as="lookup_join_const_col_@7":52]
- │    │    │    │    │    │         └── hs_s_symb:2 [as=symb:6, outer=(2)]
+ │    │    │    │    │    ├── key: (22)
+ │    │    │    │    │    ├── fd: (15)-->(17), (22)-->(28), (6)==(15,22), (15)==(6,22), (22)==(6,15)
+ │    │    │    │    │    ├── inner-join (lookup security)
+ │    │    │    │    │    │    ├── columns: symb:6!null s_symb:22!null s_num_out:28!null
+ │    │    │    │    │    │    ├── key columns: [6] = [22]
+ │    │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    │    ├── key: (22)
+ │    │    │    │    │    │    ├── fd: (22)-->(28), (6)==(22), (22)==(6)
+ │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    ├── columns: symb:6!null
+ │    │    │    │    │    │    │    ├── key: (6)
+ │    │    │    │    │    │    │    ├── scan holding_summary
+ │    │    │    │    │    │    │    │    ├── columns: hs_ca_id:1!null hs_s_symb:2!null
+ │    │    │    │    │    │    │    │    ├── constraint: /1/2: [/0 - /0]
+ │    │    │    │    │    │    │    │    ├── key: (2)
+ │    │    │    │    │    │    │    │    └── fd: ()-->(1)
+ │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │         └── hs_s_symb:2 [as=symb:6, outer=(2)]
+ │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    └── filters (true)
- │    │    │    │    └── filters (true)
+ │    │    │    │    └── projections
+ │    │    │    │         └── '2020-06-17' [as="lookup_join_const_col_@7":58]
  │    │    │    └── filters (true)
  │    │    └── projections
  │    │         ├── s_num_out:28 * dm_close:9 [as=column40:40, outer=(9,28), immutable]
@@ -4055,39 +4066,43 @@ project
  │    ├── fd: ()-->(1,8,27,30,31,45-50), (31)==(47), (47)==(31), (8)==(45), (45)==(8)
  │    ├── inner-join (merge)
  │    │    ├── columns: c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null cr_c_tier:45!null cr_tt_id:46!null cr_ex_id:47!null cr_from_qty:48!null cr_to_qty:49!null commission_rate.cr_rate:50!null
- │    │    ├── left ordering: +31
- │    │    ├── right ordering: +47
+ │    │    ├── left ordering: +45
+ │    │    ├── right ordering: +8
  │    │    ├── key: (48)
  │    │    ├── fd: ()-->(1,8,27,30,31,45-47), (48)-->(49,50), (31)==(47), (47)==(31), (8)==(45), (45)==(8)
  │    │    ├── limit hint: 1.00
- │    │    ├── scan security
- │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
- │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(27,30,31)
  │    │    ├── inner-join (lookup commission_rate)
- │    │    │    ├── columns: c_id:1!null c_tier:8!null cr_c_tier:45!null cr_tt_id:46!null cr_ex_id:47!null cr_from_qty:48!null cr_to_qty:49!null commission_rate.cr_rate:50!null
- │    │    │    ├── key columns: [8 56] = [45 46]
- │    │    │    ├── key: (47,48)
- │    │    │    ├── fd: ()-->(1,8,45,46), (47,48)-->(49,50), (8)==(45), (45)==(8)
- │    │    │    ├── ordering: +47 opt(1,8,45,46) [actual: +47]
+ │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null cr_c_tier:45!null cr_tt_id:46!null cr_ex_id:47!null cr_from_qty:48!null cr_to_qty:49!null commission_rate.cr_rate:50!null
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── cr_c_tier:45 IN (1, 2, 3) [outer=(45), constraints=(/45: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │    │    │         ├── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
+ │    │    │    │         ├── "lookup_join_const_col_@46":54 = cr_tt_id:46 [outer=(46,54), constraints=(/46: (/NULL - ]; /54: (/NULL - ]), fd=(46)==(54), (54)==(46)]
+ │    │    │    │         └── s_ex_id:31 = cr_ex_id:47 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
+ │    │    │    ├── key: (45,48)
+ │    │    │    ├── fd: ()-->(27,30,31,46,47), (45,48)-->(49,50), (31)==(47), (47)==(31)
+ │    │    │    ├── ordering: +45 opt(27,30,31,46,47) [actual: +45]
  │    │    │    ├── project
- │    │    │    │    ├── columns: "lookup_join_const_col_@46":56!null c_id:1!null c_tier:8!null
+ │    │    │    │    ├── columns: "lookup_join_const_col_@46":54!null s_symb:27!null s_name:30!null s_ex_id:31!null
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,8,56)
- │    │    │    │    ├── scan customer
- │    │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
- │    │    │    │    │    ├── constraint: /1: [/0 - /0]
+ │    │    │    │    ├── fd: ()-->(27,30,31,54)
+ │    │    │    │    ├── scan security
+ │    │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
  │    │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── fd: ()-->(1,8)
+ │    │    │    │    │    └── fd: ()-->(27,30,31)
  │    │    │    │    └── projections
- │    │    │    │         └── 'TLS' [as="lookup_join_const_col_@46":56]
+ │    │    │    │         └── 'TLS' [as="lookup_join_const_col_@46":54]
  │    │    │    └── filters
- │    │    │         ├── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
  │    │    │         └── cr_to_qty:49 >= 200 [outer=(49), constraints=(/49: [/200 - ]; tight)]
+ │    │    ├── scan customer
+ │    │    │    ├── columns: c_id:1!null c_tier:8!null
+ │    │    │    ├── constraint: /1: [/0 - /0]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(1,8)
  │    │    └── filters (true)
  │    └── 1
  └── projections
@@ -4134,24 +4149,26 @@ project
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(1,8,27,30,31,54)
+ │    │    │    ├── limit hint: 1.00
  │    │    │    ├── inner-join (cross)
  │    │    │    │    ├── columns: c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(1,8,27,30,31)
- │    │    │    │    ├── scan security
- │    │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
- │    │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
- │    │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── fd: ()-->(27,30,31)
+ │    │    │    │    ├── limit hint: 1.00
  │    │    │    │    ├── scan customer
  │    │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
  │    │    │    │    │    ├── constraint: /1: [/0 - /0]
  │    │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    │    ├── key: ()
  │    │    │    │    │    └── fd: ()-->(1,8)
+ │    │    │    │    ├── scan security
+ │    │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
+ │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    └── fd: ()-->(27,30,31)
  │    │    │    │    └── filters (true)
  │    │    │    └── projections
  │    │    │         └── 'TLS' [as="lookup_join_const_col_@46":54]

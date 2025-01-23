@@ -756,7 +756,7 @@ scalar-group-by
  │    ├── left ordering: +1
  │    ├── right ordering: +13
  │    ├── immutable
- │    ├── stats: [rows=3.333333, distinct(1)=3.33333, null(1)=0, distinct(9)=1, null(9)=0, distinct(13)=3.33333, null(13)=0, distinct(25)=3.33333, null(25)=0]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(9)=1, null(9)=0, distinct(13)=1, null(13)=0, distinct(25)=1, null(25)=0]
  │    ├── key: (13)
  │    ├── fd: (1)-->(9), (13)-->(25), (1)==(13), (13)==(1)
  │    ├── scan warehouse
@@ -810,10 +810,10 @@ column_names  row_count  distinct_count  null_count
 {w_ytd}       0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{d_w_id}      3.00           +Inf <==       3.00                +Inf <==            0.00            1.00
-{sum}         3.00           +Inf <==       3.00                +Inf <==            0.00            1.00
-{w_id}        3.00           +Inf <==       3.00                +Inf <==            0.00            1.00
-{w_ytd}       3.00           +Inf <==       1.00                +Inf <==            0.00            1.00
+{d_w_id}      1.00           +Inf <==       1.00                +Inf <==            0.00            1.00
+{sum}         1.00           +Inf <==       1.00                +Inf <==            0.00            1.00
+{w_id}        1.00           +Inf <==       1.00                +Inf <==            0.00            1.00
+{w_ytd}       1.00           +Inf <==       1.00                +Inf <==            0.00            1.00
 
 ----Stats for consistency_01_scan_3----
 column_names  row_count  distinct_count  null_count
@@ -1010,7 +1010,7 @@ scalar-group-by
  │    ├── save-table-name: consistency_05_select_2
  │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:6(int!null) min:7(int!null) count_rows:8(int!null)
  │    ├── immutable
- │    ├── stats: [rows=33.33333, distinct(2)=9.82658, null(2)=0, distinct(3)=9.82658, null(3)=0, distinct(6)=33.3333, null(6)=0, distinct(7)=33.3333, null(7)=0, distinct(8)=33.3333, null(8)=0]
+ │    ├── stats: [rows=10, distinct(2)=6.51322, null(2)=0, distinct(3)=6.51322, null(3)=0, distinct(6)=10, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=10, null(8)=0]
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(6-8)
  │    ├── group-by (streaming)
@@ -1060,11 +1060,11 @@ column_names  row_count  distinct_count  null_count
 {no_w_id}     0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count_rows}  33.00          +Inf <==       33.00               +Inf <==            0.00            1.00
-{max}         33.00          +Inf <==       33.00               +Inf <==            0.00            1.00
-{min}         33.00          +Inf <==       33.00               +Inf <==            0.00            1.00
-{no_d_id}     33.00          +Inf <==       10.00               +Inf <==            0.00            1.00
-{no_w_id}     33.00          +Inf <==       10.00               +Inf <==            0.00            1.00
+{count_rows}  10.00          +Inf <==       10.00               +Inf <==            0.00            1.00
+{max}         10.00          +Inf <==       10.00               +Inf <==            0.00            1.00
+{min}         10.00          +Inf <==       10.00               +Inf <==            0.00            1.00
+{no_d_id}     10.00          +Inf <==       7.00                +Inf <==            0.00            1.00
+{no_w_id}     10.00          +Inf <==       7.00                +Inf <==            0.00            1.00
 
 ----Stats for consistency_05_group_by_3----
 column_names  row_count  distinct_count  null_count

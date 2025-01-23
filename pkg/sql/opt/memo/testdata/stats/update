@@ -41,7 +41,7 @@ WHERE x > 'foo'
 with &1
  ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
  ├── volatile, mutations
- ├── stats: [rows=3.333333, distinct(12)=3.33333, null(12)=0]
+ ├── stats: [rows=1, distinct(12)=1, null(12)=0]
  ├── key: (12)
  ├── fd: ()-->(13,14)
  ├── update xyz
@@ -79,7 +79,7 @@ with &1
  │              └── 5 [as=y_new:11, type=int]
  └── select
       ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
-      ├── stats: [rows=3.333333, distinct(12)=3.33333, null(12)=0]
+      ├── stats: [rows=1, distinct(12)=1, null(12)=0]
       ├── key: (12)
       ├── fd: ()-->(13,14)
       ├── with-scan &1

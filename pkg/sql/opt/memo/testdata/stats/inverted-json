@@ -87,7 +87,7 @@ SELECT * FROM t@j_idx WHERE j @> '{}'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -117,7 +117,7 @@ SELECT * FROM t WHERE j @> '{"c": "d"}'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t@j_idx,inverted
@@ -137,7 +137,7 @@ SELECT * FROM t WHERE j->'c' = '"d"'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t@j_idx,inverted
@@ -157,7 +157,7 @@ SELECT * FROM t WHERE j @> '{"c": "d"}' OR j @> '{"e": "f"}'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=666.6667, distinct(2)=10, null(2)=0]
+ ├── stats: [rows=200, distinct(2)=10, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -186,7 +186,7 @@ SELECT * FROM t@j_idx WHERE j @> '[]'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -216,7 +216,7 @@ SELECT * FROM t WHERE j @> '[2]'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t@j_idx,inverted
@@ -236,7 +236,7 @@ SELECT * FROM t WHERE j @> '[2]' OR j @> '[3]'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=666.6667, distinct(2)=10, null(2)=0]
+ ├── stats: [rows=200, distinct(2)=10, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -266,7 +266,7 @@ SELECT * FROM t WHERE j <@ '[]'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -293,7 +293,7 @@ SELECT * FROM t WHERE j <@ '{}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -320,7 +320,7 @@ SELECT * FROM t WHERE j <@ '{"c": "d"}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -357,7 +357,7 @@ SELECT * FROM t WHERE j <@ '{"c": "d"}' OR j <@ '{"e": "f"}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -396,7 +396,7 @@ SELECT * FROM t WHERE j <@ '{"c": "d"}' AND j <@ '{"e": "f"}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -440,7 +440,7 @@ SELECT * FROM t WHERE j <@ '[2]'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -479,7 +479,7 @@ SELECT * FROM t WHERE j <@ '[2]' OR j <@ '[3]'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -522,7 +522,7 @@ SELECT * FROM t WHERE j <@ '[2]' AND j <@ '[3]'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -626,7 +626,7 @@ SELECT * FROM t WHERE j @> '{}'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -656,7 +656,7 @@ SELECT * FROM t WHERE j @> '[]'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -686,21 +686,14 @@ SELECT * FROM t WHERE j->'a' = '{"b": "c"}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── index-join t
+ ├── scan t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=4e-07]
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan t@j_idx,inverted
- │         ├── columns: k:1(int!null)
- │         ├── inverted constraint: /5/1
- │         │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
- │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
- │         │   histogram(5)=
- │         └── key: (1)
+ │    └── fd: (1)-->(2)
  └── filters
       └── (j:2->'a') = '{"b": "c"}' [type=bool, outer=(2), immutable]
 
@@ -712,21 +705,14 @@ SELECT * FROM t WHERE j->'a' = '{"b": {"c": "d"}}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── index-join t
+ ├── scan t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=4e-07]
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan t@j_idx,inverted
- │         ├── columns: k:1(int!null)
- │         ├── inverted constraint: /5/1
- │         │    └── spans: ["a"/"b"/"c"/"d", "a"/"b"/"c"/"d"]
- │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
- │         │   histogram(5)=
- │         └── key: (1)
+ │    └── fd: (1)-->(2)
  └── filters
       └── (j:2->'a') = '{"b": {"c": "d"}}' [type=bool, outer=(2), immutable]
 
@@ -736,24 +722,21 @@ select
 opt
 SELECT * FROM t WHERE j->'a' = '{"b": "c", "d": "e"}'
 ----
-select
+inner-join (lookup t)
  ├── columns: k:1(int!null) j:2(jsonb)
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── index-join t
- │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=4e-07]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan t@j_idx,inverted
- │         ├── columns: k:1(int!null)
- │         ├── inverted constraint: /5/1
- │         │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
- │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
- │         │   histogram(5)=
- │         └── key: (1)
+ ├── inner-join (zigzag t@j_idx,inverted t@j_idx,inverted)
+ │    ├── columns: k:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [5] = ['\x3761000262000112630001']
+ │    ├── right fixed columns: [5] = ['\x3761000264000112650001']
+ │    ├── stats: [rows=0.2]
+ │    └── filters (true)
  └── filters
       └── (j:2->'a') = '{"b": "c", "d": "e"}' [type=bool, outer=(2), immutable]
 
@@ -762,24 +745,21 @@ select
 opt
 SELECT * FROM t WHERE j->'a' = '["b", "c", "d", "e"]'
 ----
-select
+inner-join (lookup t)
  ├── columns: k:1(int!null) j:2(jsonb)
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── index-join t
- │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=4e-07]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan t@j_idx,inverted
- │         ├── columns: k:1(int!null)
- │         ├── inverted constraint: /5/1
- │         │    └── spans: ["a"/Arr/"b", "a"/Arr/"b"]
- │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
- │         │   histogram(5)=
- │         └── key: (1)
+ ├── inner-join (zigzag t@j_idx,inverted t@j_idx,inverted)
+ │    ├── columns: k:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [5] = ['\x376100020003000112620001']
+ │    ├── right fixed columns: [5] = ['\x376100020003000112630001']
+ │    ├── stats: [rows=0.2]
+ │    └── filters (true)
  └── filters
       └── (j:2->'a') = '["b", "c", "d", "e"]' [type=bool, outer=(2), immutable]
 
@@ -789,24 +769,21 @@ select
 opt
 SELECT * FROM t WHERE j->'a' = '{"b": ["c", "d", "e"]}'
 ----
-select
+inner-join (lookup t)
  ├── columns: k:1(int!null) j:2(jsonb)
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── index-join t
- │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=4e-07]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan t@j_idx,inverted
- │         ├── columns: k:1(int!null)
- │         ├── inverted constraint: /5/1
- │         │    └── spans: ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
- │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
- │         │   histogram(5)=
- │         └── key: (1)
+ ├── inner-join (zigzag t@j_idx,inverted t@j_idx,inverted)
+ │    ├── columns: k:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [5] = ['\x376100026200020003000112630001']
+ │    ├── right fixed columns: [5] = ['\x376100026200020003000112640001']
+ │    ├── stats: [rows=0.2]
+ │    └── filters (true)
  └── filters
       └── (j:2->'a') = '{"b": ["c", "d", "e"]}' [type=bool, outer=(2), immutable]
 
@@ -818,31 +795,14 @@ SELECT * FROM t WHERE j->'a' = '[]'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── index-join t
+ ├── scan t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=4e-07]
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── inverted-filter
- │         ├── columns: k:1(int!null)
- │         ├── inverted expression: /5
- │         │    ├── tight: false, unique: false
- │         │    └── union spans
- │         │         ├── ["a"/[], "a"/[]]
- │         │         └── ["a"/Arr/, "a"/Arr/]
- │         ├── stats: [rows=4e-07]
- │         ├── key: (1)
- │         └── scan t@j_idx,inverted
- │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
- │              ├── inverted constraint: /5/1
- │              │    └── spans
- │              │         ├── ["a"/[], "a"/[]]
- │              │         └── ["a"/Arr/, "a"/Arr/]
- │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
- │                  histogram(5)=
+ │    └── fd: (1)-->(2)
  └── filters
       └── (j:2->'a') = '[]' [type=bool, outer=(2), immutable]
 
@@ -854,31 +814,14 @@ SELECT * FROM t WHERE j->'a' = '{}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── index-join t
+ ├── scan t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=4e-07]
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
  │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── inverted-filter
- │         ├── columns: k:1(int!null)
- │         ├── inverted expression: /5
- │         │    ├── tight: false, unique: false
- │         │    └── union spans
- │         │         ├── ["a"/{}, "a"/{}]
- │         │         └── ["a"/, Arr/)
- │         ├── stats: [rows=4e-07]
- │         ├── key: (1)
- │         └── scan t@j_idx,inverted
- │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
- │              ├── inverted constraint: /5/1
- │              │    └── spans
- │              │         ├── ["a"/{}, "a"/{}]
- │              │         └── ["a"/, Arr/)
- │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
- │                  histogram(5)=
+ │    └── fd: (1)-->(2)
  └── filters
       └── (j:2->'a') = '{}' [type=bool, outer=(2), immutable]
 
@@ -886,29 +829,19 @@ select
 opt
 SELECT * FROM t WHERE j->'a' @> '1'
 ----
-index-join t
+select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- └── inverted-filter
-      ├── columns: k:1(int!null)
-      ├── inverted expression: /5
-      │    ├── tight: true, unique: false
-      │    └── union spans
-      │         ├── ["a"/1, "a"/1]
-      │         └── ["a"/Arr/1, "a"/Arr/1]
-      ├── stats: [rows=4e-07]
-      ├── key: (1)
-      └── scan t@j_idx,inverted
-           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
-           ├── inverted constraint: /5/1
-           │    └── spans
-           │         ├── ["a"/1, "a"/1]
-           │         └── ["a"/Arr/1, "a"/Arr/1]
-           └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
-               histogram(5)=
+ ├── scan t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── (j:2->'a') @> '1' [type=bool, outer=(2), immutable]
 
 # A query with fetch val and contained by operators uses the inverted index,
 # and the expression is not tight.
@@ -918,7 +851,7 @@ SELECT * FROM t WHERE j->'a' <@ '1'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -951,29 +884,19 @@ select
 opt
 SELECT * FROM t WHERE j->'a'->'b' @> '"c"'
 ----
-index-join t
+select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- └── inverted-filter
-      ├── columns: k:1(int!null)
-      ├── inverted expression: /5
-      │    ├── tight: true, unique: false
-      │    └── union spans
-      │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
-      │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
-      ├── stats: [rows=4e-07]
-      ├── key: (1)
-      └── scan t@j_idx,inverted
-           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
-           ├── inverted constraint: /5/1
-           │    └── spans
-           │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
-           │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
-           └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
-               histogram(5)=
+ ├── scan t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── ((j:2->'a')->'b') @> '"c"' [type=bool, outer=(2), immutable]
 
 # A query with chained fetch val and contained by operators uses the inverted
 # index, and the expression is not tight.
@@ -983,7 +906,7 @@ SELECT * FROM t WHERE j->'a'->'b' <@ '"c"'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -1019,19 +942,19 @@ select
 opt
 SELECT * FROM t WHERE j->'a' @> '{"b": "c"}'
 ----
-index-join t
+select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.2222]
+ ├── stats: [rows=20]
  ├── key: (1)
  ├── fd: (1)-->(2)
- └── scan t@j_idx,inverted
-      ├── columns: k:1(int!null)
-      ├── inverted constraint: /5/1
-      │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
-      ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
-      │   histogram(5)=
-      └── key: (1)
+ ├── scan t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── (j:2->'a') @> '{"b": "c"}' [type=bool, outer=(2), immutable]
 
 # A query with fetch val and contained by operators uses the inverted index
 # when an object is on the right side, and the expression is not tight.
@@ -1041,7 +964,7 @@ SELECT * FROM t WHERE j->'a' <@ '{"b": "c"}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -1077,24 +1000,21 @@ select
 opt
 SELECT * FROM t WHERE j->'a' @> '[1, 2]'
 ----
-select
+inner-join (lookup t)
  ├── columns: k:1(int!null) j:2(jsonb)
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=24.69136]
+ ├── stats: [rows=0.2]
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── index-join t
- │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=4e-07]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan t@j_idx,inverted
- │         ├── columns: k:1(int!null)
- │         ├── inverted constraint: /5/1
- │         │    └── spans: ["a"/Arr/1, "a"/Arr/1]
- │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
- │         │   histogram(5)=
- │         └── key: (1)
+ ├── inner-join (zigzag t@j_idx,inverted t@j_idx,inverted)
+ │    ├── columns: k:1(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [5] = ['\x37610002000300012a0200']
+ │    ├── right fixed columns: [5] = ['\x37610002000300012a0400']
+ │    ├── stats: [rows=0.2]
+ │    └── filters (true)
  └── filters
       └── (j:2->'a') @> '[1, 2]' [type=bool, outer=(2), immutable]
 
@@ -1106,7 +1026,7 @@ SELECT * FROM t WHERE j->'a' <@ '[1, 2]'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -1148,29 +1068,19 @@ select
 opt
 SELECT * FROM t WHERE  '"c"' <@ j->'a'->'b'
 ----
-index-join t
+select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
- └── inverted-filter
-      ├── columns: k:1(int!null)
-      ├── inverted expression: /5
-      │    ├── tight: true, unique: false
-      │    └── union spans
-      │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
-      │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
-      ├── stats: [rows=4e-07]
-      ├── key: (1)
-      └── scan t@j_idx,inverted
-           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
-           ├── inverted constraint: /5/1
-           │    └── spans
-           │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
-           │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
-           └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
-               histogram(5)=
+ ├── scan t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── '"c"' <@ ((j:2->'a')->'b') [type=bool, outer=(2), immutable]
 
 # A query with fetch val and contains operators uses the inverted index when
 # the fetch val is on the right side.
@@ -1180,7 +1090,7 @@ SELECT * FROM t WHERE  '[1, 2]' @> j->'a'->'b'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.6667]
+ ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t

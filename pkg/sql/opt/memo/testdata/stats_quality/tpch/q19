@@ -66,17 +66,17 @@ scalar-group-by
  │    ├── save-table-name: q19_project_2
  │    ├── columns: column30:30(float!null)
  │    ├── immutable
- │    ├── stats: [rows=185.5999, distinct(30)=185.559, null(30)=0]
+ │    ├── stats: [rows=3.006723, distinct(30)=3.00672, null(30)=0]
  │    ├── project
  │    │    ├── save-table-name: q19_project_3
  │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
- │    │    ├── stats: [rows=185.5999, distinct(2)=185.6, null(2)=0, distinct(5)=5.55556, null(5)=0, distinct(6)=185.55, null(6)=0, distinct(7)=11, null(7)=0, distinct(14)=1, null(14)=0, distinct(15)=2, null(15)=0, distinct(19)=185.6, null(19)=0, distinct(22)=3, null(22)=0, distinct(24)=16.6667, null(24)=0, distinct(25)=12, null(25)=0, distinct(6,7)=185.559, null(6,7)=0, distinct(22,24,25)=185.6, null(22,24,25)=0]
+ │    │    ├── stats: [rows=3.006723, distinct(2)=3.00672, null(2)=0, distinct(5)=1, null(5)=0, distinct(6)=3.00672, null(6)=0, distinct(7)=3.00672, null(7)=0, distinct(14)=0.999756, null(14)=0, distinct(15)=1.96879, null(15)=0, distinct(19)=3.00672, null(19)=0, distinct(22)=3, null(22)=0, distinct(24)=3.00672, null(24)=0, distinct(25)=3.00672, null(25)=0, distinct(6,7)=3.00672, null(6,7)=0, distinct(22,24,25)=3.00672, null(22,24,25)=0]
  │    │    ├── fd: ()-->(14), (19)-->(22,24,25), (2)==(19), (19)==(2)
  │    │    └── distinct-on
  │    │         ├── save-table-name: q19_distinct_on_4
  │    │         ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
  │    │         ├── grouping columns: l_orderkey:1(int!null) l_linenumber:4(int!null) p_partkey:19(int!null)
- │    │         ├── stats: [rows=182.3692, distinct(1)=182.304, null(1)=0, distinct(2)=182.369, null(2)=0, distinct(4)=13.9999, null(4)=0, distinct(5)=182.369, null(5)=0, distinct(6)=182.369, null(6)=0, distinct(7)=182.369, null(7)=0, distinct(14)=182.369, null(14)=0, distinct(15)=182.369, null(15)=0, distinct(19)=163.44, null(19)=0, distinct(22)=182.369, null(22)=0, distinct(24)=182.369, null(24)=0, distinct(25)=182.369, null(25)=0, distinct(1,4,19)=182.369, null(1,4,19)=0]
+ │    │         ├── stats: [rows=101.2167, distinct(1)=101.16, null(1)=0, distinct(2)=101.217, null(2)=0, distinct(4)=8.33632, null(4)=0, distinct(5)=101.217, null(5)=0, distinct(6)=101.217, null(6)=0, distinct(7)=101.217, null(7)=0, distinct(14)=101.217, null(14)=0, distinct(15)=101.217, null(15)=0, distinct(19)=82.2877, null(19)=0, distinct(22)=101.217, null(22)=0, distinct(24)=101.217, null(24)=0, distinct(25)=101.217, null(25)=0, distinct(1,4,19)=101.217, null(1,4,19)=0]
  │    │         ├── key: (1,4,19)
  │    │         ├── fd: (1,4,19)-->(2,5-7,14,15,22,24,25), (2)==(19), (19)==(2)
  │    │         ├── union-all
@@ -84,7 +84,7 @@ scalar-group-by
  │    │         │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
  │    │         │    ├── left columns: l_orderkey:32(int) l_partkey:33(int) l_linenumber:35(int) l_quantity:36(float) l_extendedprice:37(float) l_discount:38(float) l_shipinstruct:45(char) l_shipmode:46(char) p_partkey:50(int) p_brand:53(char) p_size:55(int) p_container:56(char)
  │    │         │    ├── right columns: l_orderkey:61(int) l_partkey:62(int) l_linenumber:64(int) l_quantity:65(float) l_extendedprice:66(float) l_discount:67(float) l_shipinstruct:74(char) l_shipmode:75(char) p_partkey:79(int) p_brand:82(char) p_size:84(int) p_container:85(char)
- │    │         │    ├── stats: [rows=182.3692, distinct(1)=182.304, null(1)=0, distinct(2)=163.44, null(2)=0, distinct(4)=13.9999, null(4)=0, distinct(5)=16.3504, null(5)=0, distinct(6)=182.302, null(6)=0, distinct(7)=21.9927, null(7)=0, distinct(14)=2, null(14)=0, distinct(15)=4, null(15)=0, distinct(19)=163.44, null(19)=0, distinct(22)=3, null(22)=0, distinct(24)=21.6667, null(24)=0, distinct(25)=12, null(25)=0, distinct(1,4,19)=182.369, null(1,4,19)=0]
+ │    │         │    ├── stats: [rows=101.2167, distinct(1)=101.16, null(1)=0, distinct(2)=82.2877, null(2)=0, distinct(4)=8.33632, null(4)=0, distinct(5)=11.7949, null(5)=0, distinct(6)=101.159, null(6)=0, distinct(7)=12.3351, null(7)=0, distinct(14)=1.99976, null(14)=0, distinct(15)=3.33632, null(15)=0, distinct(19)=82.2877, null(19)=0, distinct(22)=2.33632, null(22)=0, distinct(24)=6.33632, null(24)=0, distinct(25)=5.33632, null(25)=0, distinct(1,4,19)=101.217, null(1,4,19)=0]
  │    │         │    ├── fd: (2)==(19), (19)==(2)
  │    │         │    ├── inner-join (lookup lineitem)
  │    │         │    │    ├── save-table-name: q19_lookup_join_6
@@ -139,7 +139,7 @@ scalar-group-by
  │    │         │    └── project
  │    │         │         ├── save-table-name: q19_project_10
  │    │         │         ├── columns: l_orderkey:61(int!null) l_partkey:62(int!null) l_linenumber:64(int!null) l_quantity:65(float!null) l_extendedprice:66(float!null) l_discount:67(float!null) l_shipinstruct:74(char!null) l_shipmode:75(char!null) p_partkey:79(int!null) p_brand:82(char!null) p_size:84(int!null) p_container:85(char!null)
- │    │         │         ├── stats: [rows=82.48887, distinct(61)=82.4798, null(61)=0, distinct(62)=82.4889, null(62)=0, distinct(64)=6.99995, null(64)=0, distinct(65)=5.55556, null(65)=0, distinct(66)=82.479, null(66)=0, distinct(67)=10.9939, null(67)=0, distinct(74)=1, null(74)=0, distinct(75)=2, null(75)=0, distinct(79)=82.4889, null(79)=0, distinct(82)=2, null(82)=0, distinct(84)=16.6667, null(84)=0, distinct(85)=8, null(85)=0, distinct(61,64,79)=82.4889, null(61,64,79)=0, distinct(82,84,85)=82.4889, null(82,84,85)=0]
+ │    │         │         ├── stats: [rows=1.336324, distinct(61)=1.33632, null(61)=0, distinct(62)=1.33632, null(62)=0, distinct(64)=1.33632, null(64)=0, distinct(65)=1, null(65)=0, distinct(66)=1.33632, null(66)=0, distinct(67)=1.33632, null(67)=0, distinct(74)=0.999756, null(74)=0, distinct(75)=1.33632, null(75)=0, distinct(79)=1.33632, null(79)=0, distinct(82)=1.33632, null(82)=0, distinct(84)=1.33632, null(84)=0, distinct(85)=1.33632, null(85)=0, distinct(61,64,79)=1.33632, null(61,64,79)=0, distinct(82,84,85)=1.33632, null(82,84,85)=0]
  │    │         │         ├── key: (61,64)
  │    │         │         ├── fd: ()-->(74), (61,64)-->(62,65-67,75), (79)-->(82,84,85), (62)==(79), (79)==(62)
  │    │         │         └── distinct-on
@@ -312,7 +312,7 @@ column_names  row_count  distinct_count  null_count
 {column30}    121        121             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{column30}    186.00         1.54           186.00              1.54                0.00            1.00
+{column30}    3.00           40.33 <==      3.00                40.33 <==           0.00            1.00
 
 ----Stats for q19_project_3----
 column_names       row_count  distinct_count  null_count
@@ -328,16 +328,16 @@ column_names       row_count  distinct_count  null_count
 {p_size}           121        14              0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       186.00         1.54           11.00               1.00                0.00            1.00
-{l_extendedprice}  186.00         1.54           186.00              1.58                0.00            1.00
-{l_partkey}        186.00         1.54           186.00              1.81                0.00            1.00
-{l_quantity}       186.00         1.54           6.00                4.83 <==            0.00            1.00
-{l_shipinstruct}   186.00         1.54           1.00                1.00                0.00            1.00
-{l_shipmode}       186.00         1.54           2.00                2.00 <==            0.00            1.00
-{p_brand}          186.00         1.54           3.00                1.00                0.00            1.00
-{p_container}      186.00         1.54           12.00               1.00                0.00            1.00
-{p_partkey}        186.00         1.54           186.00              1.81                0.00            1.00
-{p_size}           186.00         1.54           17.00               1.21                0.00            1.00
+{l_discount}       3.00           40.33 <==      3.00                3.67 <==            0.00            1.00
+{l_extendedprice}  3.00           40.33 <==      3.00                39.33 <==           0.00            1.00
+{l_partkey}        3.00           40.33 <==      3.00                34.33 <==           0.00            1.00
+{l_quantity}       3.00           40.33 <==      1.00                29.00 <==           0.00            1.00
+{l_shipinstruct}   3.00           40.33 <==      1.00                1.00                0.00            1.00
+{l_shipmode}       3.00           40.33 <==      2.00                2.00 <==            0.00            1.00
+{p_brand}          3.00           40.33 <==      3.00                1.00                0.00            1.00
+{p_container}      3.00           40.33 <==      3.00                4.00 <==            0.00            1.00
+{p_partkey}        3.00           40.33 <==      3.00                34.33 <==           0.00            1.00
+{p_size}           3.00           40.33 <==      3.00                4.67 <==            0.00            1.00
 
 ----Stats for q19_distinct_on_4----
 column_names       row_count  distinct_count  null_count
@@ -355,18 +355,18 @@ column_names       row_count  distinct_count  null_count
 {p_size}           121        14              0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       182.00         1.50           182.00              16.55 <==           0.00            1.00
-{l_extendedprice}  182.00         1.50           182.00              1.54                0.00            1.00
-{l_linenumber}     182.00         1.50           14.00               2.00 <==            0.00            1.00
-{l_orderkey}       182.00         1.50           182.00              1.50                0.00            1.00
-{l_partkey}        182.00         1.50           182.00              1.77                0.00            1.00
-{l_quantity}       182.00         1.50           182.00              6.28 <==            0.00            1.00
-{l_shipinstruct}   182.00         1.50           182.00              182.00 <==          0.00            1.00
-{l_shipmode}       182.00         1.50           182.00              182.00 <==          0.00            1.00
-{p_brand}          182.00         1.50           182.00              60.67 <==           0.00            1.00
-{p_container}      182.00         1.50           182.00              15.17 <==           0.00            1.00
-{p_partkey}        182.00         1.50           163.00              1.58                0.00            1.00
-{p_size}           182.00         1.50           182.00              13.00 <==           0.00            1.00
+{l_discount}       101.00         1.20           101.00              9.18 <==            0.00            1.00
+{l_extendedprice}  101.00         1.20           101.00              1.17                0.00            1.00
+{l_linenumber}     101.00         1.20           8.00                1.14                0.00            1.00
+{l_orderkey}       101.00         1.20           101.00              1.20                0.00            1.00
+{l_partkey}        101.00         1.20           101.00              1.02                0.00            1.00
+{l_quantity}       101.00         1.20           101.00              3.48 <==            0.00            1.00
+{l_shipinstruct}   101.00         1.20           101.00              101.00 <==          0.00            1.00
+{l_shipmode}       101.00         1.20           101.00              101.00 <==          0.00            1.00
+{p_brand}          101.00         1.20           101.00              33.67 <==           0.00            1.00
+{p_container}      101.00         1.20           101.00              8.42 <==            0.00            1.00
+{p_partkey}        101.00         1.20           82.00               1.26                0.00            1.00
+{p_size}           101.00         1.20           101.00              7.21 <==            0.00            1.00
 
 ----Stats for q19_union_all_5----
 column_names       row_count  distinct_count  null_count
@@ -384,18 +384,18 @@ column_names       row_count  distinct_count  null_count
 {p_size}           121        14              0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       182.00         1.50           22.00               2.00 <==            0.00            1.00
-{l_extendedprice}  182.00         1.50           182.00              1.54                0.00            1.00
-{l_linenumber}     182.00         1.50           14.00               2.00 <==            0.00            1.00
-{l_orderkey}       182.00         1.50           182.00              1.50                0.00            1.00
-{l_partkey}        182.00         1.50           163.00              1.58                0.00            1.00
-{l_quantity}       182.00         1.50           16.00               1.81                0.00            1.00
-{l_shipinstruct}   182.00         1.50           2.00                2.00 <==            0.00            1.00
-{l_shipmode}       182.00         1.50           4.00                4.00 <==            0.00            1.00
-{p_brand}          182.00         1.50           3.00                1.00                0.00            1.00
-{p_container}      182.00         1.50           12.00               1.00                0.00            1.00
-{p_partkey}        182.00         1.50           163.00              1.58                0.00            1.00
-{p_size}           182.00         1.50           22.00               1.57                0.00            1.00
+{l_discount}       101.00         1.20           12.00               1.09                0.00            1.00
+{l_extendedprice}  101.00         1.20           101.00              1.17                0.00            1.00
+{l_linenumber}     101.00         1.20           8.00                1.14                0.00            1.00
+{l_orderkey}       101.00         1.20           101.00              1.20                0.00            1.00
+{l_partkey}        101.00         1.20           82.00               1.26                0.00            1.00
+{l_quantity}       101.00         1.20           12.00               2.42 <==            0.00            1.00
+{l_shipinstruct}   101.00         1.20           2.00                2.00 <==            0.00            1.00
+{l_shipmode}       101.00         1.20           3.00                3.00 <==            0.00            1.00
+{p_brand}          101.00         1.20           2.00                1.50                0.00            1.00
+{p_container}      101.00         1.20           5.00                2.40 <==            0.00            1.00
+{p_partkey}        101.00         1.20           82.00               1.26                0.00            1.00
+{p_size}           101.00         1.20           6.00                2.33 <==            0.00            1.00
 
 ----Stats for q19_lookup_join_6----
 column_names       row_count  distinct_count  null_count
@@ -487,18 +487,18 @@ column_names       row_count  distinct_count  null_count
 {p_size}           96         14              0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       82.00          1.17           11.00               1.00                0.00            1.00
-{l_extendedprice}  82.00          1.17           82.00               1.16                0.00            1.00
-{l_linenumber}     82.00          1.17           7.00                1.00                0.00            1.00
-{l_orderkey}       82.00          1.17           82.00               1.17                0.00            1.00
-{l_partkey}        82.00          1.17           82.00               1.00                0.00            1.00
-{l_quantity}       82.00          1.17           6.00                3.50 <==            0.00            1.00
-{l_shipinstruct}   82.00          1.17           1.00                1.00                0.00            1.00
-{l_shipmode}       82.00          1.17           2.00                2.00 <==            0.00            1.00
-{p_brand}          82.00          1.17           2.00                1.00                0.00            1.00
-{p_container}      82.00          1.17           8.00                1.00                0.00            1.00
-{p_partkey}        82.00          1.17           82.00               1.00                0.00            1.00
-{p_size}           82.00          1.17           17.00               1.21                0.00            1.00
+{l_discount}       1.00           96.00 <==      1.00                11.00 <==           0.00            1.00
+{l_extendedprice}  1.00           96.00 <==      1.00                95.00 <==           0.00            1.00
+{l_linenumber}     1.00           96.00 <==      1.00                7.00 <==            0.00            1.00
+{l_orderkey}       1.00           96.00 <==      1.00                96.00 <==           0.00            1.00
+{l_partkey}        1.00           96.00 <==      1.00                82.00 <==           0.00            1.00
+{l_quantity}       1.00           96.00 <==      1.00                21.00 <==           0.00            1.00
+{l_shipinstruct}   1.00           96.00 <==      1.00                1.00                0.00            1.00
+{l_shipmode}       1.00           96.00 <==      1.00                1.00                0.00            1.00
+{p_brand}          1.00           96.00 <==      1.00                2.00 <==            0.00            1.00
+{p_container}      1.00           96.00 <==      1.00                8.00 <==            0.00            1.00
+{p_partkey}        1.00           96.00 <==      1.00                82.00 <==           0.00            1.00
+{p_size}           1.00           96.00 <==      1.00                14.00 <==           0.00            1.00
 
 ----Stats for q19_distinct_on_11----
 column_names       row_count  distinct_count  null_count

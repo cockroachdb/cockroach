@@ -48,7 +48,7 @@ sort
  ├── save-table-name: q11_sort_1
  ├── columns: ps_partkey:1(int!null) value:24(float!null)
  ├── immutable
- ├── stats: [rows=9927.829, distinct(1)=9927.83, null(1)=0, distinct(24)=9927.83, null(24)=0]
+ ├── stats: [rows=2978.349, distinct(1)=2978.35, null(1)=0, distinct(24)=2978.35, null(24)=0]
  ├── key: (1)
  ├── fd: (1)-->(24)
  ├── ordering: -24
@@ -56,7 +56,7 @@ sort
       ├── save-table-name: q11_select_2
       ├── columns: ps_partkey:1(int!null) sum:24(float!null)
       ├── immutable
-      ├── stats: [rows=9927.829, distinct(1)=9927.83, null(1)=0, distinct(24)=9927.83, null(24)=0]
+      ├── stats: [rows=2978.349, distinct(1)=2978.35, null(1)=0, distinct(24)=2978.35, null(24)=0]
       ├── key: (1)
       ├── fd: (1)-->(24)
       ├── group-by (hash)
@@ -205,8 +205,8 @@ column_names  row_count  distinct_count  null_count
 {value}       1048       1048            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_partkey}  9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
-{value}       9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
+{ps_partkey}  2978.00        2.84 <==       2978.00             2.84 <==            0.00            1.00
+{value}       2978.00        2.84 <==       2978.00             2.84 <==            0.00            1.00
 
 ----Stats for q11_select_2----
 column_names  row_count  distinct_count  null_count
@@ -214,8 +214,8 @@ column_names  row_count  distinct_count  null_count
 {sum}         1048       1048            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_partkey}  9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
-{sum}         9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
+{ps_partkey}  2978.00        2.84 <==       2978.00             2.84 <==            0.00            1.00
+{sum}         2978.00        2.84 <==       2978.00             2.84 <==            0.00            1.00
 
 ----Stats for q11_group_by_3----
 column_names  row_count  distinct_count  null_count

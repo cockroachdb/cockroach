@@ -18401,7 +18401,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
+  estimated row count: 2,064,406,071 (33% of the table; stats collected <hidden> ago)
   table: t1401@t1401_c_idx
   spans: [/'2022-01-25 21:17:27.216095+00' - ]
 
@@ -18427,17 +18427,17 @@ vectorized: true
 │ count: 100
 │
 └── • filter
-    │ estimated row count: 1
-    │ filter: (f = 4458256) AND (d IS NOT NULL)
+    │ estimated row count: 149
+    │ filter: d IS NOT NULL
     │
     └── • index join
-        │ estimated row count: 1
+        │ estimated row count: 229
         │ table: t1401@primary
         │
-        └── • revscan
-              estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
-              table: t1401@t1401_c_idx
-              spans: [/'2022-01-25 21:17:27.216095+00' - ]
+        └── • scan
+              estimated row count: 154 - 229 (<0.01% of the table; stats collected <hidden> ago)
+              table: t1401@t1401_f_c_idx1 (partial index)
+              spans: [/4458256 - /4458256/'2022-01-25 21:17:27.216095+00']
 
 statement ok
 RESET optimizer_use_forecasts

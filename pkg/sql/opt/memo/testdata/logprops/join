@@ -1059,7 +1059,7 @@ semi-join (hash)
  │    │    ├── prune: (5)
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    ├── limit hint: 30.00
+ │    │    │    ├── limit hint: 100.00
  │    │    │    └── prune: (5,6)
  │    │    └── filters
  │    │         └── gt [type=bool, outer=(6), constraints=(/6: [/21 - ]; tight)]

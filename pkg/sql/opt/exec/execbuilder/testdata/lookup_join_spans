@@ -572,31 +572,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 100
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 100
+    │ table: metric_values@metric_values_pkey
+    │ equality: (id) = (metric_id)
+    │ pred: (nullable >= -20) AND (nullable <= -10)
     │
-    └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+    └── • index join
+        │ estimated row count: 1
+        │ table: metrics@metrics_pkey
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: ((nullable >= -20) AND (nullable <= -10)) AND (id = metric_id)
-            │
-            └── • scan
-                  estimated row count: 1 (10% of the table; stats collected <hidden> ago)
-                  table: metrics@name_index
-                  spans: [/'cpu' - /'cpu']
+        └── • scan
+              estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+              table: metrics@name_index
+              spans: [/'cpu' - /'cpu']
 
 # Test NULL values in > unbounded lookup span.
 query T
@@ -613,31 +606,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 33
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 33
+    │ table: metric_values@metric_values_pkey
+    │ equality: (id) = (metric_id)
+    │ pred: nullable > 1
     │
-    └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+    └── • index join
+        │ estimated row count: 1
+        │ table: metrics@metrics_pkey
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable > 1) AND (id = metric_id)
-            │
-            └── • scan
-                  estimated row count: 1 (10% of the table; stats collected <hidden> ago)
-                  table: metrics@name_index
-                  spans: [/'cpu' - /'cpu']
+        └── • scan
+              estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+              table: metrics@name_index
+              spans: [/'cpu' - /'cpu']
 
 # Test NULL values in >= unbounded lookup span.
 query T
@@ -654,31 +640,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 33
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 33
+    │ table: metric_values@metric_values_pkey
+    │ equality: (id) = (metric_id)
+    │ pred: nullable >= 1
     │
-    └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+    └── • index join
+        │ estimated row count: 1
+        │ table: metrics@metrics_pkey
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable >= 1) AND (id = metric_id)
-            │
-            └── • scan
-                  estimated row count: 1 (10% of the table; stats collected <hidden> ago)
-                  table: metrics@name_index
-                  spans: [/'cpu' - /'cpu']
+        └── • scan
+              estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+              table: metrics@name_index
+              spans: [/'cpu' - /'cpu']
 
 
 # Test NULL values in < unbounded lookup span.
@@ -696,31 +675,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 33
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 33
+    │ table: metric_values@metric_values_pkey
+    │ equality: (id) = (metric_id)
+    │ pred: nullable < -10
     │
-    └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+    └── • index join
+        │ estimated row count: 1
+        │ table: metrics@metrics_pkey
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable < -10) AND (id = metric_id)
-            │
-            └── • scan
-                  estimated row count: 1 (10% of the table; stats collected <hidden> ago)
-                  table: metrics@name_index
-                  spans: [/'cpu' - /'cpu']
+        └── • scan
+              estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+              table: metrics@name_index
+              spans: [/'cpu' - /'cpu']
 
 # Test NULL values in <= unbounded lookup span.
 query T
@@ -737,31 +709,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 33
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 33
+    │ table: metric_values@metric_values_pkey
+    │ equality: (id) = (metric_id)
+    │ pred: nullable <= -10
     │
-    └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+    └── • index join
+        │ estimated row count: 1
+        │ table: metrics@metrics_pkey
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable <= -10) AND (id = metric_id)
-            │
-            └── • scan
-                  estimated row count: 1 (10% of the table; stats collected <hidden> ago)
-                  table: metrics@name_index
-                  spans: [/'cpu' - /'cpu']
+        └── • scan
+              estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+              table: metrics@name_index
+              spans: [/'cpu' - /'cpu']
 
 # Test NULL values in WHERE equality conditions.
 query T
@@ -820,28 +785,26 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 3
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 3
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 3
+        │ table: metric_values@secondary
+        │ lookup condition: (("time" < '2020-01-01 00:00:10+00') AND (id = metric_id)) AND ("lookup_join_const_col_@3" = nullable)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (("time" < '2020-01-01 00:00:10+00') AND (id = metric_id)) AND ("lookup_join_const_col_@3" = nullable)
+        └── • render
             │
-            └── • render
+            └── • index join
+                │ estimated row count: 1
+                │ table: metrics@metrics_pkey
                 │
                 └── • scan
                       estimated row count: 1 (10% of the table; stats collected <hidden> ago)

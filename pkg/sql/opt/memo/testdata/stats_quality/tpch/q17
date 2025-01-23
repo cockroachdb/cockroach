@@ -62,7 +62,7 @@ project
  │    │    ├── key columns: [1 4] = [1 4]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
- │    │    ├── stats: [rows=2008.967, distinct(2)=200.094, null(2)=0, distinct(5)=50, null(5)=0, distinct(6)=2006.79, null(6)=0, distinct(19)=200.094, null(19)=0, distinct(49)=200.094, null(49)=0]
+ │    │    ├── stats: [rows=602.6901, distinct(2)=200.094, null(2)=0, distinct(5)=50, null(5)=0, distinct(6)=602.494, null(6)=0, distinct(19)=200.094, null(19)=0, distinct(49)=200.094, null(49)=0]
  │    │    ├── fd: (19)-->(49), (2)==(19), (19)==(2)
  │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │    │    ├── save-table-name: q17_lookup_join_4
@@ -169,11 +169,11 @@ column_names       row_count  distinct_count  null_count
 {p_partkey}        587        195             0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{?column?}         2009.00        3.42 <==       200.00              1.08                0.00            1.00
-{l_extendedprice}  2009.00        3.42 <==       2007.00             4.67 <==            0.00            1.00
-{l_partkey}        2009.00        3.42 <==       200.00              1.03                0.00            1.00
-{l_quantity}       2009.00        3.42 <==       50.00               8.33 <==            0.00            1.00
-{p_partkey}        2009.00        3.42 <==       200.00              1.03                0.00            1.00
+{?column?}         603.00         1.03           200.00              1.08                0.00            1.00
+{l_extendedprice}  603.00         1.03           602.00              1.40                0.00            1.00
+{l_partkey}        603.00         1.03           200.00              1.03                0.00            1.00
+{l_quantity}       603.00         1.03           50.00               8.33 <==            0.00            1.00
+{p_partkey}        603.00         1.03           200.00              1.03                0.00            1.00
 
 ----Stats for q17_lookup_join_4----
 column_names    row_count  distinct_count  null_count

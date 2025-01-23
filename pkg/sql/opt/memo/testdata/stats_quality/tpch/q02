@@ -73,7 +73,7 @@ project
  ├── save-table-name: q2_project_1
  ├── columns: s_acctbal:17(float!null) s_name:13(char!null) n_name:29(char!null) p_partkey:1(int!null) p_mfgr:3(char!null) s_address:14(varchar!null) s_phone:16(char!null) s_comment:18(varchar!null)
  ├── cardinality: [0 - 100]
- ├── stats: [rows=1.000013, distinct(1)=1, null(1)=0, distinct(3)=0.906664, null(3)=0, distinct(13)=0.632263, null(13)=0, distinct(14)=0.632263, null(14)=0, distinct(16)=0.632263, null(16)=0, distinct(17)=0.632263, null(17)=0, distinct(18)=0.632263, null(18)=0, distinct(29)=0.632263, null(29)=0]
+ ├── stats: [rows=1.000004, distinct(1)=1, null(1)=0, distinct(3)=0.907375, null(3)=0, distinct(13)=0.632583, null(13)=0, distinct(14)=0.632583, null(14)=0, distinct(16)=0.632583, null(16)=0, distinct(17)=0.632583, null(17)=0, distinct(18)=0.632583, null(18)=0, distinct(29)=0.632583, null(29)=0]
  ├── fd: (1)-->(3)
  ├── ordering: -17,+29,+13,+1
  └── limit
@@ -81,7 +81,7 @@ project
       ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_name:13(char!null) s_address:14(varchar!null) s_phone:16(char!null) s_acctbal:17(float!null) s_comment:18(varchar!null) ps_partkey:21(int!null) ps_suppkey:22(int!null) ps_supplycost:24(float!null) n_name:29(char!null) min:66(float!null)
       ├── internal-ordering: -17,+29,+13,+(1|21) opt(6)
       ├── cardinality: [0 - 100]
-      ├── stats: [rows=1.000013, distinct(1)=1, null(1)=0, distinct(3)=0.906664, null(3)=0, distinct(5)=0.99706, null(5)=0, distinct(6)=0.632263, null(6)=0, distinct(13)=0.632263, null(13)=0, distinct(14)=0.632263, null(14)=0, distinct(16)=0.632263, null(16)=0, distinct(17)=0.632263, null(17)=0, distinct(18)=0.632263, null(18)=0, distinct(21)=1, null(21)=0, distinct(22)=0.632251, null(22)=0, distinct(24)=0.632263, null(24)=0, distinct(29)=0.632263, null(29)=0, distinct(66)=0.632263, null(66)=0]
+      ├── stats: [rows=1.000004, distinct(1)=1, null(1)=0, distinct(3)=0.907375, null(3)=0, distinct(5)=0.997923, null(5)=0, distinct(6)=0.632583, null(6)=0, distinct(13)=0.632583, null(13)=0, distinct(14)=0.632583, null(14)=0, distinct(16)=0.632583, null(16)=0, distinct(17)=0.632583, null(17)=0, distinct(18)=0.632583, null(18)=0, distinct(21)=1, null(21)=0, distinct(22)=0.63257, null(22)=0, distinct(24)=0.632583, null(24)=0, distinct(29)=0.632583, null(29)=0, distinct(66)=0.632583, null(66)=0]
       ├── key: (21,22)
       ├── fd: ()-->(6), (1)-->(3,5), (21,22)-->(13,14,16-18,24,29,66), (22)-->(13,14,16-18,29), (24)==(66), (66)==(24), (1)==(21), (21)==(1)
       ├── ordering: -17,+29,+13,+(1|21) opt(6) [actual: -17,+29,+13,+21]
@@ -90,7 +90,7 @@ project
       │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_name:13(char!null) s_address:14(varchar!null) s_phone:16(char!null) s_acctbal:17(float!null) s_comment:18(varchar!null) ps_partkey:21(int!null) ps_suppkey:22(int!null) ps_supplycost:24(float!null) n_name:29(char!null) min:66(float!null)
       │    ├── key columns: [21] = [1]
       │    ├── lookup columns are key
-      │    ├── stats: [rows=1.000013, distinct(1)=1, null(1)=0, distinct(3)=0.906664, null(3)=0, distinct(5)=0.99706, null(5)=0, distinct(6)=0.632263, null(6)=0, distinct(13)=0.632263, null(13)=0, distinct(14)=0.632263, null(14)=0, distinct(16)=0.632263, null(16)=0, distinct(17)=0.632263, null(17)=0, distinct(18)=0.632263, null(18)=0, distinct(21)=1, null(21)=0, distinct(22)=0.632251, null(22)=0, distinct(24)=0.632263, null(24)=0, distinct(29)=0.632263, null(29)=0, distinct(66)=0.632263, null(66)=0]
+      │    ├── stats: [rows=1.000004, distinct(1)=1, null(1)=0, distinct(3)=0.907375, null(3)=0, distinct(5)=0.997923, null(5)=0, distinct(6)=0.632583, null(6)=0, distinct(13)=0.632583, null(13)=0, distinct(14)=0.632583, null(14)=0, distinct(16)=0.632583, null(16)=0, distinct(17)=0.632583, null(17)=0, distinct(18)=0.632583, null(18)=0, distinct(21)=1, null(21)=0, distinct(22)=0.63257, null(22)=0, distinct(24)=0.632583, null(24)=0, distinct(29)=0.632583, null(29)=0, distinct(66)=0.632583, null(66)=0]
       │    ├── key: (21,22)
       │    ├── fd: ()-->(6), (1)-->(3,5), (21,22)-->(13,14,16-18,24,29,66), (22)-->(13,14,16-18,29), (24)==(66), (66)==(24), (1)==(21), (21)==(1)
       │    ├── ordering: -17,+29,+13,+(1|21) opt(6) [actual: -17,+29,+13,+21]

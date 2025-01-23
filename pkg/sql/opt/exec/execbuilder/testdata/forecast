@@ -922,7 +922,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  estimated row count: 3 (33% of the table; stats collected <hidden> ago)
   table: g@g_pkey
   spans: [/9 - ]
 
@@ -932,9 +932,9 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM g WHERE a > 8
 scan g
  ├── columns: a:1
  ├── constraint: /1: [/9 - ]
- ├── stats: [rows=1.8e-09, distinct(1)=1.8e-09, null(1)=0]
+ ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=
- ├── cost: 18.02
+ ├── cost: 21.05
  ├── key: (1)
  └── distribution: test
 
@@ -969,7 +969,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  estimated row count: 8 (33% of the table; stats collected <hidden> ago)
   table: c@c_pkey
   spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
@@ -979,9 +979,9 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h > '1988-08-07'
 scan c
  ├── columns: h:1
  ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00' - ]
- ├── stats: [rows=4.8e-09, distinct(1)=4.8e-09, null(1)=0]
+ ├── stats: [rows=8, distinct(1)=8, null(1)=0]
  │   histogram(1)=
- ├── cost: 18.02
+ ├── cost: 26.58
  ├── key: (1)
  └── distribution: test
 
@@ -992,7 +992,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  estimated row count: 1 (33% of the table; stats collected <hidden> ago)
   table: x@x_pkey
   spans: [/17 - ]
 
@@ -1002,9 +1002,9 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM x WHERE a > 16
 scan x
  ├── columns: a:1
  ├── constraint: /1: [/17 - ]
- ├── stats: [rows=8e-10, distinct(1)=8e-10, null(1)=0]
+ ├── stats: [rows=1.333333, distinct(1)=1.33333, null(1)=0]
  │   histogram(1)=
- ├── cost: 18.02
+ ├── cost: 19.3666667
  ├── key: (1)
  └── distribution: test
 
@@ -1168,7 +1168,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  estimated row count: 3 (33% of the table; stats collected <hidden> ago)
   table: g@g_pkey
   spans: [/9 - ]
 
@@ -1190,7 +1190,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  estimated row count: 8 (33% of the table; stats collected <hidden> ago)
   table: c@c_pkey
   spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
@@ -1201,7 +1201,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  estimated row count: 1 (33% of the table; stats collected <hidden> ago)
   table: x@x_pkey
   spans: [/17 - ]
 
@@ -1547,11 +1547,11 @@ distribution: local
 vectorized: true
 ·
 • filter
-│ estimated row count: 0
+│ estimated row count: 100
 │ filter: b = 13
 │
 └── • scan
-      estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago; using stats forecast)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago; using stats forecast)
       table: t@t_a_idx
       spans: [/3 - /3]
 
@@ -1560,19 +1560,19 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM t WHERE a = 3 AND b = 13
 ----
 select
  ├── columns: a:1 b:2
- ├── stats: [rows=2e-08, distinct(1)=2e-08, null(1)=0, distinct(2)=2e-08, null(2)=0]
+ ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
  │   histogram(1)=
- │   histogram(2)=  0 2e-08
- │                <--- 13 -
- ├── cost: 18.05
+ │   histogram(2)=  0 100
+ │                <--- 13
+ ├── cost: 123.05
  ├── fd: ()-->(1,2)
  ├── distribution: test
  ├── scan t@t_a_idx
  │    ├── columns: a:1 b:2
  │    ├── constraint: /1/3: [/3 - /3]
- │    ├── stats: [rows=2e-08, distinct(1)=2e-08, null(1)=0]
+ │    ├── stats: [rows=100, distinct(1)=1, null(1)=0]
  │    │   histogram(1)=
- │    ├── cost: 18.02
+ │    ├── cost: 122.02
  │    ├── fd: ()-->(1)
  │    └── distribution: test
  └── filters
@@ -1588,36 +1588,37 @@ distribution: local
 vectorized: true
 ·
 • filter
-│ estimated row count: 0
-│ filter: a = 3
+│ estimated row count: 100
+│ filter: b = 13
 │
 └── • scan
-      estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
-      table: t@t_b_idx
-      spans: [/13 - /13]
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: t@t_a_idx
+      spans: [/3 - /3]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM t WHERE a = 3 AND b = 13
 ----
 select
  ├── columns: a:1 b:2
- ├── stats: [rows=2e-08, distinct(1)=2e-08, null(1)=0, distinct(2)=2e-08, null(2)=0]
- │   histogram(1)=  0 2e-08
- │                <---- 3 -
+ ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+ │   histogram(1)=  0 100
+ │                <--- 3
  │   histogram(2)=
- ├── cost: 18.05
+ ├── cost: 123.05
  ├── fd: ()-->(1,2)
  ├── distribution: test
- ├── scan t@t_b_idx
+ ├── scan t@t_a_idx
  │    ├── columns: a:1 b:2
- │    ├── constraint: /2/3: [/13 - /13]
- │    ├── stats: [rows=2e-08, distinct(2)=2e-08, null(2)=0]
- │    │   histogram(2)=
- │    ├── cost: 18.02
- │    ├── fd: ()-->(2)
+ │    ├── constraint: /1/3: [/3 - /3]
+ │    ├── stats: [rows=100, distinct(1)=1, null(1)=0]
+ │    │   histogram(1)=  0 100
+ │    │                <--- 3
+ │    ├── cost: 122.02
+ │    ├── fd: ()-->(1)
  │    └── distribution: test
  └── filters
-      └── a:1 = 3 [outer=(1), constraints=(/1: [/3 - /3]; tight), fd=()-->(1)]
+      └── b:2 = 13 [outer=(2), constraints=(/2: [/13 - /13]; tight), fd=()-->(2)]
 
 statement ok
 RESET enable_zigzag_join

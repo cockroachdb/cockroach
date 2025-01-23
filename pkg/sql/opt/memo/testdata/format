@@ -8,8 +8,8 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
- ├── stats: [rows=98.17716]
- ├── cost: 1128.48684
+ ├── stats: [rows=64.74279]
+ ├── cost: 1114.0127
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── ordering: +1
@@ -17,8 +17,8 @@ project
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
  │    ├── immutable
- │    ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
- │    ├── cost: 1126.50329
+ │    ├── stats: [rows=64.74279, distinct(1)=64.7428, null(1)=0.99]
+ │    ├── cost: 1112.69785
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
@@ -27,15 +27,15 @@ project
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
- │         ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
- │         ├── cost: 1109.5623
+ │         ├── stats: [rows=64.74279, distinct(1)=64.7428, null(1)=0.99]
+ │         ├── cost: 1102.29744
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
  │         ├── select
  │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
  │         │    ├── immutable
- │         │    ├── stats: [rows=330, distinct(1)=98.1772, null(1)=3.3, distinct(2)=100, null(2)=0]
+ │         │    ├── stats: [rows=99, distinct(1)=64.7428, null(1)=0.99, distinct(2)=99, null(2)=0]
  │         │    ├── cost: 1098.65
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
@@ -67,22 +67,22 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
- ├── stats: [rows=98.17716]
- ├── cost: 1128.48684
+ ├── stats: [rows=64.74279]
+ ├── cost: 1114.0127
  ├── ordering: +1
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
- │    ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
- │    ├── cost: 1126.50329
+ │    ├── stats: [rows=64.74279, distinct(1)=64.7428, null(1)=0.99]
+ │    ├── cost: 1112.69785
  │    ├── ordering: +1
  │    └── group-by (hash)
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
- │         ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
- │         ├── cost: 1109.5623
+ │         ├── stats: [rows=64.74279, distinct(1)=64.7428, null(1)=0.99]
+ │         ├── cost: 1102.29744
  │         ├── select
  │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
- │         │    ├── stats: [rows=330, distinct(1)=98.1772, null(1)=3.3, distinct(2)=100, null(2)=0]
+ │         │    ├── stats: [rows=99, distinct(1)=64.7428, null(1)=0.99, distinct(2)=99, null(2)=0]
  │         │    ├── cost: 1098.65
  │         │    ├── scan t.public.t
  │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
@@ -282,25 +282,25 @@ opt format=(hide-miscprops,hide-physprops,hide-columns)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 project
- ├── stats: [rows=98.17716]
- ├── cost: 1128.48684
+ ├── stats: [rows=64.74279]
+ ├── cost: 1114.0127
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── prune: (1,6,7)
  ├── sort
- │    ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
- │    ├── cost: 1126.50329
+ │    ├── stats: [rows=64.74279, distinct(1)=64.7428, null(1)=0.99]
+ │    ├── cost: 1112.69785
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── prune: (6)
  │    └── group-by (hash)
- │         ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
- │         ├── cost: 1109.5623
+ │         ├── stats: [rows=64.74279, distinct(1)=64.7428, null(1)=0.99]
+ │         ├── cost: 1102.29744
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
  │         ├── select
- │         │    ├── stats: [rows=330, distinct(1)=98.1772, null(1)=3.3, distinct(2)=100, null(2)=0]
+ │         │    ├── stats: [rows=99, distinct(1)=64.7428, null(1)=0.99, distinct(2)=99, null(2)=0]
  │         │    ├── cost: 1098.65
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
@@ -396,8 +396,8 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
- ├── stats: [rows=39.99842]
- ├── cost: 1115.77722
+ ├── stats: [rows=37.12841]
+ ├── cost: 1108.19107
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── ordering: +1
@@ -405,8 +405,8 @@ project
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
  │    ├── immutable
- │    ├── stats: [rows=39.99842, distinct(1)=39.9984, null(1)=0]
- │    ├── cost: 1114.95725
+ │    ├── stats: [rows=37.12841, distinct(1)=37.1284, null(1)=0]
+ │    ├── cost: 1107.42851
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
@@ -415,15 +415,15 @@ project
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
- │         ├── stats: [rows=39.99842, distinct(1)=39.9984, null(1)=0]
- │         ├── cost: 1109.07998
+ │         ├── stats: [rows=37.12841, distinct(1)=37.1284, null(1)=0]
+ │         ├── cost: 1102.05128
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
  │         ├── select
  │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
  │         │    ├── immutable
- │         │    ├── stats: [rows=333.3333, distinct(1)=39.9984, null(1)=0, distinct(2)=40, null(2)=0]
+ │         │    ├── stats: [rows=100, distinct(1)=37.1284, null(1)=0, distinct(2)=40, null(2)=0]
  │         │    ├── cost: 1098.65
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
@@ -461,8 +461,8 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
- ├── stats: [rows=39.99842]
- ├── cost: 1115.77722
+ ├── stats: [rows=37.12841]
+ ├── cost: 1108.19107
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── ordering: +1
@@ -470,8 +470,8 @@ project
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
  │    ├── immutable
- │    ├── stats: [rows=39.99842, distinct(1)=39.9984, null(1)=0]
- │    ├── cost: 1114.95725
+ │    ├── stats: [rows=37.12841, distinct(1)=37.1284, null(1)=0]
+ │    ├── cost: 1107.42851
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
@@ -480,15 +480,15 @@ project
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
- │         ├── stats: [rows=39.99842, distinct(1)=39.9984, null(1)=0]
- │         ├── cost: 1109.07998
+ │         ├── stats: [rows=37.12841, distinct(1)=37.1284, null(1)=0]
+ │         ├── cost: 1102.05128
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
  │         ├── select
  │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
  │         │    ├── immutable
- │         │    ├── stats: [rows=333.3333, distinct(1)=39.9984, null(1)=0, distinct(2)=40, null(2)=0]
+ │         │    ├── stats: [rows=100, distinct(1)=37.1284, null(1)=0, distinct(2)=40, null(2)=0]
  │         │    ├── cost: 1098.65
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
@@ -522,7 +522,7 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
- ├── cost: 1115.77722
+ ├── cost: 1108.19107
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── ordering: +1
@@ -530,7 +530,7 @@ project
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
  │    ├── immutable
- │    ├── cost: 1114.95725
+ │    ├── cost: 1107.42851
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
@@ -539,7 +539,7 @@ project
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
- │         ├── cost: 1109.07998
+ │         ├── cost: 1102.05128
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
