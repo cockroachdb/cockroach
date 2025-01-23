@@ -421,37 +421,37 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 				// the PTS to be installed and then cause the GC.
 				for i := 0; i < 2; i++ {
 					i := i
-					if err := func() error {
+					if err := func() (retErr error) {
 						t.Logf("i=%d begin running operations in the middle of backfill", i)
 						<-backfillQueryWait
 						defer func() {
 							backfillQueryResume <- struct{}{}
-							t.Logf("i=%d finished running operations in the middle of backfill", i)
+							t.Logf("i=%d finished running operations in the middle of backfill. retErr: %v", i, retErr)
 						}()
 						if _, err := db.ExecContext(ctx, "SET sql_safe_updates=off"); err != nil {
-							return err
+							return errors.Wrap(err, "failed to set sql_safe_updates")
 						}
 						if _, err := db.ExecContext(ctx, fmt.Sprintf(
 							"BEGIN; DELETE FROM t LIMIT %d; INSERT INTO t VALUES('9999999'); COMMIT",
 							rowsDeletedPerIteration,
 						)); err != nil {
-							return err
+							return errors.Wrap(err, "failed to DELETE and INSERT")
 						}
 						if err := refreshTo(ctx, tableKey, ts.Clock().Now()); err != nil {
-							return err
+							return errors.Wrap(err, "failed to refresh in-memory PTS")
 						}
 						if err := refreshPTSCacheTo(ctx, ts.Clock().Now()); err != nil {
-							return err
+							return errors.Wrap(err, "failed to refresh PTS cache")
 						}
 						if _, err := db.ExecContext(ctx, `
 SELECT crdb_internal.kv_enqueue_replica(range_id, 'mvccGC', true)
 FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); err != nil {
-							return err
+							return errors.Wrap(err, "failed to enqueue replica for GC")
 						}
 						row := db.QueryRowContext(ctx, "SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
 						var count int
 						if err := row.Scan(&count); err != nil {
-							return err
+							return errors.Wrap(err, "failed to query protected_ts_records")
 						}
 						// First iteration is before the PTS is setup, so it will be 0. Second
 						// iteration the PTS should be setup.
@@ -466,14 +466,22 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); er
 				}
 				return nil
 			})
-			grp.GoCtx(func(ctx context.Context) error {
+			grp.GoCtx(func(ctx context.Context) (retErr error) {
 				// Backfill with the PTS being not setup early enough, which will
 				// lead to failure.
+				defer func() {
+					if retErr != nil {
+						t.Logf("baackfill goroutine failed: %v", retErr)
+					}
+				}()
 				t.Logf("running backfill with PTS not setup early enough")
 				blockBackFillsForPTSFailure.Swap(true)
 				_, err := db.ExecContext(ctx, tc.backfillSchemaChange)
 				if err == nil || !testutils.IsError(err, "unable to retry backfill since fixed timestamp is before the GC timestamp") {
-					return errors.AssertionFailedf("expected error was not hit")
+					if err == nil {
+						return errors.AssertionFailedf("expected error was not hit")
+					}
+					return errors.NewAssertionErrorWithWrappedErrf(err, "expected error was not hit")
 				}
 				err = testutils.SucceedsSoonError(func() error {
 					// Wait until schema change is fully rolled back.
@@ -483,7 +491,7 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); er
 						tc.jobDescriptionPrefix,
 					)).Scan(&status)
 					if err != nil {
-						return err
+						return errors.Wrap(err, "could not read jobs table")
 					}
 					if status != "failed" {
 						return errors.Newf("schema change not rolled back yet; status=%s", status)
@@ -499,7 +507,7 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); er
 				blockBackFillsForPTSCheck.Swap(true)
 				_, err = db.ExecContext(ctx, tc.backfillSchemaChange)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "failed to run backfill")
 				}
 				return nil
 			})
