@@ -1676,9 +1676,11 @@ func (rc *rangeController) StatusRaftMuLocked() serverpb.RACStatus {
 			defer rs.sendStream.mu.Unlock()
 			s.IndexToSend = rs.sendStream.mu.sendQueue.indexToSend
 			s.NextRaftIndexInitial = rs.sendStream.mu.nextRaftIndexInitial
-			s.NextRaftIndex = rs.sendStream.mu.sendQueue.nextRaftIndex
 			s.ForceFlushStopIndex = uint64(rs.sendStream.mu.sendQueue.forceFlushStopIndex)
-			s.EvalTokensHeld = convertTokensSlice(rs.sendStream.mu.eval.tokensDeducted[:])
+			// Don't waste space if there are no tokens held.
+			if tokens := rs.sendStream.mu.eval.tokensDeducted[:]; holdsTokens(tokens) {
+				s.EvalTokensHeld = convertTokensSlice(tokens)
+			}
 		}()
 		if rs.sendStream.holdsTokensRaftMuLocked() {
 			s.SendTokensHeld = convertTokensSlice(rs.sendStream.raftMu.tracker.deducted[:])
@@ -1686,6 +1688,12 @@ func (rc *rangeController) StatusRaftMuLocked() serverpb.RACStatus {
 		status.Streams[uint64(id)] = s
 	}
 	return status
+}
+
+func holdsTokens(tokens []kvflowcontrol.Tokens) bool {
+	return slices.ContainsFunc(tokens, func(tokens kvflowcontrol.Tokens) bool {
+		return tokens != 0
+	})
 }
 
 func convertTokensSlice(tokens []kvflowcontrol.Tokens) []int64 {
