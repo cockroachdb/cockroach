@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -178,7 +179,7 @@ func (p *planner) AlterPrimaryKey(
 		Unique:            true,
 		CreatedExplicitly: true,
 		EncodingType:      catenumpb.PrimaryIndexEncoding,
-		Type:              descpb.IndexDescriptor_FORWARD,
+		Type:              idxtype.FORWARD,
 		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
 		// This is not possible until then because of a limitation in 21.2 which
 		// affects mixed-21.2-22.1-version clusters (issue #78426).
@@ -433,7 +434,7 @@ func (p *planner) AlterPrimaryKey(
 			return true, nil
 		}
 
-		return !idx.IsUnique() || idx.GetType() == descpb.IndexDescriptor_INVERTED, nil
+		return !idx.IsUnique() || idx.GetType() == idxtype.INVERTED, nil
 	}
 	var indexesToRewrite []catalog.Index
 	for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
@@ -809,7 +810,7 @@ func setKeySuffixAndStoredColumnIDsFromPrimary(
 	// Second, determine the key suffix columns: add all primary key columns
 	// which have not already been in the key columns in the secondary index.
 	toAdd.KeySuffixColumnIDs = nil
-	invIdx := toAdd.Type == descpb.IndexDescriptor_INVERTED
+	invIdx := toAdd.Type == idxtype.INVERTED
 	for _, colID := range primary.KeyColumnIDs {
 		if !idxColIDs.Contains(colID) {
 			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)

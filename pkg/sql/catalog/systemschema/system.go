@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -3168,7 +3169,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{13},
 				KeySuffixColumnIDs:  []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
-				Type:                descpb.IndexDescriptor_INVERTED,
+				Type:                idxtype.INVERTED,
 				InvertedColumnKinds: []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_DEFAULT},
 			},
 			descpb.IndexDescriptor{
@@ -5189,7 +5190,7 @@ var (
 			},
 			descpb.IndexDescriptor{
 				Name:                "db_name_gin",
-				Type:                descpb.IndexDescriptor_INVERTED,
+				Type:                idxtype.INVERTED,
 				ID:                  8,
 				Unique:              false,
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -5201,7 +5202,7 @@ var (
 			},
 			descpb.IndexDescriptor{
 				Name:                "table_name_gin",
-				Type:                descpb.IndexDescriptor_INVERTED,
+				Type:                idxtype.INVERTED,
 				ID:                  9,
 				Unique:              false,
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -5213,7 +5214,7 @@ var (
 			},
 			descpb.IndexDescriptor{
 				Name:                "schema_name_gin",
-				Type:                descpb.IndexDescriptor_INVERTED,
+				Type:                idxtype.INVERTED,
 				ID:                  10,
 				Unique:              false,
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -5225,7 +5226,7 @@ var (
 			},
 			descpb.IndexDescriptor{
 				Name:                "store_ids_gin",
-				Type:                descpb.IndexDescriptor_INVERTED,
+				Type:                idxtype.INVERTED,
 				ID:                  11,
 				Unique:              false,
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -440,7 +441,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		// (i.e., with different configurations). See #50655.
 		if len(reqStat.columns) == 1 {
 			for _, index := range desc.PublicNonPrimaryIndexes() {
-				if index.GetType() == descpb.IndexDescriptor_INVERTED && index.InvertedColumnID() == column.GetID() {
+				if index.GetType() == idxtype.INVERTED && index.InvertedColumnID() == column.GetID() {
 					spec.Index = index.IndexDesc()
 					break
 				}
@@ -680,7 +681,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			if len(s.columns) == 1 {
 				col := s.columns[0]
 				for _, index := range desc.PublicNonPrimaryIndexes() {
-					if index.GetType() == descpb.IndexDescriptor_INVERTED && index.InvertedColumnID() == col {
+					if index.GetType() == idxtype.INVERTED && index.InvertedColumnID() == col {
 						spec.Index = index.IndexDesc()
 						break
 					}
