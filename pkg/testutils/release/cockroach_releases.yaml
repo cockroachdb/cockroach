@@ -32,3 +32,6 @@
 "24.3":
   latest: 24.3.3
   predecessor: "24.2"
+"25.1":
+  latest: 25.1.0-beta.1
+  predecessor: "24.3"
