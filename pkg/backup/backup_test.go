@@ -108,7 +108,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/redact"
-	pgx "github.com/jackc/pgx/v4"
+	pgx "github.com/jackc/pgx/v5"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -7393,6 +7393,8 @@ func TestClientDisconnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "may cause connection delays, leading to a context deadline exceeded error")
+
 	const restoreDB = "restoredb"
 
 	testCases := []struct {
@@ -7485,7 +7487,9 @@ func TestClientDisconnect(t *testing.T) {
 				assert.NoError(t, err)
 				defer func() { assert.NoError(t, db.Close(ctx)) }()
 				_, err = db.Exec(ctxToCancel, command)
-				assert.Equal(t, context.Canceled, errors.Unwrap(err))
+				// Check the root cause of the error, as pgx v5 may wrap additional
+				// errors around a context-canceled error.
+				assert.Equal(t, context.Canceled, errors.Cause(err))
 			}(testCase.jobCommand)
 
 			// Wait for the job to start.

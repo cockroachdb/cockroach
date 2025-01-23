@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +54,7 @@ func TestSessionMigration(t *testing.T) {
 
 			config, err := pgx.ParseConfig(pgURL.String())
 			require.NoError(t, err)
-			config.PreferSimpleProtocol = true
+			config.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 			conn, err := pgx.ConnectConfig(ctx, config)
 			require.NoError(t, err)
 
@@ -83,7 +83,7 @@ func TestSessionMigration(t *testing.T) {
 
 			config, err := pgx.ParseConfig(pgURL.String())
 			require.NoError(t, err)
-			config.PreferSimpleProtocol = true
+			config.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 			conn, err := pgx.ConnectConfig(ctx, config)
 			require.NoError(t, err)
 
