@@ -124,8 +124,8 @@ func collectIndexRecs(
 			for _, stmt := range stmts {
 				switch stmt := stmt.AST.(type) {
 				case *tree.CreateIndex:
-					// Ignore all the inverted, partial and sharded indexes right now.
-					if !stmt.Inverted && stmt.Predicate == nil && stmt.Sharded == nil {
+					// Ignore all the inverted, vector, partial, sharded, etc. indexes right now.
+					if stmt.Type == tree.IndexTypeForward && stmt.Predicate == nil && stmt.Sharded == nil {
 						cis = append(cis, *stmt)
 					}
 				case *tree.DropIndex:

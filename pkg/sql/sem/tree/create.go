@@ -241,8 +241,7 @@ type CreateIndex struct {
 	Name        Name
 	Table       TableName
 	Unique      bool
-	Inverted    bool
-	Vector      bool
+	Type        IndexType
 	IfNotExists bool
 	Columns     IndexElemList
 	Sharded     *ShardedIndexDef
@@ -265,10 +264,10 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	if node.Unique {
 		ctx.WriteString("UNIQUE ")
 	}
-	if node.Inverted {
+	switch node.Type {
+	case IndexTypeInverted:
 		ctx.WriteString("INVERTED ")
-	}
-	if node.Vector {
+	case IndexTypeVector:
 		ctx.WriteString("VECTOR ")
 	}
 	ctx.WriteString("INDEX ")
@@ -1042,8 +1041,7 @@ type IndexTableDef struct {
 	Columns          IndexElemList
 	Sharded          *ShardedIndexDef
 	Storing          NameList
-	Inverted         bool
-	Vector           bool
+	Type             IndexType
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
 	Predicate        Expr
@@ -1052,10 +1050,10 @@ type IndexTableDef struct {
 
 // Format implements the NodeFormatter interface.
 func (node *IndexTableDef) Format(ctx *FmtCtx) {
-	if node.Inverted {
+	switch node.Type {
+	case IndexTypeInverted:
 		ctx.WriteString("INVERTED ")
-	}
-	if node.Vector {
+	case IndexTypeVector:
 		ctx.WriteString("VECTOR ")
 	}
 	ctx.WriteString("INDEX ")

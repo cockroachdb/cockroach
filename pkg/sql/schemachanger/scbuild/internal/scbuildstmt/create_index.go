@@ -51,7 +51,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	idxSpec.secondary = &scpb.SecondaryIndex{
 		Index: scpb.Index{
 			IsUnique:       n.Unique,
-			IsInverted:     n.Inverted,
+			IsInverted:     n.Type == tree.IndexTypeInverted,
 			IsConcurrently: n.Concurrently,
 			IsNotVisible:   n.Invisibility.Value != 0.0,
 			Invisibility:   n.Invisibility.Value,
@@ -145,12 +145,12 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	panicIfSchemaChangeIsDisallowed(relationElements, n)
 
 	// Vector indexes are note yet supported.
-	if n.Vector {
+	if n.Type == tree.IndexTypeVector {
 		panic(unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported"))
 	}
 
 	// Inverted indexes do not support hash sharding or unique.
-	if n.Inverted {
+	if n.Type == tree.IndexTypeInverted {
 		if n.Sharded != nil {
 			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding"))
 		}
@@ -301,16 +301,16 @@ func processColNodeType(
 ) catpb.InvertedIndexColumnKind {
 	invertedKind := catpb.InvertedIndexColumnKind_DEFAULT
 	// OpClass are only allowed for the last column of an inverted index.
-	if columnNode.OpClass != "" && (!lastColIdx || !n.Inverted) {
+	if columnNode.OpClass != "" && (!lastColIdx || n.Type != tree.IndexTypeInverted) {
 		panic(pgerror.New(pgcode.DatatypeMismatch,
 			"operator classes are only allowed for the last column of an inverted index"))
 	}
 	// Disallow descending last columns in inverted indexes.
-	if n.Inverted && columnNode.Direction == tree.Descending && lastColIdx {
+	if n.Type == tree.IndexTypeInverted && columnNode.Direction == tree.Descending && lastColIdx {
 		panic(pgerror.New(pgcode.FeatureNotSupported,
 			"the last column in an inverted index cannot have the DESC option"))
 	}
-	if n.Inverted && lastColIdx {
+	if n.Type == tree.IndexTypeInverted && lastColIdx {
 		switch columnType.Type.Family() {
 		case types.ArrayFamily:
 			switch columnNode.OpClass {
@@ -375,7 +375,7 @@ func processColNodeType(
 		})
 	}
 	// Only certain column types are supported for inverted indexes.
-	if n.Inverted && lastColIdx &&
+	if n.Type == tree.IndexTypeInverted && lastColIdx &&
 		!colinfo.ColumnTypeIsInvertedIndexable(columnType.Type) {
 		colNameForErr := colName
 		if columnNode.Expr != nil {
@@ -383,7 +383,7 @@ func processColNodeType(
 		}
 		panic(tabledesc.NewInvalidInvertedColumnError(colNameForErr,
 			columnType.Type.String()))
-	} else if (!n.Inverted || !lastColIdx) && !colinfo.ColumnTypeIsIndexable(columnType.Type) {
+	} else if (n.Type != tree.IndexTypeInverted || !lastColIdx) && !colinfo.ColumnTypeIsIndexable(columnType.Type) {
 		// Otherwise, check if the column type is indexable.
 		panic(unimplemented.NewWithIssueDetailf(35730,
 			columnType.Type.DebugString(),
@@ -488,7 +488,7 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 			columnsToPrepend = append(columnsToPrepend, newIndexColumn)
 		}
 		idxSpec.columns = append(columnsToPrepend, idxSpec.columns...)
-		if n.Inverted {
+		if n.Type == tree.IndexTypeInverted {
 			b.IncrementSchemaChangeIndexCounter("partitioned_inverted")
 		}
 	}
@@ -565,7 +565,7 @@ func addColumnsForSecondaryIndex(
 			// Add column needs to support materialized views for the
 			// declarative schema changer to work.
 			fallbackIfRelationIsNotTable(n, relation)
-			colNameStr := maybeCreateVirtualColumnForIndex(b, n, &n.Table, relation.(*scpb.Table), columnNode.Expr, n.Inverted, i == len(n.Columns)-1)
+			colNameStr := maybeCreateVirtualColumnForIndex(b, n, &n.Table, relation.(*scpb.Table), columnNode.Expr, n.Type, i == len(n.Columns)-1)
 			colName = tree.Name(colNameStr)
 			if !expressionTelemtryCounted {
 				b.IncrementSchemaChangeIndexCounter("expression")
@@ -793,7 +793,7 @@ func maybeCreateVirtualColumnForIndex(
 	tn *tree.TableName,
 	tbl *scpb.Table,
 	expr tree.Expr,
-	inverted bool,
+	typ tree.IndexType,
 	lastColumn bool,
 ) string {
 	validateColumnIndexableType := func(t *types.T) {
@@ -807,10 +807,8 @@ func maybeCreateVirtualColumnForIndex(
 				"consider adding a type cast to the expression",
 			))
 		}
-		// Check if the column type is indexable,
-		// non-inverted types.
-		if !inverted &&
-			!colinfo.ColumnTypeIsIndexable(t) {
+		// Check if the column type is indexable for forward indexes.
+		if typ == tree.IndexTypeForward && !colinfo.ColumnTypeIsIndexable(t) {
 			panic(pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"index element %s of type %s is not indexable",
@@ -818,9 +816,7 @@ func maybeCreateVirtualColumnForIndex(
 				t.Name()))
 		}
 		// Check if inverted columns are invertible.
-		if inverted &&
-			!lastColumn &&
-			!colinfo.ColumnTypeIsIndexable(t) {
+		if typ == tree.IndexTypeInverted && !lastColumn && !colinfo.ColumnTypeIsIndexable(t) {
 			panic(errors.WithHint(
 				pgerror.Newf(
 					pgcode.InvalidTableDefinition,
@@ -831,9 +827,7 @@ func maybeCreateVirtualColumnForIndex(
 				"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
 			))
 		}
-		if inverted &&
-			lastColumn &&
-			!colinfo.ColumnTypeIsInvertedIndexable(t) {
+		if typ == tree.IndexTypeInverted && lastColumn && !colinfo.ColumnTypeIsInvertedIndexable(t) {
 			panic(errors.WithHint(
 				pgerror.Newf(
 					pgcode.InvalidTableDefinition,
@@ -914,7 +908,7 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 	expr := b.PartialIndexPredicateExpression(idxSpec.secondary.TableID, n.Predicate)
 	idxSpec.secondary.EmbeddedExpr = b.WrapExpression(idxSpec.secondary.TableID, expr)
 	b.IncrementSchemaChangeIndexCounter("partial")
-	if n.Inverted {
+	if n.Type == tree.IndexTypeInverted {
 		b.IncrementSchemaChangeIndexCounter("partial_inverted")
 	}
 }
