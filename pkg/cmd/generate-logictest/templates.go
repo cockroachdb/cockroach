@@ -39,6 +39,9 @@ const templateText = `
 {{- if .LogicTest -}}
 func runLogicTest(t *testing.T, file string) {
 	{{if .SkipUnderRace}}skip.UnderRace(t, "times out and/or hangs")
+	{{else if or (or (eq .TestRuleName "fakedist") (eq .TestRuleName "fakedist-vec-off")) (eq .TestRuleName "fakedist-disk")}}if file == "alter_primary_key" {
+		skip.UnderRace(t, "times out")
+	}
 	{{end}}skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }

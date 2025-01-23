@@ -55,6 +55,9 @@ func TestMain(m *testing.M) {
 }
 
 func runLogicTest(t *testing.T, file string) {
+	if file == "alter_primary_key" {
+		skip.UnderRace(t, "times out")
+	}
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
