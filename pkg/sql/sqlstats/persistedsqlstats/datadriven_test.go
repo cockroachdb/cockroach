@@ -94,10 +94,6 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	observerConn := cluster.ServerConn(1 /* idx */)
 
 	observer := sqlutils.MakeSQLRunner(observerConn)
-	_, err := sqlConn.Exec(`SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = true;`)
-	if err != nil {
-		t.Errorf("failed to enable plan collection due to %s", err.Error())
-	}
 
 	execDataDrivenTestCmd := func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
@@ -149,12 +145,12 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			// them.
 			fingerprint = strings.Replace(fingerprint, "%", " ", -1)
 
-			previouslySampled, savePlanForStats := appStats.ShouldSample(
+			previouslySampled := appStats.ShouldSample(
 				fingerprint,
 				implicitTxn,
 				dbName,
 			)
-			return fmt.Sprintf("%t, %t", previouslySampled, savePlanForStats)
+			return fmt.Sprintf("%t", previouslySampled)
 		case "skip":
 			var issue int
 			d.ScanArgs(t, "issue-num", &issue)

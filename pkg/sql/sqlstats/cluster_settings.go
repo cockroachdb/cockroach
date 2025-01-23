@@ -57,25 +57,6 @@ var DumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 	settings.WithName("sql.metrics.statement_details.dump_to_logs.enabled"),
 	settings.WithPublic)
 
-// SampleLogicalPlans specifies whether we periodically sample the logical plan
-// for each fingerprint.
-var SampleLogicalPlans = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.metrics.statement_details.plan_collection.enabled",
-	"periodically save a logical plan for each fingerprint",
-	false,
-	settings.WithPublic)
-
-// LogicalPlanCollectionPeriod specifies the interval between collections of
-// logical plans for each fingerprint.
-var LogicalPlanCollectionPeriod = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"sql.metrics.statement_details.plan_collection.period",
-	"the time until a new logical plan is collected",
-	5*time.Minute,
-	settings.NonNegativeDuration,
-	settings.WithPublic)
-
 // MaxMemSQLStatsStmtFingerprints specifies the maximum of unique statement
 // fingerprints we store in memory.
 var MaxMemSQLStatsStmtFingerprints = settings.RegisterIntSetting(
