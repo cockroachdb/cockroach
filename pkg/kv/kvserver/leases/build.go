@@ -132,6 +132,9 @@ type BuildInput struct {
 	// alive and caught up on its log (e.g. they just sent it a snapshot) and also
 	// can't tolerate rejected lease transfers.
 	BypassSafetyChecks bool
+
+	// DesiredLeaseType is the desired lease type for this replica.
+	DesiredLeaseType roachpb.LeaseType
 }
 
 // PrevLocal returns whether the previous lease was held by the local store.
@@ -256,6 +259,7 @@ func (i BuildInput) toVerifyInput() VerifyInput {
 		PrevLeaseExpired:   i.PrevLeaseExpired,
 		NextLeaseHolder:    i.NextLeaseHolder,
 		BypassSafetyChecks: i.BypassSafetyChecks,
+		DesiredLeaseType:   i.DesiredLeaseType,
 	}
 }
 

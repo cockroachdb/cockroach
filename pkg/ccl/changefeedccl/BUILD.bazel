@@ -358,7 +358,7 @@ go_test(
         "@com_github_gogo_protobuf//types",
         "@com_github_golang_mock//gomock",
         "@com_github_ibm_sarama//:sarama",
-        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_klauspost_compress//gzip",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",

@@ -264,6 +264,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	const msg = "1μs staleness reads may actually succeed due to the slow environment"
 	skip.UnderStress(t, msg)
 	skip.UnderRace(t, msg)
+	skip.UnderDeadlock(t, msg)
 	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()

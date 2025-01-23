@@ -1215,6 +1215,7 @@ func TestInputToVerifyInput(t *testing.T) {
 			NodeID: 1, StoreID: 1, ReplicaID: 1, Type: 1,
 		},
 		BypassSafetyChecks: true,
+		DesiredLeaseType:   roachpb.LeaseLeader,
 	}
 	verifyInput := noZeroBuildInput.toVerifyInput()
 	require.NoError(t, zerofields.NoZeroField(verifyInput),
