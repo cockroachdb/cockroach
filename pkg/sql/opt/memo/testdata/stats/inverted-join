@@ -413,20 +413,20 @@ ON t1.s IN ('foo', 'bar', 'baz') AND i = 10 AND t1.j @> t2.j
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=0.3]
+ ├── stats: [rows=1]
  └── inner-join (lookup json_multi_col [as=t1])
       ├── columns: t1.k:1(int!null) t1.j:2(jsonb) s:3(string!null) i:4(int!null) t2.j:10(jsonb)
       ├── key columns: [16] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=0.3]
+      ├── stats: [rows=1]
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── inner-join (inverted json_multi_col@sij_idx,inverted [as=t1])
       │    ├── columns: t2.j:10(jsonb) t1.k:16(int!null) s:18(string!null) i:19(int!null)
       │    ├── prefix key columns: [14 15] = [18 19]
       │    ├── inverted-expr
       │    │    └── t1.j:17 @> t2.j:10 [type=bool]
-      │    ├── stats: [rows=0.3, distinct(14)=0.3, null(14)=0, distinct(15)=0.3, null(15)=0, distinct(16)=0.299957, null(16)=0, distinct(18)=0.3, null(18)=0, distinct(19)=0.3, null(19)=0, distinct(18,19)=0.3, null(18,19)=0]
+      │    ├── stats: [rows=1, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=0.999517, null(16)=0, distinct(18)=1, null(18)=0, distinct(19)=1, null(19)=0, distinct(18,19)=1, null(18,19)=0]
       │    ├── fd: ()-->(19), (16)-->(18)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@4":15(int!null) t2.j:10(jsonb) "inverted_join_const_col_@3":14(string!null)

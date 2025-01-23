@@ -119,6 +119,8 @@ func (s *Statistics) CopyFrom(other *Statistics) {
 	s.Selectivity = other.Selectivity
 }
 
+const minRowCount = 1
+
 // ApplySelectivity applies a given selectivity to the statistics. RowCount and
 // Selectivity are updated. Note that DistinctCounts, NullCounts, and
 // Histograms are not updated.
@@ -128,10 +130,13 @@ func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
 	if selectivity == ZeroSelectivity {
 		s.RowCount = 0
 		s.Selectivity = ZeroSelectivity
-		return
+	} else if r := s.RowCount * selectivity.AsFloat(); r < minRowCount {
+		s.Selectivity.Multiply(MakeSelectivityFromFraction(minRowCount, s.RowCount))
+		s.RowCount = minRowCount
+	} else {
+		s.RowCount = r
+		s.Selectivity.Multiply(selectivity)
 	}
-	s.RowCount *= selectivity.AsFloat()
-	s.Selectivity.Multiply(selectivity)
 }
 
 // UnionWith unions this Statistics object with another Statistics object. It

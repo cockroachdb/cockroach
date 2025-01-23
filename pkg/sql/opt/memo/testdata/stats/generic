@@ -87,7 +87,7 @@ SELECT * FROM t WHERE i = $1 AND s = $2
 select
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
  ├── has-placeholder
- ├── stats: [rows=0.100001, distinct(2)=0.100001, null(2)=0, distinct(3)=0.100001, null(3)=0, distinct(2,3)=0.100001, null(2,3)=0]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
  ├── key: (1)
  ├── fd: ()-->(2,3)
  ├── scan t
