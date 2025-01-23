@@ -1237,7 +1237,7 @@ func TestProposalByProxy(t *testing.T) {
 }
 
 func TestCommit(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		matches []uint64
 		logs    []pb.Entry
 		smTerm  uint64
@@ -1262,24 +1262,24 @@ func TestCommit(t *testing.T) {
 		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 1), 2, 0},
 		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 2), 2, 2},
 		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 1), 2, 0},
-	}
+	} {
+		t.Run("", func(t *testing.T) {
+			storage := newTestMemoryStorage(withPeers(1))
+			require.NoError(t, storage.Append(tt.logs))
+			require.NoError(t, storage.SetHardState(pb.HardState{Term: tt.smTerm}))
 
-	for i, tt := range tests {
-		storage := newTestMemoryStorage(withPeers(1))
-		storage.Append(tt.logs)
-		storage.hardState = pb.HardState{Term: tt.smTerm}
-
-		sm := newTestRaft(1, 10, 2, storage)
-		for j := 0; j < len(tt.matches); j++ {
-			id := pb.PeerID(j + 1)
-			if id > 1 {
-				sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
+			sm := newTestRaft(1, 10, 2, storage)
+			for j := 0; j < len(tt.matches); j++ {
+				id := pb.PeerID(j + 1)
+				if id > 1 {
+					sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
+				}
+				pr := sm.trk.Progress(id)
+				pr.Match, pr.Next = tt.matches[j], tt.matches[j]+1
 			}
-			pr := sm.trk.Progress(id)
-			pr.Match, pr.Next = tt.matches[j], tt.matches[j]+1
-		}
-		sm.maybeCommit()
-		assert.Equal(t, tt.w, sm.raftLog.committed, "#%d", i)
+			sm.maybeCommit()
+			assert.Equal(t, tt.w, sm.raftLog.committed)
+		})
 	}
 }
 
