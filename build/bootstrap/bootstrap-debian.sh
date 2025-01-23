@@ -31,7 +31,7 @@ sudo apt-get install -y --no-install-recommends \
 
 # pnpm doesn't provide a Debian repository, and supports either `curl | sh` or `npm install -g` installations.
 curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=8.6.6 sh -
-echo -e '\n' >> ~/.bashrc
+echo >> ~/.bashrc
 
 sudo adduser "${USER}" docker
 
@@ -59,7 +59,7 @@ docker-compose --version
 # Install NVM.
 # Note: you still required to run `nvm install <version>` to install a specific version of Node.js.
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-echo -e '\n' >> ~/.bashrc
+echo >> ~/.bashrc
 
 # Install Bazelisk as Bazel.
 # NOTE: you should keep this in sync with build/packer/teamcity-agent.sh and build/bazelbuilder/Dockerfile -- if
@@ -74,8 +74,8 @@ sudo mv /tmp/bazelisk /usr/bin/bazel
 . bootstrap/bootstrap-unison.sh
 
 # Configure environment variables for CockroachDB and Managed Service.
-echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
-echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachlabs/managed-service/bin"' >> ~/.bashrc_bootstrap
+echo 'export PATH="${PATH}:${HOME}/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
+echo 'export PATH="${PATH}:${HOME}/go/src/github.com/cockroachlabs/managed-service/bin"' >> ~/.bashrc_bootstrap
 echo -e '\n' >> ~/.bashrc
 echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
 . ~/.bashrc_bootstrap
