@@ -438,9 +438,6 @@ func (e *executor) executeBenchmarks() error {
 	}
 
 	e.log.Printf("Completed benchmarks, results located at %s", e.outputDir)
-	if errorCount != 0 {
-		return errors.Newf("Found %d errors during remote execution", errorCount)
-	}
 	return nil
 }
 

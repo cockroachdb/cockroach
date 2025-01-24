@@ -397,10 +397,10 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, sql := range []string{
 				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-				"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1",
+				"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 5",
 				"DROP TABLE IF EXISTS t CASCADE",
 				"CREATE TABLE t(n int)",
-				"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 1",
+				"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 5",
 				fmt.Sprintf("INSERT INTO t(n) SELECT * FROM generate_series(1, %d)", initialRowCount),
 			} {
 				r.Exec(t, sql)

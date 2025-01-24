@@ -368,13 +368,23 @@ message LatencyInfo {
   // Max is the maximum time in seconds spent executing the fingerprint.
   optional double max = 2 [(gogoproto.nullable) = false];
 
-  // P50 is the 50 Percentile in seconds for the fingerprint.
+  // Note: the percentiles below were previously populated via a method
+  // that led to much user confusion because the intervals over which
+  // the percentiles were computed was not well-defined and did not
+  // align with the aggregated timestamps used for the rest of the SQL
+  // Activity. The fields below are currently not populated but remain
+  // here so that we can re-introduce their use in the near-future.
+
+  // P50 is the 50 Percentile in seconds for the fingerprint. This
+  // value is currently unset.
   optional double p50 = 3 [(gogoproto.nullable) = false];
 
-  // P90 is the 90 Percentile in seconds for the fingerprint.
+  // P90 is the 90 Percentile in seconds for the fingerprint. This
+  // value is currently unset.
   optional double p90 = 4 [(gogoproto.nullable) = false];
 
-  // P99 is the 99 Percentile in seconds for the fingerprint.
+  // P99 is the 99 Percentile in seconds for the fingerprint. This
+  // value is currently unset.
   optional double p99 = 5 [(gogoproto.nullable) = false];
 }
 

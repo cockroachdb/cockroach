@@ -145,8 +145,11 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.detailed_latency_metrics.enabled",
 	"label latency metrics with the statement fingerprint. Workloads with tens of thousands of "+
-		"distinct query fingerprints should leave this setting false.",
+		"distinct query fingerprints should leave this setting false. "+
+		"(experimental, affects performance for workloads with high "+
+		"fingerprint cardinality)",
 	false,
+	settings.WithPublic,
 )
 
 // The metric label name we'll use to facet latency metrics by statement fingerprint.

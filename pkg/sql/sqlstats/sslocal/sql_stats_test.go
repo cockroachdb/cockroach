@@ -1618,9 +1618,6 @@ func TestSQLStatsLatencyInfo(t *testing.T) {
 
 	var min float64
 	var max float64
-	var p50 float64
-	var p90 float64
-	var p99 float64
 	stopwatch := timeutil.NewStopWatch()
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1630,22 +1627,16 @@ func TestSQLStatsLatencyInfo(t *testing.T) {
 			stopwatch.Stop()
 
 			rows := testConn.QueryRow(t, "SELECT statistics -> 'statistics' -> 'latencyInfo' ->> 'min',"+
-				"statistics -> 'statistics' -> 'latencyInfo' ->> 'max',"+
-				"statistics -> 'statistics' -> 'latencyInfo' ->> 'p50',"+
-				"statistics -> 'statistics' -> 'latencyInfo' ->> 'p90',"+
-				"statistics -> 'statistics' -> 'latencyInfo' ->> 'p99' "+
+				"statistics -> 'statistics' -> 'latencyInfo' ->> 'max' "+
 				"FROM CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = $1 "+
 				"AND metadata ->> 'query'=$2", appName, "SELECT * FROM t1")
-			rows.Scan(&min, &max, &p50, &p90, &p99)
+			rows.Scan(&min, &max)
 
 			require.Positivef(t, min, "expected min latency %f greater than 0", min)
 			require.Positivef(t, max, "expected max latency %f greater than 0", max)
 			require.GreaterOrEqualf(t, max, min, "expected max latency %f greater than min latency %f", max, min)
 			require.LessOrEqualf(t, max, stopwatch.Elapsed().Seconds(), "expected max latency %f less or equal %f",
 				max, stopwatch.Elapsed().Seconds())
-			require.GreaterOrEqualf(t, p99, p90, "expected p99 latency %f greater or equal p90 latency %f", p99, p90)
-			require.GreaterOrEqualf(t, p90, p50, "expected p90 latency %f greater or equal p50 latency %f", p90, p50)
-			require.LessOrEqualf(t, p99, max, "expected p99 latency %f less or equal max latency %f", p99, max)
 		})
 	}
 }

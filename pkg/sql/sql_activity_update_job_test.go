@@ -915,7 +915,6 @@ func verifyActivityTableContentHelper(t *testing.T, db *sqlutils.SQLRunner, appN
 			sa.contention_time_avg_seconds  = ss.contention_time AND
 			sa.cpu_sql_avg_nanos = ss.cpu_sql_nanos AND      
 			sa.service_latency_avg_seconds = ss.service_latency AND
-			sa.service_latency_p99_seconds = ss.p99_latency AND
 			sa.statistics = ss.statistics`, table)
 		row := db.QueryRow(t, query, appName)
 		var count int
