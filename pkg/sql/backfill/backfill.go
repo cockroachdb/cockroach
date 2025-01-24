@@ -476,6 +476,10 @@ type IndexBackfiller struct {
 	// backfilled.
 	indexesToEncode []catalog.Index
 
+	// keyPrefixes is a slice key prefixes for each index in indexesToEncode.
+	// indexesToEncode and keyPrefixes should both have the same ordering.
+	keyPrefixes [][]byte
+
 	alloc tree.DatumAlloc
 
 	// mon is a memory monitor linked with the IndexBackfiller on creation.
@@ -773,6 +777,7 @@ func (ib *IndexBackfiller) init(
 	// being added. If there are partial indexes, allocate a new list that is
 	// reset in BuildIndexEntriesChunk for every row added.
 	ib.indexesToEncode = ib.added
+	ib.keyPrefixes = make([][]byte, len(ib.added))
 	if len(ib.predicates) > 0 {
 		ib.indexesToEncode = make([]catalog.Index, 0, len(ib.added))
 	}
@@ -917,6 +922,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		}
 		return nil
 	}
+
 	for i := int64(0); i < chunkSize; i++ {
 		ok, _, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
@@ -942,7 +948,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// indexes that the current row should be added to.
 		if len(ib.predicates) > 0 {
 			ib.indexesToEncode = ib.indexesToEncode[:0]
-			for _, idx := range ib.added {
+			for i, idx := range ib.added {
 				if !idx.IsPartial() {
 					// If the index is not a partial index, all rows should have
 					// an entry.
@@ -961,6 +967,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 
 				if val == tree.DBoolTrue {
 					ib.indexesToEncode = append(ib.indexesToEncode, idx)
+				} else {
+					ib.keyPrefixes[i] = nil
 				}
 			}
 		}
@@ -982,6 +990,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				ib.evalCtx.Codec,
 				tableDesc,
 				ib.indexesToEncode,
+				ib.keyPrefixes,
 				ib.colIdxMap,
 				ib.rowVals,
 				buffer,
