@@ -60,9 +60,6 @@ const (
 	VolumeTypePersistent VolumeType = "persistent"
 )
 
-// providerInstance is the instance to be registered into vm.Providers by Init.
-var providerInstance = &Provider{}
-
 var (
 	defaultDefaultProject, defaultMetadataProject, defaultDNSProject, defaultDefaultServiceAccount string
 	// projects for which a cron GC job exists.
@@ -114,13 +111,13 @@ func Init() error {
 	initGCEProjectDefaults()
 	initDNSDefault()
 
+	providerInstance := &Provider{}
 	providerInstance.Projects = []string{defaultDefaultProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
 		fmt.Printf("WARNING: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_DEFAULT_PROJECT` instead")
 		providerInstance.Projects = []string{projectFromEnv}
 	}
-	providerInstance.ServiceAccount = os.Getenv("GCE_SERVICE_ACCOUNT")
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
@@ -130,10 +127,11 @@ func Init() error {
 
 	providerInstance.defaultProject = defaultDefaultProject
 	providerInstance.metadataProject = defaultMetadataProject
-	providerInstance.defaultServiceAccount = defaultDefaultServiceAccount
 
 	initialized = true
 	vm.Providers[ProviderName] = providerInstance
+	Infrastructure = providerInstance
+
 	return nil
 }
 
@@ -312,6 +310,9 @@ func DefaultProviderOpts() *ProviderOpts {
 		TerminateOnMigration: false,
 		UseSpot:              false,
 		preemptible:          false,
+
+		defaultServiceAccount: defaultDefaultServiceAccount,
+		ServiceAccount:        os.Getenv("GCE_SERVICE_ACCOUNT"),
 	}
 }
 
@@ -351,13 +352,18 @@ type ProviderOpts struct {
 	TerminateOnMigration bool
 	// use preemptible instances
 	preemptible bool
+
+	ServiceAccount string
+
+	// The service account to use if the default project is in use and no
+	// ServiceAccount was specified.
+	defaultServiceAccount string
 }
 
 // Provider is the GCE implementation of the vm.Provider interface.
 type Provider struct {
 	*dnsProvider
-	Projects       []string
-	ServiceAccount string
+	Projects []string
 
 	// The project to use for looking up metadata. In particular, this includes
 	// user keys.
@@ -365,10 +371,6 @@ type Provider struct {
 
 	// The project that provides the core roachprod services.
 	defaultProject string
-
-	// The service account to use if the default project is in use and no
-	// ServiceAccount was specified.
-	defaultServiceAccount string
 }
 
 // LogEntry represents a single log entry from the gcloud logging(stack driver)
@@ -981,6 +983,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 // (Provider.Projects).
 type ProjectsVal struct {
 	AcceptMultipleProjects bool
+	Provider               *Provider
 }
 
 // DefaultZones is the list of  zones used by default for cluster creation.
@@ -1023,7 +1026,7 @@ func (v ProjectsVal) Set(projects string) error {
 	if !v.AcceptMultipleProjects && len(prj) > 1 {
 		return fmt.Errorf("multiple GCE projects not supported for command")
 	}
-	providerInstance.Projects = prj
+	v.Provider.Projects = prj
 	return nil
 }
 
@@ -1037,7 +1040,7 @@ func (v ProjectsVal) Type() string {
 
 // String is part of the pflag.Value interface.
 func (v ProjectsVal) String() string {
-	return strings.Join(providerInstance.Projects, ",")
+	return strings.Join(v.Provider.Projects, ",")
 }
 
 // GetProject returns the GCE project on which we're configured to operate.
@@ -1065,9 +1068,9 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringSliceVar(&o.ManagedSpotZones, ProviderName+"-managed-spot-zones", nil,
 		"subset of zones in managed instance groups that will use spot instances")
 
-	flags.StringVar(&providerInstance.ServiceAccount, ProviderName+"-service-account",
-		providerInstance.ServiceAccount, "Service account to use")
-	flags.StringVar(&providerInstance.defaultServiceAccount,
+	flags.StringVar(&o.ServiceAccount, ProviderName+"-service-account",
+		o.ServiceAccount, "Service account to use")
+	flags.StringVar(&o.defaultServiceAccount,
 		ProviderName+"-default-service-account", defaultDefaultServiceAccount,
 		"Service account to use if the default project is in use and no "+
 			"--gce-service-account was specified")
@@ -1110,8 +1113,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		false, "Enables the cron service (it is disabled by default)")
 }
 
-// ConfigureClusterFlags implements vm.ProviderFlags.
-func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
+// ConfigureProviderFlags implements Provider
+func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
 	var usage string
 	if opt == vm.SingleProject {
 		usage = "GCE project to manage"
@@ -1122,14 +1125,14 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 	flags.Var(
 		ProjectsVal{
 			AcceptMultipleProjects: opt == vm.AcceptMultipleProjects,
+			Provider:               p,
 		},
 		ProviderName+"-project", /* name */
 		usage)
 
 	// Flags about DNS override the default values in
-	// providerInstance.dnsProvider.
-
-	dnsProviderInstance := providerInstance.dnsProvider
+	// dnsProvider.
+	dnsProviderInstance := p.dnsProvider
 	flags.StringVar(
 		&dnsProviderInstance.dnsProject, ProviderName+"-dns-project",
 		dnsProviderInstance.dnsProject,
@@ -1161,16 +1164,15 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 	)
 
 	// Flags about the GCE project to use override the defaults in
-	// providerInstance.
-
+	// the provider.
 	flags.StringVar(
-		&providerInstance.metadataProject, ProviderName+"-metadata-project",
-		providerInstance.metadataProject,
+		&p.metadataProject, ProviderName+"-metadata-project",
+		p.metadataProject,
 		"google cloud project to use to store and fetch SSH keys",
 	)
 	flags.StringVar(
-		&providerInstance.defaultProject, ProviderName+"-default-project",
-		providerInstance.defaultProject,
+		&p.defaultProject, ProviderName+"-default-project",
+		p.defaultProject,
 		"google cloud project to use to run core roachprod services",
 	)
 }
@@ -1181,7 +1183,7 @@ func (o *ProviderOpts) useArmAMI() bool {
 }
 
 // ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
-func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+func (p *Provider) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
 }
 
 // CleanSSH TODO(peter): document
@@ -1372,11 +1374,11 @@ func (p *Provider) computeInstanceArgs(
 		"--boot-disk-type", "pd-ssd",
 	}
 
-	if project == p.defaultProject && p.ServiceAccount == "" {
-		p.ServiceAccount = p.defaultServiceAccount
+	if project == p.defaultProject && providerOpts.ServiceAccount == "" {
+		providerOpts.ServiceAccount = providerOpts.defaultServiceAccount
 	}
-	if p.ServiceAccount != "" {
-		args = append(args, "--service-account", p.ServiceAccount)
+	if providerOpts.ServiceAccount != "" {
+		args = append(args, "--service-account", providerOpts.ServiceAccount)
 	}
 
 	if providerOpts.preemptible {

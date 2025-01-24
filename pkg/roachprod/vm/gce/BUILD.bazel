@@ -6,6 +6,7 @@ go_library(
         "dns.go",
         "fast_dns.go",
         "gcloud.go",
+        "infra_provider.go",
         "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce",

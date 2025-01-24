@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/spf13/pflag"
 )
@@ -584,6 +585,9 @@ func AddListFlags(cmdFlags *pflag.FlagSet) {
 // command flag set.
 func AddRunFlags(cmdFlags *pflag.FlagSet) {
 	globalMan.AddFlagsToCommand(runCmdID, cmdFlags)
+	for _, provider := range vm.Providers {
+		provider.ConfigureProviderFlags(cmdFlags, vm.SingleProject)
+	}
 }
 
 // AddRunOpsFlags adds all flags registered for the run-operations command to

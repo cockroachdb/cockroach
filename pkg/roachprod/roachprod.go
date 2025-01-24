@@ -335,7 +335,7 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 		if !config.Quiet {
 			l.Printf("Refreshing DNS entries...")
 		}
-		if err := gce.SyncDNS(l, vms); err != nil {
+		if err := gce.Infrastructure.SyncDNS(l, vms); err != nil {
 			l.Errorf("failed to update DNS: %v", err)
 		}
 	} else {
@@ -708,7 +708,7 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string, sync bo
 	}
 	// Fetch public keys from gcloud to set up ssh access for all users into the
 	// shared ubuntu user.
-	authorizedKeys, err := gce.GetUserAuthorizedKeys()
+	authorizedKeys, err := gce.Infrastructure.GetUserAuthorizedKeys()
 	if err != nil {
 		return errors.Wrap(err, "failed to retrieve authorized keys from gcloud")
 	}
@@ -1132,7 +1132,7 @@ func urlGenerator(
 ) ([]string, error) {
 	var urls []string
 	for i, node := range nodes {
-		host := vm.Name(c.Name, int(node)) + "." + gce.DNSDomain()
+		host := vm.Name(c.Name, int(node)) + "." + gce.Infrastructure.DNSDomain()
 
 		// There are no DNS entries for local clusters.
 		if c.IsLocal() {
