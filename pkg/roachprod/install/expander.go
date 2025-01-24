@@ -43,6 +43,7 @@ var certsDirRe = regexp.MustCompile(`{certs-dir}`)
 
 type ExpanderConfig struct {
 	DefaultVirtualCluster string
+	LogExpandedResult     bool
 }
 
 // expander expands a string which contains templated parameters for cluster
@@ -92,6 +93,9 @@ func (e *expander) expand(
 	})
 	if err != nil {
 		return "", err
+	}
+	if cfg.LogExpandedResult && s != arg {
+		l.Printf("Node %d expanded > %s", e.node, s)
 	}
 	return s, nil
 }

@@ -2505,6 +2505,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 	l.Printf("> %s", cmd)
 	expanderCfg := install.ExpanderConfig{
 		DefaultVirtualCluster: c.defaultVirtualCluster,
+		LogExpandedResult:     true,
 	}
 	if err := roachprod.Run(
 		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
@@ -2575,6 +2576,7 @@ func (c *clusterImpl) RunWithDetails(
 	l.Printf("> %s", cmd)
 	expanderCfg := install.ExpanderConfig{
 		DefaultVirtualCluster: c.defaultVirtualCluster,
+		LogExpandedResult:     true,
 	}
 	results, err := roachprod.RunWithDetails(
 		ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "", /* processTag */
