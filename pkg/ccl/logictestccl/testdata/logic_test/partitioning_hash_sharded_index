@@ -1,5 +1,8 @@
 # LogicTest: 5node
 
+# This test routinely times out under race without clear signs of problems.
+skip under race
+
 statement ok
 SET experimental_enable_implicit_column_partitioning = true;
 
