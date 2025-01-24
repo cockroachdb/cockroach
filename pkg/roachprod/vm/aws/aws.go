@@ -35,9 +35,6 @@ import (
 // ProviderName is aws.
 const ProviderName = "aws"
 
-// providerInstance is the instance to be registered into vm.Providers by Init.
-var providerInstance = &Provider{}
-
 //go:embed config.json
 var configJson []byte
 
@@ -57,9 +54,8 @@ func Init() error {
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
 	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
 
-	configVal := awsConfigValue{awsConfig: *DefaultConfig}
-	providerInstance.Config = &configVal.awsConfig
-	providerInstance.IAMProfile = "roachprod-testing"
+	providerInstance := &Provider{}
+	providerInstance.Config.awsConfig = *DefaultConfig
 
 	haveRequiredVersion := func() bool {
 		// `aws --version` takes around 400ms on my machine.
@@ -232,6 +228,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		RemoteUserName:   "ubuntu",
 		DefaultEBSVolume: defaultEBSVolumeValue,
 		CreateRateLimit:  2,
+		IAMProfile:       "roachprod-testing",
 	}
 }
 
@@ -249,6 +246,10 @@ type ProviderOpts struct {
 	DefaultEBSVolume ebsVolume
 	EBSVolumes       ebsVolumeList
 	UseMultipleDisks bool
+
+	// IAMProfile designates the name of the instance profile to use for created
+	// EC2 instances if non-empty.
+	IAMProfile string
 
 	// Use specified ImageAMI when provisioning.
 	// Overrides config.json AMI.
@@ -274,11 +275,7 @@ type Provider struct {
 	Profile string
 
 	// Path to json for aws configuration, defaults to predefined configuration
-	Config *awsConfig
-
-	// IAMProfile designates the name of the instance profile to use for created
-	// EC2 instances if non-empty.
-	IAMProfile string
+	Config awsConfigValue
 
 	// aws accounts to perform action in, used by gcCmd only as it clean ups multiple aws accounts
 	AccountIDs []string
@@ -335,7 +332,8 @@ func (p *Provider) GetPreemptedSpotVMs(
 //
 // Sample error message:
 //
-// ‹An error occurred (InvalidInstanceID.NotFound) when calling the DescribeInstances operation: The instance IDs 'i-02e9adfac0e5fa18f, i-0bc7869fda0299caa' do not exist›
+// ‹An error occurred (InvalidInstanceID.NotFound) when calling the DescribeInstances operation: The instance IDs 'i-02e9adfac0e5fa18f, i-0bc7869fda0299caa'
+// do not exist›
 func getInstanceIDsNotFound(errorMsg string) []string {
 	// Regular expression pattern to find instance IDs between single quotes
 	re := regexp.MustCompile(`'([^']*)'`)
@@ -512,24 +510,22 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		" created. Try lowering this limit when hitting 'Request limit exceeded' errors.")
 	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot",
 		false, "use AWS Spot VMs, which are significantly cheaper, but can be preempted by AWS.")
-	flags.StringVar(&providerInstance.IAMProfile, ProviderName+"-iam-profile", providerInstance.IAMProfile,
+	flags.StringVar(&o.IAMProfile, ProviderName+"-iam-profile", o.IAMProfile,
 		"the IAM instance profile to associate with created VMs if non-empty")
-
-}
-
-// ConfigureClusterFlags implements vm.ProviderOpts.
-func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
-	flags.StringVar(&providerInstance.Profile, ProviderName+"-profile", os.Getenv("AWS_PROFILE"),
-		"Profile to manage cluster in")
-	configFlagVal := awsConfigValue{awsConfig: *DefaultConfig}
-	flags.Var(&configFlagVal, ProviderName+"-config",
-		"Path to json for aws configuration, defaults to predefined configuration")
 }
 
 // ConfigureClusterCleanupFlags implements ProviderOpts.
-func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
-	flags.StringSliceVar(&providerInstance.AccountIDs, ProviderName+"-account-ids", []string{},
+func (p *Provider) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+	flags.StringSliceVar(&p.AccountIDs, ProviderName+"-account-ids", []string{},
 		"AWS account ids as a comma-separated string")
+}
+
+// ConfigureProviderFlags is part of the vm.Provider interface.
+func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
+	flags.StringVar(&p.Profile, ProviderName+"-profile", os.Getenv("AWS_PROFILE"),
+		"Profile to manage cluster in")
+	flags.Var(&p.Config, ProviderName+"-config",
+		"Path to json for aws configuration, defaults to predefined configuration")
 }
 
 // CleanSSH is part of vm.Provider.  This implementation is a no-op,
@@ -1365,8 +1361,8 @@ func (p *Provider) runInstance(
 		args = append(args, "--cpu-options", cpuOptions)
 	}
 
-	if p.IAMProfile != "" {
-		args = append(args, "--iam-instance-profile", "Name="+p.IAMProfile)
+	if providerOpts.IAMProfile != "" {
+		args = append(args, "--iam-instance-profile", "Name="+providerOpts.IAMProfile)
 	}
 	ebsVolumes := assignEBSVolumes(&opts, providerOpts)
 	args, err = genDeviceMapping(ebsVolumes, args)

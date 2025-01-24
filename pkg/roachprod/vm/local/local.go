@@ -120,6 +120,9 @@ type Provider struct {
 	vm.DNSProvider
 }
 
+func (p *Provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
+}
+
 func (p *Provider) SupportsSpotVMs() bool {
 	return false
 }
@@ -181,12 +184,8 @@ type providerOpts struct{}
 func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 }
 
-// ConfigureClusterFlags is part of ProviderOpts.  This implementation is a no-op.
-func (o *providerOpts) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
-}
-
-// ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
-func (o *providerOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+// ConfigureClusterCleanupFlags is part of the vm.Provider interface. This implementation is a no-op.
+func (p *Provider) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
 }
 
 // CleanSSH is part of the vm.Provider interface.  This implementation is a no-op.
