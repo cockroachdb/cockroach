@@ -29,6 +29,9 @@ type ConcurrentBufferIngester struct {
 	opts struct {
 		// noTimedFlush prevents time-triggered flushes from being scheduled.
 		noTimedFlush bool
+		// flushIntervalMS is an optional override flush interval
+		// a value of zero will be set to the 500ms default.
+		flushIntervalMS int
 	}
 
 	eventBufferCh chan eventBufChPayload
@@ -77,6 +80,13 @@ func WithoutTimedFlush() BufferOpt {
 	}
 }
 
+// WithFlushInterval allows for the override of the default flush interval
+func WithFlushInterval(intervalMS int) BufferOpt {
+	return func(i *ConcurrentBufferIngester) {
+		i.opts.flushIntervalMS = intervalMS
+	}
+}
+
 func (i *ConcurrentBufferIngester) Start(
 	ctx context.Context, stopper *stop.Stopper, opts ...BufferOpt,
 ) {
@@ -103,10 +113,14 @@ func (i *ConcurrentBufferIngester) Start(
 	})
 
 	if !i.opts.noTimedFlush {
+		flushIntervalMS := i.opts.flushIntervalMS
+		if flushIntervalMS == 0 {
+			flushIntervalMS = 500
+		}
 		// This task eagerly flushes partial buffers into the channel, to avoid
 		// delays identifying insights in low-traffic clusters and tests.
 		_ = stopper.RunAsyncTask(ctx, "insights-ingester-flush", func(ctx context.Context) {
-			ticker := time.NewTicker(500 * time.Millisecond)
+			ticker := time.NewTicker(time.Duration(flushIntervalMS) * time.Millisecond)
 
 			for {
 				select {
