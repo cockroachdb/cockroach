@@ -4,10 +4,10 @@
 // included in the /LICENSE file.
 
 syntax = "proto3";
-package cockroach.ccl.storageccl.engineccl.enginepbccl;
-option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl";
+package cockroach.storage.enginepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
 
-import "ccl/storageccl/engineccl/enginepbccl/key_registry.proto";
+import "storage/enginepb/key_registry.proto";
 
 // EncryptionStatus contains encryption-related information.
 message EncryptionStatus {

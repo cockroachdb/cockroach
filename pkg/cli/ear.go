@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cliccl
+package cli
 
 import (
 	"bytes"
@@ -12,8 +12,6 @@ import (
 	"io"
 	"slices"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
-	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -28,7 +26,7 @@ func runDecrypt(cmd *cobra.Command, args []string) (returnErr error) {
 		outPath = args[2]
 	}
 
-	env, err := cli.OpenFilesystemEnv(dir, fs.ReadOnly)
+	env, err := OpenFilesystemEnv(dir, fs.ReadOnly)
 	if err != nil {
 		return errors.Wrap(err, "could not open store")
 	}
@@ -60,7 +58,7 @@ func runDecrypt(cmd *cobra.Command, args []string) (returnErr error) {
 type fileEntry struct {
 	name     string
 	envType  enginepb.EnvType
-	settings enginepbccl.EncryptionSettings
+	settings enginepb.EncryptionSettings
 }
 
 func (f fileEntry) String() string {
@@ -69,7 +67,7 @@ func (f fileEntry) String() string {
 		&b, "%s:\n  env type: %s, %s\n",
 		f.name, f.envType, f.settings.EncryptionType,
 	)
-	if f.settings.EncryptionType != enginepbccl.EncryptionType_Plaintext {
+	if f.settings.EncryptionType != enginepb.EncryptionType_Plaintext {
 		_, _ = fmt.Fprintf(
 			&b, "  keyID: %s\n  nonce: % x\n  counter: %d",
 			f.settings.KeyId, f.settings.Nonce, f.settings.Counter,
@@ -81,7 +79,7 @@ func (f fileEntry) String() string {
 func runList(cmd *cobra.Command, args []string) (returnErr error) {
 	dir := args[0]
 
-	env, err := cli.OpenFilesystemEnv(dir, fs.ReadOnly)
+	env, err := OpenFilesystemEnv(dir, fs.ReadOnly)
 	if err != nil {
 		return errors.Wrap(err, "could not open store")
 	}
@@ -94,7 +92,7 @@ func runList(cmd *cobra.Command, args []string) (returnErr error) {
 	// List files and print to stdout.
 	var entries []fileEntry
 	for name, entry := range env.Registry.List() {
-		var encSettings enginepbccl.EncryptionSettings
+		var encSettings enginepb.EncryptionSettings
 		settings := entry.EncryptionSettings
 		if err := protoutil.Unmarshal(settings, &encSettings); err != nil {
 			return errors.Wrapf(err, "could not unmarshal encryption settings for %s", name)
