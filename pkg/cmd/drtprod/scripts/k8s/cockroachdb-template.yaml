@@ -1,0 +1,32 @@
+# Copyright 2025 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+apiVersion: crdb.cockroachlabs.com/v1alpha1
+kind: CrdbCluster
+metadata:
+  name: ${CLUSTER_NAME}
+spec:
+  dataStore:
+    pvc:
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: "${STORAGE_SIZE}"
+        volumeMode: Filesystem
+  resources:
+    requests:
+      cpu: "${CPU_REQUEST}"
+      memory: "${MEMORY_REQUEST}"
+    limits:
+      cpu: "${CPU_LIMIT}"
+      memory: "${MEMORY_LIMIT}"
+  tlsEnabled: true
+  image:
+    name: cockroachdb/cockroach:${COCKROACH_VERSION}
+  nodes: ${NODE_COUNT}
+  additionalLabels:
+    crdb: is-cool
