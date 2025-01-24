@@ -124,17 +124,11 @@ func (s *Container) RecordStatement(
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
 	stats.mu.data.Indexes = util.CombineUnique(stats.mu.data.Indexes, value.Indexes)
 
-	// Percentile latencies are only being sampled if the latency was above the
-	// AnomalyDetectionLatencyThreshold.
-	latencies := s.anomalies.GetPercentileValues(stmtFingerprintID)
 	latencyInfo := appstatspb.LatencyInfo{
 		Min: value.ServiceLatencySec,
 		Max: value.ServiceLatencySec,
-		P50: latencies.P50,
-		P90: latencies.P90,
-		P99: latencies.P99,
 	}
-	stats.mu.data.LatencyInfo.Add(latencyInfo)
+	stats.mu.data.LatencyInfo.MergeMaxMin(latencyInfo)
 
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected

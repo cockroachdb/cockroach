@@ -496,3 +496,10 @@ replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20
 // TODO(yuzefovich): remove this version once compatibility with 24.3 is no
 // longer needed.
 replace github.com/axiomhq/hyperloglog/000 => github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e
+
+// Note: This forked dependency adds a commit that opens up some
+// private APIs to enable us to make some perf improvements to
+// histogram updates in particular.
+// See pkg/util/metric/metric.go for usage.
+// See https://github.com/cockroachdb/client_golang/pulls for merged changes.
+replace github.com/prometheus/client_golang => github.com/cockroachdb/client_golang v0.0.0-20250124161916-2d4b7d300341
