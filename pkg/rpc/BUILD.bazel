@@ -49,6 +49,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/circuit",
+        "//pkg/util/ctxgroup",
         "//pkg/util/envutil",
         "//pkg/util/growstack",
         "//pkg/util/grpcutil",
