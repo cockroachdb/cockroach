@@ -272,7 +272,7 @@ CREATE TABLE crdb_internal.node_build_info (
 			"Name":         "CockroachDB",
 			"ClusterID":    execCfg.NodeInfo.LogicalClusterID().String(),
 			"Organization": execCfg.Organization(),
-			"Build":        info.Short(),
+			"Build":        info.Short().StripMarkers(),
 			"Version":      info.Tag,
 			"Channel":      info.Channel,
 

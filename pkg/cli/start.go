@@ -1365,7 +1365,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		} else {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
 		}
-		log.Ops.Warningf(ctx, "%s", redact.Safe(buf.String()))
+		log.Ops.Warningf(ctx, "%s", redact.SafeString(buf.String()))
 	}
 
 	// Check that the total suggested "max" memory is well below the available memory.
@@ -1458,8 +1458,8 @@ func setupAndInitializeLoggingAndProfiling(
 				"consider --accept-sql-without-tls instead. For other options, see:\n\n"+
 				"- %s\n"+
 				"- %s",
-			redact.Safe(build.MakeIssueURL(53404)),
-			redact.Safe(docs.URL("secure-a-cluster.html")),
+			redact.SafeString(build.MakeIssueURL(53404)),
+			redact.SafeString(docs.URL("secure-a-cluster.html")),
 		)
 	}
 
@@ -1482,7 +1482,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Ops.Infof(ctx, "%s", log.SafeManaged(info.Short()))
+	log.Ops.Infof(ctx, "%s", info.Short())
 
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it

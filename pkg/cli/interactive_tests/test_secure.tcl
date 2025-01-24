@@ -39,7 +39,7 @@ system "grep AWS_ACCESS_KEY='\\.\\.\\.' logs/db/logs/cockroach.log"
 system "grep GODEBUG=mycooldebugvar logs/db/logs/cockroach.log"
 # NB: this grep checks the value of the TERM var was enclosed
 # in redaction markers.
-system "grep TERM=..*mycoolterm logs/db/logs/cockroach.log"
+system "grep TERM=mycoolterm logs/db/logs/cockroach.log"
 end_test
 
 
