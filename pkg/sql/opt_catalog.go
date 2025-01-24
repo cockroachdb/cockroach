@@ -1638,7 +1638,7 @@ func (oi *optIndex) init(
 	}
 
 	// Populate columnOrds.
-	inverted := oi.IsInverted()
+	inverted := oi.Type() == idxtype.INVERTED
 	numKeyCols := idx.NumKeyColumns()
 	numKeySuffixCols := idx.NumKeySuffixColumns()
 	oi.columnOrds = make([]int, oi.numCols)
@@ -1668,20 +1668,14 @@ func (oi *optIndex) Name() tree.Name {
 	return tree.Name(oi.idx.GetName())
 }
 
+// Type is part of the cat.Index interface.
+func (oi *optIndex) Type() idxtype.T {
+	return oi.idx.GetType()
+}
+
 // IsUnique is part of the cat.Index interface.
 func (oi *optIndex) IsUnique() bool {
 	return oi.idx.IsUnique()
-}
-
-// IsInverted is part of the cat.Index interface.
-func (oi *optIndex) IsInverted() bool {
-	return oi.idx.GetType() == idxtype.INVERTED
-}
-
-// IsVector is part of the cat.Index interface.
-func (oi *optIndex) IsVector() bool {
-	// TODO(#137370): check the index type.
-	return false
 }
 
 // GetInvisibility is part of the cat.Index interface.
@@ -1711,7 +1705,7 @@ func (oi *optIndex) LaxKeyColumnCount() int {
 
 // PrefixColumnCount is part of the cat.Index interface.
 func (oi *optIndex) PrefixColumnCount() int {
-	if !oi.IsInverted() && !oi.IsVector() {
+	if oi.Type() == idxtype.FORWARD {
 		panic(errors.AssertionFailedf("only inverted and vector indexes have prefix columns"))
 	}
 	return oi.idx.NumKeyColumns() - 1
@@ -1730,7 +1724,7 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 
 // InvertedColumn is part of the cat.Index interface.
 func (oi *optIndex) InvertedColumn() cat.IndexColumn {
-	if !oi.IsInverted() {
+	if oi.Type() != idxtype.INVERTED {
 		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted columns"))
 	}
 	ord := oi.idx.NumKeyColumns() - 1
@@ -1739,7 +1733,7 @@ func (oi *optIndex) InvertedColumn() cat.IndexColumn {
 
 // VectorColumn is part of the cat.Index interface.
 func (oi *optIndex) VectorColumn() cat.IndexColumn {
-	if !oi.IsVector() {
+	if oi.Type() != idxtype.VECTOR {
 		panic(errors.AssertionFailedf("non-vector indexes do not have inverted columns"))
 	}
 	ord := oi.idx.NumKeyColumns() - 1
@@ -2607,6 +2601,11 @@ func (oi *optVirtualIndex) Name() tree.Name {
 	return tree.Name(oi.idx.GetName())
 }
 
+// Type is part of the cat.Index interface.
+func (oi *optVirtualIndex) Type() idxtype.T {
+	return idxtype.FORWARD
+}
+
 // IsUnique is part of the cat.Index interface.
 func (oi *optVirtualIndex) IsUnique() bool {
 	if oi.idx == nil {
@@ -2614,16 +2613,6 @@ func (oi *optVirtualIndex) IsUnique() bool {
 		return false
 	}
 	return oi.idx.IsUnique()
-}
-
-// IsInverted is part of the cat.Index interface.
-func (oi *optVirtualIndex) IsInverted() bool {
-	return false
-}
-
-// IsVector is part of the cat.Index interface.
-func (oi *optVirtualIndex) IsVector() bool {
-	return false
 }
 
 // GetInvisibility is part of the cat.Index interface.

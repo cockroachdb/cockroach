@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -1094,11 +1095,8 @@ type Index struct {
 	// Unique is true if this index is declared as UNIQUE in the schema.
 	Unique bool
 
-	// Inverted is true when this index is an inverted index.
-	Inverted bool
-
-	// Vector is true when this index is a vector index.
-	Vector bool
+	// Typ is the type of the index: forward, inverted, vector, etc.
+	Typ idxtype.T
 
 	// Invisibility specifies the invisibility of an index and can be any float64
 	// between [0.0, 1.0]. An index with invisibility 0.0 means that the index is
@@ -1170,14 +1168,9 @@ func (ti *Index) IsUnique() bool {
 	return ti.Unique
 }
 
-// IsInverted is part of the cat.Index interface.
-func (ti *Index) IsInverted() bool {
-	return ti.Inverted
-}
-
-// IsVector is part of the cat.Index interface.
-func (ti *Index) IsVector() bool {
-	return ti.Vector
+// Type is part of the cat.Index interface.
+func (ti *Index) Type() idxtype.T {
+	return ti.Typ
 }
 
 // GetInvisibility is part of the cat.Index interface.
@@ -1207,13 +1200,14 @@ func (ti *Index) LaxKeyColumnCount() int {
 
 // PrefixColumnCount is part of the cat.Index interface.
 func (ti *Index) PrefixColumnCount() int {
-	if ti.IsInverted() {
+	switch ti.Type() {
+	case idxtype.INVERTED:
 		return ti.invertedOrd
-	}
-	if ti.IsVector() {
+	case idxtype.VECTOR:
 		return ti.vectorOrd
+	default:
+		panic("only supported for inverted and vector indexes")
 	}
-	panic("only supported for inverted and vector indexes")
 }
 
 // Column is part of the cat.Index interface.
@@ -1223,7 +1217,7 @@ func (ti *Index) Column(i int) cat.IndexColumn {
 
 // InvertedColumn is part of the cat.Index interface.
 func (ti *Index) InvertedColumn() cat.IndexColumn {
-	if !ti.IsInverted() {
+	if ti.Type() != idxtype.INVERTED {
 		panic("non-inverted indexes do not have inverted columns")
 	}
 	return ti.Column(ti.invertedOrd)
@@ -1231,7 +1225,7 @@ func (ti *Index) InvertedColumn() cat.IndexColumn {
 
 // VectorColumn is part of the cat.Index interface.
 func (ti *Index) VectorColumn() cat.IndexColumn {
-	if !ti.IsVector() {
+	if ti.Type() != idxtype.VECTOR {
 		panic("non-vector indexes do not have indexed vector columns")
 	}
 	return ti.Column(ti.vectorOrd)

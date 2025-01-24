@@ -18,7 +18,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -500,14 +499,14 @@ func (s *Smither) extractIndexes(
 				return nil, err
 			}
 			if _, ok := indexes[idx]; !ok {
-				indexType := idxtype.FORWARD
+				indexType := tree.IndexTypeForward
 				if inverted {
-					indexType = idxtype.INVERTED
+					indexType = tree.IndexTypeInverted
 				}
 				indexes[idx] = &tree.CreateIndex{
 					Name:  idx,
 					Table: *t.TableName,
-					Type:  tree.IndexType(indexType),
+					Type:  indexType,
 				}
 			}
 			create := indexes[idx]

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -989,7 +990,7 @@ func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bo
 	// Check UNIQUE INDEX constraints.
 	for i := 1; i < tab.IndexCount(); i++ {
 		index := tab.Index(i)
-		if !index.IsUnique() || index.IsInverted() || index.IsVector() {
+		if !index.IsUnique() || index.Type() != idxtype.FORWARD {
 			continue
 		}
 		// If any of the key columns is nullable, uniqueCols is suffixed with the
