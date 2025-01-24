@@ -2508,7 +2508,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 	}
 	if err := roachprod.Run(
 		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
-		l.Stdout, l.Stderr, args, options.WithExpanderConfig(expanderCfg),
+		l.Stdout, l.Stderr, args, options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
 	); err != nil {
 		if err := ctx.Err(); err != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
@@ -2578,7 +2578,7 @@ func (c *clusterImpl) RunWithDetails(
 	}
 	results, err := roachprod.RunWithDetails(
 		ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "", /* processTag */
-		c.IsSecure(), args, options.WithExpanderConfig(expanderCfg),
+		c.IsSecure(), args, options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
 	)
 
 	var logFileFull string
