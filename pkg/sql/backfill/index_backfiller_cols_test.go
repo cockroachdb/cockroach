@@ -411,7 +411,7 @@ func TestInitIndexesAllowList(t *testing.T) {
 	t.Run("nil allowList", func(t *testing.T) {
 		// A nil allowList means no filtering.
 		ib := &IndexBackfiller{}
-		ib.initIndexes(desc, nil /* allowList */)
+		ib.initIndexes(
 		require.Equal(t, 2, len(ib.added))
 		require.Equal(t, catid.IndexID(2), ib.added[0].GetID())
 		require.Equal(t, catid.IndexID(3), ib.added[1].GetID())
@@ -419,7 +419,7 @@ func TestInitIndexesAllowList(t *testing.T) {
 
 	t.Run("non-nil allowList", func(t *testing.T) {
 		ib := &IndexBackfiller{}
-		ib.initIndexes(desc, []catid.IndexID{3} /* allowList */)
+		ib.initIndexes(
 		require.Equal(t, 1, len(ib.added))
 		require.Equal(t, catid.IndexID(3), ib.added[0].GetID())
 	})
