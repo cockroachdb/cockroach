@@ -48,9 +48,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgtype"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -279,7 +279,7 @@ func TestCopyFromTransaction(t *testing.T) {
 			valToDecimal := func(v driver.Value) *apd.Decimal {
 				mt, ok := v.(pgtype.Numeric)
 				require.True(t, ok)
-				buf, err := mt.EncodeText(nil, nil)
+				buf, err := mt.MarshalJSON()
 				require.NoError(t, err)
 				decimal, _, err := apd.NewFromString(string(buf))
 				require.NoError(t, err)

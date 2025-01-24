@@ -257,8 +257,8 @@ go_library(
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_fsnotify_fsnotify//:fsnotify",
         "@com_github_gogo_protobuf//jsonpb",
-        "@com_github_jackc_pgconn//:pgconn",
-        "@com_github_jackc_pgtype//:pgtype",
+        "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgtype",
         "@com_github_kr_pretty//:pretty",
         "@com_github_marusama_semaphore//:semaphore",
         "@com_github_mattn_go_isatty//:go-isatty",
@@ -486,6 +486,10 @@ disallowed_imports_test(
         # TODO(#81375)
         #"//pkg/security/securitytest",
         "//pkg/sql/randgen",
+        # Prohibit the use of pgx v4 imports. This package now exclusively
+        # relies on pgx v5.
+        "@com_github_jackc_pgproto3//:pgproto3",
+        "@com_github_jackc_pgx_v4//:pgx",
     ],
     disallowed_prefixes = [
         # TODO(#81375)

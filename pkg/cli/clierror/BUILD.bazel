@@ -18,7 +18,7 @@ go_library(
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_jackc_pgconn//:pgconn",
+        "@com_github_jackc_pgx_v5//pgconn",
     ],
 )
 
@@ -47,7 +47,7 @@ go_test(
         "//pkg/util/log/channel",
         "//pkg/util/log/severity",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_jackc_pgconn//:pgconn",
+        "@com_github_jackc_pgx_v5//pgconn",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

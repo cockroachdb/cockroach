@@ -35,7 +35,7 @@ import (
 	tracezipper "github.com/cockroachdb/cockroach/pkg/util/tracing/zipper"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
 )
