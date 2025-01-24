@@ -2037,11 +2037,6 @@ func (p *Pebble) NewEventuallyFileOnlySnapshot(keyRanges []roachpb.Span) Eventua
 	}
 }
 
-// Type implements the Engine interface.
-func (p *Pebble) Type() enginepb.EngineType {
-	return enginepb.EngineTypePebble
-}
-
 // IngestLocalFiles implements the Engine interface.
 func (p *Pebble) IngestLocalFiles(ctx context.Context, paths []string) error {
 	return p.db.Ingest(ctx, paths)
