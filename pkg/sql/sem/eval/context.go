@@ -150,6 +150,8 @@ type Context struct {
 
 	StreamManagerFactory StreamManagerFactory
 
+	BackupCompactionManagerFactory BackupCompactionManagerFactory
+
 	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
 	JobExecContext interface{}
 
@@ -945,5 +947,23 @@ type StreamIngestManager interface {
 		ctx context.Context,
 		tenantName roachpb.TenantName,
 		revertTo hlc.Timestamp,
+	) error
+}
+
+// BackupCompactionManagerFactory is an interface for creating a BackupCompactionManager.
+type BackupCompactionManagerFactory interface {
+	GetBackupCompactionManager(ctx context.Context) (BackupCompactionManager, error)
+}
+
+// BackupCompactionManager represents a collection of APIs that supports backup compactions.
+type BackupCompactionManager interface {
+	CompactBackups(
+		ctx context.Context,
+		collectionURI,
+		incrLoc []string,
+		fullBackupPath string,
+		encryptionOpts jobspb.BackupEncryptionOptions,
+		start,
+		end hlc.Timestamp,
 	) error
 }

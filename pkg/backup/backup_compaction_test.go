@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,15 +34,24 @@ func TestBackupCompaction(t *testing.T) {
 	)
 	defer cleanupDB()
 	fullBackupStmt := "BACKUP INTO 'nodelocal://1/backup'"
+	compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY['nodelocal://1/backup'], 'LATEST', '%s','%s')"
 
 	t.Run("compaction creates a new backup", func(t *testing.T) {
-		numExplicitBackups := 3
-		db.Exec(t, fullBackupStmt)
+		start := timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", start),
+		)
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
-		for i := 1; i < numExplicitBackups; i++ {
-			doIncrementalBackup(t, db, "'nodelocal://1/backup'", i == numExplicitBackups-1)
-		}
+		db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+		db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+		end := timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", end),
+		)
+		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
 		var numBackups int
 		db.QueryRow(
 			t,
@@ -48,10 +59,10 @@ func TestBackupCompaction(t *testing.T) {
 				"[SHOW BACKUP FROM $1 IN 'nodelocal://1/backup']",
 			backupPath,
 		).Scan(&numBackups)
-		require.Equal(t, numExplicitBackups+1, numBackups)
+		require.Equal(t, 5, numBackups)
 	})
 
-	t.Run("basic operations (insert/update/delete)", func(t *testing.T) {
+	t.Run("basic operations insert/update/delete", func(t *testing.T) {
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
@@ -61,11 +72,20 @@ func TestBackupCompaction(t *testing.T) {
 		// Run twice to test compaction on top of compaction.
 		for i := 0; i < 2; i++ {
 			db.Exec(t, "INSERT INTO foo VALUES (2, 2), (3, 3)")
-			doIncrementalBackup(t, db, "'nodelocal://1/backup'", false)
+			start := timeutil.Now().Format(time.RFC3339Nano)
+			db.Exec(
+				t,
+				fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", start),
+			)
 			db.Exec(t, "UPDATE foo SET b = b + 1 WHERE a = 2")
-			doIncrementalBackup(t, db, "'nodelocal://1/backup'", false)
+			db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
 			db.Exec(t, "DELETE FROM foo WHERE a = 3")
-			doIncrementalBackup(t, db, "'nodelocal://1/backup'", true)
+			end := timeutil.Now().Format(time.RFC3339Nano)
+			db.Exec(
+				t,
+				fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", end),
+			)
+			db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
 			validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
 		}
 	})
@@ -77,14 +97,31 @@ func TestBackupCompaction(t *testing.T) {
 		db.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT)")
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
 		db.Exec(t, fullBackupStmt)
+
 		db.Exec(t, "CREATE TABLE bar (a INT, b INT)")
 		db.Exec(t, "INSERT INTO bar VALUES (1, 1)")
-		doIncrementalBackup(t, db, "'nodelocal://1/backup'", false)
+		start := timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", start),
+		)
+
 		db.Exec(t, "INSERT INTO bar VALUES (2, 2)")
-		doIncrementalBackup(t, db, "'nodelocal://1/backup'", true)
+		end := timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", end),
+		)
+		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
+
 		db.Exec(t, "CREATE TABLE baz (a INT, b INT)")
 		db.Exec(t, "INSERT INTO baz VALUES (3, 3)")
-		doIncrementalBackup(t, db, "'nodelocal://1/backup'", true)
+		end = timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", end),
+		)
+		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
 		validateCompactedBackupForTables(
 			t, db,
 			[]string{"foo", "bar", "baz"},
@@ -92,7 +129,13 @@ func TestBackupCompaction(t *testing.T) {
 		)
 
 		db.Exec(t, "DROP TABLE bar")
-		doIncrementalBackup(t, db, "'nodelocal://1/backup'", true)
+		end = timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", end),
+		)
+		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
+
 		db.Exec(t, "DROP TABLE foo, baz")
 		db.Exec(t, "RESTORE FROM LATEST IN 'nodelocal://1/backup'")
 		rows := db.QueryStr(t, "SELECT * FROM [SHOW TABLES] WHERE table_name = 'bar'")
@@ -106,10 +149,21 @@ func TestBackupCompaction(t *testing.T) {
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1), (2, 2), (3, 3)")
 		db.Exec(t, fullBackupStmt)
+
 		db.Exec(t, "CREATE INDEX ON foo (a)")
-		doIncrementalBackup(t, db, "'nodelocal://1/backup'", false)
+		start := timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", start),
+		)
+
 		db.Exec(t, "CREATE INDEX ON foo (b)")
-		doIncrementalBackup(t, db, "'nodelocal://1/backup'", true)
+		end := timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", end),
+		)
+		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
 
 		var numIndexes, restoredNumIndexes int
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&numIndexes)
@@ -117,6 +171,41 @@ func TestBackupCompaction(t *testing.T) {
 		db.Exec(t, "RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/backup'")
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&restoredNumIndexes)
 		require.Equal(t, numIndexes, restoredNumIndexes)
+	})
+
+	t.Run("compact middle of backup chain", func(t *testing.T) {
+		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+		defer func() {
+			db.Exec(t, "DROP TABLE foo")
+		}()
+		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+		db.Exec(t, fullBackupStmt)
+
+		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+		db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+
+		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+		start := timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", start),
+		)
+
+		db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
+		db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+
+		db.Exec(t, "INSERT INTO foo VALUES (5, 5)")
+		end := timeutil.Now().Format(time.RFC3339Nano)
+		db.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'", end),
+		)
+
+		db.Exec(t, "INSERT INTO foo VALUES (6, 6)")
+		db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+
+		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
+		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
 	})
 
 	// TODO (kev-cao): Once range keys are supported by the compaction
@@ -176,24 +265,27 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 	db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 	db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
 	db.Exec(t, fmt.Sprintf("BACKUP INTO (%s)", collectionURIs))
-	db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-	doIncrementalBackup(t, db, collectionURIs, false)
-	db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
-	doIncrementalBackup(t, db, collectionURIs, true)
-	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs)
-}
 
-// doIncrementalBackup performs an incremental backup, and if compact is set to true, performs a
-// compaction afterward.
-// TODO (kev-cao): Remove once doCompaction bool is removed and builtin for compaction is made.
-func doIncrementalBackup(
-	t *testing.T, db *sqlutils.SQLRunner, collectionURIs string, compact bool,
-) {
-	t.Helper()
-	if compact {
-		defer testutils.HookGlobal(&doCompaction, true)()
-	}
-	db.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN (%s)", collectionURIs))
+	db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+	start := timeutil.Now().Format(time.RFC3339Nano)
+	db.Exec(
+		t,
+		fmt.Sprintf("BACKUP INTO (%s) AS OF SYSTEM TIME '%s'", collectionURIs, start),
+	)
+
+	db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+	end := timeutil.Now().Format(time.RFC3339Nano)
+	db.Exec(
+		t,
+		fmt.Sprintf("BACKUP INTO LATEST IN (%s) AS OF SYSTEM TIME '%s'", collectionURIs, end),
+	)
+	db.Exec(t, fmt.Sprintf(
+		"SELECT crdb_internal.backup_compaction(ARRAY[%s], 'LATEST', '%s', '%s')",
+		collectionURIs,
+		start,
+		end,
+	))
+	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs)
 }
 
 func validateCompactedBackupForTables(

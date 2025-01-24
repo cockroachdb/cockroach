@@ -8952,6 +8952,41 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Stable,
 		},
 	),
+	"crdb_internal.backup_compaction": makeBuiltin(
+		tree.FunctionProperties{Undocumented: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "collection_uri", Typ: types.StringArray},
+				{Name: "full_backup_path", Typ: types.String},
+				{Name: "start_time", Typ: types.TimestampTZ},
+				{Name: "end_time", Typ: types.TimestampTZ},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				manager, err := evalCtx.BackupCompactionManagerFactory.GetBackupCompactionManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+				ary := *tree.MustBeDArray(args[0])
+				collectionURI, ok := darrayToStringSlice(ary)
+				if !ok {
+					return nil, errors.Newf("expected array value, got %T", args[0])
+				}
+				encryption := jobspb.BackupEncryptionOptions{
+					Mode: jobspb.EncryptionMode_None,
+				}
+				fullPath := string(tree.MustBeDString(args[1]))
+				start, end := tree.MustBeDTimestampTZ(args[2]), tree.MustBeDTimestampTZ(args[3])
+				startTs := hlc.Timestamp{WallTime: start.UnixNano()}
+				endTs := hlc.Timestamp{WallTime: end.UnixNano()}
+				return tree.DVoidDatum, manager.CompactBackups(
+					ctx, collectionURI, nil, fullPath, encryption, startTs, endTs,
+				)
+			},
+			Info:       "Compacts the chain of incremental backups described by the start and end times.",
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
