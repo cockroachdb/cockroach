@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
@@ -618,6 +619,63 @@ func (jls *JoinListType) Set(value string) error {
 		// Re-join the parts. This guarantees an address that
 		// will be valid for net.SplitHostPort().
 		*jls = append(*jls, net.JoinHostPort(addr, port))
+	}
+	return nil
+}
+
+// PopulateWithEncryptionOpts iterates through the EncryptionSpecList and looks
+// for matching paths in the StoreSpecList and WAL failover config. Any
+// unmatched EncryptionSpec causes an error.
+func PopulateWithEncryptionOpts(
+	storeSpecs StoreSpecList,
+	walFailoverConfig *WALFailoverConfig,
+	encryptionSpecs storagepb.EncryptionSpecList,
+) error {
+	for _, es := range encryptionSpecs.Specs {
+		var found bool
+		for i := range storeSpecs.Specs {
+			if !es.PathMatches(storeSpecs.Specs[i].Path) {
+				continue
+			}
+
+			// Found a matching path.
+			if len(storeSpecs.Specs[i].EncryptionOptions) > 0 {
+				return fmt.Errorf("store with path %s already has an encryption setting",
+					storeSpecs.Specs[i].Path)
+			}
+
+			opts, err := es.ToEncryptionOptions()
+			if err != nil {
+				return err
+			}
+			storeSpecs.Specs[i].EncryptionOptions = opts
+			found = true
+			break
+		}
+
+		for _, externalPath := range [2]*ExternalPath{&walFailoverConfig.Path, &walFailoverConfig.PrevPath} {
+			if !externalPath.IsSet() || !es.PathMatches(externalPath.Path) {
+				continue
+			}
+			// NB: The external paths WALFailoverConfig.Path and
+			// WALFailoverConfig.PrevPath are only ever set in single-store
+			// configurations. In multi-store with among-stores failover mode, these
+			// will be empty (so we won't encounter the same path twice).
+			if len(externalPath.EncryptionOptions) > 0 {
+				return fmt.Errorf("WAL failover path %s already has an encryption setting",
+					externalPath.Path)
+			}
+			opts, err := es.ToEncryptionOptions()
+			if err != nil {
+				return err
+			}
+			externalPath.EncryptionOptions = opts
+			found = true
+		}
+
+		if !found {
+			return fmt.Errorf("no usage of path %s found for encryption setting: %v", es.Path, es)
+		}
 	}
 	return nil
 }

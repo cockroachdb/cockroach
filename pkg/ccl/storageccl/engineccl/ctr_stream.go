@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math/bits"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -40,14 +39,14 @@ const (
 // settings used, so that the caller can record these in a file registry.
 func (c *FileCipherStreamCreator) CreateNew(
 	ctx context.Context,
-) (*enginepbccl.EncryptionSettings, FileStream, error) {
+) (*enginepb.EncryptionSettings, FileStream, error) {
 	key, err := c.keyManager.ActiveKeyForWriter(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	settings := &enginepbccl.EncryptionSettings{}
-	if key == nil || key.Info.EncryptionType == enginepbccl.EncryptionType_Plaintext {
-		settings.EncryptionType = enginepbccl.EncryptionType_Plaintext
+	settings := &enginepb.EncryptionSettings{}
+	if key == nil || key.Info.EncryptionType == enginepb.EncryptionType_Plaintext {
+		settings.EncryptionType = enginepb.EncryptionType_Plaintext
 	} else {
 		settings.EncryptionType = key.Info.EncryptionType
 		settings.KeyId = key.Info.KeyId
@@ -72,20 +71,20 @@ func (c *FileCipherStreamCreator) CreateNew(
 }
 
 func createFileCipherStream(
-	settings *enginepbccl.EncryptionSettings, key *enginepbccl.SecretKey,
+	settings *enginepb.EncryptionSettings, key *enginepb.SecretKey,
 ) (FileStream, error) {
 	switch settings.EncryptionType {
-	case enginepbccl.EncryptionType_Plaintext:
+	case enginepb.EncryptionType_Plaintext:
 		return &filePlainStream{}, nil
 
-	case enginepbccl.EncryptionType_AES128_CTR, enginepbccl.EncryptionType_AES192_CTR, enginepbccl.EncryptionType_AES256_CTR:
+	case enginepb.EncryptionType_AES128_CTR, enginepb.EncryptionType_AES192_CTR, enginepb.EncryptionType_AES256_CTR:
 		ctrCS, err := newCTRBlockCipherStream(key, settings.Nonce, settings.Counter)
 		if err != nil {
 			return nil, err
 		}
 		return &fileCipherStream{bcs: ctrCS}, nil
 
-	case enginepbccl.EncryptionType_AES_128_CTR_V2, enginepbccl.EncryptionType_AES_192_CTR_V2, enginepbccl.EncryptionType_AES_256_CTR_V2:
+	case enginepb.EncryptionType_AES_128_CTR_V2, enginepb.EncryptionType_AES_192_CTR_V2, enginepb.EncryptionType_AES_256_CTR_V2:
 		var iv [ctrBlockSize]byte
 		copy(iv[:ctrNonceSize], settings.Nonce)
 		binary.BigEndian.PutUint32(iv[ctrNonceSize:ctrNonceSize+4], settings.Counter)
@@ -101,9 +100,9 @@ func createFileCipherStream(
 // CreateExisting creates a FileStream for an existing file by looking up the key described by
 // settings in the key manager.
 func (c *FileCipherStreamCreator) CreateExisting(
-	settings *enginepbccl.EncryptionSettings,
+	settings *enginepb.EncryptionSettings,
 ) (FileStream, error) {
-	if settings == nil || settings.EncryptionType == enginepbccl.EncryptionType_Plaintext {
+	if settings == nil || settings.EncryptionType == enginepb.EncryptionType_Plaintext {
 		return &filePlainStream{}, nil
 	}
 	key, err := c.keyManager.GetKey(settings.KeyId)
@@ -179,7 +178,7 @@ func (s *fileCipherStream) Decrypt(fileOffset int64, data []byte) {
 
 // AES in CTR mode.
 type cTRBlockCipherStream struct {
-	key     *enginepbccl.SecretKey
+	key     *enginepb.SecretKey
 	nonce   [ctrNonceSize]byte
 	counter uint32
 
@@ -187,12 +186,12 @@ type cTRBlockCipherStream struct {
 }
 
 func newCTRBlockCipherStream(
-	key *enginepbccl.SecretKey, nonce []byte, counter uint32,
+	key *enginepb.SecretKey, nonce []byte, counter uint32,
 ) (*cTRBlockCipherStream, error) {
 	switch key.Info.EncryptionType {
-	case enginepbccl.EncryptionType_AES128_CTR:
-	case enginepbccl.EncryptionType_AES192_CTR:
-	case enginepbccl.EncryptionType_AES256_CTR:
+	case enginepb.EncryptionType_AES128_CTR:
+	case enginepb.EncryptionType_AES192_CTR:
+	case enginepb.EncryptionType_AES256_CTR:
 	default:
 		return nil, fmt.Errorf("unknown EncryptionType: %d", key.Info.EncryptionType)
 	}
