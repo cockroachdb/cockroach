@@ -2380,7 +2380,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// Should eventually checkpoint all spans around the lagging span
 	testutils.SucceedsSoon(t, func() error {
 		progress := loadProgress()
-		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && !p.Checkpoint.Timestamp.IsEmpty() {
+		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && !p.Checkpoint.MinTimestamp.IsEmpty() {
 			return nil
 		}
 		return errors.New("waiting for checkpoint")
@@ -2397,7 +2397,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		"expected empty highwater or %s,  found %s", cursor, progress.GetHighWater())
 	require.NotNil(t, progress.GetChangefeed().Checkpoint)
 	require.Less(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
-	checkpointTS := progress.GetChangefeed().Checkpoint.Timestamp
+	checkpointTS := progress.GetChangefeed().Checkpoint.MinTimestamp
 	require.True(t, cursor.LessEq(checkpointTS))
 
 	var incorrectCheckpointErr error
@@ -2565,9 +2565,9 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			progress := loadProgress()
 			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
 				// Checkpoint timestamp should be the timestamp of the spans from the backfill
-				if !p.Checkpoint.Timestamp.Equal(backfillTimestamp.Next()) {
+				if !p.Checkpoint.MinTimestamp.Equal(backfillTimestamp.Next()) {
 					return false, changefeedbase.WithTerminalError(
-						errors.AssertionFailedf("expected checkpoint timestamp %s, found %s", backfillTimestamp, p.Checkpoint.Timestamp))
+						errors.AssertionFailedf("expected checkpoint timestamp %s, found %s", backfillTimestamp, p.Checkpoint.MinTimestamp))
 				}
 				initialCheckpoint.Add(p.Checkpoint.Spans...)
 				atomic.StoreInt32(&foundCheckpoint, 1)

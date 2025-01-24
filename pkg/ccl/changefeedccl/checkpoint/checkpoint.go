@@ -56,8 +56,8 @@ func Make(
 	}
 
 	cp := jobspb.ChangefeedProgress_Checkpoint{
-		Spans:     checkpointSpans,
-		Timestamp: checkpointTS,
+		Spans:        checkpointSpans,
+		MinTimestamp: checkpointTS,
 	}
 
 	if metrics != nil {
