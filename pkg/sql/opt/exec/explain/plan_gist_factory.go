@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -681,12 +682,8 @@ func (u *unknownIndex) IsUnique() bool {
 	return false
 }
 
-func (u *unknownIndex) IsInverted() bool {
-	return false
-}
-
-func (u *unknownIndex) IsVector() bool {
-	return false
+func (u *unknownIndex) Type() idxtype.T {
+	return idxtype.FORWARD
 }
 
 func (u *unknownIndex) GetInvisibility() float64 {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -125,7 +126,7 @@ func collectIndexRecs(
 				switch stmt := stmt.AST.(type) {
 				case *tree.CreateIndex:
 					// Ignore all the inverted, vector, partial, sharded, etc. indexes right now.
-					if stmt.Type == tree.IndexTypeForward && stmt.Predicate == nil && stmt.Sharded == nil {
+					if stmt.Type == idxtype.FORWARD && stmt.Predicate == nil && stmt.Sharded == nil {
 						cis = append(cis, *stmt)
 					}
 				case *tree.DropIndex:

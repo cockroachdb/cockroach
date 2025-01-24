@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -190,7 +191,7 @@ func (c *CustomFuncs) ScanIsLimited(sp *memo.ScanPrivate) bool {
 func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
 	md := c.e.mem.Metadata()
 	idx := md.Table(sp.Table).Index(sp.Index)
-	return idx.IsInverted()
+	return idx.Type() == idxtype.INVERTED
 }
 
 // SplitLimitedScanIntoUnionScans returns a UnionAll tree of Scan operators with

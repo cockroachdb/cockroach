@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -341,7 +340,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	}
 	var cols tree.IndexElemList
 	seen := map[tree.Name]bool{}
-	indexType := idxtype.FORWARD
+	indexType := tree.IndexTypeForward
 	unique := s.coin()
 	for len(cols) < 1 || s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
@@ -352,7 +351,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		// If this is the first column and it's invertible (i.e., JSONB), make an inverted index.
 		if len(cols) == 0 &&
 			colinfo.ColumnTypeIsOnlyInvertedIndexable(tree.MustBeStaticallyKnownType(col.Type)) {
-			indexType = idxtype.INVERTED
+			indexType = tree.IndexTypeInverted
 			unique = false
 			cols = append(cols, tree.IndexElem{
 				Column: col.Name,
@@ -367,7 +366,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		}
 	}
 	var storing tree.NameList
-	for idxtype.SupportsStoring(indexType) && s.coin() {
+	for indexType == tree.IndexTypeForward && s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
@@ -391,7 +390,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		Unique:       unique,
 		Columns:      cols,
 		Storing:      storing,
-		Type:         tree.IndexType(indexType),
+		Type:         indexType,
 		Concurrently: s.coin(),
 		Invisibility: invisibility,
 	}, true
