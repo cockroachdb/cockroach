@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1473,10 +1474,10 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 	if reverse {
 		f.Buffer.WriteString(",rev")
 	}
-	if index.IsInverted() {
+	switch index.Type() {
+	case idxtype.INVERTED:
 		f.Buffer.WriteString(",inverted")
-	}
-	if index.IsVector() {
+	case idxtype.VECTOR:
 		f.Buffer.WriteString(",vector")
 	}
 	if _, isPartial := index.Predicate(); isPartial {

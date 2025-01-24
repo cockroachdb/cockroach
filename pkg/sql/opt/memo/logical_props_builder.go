@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -2019,13 +2020,9 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 			continue
 		}
 
-		if index.IsInverted() {
-			// Skip inverted indexes for now.
-			continue
-		}
-
-		if index.IsVector() {
-			// Skip vector indexes for now.
+		switch index.Type() {
+		case idxtype.INVERTED, idxtype.VECTOR:
+			// Skip inverted and vector indexes for now.
 			continue
 		}
 
