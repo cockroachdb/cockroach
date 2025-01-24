@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/errors"
 )
 
@@ -234,22 +235,22 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 		}
 
 		// Skip over inverted indexes if rejectInvertedIndexes is set.
-		if it.hasRejectFlags(rejectInvertedIndexes) && index.IsInverted() {
+		if it.hasRejectFlags(rejectInvertedIndexes) && index.Type() == idxtype.INVERTED {
 			continue
 		}
 
 		// Skip over non-inverted indexes if rejectNonInvertedIndexes is set.
-		if it.hasRejectFlags(rejectNonInvertedIndexes) && !index.IsInverted() {
+		if it.hasRejectFlags(rejectNonInvertedIndexes) && index.Type() != idxtype.INVERTED {
 			continue
 		}
 
 		// Skip over vector indexes if rejectVectorIndexes is set.
-		if it.hasRejectFlags(rejectVectorIndexes) && index.IsVector() {
+		if it.hasRejectFlags(rejectVectorIndexes) && index.Type() == idxtype.VECTOR {
 			continue
 		}
 
 		// Skip over non-vector indexes if rejectNonVectorIndexes is set.
-		if it.hasRejectFlags(rejectNonVectorIndexes) && !index.IsVector() {
+		if it.hasRejectFlags(rejectNonVectorIndexes) && index.Type() != idxtype.VECTOR {
 			continue
 		}
 
