@@ -1,3 +1,6 @@
+# We've seen this file take more than an hour under race.
+skip under race
+
 statement ok
 CREATE TABLE other (b INT PRIMARY KEY)
 
