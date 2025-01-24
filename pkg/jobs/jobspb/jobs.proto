@@ -1188,6 +1188,23 @@ message ResolvedSpans {
   Stats stats = 2 [(gogoproto.nullable) = false];
 }
 
+// TimestampSpansMap is a map from timestamps to lists of spans.
+//
+// You should create a go map and call NewTimestampSpansMap on it
+// instead of creating one directly.
+//
+// NB: This can't be a protobuf map because that requires the key
+// to be integral/string, but the language guide notes that this
+// structure is equivalent on the wire to a map:
+// https://protobuf.dev/programming-guides/proto3/#backwards.
+message TimestampSpansMap {
+  message Entry {
+    util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+    repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+  }
+  repeated Entry entries = 1 [(gogoproto.nullable) = false];
+}
+
 message ChangefeedProgress {
   reserved 1;
 
@@ -1196,13 +1213,20 @@ message ChangefeedProgress {
   // some spans are significantly behind the rest, such as during backfills or
   // if specific spans are having issues progressing.  On restart, the
   // changefeed will forward the specified spans to the specified timestamp.
+  // TODO(#139734): Delete this nested message type.
   message Checkpoint {
+    option deprecated = true;
     repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
     util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
 
   reserved 2;
-  Checkpoint checkpoint = 4;
+  // Checkpoint is the deprecated span-level checkpoint for a
+  // changefeed. It consists of a list of spans and a single timestamp
+  // representing the minimum resolved timestamp of the spans.
+  // It is now deprecated in favor of SpanLevelCheckpoint.
+  // TODO(#139734): Delete this field and mark field number as reserved.
+  Checkpoint checkpoint = 4 [deprecated=true];
 
   // ProtectedTimestampRecord is the ID of the protected timestamp record
   // corresponding to this job. While the job ought to clean up the record
@@ -1218,6 +1242,19 @@ message ChangefeedProgress {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false
   ];
+
+  // SpanLevelCheckpoint is the span-level checkpoint for a changefeed.
+  // It consists of a map from resolved timestamps to lists of spans
+  // with that resolved timestamp.
+  //
+  // On restart, the changefeed can restore the progress of spans in the
+  // checkpoint to its corresponding resolved timestamp, which will be higher
+  // than the overall resolved timestamp and thus allow us to do less work.
+  // This is especially useful during backfills or if some spans are lagging.
+  // TODO(#137692): Write to this field.
+  // TODO(#137693): Restore this field to change aggregators.
+  // TODO(#131549): Restore this field to the change frontier.
+  TimestampSpansMap span_level_checkpoint = 5;
 }
 
 // CreateStatsDetails are used for the CreateStats job, which is triggered
