@@ -95,8 +95,7 @@ func newTestTenant(
 	tenant, tenantConn := serverutils.StartTenant(t, server, args)
 	sqlDB := sqlutils.MakeSQLRunner(tenantConn)
 	status := tenant.StatusServer().(serverpb.SQLStatusServer)
-	sqlStats := tenant.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	sqlStats := tenant.SQLServer().(*sql.Server).GetSQLStatsProvider()
 	contentionRegistry := tenant.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry
 
 	return &testTenant{

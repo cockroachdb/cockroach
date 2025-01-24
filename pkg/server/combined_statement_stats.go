@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -105,7 +106,7 @@ type statementStatsRunner struct {
 func getCombinedStatementStats(
 	ctx context.Context,
 	req *serverpb.CombinedStatementsStatsRequest,
-	statsProvider sqlstats.Provider,
+	statsProvider *persistedsqlstats.PersistedSQLStats,
 	ie *sql.InternalExecutor,
 	settings *cluster.Settings,
 	testingKnobs *sqlstats.TestingKnobs,

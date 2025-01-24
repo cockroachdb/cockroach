@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
 )
@@ -319,6 +320,9 @@ type bytesOrPercentageValue struct {
 	// memoryPercentResolver() and diskPercentResolverFactory().
 	percentResolver percentResolverFunc
 }
+
+var _ redact.SafeFormatter = (*bytesOrPercentageValue)(nil)
+
 type percentResolverFunc func(percent int) (int64, error)
 
 // memoryPercentResolver turns a percent into the respective fraction of the
@@ -426,7 +430,12 @@ func (b *bytesOrPercentageValue) Type() string {
 
 // String implements the pflag.Value interface.
 func (b *bytesOrPercentageValue) String() string {
-	return b.bval.String()
+	return redact.StringWithoutMarkers(b)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (b *bytesOrPercentageValue) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Print(b.bval)
 }
 
 // IsSet returns true iff Set has successfully been called.

@@ -70,7 +70,6 @@ go_test(
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",
-        "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
         "//pkg/sql/sqlstats/ssmemstorage",
         "//pkg/testutils",
