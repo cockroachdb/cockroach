@@ -1297,10 +1297,10 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 			if nextProgressCheck.IsZero() || nextProgressCheck.Before(timeutil.Now()) {
 				// Check if we've set a checkpoint yet
 				progress := loadProgress(t, jobFeed, jobRegistry)
-				if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-					initialCheckpoint.Add(p.Checkpoint.Spans...)
+				if p := progress.GetChangefeed(); p != nil && p.DeprecatedCheckpoint != nil && len(p.DeprecatedCheckpoint.Spans) > 0 {
+					initialCheckpoint.Add(p.DeprecatedCheckpoint.Spans...)
 					atomic.StoreInt32(&foundCheckpoint, 1)
-					t.Logf("found checkpoint %v", p.Checkpoint.Spans)
+					t.Logf("found checkpoint %v", p.DeprecatedCheckpoint.Spans)
 				}
 				nextProgressCheck = timeutil.Now().Add(progressBackoff)
 			}
@@ -1459,7 +1459,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		noHighWater := h == nil || h.IsEmpty()
 		require.True(t, noHighWater)
 
-		jobCheckpoint := progress.GetChangefeed().Checkpoint
+		jobCheckpoint := progress.GetChangefeed().DeprecatedCheckpoint
 		require.Less(t, 0, len(jobCheckpoint.Spans))
 		var checkpoint roachpb.SpanGroup
 		checkpoint.Add(jobCheckpoint.Spans...)
@@ -1484,7 +1484,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		// At this point, highwater mark should be set, and previous checkpoint should be gone.
 		progress = loadProgress(t, jobFeed, registry)
 		require.NotNil(t, progress.GetChangefeed())
-		require.Equal(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
+		require.Equal(t, 0, len(progress.GetChangefeed().DeprecatedCheckpoint.Spans))
 
 		require.NoError(t, jobFeed.Pause())
 

@@ -2380,7 +2380,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// Should eventually checkpoint all spans around the lagging span
 	testutils.SucceedsSoon(t, func() error {
 		progress := loadProgress()
-		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && !p.Checkpoint.Timestamp.IsEmpty() {
+		if p := progress.GetChangefeed(); p != nil && p.DeprecatedCheckpoint != nil && !p.DeprecatedCheckpoint.Timestamp.IsEmpty() {
 			return nil
 		}
 		return errors.New("waiting for checkpoint")
@@ -2395,9 +2395,9 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	progress := loadProgress()
 	require.True(t, progress.GetHighWater().IsEmpty() || *progress.GetHighWater() == cursor,
 		"expected empty highwater or %s,  found %s", cursor, progress.GetHighWater())
-	require.NotNil(t, progress.GetChangefeed().Checkpoint)
-	require.Less(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
-	checkpointTS := progress.GetChangefeed().Checkpoint.Timestamp
+	require.NotNil(t, progress.GetChangefeed().DeprecatedCheckpoint)
+	require.Less(t, 0, len(progress.GetChangefeed().DeprecatedCheckpoint.Spans))
+	checkpointTS := progress.GetChangefeed().DeprecatedCheckpoint.Timestamp
 	require.True(t, cursor.LessEq(checkpointTS))
 
 	var incorrectCheckpointErr error
@@ -2563,13 +2563,13 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 			// Check if we've set a checkpoint yet
 			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+			if p := progress.GetChangefeed(); p != nil && p.DeprecatedCheckpoint != nil && len(p.DeprecatedCheckpoint.Spans) > 0 {
 				// Checkpoint timestamp should be the timestamp of the spans from the backfill
-				if !p.Checkpoint.Timestamp.Equal(backfillTimestamp.Next()) {
+				if !p.DeprecatedCheckpoint.Timestamp.Equal(backfillTimestamp.Next()) {
 					return false, changefeedbase.WithTerminalError(
-						errors.AssertionFailedf("expected checkpoint timestamp %s, found %s", backfillTimestamp, p.Checkpoint.Timestamp))
+						errors.AssertionFailedf("expected checkpoint timestamp %s, found %s", backfillTimestamp, p.DeprecatedCheckpoint.Timestamp))
 				}
-				initialCheckpoint.Add(p.Checkpoint.Spans...)
+				initialCheckpoint.Add(p.DeprecatedCheckpoint.Spans...)
 				atomic.StoreInt32(&foundCheckpoint, 1)
 			}
 
@@ -2629,9 +2629,9 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 			// Once we've set a checkpoint that covers new spans, record it
 			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil {
+			if p := progress.GetChangefeed(); p != nil && p.DeprecatedCheckpoint != nil {
 				var currentCheckpoint roachpb.SpanGroup
-				currentCheckpoint.Add(p.Checkpoint.Spans...)
+				currentCheckpoint.Add(p.DeprecatedCheckpoint.Spans...)
 
 				// Ensure that the second checkpoint both contains all spans in the first checkpoint as well as new spans
 				if currentCheckpoint.Encloses(initialCheckpoint.Slice()...) && !initialCheckpoint.Encloses(currentCheckpoint.Slice()...) {
@@ -2689,8 +2689,8 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		// checkpoint should eventually be gone once backfill completes.
 		testutils.SucceedsSoon(t, func() error {
 			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-				t.Logf("non-empty checkpoint: %s", progress.GetChangefeed().Checkpoint.Spans)
+			if p := progress.GetChangefeed(); p != nil && p.DeprecatedCheckpoint != nil && len(p.DeprecatedCheckpoint.Spans) > 0 {
+				t.Logf("non-empty checkpoint: %s", progress.GetChangefeed().DeprecatedCheckpoint.Spans)
 				return errors.New("checkpoint still non-empty")
 			}
 			return nil
@@ -7385,7 +7385,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// Wait for non-nil checkpoint.
 		testutils.SucceedsSoon(t, func() error {
 			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+			if p := progress.GetChangefeed(); p != nil && p.DeprecatedCheckpoint != nil && len(p.DeprecatedCheckpoint.Spans) > 0 {
 				return nil
 			}
 			return errors.New("waiting for checkpoint")
@@ -7399,7 +7399,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		noHighWater := h == nil || h.IsEmpty()
 		require.True(t, noHighWater)
 
-		jobCheckpoint := progress.GetChangefeed().Checkpoint
+		jobCheckpoint := progress.GetChangefeed().DeprecatedCheckpoint
 		require.Less(t, 0, len(jobCheckpoint.Spans))
 		var checkpoint roachpb.SpanGroup
 		checkpoint.Add(jobCheckpoint.Spans...)
@@ -7428,7 +7428,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// At this point, highwater mark should be set, and previous checkpoint should be gone.
 		progress = loadProgress()
 		require.NotNil(t, progress.GetChangefeed())
-		require.Equal(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
+		require.Equal(t, 0, len(progress.GetChangefeed().DeprecatedCheckpoint.Spans))
 
 		// Verify that none of the resolved spans after resume were checkpointed.
 		for _, sp := range resolved {

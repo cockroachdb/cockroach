@@ -257,9 +257,9 @@ func startDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 
-	var checkpoint *jobspb.ChangefeedProgress_Checkpoint
-	if progress := localState.progress.GetChangefeed(); progress != nil && progress.Checkpoint != nil {
-		checkpoint = progress.Checkpoint
+	var checkpoint *jobspb.ChangefeedProgress_DeprecatedCheckpoint
+	if progress := localState.progress.GetChangefeed(); progress != nil && progress.DeprecatedCheckpoint != nil {
+		checkpoint = progress.DeprecatedCheckpoint
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
 		trackedSpans, checkpoint, localState.drainingNodes)(ctx, dsp)
@@ -378,7 +378,7 @@ func makePlan(
 	description string,
 	initialHighWater hlc.Timestamp,
 	trackedSpans []roachpb.Span,
-	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
+	checkpoint *jobspb.ChangefeedProgress_DeprecatedCheckpoint,
 	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {

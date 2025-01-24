@@ -765,8 +765,8 @@ func generateNewProgress(
 	}
 
 	haveHighwater := !(prevHighWater == nil || prevHighWater.IsEmpty())
-	haveCheckpoint := changefeedProgress != nil && changefeedProgress.Checkpoint != nil &&
-		len(changefeedProgress.Checkpoint.Spans) != 0
+	haveCheckpoint := changefeedProgress != nil && changefeedProgress.DeprecatedCheckpoint != nil &&
+		len(changefeedProgress.DeprecatedCheckpoint.Spans) != 0
 
 	// Check if the progress does not need to be updated. The progress does not
 	// need to be updated if:
@@ -802,7 +802,7 @@ func generateNewProgress(
 			Progress: &jobspb.Progress_HighWater{},
 			Details: &jobspb.Progress_Changefeed{
 				Changefeed: &jobspb.ChangefeedProgress{
-					Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
+					DeprecatedCheckpoint: &jobspb.ChangefeedProgress_DeprecatedCheckpoint{
 						Spans: existingTargetSpans,
 					},
 					ProtectedTimestampRecord: ptsRecord,
@@ -824,7 +824,7 @@ func generateNewProgress(
 
 	var mergedSpanGroup roachpb.SpanGroup
 	if haveCheckpoint {
-		mergedSpanGroup.Add(changefeedProgress.Checkpoint.Spans...)
+		mergedSpanGroup.Add(changefeedProgress.DeprecatedCheckpoint.Spans...)
 	}
 	mergedSpanGroup.Add(newSpans...)
 
@@ -832,7 +832,7 @@ func generateNewProgress(
 		Progress: &jobspb.Progress_HighWater{},
 		Details: &jobspb.Progress_Changefeed{
 			Changefeed: &jobspb.ChangefeedProgress{
-				Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
+				DeprecatedCheckpoint: &jobspb.ChangefeedProgress_DeprecatedCheckpoint{
 					Spans: mergedSpanGroup.Slice(),
 				},
 				ProtectedTimestampRecord: ptsRecord,
@@ -847,7 +847,7 @@ func removeSpansFromProgress(prevProgress jobspb.Progress, spansToRemove []roach
 	if changefeedProgress == nil {
 		return
 	}
-	changefeedCheckpoint := changefeedProgress.Checkpoint
+	changefeedCheckpoint := changefeedProgress.DeprecatedCheckpoint
 	if changefeedCheckpoint == nil {
 		return
 	}
@@ -856,7 +856,7 @@ func removeSpansFromProgress(prevProgress jobspb.Progress, spansToRemove []roach
 	var spanGroup roachpb.SpanGroup
 	spanGroup.Add(prevSpans...)
 	spanGroup.Sub(spansToRemove...)
-	changefeedProgress.Checkpoint.Spans = spanGroup.Slice()
+	changefeedProgress.DeprecatedCheckpoint.Spans = spanGroup.Slice()
 }
 
 func fetchSpansForDescs(p sql.PlanHookState, droppedIDs []descpb.ID) (primarySpans []roachpb.Span) {

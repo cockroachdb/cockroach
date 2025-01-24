@@ -700,8 +700,8 @@ func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Reg
 	for r := retry.Start(jobRecordRetryOpts); ; {
 		t.Log("waiting for checkpoint")
 		progress := loadProgress(t, jf, jr)
-		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-			t.Logf("read checkpoint: %#v", p.Checkpoint)
+		if p := progress.GetChangefeed(); p != nil && p.DeprecatedCheckpoint != nil && len(p.DeprecatedCheckpoint.Spans) > 0 {
+			t.Logf("read checkpoint: %#v", p.DeprecatedCheckpoint)
 			return
 		}
 		if !r.Next() {

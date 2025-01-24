@@ -57,7 +57,7 @@ func TestCheckpointMake(t *testing.T) {
 		frontier hlc.Timestamp
 		spans    checkpointSpans
 		maxBytes int64
-		expected jobspb.ChangefeedProgress_Checkpoint
+		expected jobspb.ChangefeedProgress_DeprecatedCheckpoint
 	}{
 		"all spans ahead of frontier checkpointed": {
 			frontier: ts(1),
@@ -68,7 +68,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(4)},
 			},
 			maxBytes: 100,
-			expected: jobspb.ChangefeedProgress_Checkpoint{
+			expected: jobspb.ChangefeedProgress_DeprecatedCheckpoint{
 				Timestamp: ts(2),
 				Spans: []roachpb.Span{
 					{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
@@ -85,7 +85,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(4)},
 			},
 			maxBytes: 2,
-			expected: jobspb.ChangefeedProgress_Checkpoint{
+			expected: jobspb.ChangefeedProgress_DeprecatedCheckpoint{
 				Timestamp: ts(2),
 				Spans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
 			},
@@ -99,7 +99,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(4)},
 			},
 			maxBytes: 0,
-			expected: jobspb.ChangefeedProgress_Checkpoint{
+			expected: jobspb.ChangefeedProgress_DeprecatedCheckpoint{
 				Timestamp: ts(2),
 			},
 		},
@@ -112,7 +112,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(1)},
 			},
 			maxBytes: 100,
-			expected: jobspb.ChangefeedProgress_Checkpoint{},
+			expected: jobspb.ChangefeedProgress_DeprecatedCheckpoint{},
 		},
 		"adjacent spans ahead of frontier merged before being checkpointed": {
 			frontier: ts(1),
@@ -123,7 +123,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(1)},
 			},
 			maxBytes: 100,
-			expected: jobspb.ChangefeedProgress_Checkpoint{
+			expected: jobspb.ChangefeedProgress_DeprecatedCheckpoint{
 				Timestamp: ts(2),
 				Spans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}},
 			},
