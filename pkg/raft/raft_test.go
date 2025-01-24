@@ -2565,8 +2565,9 @@ func TestPreCandidateIgnoresDefortification(t *testing.T) {
 }
 
 func TestLeaderAppResp(t *testing.T) {
-	// initial progress: match = 0; next = 3
-	tests := []struct {
+	// The test creates a leader node at term 2, with raft log [1 1 1 2 2 2].
+	// Initial progress: match = 0, next = 4.
+	for _, tt := range []struct {
 		index  uint64
 		reject bool
 		// progress
@@ -2577,46 +2578,45 @@ func TestLeaderAppResp(t *testing.T) {
 		windex     uint64
 		wcommitted uint64
 	}{
-		{3, true, 0, 3, 0, 0, 0},  // stale resp; no replies
-		{2, true, 0, 2, 1, 1, 0},  // denied resp; leader does not commit; decrease next and send probing msg
-		{2, false, 2, 4, 2, 2, 2}, // accept resp; leader commits; broadcast with commit index
-		// Follower is StateProbing at 0, it sends MsgAppResp for 0 (which
-		// matches the pr.Match) so it is moved to StateReplicate and as many
-		// entries as possible are sent to it (1, 2, and 3). Correspondingly the
-		// Next is then 4 (an Entry at 4 does not exist, indicating the follower
-		// will be up to date should it process the emitted MsgApp).
-		{0, false, 0, 4, 1, 0, 0},
-	}
+		{2, true, 0, 4, 0, 0, 0}, // stale resp; no replies
+		{6, true, 0, 4, 0, 0, 0}, // stale resp; no replies
+		{3, true, 0, 3, 1, 2, 0}, // denied resp; leader does not commit; decrease next and send probing msg
 
-	for _, tt := range tests {
+		{4, false, 4, 7, 1, 4, 4}, // accept resp; leader commits; broadcast with commit index
+		// Follower is StateProbing at 4, it sends MsgAppResp for 4, and is moved to
+		// StateReplicate and as many entries as possible are sent to it (5, 6).
+		// Correspondingly the Next is then 7 (entry 7 does not exist, indicating
+		// the follower will be up to date should it process the emitted MsgApp).
+		{4, false, 4, 7, 1, 4, 4},
+	} {
 		t.Run("", func(t *testing.T) {
-			// sm term is 1 after it becomes the leader.
-			// thus the last log term must be 1 to be committed.
-			sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-			sm.raftLog = newLog(&MemoryStorage{ls: LogSlice{
-				term:    1,
-				entries: index(1).terms(1, 1),
-			}}, nil)
+			storage := newTestMemoryStorage(withPeers(1, 2, 3))
+			require.NoError(t, storage.Append(index(1).terms(1, 1, 1)))
+			require.NoError(t, storage.SetHardState(pb.HardState{Term: 1}))
+			sm := newTestRaft(1, 10, 1, storage)
 			sm.becomeCandidate()
+			require.Equal(t, uint64(2), sm.Term)
+			require.Equal(t, uint64(3), sm.raftLog.lastIndex())
 			sm.becomeLeader()
+			require.Equal(t, uint64(4), sm.raftLog.lastIndex()) // appended a dummy
+			sm.appendEntry(index(5).terms(2, 2)...)
+			sm.bcastAppend()
+
 			sm.readMessages()
-			require.NoError(t, sm.Step(
-				pb.Message{
-					From:       2,
-					Type:       pb.MsgAppResp,
-					Index:      tt.index,
-					Term:       sm.Term,
-					Reject:     tt.reject,
-					RejectHint: tt.index,
-				},
-			))
+			require.NoError(t, sm.Step(pb.Message{
+				From:       2,
+				Type:       pb.MsgAppResp,
+				Index:      tt.index,
+				Term:       sm.Term,
+				Reject:     tt.reject,
+				RejectHint: tt.index,
+			}))
 
 			p := sm.trk.Progress(2)
 			require.Equal(t, tt.wmatch, p.Match)
 			require.Equal(t, tt.wnext, p.Next)
 
 			msgs := sm.readMessages()
-
 			require.Len(t, msgs, tt.wmsgNum)
 			for _, msg := range msgs {
 				require.Equal(t, tt.windex, msg.Index, "%v", DescribeMessage(msg, nil))
