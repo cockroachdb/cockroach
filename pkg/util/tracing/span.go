@@ -210,7 +210,7 @@ func (sp *Span) String() string {
 
 // Redactable returns true if this Span's tracer is marked redactable.
 func (sp *Span) Redactable() bool {
-	if sp == nil || sp.i.isNoop() {
+	if sp == nil {
 		return false
 	}
 	sp.detectUseAfterFinish()
@@ -656,6 +656,9 @@ func (sp *Span) reset(
 	}
 
 	c := sp.i.crdb
+	if c == nil && otelSpan == nil && netTr == nil {
+		panic(errors.AssertionFailedf("must have at least one of crdbSpan, otelSpan, or netTr"))
+	}
 	sp.i = spanInner{
 		tracer:   sp.i.tracer,
 		crdb:     c,
