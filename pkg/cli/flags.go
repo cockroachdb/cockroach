@@ -292,6 +292,10 @@ func (f *keyTypeFilter) Set(v string) error {
 
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
+// This value is never read. It is used to hold the storage engine which is now
+// a hidden option.
+var deprecatedStorageEngine string
+
 func init() {
 	initCLIDefaults()
 
@@ -507,7 +511,11 @@ func init() {
 		cliflagcfg.StringFlag(f, &localityFile, cliflags.LocalityFile)
 
 		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
-		cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
+
+		// deprecatedStorageEngine is only kept for backwards compatibility.
+		cliflagcfg.StringFlag(f, &deprecatedStorageEngine, cliflags.StorageEngine)
+		_ = pf.MarkHidden(cliflags.StorageEngine.Name)
+
 		cliflagcfg.VarFlag(f, &serverCfg.WALFailover, cliflags.WALFailover)
 		cliflagcfg.StringFlag(f, &serverCfg.SharedStorage, cliflags.SharedStorage)
 		cliflagcfg.VarFlag(f, &serverCfg.SecondaryCache, cliflags.SecondaryCache)

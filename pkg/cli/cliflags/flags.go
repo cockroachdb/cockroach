@@ -1092,11 +1092,8 @@ See the storage.wal_failover.unhealthy_op_threshold cluster setting.
 	}
 
 	StorageEngine = FlagInfo{
-		Name: "storage-engine",
-		Description: `
-Storage engine to use for all stores on this cockroach node. The only option is pebble. Deprecated;
-only present for backward compatibility.
-`,
+		Name:        "storage-engine",
+		Description: "Deprecated: only present for backward compatibility.",
 	}
 
 	SecondaryCache = FlagInfo{

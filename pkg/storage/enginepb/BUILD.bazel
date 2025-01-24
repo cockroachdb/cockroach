@@ -5,7 +5,6 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "enginepb_proto",
     srcs = [
-        "engine.proto",
         "file_registry.proto",
         "mvcc.proto",
         "mvcc3.proto",
@@ -38,7 +37,6 @@ go_library(
     name = "enginepb",
     srcs = [
         "decode.go",
-        "engine.go",
         "file_registry.go",
         "mvcc.go",
         "mvcc3.go",
