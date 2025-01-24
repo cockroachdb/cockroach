@@ -2935,7 +2935,20 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	for i := 0; i < numRows; i++ {
 		var row []string
 		for _, col := range nonGeneratedCols {
-			d := randgen.RandDatum(og.params.rng, col.typ, col.nullable)
+			// Limit the size of columns being generated.
+			const maxSize = 1024 * 1024
+			maxAttempts := 30
+			var d tree.Datum
+			for i := 0; i < maxAttempts; i++ {
+				d = randgen.RandDatum(og.params.rng, col.typ, col.nullable)
+				// Retry if we exceed the maximum size.
+				if d.Size() > maxSize {
+					break
+				}
+			}
+			if d.Size() > maxSize {
+				og.LogMessage("unable to generate small enough datum")
+			}
 			// Unfortunately, RandDatum for OIDs only selects random values, which will
 			// always fail validation. So, for OIDs we will select a random known type
 			// instead.
