@@ -477,6 +477,10 @@ type IndexBackfiller struct {
 	// backfilled.
 	indexesToEncode []catalog.Index
 
+	// keyPrefixes is a slice of key prefixes for each index in indexesToEncode.
+	// indexesToEncode and keyPrefixes should both have the same ordering.
+	keyPrefixes [][]byte
+
 	alloc tree.DatumAlloc
 
 	// mon is a memory monitor linked with the IndexBackfiller on creation.
@@ -526,7 +530,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 		ib.valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	return ib.init(evalCtx, predicates, colExprs, mon)
+	return ib.init(evalCtx, predicates, colExprs, mon, desc.GetID())
 }
 
 // constructExprs is a helper to construct the index and column expressions
@@ -690,7 +694,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		ib.valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	return ib.init(evalCtx, predicates, colExprs, mon)
+	return ib.init(evalCtx, predicates, colExprs, mon, desc.GetID())
 }
 
 // Close releases the resources used by the IndexBackfiller. It can be called
@@ -764,18 +768,25 @@ func (ib *IndexBackfiller) init(
 	predicateExprs map[descpb.IndexID]tree.TypedExpr,
 	colExprs map[descpb.ColumnID]tree.TypedExpr,
 	mon *mon.BytesMonitor,
+	descID descpb.ID,
 ) error {
 	ib.evalCtx = evalCtx
 	ib.predicates = predicateExprs
 	ib.colExprs = colExprs
 
-	// Initialize a list of index descriptors to encode entries for. If there
+	// Initialize a list of index descriptors to encode entries for, along with a
+	// slice of key prefixes for each index (with the same ordering). If there
 	// are no partial indexes, the list is equivalent to the list of indexes
 	// being added. If there are partial indexes, allocate a new list that is
 	// reset in BuildIndexEntriesChunk for every row added.
 	ib.indexesToEncode = ib.added
+	for _, idx := range ib.added {
+		keyPrefix := rowenc.MakeIndexKeyPrefix(evalCtx.Codec, descID, idx.GetID())
+		ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
+	}
 	if len(ib.predicates) > 0 {
 		ib.indexesToEncode = make([]catalog.Index, 0, len(ib.added))
+		ib.keyPrefixes = make([][]byte, 0, len(ib.added))
 	}
 
 	ib.types = make([]*types.T, len(ib.cols))
@@ -918,6 +929,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		}
 		return nil
 	}
+
 	for i := int64(0); i < chunkSize; i++ {
 		ok, _, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
@@ -943,11 +955,14 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// indexes that the current row should be added to.
 		if len(ib.predicates) > 0 {
 			ib.indexesToEncode = ib.indexesToEncode[:0]
+			ib.keyPrefixes = ib.keyPrefixes[:0]
 			for _, idx := range ib.added {
 				if !idx.IsPartial() {
 					// If the index is not a partial index, all rows should have
 					// an entry.
 					ib.indexesToEncode = append(ib.indexesToEncode, idx)
+					keyPrefix := rowenc.MakeIndexKeyPrefix(ib.evalCtx.Codec, tableDesc.GetID(), idx.GetID())
+					ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 					continue
 				}
 
@@ -962,6 +977,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 
 				if val == tree.DBoolTrue {
 					ib.indexesToEncode = append(ib.indexesToEncode, idx)
+					keyPrefix := rowenc.MakeIndexKeyPrefix(ib.evalCtx.Codec, tableDesc.GetID(), idx.GetID())
+					ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 				}
 			}
 		}
@@ -983,6 +1000,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				ib.evalCtx.Codec,
 				tableDesc,
 				ib.indexesToEncode,
+				ib.keyPrefixes,
 				ib.colIdxMap,
 				ib.rowVals,
 				buffer,
