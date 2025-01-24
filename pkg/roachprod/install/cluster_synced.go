@@ -782,6 +782,7 @@ func (r *RunResultDetails) Output(decorate bool) string {
 type RunCmdOptions struct {
 	combinedOut             bool
 	includeRoachprodEnvVars bool
+	logExpandedCmd          bool // log expanded result if it differs from the original command
 	stdin                   io.Reader
 	stdout, stderr          io.Writer
 	remoteOptions           []remoteSessionOption
@@ -825,6 +826,9 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	expandedCmd, err := e.expand(ctx, l, c, opts.expanderConfig, cmd)
 	if err != nil {
 		return &noResult, errors.WithDetailf(err, "error expanding command: %s", cmd)
+	}
+	if opts.logExpandedCmd && expandedCmd != cmd {
+		l.Printf("Node %d expanded cmd > %s", e.node, expandedCmd)
 	}
 
 	nodeCmd := expandedCmd
@@ -931,6 +935,7 @@ func (c *SyncedCluster) Run(
 			stdout:                  stdout,
 			stderr:                  stderr,
 			expanderConfig:          options.ExpanderConfig,
+			logExpandedCmd:          options.LogExpandedCmd,
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
@@ -1015,6 +1020,7 @@ func (c *SyncedCluster) RunWithDetails(
 			stdout:                  l.Stdout,
 			stderr:                  l.Stderr,
 			expanderConfig:          options.ExpanderConfig,
+			logExpandedCmd:          options.LogExpandedCmd,
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
