@@ -791,7 +791,7 @@ func (n *Node) start(
 		// sequence ID generator stored in a system key.
 		n.additionalStoreInitCh = make(chan struct{})
 		if err := n.stopper.RunAsyncTask(workersCtx, "initialize-additional-stores", func(ctx context.Context) {
-			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines, n.stopper); err != nil {
+			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines); err != nil {
 				log.Fatalf(ctx, "while initializing additional stores: %v", err)
 			}
 			close(n.additionalStoreInitCh)
@@ -1011,9 +1011,7 @@ func (n *Node) validateStores(ctx context.Context) error {
 // cluster and node ID have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per node. The
 // new stores are added to n.stores.
-func (n *Node) initializeAdditionalStores(
-	ctx context.Context, engines []storage.Engine, stopper *stop.Stopper,
-) error {
+func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage.Engine) error {
 	if n.clusterID.Get() == uuid.Nil {
 		return errors.New("missing cluster ID during initialization of additional store")
 	}
@@ -1040,7 +1038,7 @@ func (n *Node) initializeAdditionalStores(
 			}
 
 			s := kvserver.NewStore(ctx, n.storeCfg, eng, &n.Descriptor)
-			if err := s.Start(ctx, stopper); err != nil {
+			if err := s.Start(ctx, n.stopper); err != nil {
 				return err
 			}
 
