@@ -2580,7 +2580,7 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 		// descriptor txn will not wait for the initial version.
 		if expected == descpb.DescriptorState_DROP && next == descpb.DescriptorState_PUBLIC {
 			require.NoError(t,
-				execCfg.LeaseManager.WaitForInitialVersion(ctx, testTableID(), retry.Options{}, nil))
+				execCfg.LeaseManager.WaitForInitialVersion(ctx, descpb.IDs{testTableID()}, retry.Options{}, nil))
 		}
 		// Wait for the lease manager's refresh worker to have processed the
 		// descriptor update.
@@ -4094,4 +4094,80 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_no_version"))
 	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant"))
 	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_one_version"))
+}
+
+// TestWaitForInitialVersionConcurrent this test is a basic sanity test that
+// intentionally has leases modified or used while the WaitForInitialVersion
+// is happening. The goal of this test is to find any concurrency related
+// bugs in the leasing subsystem with this logic.
+func TestWaitForInitialVersionConcurrent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	const numIter = 100
+	const numThreads = 4
+
+	expectedErrors := map[pgcode.Code]struct{}{
+		pgcode.UndefinedTable: {}, // table isn't created yet
+	}
+	tableCreator := func(ctx context.Context, index int) error {
+		stopTableUser := make(chan struct{})
+		defer close(stopTableUser)
+		tableUser := func(ctx context.Context, tblName string) error {
+			execLoop := true
+			// Execute a tight loop during the table creation
+			// process.
+			iter := 0
+			for execLoop {
+				select {
+				// Detect if we should move to the next
+				// table.
+				case <-stopTableUser:
+					execLoop = false
+				default:
+				}
+				var err error
+				// Execute DDL / DML we expect this to succeed or not notice the
+				// table.
+				if iter%2 == 0 {
+					_, err = sqlDB.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN j%d INT", tblName, iter))
+				} else {
+					_, err = sqlDB.Exec(fmt.Sprintf("SELECT * FROM %s", tblName))
+				}
+				// We expect failures when the table doesn't exist.
+				if err != nil {
+					var pqErr *pq.Error
+					if !errors.As(err, &pqErr) {
+						return err
+					}
+					if _, ok := expectedErrors[pgcode.MakeCode(string(pqErr.Code))]; !ok {
+						return err
+					}
+				}
+				iter += 1
+			}
+			return nil
+		}
+		tablePrefix := fmt.Sprintf("table%d_", index)
+		for i := 0; i < numIter; i++ {
+			tblName := fmt.Sprintf("%s%d", tablePrefix, i)
+			grp := ctxgroup.WithContext(ctx)
+			grp.GoCtx(func(ctx context.Context) error {
+				return tableUser(ctx, tblName)
+			})
+			_, err := sqlDB.Exec(fmt.Sprintf("CREATE TABLE %s(n int)", tblName))
+			if err != nil {
+				return err
+			}
+			stopTableUser <- struct{}{}
+			if err := grp.Wait(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	require.NoError(t, ctxgroup.GroupWorkers(ctx, numThreads, tableCreator))
 }

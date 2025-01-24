@@ -1118,7 +1118,7 @@ func TestExpectDataRow(t *testing.T) {
 	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 
-	falseValidateFn := func(m *pgproto3.DataRow, s int) bool { return false }
+	falseValidateFn := func(m *pgproto3.DataRow, s int) (bool, error) { return false, nil }
 
 	t.Run("context_cancelled", func(t *testing.T) {
 		tCtx, cancel := context.WithCancel(ctx)
@@ -1176,10 +1176,14 @@ func TestExpectDataRow(t *testing.T) {
 		err := expectDataRow(
 			ctx,
 			interceptor.NewFrontendConn(r),
-			func(m *pgproto3.DataRow, size int) bool {
+			func(m *pgproto3.DataRow, size int) (bool, error) {
+				buf, err := msg.Encode(nil)
+				if err != nil {
+					return false, err
+				}
 				return len(m.Values) == 1 &&
 					string(m.Values[0]) == "foo" &&
-					len(msg.Encode(nil)) == size
+					len(buf) == size, nil
 			},
 		)
 		require.Nil(t, err)
@@ -1298,7 +1302,8 @@ func TestExpectReadyForQuery(t *testing.T) {
 }
 
 func writeServerMsg(w io.Writer, msg pgproto3.BackendMessage) {
-	_, _ = w.Write(msg.Encode(nil))
+	buf, _ := msg.Encode(nil)
+	_, _ = w.Write(buf)
 }
 
 func expectMsg(t *testing.T, msgCh <-chan pgproto3.BackendMessage, match string) {

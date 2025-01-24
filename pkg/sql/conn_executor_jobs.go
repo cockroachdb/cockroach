@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -61,19 +62,17 @@ func (ex *connExecutor) waitForInitialVersionForNewDescriptors(
 	// nodes that have leased the schema for them out are aware of the new object.
 	// This guarantees that any cached optimizer memos are discarded once the
 	// user transaction completes.
+	descriptorIDs := make(descpb.IDs, 0, len(ex.extraTxnState.descCollection.GetUncommittedTables()))
 	for _, tbl := range ex.extraTxnState.descCollection.GetUncommittedTables() {
 		if tbl.GetVersion() == 1 {
-			err := ex.planner.LeaseMgr().WaitForInitialVersion(ex.Ctx(), tbl.GetID(), retry.Options{
-				InitialBackoff: time.Millisecond,
-				MaxBackoff:     time.Second,
-				Multiplier:     1.5,
-			}, cachedRegions)
-			if err != nil {
-				return err
-			}
+			descriptorIDs = append(descriptorIDs, tbl.GetID())
 		}
 	}
-	return nil
+	return ex.planner.LeaseMgr().WaitForInitialVersion(ex.Ctx(), descriptorIDs, retry.Options{
+		InitialBackoff: time.Millisecond,
+		MaxBackoff:     time.Second,
+		Multiplier:     1.5,
+	}, cachedRegions)
 }
 
 // descIDsInSchemaChangeJobs returns all descriptor IDs with which schema change
