@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -883,8 +884,7 @@ func (tt *Table) addIndexWithVersion(
 	idx := &Index{
 		IdxName:      tt.makeIndexName(def.Name, def.Columns, typ),
 		Unique:       typ != nonUniqueIndex,
-		Inverted:     def.Type == tree.IndexTypeInverted,
-		Vector:       def.Type == tree.IndexTypeVector,
+		Typ:          def.Type,
 		IdxZone:      cat.EmptyZone(),
 		table:        tt,
 		version:      version,
@@ -913,9 +913,9 @@ func (tt *Table) addIndexWithVersion(
 		isLastIndexCol := i == len(def.Columns)-1
 		if isLastIndexCol {
 			switch def.Type {
-			case tree.IndexTypeInverted:
+			case idxtype.INVERTED:
 				idx.invertedOrd = i
-			case tree.IndexTypeVector:
+			case idxtype.VECTOR:
 				idx.vectorOrd = i
 			}
 		}
@@ -925,7 +925,7 @@ func (tt *Table) addIndexWithVersion(
 			notNullIndex = false
 		}
 
-		if isLastIndexCol && def.Type == tree.IndexTypeInverted {
+		if isLastIndexCol && def.Type == idxtype.INVERTED {
 			switch tt.Columns[col.InvertedSourceColumnOrdinal()].DatumType().Family() {
 			case types.GeometryFamily:
 				// Don't use the default config because it creates a huge number of spans.
@@ -1071,9 +1071,9 @@ func (tt *Table) addIndexWithVersion(
 	// Add storing columns.
 	for _, name := range def.Storing {
 		switch def.Type {
-		case tree.IndexTypeInverted:
+		case idxtype.INVERTED:
 			panic("inverted indexes don't support stored columns")
-		case tree.IndexTypeVector:
+		case idxtype.VECTOR:
 			panic("vector indexes don't support stored columns")
 		}
 		// Only add storing columns that weren't added as part of adding implicit
@@ -1235,7 +1235,7 @@ func (ti *Index) addColumn(
 		colName = elem.Column
 	}
 
-	if ti.Inverted && isLastIndexCol {
+	if ti.Typ == idxtype.INVERTED && isLastIndexCol {
 		// The last column of an inverted index is special: the index key does
 		// not contain values from the column itself, but contains inverted
 		// index entries derived from that column. Create a virtual column to be
@@ -1319,7 +1319,7 @@ func (ti *Index) addColumnByOrdinal(
 				))
 			}
 		} else if typ.Family() == types.PGVectorFamily {
-			if !ti.Vector {
+			if ti.Typ != idxtype.VECTOR {
 				panic(fmt.Errorf(
 					"column %s of type %s is not allowed in a non-vector index", col.ColName(), typ,
 				))

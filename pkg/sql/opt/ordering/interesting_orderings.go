@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 )
 
 // DeriveRestrictedInterestingOrderings calculates and returns the entry of the
@@ -105,7 +106,8 @@ func interestingOrderingsForScan(scan *memo.ScanExpr) props.OrderingSet {
 
 	addIndexOrdering := func(indexOrd cat.IndexOrdinal, fds *props.FuncDepSet, exactPrefix int) {
 		index := tab.Index(indexOrd)
-		if index.IsInverted() {
+		if index.Type() != idxtype.FORWARD {
+			// Do not consider inverted or vector indexes.
 			return
 		}
 		numIndexCols := index.KeyColumnCount()
