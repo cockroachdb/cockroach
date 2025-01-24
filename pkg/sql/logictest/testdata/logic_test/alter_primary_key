@@ -1,4 +1,5 @@
-# LogicTest: !metamorphic-batch-sizes
+# We've seen this test hit a timeout in fakedist configs under race.
+skip under race
 
 statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, w INT, INDEX i (x), INDEX i2 (z))
