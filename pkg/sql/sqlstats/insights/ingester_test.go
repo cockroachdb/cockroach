@@ -77,7 +77,7 @@ func TestIngester(t *testing.T) {
 				}, store, nil),
 			)
 
-			ingester.Start(ctx, stopper)
+			ingester.Start(ctx, stopper, WithFlushInterval(10))
 			for _, e := range tc.observations {
 				if e.statementID != 0 {
 					ingester.ObserveStatement(e.SessionID(), &Statement{ID: e.StatementID()})
@@ -93,7 +93,7 @@ func TestIngester(t *testing.T) {
 					numInsights++
 				})
 				return numInsights == tc.totalTxnInsights
-			}, 1*time.Second, 50*time.Millisecond)
+			}, 1*time.Second, 10*time.Millisecond)
 
 			// See that the insights we were expecting are the ones that
 			// arrived. We allow the provider to do whatever it needs to, so
