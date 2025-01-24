@@ -828,12 +828,6 @@ func (n *Node) start(
 		}
 	})
 
-	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
-	allEngines = append(allEngines, state.uninitializedEngines...)
-	for _, e := range allEngines {
-		t := e.Type()
-		log.Infof(ctx, "started with engine type %v", &t)
-	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
 
 	n.startPeriodicLivenessCompaction(n.stopper, livenessRangeCompactInterval)
