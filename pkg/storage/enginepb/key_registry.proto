@@ -4,8 +4,8 @@
 // included in the /LICENSE file.
 
 syntax = "proto3";
-package cockroach.ccl.storageccl.engineccl.enginepbccl;
-option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl";
+package cockroach.storage.enginepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
 
 enum EncryptionType {
   // No encryption.
@@ -14,9 +14,10 @@ enum EncryptionType {
   AES128_CTR = 1;
   AES192_CTR = 2;
   AES256_CTR = 3;
-  // AES in counter mode with OpenSSL-compatible behavior for counter wraparound.
-  // This version is faster than the original implementation becasue it is able
-  // to offload more work to highly-optimized library implementations.
+  // AES in counter mode with OpenSSL-compatible behavior for counter
+  // wraparound. This version is faster than the original implementation becasue
+  // it is able to offload more work to highly-optimized library
+  // implementations.
   AES_128_CTR_V2 = 4;
   AES_192_CTR_V2 = 5;
   AES_256_CTR_V2 = 6;
@@ -56,8 +57,8 @@ message KeyInfo {
 }
 
 // SecretKey contains the information about the key AND the raw key itself.
-// This should never be logged, displayed, or stored outside of the key registry.
-// The name is intended to make users of the key wary of the usage.
+// This should never be logged, displayed, or stored outside of the key
+// registry. The name is intended to make users of the key wary of the usage.
 message SecretKey {
   KeyInfo info = 1;
   // The raw key.

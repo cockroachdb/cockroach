@@ -3,17 +3,16 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cliccl
+package cli
 
 import (
 	"crypto/rand"
-	"encoding/hex"
+	gohex "encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
-	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/errors"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/spf13/cobra"
@@ -46,14 +45,14 @@ func genEncryptionKey(
 		b = append(b, keyID...)
 		b = append(b, key...)
 	case 2:
-		var et enginepbccl.EncryptionType
+		var et enginepb.EncryptionType
 		switch aesSize {
 		case 128:
-			et = enginepbccl.EncryptionType_AES_128_CTR_V2
+			et = enginepb.EncryptionType_AES_128_CTR_V2
 		case 192:
-			et = enginepbccl.EncryptionType_AES_192_CTR_V2
+			et = enginepb.EncryptionType_AES_192_CTR_V2
 		case 256:
-			et = enginepbccl.EncryptionType_AES_256_CTR_V2
+			et = enginepb.EncryptionType_AES_256_CTR_V2
 		default:
 			// Redundant since we checked this at the start of the function too.
 			return fmt.Errorf("store key size should be 128, 192, or 256 bits, got %d", aesSize)
@@ -65,7 +64,7 @@ func genEncryptionKey(
 		if err != nil {
 			return errors.Wrap(err, "error setting key bytes")
 		}
-		if err := symKey.Set(jwk.KeyIDKey, hex.EncodeToString(keyID)); err != nil {
+		if err := symKey.Set(jwk.KeyIDKey, gohex.EncodeToString(keyID)); err != nil {
 			return errors.Wrap(err, "error setting key id")
 		}
 		alg, err := et.JWKAlgorithm()
@@ -132,8 +131,6 @@ The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 }
 
 func init() {
-	cli.GenCmd.AddCommand(genEncryptionKeyCmd)
-
 	genEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSizeFlag, "size", "s", 128,
 		"AES key size for encryption at rest (one of: 128, 192, 256)")
 	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKeyFlag, "overwrite", false,

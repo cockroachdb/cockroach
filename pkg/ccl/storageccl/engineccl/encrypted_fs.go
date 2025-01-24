@@ -9,10 +9,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/pebble/vfs"
@@ -123,7 +122,7 @@ func (fs *encryptedFS) Create(name string, category vfs.DiskWriteCategory) (vfs.
 	// Add an entry for the file to the pebble file registry if it is encrypted.
 	// We choose not to store an entry for unencrypted files since the absence of
 	// a file in the file registry implies that it is unencrypted.
-	if settings.EncryptionType == enginepbccl.EncryptionType_Plaintext {
+	if settings.EncryptionType == enginepb.EncryptionType_Plaintext {
 		if err := fs.fileRegistry.MaybeDeleteEntry(name); err != nil {
 			_ = f.Close()
 			return nil, err
@@ -158,14 +157,14 @@ func (fs *encryptedFS) Open(name string, opts ...vfs.OpenOption) (vfs.File, erro
 		return f, err
 	}
 	fileEntry := fs.fileRegistry.GetFileEntry(name)
-	var settings *enginepbccl.EncryptionSettings
+	var settings *enginepb.EncryptionSettings
 	if fileEntry != nil {
 		if fileEntry.EnvType != fs.streamCreator.envType {
 			f.Close()
 			return nil, fmt.Errorf("filename: %s has env %d not equal to FS env %d",
 				name, fileEntry.EnvType, fs.streamCreator.envType)
 		}
-		settings = &enginepbccl.EncryptionSettings{}
+		settings = &enginepb.EncryptionSettings{}
 		if err := protoutil.Unmarshal(fileEntry.EncryptionSettings, settings); err != nil {
 			f.Close()
 			return nil, err
@@ -244,7 +243,7 @@ type encryptionStatsHandler struct {
 }
 
 func (e *encryptionStatsHandler) GetEncryptionStatus() ([]byte, error) {
-	var s enginepbccl.EncryptionStatus
+	var s enginepb.EncryptionStatus
 	if e.storeKM.activeKey != nil {
 		s.ActiveStoreKey = e.storeKM.activeKey.Info
 	}
@@ -270,11 +269,11 @@ func (e *encryptionStatsHandler) GetActiveStoreKeyType() int32 {
 	if e.storeKM.activeKey != nil {
 		return int32(e.storeKM.activeKey.Info.EncryptionType)
 	}
-	return int32(enginepbccl.EncryptionType_Plaintext)
+	return int32(enginepb.EncryptionType_Plaintext)
 }
 
 func (e *encryptionStatsHandler) GetKeyIDFromSettings(settings []byte) (string, error) {
-	var s enginepbccl.EncryptionSettings
+	var s enginepb.EncryptionSettings
 	if err := protoutil.Unmarshal(settings, &s); err != nil {
 		return "", err
 	}
@@ -288,18 +287,18 @@ func init() {
 }
 
 // newEncryptedEnv creates an encrypted environment and returns the vfs.FS to use for reading and
-// writing data. The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
+// writing data. The optionBytes is a binary serialized storagepb.EncryptionOptions, so that non-CCL
 // code does not depend on CCL code.
 //
 // See the comment at the top of this file for the structure of this environment.
 func newEncryptedEnv(
 	unencryptedFS vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
 ) (*fs.EncryptionEnv, error) {
-	options := &baseccl.EncryptionOptions{}
+	options := &storagepb.EncryptionOptions{}
 	if err := protoutil.Unmarshal(optionBytes, options); err != nil {
 		return nil, err
 	}
-	if options.KeySource != baseccl.EncryptionKeySource_KeyFiles {
+	if options.KeySource != storagepb.EncryptionKeySource_KeyFiles {
 		return nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
 	}
 	storeKeyManager := &StoreKeyManager{
@@ -360,9 +359,9 @@ func canRegistryElide(entry *enginepb.FileEntry) bool {
 	if entry == nil {
 		return true
 	}
-	settings := &enginepbccl.EncryptionSettings{}
+	settings := &enginepb.EncryptionSettings{}
 	if err := protoutil.Unmarshal(entry.EncryptionSettings, settings); err != nil {
 		return false
 	}
-	return settings.EncryptionType == enginepbccl.EncryptionType_Plaintext
+	return settings.EncryptionType == enginepb.EncryptionType_Plaintext
 }

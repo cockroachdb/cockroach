@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cliccl
+package cli
 
 import (
 	"bytes"
@@ -15,14 +15,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
-	// The following import is required for the hook that populates
-	// NewEncryptedEnvFunc in `pkg/storage`.
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
-	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +44,7 @@ func TestDecrypt(t *testing.T) {
 
 	// Spin up a new encrypted store.
 	encSpecStr := fmt.Sprintf("path=%s,key=%s,old-key=plain", dir, keyPath)
-	encSpec, err := baseccl.NewStoreEncryptionSpec(encSpecStr)
+	encSpec, err := storagepb.NewStoreEncryptionSpec(encSpecStr)
 	require.NoError(t, err)
 	encOpts, err := encSpec.ToEncryptionOptions()
 	require.NoError(t, err)
@@ -76,7 +72,7 @@ func TestDecrypt(t *testing.T) {
 	p.Close()
 
 	// Pluck the `pebble manifest dump` command out of the debug command.
-	dumpCmd := getTool(cli.DebugPebbleCmd, []string{"pebble", "manifest", "dump"})
+	dumpCmd := getTool(debugPebbleCmd, []string{"pebble", "manifest", "dump"})
 	require.NotNil(t, dumpCmd)
 
 	dumpManifest := func(cmd *cobra.Command, path string) string {
@@ -95,7 +91,7 @@ func TestDecrypt(t *testing.T) {
 
 	// Decrypt the manifest file.
 	outPath := filepath.Join(dir, "manifest.plain")
-	decryptCmd := getTool(cli.DebugCmd, []string{"debug", "encryption-decrypt"})
+	decryptCmd := getTool(DebugCmd, []string{"debug", "encryption-decrypt"})
 	require.NotNil(t, decryptCmd)
 	err = decryptCmd.Flags().Set("enterprise-encryption", encSpecStr)
 	require.NoError(t, err)
@@ -131,7 +127,7 @@ func TestList(t *testing.T) {
 
 	// Spin up a new encrypted store.
 	encSpecStr := fmt.Sprintf("path=%s,key=%s,old-key=plain", dir, keyPath)
-	encSpec, err := baseccl.NewStoreEncryptionSpec(encSpecStr)
+	encSpec, err := storagepb.NewStoreEncryptionSpec(encSpecStr)
 	require.NoError(t, err)
 	encOpts, err := encSpec.ToEncryptionOptions()
 	require.NoError(t, err)
@@ -152,7 +148,7 @@ func TestList(t *testing.T) {
 			d.Fatalf(t, "invalid command %q", d.Cmd)
 		}
 		// List the files in the registry.
-		cmd := getTool(cli.DebugCmd, []string{"debug", "encryption-registry-list"})
+		cmd := getTool(DebugCmd, []string{"debug", "encryption-registry-list"})
 		require.NotNil(t, cmd)
 		var b bytes.Buffer
 		cmd.SetOut(&b)
