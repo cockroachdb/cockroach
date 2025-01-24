@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -195,10 +194,6 @@ type BaseConfig struct {
 	// Locality is a description of the topography of the server.
 	Locality roachpb.Locality
 
-	// StorageEngine specifies the engine type (eg. rocksdb, pebble) to use to
-	// instantiate stores.
-	StorageEngine enginepb.EngineType
-
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
@@ -319,7 +314,6 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.MaxOffset = MaxOffsetType(base.DefaultMaxClockOffset)
 	cfg.DisableMaxOffsetCheck = false
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
-	cfg.StorageEngine = storage.DefaultStorageEngine
 	cfg.WALFailover = base.WALFailoverConfig{Mode: base.WALFailoverDefault}
 	cfg.TestingInsecureWebAccess = disableWebLogin
 	cfg.Stores = base.StoreSpecList{
