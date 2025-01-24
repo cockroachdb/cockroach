@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,7 +70,7 @@ func TestDataDriven(t *testing.T) {
 
 			switch d.Cmd {
 			case "simple_query":
-				rows, err := conn.Query(ctx, d.Input, pgx.QuerySimpleProtocol(true))
+				rows, err := conn.Query(ctx, d.Input, pgx.QueryExecModeSimpleProtocol)
 				if expectError {
 					require.Error(t, err)
 					return err.Error()
@@ -81,7 +81,7 @@ func TestDataDriven(t *testing.T) {
 				return out
 			case "identify_system":
 				// IDENTIFY_SYSTEM needs some redaction to be deterministic.
-				rows, err := conn.Query(ctx, "IDENTIFY_SYSTEM", pgx.QuerySimpleProtocol(true))
+				rows, err := conn.Query(ctx, "IDENTIFY_SYSTEM", pgx.QueryExecModeSimpleProtocol)
 				require.NoError(t, err)
 				var sb strings.Builder
 				for rows.Next() {
@@ -91,13 +91,13 @@ func TestDataDriven(t *testing.T) {
 						if i > 0 {
 							sb.WriteRune('\n')
 						}
-						switch string(rows.FieldDescriptions()[i].Name) {
+						switch rows.FieldDescriptions()[i].Name {
 						case "systemid":
 							val = "some_cluster_id"
 						case "xlogpos":
 							val = "some_lsn"
 						}
-						sb.Write(rows.FieldDescriptions()[i].Name)
+						sb.WriteString(rows.FieldDescriptions()[i].Name)
 						sb.WriteString(": ")
 						sb.WriteString(fmt.Sprintf("%v", val))
 					}
