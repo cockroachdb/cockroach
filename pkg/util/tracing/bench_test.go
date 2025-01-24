@@ -37,7 +37,6 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 		opts              []SpanOption
 		regexpFilter      string
 	}{
-		{name: "none", defaultMode: TracingModeOnDemand},
 		{name: "real", defaultMode: TracingModeActiveSpansRegistry},
 		{name: "real,logtag", defaultMode: TracingModeActiveSpansRegistry,
 			opts: []SpanOption{WithLogTags(staticLogTags)}},
