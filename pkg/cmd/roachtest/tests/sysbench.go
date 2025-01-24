@@ -61,24 +61,11 @@ var sysbenchWorkloadName = map[sysbenchWorkload]string{
 type extraSetup struct {
 	nameSuffix string
 	stmts      []string
+	useDRPC    bool
 }
 
 func (w sysbenchWorkload) String() string {
 	return sysbenchWorkloadName[w]
-}
-
-type rpc int
-
-const (
-	gRPC rpc = iota
-	drpc
-)
-
-func (rf rpc) String() string {
-	if rf == drpc {
-		return "drpc"
-	}
-	return "gRPC"
 }
 
 type sysbenchOptions struct {
@@ -89,7 +76,6 @@ type sysbenchOptions struct {
 	tables       int
 	rowsPerTable int
 	usePostgres  bool
-	rf           rpc
 	extra        extraSetup // invoked before the workload starts
 }
 
@@ -166,8 +152,9 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	} else {
 		t.Status("installing cockroach")
 		settings := install.MakeClusterSettings()
-		if opts.rf == drpc {
+		if opts.extra.useDRPC {
 			settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_DRPC_ENABLED=true")
+			t.L().Printf("extra setup to use DRPC")
 		}
 		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.CRDBNodes())
 		if len(c.CRDBNodes()) >= 3 {
@@ -269,12 +256,18 @@ func registerSysbench(r registry.Registry) {
 		{n: 1, cpus: 32},
 		{n: 3, cpus: 32},
 		{n: 3, cpus: 8, pick: coreThree},
-		{n: 3, cpus: 8, pick: coreThree, extra: extraSetup{nameSuffix: "-settings", stmts: []string{
-			`set cluster setting sql.stats.flush.enabled = false`,
-			`set cluster setting sql.metrics.statement_details.enabled = false`,
-			`set cluster setting kv.split_queue.enabled = false`,
-			`set cluster setting sql.stats.histogram_collection.enabled = false`,
-			`set cluster setting kv.consistency_queue.enabled = false`}},
+		{n: 3, cpus: 8, pick: coreThree,
+			extra: extraSetup{
+				nameSuffix: "-settings",
+				stmts: []string{
+					`set cluster setting sql.stats.flush.enabled = false`,
+					`set cluster setting sql.metrics.statement_details.enabled = false`,
+					`set cluster setting kv.split_queue.enabled = false`,
+					`set cluster setting sql.stats.histogram_collection.enabled = false`,
+					`set cluster setting kv.consistency_queue.enabled = false`,
+				},
+				useDRPC: true,
+			},
 		},
 	} {
 		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
@@ -297,22 +290,18 @@ func registerSysbench(r registry.Registry) {
 				benchname += d.extra.nameSuffix
 			}
 
-			for _, rf := range []rpc{gRPC, drpc} {
-				rpcOpts := opts
-				rpcOpts.rf = rf
-				r.Add(registry.TestSpec{
-					Name:                      fmt.Sprintf("%s/%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, rf, d.n, d.cpus, conc),
-					Benchmark:                 true,
-					Owner:                     registry.OwnerTestEng,
-					Cluster:                   r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
-					CompatibleClouds:          registry.OnlyGCE,
-					Suites:                    registry.Suites(registry.Nightly),
-					TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runSysbench(ctx, t, c, rpcOpts)
-					},
-				})
-			}
+			r.Add(registry.TestSpec{
+				Name:                      fmt.Sprintf("%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, d.n, d.cpus, conc),
+				Benchmark:                 true,
+				Owner:                     registry.OwnerTestEng,
+				Cluster:                   r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
+				CompatibleClouds:          registry.OnlyGCE,
+				Suites:                    registry.Suites(registry.Nightly),
+				TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runSysbench(ctx, t, c, opts)
+				},
+			})
 
 			// Add a variant of each test that uses PostgreSQL instead of CockroachDB.
 			if d.n == 1 {
