@@ -6,7 +6,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -1356,16 +1355,16 @@ func reportConfiguration(ctx context.Context) {
 func maybeWarnMemorySizes(ctx context.Context) {
 	// Is the cache configuration OK?
 	if !startCtx.cacheSizeValue.IsSet() {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", &startCtx.cacheSizeValue)
-		fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
+		var buf redact.StringBuilder
+		buf.Printf("Using the default setting for --cache (%s).\n", &startCtx.cacheSizeValue)
+		buf.Printf("  A significantly larger value is usually needed for good performance.\n")
 		if size, err := status.GetTotalMemory(ctx); err == nil {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=.25 (%s).",
+			buf.Printf("  If you have a dedicated server a reasonable setting is --cache=.25 (%s).",
 				humanizeutil.IBytes(size/4))
 		} else {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
+			buf.Printf("  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
 		}
-		log.Ops.Warningf(ctx, "%s", redact.SafeString(buf.String()))
+		log.Ops.Warningf(ctx, "%s", buf.RedactableString())
 	}
 
 	// Check that the total suggested "max" memory is well below the available memory.

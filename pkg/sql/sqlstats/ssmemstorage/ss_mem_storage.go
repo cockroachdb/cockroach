@@ -95,8 +95,6 @@ type Container struct {
 	anomalies *insights.AnomalyDetector
 }
 
-var _ sqlstats.ApplicationStats = &Container{}
-
 // New returns a new instance of Container.
 func New(
 	st *cluster.Settings,
@@ -126,8 +124,6 @@ func New(
 	return s
 }
 
-// IterateAggregatedTransactionStats implements sqlstats.ApplicationStats
-// interface.
 func (s *Container) IterateAggregatedTransactionStats(
 	_ context.Context, _ sqlstats.IteratorOptions, visitor sqlstats.AggregatedTransactionVisitor,
 ) error {
@@ -155,7 +151,6 @@ func (s *Container) TxnStatsIterator(options sqlstats.IteratorOptions) TxnStatsI
 	return NewTxnStatsIterator(s, options)
 }
 
-// IterateStatementStats implements sqlstats.Provider interface.
 func (s *Container) IterateStatementStats(
 	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
 ) error {
@@ -170,7 +165,6 @@ func (s *Container) IterateStatementStats(
 	return nil
 }
 
-// IterateTransactionStats implements sqlstats.Provider interface.
 func (s *Container) IterateTransactionStats(
 	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) error {
@@ -309,9 +303,7 @@ func NewTempContainerFromExistingTxnStats(
 	return container, nil /* remaining */, nil /* err */
 }
 
-// NewApplicationStatsWithInheritedOptions implements the
-// sqlstats.ApplicationStats interface.
-func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.ApplicationStats {
+func (s *Container) NewApplicationStatsWithInheritedOptions() *Container {
 	return New(
 		s.st,
 		// There is no need to constraint txn fingerprint limit since in temporary
@@ -684,10 +676,9 @@ func (s *Container) freeLocked(ctx context.Context) {
 	s.mu.acc.Clear(ctx)
 }
 
-// MergeApplicationStatementStats implements the sqlstats.ApplicationStats interface.
 func (s *Container) MergeApplicationStatementStats(
 	ctx context.Context,
-	other sqlstats.ApplicationStats,
+	other *Container,
 	transactionFingerprintID appstatspb.TransactionFingerprintID,
 ) (discardedStats uint64) {
 	if err := other.IterateStatementStats(

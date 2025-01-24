@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// IterateTransactionStats implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) IterateTransactionStats(
 	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) (err error) {

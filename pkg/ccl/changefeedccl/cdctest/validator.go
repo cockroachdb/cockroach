@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -198,6 +199,7 @@ type beforeAfterValidator struct {
 	table          string
 	primaryKeyCols []string
 	resolved       map[string]hlc.Timestamp
+	diff           bool
 
 	failures []string
 }
@@ -205,7 +207,7 @@ type beforeAfterValidator struct {
 // NewBeforeAfterValidator returns a Validator verifies that the "before" and
 // "after" fields in each row agree with the source table when performing AS OF
 // SYSTEM TIME lookups before and at the row's timestamp.
-func NewBeforeAfterValidator(sqlDB *gosql.DB, table string) (Validator, error) {
+func NewBeforeAfterValidator(sqlDB *gosql.DB, table string, diff bool) (Validator, error) {
 	primaryKeyCols, err := fetchPrimaryKeyCols(sqlDB, table)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetchPrimaryKeyCols failed")
@@ -214,6 +216,7 @@ func NewBeforeAfterValidator(sqlDB *gosql.DB, table string) (Validator, error) {
 	return &beforeAfterValidator{
 		sqlDB:          sqlDB,
 		table:          table,
+		diff:           diff,
 		primaryKeyCols: primaryKeyCols,
 		resolved:       make(map[string]hlc.Timestamp),
 	}, nil
@@ -253,6 +256,15 @@ func (v *beforeAfterValidator) NoteRow(
 	// updated timestamp.
 	if err := v.checkRowAt("after", keyJSONAsArray, afterJSON, updated); err != nil {
 		return err
+	}
+
+	if !v.diff {
+		// If the diff option is not specified in the change feed,
+		// we don't expect the rows to contain a "before" field.
+		if beforeJson != nil {
+			return errors.Errorf(`expected before to be nil, got %s`, beforeJson.String())
+		}
+		return nil
 	}
 
 	if v.resolved[partition].IsEmpty() && (beforeJson == nil || beforeJson.Type() == json.NullJSONType) {
@@ -349,6 +361,68 @@ func (v *beforeAfterValidator) Failures() []string {
 	return v.failures
 }
 
+type mvccTimestampValidator struct {
+	failures []string
+}
+
+// NewMvccTimestampValidator returns a Validator that verifies that the emitted
+// row includes the mvcc_timestamp field and that its value is not later than
+// the updated timestamp
+func NewMvccTimestampValidator() Validator {
+	return &mvccTimestampValidator{}
+}
+
+// NoteRow implements the Validator interface.
+func (v *mvccTimestampValidator) NoteRow(
+	partition, key, value string, updated hlc.Timestamp, topic string,
+) error {
+	valueJSON, err := json.ParseJSON(value)
+	if err != nil {
+		return err
+	}
+
+	mvccJSON, err := valueJSON.FetchValKey("mvcc_timestamp")
+	if err != nil {
+		return err
+	}
+	if mvccJSON == nil {
+		v.failures = append(v.failures, "expected MVCC timestamp, got nil")
+		return nil
+	}
+
+	mvccJSONText, err := mvccJSON.AsText()
+	if err != nil {
+		return err
+	}
+
+	if *mvccJSONText > updated.AsOfSystemTime() {
+		v.failures = append(v.failures, fmt.Sprintf(
+			`expected MVCC timestamp to be earlier or equal to updated timestamp (%s), got %s`,
+			updated.AsOfSystemTime(), *mvccJSONText))
+	}
+
+	// This check is primarily a sanity check. Even in tests, we see the mvcc
+	// timestamp regularly differ from the updated timestamp by over 5 seconds.
+	// Asserting that the two are within an hour of each other should always pass.
+	if *mvccJSONText < updated.AddDuration(-time.Hour).AsOfSystemTime() {
+		v.failures = append(v.failures, fmt.Sprintf(
+			`expected MVCC timestamp to be within an hour of updated timestamp (%s), got %s`,
+			updated.AsOfSystemTime(), *mvccJSONText))
+	}
+
+	return nil
+}
+
+// NoteResolved implements the Validator interface.
+func (v *mvccTimestampValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return nil
+}
+
+// Failures implements the Validator interface.
+func (v *mvccTimestampValidator) Failures() []string {
+	return v.failures
+}
+
 type keyInValueValidator struct {
 	primaryKeyCols []string
 	failures       []string
@@ -376,12 +450,6 @@ func (v *keyInValueValidator) NoteRow(
 	if err != nil {
 		return err
 	}
-	keyJSONAsArray, ok := keyJSON.AsArray()
-	if !ok || len(keyJSONAsArray) != len(v.primaryKeyCols) {
-		return errors.Errorf(
-			`Not array: expected primary key columns %s got datums %s`,
-			v.primaryKeyCols, keyJSONAsArray)
-	}
 
 	valueJSON, err := json.ParseJSON(value)
 	if err != nil {
@@ -395,14 +463,14 @@ func (v *keyInValueValidator) NoteRow(
 	}
 
 	if keyInValueJSON == nil {
-		return errors.Errorf(
-			"no key in value, expected key value %s", keyString)
+		v.failures = append(v.failures, fmt.Sprintf(
+			"no key in value, expected key value %s", keyString))
 	} else {
 		keyInValueString := keyInValueJSON.String()
 		if keyInValueString != keyString {
-			return errors.Errorf(
+			v.failures = append(v.failures, fmt.Sprintf(
 				"key in value %s does not match expected key value %s",
-				keyInValueString, keyString)
+				keyInValueString, keyString))
 		}
 	}
 
@@ -448,7 +516,7 @@ func (v *topicValidator) NoteRow(
 	} else {
 		if topic != v.table {
 			v.failures = append(v.failures, fmt.Sprintf(
-				"topic %s does not match expected table d.public.%s", topic, v.table))
+				"topic %s does not match expected table %s", topic, v.table))
 		}
 	}
 	return nil

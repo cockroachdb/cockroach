@@ -926,7 +926,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
 		}
-		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`)
+		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`, true)
 		if err != nil {
 			return err
 		}

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -84,7 +83,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	defer cluster.Stopper().Stop(ctx)
 
 	server := cluster.Server(0 /* idx */).ApplicationLayer()
-	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider()
 
 	appStats := sqlStats.GetApplicationStats("app1")
 

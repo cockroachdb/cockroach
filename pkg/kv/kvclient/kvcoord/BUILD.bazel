@@ -30,6 +30,7 @@ go_library(
         "txn_interceptor_pipeliner.go",
         "txn_interceptor_seq_num_allocator.go",
         "txn_interceptor_span_refresher.go",
+        "txn_interceptor_write_buffer.go",
         "txn_lock_gatekeeper.go",
         "txn_metrics.go",
         ":gen-txnstate-stringer",  # keep

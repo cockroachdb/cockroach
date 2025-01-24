@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -346,7 +347,7 @@ type Server struct {
 	// reportedStats is a pool of stats that is held for reporting, and is
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
 	// into reported stats when sqlStats is cleared.
-	reportedStats sqlstats.Provider
+	reportedStats *sslocal.SQLStats
 
 	// reportedStatsController is the control-plane interface for
 	// reportedStatsController.
@@ -687,7 +688,7 @@ func (s *Server) GetInsightsReader() *insights.LockingStore {
 }
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
-func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
+func (s *Server) GetSQLStatsProvider() *persistedsqlstats.PersistedSQLStats {
 	return s.sqlStats
 }
 
@@ -761,7 +762,7 @@ func (s *Server) GetScrubbedReportingStats(
 }
 
 func (s *Server) getScrubbedStmtStats(
-	ctx context.Context, statsProvider sqlstats.Provider, limit int, includeInternal bool,
+	ctx context.Context, statsProvider *sslocal.SQLStats, limit int, includeInternal bool,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
 	salt := ClusterSecret.Get(&s.cfg.Settings.SV)
 
@@ -1062,7 +1063,7 @@ func (s *Server) newConnExecutor(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
-	applicationStats sqlstats.ApplicationStats,
+	applicationStats *ssmemstorage.Container,
 	sessionID clusterunique.ID,
 	underOuterTxn bool,
 	postSetupFn func(ex *connExecutor),
@@ -1713,7 +1714,7 @@ type connExecutor struct {
 	// applicationStats records per-application SQL usage statistics. It is
 	// maintained to represent statistics for the application currently identified
 	// by sessiondata.ApplicationName.
-	applicationStats sqlstats.ApplicationStats
+	applicationStats *ssmemstorage.Container
 
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
