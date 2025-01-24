@@ -24,6 +24,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings/cluster",
+        "//pkg/storage/storagepb",
         "//pkg/testutils/listenerutil",
         "//pkg/util",
         "//pkg/util/envutil",
