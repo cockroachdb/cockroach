@@ -113,6 +113,7 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/schemachanger/scbackup",
+        "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
