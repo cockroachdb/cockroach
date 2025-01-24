@@ -1810,7 +1810,8 @@ func TestCancelQuery(t *testing.T) {
 			ProcessID: 1,
 			SecretKey: conn.PgConn().SecretKey() + 1,
 		}
-		buf := crdbRequest.Encode(nil /* buf */)
+		buf, err := crdbRequest.Encode(nil /* buf */)
+		require.NoError(t, err)
 		proxyAddr := conn.PgConn().Conn().RemoteAddr()
 		cancelConn, err := net.Dial(proxyAddr.Network(), proxyAddr.String())
 		require.NoError(t, err)
