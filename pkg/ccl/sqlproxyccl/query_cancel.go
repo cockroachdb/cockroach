@@ -116,7 +116,10 @@ func (c *cancelInfo) sendCancelToBackend(requestClientIP net.IP) error {
 		ProcessID: origBackendKeyData.ProcessID,
 		SecretKey: origBackendKeyData.SecretKey,
 	}
-	buf := crdbRequest.Encode(nil /* buf */)
+	buf, err := crdbRequest.Encode(nil /* buf */)
+	if err != nil {
+		return err
+	}
 	if _, err := cancelConn.Write(buf); err != nil {
 		return err
 	}
