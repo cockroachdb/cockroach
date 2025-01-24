@@ -257,6 +257,7 @@ func startDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 
+	//lint:ignore SA1019 deprecated usage
 	var checkpoint *jobspb.ChangefeedProgress_Checkpoint
 	if progress := localState.progress.GetChangefeed(); progress != nil && progress.Checkpoint != nil {
 		checkpoint = progress.Checkpoint
@@ -378,6 +379,7 @@ func makePlan(
 	description string,
 	initialHighWater hlc.Timestamp,
 	trackedSpans []roachpb.Span,
+	//lint:ignore SA1019 deprecated usage
 	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
 	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
