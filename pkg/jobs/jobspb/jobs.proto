@@ -1191,14 +1191,37 @@ message ResolvedSpans {
 message ChangefeedProgress {
   reserved 1;
 
-  // Checkpoint describes a list of spans that the changefeed has progressed to
-  // at or above the specified timestamp.  This is used for situations where
-  // some spans are significantly behind the rest, such as during backfills or
-  // if specific spans are having issues progressing.  On restart, the
-  // changefeed will forward the specified spans to the specified timestamp.
+  // Checkpoint contains a list of spans that are above the changefeed's
+  // highwater (overall resolved) timestamp. In an earlier version, it consisted
+  // of a single timestamp and a list of spans. This single timestamp was the
+  // min resolved timestamp among the list of spans. The current version of the
+  // checkpoint is a "map" from timestamps to lists of spans, where each entry
+  // is a unique resolved timestamp and a list of associated spans.
+  //
+  // On restart, the changefeed can restore the progress of spans in the
+  // checkpoint to its corresponding resolved timestamp, which will be higher
+  // than the overall resolved timestamp and thus allow us to do less work.
+  // This is especially useful during backfills or if some spans are lagging.
   message Checkpoint {
-    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
-    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+    // TODO(#139734): Delete this field and mark field number as reserved.
+    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false, deprecated=true];
+
+    // TODO(#139734): Delete this field and mark field number as reserved.
+    util.hlc.Timestamp min_timestamp = 2 [(gogoproto.nullable) = false, deprecated=true];
+
+    // TimestampSpansMap is a "map" from timestamps to list of spans.
+    // NB: We can't use a protobuf map because the key has to be integral/string
+    // for those, but the language guide notes that this structure is equivalent
+    // on the wire to a map:
+    // https://protobuf.dev/programming-guides/proto3/#backwards.
+    message TimestampSpansMap {
+      message TimestampSpansMapEntry {
+        util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+        repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+      }
+      repeated TimestampSpansMapEntry entries = 1 [(gogoproto.nullable) = false];
+    }
+    TimestampSpansMap timestamp_spans = 3 [(gogoproto.nullable) = false];
   }
 
   reserved 2;

@@ -69,7 +69,7 @@ func TestCheckpointMake(t *testing.T) {
 			},
 			maxBytes: 100,
 			expected: jobspb.ChangefeedProgress_Checkpoint{
-				Timestamp: ts(2),
+				MinTimestamp: ts(2),
 				Spans: []roachpb.Span{
 					{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
 					{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")},
@@ -86,8 +86,8 @@ func TestCheckpointMake(t *testing.T) {
 			},
 			maxBytes: 2,
 			expected: jobspb.ChangefeedProgress_Checkpoint{
-				Timestamp: ts(2),
-				Spans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+				MinTimestamp: ts(2),
+				Spans:        []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
 			},
 		},
 		"no spans checkpointed because of maxBytes constraint": {
@@ -100,7 +100,7 @@ func TestCheckpointMake(t *testing.T) {
 			},
 			maxBytes: 0,
 			expected: jobspb.ChangefeedProgress_Checkpoint{
-				Timestamp: ts(2),
+				MinTimestamp: ts(2),
 			},
 		},
 		"no spans checkpointed because all spans are at frontier": {
@@ -124,8 +124,8 @@ func TestCheckpointMake(t *testing.T) {
 			},
 			maxBytes: 100,
 			expected: jobspb.ChangefeedProgress_Checkpoint{
-				Timestamp: ts(2),
-				Spans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}},
+				MinTimestamp: ts(2),
+				Spans:        []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}},
 			},
 		},
 	} {
@@ -145,7 +145,7 @@ func TestCheckpointMake(t *testing.T) {
 
 			// Verify that metrics were set/not set based on whether a
 			// checkpoint was created.
-			if tc.expected.Timestamp.IsSet() {
+			if tc.expected.MinTimestamp.IsSet() {
 				require.Greater(t, aggMetrics.CreateNanos.CumulativeSnapshot().Mean(), float64(0))
 				require.Greater(t, aggMetrics.TotalBytes.CumulativeSnapshot().Mean(), float64(0))
 				require.Equal(t, float64(len(tc.expected.Spans)), aggMetrics.SpanCount.CumulativeSnapshot().Mean())
@@ -194,7 +194,7 @@ func TestCheckpointCatchupTime(t *testing.T) {
 
 	// Compute the checkpoint.
 	cp := checkpoint.Make(hwm, forEachSpan, maxBytes, nil /* metrics */)
-	cpSpans, cpTS := roachpb.Spans(cp.Spans), cp.Timestamp
+	cpSpans, cpTS := roachpb.Spans(cp.Spans), cp.MinTimestamp
 	require.Less(t, len(cpSpans), numSpans)
 	require.True(t, hwm.Less(cpTS))
 

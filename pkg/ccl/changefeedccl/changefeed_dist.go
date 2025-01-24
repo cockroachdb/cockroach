@@ -455,7 +455,7 @@ func makePlan(
 		if checkpoint != nil {
 			checkpointSpanGroup.Add(checkpoint.Spans...)
 			aggregatorCheckpoint.Spans = checkpoint.Spans
-			aggregatorCheckpoint.Timestamp = checkpoint.Timestamp
+			aggregatorCheckpoint.Timestamp = checkpoint.MinTimestamp
 		}
 		if log.V(2) {
 			log.Infof(ctx, "aggregator checkpoint: %s", aggregatorCheckpoint)
@@ -470,7 +470,7 @@ func makePlan(
 			for watchIdx, nodeSpan := range sp.Spans {
 				initialResolved := initialHighWater
 				if checkpointSpanGroup.Encloses(nodeSpan) {
-					initialResolved = checkpoint.Timestamp
+					initialResolved = checkpoint.MinTimestamp
 				}
 				watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
 					Span:            nodeSpan,
