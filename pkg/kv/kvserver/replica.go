@@ -2448,7 +2448,7 @@ var checkAbortSpan = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.check_abort_span",
 	"enables detection of cases in which a transaction was aborted before it returns potentially invalid reads",
-	true,
+	false,
 )
 
 // checkIfTxnAborted checks the txn AbortSpan for the given
