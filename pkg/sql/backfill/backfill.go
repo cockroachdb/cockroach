@@ -917,6 +917,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		}
 		return nil
 	}
+
+	idxToKeyPrefix := map[descpb.IndexID][]byte{}
 	for i := int64(0); i < chunkSize; i++ {
 		ok, _, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
@@ -982,6 +984,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				ib.evalCtx.Codec,
 				tableDesc,
 				ib.indexesToEncode,
+				idxToKeyPrefix,
 				ib.colIdxMap,
 				ib.rowVals,
 				buffer,
