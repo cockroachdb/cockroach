@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/backupcompaction"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1024,4 +1025,11 @@ func (p *planner) StartHistoryRetentionJob(
 
 func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID) error {
 	return ExtendHistoryRetention(ctx, p.EvalContext(), p.InternalSQLTxn(), jobID)
+}
+
+// GetBackupCompactionManager returns a BackupCompactionManager.
+func (p *planner) GetBackupCompactionManager(
+	ctx context.Context,
+) (eval.BackupCompactionManager, error) {
+	return backupcompaction.GetBackupCompactionManager(ctx, p.EvalContext())
 }

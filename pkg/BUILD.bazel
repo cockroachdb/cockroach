@@ -826,6 +826,7 @@ GO_TARGETS = [
     "//pkg/backup/testgen:testgen_lib",
     "//pkg/backup:backup",
     "//pkg/backup:backup_test",
+    "//pkg/backupcompaction:backupcompaction",
     "//pkg/base/serverident:serverident",
     "//pkg/base:base",
     "//pkg/base:base_test",
