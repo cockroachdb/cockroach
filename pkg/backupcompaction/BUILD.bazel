@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "backupcompaction",
+    srcs = ["api.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/backupcompaction",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/eval",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

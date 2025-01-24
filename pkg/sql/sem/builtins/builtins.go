@@ -8952,6 +8952,53 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Stable,
 		},
 	),
+	"crdb_internal.backup_compaction": makeBuiltin(
+		tree.FunctionProperties{Undocumented: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "collection_uri", Typ: types.StringArray},
+				{Name: "full_backup_path", Typ: types.String},
+				{Name: "encryption_opts", Typ: types.Bytes},
+				{Name: "start_time", Typ: types.Decimal},
+				{Name: "end_time", Typ: types.Decimal},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				manager, err := evalCtx.BackupCompactionManagerFactory.GetBackupCompactionManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+				ary := *tree.MustBeDArray(args[0])
+				collectionURI, ok := darrayToStringSlice(ary)
+				if !ok {
+					return nil, errors.Newf("expected array value, got %T", args[0])
+				}
+				var encryption jobspb.BackupEncryptionOptions
+				encryptionBytes := []byte(tree.MustBeDBytes(args[2]))
+				if len(encryptionBytes) == 0 {
+					encryption = jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_None}
+				} else if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(args[2])), &encryption); err != nil {
+					return nil, err
+				}
+				fullPath := string(tree.MustBeDString(args[1]))
+				start := tree.MustBeDDecimal(args[3])
+				startTs, err := hlc.DecimalToHLC(&start.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				end := tree.MustBeDDecimal(args[4])
+				endTs, err := hlc.DecimalToHLC(&end.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, manager.CompactBackups(
+					ctx, collectionURI, nil, fullPath, encryption, startTs, endTs,
+				)
+			},
+			Info:       "Compacts the chain of incremental backups described by the start and end times.",
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
