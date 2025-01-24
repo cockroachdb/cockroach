@@ -710,6 +710,16 @@ SELECT to_regclass('4294967230')
 NULL
 
 query T
+SELECT to_regclass('0 ')
+----
+NULL
+
+query T
+SELECT to_regclass(' -123 ')
+----
+NULL
+
+query T
 SELECT to_regclass('pg_policy')
 ----
 pg_policy
@@ -736,6 +746,16 @@ NULL
 
 query T
 SELECT to_regnamespace(' 1330834471')
+----
+NULL
+
+query T
+SELECT to_regnamespace('0 ')
+----
+NULL
+
+query T
+SELECT to_regnamespace('-1234 ')
 ----
 NULL
 
@@ -780,6 +800,16 @@ SELECT to_regprocedure('961893967')
 NULL
 
 query T
+SELECT to_regprocedure('0')
+----
+NULL
+
+query T
+SELECT to_regprocedure('-2')
+----
+NULL
+
+query T
 SELECT to_regrole('admin')
 ----
 admin
@@ -796,6 +826,16 @@ NULL
 
 query T
 SELECT to_regrole('1546506610')
+----
+NULL
+
+query T
+SELECT to_regrole('0')
+----
+NULL
+
+query T
+SELECT to_regrole('-2')
 ----
 NULL
 
@@ -821,6 +861,16 @@ text
 
 query T
 SELECT to_regtype('1186')
+----
+NULL
+
+query T
+SELECT to_regtype('0')
+----
+NULL
+
+query T
+SELECT to_regtype('-3')
 ----
 NULL
 

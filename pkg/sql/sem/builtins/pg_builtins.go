@@ -573,8 +573,9 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 			ReturnType: tree.FixedReturnType(types.RegType),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				typName := tree.MustBeDString(args[0])
-				int, _ := strconv.Atoi(strings.TrimSpace(string(typName)))
-				if int > 0 {
+				_, err := strconv.Atoi(strings.TrimSpace(string(typName)))
+				if err == nil {
+					// If a number was passed in, return NULL.
 					return tree.DNull, nil
 				}
 				typOid, err := eval.ParseDOid(ctx, evalCtx, string(typName), typ)
