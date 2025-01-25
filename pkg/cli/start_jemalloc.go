@@ -24,9 +24,6 @@ import (
 // #include <stddef.h>
 // #include <stdio.h>
 //
-// // TODO(radu): if we want to change the defaults, we can set the following
-// // global variable.
-// //
 // // These default options can still be overriden via /etc/malloc.conf and the
 // // MALLOC_CONF env var. From the jemalloc man page:
 // //   The string specified via --with-malloc-conf, the string pointed to by
@@ -39,7 +36,7 @@ import (
 // //   --with-malloc-conf and malloc_conf are compile-time mechanisms, whereas
 // //   /etc/malloc.conf and MALLOC_CONF can be safely set any time prior to
 // //   program invocation.
-// //const char *je_malloc_conf = "...";
+// const char *je_malloc_conf = "background_thread:true,thp:never,metadata_thp:disabled,dirty_decay_ms:2000,muzzy_decay_ms:0";
 //
 // // Checks whether jemalloc profiling is enabled and active.
 // // Returns true if profiling is enabled and active.
@@ -138,7 +135,7 @@ func init() {
 	if res, _ := C.jemalloc_get_opts(&opts); res != 0 {
 		cgoAllocConfStr = fmt.Sprintf("unknown (error %d)", int(res))
 	} else {
-		cgoAllocConfStr = fmt.Sprintf("prof:%t,prof_active:%t,background_thread:%t,thp:%s,metadata_thp:%s,narenas:%d,dirty_decay_ms:%d,muzzy_delay_ms:%d",
+		cgoAllocConfStr = fmt.Sprintf("prof:%t,prof_active:%t,background_thread:%t,thp:%s,metadata_thp:%s,narenas:%d,dirty_decay_ms:%d,muzzy_decay_ms:%d",
 			bool(opts.prof),
 			bool(opts.prof_active),
 			bool(opts.background_thread),
