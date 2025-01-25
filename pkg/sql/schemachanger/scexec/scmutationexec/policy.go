@@ -135,3 +135,14 @@ func (i *immediateVisitor) SetPolicyForwardReferences(
 	policy.DependsOnFunctions = op.Deps.UsesFunctionIDs
 	return nil
 }
+
+func (i *immediateVisitor) ToggleRowLevelSecurityMode(
+	ctx context.Context, op scop.ToggleRowLevelSecurityMode,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl.RowLevelSecurityEnabled = op.Enabled
+	return nil
+}

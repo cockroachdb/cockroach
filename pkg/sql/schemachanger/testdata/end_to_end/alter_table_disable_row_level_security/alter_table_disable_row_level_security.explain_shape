@@ -1,0 +1,10 @@
+/* setup */
+CREATE TABLE roaches();
+set enable_row_level_security = on;
+ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹roaches› DISABLE ROW LEVEL SECURITY;
+ └── execute 1 system table mutations transaction

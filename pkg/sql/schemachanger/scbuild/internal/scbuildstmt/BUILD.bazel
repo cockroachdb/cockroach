@@ -13,6 +13,7 @@ go_library(
         "alter_table_alter_primary_key.go",
         "alter_table_drop_column.go",
         "alter_table_drop_constraint.go",
+        "alter_table_set_rls_mode.go",
         "alter_table_validate_constraint.go",
         "comment_on.go",
         "configure_zone.go",
