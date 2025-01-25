@@ -1705,7 +1705,7 @@ func (oi *optIndex) LaxKeyColumnCount() int {
 
 // PrefixColumnCount is part of the cat.Index interface.
 func (oi *optIndex) PrefixColumnCount() int {
-	if oi.Type() == idxtype.FORWARD {
+	if !oi.Type().AllowsPrefixColumns() {
 		panic(errors.AssertionFailedf("only inverted and vector indexes have prefix columns"))
 	}
 	return oi.idx.NumKeyColumns() - 1

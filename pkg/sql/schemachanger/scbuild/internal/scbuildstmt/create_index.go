@@ -144,22 +144,26 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	panicIfSchemaChangeIsDisallowed(relationElements, n)
 
-	// Vector indexes are note yet supported.
+	// Vector indexes are not yet supported.
 	if n.Type == tree.IndexTypeVector {
 		panic(unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported"))
 	}
 
+	if !n.Type.SupportsSharding() && n.Sharded != nil {
+		panic(pgerror.Newf(pgcode.InvalidSQLStatementName,
+			"%s indexes don't support hash sharding", strings.ToLower(n.Type.String())))
+	}
+	if !n.Type.SupportsStoring() && len(n.Storing) > 0 {
+		panic(pgerror.Newf(pgcode.InvalidSQLStatementName,
+			"%s indexes don't support stored columns", strings.ToLower(n.Type.String())))
+	}
+	if !n.Type.CanBeUnique() && n.Unique {
+		panic(pgerror.Newf(pgcode.InvalidSQLStatementName,
+			"%s indexes can't be unique", strings.ToLower(n.Type.String())))
+	}
+
 	// Inverted indexes do not support hash sharding or unique.
 	if n.Type == tree.IndexTypeInverted {
-		if n.Sharded != nil {
-			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding"))
-		}
-		if len(n.Storing) > 0 {
-			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns"))
-		}
-		if n.Unique {
-			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique"))
-		}
 		b.IncrementSchemaChangeIndexCounter("inverted")
 		if len(n.Columns) > 1 {
 			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
@@ -301,16 +305,16 @@ func processColNodeType(
 ) catpb.InvertedIndexColumnKind {
 	invertedKind := catpb.InvertedIndexColumnKind_DEFAULT
 	// OpClass are only allowed for the last column of an inverted index.
-	if columnNode.OpClass != "" && (!lastColIdx || n.Type != tree.IndexTypeInverted) {
+	if columnNode.OpClass != "" && (!lastColIdx || !n.Type.SupportsOpClass()) {
 		panic(pgerror.New(pgcode.DatatypeMismatch,
 			"operator classes are only allowed for the last column of an inverted index"))
 	}
 	// Disallow descending last columns in inverted indexes.
-	if n.Type == tree.IndexTypeInverted && columnNode.Direction == tree.Descending && lastColIdx {
+	if !n.Type.AllowExplicitDirection() && columnNode.Direction == tree.Descending && lastColIdx {
 		panic(pgerror.New(pgcode.FeatureNotSupported,
 			"the last column in an inverted index cannot have the DESC option"))
 	}
-	if n.Type == tree.IndexTypeInverted && lastColIdx {
+	if n.Type.SupportsOpClass() && lastColIdx {
 		switch columnType.Type.Family() {
 		case types.ArrayFamily:
 			switch columnNode.OpClass {

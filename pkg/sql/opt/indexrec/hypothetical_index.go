@@ -79,7 +79,7 @@ func (hi *hypotheticalIndex) init(
 	}
 
 	// Build the stored cols for forward indexes only.
-	if typ == idxtype.FORWARD {
+	if typ.SupportsStoring() {
 		keyColsOrds := colsOrdSet.Union(pkColOrds)
 		hi.storedCols = make([]cat.IndexColumn, 0, tab.ColumnCount())
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
@@ -146,7 +146,7 @@ func (hi *hypotheticalIndex) LaxKeyColumnCount() int {
 
 // PrefixColumnCount is part of the cat.Index interface.
 func (hi *hypotheticalIndex) PrefixColumnCount() int {
-	if hi.Type() == idxtype.FORWARD {
+	if !hi.Type().AllowsPrefixColumns() {
 		panic(errors.AssertionFailedf("only inverted and vector indexes have prefix columns"))
 	}
 	return len(hi.cols) - 1

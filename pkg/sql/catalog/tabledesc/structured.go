@@ -1167,7 +1167,7 @@ func NewInvalidInvertedColumnError(colName, colType string) error {
 	return errors.WithHint(
 		pgerror.Newf(
 			pgcode.FeatureNotSupported,
-			"column %s of type %s is not allowed as the last column in an inverted index",
+			"column %s of type %s is not allowed as the last column in an inverted or vector index",
 			colName, colType,
 		),
 		"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
