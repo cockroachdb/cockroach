@@ -1031,8 +1031,7 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 	for _, stmt := range stmts {
 		switch ast := stmt.(type) {
 		case *tree.CreateIndex:
-			if ast.Type != tree.IndexTypeForward {
-				// Only forward indexes support STORING columns for now.
+			if !ast.Type.SupportsStoring() {
 				continue
 			}
 			info, ok := tables[ast.Table.ObjectName]
@@ -1063,8 +1062,7 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 						idx = &defType.IndexTableDef
 					}
 				}
-				if idx == nil || idx.Type != tree.IndexTypeForward {
-					// STORING is not currently supported by non-forward indexes.
+				if idx == nil || !idx.Type.SupportsStoring() {
 					continue
 				}
 				// If we don't have a storing list, make one with 50% chance.

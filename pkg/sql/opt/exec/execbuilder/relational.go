@@ -763,7 +763,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 				errors.AssertionFailedf("expected inverted index scan to have a constraint")
 		}
 	}
-	if idx.Type() == tree.IndexTypeVector {
+	if idx.Type() == idxtype.VECTOR {
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"only VectorSearch operators can use vector indexes")
 	}

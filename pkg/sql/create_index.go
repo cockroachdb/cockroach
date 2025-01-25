@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -208,22 +209,25 @@ func makeIndexDescriptor(
 		CreatedAtNanos:    params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 		NotVisible:        n.Invisibility.Value != 0.0,
 		Invisibility:      n.Invisibility.Value,
+		Type:              n.Type,
+	}
+
+	if !n.Type.SupportsSharding() && n.Sharded != nil {
+		return nil, pgerror.Newf(pgcode.InvalidSQLStatementName,
+			"%s indexes don't support hash sharding", strings.ToLower(n.Type.String()))
+	}
+
+	if !n.Type.SupportsStoring() && len(indexDesc.StoreColumnNames) > 0 {
+		return nil, pgerror.Newf(pgcode.InvalidSQLStatementName,
+			"%s indexes don't support stored columns", strings.ToLower(n.Type.String()))
+	}
+
+	if !n.Type.CanBeUnique() && n.Unique {
+		return nil, pgerror.Newf(pgcode.InvalidSQLStatementName,
+			"%s indexes can't be unique", strings.ToLower(n.Type.String()))
 	}
 
 	if n.Type == tree.IndexTypeInverted {
-		if n.Sharded != nil {
-			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding")
-		}
-
-		if len(indexDesc.StoreColumnNames) > 0 {
-			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns")
-		}
-
-		if n.Unique {
-			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique")
-		}
-
-		indexDesc.Type = idxtype.INVERTED
 		invCol := columns[len(columns)-1]
 		column, err := catalog.MustFindColumnByTreeName(tableDesc, invCol.Column)
 		if err != nil {
@@ -333,7 +337,7 @@ func checkIndexColumns(
 				"cannot index system column %v", colDef.Column,
 			)
 		}
-		if colDef.OpClass != "" && (i < len(columns)-1 || indexType != tree.IndexTypeInverted) {
+		if colDef.OpClass != "" && (i < len(columns)-1 || !indexType.SupportsOpClass()) {
 			return pgerror.New(pgcode.DatatypeMismatch,
 				"operator classes are only allowed for the last column of an inverted index")
 		}

@@ -1,6 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 proto_library(
     name = "idxtype_proto",
@@ -12,6 +13,7 @@ proto_library(
 
 go_library(
     name = "idxtype",
+    srcs = ["idxtype.go"],
     embed = [":idxtype_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype",
     visibility = ["//visibility:public"],
@@ -31,4 +33,17 @@ go_library(
     srcs = ["idxtype.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtypepb",
     visibility = ["//visibility:public"],
+)
+
+# idxtype is meant to stay a leaf package. Never add a heavy-weight dependency.
+# In fact, avoid any dependency at all, except protobuf-related.
+disallowed_imports_test(
+    "idxtype",
+    allowlist = [
+        "//pkg/sql/sem/idxtype:idxtype_go_proto",
+        "@com_github_gogo_protobuf//gogoproto",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//protoc-gen-gogo/descriptor",
+    ],
+    disallow_cdeps = True,
 )

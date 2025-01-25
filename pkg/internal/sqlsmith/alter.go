@@ -366,7 +366,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		}
 	}
 	var storing tree.NameList
-	for indexType == tree.IndexTypeForward && s.coin() {
+	for indexType.SupportsStoring() && s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
