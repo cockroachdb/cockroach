@@ -990,7 +990,7 @@ func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bo
 	// Check UNIQUE INDEX constraints.
 	for i := 1; i < tab.IndexCount(); i++ {
 		index := tab.Index(i)
-		if !index.IsUnique() || index.Type() != idxtype.FORWARD {
+		if !index.IsUnique() || idxtype.CanBeUnique(index.Type()) {
 			continue
 		}
 		// If any of the key columns is nullable, uniqueCols is suffixed with the

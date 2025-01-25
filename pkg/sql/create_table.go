@@ -1927,9 +1927,7 @@ func NewTableDesc(
 				Version:          indexEncodingVersion,
 				NotVisible:       d.Invisibility.Value != 0.0,
 				Invisibility:     d.Invisibility.Value,
-			}
-			if d.Type == tree.IndexTypeInverted {
-				idx.Type = idxtype.INVERTED
+				Type:             d.Type,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -2810,9 +2808,9 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)
 				}
-				// The last column of an inverted index cannot have an explicit
-				// direction.
-				if indexDef.Type == tree.IndexTypeInverted {
+				// The last column of an inverted or vector index cannot have an
+				// explicit direction.
+				if !idxtype.AllowExplicitDirection(indexDef.Type) {
 					indexDef.Columns[len(indexDef.Columns)-1].Direction = tree.DefaultDirection
 				}
 				for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {

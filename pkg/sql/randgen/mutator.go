@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1031,8 +1032,7 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 	for _, stmt := range stmts {
 		switch ast := stmt.(type) {
 		case *tree.CreateIndex:
-			if ast.Type != tree.IndexTypeForward {
-				// Only forward indexes support STORING columns for now.
+			if !idxtype.SupportsStoring(ast.Type) {
 				continue
 			}
 			info, ok := tables[ast.Table.ObjectName]
@@ -1063,8 +1063,7 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 						idx = &defType.IndexTableDef
 					}
 				}
-				if idx == nil || idx.Type != tree.IndexTypeForward {
-					// STORING is not currently supported by non-forward indexes.
+				if idx == nil || !idxtype.SupportsStoring(idx.Type) {
 					continue
 				}
 				// If we don't have a storing list, make one with 50% chance.
