@@ -12,6 +12,7 @@ proto_library(
 
 go_library(
     name = "idxtype",
+    srcs = ["idxtype.go"],
     embed = [":idxtype_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype",
     visibility = ["//visibility:public"],

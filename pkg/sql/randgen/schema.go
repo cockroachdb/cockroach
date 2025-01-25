@@ -229,7 +229,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	if opt.IsSet(TableOptPrimaryIndexRequired) || (rng.Intn(8) != 0) {
 		for {
 			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, opt)
-			canUseIndex := ok && indexDef.Type == tree.IndexTypeForward
+			canUseIndex := ok && indexDef.Type.CanBePrimary()
 			if canUseIndex {
 				// Although not necessary for Cockroach to function correctly,
 				// but for ease of use for any code that introspects on the
@@ -261,8 +261,9 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 		if !ok {
 			continue
 		}
-		if indexDef.Type == tree.IndexTypeInverted && pk != nil {
-			// Inverted indexes aren't permitted to be created on primary key columns.
+		if !indexDef.Type.CanBePrimary() && pk != nil {
+			// Inverted/vector indexes aren't permitted to be created on primary
+			// key columns.
 			col := indexDef.Columns[len(indexDef.Columns)-1]
 			foundOverlap := false
 			for _, pkCol := range pk.Columns {
@@ -275,9 +276,9 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 				continue
 			}
 		}
-		// Make forward indexes unique 50% of the time. Inverted indexes cannot
+		// Make forward indexes unique 50% of the time. Other index types cannot
 		// be unique.
-		unique := indexDef.Type == tree.IndexTypeForward && rng.Intn(2) == 0
+		unique := idxtype.CanBeUnique(indexDef.Type) && rng.Intn(2) == 0
 		if unique {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: indexDef,

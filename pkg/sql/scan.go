@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -231,7 +230,7 @@ func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catal
 	// table where prefixCol is the key column.
 	foundIndex := false
 	for _, idx := range indexes {
-		if idx.GetType() != idxtype.FORWARD || idx.IsPartial() {
+		if !idx.GetType().AllowsPrefixColumns() || idx.IsPartial() {
 			continue
 		}
 		columns := n.desc.IndexKeyColumns(idx)
