@@ -11,10 +11,15 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/cmd/drtprod/helpers",
+        "//pkg/roachprod",
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/install",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_x_exp//maps",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
@@ -22,5 +27,10 @@ go_test(
     name = "commands_test",
     srcs = ["yamlprocessor_test.go"],
     embed = [":commands"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
+    ],
 )
