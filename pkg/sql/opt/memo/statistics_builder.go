@@ -5254,9 +5254,16 @@ func (sb *statisticsBuilder) factorOutVirtualCols(
 		}
 		expr, ok := tab.ComputedCols[colID]
 		if !ok {
-			panic(errors.AssertionFailedf(
-				"could not find computed column expression for column %v in table %v", colID, tab.Alias,
-			))
+			// If we can't find the computed column expression, this is probably a
+			// mutation column. Whatever the reason, it's safe to skip: we simply
+			// won't factor out matching expressions.
+			if buildutil.CrdbTestBuild &&
+				!tab.Table.Column(tab.MetaID.ColumnOrdinal(colID)).IsMutation() {
+				panic(errors.AssertionFailedf(
+					"could not find computed column expression for column %v in table %v", colID, tab.Alias,
+				))
+			}
+			return
 		}
 		virtExprs = append(virtExprs, virtExpr{colID: colID, expr: expr})
 	})
