@@ -133,21 +133,58 @@ func TestRangeResponse(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer kvserver.EnableLeaseHistoryForTesting(100)()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110018),
+		DefaultTestTenant: base.TestTenantProbabilistic,
 	})
 	defer srv.Stopper().Stop(context.Background())
 	ts := srv.ApplicationLayer()
+
+	t.Logf("value of StartedDefaultTestTenant %v", srv.StartedDefaultTestTenant())
 
 	// Perform a scan to ensure that all the raft groups are initialized.
 	if _, err := srv.SystemLayer().DB().Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
 
-	// TODO(#110018): grant a special capability to the secondary tenant
-	// before the endpoint can be accessed.
+	var isSystemTenant bool = !srv.StartedDefaultTestTenant()
+	t.Run("access range endpoint within current tenant's scope", func(t *testing.T) {
+		// Test case 1, looking for a range id which lies within the current tenant's (system or secondary tenant, chosen probabilistically) range
+		var currentTenantRangeId int64 // could be a system tenant or a secondary application tenant
+		t.Logf("Is system tenant enabled : %v", isSystemTenant)
+		// create a new table from the current tenant
+		r := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+		r.Exec(t, "CREATE TABLE t (x INT PRIMARY KEY, xsquared INT)")
+		for i := 0; i < 5; i++ {
+			r.Exec(t, fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES (%d)", 100*i/5))
+		}
 
+		// get some ranges from the given table
+		queryResult := r.Query(t, "SELECT range_id FROM [SHOW RANGES FROM TABLE t WITH DETAILS] LIMIT 1;")
+		defer queryResult.Close()
+
+		queryResult.Next()
+
+		if err := queryResult.Scan(&currentTenantRangeId); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("currentTenantRangeId : %v", currentTenantRangeId)
+		validateRangeBelongsToTenant(t, ts, fmt.Sprintf("range/%d", currentTenantRangeId))
+	})
+
+	t.Run("access range endpoint within system tenant's scope", func(t *testing.T) {
+		// Test case 2, looking for a range which lies within system tenant's range
+		if isSystemTenant {
+			validateRangeBelongsToTenant(t, ts, "range/1")
+			t.Logf("Executing the test case 2 for range/1")
+		}
+
+	})
+}
+
+func validateRangeBelongsToTenant(
+	t *testing.T, ts serverutils.ApplicationLayerInterface, rangeQueryPath string,
+) {
 	var response serverpb.RangeResponse
-	if err := srvtestutils.GetStatusJSONProto(ts, "range/1", &response); err != nil {
+	if err := srvtestutils.GetStatusJSONProto(ts, rangeQueryPath, &response); err != nil {
 		t.Fatal(err)
 	}
 
