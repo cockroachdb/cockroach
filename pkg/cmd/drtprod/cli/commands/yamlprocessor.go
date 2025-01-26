@@ -7,8 +7,11 @@ package commands
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -30,11 +33,13 @@ const (
 
 // commandExecutor is responsible for executing the shell commands
 var commandExecutor = helpers.ExecuteCmdWithPrefix
+var drtprodLocation = "artifacts/drtprod"
 
 // GetYamlProcessor creates a new Cobra command for processing a YAML file.
 // The command expects a YAML file as an argument and runs the commands defined in it.
 func GetYamlProcessor(ctx context.Context) *cobra.Command {
 	displayOnly := false
+	useRemoteDeployer := false
 	userProvidedTargetNames := make([]string, 0)
 	cobraCmd := &cobra.Command{
 		Use:   "execute <yaml file> [flags]",
@@ -45,19 +50,23 @@ You can also specify the rollback commands in case of a step failure.
 		Args: cobra.ExactArgs(1),
 		// Wraps the command execution with additional error handling
 		Run: helpers.Wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-			yamlFileLocation := args[0]
-			// Read the YAML file from the specified location
-			yamlContent, err := os.ReadFile(yamlFileLocation)
+			_, err := exec.LookPath("drtprod")
 			if err != nil {
+				// drtprod is needed in the path to run yaml commands
 				return err
 			}
-			return processYaml(ctx, yamlContent, displayOnly, userProvidedTargetNames)
+			yamlFileLocation := args[0]
+			return processYamlFile(ctx, yamlFileLocation, displayOnly, useRemoteDeployer, userProvidedTargetNames)
 		}),
 	}
 	cobraCmd.Flags().BoolVarP(&displayOnly,
 		"display-only", "d", false, "displays the commands that will be executed without running them")
 	cobraCmd.Flags().StringArrayVarP(&userProvidedTargetNames,
 		"targets", "t", nil, "the targets to execute. executes all if not mentioned.")
+	cobraCmd.Flags().BoolVarP(&useRemoteDeployer,
+		"remote", "r", false, "runs the deployment remotely in the deployment node. This is "+
+			"useful for long running deployments as the local execution completes soon. A \"deployment_name\" must be mentioned "+
+			"in the YAML for running a deployment remotely.")
 	return cobraCmd
 }
 
@@ -106,8 +115,10 @@ type target struct {
 
 // yamlConfig represents the structure of the entire YAML configuration file.
 type yamlConfig struct {
-	Environment map[string]string `yaml:"environment"` // Environment variables to set
-	Targets     []target          `yaml:"targets"`     // List of target clusters with their steps
+	DependentFileLocations []string          `yaml:"dependent_file_locations,omitempty"` // location of all the dependent files - scripts/binaries
+	DeploymentName         string            `yaml:"deployment_name,omitempty"`          // name provided to the deployment
+	Environment            map[string]string `yaml:"environment"`                        // Environment variables to set
+	Targets                []target          `yaml:"targets"`                            // List of target clusters with their steps
 }
 
 // command is a simplified representation of a shell command that needs to be executed.
@@ -127,16 +138,301 @@ func (c *command) String() string {
 	return cmdStr
 }
 
-// processYaml reads the YAML file, parses it, sets the environment variables, and processes the targets.
-func processYaml(
-	ctx context.Context, yamlContent []byte, displayOnly bool, userProvidedTargetNames []string,
+func processYamlFile(
+	ctx context.Context,
+	yamlFileLocation string,
+	displayOnly, useRemoteDeployer bool,
+	userProvidedTargetNames []string,
 ) (err error) {
-
-	// Unmarshal the YAML content into the yamlConfig struct
-	var config yamlConfig
-	if err = yaml.UnmarshalStrict(yamlContent, &config); err != nil {
+	// Read the YAML file from the specified location
+	yamlContent, err := os.ReadFile(yamlFileLocation)
+	if err != nil {
 		return err
 	}
+	return processYaml(ctx, yamlFileLocation, yamlContent, displayOnly, userProvidedTargetNames, useRemoteDeployer)
+}
+
+// processYaml is responsible for processing the yaml configuration. The YAML commands can be executed
+// either locally or in a remote VM based on the flag "useRemoteDeployer".
+// If the useRemoteDeployer is set to true, a new VM is created and the current YAML is copied across along
+// with the required scripts and binaries and execution is run there. This is useful for long-running deployments
+// where the local deployment just delegates the execution of the deployment to the remote machine.
+func processYaml(
+	ctx context.Context,
+	yamlFileLocation string,
+	yamlContent []byte,
+	displayOnly bool,
+	userProvidedTargetNames []string,
+	useRemoteDeployer bool,
+) error {
+	// Unmarshal the YAML content into the yamlConfig struct
+	var config yamlConfig
+	if err := yaml.UnmarshalStrict(yamlContent, &config); err != nil {
+		return err
+	}
+	if !displayOnly {
+		if err := checkForDependentFiles(config.DependentFileLocations); err != nil {
+			return err
+		}
+	}
+	if useRemoteDeployer {
+		return processYamlRemote(ctx, yamlFileLocation, config, displayOnly, userProvidedTargetNames)
+	}
+	return processYamlConfig(ctx, config, displayOnly, userProvidedTargetNames)
+}
+
+// checkForDependentFiles checks if the dependent files are missing and raises an error if not
+func checkForDependentFiles(dependentFileLocations []string) error {
+	missingFiles := make([]string, 0)
+	for _, f := range dependentFileLocations {
+		_, err := os.Stat(f)
+		if err != nil {
+			missingFiles = append(missingFiles, f)
+		}
+	}
+	if len(missingFiles) == 0 {
+		return nil
+	}
+	return fmt.Errorf("dependent files are missing for the YAML: %s",
+		strings.Join(missingFiles, ", "))
+}
+
+// processYamlRemote executes the YAML remotely
+func processYamlRemote(
+	ctx context.Context,
+	yamlFileLocation string,
+	config yamlConfig,
+	displayOnly bool,
+	userProvidedTargetNames []string,
+) (err error) {
+	if _, err := os.Stat(drtprodLocation); err != nil {
+		// if drtprod binary is not available in artifacts, we cannot proceed as this is needed for executing
+		// the YAML remotely
+		return fmt.Errorf("%s must be available for executing remotely", drtprodLocation)
+	}
+	// displayOnly has to be run locally as this is just for displaying the commands
+	if displayOnly {
+		return fmt.Errorf("display option is not valid for remote execution")
+	}
+	// DeploymentName is used for identifying the deployment node. The same can be used later for checking the
+	// status of the execution and also, run further commands if needed.
+	if config.DeploymentName == "" {
+		return fmt.Errorf("deployment_name is a required configuration for remote execution")
+	}
+	deploymentConfig := buildDeploymentYaml(config, yamlFileLocation, userProvidedTargetNames)
+	// here processYamlConfig is executing the processYamlConfig which executes the user provided YAML in the remote
+	// machine
+	return processYamlConfig(ctx, deploymentConfig, false, make([]string, 0))
+}
+
+// buildDeploymentYaml builds the deployment YAML responsible for creating the remote VM and executing the YAML
+func buildDeploymentYaml(
+	config yamlConfig, yamlFileLocation string, userProvidedTargetNames []string,
+) yamlConfig {
+	// monitorClusterName is used as the cluster name for the 1 node monitor cluster
+	monitorClusterName := fmt.Sprintf("drt-%s-monitor", config.DeploymentName)
+	// deploymentConfig is created to create the
+	deploymentConfig := yamlConfig{
+		// environment is configured to be in cockroach-drt project in GCP. As this will be mostly responsible for
+		// running commands, it would not matter even if we are deploying clusters on any other cloud.
+		Environment: map[string]string{
+			"ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT": "622274581499-compute@developer.gserviceaccount.com",
+			"ROACHPROD_GCE_DNS_DOMAIN":              "drt.crdb.io",
+			"ROACHPROD_GCE_DNS_ZONE":                "drt",
+			"ROACHPROD_GCE_DEFAULT_PROJECT":         "cockroach-drt",
+		},
+		Targets: []target{
+			{
+				// This target is responsible for creating the monitor cluster
+				TargetName: monitorClusterName,
+				Steps: []step{
+					{
+						// the first step is to create the monitor cluster with 1 node. This does not need a very powerful
+						// machine as we will be mostly running deployment commands from here.
+						Command: "create",
+						Args:    []string{monitorClusterName},
+						Flags: map[string]interface{}{
+							"clouds":           "gce",
+							"gce-zones":        "us-central1-a",
+							"nodes":            "1",
+							"gce-machine-type": "n2-standard-2",
+							"os-volume-size":   "10",
+							"username":         "drt",
+							"lifetime":         "8760h",
+							"gce-image":        "ubuntu-2204-jammy-v20250112",
+						},
+						// continue on failure as the same node can be used to execute further commands
+						// in which case the cluster would have been already created
+						ContinueOnFailure: true,
+					},
+					{
+						// roachprod sync is run to ensure that further roachprod commands can recognise the cluster
+						Command: "sync",
+						Flags:   map[string]interface{}{"clouds": "gce"},
+					},
+				},
+			},
+			{
+				// this target is responsible for upload drtprod. this can be run concurrently with other
+				// targets as the monitor cluster is ready
+				TargetName:       fmt.Sprintf("%s-upload", monitorClusterName),
+				DependentTargets: []string{monitorClusterName},
+				Steps: []step{
+					{
+						// drtprod binary is put in the monitor node
+						Command: "put",
+						Args: []string{
+							monitorClusterName, drtprodLocation,
+						},
+					},
+					{
+						// the drtprod binary is moved to /usr/bin so that it can be executed from anywhere
+						// this is easier that trying to modify the PATH environment
+						Command: "run",
+						Args: []string{
+							monitorClusterName, "--", "sudo mv ./drtprod /usr/bin",
+						},
+					},
+					{
+						// the YAML configuration which will be executed is put
+						Command: "put",
+						Args:    []string{monitorClusterName, yamlFileLocation},
+					},
+				},
+			},
+		},
+	}
+	deploymentConfig = buildDeploymentPartFromTargets(config, deploymentConfig, monitorClusterName, userProvidedTargetNames)
+	deploymentConfig = buildYamlExecutionDeployment(yamlFileLocation, userProvidedTargetNames, deploymentConfig, monitorClusterName)
+	return deploymentConfig
+}
+
+// buildYamlExecutionDeployment builds the final execution command to executing the user provided YAML configuration
+// on the monitor node. The execution is run as a system daemon process.
+func buildYamlExecutionDeployment(
+	yamlFileLocation string,
+	userProvidedTargetNames []string,
+	deploymentConfig yamlConfig,
+	deploymentClusterName string,
+) yamlConfig {
+	yamlFileName := filepath.Base(yamlFileLocation)
+	executeArgs := fmt.Sprintf(
+		"sudo systemd-run --unit %s --same-dir --uid $(id -u) --gid $(id -g) drtprod execute ./%s",
+		deploymentClusterName,
+		yamlFileName)
+	if len(userProvidedTargetNames) > 0 {
+		// if -t is provided the execution needs to run for the specified targets only
+		executeArgs = fmt.Sprintf("%s -t %s", executeArgs, strings.Join(userProvidedTargetNames, " "))
+	}
+	// this target is dependent on all the targets before this
+	dependentTargets := make([]string, 0)
+	for _, t := range deploymentConfig.Targets {
+		dependentTargets = append(dependentTargets, t.TargetName)
+	}
+	deploymentConfig.Targets = append(deploymentConfig.Targets, target{
+		TargetName:       fmt.Sprintf("%s-execute", deploymentConfig.Targets[0].TargetName),
+		DependentTargets: dependentTargets,
+		Steps: []step{
+			{
+				Command: "run",
+				Args:    []string{deploymentClusterName, "--", executeArgs},
+			},
+		},
+	})
+	return deploymentConfig
+}
+
+// buildDeploymentPartFromTargets builds the deployment from the targets defined in the provided YAML config.
+// We need this to make the binaries and scripts available in the remote machine during the YAML execution.
+// There are only a few ways a user can define externally dependent files:
+// 1. it can be a script step
+// 2. it can be an input to "roachprod put" command.
+// In both the above conditions, the files are uploaded to the required location.
+func buildDeploymentPartFromTargets(
+	config yamlConfig,
+	deploymentConfig yamlConfig,
+	deploymentClusterName string,
+	userProvidedTargetNames []string,
+) yamlConfig {
+	userTargetsMap := map[string]struct{}{}
+	for _, ut := range userProvidedTargetNames {
+		userTargetsMap[ut] = struct{}{}
+	}
+	for targetCount, t := range config.Targets {
+		if _, ok := userTargetsMap[t.TargetName]; len(userProvidedTargetNames) > 0 && !ok {
+			// proceed only if user has provided targets and this target is present
+			continue
+		}
+
+		for stepCount, s := range t.Steps {
+			// if a script is found, we have to put the script in the remote VM in the same directory
+			if s.Script != "" {
+				if _, err := os.Stat(s.Script); err != nil {
+					// A script that does not exist should be a system command like "rm", "cp", so those are ignored
+					continue
+				}
+				steps := make([]step, 0)
+				if strings.Contains(s.Script, "/") {
+					dirLocation := filepath.Dir(s.Script)
+					// we need to add the binary in the same location as in the local
+					steps =
+						append(steps,
+							step{
+								// this step creates the directory where the script needs to be placed
+								Command: "run",
+								Args:    []string{deploymentClusterName, "--", fmt.Sprintf("mkdir -p %s", dirLocation)},
+							})
+				}
+				deploymentConfig.Targets = append(deploymentConfig.Targets, target{
+					// adding a new target so that we can run these concurrently
+					TargetName:       fmt.Sprintf("%s-%d-%d", deploymentConfig.Targets[0].TargetName, targetCount, stepCount),
+					DependentTargets: []string{deploymentConfig.Targets[0].TargetName},
+					Steps: append(steps, step{
+						Command: "put",
+						Args:    []string{deploymentClusterName, s.Script, s.Script},
+					}),
+				})
+			} else if s.Command == "put" {
+				// if there is a "roachprod put" command, we need to ensure that the binary is put in the remote VM
+				// in the same location
+				binary := s.Args[1]
+				if _, err := os.Stat(binary); err != nil {
+					// binary may not exist if it is downloaded by the YAML itself. So, we need not copy in that case
+					continue
+				}
+
+				steps := make([]step, 0)
+				if strings.Contains(binary, "/") {
+					dirLocation := filepath.Dir(binary)
+					// we need to add the binary in the same location as in the local
+					steps = append(steps,
+						step{
+							// this step creates the directory where the binary needs to be placed
+							Command: "run",
+							Args:    []string{deploymentClusterName, "--", fmt.Sprintf("mkdir -p %s", dirLocation)},
+						})
+				}
+				deploymentConfig.Targets = append(deploymentConfig.Targets, target{
+					// adding a new target so that we can run these concurrently
+					TargetName:       fmt.Sprintf("%s-%d-%d", deploymentConfig.Targets[0].TargetName, targetCount, stepCount),
+					DependentTargets: []string{deploymentConfig.Targets[0].TargetName},
+					Steps: append(steps, step{
+						// this step places the binary in the location
+						Command: "put",
+						Args:    []string{deploymentClusterName, binary, binary},
+					}),
+				})
+			}
+		}
+	}
+	return deploymentConfig
+}
+
+// processYamlConfig executes the YAML configuration. This execution may happen locally or remotely.
+// This reads the YAML to set the environment variables, and processes the targets.
+func processYamlConfig(
+	ctx context.Context, config yamlConfig, displayOnly bool, userProvidedTargetNames []string,
+) (err error) {
 
 	// Set the environment variables specified in the YAML
 	if err = setEnv(config.Environment, displayOnly); err != nil {
