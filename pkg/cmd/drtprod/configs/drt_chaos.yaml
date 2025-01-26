@@ -10,6 +10,17 @@ environment:
   WORKLOAD_CLUSTER: workload-chaos
   WORKLOAD_NODES: 1
 
+dependent_file_locations:
+  - artifacts/roachprod
+  - artifacts/roachtest
+  - pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller
+  - pkg/cmd/drtprod/scripts/setup_datadog_cluster
+  - pkg/cmd/drtprod/scripts/setup_datadog_workload
+  - pkg/cmd/drtprod/scripts/tpcc_init.sh
+  - pkg/cmd/drtprod/scripts/generate_tpcc_run.sh
+  - pkg/cmd/drtprod/scripts/generate_kv_run.sh
+  - pkg/cmd/drtprod/scripts/generate_tpcc_drop.sh
+
 targets:
   - target_name: $CLUSTER
     steps:
