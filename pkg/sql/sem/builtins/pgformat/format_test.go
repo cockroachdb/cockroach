@@ -59,6 +59,11 @@ func TestFormat(t *testing.T) {
 			// REFCURSOR doesn't support comparison operators.
 			return true
 		}
+
+		// Skip jsonpath because we don't support <jsonpath> = <string> comparisons.
+		if typ.Family() == types.JsonpathFamily {
+			return true
+		}
 		return !randgen.IsLegalColumnType(typ)
 	}
 	for _, typ := range types.OidToType {

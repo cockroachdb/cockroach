@@ -1959,6 +1959,8 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 3645    _tsquery               4294967095    NULL        -1      false     b
 3802    jsonb                  4294967095    NULL        -1      false     b
 3807    _jsonb                 4294967095    NULL        -1      false     b
+4072    jsonpath               4294967095    NULL        -1      false     b
+4073    _jsonpath              4294967095    NULL        -1      false     b
 4089    regnamespace           4294967095    NULL        4       true      b
 4090    _regnamespace          4294967095    NULL        -1      false     b
 4096    regrole                4294967095    NULL        4       true      b
@@ -2077,6 +2079,8 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 3645    _tsquery               A            false           true          ,         0         3615     0
 3802    jsonb                  U            false           true          ,         0         0        3807
 3807    _jsonb                 A            false           true          ,         0         3802     0
+4072    jsonpath               U            false           true          ,         0         0        4073
+4073    _jsonpath              A            false           true          ,         0         4072     0
 4089    regnamespace           N            false           true          ,         0         0        4090
 4090    _regnamespace          A            false           true          ,         0         4089     0
 4096    regrole                N            false           true          ,         0         0        4097
@@ -2195,6 +2199,8 @@ oid     typname                typinput        typoutput        typreceive      
 3645    _tsquery               array_in        array_out        array_recv        array_send        0         0          0
 3802    jsonb                  jsonb_in        jsonb_out        jsonb_recv        jsonb_send        0         0          0
 3807    _jsonb                 array_in        array_out        array_recv        array_send        0         0          0
+4072    jsonpath               jsonpathin      jsonpathout      jsonpathrecv      jsonpathsend      0         0          0
+4073    _jsonpath              array_in        array_out        array_recv        array_send        0         0          0
 4089    regnamespace           regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
 4090    _regnamespace          array_in        array_out        array_recv        array_send        0         0          0
 4096    regrole                regrolein       regroleout       regrolerecv       regrolesend       0         0          0
@@ -2313,6 +2319,8 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 3645    _tsquery               NULL      NULL        false       0            -1
 3802    jsonb                  NULL      NULL        false       0            -1
 3807    _jsonb                 NULL      NULL        false       0            -1
+4072    jsonpath               NULL      NULL        false       0            -1
+4073    _jsonpath              NULL      NULL        false       0            -1
 4089    regnamespace           NULL      NULL        false       0            -1
 4090    _regnamespace          NULL      NULL        false       0            -1
 4096    regrole                NULL      NULL        false       0            -1
@@ -2431,6 +2439,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 3645    _tsquery               0         0             NULL           NULL        NULL
 3802    jsonb                  0         0             NULL           NULL        NULL
 3807    _jsonb                 0         0             NULL           NULL        NULL
+4072    jsonpath               0         0             NULL           NULL        NULL
+4073    _jsonpath              0         0             NULL           NULL        NULL
 4089    regnamespace           0         0             NULL           NULL        NULL
 4090    _regnamespace          0         0             NULL           NULL        NULL
 4096    regrole                0         0             NULL           NULL        NULL

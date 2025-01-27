@@ -1156,6 +1156,13 @@ func TestTenantLogic_json_index(
 	runLogicTest(t, "json_index")
 }
 
+func TestTenantLogic_jsonpath(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonpath")
+}
+
 func TestTenantLogic_kv_builtin_functions_tenant(
 	t *testing.T,
 ) {

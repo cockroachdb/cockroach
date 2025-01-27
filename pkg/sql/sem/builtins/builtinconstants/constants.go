@@ -44,6 +44,7 @@ const (
 	CategoryFuzzyStringMatching = "Fuzzy String Matching"
 	CategoryIDGeneration        = "ID generation"
 	CategoryJSON                = "JSONB"
+	CategoryJsonpath            = "Jsonpath"
 	CategoryMultiRegion         = "Multi-region"
 	CategoryMultiTenancy        = "Multi-tenancy"
 	CategoryPGVector            = "PGVector"
