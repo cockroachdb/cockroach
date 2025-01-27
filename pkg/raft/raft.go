@@ -330,9 +330,14 @@ type raft struct {
 
 	state pb.StateType
 
-	// idxPreLeading is the highest log index on the raft node before the leader became leader
-	// Updated only when the raft node becomes leader
-	// Only used for term check comparison before committing entry(s) in maybeCommit() when raft is in leader state
+	// idxPreLeading is the last log index as of when this node became the
+	// leader. Separates entries proposed by previous leaders from the entries
+	// proposed by the current leader. Used only in StateLeader, and updated
+	// when entering StateLeader (in becomeLeader()).
+	//
+	// Invariants (when in StateLeader at raft.Term):
+	//	- entries at indices <= idxBeforeLeader have term < raft.Term
+	//	- entries at indices > idxBeforeLeader have term == raft.Term
 	idxPreLeading uint64
 
 	// isLearner is true if the local raft node is a learner.
@@ -1034,13 +1039,10 @@ func (r *raft) maybeCommit() bool {
 	// way, then all prior entries are committed indirectly because of the Log
 	// Matching Property.
 	//
-	// Instead of comparing the term of the entry we want to commit with the current term of the leader,
-	// (which may trigger a storage read to know the term number of the entry we want to commit,
-	// because the entry might already have been persisted to stable storage and deleted from memory)
-	// we keep the index of the highest entry of the current leader node before it became leader
-	if index <= r.idxPreLeading {
+	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
 		return false
 	}
+
 	r.raftLog.commitTo(LogMark{Term: r.Term, Index: index})
 	return true
 }
@@ -2309,10 +2311,10 @@ func stepFollower(r *raft, m pb.Message) error {
 		// may never be safe for MsgTimeoutNow to come from anyone but the leader.
 		// We need to think about this more.
 		//
-		//if r.supportingFortifiedLeader() && r.lead != m.From {
+		// if r.supportingFortifiedLeader() && r.lead != m.From {
 		//	r.logger.Infof("%x [term %d] ignored MsgTimeoutNow from %x due to leader fortification", r.id, r.Term, m.From)
 		//	return nil
-		//}
+		// }
 		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
 		// know we are not recovering from a partition so there is no need for the
