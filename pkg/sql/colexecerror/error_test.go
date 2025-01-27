@@ -15,8 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -119,75 +117,6 @@ func TestRuntimePanicIsCaught(t *testing.T) {
 		var o testInterface = &testImpl1{}
 		_ = o.(*testImpl2)
 	}))
-}
-
-// BenchmarkCatchVectorizedRuntimeError measures the time for
-// CatchVectorizedRuntimeError to catch and process an error.
-func BenchmarkCatchVectorizedRuntimeError(b *testing.B) {
-	err := errors.New("oops")
-	storageErr := colexecerror.NewStorageError(err)
-	pgErr := pgerror.WithCandidateCode(err, pgcode.Warning)
-
-	cases := []struct {
-		name    string
-		thrower func()
-	}{
-		{
-			"noError",
-			func() {},
-		},
-		{
-			"expected",
-			func() {
-				colexecerror.ExpectedError(err)
-			},
-		},
-		{
-			"storage",
-			func() {
-				colexecerror.InternalError(storageErr)
-			},
-		},
-		{
-			"contextCanceled",
-			func() {
-				colexecerror.InternalError(context.Canceled)
-			},
-		},
-		{
-			"internalWithCode",
-			func() {
-				colexecerror.InternalError(pgErr)
-			},
-		},
-		{
-			"internal",
-			func() {
-				colexecerror.InternalError(err)
-			},
-		},
-		{
-			"runtime",
-			func() {
-				arr := []int{0, 1, 2}
-				_ = arr[3]
-			},
-		},
-	}
-
-	// Use the release-build panic-catching behavior instead of the
-	// crdb_test-build behavior.
-	defer colexecerror.ProductionBehaviorForTests()()
-
-	for _, tc := range cases {
-		b.Run(tc.name, func(b *testing.B) {
-			b.RunParallel(func(pb *testing.PB) {
-				for pb.Next() {
-					_ = colexecerror.CatchVectorizedRuntimeError(tc.thrower)
-				}
-			})
-		})
-	}
 }
 
 // BenchmarkSQLCatchVectorizedRuntimeError measures the time for
