@@ -1260,7 +1260,6 @@ message ChangefeedProgress {
   // than the overall resolved timestamp and thus allow us to do less work.
   // This is especially useful during backfills or if some spans are lagging.
   // TODO(#137692): Write to this field.
-  // TODO(#131549): Restore this field to the change frontier.
   TimestampSpansMap span_level_checkpoint = 5;
 }
 

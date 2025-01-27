@@ -1342,11 +1342,6 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		}
 
 		// Recover highwater information from job progress.
-		// Checkpoint information from job progress will eventually be sent to the
-		// changeFrontier from the changeAggregators.  Note that the changeFrontier
-		// may save a new checkpoint prior to receiving all spans of the
-		// aggregators' frontier, potentially missing spans that were previously
-		// checkpointed, so it is still possible for job progress to regress.
 		p := job.Progress()
 		if ts := p.GetHighWater(); ts != nil {
 			cf.highWaterAtStart.Forward(*ts)
@@ -1384,6 +1379,16 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		log.Infof(cf.Ctx(), "change frontier moving to draining due to error setting up frontier: %v", err)
 		cf.MoveToDraining(err)
 		return
+	}
+
+	if err := checkpoint.Restore(cf.frontier, cf.spec.SpanLevelCheckpoint); err != nil {
+		if log.V(2) {
+			log.Infof(cf.Ctx(), "change frontier encountered error on checkpoint restore: %v", err)
+		}
+	}
+
+	if cf.knobs.AfterCoordinatorFrontierRestore != nil {
+		cf.knobs.AfterCoordinatorFrontierRestore(cf.frontier)
 	}
 
 	func() {
