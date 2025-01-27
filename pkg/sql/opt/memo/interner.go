@@ -371,6 +371,8 @@ func (h *hasher) HashDatum(val tree.Datum) {
 	case *tree.DCollatedString:
 		h.HashString(t.Locale)
 		h.HashString(t.Contents)
+	case *tree.DJsonpath:
+		h.HashString(string(*t))
 	default:
 		h.bytes, h.bytes3 = encodeDatum(h.bytes[:0], val, h.bytes3[:0])
 		h.HashBytes(h.bytes)

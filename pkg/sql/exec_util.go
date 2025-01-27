@@ -2154,6 +2154,7 @@ func checkResultType(typ *types.T, fmtCode pgwirebase.FormatCode) error {
 	case types.TSVectorFamily:
 	case types.IntervalFamily:
 	case types.JsonFamily:
+	case types.JsonpathFamily:
 	case types.UuidFamily:
 	case types.INetFamily:
 	case types.OidFamily:
