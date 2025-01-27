@@ -370,6 +370,11 @@ func TestRandStep(t *testing.T) {
 			}
 		case *TransferLeaseOperation:
 			counts.ChangeLease.TransferLease++
+		case *ChangeSettingOperation:
+			switch o.Type {
+			case ChangeSettingType_SetLeaseType:
+				counts.ChangeSetting.SetLeaseType++
+			}
 		case *ChangeZoneOperation:
 			switch o.Type {
 			case ChangeZoneType_ToggleGlobalReads:

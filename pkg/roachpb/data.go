@@ -1976,7 +1976,7 @@ func (l Lease) OwnedBy(storeID StoreID) bool {
 // LeaseType describes the type of lease.
 //
 //go:generate stringer -type=LeaseType
-type LeaseType int
+type LeaseType int32
 
 const (
 	// LeaseNone specifies no lease, to be used as a default value.
