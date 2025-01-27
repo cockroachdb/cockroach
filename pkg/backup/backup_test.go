@@ -9448,13 +9448,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	ctx := context.Background()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			// Test fails when run within a tenant as zone config
-			// updates are not allowed by default. Tracked with 73768.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-		},
-	}
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{}}
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		DisableGCQueue:            true,
 		DisableLastProcessedCheck: true,
@@ -9481,11 +9475,9 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	_, err := conn.Exec("CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
 	require.NoError(t, err)
 
-	_, err = conn.Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
-	require.NoError(t, err)
-
-	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
-	require.NoError(t, err)
+	systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	const tableRangeMaxBytes = 100 << 20
 	_, err = conn.Exec("ALTER TABLE foo CONFIGURE ZONE USING "+
@@ -9555,9 +9547,6 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
-	// Test fails when run within a tenant. More investigation is
-	// required. Tracked with #76378.
-	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		DisableGCQueue:            true,
 		DisableLastProcessedCheck: true,
@@ -9571,10 +9560,11 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 
 	conn := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(conn)
-	runner.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	// speeds up the test
-	runner.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-	runner.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
+
+	systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
 
 	runner.Exec(t, `CREATE DATABASE test;`)
 	runner.Exec(t, `CREATE TABLE test.foo (k INT PRIMARY KEY, v BYTES)`)

@@ -493,14 +493,19 @@ ORDER BY raw_start_key ASC`, tree.NameString(databaseName), tree.NameString(tabl
 	require.NoError(t, err)
 	lhServer := tc.ServerConn(int(l.Replica.NodeID) - 1)
 	lhSQLDB := sqlutils.MakeSQLRunner(lhServer)
+	systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
 	testutils.SucceedsSoon(t, func() error {
-		trace := runGCWithTrace(t, lhSQLDB, skipShouldQueue, databaseName, tableName)
+		trace := runGCWithTrace(t, lhSQLDB, systemDB, skipShouldQueue, databaseName, tableName)
 		return checkGCTrace(trace)
 	})
 }
 
 func runGCWithTrace(
-	t *testing.T, sqlDB *sqlutils.SQLRunner, skipShouldQueue bool, databaseName, tableName string,
+	t *testing.T,
+	sqlDB *sqlutils.SQLRunner,
+	systemDB *sqlutils.SQLRunner,
+	skipShouldQueue bool,
+	databaseName, tableName string,
 ) string {
 	// Grab the range ID of the table and manually enqueue it in the mvccGC queue.
 	var rangeID int
@@ -508,7 +513,7 @@ func runGCWithTrace(
 		databaseName, tableName)).Scan(&rangeID)
 
 	var trace string
-	sqlDB.QueryRow(t, fmt.Sprintf(
+	systemDB.QueryRow(t, fmt.Sprintf(
 		`SELECT crdb_internal.kv_enqueue_replica(%d, 'mvccGC', %t, true)`, rangeID, skipShouldQueue)).Scan(&trace)
 	return trace
 }
