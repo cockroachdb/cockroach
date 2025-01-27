@@ -138,6 +138,11 @@ type Collection struct {
 	// It must be set in the multi-tenant environment for ephemeral
 	// SQL pods. It should not be set otherwise.
 	sqlLivenessSession sqlliveness.Session
+
+	// LeaseGeneration is the first generation value observed by this
+	// txn. This guarantees the generation for long-running transactions
+	// this value stays the same for the life of the transaction.
+	leaseGeneration int64
 }
 
 // FromTxn is a convenience function to extract a descs.Collection which is
@@ -199,6 +204,7 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 	tc.leased.releaseAll(ctx)
 	// Clear the associated sqlliveness.session
 	tc.sqlLivenessSession = nil
+	tc.leaseGeneration = 0
 }
 
 // ReleaseAll releases all state currently held by the Collection.
@@ -214,7 +220,10 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 // descriptor versions are available. This can be used for fast comparisons
 // to make sure previously looked up information is still valid.
 func (tc *Collection) GetLeaseGeneration() int64 {
-	return tc.leased.lm.GetLeaseGeneration()
+	if tc.leaseGeneration == 0 {
+		tc.leaseGeneration = tc.leased.lm.GetLeaseGeneration()
+	}
+	return tc.leaseGeneration
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
