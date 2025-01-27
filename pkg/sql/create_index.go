@@ -145,7 +145,7 @@ func makeIndexDescriptor(
 			`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
 		)
 	}
-	if n.Type == tree.IndexTypeVector {
+	if n.Type == idxtype.VECTOR {
 		return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
 	}
 
@@ -227,7 +227,7 @@ func makeIndexDescriptor(
 			"%s indexes can't be unique", strings.ToLower(n.Type.String()))
 	}
 
-	if n.Type == tree.IndexTypeInverted {
+	if n.Type == idxtype.INVERTED {
 		invCol := columns[len(columns)-1]
 		column, err := catalog.MustFindColumnByTreeName(tableDesc, invCol.Column)
 		if err != nil {
@@ -323,7 +323,7 @@ func checkIndexColumns(
 	desc catalog.TableDescriptor,
 	columns tree.IndexElemList,
 	storing tree.NameList,
-	indexType tree.IndexType,
+	indexType idxtype.T,
 	version clusterversion.ClusterVersion,
 ) error {
 	for i, colDef := range columns {
@@ -484,7 +484,7 @@ func replaceExpressionElemsWithVirtualCols(
 	desc *tabledesc.Mutable,
 	tn *tree.TableName,
 	elems tree.IndexElemList,
-	indexType tree.IndexType,
+	indexType idxtype.T,
 	isNewTable bool,
 	semaCtx *tree.SemaContext,
 	version clusterversion.ClusterVersion,
@@ -549,7 +549,7 @@ func replaceExpressionElemsWithVirtualCols(
 				)
 			}
 
-			if indexType != tree.IndexTypeInverted && !colinfo.ColumnTypeIsIndexable(typ) {
+			if indexType != idxtype.INVERTED && !colinfo.ColumnTypeIsIndexable(typ) {
 				if colinfo.ColumnTypeIsInvertedIndexable(typ) {
 					return errors.WithHint(
 						pgerror.Newf(
@@ -569,7 +569,7 @@ func replaceExpressionElemsWithVirtualCols(
 				)
 			}
 
-			if indexType == tree.IndexTypeInverted {
+			if indexType == idxtype.INVERTED {
 				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
 					return errors.WithHint(
 						pgerror.Newf(
