@@ -1,4 +1,7 @@
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE TABLE xy (x INT, y INT);
 INSERT INTO xy VALUES (1, 2), (3, 4);
 
@@ -2060,3 +2063,6 @@ statement ok
 RESET close_cursors_at_commit;
 
 subtest end
+
+statement ok
+RESET autocommit_before_ddl

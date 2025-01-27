@@ -241,6 +241,9 @@ vectorized: true
       table: s@s_pkey
       spans: FULL SCAN
 
+statement ok
+SET autocommit_before_ddl = false
+
 # Ensuring that the presence of composite values results in
 # encoding in the valueside as well for a given K/V pair.
 statement ok

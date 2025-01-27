@@ -103,6 +103,7 @@ exec-sql
 create user testuser;
 grant admin to testuser;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Cluster backup as a non-admin user should fail.
 exec-sql user=testuser

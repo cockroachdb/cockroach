@@ -1654,6 +1654,9 @@ statement ok
 create table t_droppedcol (dropme int);
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 begin;
 
 statement ok
@@ -1664,6 +1667,9 @@ alter table t_droppedcol alter column dropme set data type text;
 
 statement ok
 rollback;
+
+statement ok
+RESET autocommit_before_ddl
 
 query TT
 SHOW CREATE TABLE t_droppedcol;

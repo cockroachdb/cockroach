@@ -804,9 +804,15 @@ CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON t1 FOR EACH ROW EXECUTE FUNCTION g
 # Make sure the legacy schema-changer correctly removes the backreference from
 # t2 to t1.
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 DROP TABLE t1;
 DROP TABLE t2;
 DROP FUNCTION g;
+
+statement ok
+RESET autocommit_before_ddl
 
 # ==============================================================================
 # Test dependency tracking for a user-defined type reference.

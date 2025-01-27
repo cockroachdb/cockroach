@@ -546,6 +546,10 @@ CREATE TABLE db.t(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
 		t.Error(err)
 	}
 
+	sqlDB.SetMaxOpenConns(1)
+	_, err = sqlDB.Exec(`SET autocommit_before_ddl = false`)
+	require.NoError(t, err)
+
 	_, err = sqlDB.Exec(`BEGIN;
 ALTER DATABASE db ADD REGION "us-east3";
 ALTER DATABASE db DROP REGION "us-east2";

@@ -26,7 +26,7 @@ var defaultAutocommitBeforeDDL = settings.RegisterBoolSetting(
 	"sql.defaults.autocommit_before_ddl.enabled",
 	"default value for autocommit_before_ddl session setting; "+
 		"forces transactions to autocommit before running any DDL statement",
-	false,
+	true,
 )
 
 // maybeAutoCommitBeforeDDL checks if the current transaction needs to be

@@ -311,6 +311,7 @@ func TestCreateFunctionVisibilityInExplicitTransaction(t *testing.T) {
 	// Make sure that everything is rolled back if post commit job fails.
 	_, err := sqlDB.Exec(`
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE UNIQUE INDEX idx ON t(b);
 COMMIT;
@@ -335,6 +336,7 @@ COMMIT;
 	//tDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints='newschemachanger.before.exec'`)
 	_, err = sqlDB.Exec(`
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE UNIQUE INDEX idx ON t(b);
 COMMIT;

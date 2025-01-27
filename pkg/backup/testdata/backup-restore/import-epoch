@@ -16,6 +16,8 @@ CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
 CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
 INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 let $d_id
 SELECT id FROM system.namespace WHERE name = 'foo'
