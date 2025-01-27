@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -933,10 +934,8 @@ type WALFailoverConfig struct {
 // configuration.
 type ExternalPath struct {
 	Path string
-	// EncryptionOptions is a serialized protobuf set by Go CCL code describing
-	// the encryption-at-rest configuration. If encryption-at-rest has ever been
-	// enabled on the store, this field must be set.
-	EncryptionOptions []byte
+	// EncryptionOptions is set if encryption is enabled.
+	EncryptionOptions *storagepb.EncryptionOptions
 }
 
 // IsSet returns whether or not the external path was provided.

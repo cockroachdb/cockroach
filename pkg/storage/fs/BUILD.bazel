@@ -20,6 +20,7 @@ go_library(
         "//pkg/settings",
         "//pkg/storage/disk",
         "//pkg/storage/enginepb",
+        "//pkg/storage/storagepb",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/log",

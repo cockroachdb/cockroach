@@ -215,10 +215,8 @@ type StoreSpec struct {
 	// delete_range_flush_delay=2s
 	// flush_split_bytes=4096
 	PebbleOptions string
-	// EncryptionOptions is a serialized protobuf set by Go CCL code and passed
-	// through to C CCL code to set up encryption-at-rest.  Must be set if and
-	// only if encryption is enabled, otherwise left empty.
-	EncryptionOptions []byte
+	// EncryptionOptions is set if encryption is enabled.
+	EncryptionOptions *storagepb.EncryptionOptions
 	// ProvisionedRateSpec is optional.
 	ProvisionedRateSpec ProvisionedRateSpec
 }
@@ -276,7 +274,7 @@ func (ss StoreSpec) String() string {
 
 // IsEncrypted returns whether the StoreSpec has encryption enabled.
 func (ss StoreSpec) IsEncrypted() bool {
-	return len(ss.EncryptionOptions) > 0
+	return ss.EncryptionOptions != nil
 }
 
 // fractionRegex is the regular expression that recognizes whether
@@ -639,16 +637,12 @@ func PopulateWithEncryptionOpts(
 			}
 
 			// Found a matching path.
-			if len(storeSpecs.Specs[i].EncryptionOptions) > 0 {
+			if storeSpecs.Specs[i].EncryptionOptions != nil {
 				return fmt.Errorf("store with path %s already has an encryption setting",
 					storeSpecs.Specs[i].Path)
 			}
 
-			opts, err := es.ToEncryptionOptions()
-			if err != nil {
-				return err
-			}
-			storeSpecs.Specs[i].EncryptionOptions = opts
+			storeSpecs.Specs[i].EncryptionOptions = &es.Options
 			found = true
 			break
 		}
@@ -661,15 +655,11 @@ func PopulateWithEncryptionOpts(
 			// WALFailoverConfig.PrevPath are only ever set in single-store
 			// configurations. In multi-store with among-stores failover mode, these
 			// will be empty (so we won't encounter the same path twice).
-			if len(externalPath.EncryptionOptions) > 0 {
+			if externalPath.EncryptionOptions != nil {
 				return fmt.Errorf("WAL failover path %s already has an encryption setting",
 					externalPath.Path)
 			}
-			opts, err := es.ToEncryptionOptions()
-			if err != nil {
-				return err
-			}
-			externalPath.EncryptionOptions = opts
+			externalPath.EncryptionOptions = &es.Options
 			found = true
 		}
 

@@ -50,16 +50,64 @@ func TestNewStoreEncryptionSpec(t *testing.T) {
 
 		// Good values. Note that paths get absolutized so we start most of them
 		// with / so we can used fixed expected values.
-		{"path=/data,key=/new.key,old-key=/old.key", "", StoreEncryptionSpec{Path: "/data", KeyPath: "/new.key", OldKeyPath: "/old.key", RotationPeriod: DefaultRotationPeriod}},
-		{"path=/data,key=/new.key,old-key=/old.key,rotation-period=1h", "", StoreEncryptionSpec{Path: "/data", KeyPath: "/new.key", OldKeyPath: "/old.key", RotationPeriod: time.Hour}},
-		{"path=/data,key=plain,old-key=/old.key,rotation-period=1h", "", StoreEncryptionSpec{Path: "/data", KeyPath: "plain", OldKeyPath: "/old.key", RotationPeriod: time.Hour}},
-		{"path=/data,key=/new.key,old-key=plain,rotation-period=1h", "", StoreEncryptionSpec{Path: "/data", KeyPath: "/new.key", OldKeyPath: "plain", RotationPeriod: time.Hour}},
+		{
+			"path=/data,key=/new.key,old-key=/old.key", "",
+			StoreEncryptionSpec{Path: "/data",
+				Options: EncryptionOptions{
+					KeyFiles:              &EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(DefaultRotationPeriod / time.Second),
+				},
+			},
+		},
+		{
+			"path=/data,key=/new.key,old-key=/old.key,rotation-period=1h", "",
+			StoreEncryptionSpec{Path: "/data",
+				Options: EncryptionOptions{
+					KeyFiles:              &EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(time.Hour / time.Second),
+				},
+			},
+		},
+		{
+			"path=/data,key=plain,old-key=/old.key,rotation-period=1h", "",
+			StoreEncryptionSpec{Path: "/data",
+				Options: EncryptionOptions{
+					KeyFiles:              &EncryptionKeyFiles{CurrentKey: "plain", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(time.Hour / time.Second),
+				},
+			},
+		},
+		{
+			"path=/data,key=/new.key,old-key=plain,rotation-period=1h", "",
+			StoreEncryptionSpec{Path: "/data",
+				Options: EncryptionOptions{
+					KeyFiles:              &EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "plain"},
+					DataKeyRotationPeriod: int64(time.Hour / time.Second),
+				},
+			},
+		},
 
 		// One relative path to test absolutization.
-		{"path=data,key=/new.key,old-key=/old.key", "", StoreEncryptionSpec{Path: absDataPath, KeyPath: "/new.key", OldKeyPath: "/old.key", RotationPeriod: DefaultRotationPeriod}},
+		{
+			"path=data,key=/new.key,old-key=/old.key", "",
+			StoreEncryptionSpec{Path: absDataPath,
+				Options: EncryptionOptions{
+					KeyFiles:              &EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(DefaultRotationPeriod / time.Second),
+				},
+			},
+		},
 
 		// Special path * is not absolutized.
-		{"path=*,key=/new.key,old-key=/old.key", "", StoreEncryptionSpec{Path: "*", KeyPath: "/new.key", OldKeyPath: "/old.key", RotationPeriod: DefaultRotationPeriod}},
+		{
+			"path=*,key=/new.key,old-key=/old.key", "",
+			StoreEncryptionSpec{Path: "*",
+				Options: EncryptionOptions{
+					KeyFiles:              &EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(DefaultRotationPeriod / time.Second),
+				},
+			},
+		},
 	}
 
 	for i, testCase := range testCases {
