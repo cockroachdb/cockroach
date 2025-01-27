@@ -1123,6 +1123,13 @@ func TestLogic_json_index(
 	runLogicTest(t, "json_index")
 }
 
+func TestLogic_jsonpath(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonpath")
+}
+
 func TestLogic_kv_builtin_functions(
 	t *testing.T,
 ) {
