@@ -337,12 +337,15 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 ) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	defer sc.generation.Add(1)
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
 		if e.isStale(forecast, udtCols) {
 			// Evict the cache entry and build it again.
 			sc.mu.cache.Del(tableID)
+			// Increment the generation right after the deletion.
+			// It will get re-incremented one more time when the
+			// entry gets added back.
+			sc.generation.Add(1)
 		} else {
 			return e.stats, e.err
 		}
