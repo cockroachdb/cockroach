@@ -284,6 +284,8 @@ func (s *sysbenchSQL) prepSchema(rng *rand.Rand) {
 func (s *sysbenchSQL) prepConn() {
 	// Force generic query plans.
 	try(s.conn.Exec(s.ctx, "SET plan_cache_mode = force_generic_plan"))
+	// Disable the streamer.
+	try(s.conn.Exec(s.ctx, "SET streamer_enabled = false"))
 
 	s.stmt.begin = try(s.conn.Prepare(s.ctx, "begin", sysbenchStmtBegin)).Name
 	s.stmt.commit = try(s.conn.Prepare(s.ctx, "commit", sysbenchStmtCommit)).Name
