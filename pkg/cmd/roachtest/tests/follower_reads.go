@@ -531,6 +531,38 @@ func initFollowerReadsDB(
 		require.NoError(t, err)
 	}
 
+	ensureUpreplicationAndPlacement(ctx, t, l, topology, db)
+
+	const rows = 100
+	const concurrency = 32
+	sem := make(chan struct{}, concurrency)
+	data = make(map[int]int64)
+	insert := func(ctx context.Context, k int) func() error {
+		v := rng.Int63()
+		data[k] = v
+		return func() error {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			_, err := db.ExecContext(ctx, "INSERT INTO mr_db.test VALUES ( $1, $2 )", k, v)
+			return err
+		}
+	}
+
+	// Insert the data.
+	g, gCtx := errgroup.WithContext(ctx)
+	for i := 0; i < rows; i++ {
+		g.Go(insert(gCtx, i))
+	}
+	if err := g.Wait(); err != nil {
+		t.Fatalf("failed to insert data: %v", err)
+	}
+
+	return data
+}
+
+func ensureUpreplicationAndPlacement(
+	ctx context.Context, t test.Test, l *logger.Logger, topology topologySpec, db *gosql.DB,
+) {
 	// Wait until the table has completed up-replication.
 	l.Printf("waiting for up-replication...")
 	retryOpts := retry.Options{MaxBackoff: 15 * time.Second}
@@ -653,32 +685,6 @@ func initFollowerReadsDB(
 			}
 		}
 	}
-
-	const rows = 100
-	const concurrency = 32
-	sem := make(chan struct{}, concurrency)
-	data = make(map[int]int64)
-	insert := func(ctx context.Context, k int) func() error {
-		v := rng.Int63()
-		data[k] = v
-		return func() error {
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			_, err := db.ExecContext(ctx, "INSERT INTO mr_db.test VALUES ( $1, $2 )", k, v)
-			return err
-		}
-	}
-
-	// Insert the data.
-	g, gCtx := errgroup.WithContext(ctx)
-	for i := 0; i < rows; i++ {
-		g.Go(insert(gCtx, i))
-	}
-	if err := g.Wait(); err != nil {
-		t.Fatalf("failed to insert data: %v", err)
-	}
-
-	return data
 }
 
 func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Duration, error) {
@@ -1053,6 +1059,7 @@ func runFollowerReadsMixedVersionTest(
 	}
 
 	runFollowerReads := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+		ensureUpreplicationAndPlacement(ctx, t, l, topology, h.Connect(1))
 		runFollowerReadsTest(ctx, t, l, c, r, topology, rc, data)
 		return nil
 	}
