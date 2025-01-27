@@ -68,6 +68,9 @@ message ChangeFrontierSpec {
   // changefeed at that timestamp.
   repeated roachpb.Span tracked_spans = 1 [(gogoproto.nullable) = false];
 
+  // Change frontier checkpoint
+  optional cockroach.sql.jobs.jobspb.ChangefeedProgress.Checkpoint checkpoint = 6 [(gogoproto.nullable) = false];
+
   // Feed is the specification for this changefeed.
   optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
 

@@ -25,7 +25,7 @@ type SpanIter func(forEachSpan span.Operation)
 func Make(
 	frontier hlc.Timestamp, forEachSpan SpanIter, maxBytes int64, metrics *Metrics,
 ) jobspb. //lint:ignore SA1019 deprecated usage
-		ChangefeedProgress_Checkpoint {
+					ChangefeedProgress_Checkpoint {
 	start := timeutil.Now()
 
 	// Collect leading spans into a SpanGroup to merge adjacent spans and store
@@ -70,4 +70,41 @@ func Make(
 	}
 
 	return cp
+}
+
+type SpanForwarder interface {
+	Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error)
+}
+
+func Restore(
+	sf SpanForwarder,
+	//lint:ignore SA1019 deprecated usage
+	oldCheckpoint *jobspb.ChangefeedProgress_Checkpoint,
+	checkpoint *jobspb.TimestampSpansMap,
+) error {
+	if oldCheckpoint != nil {
+		ts := oldCheckpoint.Timestamp
+		if !ts.IsEmpty() {
+			for _, checkpointedSpan := range oldCheckpoint.Spans {
+				if _, err := sf.Forward(checkpointedSpan, ts); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	for _, entry := range checkpoint.Entries {
+		ts := entry.Timestamp
+		spans := entry.Spans
+		if !ts.IsEmpty() {
+			for _, checkpointedSpan := range spans {
+				if _, err := sf.Forward(checkpointedSpan, ts); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }
