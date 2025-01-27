@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/apd"
 	"math"
 	"strconv"
 	"strings"
@@ -19,7 +20,6 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -2091,7 +2091,7 @@ func PeekLength(b []byte) (int, error) {
 	if m >= decimalNaN && m <= decimalNaNDesc {
 		return getDecimalLen(b)
 	}
-	return 0, errors.Errorf("unknown tag %d", m)
+	return 0, errors.Errorf("unknown tag %d, bytes: %x", m, b)
 }
 
 // PrettyPrintValue returns the string representation of all contiguous

@@ -87,6 +87,47 @@ func (no NemesesOption) String() string {
 		no.EnableFpValidator, no.EnableSQLSmith)
 }
 
+func dumpTable(db *gosql.DB, tableName string) {
+	fmt.Print("---------------------------------\n")
+	fmt.Printf("start dumping table: %s\n", tableName)
+	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %s", tableName))
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+
+	values := make([]interface{}, len(columns))
+	valuePtrs := make([]interface{}, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	fmt.Printf("Table %s:", tableName)
+
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			fmt.Printf("error: %v\n", err)
+		}
+
+		for i, col := range columns {
+			fmt.Printf(" %s: %v", col, values[i])
+		}
+		fmt.Printf("\n")
+	}
+
+	fmt.Printf("end dumping table: %s\n", tableName)
+	fmt.Print("---------------------------------\n")
+	if err := rows.Err(); err != nil {
+		fmt.Printf("error: %v\n", err)
+
+	}
+}
+
 // RunNemesis runs a jepsen-style validation of whether a changefeed meets our
 // user-facing guarantees. It's driven by a state machine with various nemeses:
 // txn begin/commit/rollback, job pause/unpause.
@@ -96,6 +137,7 @@ func (no NemesesOption) String() string {
 // real output of a changefeed. The output rows and resolved timestamps of the
 // tested feed are fed into them to check for anomalies.
 func RunNemesis(
+	l func(format string, args ...any),
 	f TestFeedFactory,
 	db *gosql.DB,
 	testName string,
@@ -194,10 +236,10 @@ func RunNemesis(
 		},
 	}
 
-	if nOp.EnableFpValidator {
-		// TODO(#139351): Fingerprint validator doesn't support user defined types.
-		ns.eventMix[eventCreateEnum{}] = 0
-	}
+	//if nOp.EnableFpValidator {
+	//	// TODO(#139351): Fingerprint validator doesn't support user defined types.
+	//}
+	ns.eventMix[eventCreateEnum{}] = 0
 
 	// Create the table and set up some initial splits.
 	if _, err := db.Exec(`CREATE TABLE foo (id INT PRIMARY KEY, ts STRING DEFAULT '0')`); err != nil {
@@ -247,11 +289,14 @@ func RunNemesis(
 		for i := 0; i < numInserts; i++ {
 			query := queryGen.Generate()
 			if _, err := db.Exec(query); err != nil {
-				log.Infof(ctx, "Skipping query %s because error %s", query, err)
 				continue
+			} else {
+				log.Infof(ctx, "Executing query %s", query)
 			}
 		}
 	}
+
+	dumpTable(db, "foo")
 
 	cfo := newChangefeedOption(testName)
 	changefeedStatement := fmt.Sprintf(
@@ -785,13 +830,18 @@ func addColumn(a fsm.Args) error {
 	case addColumnTypeEnum:
 		// Pick a random enum to add.
 		enum := payload.enum
-		if _, err := ns.db.Exec(fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d enum%d DEFAULT 'hello'`,
-			ns.currentTestColumnCount, enum)); err != nil {
+		execS := fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d enum%d DEFAULT 'hello'`,
+			ns.currentTestColumnCount, enum)
+		dumpTable(ns.db, "foo")
+		if _, err := ns.db.Exec(execS); err != nil {
 			return err
 		}
 	case addColumnTypeString:
-		if _, err := ns.db.Exec(fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d STRING DEFAULT 'x'`,
-			ns.currentTestColumnCount)); err != nil {
+		execS := fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d STRING DEFAULT 'x'`,
+			ns.currentTestColumnCount)
+		dumpTable(ns.db, "foo")
+		fmt.Println(execS)
+		if _, err := ns.db.Exec(execS); err != nil {
 			return err
 		}
 	}
@@ -820,8 +870,11 @@ func removeColumn(a fsm.Args) error {
 		return errors.AssertionFailedf(`removeColumn should be called with` +
 			`at least one test column.`)
 	}
-	if _, err := ns.db.Exec(fmt.Sprintf(`ALTER TABLE foo DROP COLUMN test%d`,
-		ns.currentTestColumnCount-1)); err != nil {
+	execS := fmt.Sprintf(`ALTER TABLE foo DROP COLUMN test%d`,
+		ns.currentTestColumnCount-1)
+	fmt.Println(execS)
+	dumpTable(ns.db, "foo")
+	if _, err := ns.db.Exec(execS); err != nil {
 		return err
 	}
 	ns.currentTestColumnCount--

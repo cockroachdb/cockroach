@@ -35,7 +35,7 @@ func TestChangefeedNemeses(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(s.DB)
 			withLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
 
-			v, err := cdctest.RunNemesis(f, s.DB, t.Name(), withLegacySchemaChanger, rng, nop)
+			v, err := cdctest.RunNemesis(t.Logf, f, s.DB, t.Name(), withLegacySchemaChanger, rng, nop)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}

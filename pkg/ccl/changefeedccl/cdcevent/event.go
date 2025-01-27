@@ -608,6 +608,7 @@ func (d *eventDecoder) initForKey(
 	ctx context.Context, key roachpb.Key, schemaTS hlc.Timestamp, keyOnly bool,
 ) error {
 	desc, familyID, err := d.rfCache.tableDescForKey(ctx, key, schemaTS)
+	fmt.Printf("desc: %v, familyID: %v, err: %v, schemaTS: %v\n", desc, familyID, err, schemaTS)
 	if err != nil {
 		return err
 	}

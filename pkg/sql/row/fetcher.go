@@ -846,6 +846,7 @@ func (rf *Fetcher) prettyKeyDatums(
 // it encountered a null while decoding.
 func (rf *Fetcher) DecodeIndexKey(key roachpb.Key) (remaining []byte, foundNull bool, err error) {
 	key = key[rf.table.spec.KeyPrefixLength:]
+	fmt.Println("at rf fetcher: ", key)
 	return rowenc.DecodeKeyValsUsingSpec(rf.table.spec.KeyAndSuffixColumns, key, rf.table.keyVals)
 }
 

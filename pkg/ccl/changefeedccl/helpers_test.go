@@ -61,13 +61,14 @@ var testSinkFlushFrequency = 100 * time.Millisecond
 // schema changer with a probability of 10% using the provided SQL DB
 // connection. This returns true if the declarative schema changer is disabled.
 func maybeDisableDeclarativeSchemaChangesForTest(t testing.TB, sqlDB *sqlutils.SQLRunner) bool {
-	disable := rand.Float32() < 0.1
-	if disable {
-		t.Log("using legacy schema changer")
-		sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
-		sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
-	}
-	return disable
+	//disable := rand.Float32() < 0.1
+	//if disable {
+	//
+	//}
+	t.Log("using legacy schema changer")
+	sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
+	return true
 }
 
 func waitForSchemaChange(
