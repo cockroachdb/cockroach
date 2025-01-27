@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/spf13/cobra"
 )
 
@@ -151,7 +153,11 @@ func (d *dev) getDockerRunArgs(
 	}
 	args = append(args, "-v", workspace+":/cockroach")
 	args = append(args, "--workdir=/cockroach")
-	args = append(args, "-v", filepath.Join(workspace, "build", "bazelutil", "empty.bazelrc")+":/cockroach/.bazelrc.user")
+	bazelRc := "empty.bazelrc"
+	if !buildutil.CrdbTestBuild && (runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") {
+		bazelRc = "darwinarm64cross.bazelrc"
+	}
+	args = append(args, "-v", filepath.Join(workspace, "build", "bazelutil", bazelRc)+":/cockroach/.bazelrc.user")
 	// Create the artifacts directory.
 	artifacts := filepath.Join(workspace, "artifacts")
 	err = d.os.MkdirAll(artifacts)
