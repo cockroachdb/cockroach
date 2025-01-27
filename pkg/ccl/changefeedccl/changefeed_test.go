@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // multi-tenant tests
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"    // locality-related table mutations
@@ -7508,6 +7509,28 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// Resume job.
 		require.NoError(t, jobFeed.Resume())
 
+		// Verify that the resumed job has restored the progress from the checkpoint
+		// to the change frontier.
+		knobs.AfterCoordinatorFrontierRestore = func(frontier *resolvedspan.CoordinatorFrontier) {
+			require.NotNil(t, frontier)
+			var frontierHasProgress bool
+
+			frontier.Entries(func(s roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+				isSpanCheckpointed := checkpoint.Contains(s.Key)
+				frontierHasNonEmptyTS := !ts.IsEmpty()
+
+				if frontierHasNonEmptyTS {
+					frontierHasProgress = true
+					require.Equal(t, ts, jobCheckpoint.Timestamp)
+				}
+
+				require.Equal(t, isSpanCheckpointed, frontierHasNonEmptyTS)
+				return span.ContinueMatch
+			})
+
+			require.True(t, frontierHasProgress)
+		}
+
 		// Wait for the high water mark to be non-zero.
 		testutils.SucceedsSoon(t, func() error {
 			prog := loadProgress()
@@ -7516,6 +7539,10 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			}
 			return errors.New("waiting for highwater")
 		})
+
+		// Now that we've checked that our checkpoint progress is loaded on resume,
+		// do not make further checks.
+		knobs.AfterCoordinatorFrontierRestore = nil
 
 		// At this point, highwater mark should be set, and previous checkpoint should be gone.
 		progress = loadProgress()

@@ -530,6 +530,12 @@ func makePlan(
 			Description:  description,
 		}
 
+		if spanLevelCheckpoint != nil {
+			changeFrontierSpec.SpanLevelCheckpoint = spanLevelCheckpoint
+		} else {
+			changeFrontierSpec.Checkpoint = checkpoint
+		}
+
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
 			maybeCfKnobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
 		}
