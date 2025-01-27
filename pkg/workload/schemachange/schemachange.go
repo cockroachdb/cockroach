@@ -342,6 +342,9 @@ func (s *schemaChange) setClusterSettings(ctx context.Context, pool *workload.Mu
 	for _, stmt := range []string{
 		`SET CLUSTER SETTING sql.defaults.super_regions.enabled = 'on'`,
 		`SET CLUSTER SETTING sql.log.all_statements.enabled = 'on'`,
+
+		// This workload is designed to test multiple statements in a transaction.
+		`SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`,
 	} {
 		_, err := pool.Get().Exec(ctx, stmt)
 		if err != nil {

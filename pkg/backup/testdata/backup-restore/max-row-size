@@ -7,6 +7,7 @@ USE orig;
 CREATE TABLE maxrow (i INT PRIMARY KEY, s STRING);
 INSERT INTO maxrow VALUES (1, repeat('x', 20000));
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SELECT i, pg_column_size(s) FROM maxrow ORDER BY i;

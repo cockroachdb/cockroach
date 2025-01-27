@@ -11,6 +11,17 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# This test relies on transactions not being autocommitted.
+send
+Query {"String": "SET autocommit_before_ddl = 'false'"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 send
 Query {"String": "CREATE TABLE t1 (a int)"}
 ----

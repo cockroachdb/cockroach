@@ -1,3 +1,15 @@
+# The test relies on the transaction not being autocommitted.
+send crdb_only
+Query {"String": "SET autocommit_before_ddl = false"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
 # Prepare a statement and make sure it works.
 
 send

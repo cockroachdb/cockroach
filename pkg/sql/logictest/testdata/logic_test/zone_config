@@ -288,10 +288,16 @@ statement ok
 ALTER TABLE zc CONFIGURE ZONE USING gc.ttlseconds = 100000
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE MATERIALIZED VIEW vm (x, y) AS SELECT a,b FROM zc; ALTER TABLE vm CONFIGURE ZONE USING gc.ttlseconds = 100000
 
 statement error pgcode 42809 cannot set a zone configuration on non-physical object v
 CREATE VIEW v (x, y) AS SELECT a, b FROM zc; ALTER TABLE v CONFIGURE ZONE USING gc.ttlseconds = 100000
+
+statement ok
+RESET autocommit_before_ddl
 
 user root
 

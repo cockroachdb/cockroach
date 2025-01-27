@@ -33,6 +33,7 @@ exec-sql
 CREATE USER testuser;
 GRANT ADMIN TO testuser;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql user=testuser
 CREATE SCHEDULE foocluster_admintestuser FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
@@ -74,6 +75,8 @@ GRANT SYSTEM BACKUP TO testuser;
 GRANT BACKUP ON DATABASE foo TO testuser;
 GRANT BACKUP ON TABLE foo.foo TO testuser;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser;

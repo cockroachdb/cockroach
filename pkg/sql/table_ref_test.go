@@ -53,8 +53,6 @@ CREATE INDEX bc ON test.t(b, c);
 			cID = c.GetID()
 		}
 	}
-	pkID := tableDesc.GetPrimaryIndexID()
-	secID := tableDesc.PublicNonPrimaryIndexes()[0].GetID()
 
 	// Retrieve the numeric descriptors.
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")
@@ -68,6 +66,8 @@ CREATE INDEX bc ON test.t(b, c);
 	}
 
 	// Make some schema changes meant to shuffle the ID/name mapping.
+	// Note: index IDs will change since the declarative schema changer implements
+	// DROP COLUMN with an index swap.
 	stmt = `
 ALTER TABLE test.t RENAME COLUMN b TO d;
 ALTER TABLE test.t RENAME COLUMN a TO p;
@@ -77,6 +77,10 @@ ALTER TABLE test.t DROP COLUMN xx;
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	pkID := tableDesc.GetPrimaryIndexID()
+	secID := tableDesc.PublicNonPrimaryIndexes()[0].GetID()
 
 	// Check the table references.
 	testData := []struct {

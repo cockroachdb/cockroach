@@ -1875,6 +1875,9 @@ SELECT k, (j->'b' = '1') IS NULL FROM t75907@t75907_partial_idx WHERE (j->'b' = 
 subtest column_added_in_same_transaction
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE TABLE t79613 (i INT PRIMARY KEY);
 
 statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
@@ -1951,6 +1954,9 @@ SELECT * FROM t79613;
 
 statement ok
 DROP TABLE t79613;
+
+statement ok
+RESET autocommit_before_ddl
 
 # Regression test for #96924 to disallow dropping a column that is referenced in
 # a partial index predicate.

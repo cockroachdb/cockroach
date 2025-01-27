@@ -766,6 +766,9 @@ DROP TABLE c3, c2, c1, b2, b1, a;
 # Regression for #46094.
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE TABLE parent (x INT PRIMARY KEY);
 CREATE TABLE child1 (
   id INT PRIMARY KEY,

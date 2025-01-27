@@ -17,6 +17,9 @@ CREATE INDEX test_idx_2 ON d.t(b);
 CREATE INDEX test_idx_3 ON d.t(c);
 DROP INDEX d.test_idx_2;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 NOTICE: the data for dropped indexes is reclaimed asynchronously
 HINT: The reclamation delay can be customized in the zone configuration for the table.
 
