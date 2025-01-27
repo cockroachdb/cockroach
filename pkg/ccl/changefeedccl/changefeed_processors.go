@@ -1244,6 +1244,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	if cf.spec.JobID != 0 {
 		ctx = logtags.AddTag(ctx, "job", cf.spec.JobID)
 	}
+
 	ctx = logtags.AddTag(ctx, changeFrontierLogTag, nil /* value */)
 	// StartInternal called at the beginning of the function because there are
 	// early returns if errors are detected.
@@ -1317,15 +1318,19 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		}
 
 		// Recover highwater information from job progress.
-		// Checkpoint information from job progress will eventually be sent to the
-		// changeFrontier from the changeAggregators.  Note that the changeFrontier
-		// may save a new checkpoint prior to receiving all spans of the
-		// aggregators' frontier, potentially missing spans that were previously
-		// checkpointed, so it is still possible for job progress to regress.
 		p := job.Progress()
 		if ts := p.GetHighWater(); ts != nil {
 			cf.highWaterAtStart.Forward(*ts)
 			initialHighwater = *ts
+		}
+
+		ts := cf.spec.Checkpoint.Timestamp
+		for _, checkpointedSpan := range cf.spec.Checkpoint.Spans {
+			if _, err := cf.frontier.Forward(checkpointedSpan, ts); err != nil {
+				if log.V(2) {
+					log.Infof(cf.Ctx(), "error forwarding changefeed frontier with specified checkpoint: %v", err)
+				}
+			}
 		}
 
 		// latestResolvedKV timestamp is set to the current time to make

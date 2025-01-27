@@ -68,6 +68,15 @@ message ChangeFrontierSpec {
   // changefeed at that timestamp.
   repeated roachpb.Span tracked_spans = 1 [(gogoproto.nullable) = false];
 
+  // Checkpoint enables change aggregators to resume faster on restart.
+  message Checkpoint {
+    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+    optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  }
+
+  // Change frontier checkpoint
+  optional Checkpoint checkpoint = 6 [(gogoproto.nullable) = false];
+
   // Feed is the specification for this changefeed.
   optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
 

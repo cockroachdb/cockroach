@@ -450,12 +450,15 @@ func makePlan(
 		// spans that are assigned to it.
 		// We could compute per-aggregator checkpoint, but that's probably an overkill.
 		var aggregatorCheckpoint execinfrapb.ChangeAggregatorSpec_Checkpoint
+		var changeFrontierCheckpoint execinfrapb.ChangeFrontierSpec_Checkpoint
 		var checkpointSpanGroup roachpb.SpanGroup
 
 		if checkpoint != nil {
 			checkpointSpanGroup.Add(checkpoint.Spans...)
 			aggregatorCheckpoint.Spans = checkpoint.Spans
 			aggregatorCheckpoint.Timestamp = checkpoint.Timestamp
+			changeFrontierCheckpoint.Spans = checkpoint.Spans
+			changeFrontierCheckpoint.Timestamp = checkpoint.Timestamp
 		}
 		if log.V(2) {
 			log.Infof(ctx, "aggregator checkpoint: %s", aggregatorCheckpoint)
@@ -495,6 +498,7 @@ func makePlan(
 		// ways that this might happen in the future.
 		changeFrontierSpec := execinfrapb.ChangeFrontierSpec{
 			TrackedSpans: trackedSpans,
+			Checkpoint:   changeFrontierCheckpoint,
 			Feed:         details,
 			JobID:        jobID,
 			UserProto:    execCtx.User().EncodeProto(),
