@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 )
@@ -18,16 +19,20 @@ import (
 // and writing data. This should be initialized by calling engineccl.Init() before calling
 // NewPebble(). The optionBytes is a binary serialized storagepb.EncryptionOptions.
 var NewEncryptedEnvFunc func(
-	fs vfs.FS, fr *FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+	fs vfs.FS, fr *FileRegistry, dbDir string, readOnly bool, encryptionOptions *storagepb.EncryptionOptions,
 ) (*EncryptionEnv, error)
 
 // resolveEncryptedEnvOptions creates the EncryptionEnv and associated file
 // registry if this store has encryption-at-rest enabled; otherwise returns a
 // nil EncryptionEnv.
 func resolveEncryptedEnvOptions(
-	ctx context.Context, unencryptedFS vfs.FS, dir string, encryptionOpts []byte, rw RWMode,
+	ctx context.Context,
+	unencryptedFS vfs.FS,
+	dir string,
+	encryptionOpts *storagepb.EncryptionOptions,
+	rw RWMode,
 ) (*FileRegistry, *EncryptionEnv, error) {
-	if len(encryptionOpts) == 0 {
+	if encryptionOpts == nil {
 		// There's no encryption config. This is valid if the user doesn't
 		// intend to use encryption-at-rest, and the store has never had
 		// encryption-at-rest enabled. Validate that there's no file registry.
