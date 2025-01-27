@@ -220,7 +220,7 @@ type BaseConfig struct {
 	ReadyFn func(waitForInit bool)
 
 	// Stores is specified to enable durable key-value storage.
-	Stores base.StoreSpecList
+	Stores storagepb.StoreSpecList
 
 	// StorageConfig is the configuration of storage based on the Stores,
 	// WALFailover and SharedStorage and BootstrapMount.
@@ -272,7 +272,9 @@ type BaseConfig struct {
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
-func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer, storeSpec base.StoreSpec) BaseConfig {
+func MakeBaseConfig(
+	st *cluster.Settings, tr *tracing.Tracer, storeSpec storagepb.StoreSpec,
+) BaseConfig {
 	if tr == nil {
 		panic("nil Tracer")
 	}
@@ -285,7 +287,7 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer, storeSpec base.Sto
 // SetDefaults resets the values in BaseConfig but while preserving
 // the Config reference. Enables running tests multiple times.
 func (cfg *BaseConfig) SetDefaults(
-	st *cluster.Settings, tr *tracing.Tracer, storeSpec base.StoreSpec,
+	st *cluster.Settings, tr *tracing.Tracer, storeSpec storagepb.StoreSpec,
 ) {
 	baseCfg := cfg.Config
 	*cfg = BaseConfig{Config: baseCfg}
@@ -306,8 +308,8 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	cfg.StorageConfig.WALFailover = storagepb.WALFailover{}
 	cfg.TestingInsecureWebAccess = disableWebLogin
-	cfg.Stores = base.StoreSpecList{
-		Specs: []base.StoreSpec{storeSpec},
+	cfg.Stores = storagepb.StoreSpecList{
+		Specs: []storagepb.StoreSpec{storeSpec},
 	}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID
@@ -621,8 +623,8 @@ func (cfg *Config) SetDefaults(ctx context.Context, st *cluster.Settings) {
 
 func makeStorageCfg(
 	ctx context.Context, st *cluster.Settings,
-) (base.StoreSpec, base.TempStorageConfig) {
-	storeSpec, err := base.NewStoreSpec(DefaultStorePath)
+) (storagepb.StoreSpec, base.TempStorageConfig) {
+	storeSpec, err := storagepb.NewStoreSpec(DefaultStorePath)
 	if err != nil {
 		panic(err)
 	}
@@ -773,17 +775,17 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		}
 
 		if spec.InMemory {
-			var sizeInBytes = spec.Size.Capacity
-			if spec.Size.Percent > 0 {
+			var sizeInBytes = spec.Properties.Capacity
+			if spec.Properties.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
 				if err != nil {
 					return Engines{}, errors.Errorf("could not retrieve system memory")
 				}
-				sizeInBytes = int64(float64(sysMem) * spec.Size.Percent / 100)
+				sizeInBytes = int64(float64(sysMem) * spec.Properties.Percent / 100)
 			}
-			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < base.MinimumStoreSize {
+			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < storagepb.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
+					spec.Properties.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(storagepb.MinimumStoreSize))
 			}
 			addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
 			addCfgOpt(storage.CacheSize(cfg.CacheSize))
@@ -798,13 +800,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "retrieving disk usage")
 			}
-			var sizeInBytes = spec.Size.Capacity
-			if spec.Size.Percent > 0 {
-				sizeInBytes = int64(float64(du.TotalBytes) * spec.Size.Percent / 100)
+			var sizeInBytes = spec.Properties.Capacity
+			if spec.Properties.Percent > 0 {
+				sizeInBytes = int64(float64(du.TotalBytes) * spec.Properties.Percent / 100)
 			}
-			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < base.MinimumStoreSize {
+			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < storagepb.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
+					spec.Properties.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(storagepb.MinimumStoreSize))
 			}
 			monitor, err := cfg.DiskMonitorManager.Monitor(spec.Path)
 			if err != nil {
@@ -817,14 +819,14 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			addCfgOpt(storage.DiskWriteStatsCollector(statsCollector))
 
-			if spec.Size.Percent > 0 {
-				detail(redact.Sprintf("store %d: max size %s (calculated from %.2f percent of total), max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), spec.Size.Percent, openFileLimitPerStore))
-				addCfgOpt(storage.MaxSizePercent(spec.Size.Percent / 100))
+			if spec.Properties.Percent > 0 {
+				detail(redact.Sprintf("store %d: max size %s (calculated from %.2f percent of total), max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), spec.Properties.Percent, openFileLimitPerStore))
+				addCfgOpt(storage.MaxSizePercent(spec.Properties.Percent / 100))
 			} else {
 				detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 				addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
 			}
-			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du)))
+			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec.Properties, du)))
 			addCfgOpt(storage.Caches(pebbleCache, fileCache))
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
 			addCfgOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
@@ -836,8 +838,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			addCfgOpt(storage.DiskMonitor(monitor))
 			// If the spec contains Pebble options, set those too.
-			if spec.PebbleOptions != "" {
-				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
+			if spec.Options != "" {
+				addCfgOpt(storage.PebbleOptions(spec.Options, &pebble.ParseHooks{
 					NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
 						switch name {
 						case "none":

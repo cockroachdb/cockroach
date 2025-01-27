@@ -78,7 +78,7 @@ type TestCLIParams struct {
 	NoServer bool
 
 	// The store specifications for the in-memory server.
-	StoreSpecs []base.StoreSpec
+	StoreConfig storagepb.NodeConfig
 
 	// The locality tiers for the in-memory server.
 	Locality roachpb.Locality
@@ -163,7 +163,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 			Insecure:      params.Insecure,
 			Settings:      settings,
 			SSLCertsDir:   c.certsDir,
-			StoreSpecs:    params.StoreSpecs,
+			StoreConfig:   params.StoreConfig,
 			Locality:      params.Locality,
 			StorageConfig: storagepb.NodeConfig{ExternalIODir: filepath.Join(certsDir, "extern")},
 			Knobs: base.TestingKnobs{
@@ -263,7 +263,7 @@ func (c *TestCLI) RestartServer(params TestCLIParams) {
 	s, err := serverutils.StartServerOnlyE(params.T, base.TestServerArgs{
 		Insecure:    params.Insecure,
 		SSLCertsDir: c.certsDir,
-		StoreSpecs:  params.StoreSpecs,
+		StoreConfig: params.StoreConfig,
 	})
 	if err != nil {
 		c.fail(err)

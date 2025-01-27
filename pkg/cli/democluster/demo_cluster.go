@@ -917,8 +917,8 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		Stopper:           stop.NewStopper(),
 		JoinAddr:          joinAddr,
 		DisableTLSForHTTP: true,
-		StoreSpecs:        []base.StoreSpec{storeSpec},
 		StorageConfig: storagepb.NodeConfig{
+			Stores:        []storagepb.StoreSpec{storeSpec},
 			ExternalIODir: filepath.Join(demoDir, "nodelocal", fmt.Sprintf("n%d", serverIdx+1)),
 		},
 		SQLMemoryPoolSize:       demoCtx.SQLPoolMemorySize,

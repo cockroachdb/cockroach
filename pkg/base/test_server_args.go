@@ -76,11 +76,10 @@ type TestServerArgs struct {
 	// will be set to the address of the cluster's first node.
 	JoinAddr string
 
-	// StoreSpecs define the stores for this server. If you want more than
-	// one store per node, populate this array with StoreSpecs each
-	// representing a store. If no StoreSpecs are provided then a single
-	// DefaultTestStoreSpec will be used.
-	StoreSpecs []StoreSpec
+	// StoreConfig define the stores for this server. If you want more than one
+	// store per node, populate this struct appropriately If no StoreConfig is
+	// provided then a single DefaultTestStoreSpec will be used.
+	StoreConfig storagepb.NodeConfig
 
 	// Locality is optional and will set the server's locality.
 	Locality roachpb.Locality
@@ -488,11 +487,9 @@ func InternalNonDefaultDecision(
 var (
 	// DefaultTestStoreSpec is just a single in memory store of 512 MiB
 	// with no special attributes.
-	DefaultTestStoreSpec = StoreSpec{
-		InMemory: true,
-		Size: storagepb.SizeSpec{
-			Capacity: 512 << 20,
-		},
+	DefaultTestStoreSpec = storagepb.StoreSpec{
+		InMemory:   true,
+		Properties: storagepb.SizeSpec{Capacity: 512 << 20},
 	}
 )
 

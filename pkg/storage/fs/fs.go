@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
@@ -61,7 +60,7 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 // InitEnvsFromStoreSpecs constructs Envs for all the provided store specs.
 func InitEnvsFromStoreSpecs(
 	ctx context.Context,
-	specs []base.StoreSpec,
+	specs []storagepb.StoreSpec,
 	rw RWMode,
 	stickyRegistry StickyRegistry,
 	diskWriteStats disk.WriteStatsManager,
@@ -96,26 +95,29 @@ func (e Envs) CloseAll() {
 // stickyRegistry may be nil iff the spec's StickyVFSID field is unset.
 func InitEnvFromStoreSpec(
 	ctx context.Context,
-	spec base.StoreSpec,
+	store storagepb.StoreSpec,
 	rw RWMode,
 	stickyRegistry StickyRegistry,
 	diskWriteStats disk.WriteStatsManager,
 ) (*Env, error) {
 	fs := vfs.Default
-	dir := spec.Path
-	if spec.InMemory {
-		if spec.StickyVFSID != "" {
+	var dir string
+	if store.InMemory {
+		if store.StickyVFSID != "" {
 			if stickyRegistry == nil {
 				return nil, errors.Errorf("missing StickyVFSRegistry")
 			}
-			fs = stickyRegistry.Get(spec.StickyVFSID)
+			fs = stickyRegistry.Get(store.StickyVFSID)
 		} else {
 			fs = vfs.NewMem()
 		}
+	} else {
+		dir = store.Path
 	}
+
 	return InitEnv(ctx, fs, dir, EnvConfig{
 		RW:                rw,
-		EncryptionOptions: spec.EncryptionOptions,
+		EncryptionOptions: store.Encryption,
 	}, diskWriteStats)
 }
 

@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -1276,7 +1277,7 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // diskStatsMap encapsulates all the logic for populating DiskStats for
 // admission.StoreMetrics.
 type diskStatsMap struct {
-	provisionedRate map[roachpb.StoreID]base.ProvisionedRateSpec
+	provisionedRate map[roachpb.StoreID]storagepb.ProvisionedRateSpec
 	diskMonitors    map[roachpb.StoreID]kvserver.DiskStatsMonitor
 }
 
@@ -1295,8 +1296,8 @@ func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 
 		provisionedBandwidth := clusterProvisionedBandwidth
 		spec, ok := dsm.provisionedRate[id]
-		if ok && spec.ProvisionedBandwidth > 0 {
-			provisionedBandwidth = spec.ProvisionedBandwidth
+		if ok && spec.Bandwidth > 0 {
+			provisionedBandwidth = spec.Bandwidth
 		}
 		stats[id] = admission.DiskStats{
 			ProvisionedBandwidth: provisionedBandwidth,
@@ -1317,10 +1318,10 @@ type monitorManagerInterface interface {
 }
 
 func (dsm *diskStatsMap) initDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager monitorManagerInterface,
+	specs []storagepb.StoreSpec, engines []storage.Engine, diskManager monitorManagerInterface,
 ) error {
 	*dsm = diskStatsMap{
-		provisionedRate: make(map[roachpb.StoreID]base.ProvisionedRateSpec),
+		provisionedRate: make(map[roachpb.StoreID]storagepb.ProvisionedRateSpec),
 		diskMonitors:    make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
 	}
 	for i := range engines {
@@ -1335,7 +1336,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		if err != nil {
 			return err
 		}
-		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
+		dsm.provisionedRate[id.StoreID] = specs[i].Provisioned
 		dsm.diskMonitors[id.StoreID] = monitor
 	}
 	return nil
@@ -1355,7 +1356,7 @@ func (mm *diskMonitorManager) Monitor(path string) (kvserver.DiskStatsMonitor, e
 }
 
 func (n *Node) registerEnginesForDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager *diskMonitorManager,
+	specs []storagepb.StoreSpec, engines []storage.Engine, diskManager *diskMonitorManager,
 ) (admission.PebbleMetricsProvider, error) {
 	pmp := &nodePebbleMetricsProvider{n: n}
 	if err := pmp.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {

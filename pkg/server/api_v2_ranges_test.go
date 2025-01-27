@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/rangetestutils"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -124,10 +125,12 @@ func TestNodesV2(t *testing.T) {
 
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				base.DefaultTestStoreSpec,
-				base.DefaultTestStoreSpec,
-				base.DefaultTestStoreSpec,
+			StoreConfig: storagepb.NodeConfig{
+				Stores: []storagepb.StoreSpec{
+					base.DefaultTestStoreSpec,
+					base.DefaultTestStoreSpec,
+					base.DefaultTestStoreSpec,
+				},
 			},
 		},
 	})

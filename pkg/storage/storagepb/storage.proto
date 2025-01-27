@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -101,10 +101,68 @@ message SharedStorage {
   SizeSpec cache = 2 [ (gogoproto.nullable) = false ];
 }
 
+message ProvisionedRateSpec { int64 bandwidth = 1; }
+
+enum StoreState {
+  ACTIVE = 0;
+  DECOMMISIONING = 1;
+  REMOVED = 2;
+}
+
+// StoreSpec is the configuration for a single store. Some properties only apply
+// for in-memory stores.
+message StoreSpec {
+  option (gogoproto.goproto_stringer) = false;
+  // An in-memory store keeps the data in memory. However an optional path can
+  // be supplied for non-pebble data such as overflow. Memory stores are
+  // primarily intended for testing.
+  bool in_memory = 1;
+
+  // Root path on the file system where the data for this store lives. Paths for
+  // different stores should not overlap.
+  string path = 2;
+
+  // Storage and throughput properties that apply to this store. By default the
+  // entire disk will be used with unlimited capacity.
+  SizeSpec properties = 3 [ (gogoproto.nullable) = false ];
+
+  // Arbitrary tags for this store. These can be used by the allocator for
+  // making balancing decisions.
+  roachpb.Attributes attributes = 4 [ (gogoproto.nullable) = false ];
+
+  // Encryption options for this disk.
+  EncryptionOptions encryption = 5;
+
+  // Arbitrary options which are passed to the underlying engine during
+  // construction.
+  string options = 6;
+
+  // Ballast is used to prevent an out of space error from preventing the disk
+  // from being recovered. By default this is 1% of the space on the drive.
+  SizeSpec ballast = 7 [ (gogoproto.nullable) = false ];
+
+  // StickyVFSID is a unique identifier associated with a given store which
+  // will preserve the in-memory virtual file system (VFS) even after the
+  // storage engine has been closed. This only applies to in-memory storage
+  // engine.
+  string stickyVFSID = 8;
+
+  // State of this store. By default the state is Active.
+  ProvisionedRateSpec provisioned = 9 [ (gogoproto.nullable) = false ];
+
+  // State of this store. By default the state is Active. A decommissioning
+  // state means the data will be drained from the drive.
+  StoreState state = 10;
+}
+
 // NodeConfig is all the node level storage related configurations for this
 // node. This structure is persisted to all stores and can be used to bootstrap
 // the node.
 message NodeConfig {
+
+  // Stores is the list of StoreSpecs for this node.
+  repeated StoreSpec stores = 1 [ (gogoproto.nullable) = false ];
+
   // WALFailover enables and configures automatic WAL failover when latency to
   // a store's primary WAL increases.
   WALFailover wal_failover = 2

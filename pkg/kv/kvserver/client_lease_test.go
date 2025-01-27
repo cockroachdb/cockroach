@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -929,11 +930,10 @@ func TestLeaseholderRelocate(t *testing.T) {
 					StickyVFSRegistry: stickyRegistry,
 				},
 			},
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{{
+				InMemory:    true,
+				StickyVFSID: strconv.FormatInt(int64(i), 10),
+			}},
 			},
 		}
 	}
@@ -1129,10 +1129,12 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 					BaseQueueDisabledBypassFilter:           disabledQueueBypassFn,
 				},
 			},
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
+			StoreConfig: storagepb.NodeConfig{
+				Stores: []storagepb.StoreSpec{
+					{
+						InMemory:    true,
+						StickyVFSID: strconv.FormatInt(int64(i), 10),
+					},
 				},
 			},
 		}
@@ -1294,10 +1296,12 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 					StickyVFSRegistry:         stickyRegistry,
 				},
 			},
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
+			StoreConfig: storagepb.NodeConfig{
+				Stores: []storagepb.StoreSpec{
+					{
+						InMemory:    true,
+						StickyVFSID: strconv.FormatInt(int64(i), 10),
+					},
 				},
 			},
 		}

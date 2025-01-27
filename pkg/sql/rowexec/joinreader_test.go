@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1646,14 +1647,12 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 	// reflect the real costs of lookups and spilling.
 	primaryStoragePath, cleanupPrimaryDir := testutils.TempDir(b)
 	defer cleanupPrimaryDir()
-	storeSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", primaryStoragePath))
-	require.NoError(b, err)
 
 	var (
 		logScope       = log.Scope(b)
 		ctx            = context.Background()
 		s, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{storeSpec},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{{Path: primaryStoragePath}}},
 		})
 		st          = s.ClusterSettings()
 		evalCtx     = eval.MakeTestingEvalContext(st)
@@ -1676,8 +1675,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 
 	tempStoragePath, cleanupTempDir := testutils.TempDir(b)
 	defer cleanupTempDir()
-	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
-	require.NoError(b, err)
+	tempStoreSpec := storagepb.StoreSpec{Path: tempStoragePath}
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     tempStoragePath,
 		Mon:      diskMonitor,
@@ -1915,14 +1913,12 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 	// reflect the real costs of lookups and spilling.
 	primaryStoragePath, cleanupPrimaryDir := testutils.TempDir(b)
 	defer cleanupPrimaryDir()
-	storeSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", primaryStoragePath))
-	require.NoError(b, err)
 
 	var (
 		logScope       = log.Scope(b)
 		ctx            = context.Background()
 		s, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{storeSpec},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{{Path: primaryStoragePath}}},
 		})
 		st          = s.ClusterSettings()
 		evalCtx     = eval.MakeTestingEvalContext(st)
@@ -1945,8 +1941,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 
 	tempStoragePath, cleanupTempDir := testutils.TempDir(b)
 	defer cleanupTempDir()
-	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
-	require.NoError(b, err)
+	tempStoreSpec := storagepb.StoreSpec{Path: tempStoragePath}
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     tempStoragePath,
 		Mon:      diskMonitor,

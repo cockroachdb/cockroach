@@ -11,7 +11,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -427,7 +426,7 @@ func WALFailover(
 		secondary := wal.Dir{
 			FS: secondaryEnv,
 			// Use auxiliary/wals-among-stores within the other stores directory.
-			Dirname: secondaryEnv.PathJoin(secondaryEnv.Dir, base.AuxiliaryDir, "wals-among-stores"),
+			Dirname: secondaryEnv.PathJoin(secondaryEnv.Dir, storagepb.AuxiliaryDir, "wals-among-stores"),
 		}
 		if walCfg.Mode == storagepb.WALFailoverMode_AMONG_STORES {
 			cfg.opts.WALFailover = makePebbleWALFailoverOptsForDir(cfg.settings, secondary)

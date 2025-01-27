@@ -729,23 +729,3 @@ var userfileCtx struct {
 func setUserfileContextDefaults() {
 	userfileCtx.recursive = false
 }
-
-// GetServerCfgStores provides direct public access to the StoreSpecList inside
-// serverCfg. This is used by CCL code to populate some fields.
-//
-// WARNING: consider very carefully whether you should be using this.
-// If you are not writing CCL code that performs command-line flag
-// parsing, you probably should not be using this.
-func GetServerCfgStores() base.StoreSpecList {
-	return serverCfg.Stores
-}
-
-// GetWALFailoverConfig provides direct public access to the WALFailoverConfig
-// inside serverCfg. This is used by CCL code to populate some fields.
-//
-// WARNING: consider very carefully whether you should be using this.
-// If you are not writing CCL code that performs command-line flag
-// parsing, you probably should not be using this.
-func GetWALFailoverConfig() *storagepb.WALFailover {
-	return &serverCfg.StorageConfig.WALFailover
-}

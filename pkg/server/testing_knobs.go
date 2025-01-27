@@ -80,7 +80,7 @@ type TestingKnobs struct {
 	// node is permanently removed from the cluster.
 	OnDecommissionedCallback func(id roachpb.NodeID)
 	// StickyVFSRegistry manages the lifecycle of sticky in memory engines,
-	// which can be enabled via base.StoreSpec.StickyVFSID.
+	// which can be enabled via storagepb.StoreSpec.StickyVFSID.
 	//
 	// When supplied to a TestCluster, StickyVFSIDs will be associated auto-
 	// matically to the StoreSpecs used.

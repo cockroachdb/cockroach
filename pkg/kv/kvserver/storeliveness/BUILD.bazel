@@ -64,6 +64,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/fs",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/listenerutil",

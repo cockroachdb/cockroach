@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -184,7 +185,7 @@ func initTraceDir(ctx context.Context, dir string) {
 }
 
 func initTempStorageConfig(
-	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, stores base.StoreSpecList,
+	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, stores storagepb.NodeConfig,
 ) (base.TempStorageConfig, error) {
 	// Initialize the target directory for temporary storage. If encryption at
 	// rest is enabled in any fashion, we'll want temp storage to be encrypted
@@ -197,11 +198,11 @@ func initTempStorageConfig(
 	// encryption gets enabled after the fact—so we check each store.
 	specIdxDisk := -1
 	specIdxEncrypted := -1
-	for i, spec := range stores.Specs {
+	for i, spec := range stores.Stores {
 		if spec.InMemory {
 			continue
 		}
-		if spec.IsEncrypted() && specIdxEncrypted == -1 {
+		if spec.Encryption != nil && specIdxEncrypted == -1 {
 			// TODO(jackson): One store's EncryptionOptions may say to encrypt
 			// with a real key, while another store's say to use key=plain.
 			// This provides no guarantee that we'll use the encrypted one's.
@@ -226,7 +227,7 @@ func initTempStorageConfig(
 		// Prefer a non-encrypted on-disk store.
 		specIdx = specIdxDisk
 	}
-	useStore := stores.Specs[specIdx]
+	useStore := stores.Stores[specIdx]
 
 	var recordPath string
 	if !useStore.InMemory {
@@ -311,7 +312,7 @@ type newServerFn func(ctx context.Context, serverCfg server.Config, stopper *sto
 
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
 
-func runStartSingleNode(cmd *cobra.Command, args []string) error {
+func runStartSingleNode(cmd *cobra.Command, _ []string) error {
 	joinFlag := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name)
 	if joinFlag.Changed {
 		return errCannotUseJoin
@@ -332,11 +333,11 @@ func runStartSingleNode(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return runStart(cmd, args, true /*startSingleNode*/)
+	return runStart(cmd, true /*startSingleNode*/)
 }
 
-func runStartJoin(cmd *cobra.Command, args []string) error {
-	return runStart(cmd, args, false /*startSingleNode*/)
+func runStartJoin(cmd *cobra.Command, _ []string) error {
+	return runStart(cmd, false /*startSingleNode*/)
 }
 
 // runStart starts the cockroach node using --store as the list of
@@ -352,7 +353,7 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 // because we cannot refer to startSingleNodeCmd under
 // runStartInternal: there would be a cyclic dependency between
 // runStart, runStartSingleNode and runStartSingleNodeCmd.
-func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
+func runStart(cmd *cobra.Command, startSingleNode bool) error {
 	const serverType redact.SafeString = "node"
 
 	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error) {
@@ -412,19 +413,24 @@ func runStartInternal(
 		signal.Notify(signalCh, exitAbruptlySignal)
 	}
 
+	// Set up a cancellable context for the entire start command.
+	// The context will be canceled at the end.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Check for stores with full disks and exit with an informative exit
 	// code. This needs to happen early during start, before we perform any
 	// writes to the filesystem including log rotation. We need to guarantee
 	// that the process continues to exit with the Disk Full exit code. A
 	// flapping exit code can affect alerting, including the alerting
 	// performed within CockroachCloud.
-	if err := exitIfDiskFull(vfs.Default, serverCfg.Stores.Specs); err != nil {
+	if err := exitIfDiskFull(vfs.Default, serverCfg.StorageConfig); err != nil {
 		return err
 	}
 
 	// If any store has something to say against a server start-up
 	// (e.g. previously detected corruption), listen to them now.
-	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
+	if err := serverCfg.StorageConfig.PriorCriticalAlertError(); err != nil {
 		return clierror.NewError(err, exit.FatalError())
 	}
 
@@ -432,11 +438,6 @@ func runStartInternal(
 	// against a persistent disk stall that prevents the process from exiting or
 	// making progress.
 	log.SetMakeProcessUnavailableFunc(closeAllSockets)
-
-	// Set up a cancellable context for the entire start command.
-	// The context will be canceled at the end.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// The context annotation ensures that server identifiers show up
 	// in the logging metadata as soon as they are known.
@@ -601,10 +602,9 @@ func runStartInternal(
 	if err := initConfigFn(ctx); err != nil {
 		return errors.Wrapf(err, "failed to initialize %s", serverType)
 	}
-
 	st := serverCfg.BaseConfig.Settings
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
-		ctx, st, stopper, serverCfg.Stores,
+		ctx, st, stopper, serverCfg.StorageConfig,
 	); err != nil {
 		return err
 	}
@@ -1228,8 +1228,8 @@ func reportServerInfo(
 	} else {
 		buf.Printf("external I/O path: \t<disabled>\n")
 	}
-	for i, spec := range serverCfg.Stores.Specs {
-		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(spec))
+	for i, spec := range serverCfg.StorageConfig.Stores {
+		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(spec.Path))
 	}
 
 	// Print the commong server identifiers.
@@ -1371,11 +1371,11 @@ func maybeWarnMemorySizes(ctx context.Context) {
 	}
 }
 
-func exitIfDiskFull(fs vfs.FS, specs []base.StoreSpec) error {
+func exitIfDiskFull(fs vfs.FS, specs storagepb.NodeConfig) error {
 	var cause error
 	var ballastPaths []string
 	var ballastMissing bool
-	for _, spec := range specs {
+	for _, spec := range specs.Stores {
 		isDiskFull, err := storage.IsDiskFull(fs, spec)
 		if err != nil {
 			return err
@@ -1383,7 +1383,7 @@ func exitIfDiskFull(fs vfs.FS, specs []base.StoreSpec) error {
 		if !isDiskFull {
 			continue
 		}
-		path := base.EmergencyBallastFile(fs.PathJoin, spec.Path)
+		path := storagepb.EmergencyBallastFile(fs.PathJoin, spec.Path)
 		ballastPaths = append(ballastPaths, path)
 		if _, err := fs.Stat(path); oserror.IsNotExist(err) {
 			ballastMissing = true

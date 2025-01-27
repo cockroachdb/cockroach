@@ -17,10 +17,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -86,7 +86,7 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 	require.Panics(t, func() { iter.Close() })
 
 	// Should have laid down marker file to prevent startup.
-	_, err = p.Env().Stat(base.PreventedStartupFile(p.GetAuxiliaryDir()))
+	_, err = p.Env().Stat(storagepb.PreventedStartupFile(p.GetAuxiliaryDir()))
 	require.NoError(t, err)
 }
 

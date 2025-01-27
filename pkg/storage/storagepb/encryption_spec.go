@@ -201,18 +201,3 @@ func EncryptionOptionsForStore(
 	}
 	return nil, nil
 }
-
-// GetAbsoluteFSPath takes a (possibly relative) and returns the absolute path.
-// Returns an error if the path begins with '~' or Abs fails.
-// 'fieldName' is used in error strings.
-func GetAbsoluteFSPath(fieldName string, p string) (string, error) {
-	if p[0] == '~' {
-		return "", fmt.Errorf("%s cannot start with '~': %s", fieldName, p)
-	}
-
-	ret, err := filepath.Abs(p)
-	if err != nil {
-		return "", errors.Wrapf(err, "could not find absolute path for %s %s", fieldName, p)
-	}
-	return ret, nil
-}

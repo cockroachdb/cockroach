@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -101,12 +102,9 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 			ReplicationMode:     base.ReplicationManual,
 			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
-				StoreSpecs: []base.StoreSpec{
-					{
-						InMemory:    true,
-						StickyVFSID: "1",
-					},
-				},
+				StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+					{InMemory: true, StickyVFSID: "1"},
+				}},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: fs.NewStickyRegistry(),
@@ -228,12 +226,9 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 						},
 					},
 				},
-				StoreSpecs: []base.StoreSpec{
-					{
-						InMemory:    true,
-						StickyVFSID: "1",
-					},
-				},
+				StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+					{InMemory: true, StickyVFSID: "1"},
+				}},
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
@@ -352,11 +347,8 @@ func TestRestoreReplicas(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -661,11 +653,8 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			stickyServerArgs := make(map[int]base.TestServerArgs)
 			for i := 0; i < numServers; i++ {
 				stickyServerArgs[i] = base.TestServerArgs{
-					StoreSpecs: []base.StoreSpec{
-						{
-							InMemory:    true,
-							StickyVFSID: strconv.FormatInt(int64(i), 10),
-						},
+					StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+						{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
@@ -1708,11 +1697,8 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -1791,11 +1777,8 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -1897,11 +1880,8 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			for i := 0; i < numServers; i++ {
 				stickyServerArgs[i] = base.TestServerArgs{
 					Settings: settings,
-					StoreSpecs: []base.StoreSpec{
-						{
-							InMemory:    true,
-							StickyVFSID: strconv.FormatInt(int64(i), 10),
-						},
+					StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+						{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 					},
 					RaftConfig: raftConfig,
 					Knobs: base.TestingKnobs{
@@ -2197,11 +2177,8 @@ func TestProgressWithDownNode(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -2279,11 +2256,8 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -2376,11 +2350,8 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -3545,11 +3516,8 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -3891,11 +3859,8 @@ func TestReplicaTooOldGC(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -3988,11 +3953,8 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -5006,11 +4968,8 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
 			Settings: st,
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -5365,11 +5324,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 				stickyServerArgs[i] = base.TestServerArgs{
 					Settings: st,
-					StoreSpecs: []base.StoreSpec{
-						{
-							InMemory:    true,
-							StickyVFSID: strconv.FormatInt(int64(i), 10),
-						},
+					StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+						{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{

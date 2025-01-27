@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -368,9 +369,7 @@ func TestListenerFileCreation(t *testing.T) {
 	defer cleanupFn()
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{{Path: dir}}},
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1140,11 +1139,11 @@ func TestStorageBlockLoadConcurrencyLimit(t *testing.T) {
 
 	for _, n := range []int{1, 2, 5} {
 		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
-			storeSpecs := make([]base.StoreSpec, n)
+			storeSpecs := make([]storagepb.StoreSpec, n)
 			for i := range storeSpecs {
 				storeSpecs[i] = base.DefaultTestStoreSpec
 			}
-			s := serverutils.StartServerOnly(t, base.TestServerArgs{StoreSpecs: storeSpecs})
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{StoreConfig: storagepb.NodeConfig{Stores: storeSpecs}})
 			defer s.Stopper().Stop(context.Background())
 
 			check := func(expected int64) error {

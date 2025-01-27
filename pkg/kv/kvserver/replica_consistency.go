@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -779,7 +779,7 @@ func (r *Replica) computeChecksumPostApply(
 		// that's about to end, just sleep for a few seconds and then terminate.
 		auxDir := r.store.TODOEngine().GetAuxiliaryDir()
 		_ = r.store.TODOEngine().Env().MkdirAll(auxDir, os.ModePerm)
-		path := base.PreventedStartupFile(auxDir)
+		path := storagepb.PreventedStartupFile(auxDir)
 
 		const attentionFmt = `ATTENTION:
 

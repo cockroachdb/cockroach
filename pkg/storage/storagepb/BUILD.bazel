@@ -30,6 +30,7 @@ go_library(
     srcs = [
         "encryption_spec.go",
         "size_spec.go",
+        "store_spec.go",
         "wal_failover.go",
     ],
     embed = [":storagepb_go_proto"],
@@ -39,6 +40,8 @@ go_library(
         "//pkg/cli/cliflags",
         "//pkg/util/humanizeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_spf13_pflag//:pflag",
@@ -47,7 +50,16 @@ go_library(
 
 go_test(
     name = "storagepb_test",
-    srcs = ["encryption_spec_test.go"],
+    srcs = [
+        "encryption_spec_test.go",
+        "store_spec_test.go",
+    ],
     embed = [":storagepb"],
-    deps = ["//pkg/util/leaktest"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
 )

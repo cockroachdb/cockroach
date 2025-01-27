@@ -58,7 +58,7 @@ var serverHTTPAddr, serverHTTPPort string
 var serverHTTPAdvertiseAddr, serverHTTPAdvertisePort string
 var localityAdvertiseHosts localityList
 var startBackground bool
-var storeSpecs base.StoreSpecList
+var storeSpecs storagepb.StoreSpecList
 var goMemLimit int64
 var tenantIDFile string
 var localityFile string
@@ -90,7 +90,7 @@ func initPreFlagsDefaults() {
 
 	startBackground = false
 
-	storeSpecs = base.StoreSpecList{}
+	storeSpecs = storagepb.StoreSpecList{}
 
 	goMemLimit = 0
 
@@ -1388,7 +1388,7 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 		if ss.InMemory {
 			continue
 		}
-		absPath, err := base.GetAbsoluteFSPath("path", ss.Path)
+		absPath, err := storagepb.GetAbsoluteFSPath("path", ss.Path)
 		if err != nil {
 			return err
 		}
@@ -1397,14 +1397,14 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	}
 
 	if serverCfg.StorageConfig.WALFailover.Path.IsSet() {
-		absPath, err := base.GetAbsoluteFSPath("wal-failover.path", serverCfg.StorageConfig.WALFailover.Path.Path)
+		absPath, err := storagepb.GetAbsoluteFSPath("wal-failover.path", serverCfg.StorageConfig.WALFailover.Path.Path)
 		if err != nil {
 			return err
 		}
 		serverCfg.StorageConfig.WALFailover.Path.Path = absPath
 	}
 	if serverCfg.StorageConfig.WALFailover.PrevPath.IsSet() {
-		absPath, err := base.GetAbsoluteFSPath("wal-failover.prev_path", serverCfg.StorageConfig.WALFailover.PrevPath.Path)
+		absPath, err := storagepb.GetAbsoluteFSPath("wal-failover.prev_path", serverCfg.StorageConfig.WALFailover.PrevPath.Path)
 		if err != nil {
 			return err
 		}
@@ -1466,18 +1466,6 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
 		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
 	}
-
-	// In standalone SQL servers, we do not generate a ballast file,
-	// unless a ballast size was specified explicitly by the user.
-	for i := range serverCfg.Stores.Specs {
-		spec := &serverCfg.Stores.Specs[i]
-		if spec.BallastSize == nil {
-			// Only override if there was no ballast size specified to start
-			// with.
-			zero := storagepb.SizeSpec{Capacity: 0, Percent: 0}
-			spec.BallastSize = &zero
-		}
-	}
 	return nil
 }
 
@@ -1485,9 +1473,9 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 // specs with the parsed stores and populates some fields in the StoreSpec and
 // WAL failover config.
 func populateStoreSpecsEncryption() error {
-	return base.PopulateWithEncryptionOpts(
-		GetServerCfgStores(),
-		GetWALFailoverConfig(),
+	return storagepb.PopulateWithEncryptionOpts(
+		serverCfg.Stores,
+		serverCfg.StorageConfig.WALFailover,
 		encryptionSpecs,
 	)
 }
@@ -1506,7 +1494,7 @@ func populateExternalIODir(fs *pflag.FlagSet) error {
 	// store specs.
 	if fs.Changed(cliflags.ExternalIODir.Name) {
 		if serverCfg.StorageConfig.ExternalIODir != "" {
-			absPath, err := base.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, serverCfg.StorageConfig.ExternalIODir)
+			absPath, err := storagepb.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, serverCfg.StorageConfig.ExternalIODir)
 			if err != nil {
 				return err
 			}

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -139,20 +140,18 @@ func TestBootstrapNewStore(t *testing.T) {
 	// Start server with persisted store so that it gets bootstrapped.
 	{
 		s := serverutils.StartServerOnly(t, base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{Path: path},
-			},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{{Path: path}}},
 		})
 		s.Stopper().Stop(ctx)
 	}
 
-	specs := []base.StoreSpec{
+	specs := []storagepb.StoreSpec{
 		{Path: path},
 		{InMemory: true},
 		{InMemory: true},
 	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		StoreSpecs: specs,
+		StoreConfig: storagepb.NodeConfig{Stores: specs},
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -186,7 +185,7 @@ func TestStartManyStores(t *testing.T) {
 	path, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	specs := []base.StoreSpec{
+	specs := []storagepb.StoreSpec{
 		{Path: path},
 		{InMemory: true},
 		{InMemory: true},
@@ -211,7 +210,7 @@ func TestStartManyStores(t *testing.T) {
 	}
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		StoreSpecs: specs,
+		StoreConfig: storagepb.NodeConfig{Stores: specs},
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -247,10 +246,10 @@ func TestNodeJoin(t *testing.T) {
 	// one will join the first.
 	perNode := map[int]base.TestServerArgs{}
 	perNode[0] = base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
+		StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
 			{InMemory: true},
 			{InMemory: true},
-		},
+		}},
 	}
 	perNode[1] = perNode[0]
 
@@ -267,7 +266,7 @@ func TestNodeJoin(t *testing.T) {
 	// Verify all stores are initialized.
 	for i := 0; i < numNodes; i++ {
 		testutils.SucceedsSoon(t, func() error {
-			exp := len(perNode[i].StoreSpecs)
+			exp := len(perNode[i].StoreConfig.Stores)
 			sc := s.Server(i).GetStores().(*kvserver.Stores).GetStoreCount()
 			if sc != exp {
 				return errors.Errorf("%d: saw only %d out of %d stores", i, sc, exp)
@@ -540,12 +539,9 @@ func TestNodeEmitsLowDiskSpaceEvents(t *testing.T) {
 				StickyVFSRegistry: stickyRegistry,
 			},
 		},
-		StoreSpecs: []base.StoreSpec{
-			{
-				InMemory:    true,
-				StickyVFSID: "foo",
-			},
-		},
+		StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+			{InMemory: true, StickyVFSID: "foo"},
+		}},
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	})
 	defer ts.Stopper().Stop(ctx)
@@ -1035,12 +1031,12 @@ func TestGetTenantWeights(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	specs := []base.StoreSpec{
+	specs := []storagepb.StoreSpec{
 		{InMemory: true},
 		{InMemory: true},
 	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		StoreSpecs: specs,
+		StoreConfig: storagepb.NodeConfig{Stores: specs},
 	})
 	defer s.Stopper().Stop(ctx)
 	// Wait until both stores are started properly.
@@ -1140,20 +1136,21 @@ func TestDiskStatsMap(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	specs := []base.StoreSpec{
+	specs := []storagepb.StoreSpec{
 		{
-			ProvisionedRateSpec: base.ProvisionedRateSpec{
-				ProvisionedBandwidth: 0,
+			Provisioned: storagepb.ProvisionedRateSpec{
+				Bandwidth: 0,
 			},
 			Path: "foo",
 		},
 		{
-			ProvisionedRateSpec: base.ProvisionedRateSpec{
-				ProvisionedBandwidth: 200,
+			Provisioned: storagepb.ProvisionedRateSpec{
+				Bandwidth: 200,
 			},
 			Path: "bar",
 		},
 	}
+
 	// Engines.
 	engines := []storage.Engine{
 		storage.NewDefaultInMemForTesting(),

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -267,10 +268,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 				Store:  &testKnobs,
 				Server: &server.TestingKnobs{StickyVFSRegistry: stickyVFSRegistry},
 			},
-			StoreSpecs: []base.StoreSpec{{
-				InMemory:    true,
-				StickyVFSID: strconv.FormatInt(int64(i), 10),
-			}},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
+			},
 		}
 	}
 
@@ -418,7 +418,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// A death rattle should have been written on s2. Note that the VFSes are
 	// zero-indexed whereas store IDs are one-indexed.
 	fs := stickyVFSRegistry.Get("1")
-	f, err := fs.Open(base.PreventedStartupFile(s2AuxDir))
+	f, err := fs.Open(storagepb.PreventedStartupFile(s2AuxDir))
 	require.NoError(t, err)
 	b, err := io.ReadAll(f)
 	require.NoError(t, err)
@@ -471,9 +471,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	}
 	tsArgs.Knobs.Store = knobs
 	nodeZeroArgs := tsArgs
-	nodeZeroArgs.StoreSpecs = []base.StoreSpec{{
-		Path: path,
-	}}
+	nodeZeroArgs.StoreConfig = storagepb.NodeConfig{Stores: []storagepb.StoreSpec{{Path: path}}}
 
 	clusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,

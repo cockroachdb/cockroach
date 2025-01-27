@@ -130,16 +130,16 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 
-			assert.Len(t, actual.StoreSpecs, 1)
+			assert.Len(t, actual.StoreConfig.Stores, 1)
 			assert.Equal(
 				t,
 				fmt.Sprintf("demo-server%d", tc.serverIdx),
-				actual.StoreSpecs[0].StickyVFSID,
+				actual.StoreConfig.Stores[0].StickyVFSID,
 			)
 
 			// We cannot compare these.
 			actual.Stopper = nil
-			actual.StoreSpecs = nil
+			actual.StoreConfig = storagepb.NodeConfig{}
 			actual.Knobs.JobsTestingKnobs = nil
 
 			assert.Equal(t, tc.expected, actual)

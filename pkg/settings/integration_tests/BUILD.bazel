@@ -16,6 +16,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings",
         "//pkg/storage/fs",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",

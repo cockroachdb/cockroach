@@ -17,7 +17,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -249,12 +248,11 @@ func TestPebbleEncryption(t *testing.T) {
 		// Initialize the filesystem env.
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
-			base.StoreSpec{
-				InMemory:          true,
-				Attributes:        roachpb.Attributes{},
-				Size:              storagepb.SizeSpec{Capacity: 512 << 20},
-				EncryptionOptions: encOptions,
-				StickyVFSID:       stickyVFSID,
+			storagepb.StoreSpec{
+				InMemory:    true,
+				Properties:  storagepb.SizeSpec{Capacity: 512 << 20},
+				StickyVFSID: stickyVFSID,
+				Encryption:  encOptions,
 			},
 			fs.ReadWrite,
 			stickyRegistry, /* sticky registry */
@@ -298,12 +296,11 @@ func TestPebbleEncryption(t *testing.T) {
 		// Initialize the filesystem env again, replaying the file registries.
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
-			base.StoreSpec{
-				InMemory:          true,
-				Attributes:        roachpb.Attributes{},
-				Size:              storagepb.SizeSpec{Capacity: 512 << 20},
-				EncryptionOptions: encOptions,
-				StickyVFSID:       stickyVFSID,
+			storagepb.StoreSpec{
+				InMemory:    true,
+				Properties:  storagepb.SizeSpec{Capacity: 512 << 20},
+				StickyVFSID: stickyVFSID,
+				Encryption:  encOptions,
 			},
 			fs.ReadWrite,
 			stickyRegistry, /* sticky registry */
@@ -386,12 +383,11 @@ func TestPebbleEncryption2(t *testing.T) {
 		ctx := context.Background()
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
-			base.StoreSpec{
-				InMemory:          true,
-				Attributes:        roachpb.Attributes{},
-				Size:              storagepb.SizeSpec{Capacity: 512 << 20},
-				EncryptionOptions: encOptions,
-				StickyVFSID:       stickyVFSID,
+			storagepb.StoreSpec{
+				InMemory:    true,
+				Properties:  storagepb.SizeSpec{Capacity: 512 << 20},
+				StickyVFSID: stickyVFSID,
+				Encryption:  encOptions,
 			},
 			fs.ReadWrite,
 			stickyRegistry, /* sticky registry */

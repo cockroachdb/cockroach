@@ -203,6 +203,7 @@ go_library(
         "//pkg/storage/disk",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
+        "//pkg/storage/storagepb",
         "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",

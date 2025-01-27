@@ -12,13 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -234,12 +234,10 @@ func Example_misc_table() {
 }
 
 func Example_in_memory() {
-	spec, err := base.NewStoreSpec("type=mem,size=1GiB")
-	if err != nil {
-		panic(err)
-	}
 	c := cli.NewCLITest(cli.TestCLIParams{
-		StoreSpecs: []base.StoreSpec{spec},
+		StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+			{InMemory: true, Properties: storagepb.SizeSpec{Capacity: 1 << 30}}},
+		},
 	})
 	defer c.Cleanup()
 

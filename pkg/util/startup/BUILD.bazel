@@ -37,6 +37,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/storage/fs",
+        "//pkg/storage/storagepb",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

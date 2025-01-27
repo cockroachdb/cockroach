@@ -190,8 +190,8 @@ func makeSharedProcessTenantServerConfig(
 	//
 	// First, determine if there's a disk store or whether we will
 	// use an in-memory store.
-	candidateSpec := kvServerCfg.Stores.Specs[0]
-	for _, storeSpec := range kvServerCfg.Stores.Specs {
+	candidateSpec := kvServerCfg.StorageConfig.Stores[0]
+	for _, storeSpec := range kvServerCfg.StorageConfig.Stores {
 		if storeSpec.InMemory {
 			continue
 		}
@@ -313,10 +313,10 @@ func makeSharedProcessTenantServerConfig(
 		useStore := tempStorageCfg.Spec
 		// TODO(knz): Make tempDir configurable.
 		tempDir := useStore.Path
-		if tempStorageCfg.Path, err = fs.CreateTempDir(tempDir, TempDirPrefix, stopper); err != nil {
-			return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
-		}
 		if useStore.Path != "" {
+			if tempStorageCfg.Path, err = fs.CreateTempDir(tempDir, TempDirPrefix, stopper); err != nil {
+				return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
+			}
 			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
 			if err := fs.RecordTempDir(recordPath, tempStorageCfg.Path); err != nil {
 				return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not record temp dir")

@@ -17,7 +17,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/strutil"
@@ -293,7 +293,7 @@ See debug recover command help for more details on how to use this command.
 }
 
 var debugRecoverCollectInfoOpts struct {
-	Stores         base.StoreSpecList
+	Stores         storagepb.StoreSpecList
 	maxConcurrency int
 }
 
@@ -631,7 +631,7 @@ See debug recover command help for more details on how to use this command.
 }
 
 var debugRecoverExecuteOpts struct {
-	Stores                base.StoreSpecList
+	Stores                storagepb.StoreSpecList
 	confirmAction         confirmActionFlag
 	ignoreInternalVersion bool
 	maxConcurrency        int

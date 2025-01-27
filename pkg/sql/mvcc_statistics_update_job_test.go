@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -70,9 +71,11 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Settings:          settings,
 			Knobs:             testingKnobs,
-			StoreSpecs: []base.StoreSpec{
-				base.DefaultTestStoreSpec,
-				base.DefaultTestStoreSpec,
+			StoreConfig: storagepb.NodeConfig{
+				Stores: []storagepb.StoreSpec{
+					base.DefaultTestStoreSpec,
+					base.DefaultTestStoreSpec,
+				},
 			},
 		},
 	})

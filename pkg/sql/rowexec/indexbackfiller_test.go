@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -125,7 +126,7 @@ func BenchmarkIndexBackfill(b *testing.B) {
 				},
 			},
 		},
-		StoreSpecs: []base.StoreSpec{{InMemory: false, Path: filepath.Join(dir, "testserver")}},
+		StorageConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{{Path: filepath.Join(dir, "testserver")}}},
 	})
 	defer srv.Stopper().Stop(ctx)
 

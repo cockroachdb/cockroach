@@ -901,6 +901,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/jobutils",

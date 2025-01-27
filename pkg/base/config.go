@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -859,7 +860,7 @@ type TempStorageConfig struct {
 	// has to be a disk monitor.
 	Mon *mon.BytesMonitor
 	// Spec stores the StoreSpec this TempStorageConfig will use.
-	Spec StoreSpec
+	Spec storagepb.StoreSpec
 	// Settings stores the cluster.Settings this TempStoreConfig will use. Must
 	// not be nil.
 	Settings *cluster.Settings
@@ -900,7 +901,7 @@ type ExternalIODirConfig struct {
 func TempStorageConfigFromEnv(
 	ctx context.Context,
 	st *cluster.Settings,
-	useStore StoreSpec,
+	useStore storagepb.StoreSpec,
 	parentDir string,
 	maxSizeBytes int64,
 ) TempStorageConfig {
@@ -918,7 +919,11 @@ func InheritTempStorageConfig(
 }
 
 func newTempStorageConfig(
-	ctx context.Context, st *cluster.Settings, inMemory bool, useStore StoreSpec, maxSizeBytes int64,
+	ctx context.Context,
+	st *cluster.Settings,
+	inMemory bool,
+	useStore storagepb.StoreSpec,
+	maxSizeBytes int64,
 ) TempStorageConfig {
 	var monitorName mon.MonitorName
 	if inMemory {
