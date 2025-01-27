@@ -337,7 +337,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	log.Infof(ctx, "prevSchemaTimestamp: %v\n", prevSchemaTimestamp)
 	log.Infof(ctx, "backfillTs: %v\n", ev.BackfillTimestamp())
 
-	log.Infof(ctx, "decoding not a prev row: %v with schema ts: %v, current row: %v\n", ev.KV(), schemaTimestamp, cdcevent.CurrentRow)
+	log.Infof(ctx, "decoding updated row: %v with schema ts: %v, current row: %v\n", ev.KV(), schemaTimestamp, cdcevent.CurrentRow)
 	updatedRow, err := c.decoder.DecodeKV(ctx, ev.KV(), cdcevent.CurrentRow, schemaTimestamp, keyOnly)
 	if err != nil {
 		// Column families are stored contiguously, so we'll get
