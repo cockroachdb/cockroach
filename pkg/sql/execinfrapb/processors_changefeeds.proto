@@ -68,6 +68,12 @@ message ChangeFrontierSpec {
   // changefeed at that timestamp.
   repeated roachpb.Span tracked_spans = 1 [(gogoproto.nullable) = false];
 
+  // Change frontier legacy checkpoint
+  optional cockroach.sql.jobs.jobspb.ChangefeedProgress.Checkpoint checkpoint = 6;
+
+  // Change frontier span level checkpoint
+  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 7;
+
   // Feed is the specification for this changefeed.
   optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
 

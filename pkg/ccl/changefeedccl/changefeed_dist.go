@@ -263,7 +263,7 @@ func startDistChangefeed(
 		checkpoint = progress.Checkpoint
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, checkpoint, localState.drainingNodes)(ctx, dsp)
+		trackedSpans, checkpoint, nil, localState.drainingNodes)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -381,6 +381,7 @@ func makePlan(
 	trackedSpans []roachpb.Span,
 	//lint:ignore SA1019 deprecated usage
 	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
+	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -501,6 +502,12 @@ func makePlan(
 			JobID:        jobID,
 			UserProto:    execCtx.User().EncodeProto(),
 			Description:  description,
+		}
+
+		if spanLevelCheckpoint != nil {
+			changeFrontierSpec.SpanLevelCheckpoint = spanLevelCheckpoint
+		} else {
+			changeFrontierSpec.Checkpoint = checkpoint
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
