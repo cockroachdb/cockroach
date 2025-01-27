@@ -72,6 +72,10 @@ func TestCostFlagsLess(t *testing.T) {
 		{memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, false},
 		{memo.CostFlags{FullScanPenalty: false}, memo.CostFlags{FullScanPenalty: true}, true},
 		{memo.CostFlags{HugeCostPenalty: false}, memo.CostFlags{HugeCostPenalty: true}, true},
+		{memo.CostFlags{UnboundedCardinality: false}, memo.CostFlags{UnboundedCardinality: true}, true},
+		{memo.CostFlags{UnboundedCardinality: true}, memo.CostFlags{UnboundedCardinality: false}, false},
+		{memo.CostFlags{UnboundedCardinality: true}, memo.CostFlags{UnboundedCardinality: true}, false},
+		{memo.CostFlags{UnboundedCardinality: false}, memo.CostFlags{UnboundedCardinality: false}, false},
 	}
 	for _, tc := range testCases {
 		if tc.left.Less(tc.right) != tc.expected {
