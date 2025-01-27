@@ -49,9 +49,6 @@ func ReplaceNodeLocalForTesting(root string) func() {
 func TestingMakeNodelocalStorage(
 	root string, settings *cluster.Settings, es cloudpb.ExternalStorage,
 ) cloud.ExternalStorage {
-	if !buildutil.CrdbTestBuild {
-		panic("nodelocal test implementation in non-test build")
-	}
 	c, err := blobs.NewLocalClient(root)
 	if err != nil {
 		panic(err)
@@ -59,7 +56,7 @@ func TestingMakeNodelocalStorage(
 	return &localFileStorage{
 		cfg:        es.LocalFileConfig,
 		ioConf:     base.ExternalIODirConfig{},
-		base:       es.LocalFileConfig.Path,
+		base:       root,
 		blobClient: c,
 		settings:   settings,
 	}
