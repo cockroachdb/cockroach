@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "blobfixture",
+    srcs = [
+        "metadata.go",
+        "registry.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/blobfixture",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/cloud",
+        "//pkg/roachprod/logger",
+        "//pkg/settings/cluster",
+        "//pkg/util/ioctx",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "blobfixture_test",
+    srcs = ["registry_test.go"],
+    embed = [":blobfixture"],
+    deps = [
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/cloud/nodelocal",
+        "//pkg/roachprod/logger",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
