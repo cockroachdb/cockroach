@@ -252,6 +252,10 @@ func writeTextDatumNotNull(
 	case *tree.DJSON:
 		b.writeLengthPrefixedString(v.JSON.String())
 
+	case *tree.DJsonpath:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
+
 	case *tree.DTSQuery:
 		b.textFormatter.FormatNode(v)
 		b.writeFromFmtCtx(b.textFormatter)
@@ -600,6 +604,11 @@ func writeBinaryJSON(b *writeBuffer, v json.JSON, t *types.T) {
 	b.writeString(s)
 }
 
+func writeBinaryJsonpath(b *writeBuffer, v tree.DJsonpath) {
+	b.putInt32(int32(len(v)))
+	b.writeString(string(v))
+}
+
 // writeBinaryDatum writes d to the buffer. Type t must be specified for types
 // that have various width encodings (floats, ints, chars). It is ignored
 // (and can be nil) for types with a 1:1 datum:type mapping.
@@ -855,6 +864,9 @@ func writeBinaryDatumNotNull(
 
 	case *tree.DJSON:
 		writeBinaryJSON(b, v.JSON, t)
+
+	case *tree.DJsonpath:
+		writeBinaryJsonpath(b, *v)
 
 	case *tree.DOid:
 		b.putInt32(4)

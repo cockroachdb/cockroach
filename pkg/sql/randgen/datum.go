@@ -228,6 +228,9 @@ func RandDatumWithNullChance(
 			return nil
 		}
 		return &tree.DJSON{JSON: j}
+	case types.JsonpathFamily:
+		jsonpath := randJsonpath(rng)
+		return tree.NewDJsonpath(jsonpath)
 	case types.TupleFamily:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
 		if nullChance == 0 {
@@ -573,6 +576,25 @@ func randJSONSimpleDepth(rng *rand.Rand, depth int) json.JSON {
 	}
 }
 
+const charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func randJsonpath(rng *rand.Rand) string {
+	var parts []string
+	depth := 1 + rng.Intn(20)
+
+	for range depth {
+		p := make([]byte, 1+rng.Intn(20))
+		for i := range p {
+			p[i] = charSet[rng.Intn(len(charSet))]
+		}
+		if rng.Intn(5) == 0 {
+			p = append(p, []byte("[*]")...)
+		}
+		parts = append(parts, string(p))
+	}
+	return "$." + strings.Join(parts, ".")
+}
+
 var (
 	// randInterestingDatums is a collection of interesting datums that can be
 	// used for random testing.
@@ -789,6 +811,19 @@ var (
 				`{"test": "json"}`,
 			} {
 				d, err := tree.ParseDJSON(s)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.JsonpathFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				"$.a",
+			} {
+				d, err := tree.ParseDJsonpath(s)
 				if err != nil {
 					panic(err)
 				}
@@ -1114,6 +1149,20 @@ var (
 					]}`,
 			} {
 				d, err := tree.ParseDJSON(s)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.JsonpathFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				"$.a",
+				"$.b[*]",
+			} {
+				d, err := tree.ParseDJsonpath(s)
 				if err != nil {
 					panic(err)
 				}

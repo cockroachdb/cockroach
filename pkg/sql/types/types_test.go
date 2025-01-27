@@ -341,6 +341,11 @@ func TestTypes(t *testing.T) {
 			Family: JsonFamily, Oid: oid.T_jsonb, Locale: &emptyLocale}}},
 		{Jsonb, MakeScalar(JsonFamily, oid.T_jsonb, 0, 0, emptyLocale)},
 
+		// JSONPATH
+		{Jsonpath, &T{InternalType: InternalType{
+			Family: JsonpathFamily, Oid: oidext.T_jsonpath, Locale: &emptyLocale}}},
+		{Jsonpath, MakeScalar(JsonpathFamily, oidext.T_jsonpath, 0, 0, emptyLocale)},
+
 		// OID
 		{Oid, &T{InternalType: InternalType{
 			Family: OidFamily, Oid: oid.T_oid, Locale: &emptyLocale}}},

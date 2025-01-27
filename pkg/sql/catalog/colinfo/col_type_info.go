@@ -106,7 +106,8 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily,
-		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily:
+		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily,
+		types.JsonpathFamily:
 	// These types are OK.
 
 	case types.TupleFamily:
@@ -197,6 +198,8 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 	case types.TSVectorFamily, types.TSQueryFamily:
 		return true
 	case types.PGVectorFamily:
+		return true
+	case types.JsonpathFamily:
 		return true
 	}
 	return false

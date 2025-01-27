@@ -608,6 +608,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 				return tree.ParseDJSON(x.(string))
 			},
 		)
+	//case types.JsonpathFamily:
 	case types.TSQueryFamily:
 		setNullable(
 			schemaTypeString,

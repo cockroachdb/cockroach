@@ -536,6 +536,7 @@ var (
 		types.UUIDArray,
 		types.INet,
 		types.Jsonb,
+		types.Jsonpath,
 		types.PGLSN,
 		types.PGLSNArray,
 		types.PGVector,

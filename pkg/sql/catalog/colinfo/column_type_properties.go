@@ -48,7 +48,8 @@ func CanHaveCompositeKeyEncoding(typ *types.T) bool {
 	case types.FloatFamily,
 		types.DecimalFamily,
 		types.JsonFamily,
-		types.CollatedStringFamily:
+		types.CollatedStringFamily,
+		types.JsonpathFamily:
 		return true
 	case types.ArrayFamily:
 		return CanHaveCompositeKeyEncoding(typ.ArrayContents())

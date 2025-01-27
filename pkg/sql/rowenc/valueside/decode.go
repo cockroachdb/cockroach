@@ -199,6 +199,12 @@ func DecodeUntaggedDatum(
 			return nil, b, err
 		}
 		return a.NewDJSON(tree.DJSON{JSON: j}), b, nil
+	case types.JsonpathFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDJsonpath(*tree.NewDJsonpath(string(data))), b, nil
 	case types.TSQueryFamily:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
