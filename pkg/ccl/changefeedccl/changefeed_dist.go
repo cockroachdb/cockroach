@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	checkpoint2 "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -529,6 +530,12 @@ func makePlan(
 			JobID:        jobID,
 			UserProto:    execCtx.User().EncodeProto(),
 			Description:  description,
+		}
+
+		if spanLevelCheckpoint != nil {
+			changeFrontierSpec.SpanLevelCheckpoint = spanLevelCheckpoint
+		} else {
+			changeFrontierSpec.SpanLevelCheckpoint = checkpoint2.ConvertLegacyCheckpoint(checkpoint, details.StatementTime, initialHighWater)
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
