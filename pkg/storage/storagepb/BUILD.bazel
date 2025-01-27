@@ -25,7 +25,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cli/cliflags",
-        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",
     ],

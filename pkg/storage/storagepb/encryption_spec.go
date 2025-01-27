@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
@@ -34,7 +33,7 @@ type StoreEncryptionSpec struct {
 }
 
 // ToEncryptionOptions convert to a serialized EncryptionOptions protobuf.
-func (es StoreEncryptionSpec) ToEncryptionOptions() ([]byte, error) {
+func (es StoreEncryptionSpec) ToEncryptionOptions() *EncryptionOptions {
 	opts := EncryptionOptions{
 		KeySource: EncryptionKeySource_KeyFiles,
 		KeyFiles: &EncryptionKeyFiles{
@@ -44,7 +43,7 @@ func (es StoreEncryptionSpec) ToEncryptionOptions() ([]byte, error) {
 		DataKeyRotationPeriod: int64(es.RotationPeriod / time.Second),
 	}
 
-	return protoutil.Marshal(&opts)
+	return &opts
 }
 
 // String returns a fully parsable version of the encryption spec.
@@ -191,7 +190,9 @@ func (encl *EncryptionSpecList) Set(value string) error {
 
 // EncryptionOptionsForStore takes a store directory and returns its EncryptionOptions
 // if a matching entry if found in the StoreEncryptionSpecList.
-func EncryptionOptionsForStore(dir string, encryptionSpecs EncryptionSpecList) ([]byte, error) {
+func EncryptionOptionsForStore(
+	dir string, encryptionSpecs EncryptionSpecList,
+) (*EncryptionOptions, error) {
 	// We need an absolute path, but the input may have come in relative.
 	path, err := filepath.Abs(dir)
 	if err != nil {
@@ -199,7 +200,7 @@ func EncryptionOptionsForStore(dir string, encryptionSpecs EncryptionSpecList) (
 	}
 	for _, es := range encryptionSpecs.Specs {
 		if es.PathMatches(path) {
-			return es.ToEncryptionOptions()
+			return es.ToEncryptionOptions(), nil
 		}
 	}
 	return nil, nil
