@@ -1,0 +1,166 @@
+# LogicTest: !local-mixed-24.3 !local-mixed-25.1
+
+query T
+SELECT pg_typeof(JSONPATH '$.a')
+----
+jsonpath
+
+query T
+SELECT '$.a'::JSONPATH
+----
+$.a
+
+statement error pq: value type jsonpath cannot be used for table columns
+CREATE TABLE a (j JSONPATH)
+
+statement error pq: value type jsonpath cannot be used for table columns
+CREATE TABLE a (j JSONPATH[])
+
+query T
+SELECT '$'::JSONPATH
+----
+$
+
+query T
+SELECT '$.*'::JSONPATH
+----
+$.*
+
+query T
+SELECT 'strict $'::JSONPATH
+----
+strict $
+
+query T
+SELECT 'lax $'::JSONPATH
+----
+lax $
+
+query T
+SELECT '$.1a[*]'::JSONPATH
+----
+$.1a[*]
+
+query T
+SELECT '$.a1[*]'::JSONPATH
+----
+$.a1[*]
+
+query T
+SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH
+----
+$.a[*] ? (@.b == 1 && @.c != 1)
+
+query T
+SELECT '$.a[*] ? (@.b != 1)'::JSONPATH
+----
+$.a[*] ? (@.b != 1)
+
+query T
+SELECT '$.a[*] ? (@.b < 1)'::JSONPATH
+----
+$.a[*] ? (@.b < 1)
+
+query T
+SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH
+----
+$.a[*] ? (@.b <= 1)
+
+query T
+SELECT '$.a[*] ? (@.b > 1)'::JSONPATH
+----
+$.a[*] ? (@.b > 1)
+
+query T
+SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH
+----
+$.a[*] ? (@.b >= 1)
+
+query T
+SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH
+----
+$.a ? (@.b == 1).c ? (@.d == 2)
+
+query T
+SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH
+----
+$.a?(@.b==1).c?(@.d==2)
+
+query T
+SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH
+----
+$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )
+
+query T
+SELECT '$.a.type()'::JSONPATH
+----
+$.a.type()
+
+query B
+SELECT '$'::JSONPATH IS NULL
+----
+false
+
+query B
+SELECT '$'::JSONPATH IS NOT NULL
+----
+true
+
+statement error invalid jsonpath
+SELECT ''::JSONPATH
+
+statement error pq: unsupported comparison operator: jsonpath IS NOT DISTINCT FROM jsonpath
+SELECT '$'::JSONPATH IS NOT DISTINCT FROM '$'::JSONPATH
+
+statement error pq: unsupported comparison operator: jsonpath IS DISTINCT FROM jsonpath
+SELECT '$'::JSONPATH IS DISTINCT FROM '$'::JSONPATH
+
+query B
+SELECT '$'::JSONPATH IS NOT DISTINCT FROM NULL
+----
+false
+
+query B
+SELECT '$'::JSONPATH IS DISTINCT FROM NULL
+----
+true
+
+# statement ok
+# SELECT * FROM a WHERE j IS NULL
+
+## Jsonpath checks that shouldn't work when the type is fully implemented
+
+query T
+SELECT '$.'::JSONPATH
+----
+$.
+
+query T
+SELECT 'word $'::JSONPATH
+----
+word $
+
+query T
+SELECT '$a'::JSONPATH;
+----
+$a
+
+# statement ok
+# INSERT INTO a VALUES ('$.something'), ('$.other.thing'), ('$.another.thing'), ('$.a[*].b.c[*]')
+
+# query T rowsort
+# SELECT * FROM a;
+# ----
+# $.something
+# $.other.thing
+# $.another.thing
+# $.a[*].b.c[*]
+
+# statement error pq: column j is of type jsonpath, which does not support forward indexing
+# CREATE TABLE b (j JSONPATH, PRIMARY KEY(j))
+
+# statement error pq: column j is of type jsonpath\[\], which does not support forward indexing
+# CREATE TABLE c (j JSONPATH[], PRIMARY KEY(j))
+
+# statement error unsupported comparison operator
+# SELECT * FROM a WHERE j = '$.a'

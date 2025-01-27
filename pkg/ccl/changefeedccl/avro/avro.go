@@ -644,6 +644,8 @@ func typeToSchema(typ *types.T) (*SchemaField, error) {
 				return tree.ParseDJSON(x.(string))
 			},
 		)
+	// case types.JsonpathFamily:
+	// We do not support Jsonpath yet, but should be able to support it easily.
 	case types.TSQueryFamily:
 		setNullable(
 			SchemaTypeString,

@@ -204,6 +204,13 @@ CREATE TABLE a (b JSONB) -- fully parenthesized
 CREATE TABLE a (b JSONB) -- literals removed
 CREATE TABLE _ (_ JSONB) -- identifiers removed
 
+parse
+CREATE TABLE a (b JSONPATH)
+----
+CREATE TABLE a (b JSONPATH)
+CREATE TABLE a (b JSONPATH) -- fully parenthesized
+CREATE TABLE a (b JSONPATH) -- literals removed
+CREATE TABLE _ (_ JSONPATH) -- identifiers removed
 
 parse
 CREATE TABLE a (b FLOAT4)

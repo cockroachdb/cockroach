@@ -686,6 +686,17 @@ func (a *DatumAlloc) NewDJSON(v DJSON) *DJSON {
 	return r
 }
 
+func (a *DatumAlloc) NewDJsonpath(v DJsonpath) *DJsonpath {
+	if a == nil {
+		r := new(DJsonpath)
+		*r = v
+		return r
+	}
+	r := (*DJsonpath)(a.newString())
+	*r = v
+	return r
+}
+
 // NewDTuple allocates a DTuple.
 func (a *DatumAlloc) NewDTuple(v DTuple) *DTuple {
 	if a == nil {
