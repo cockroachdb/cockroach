@@ -12,6 +12,7 @@ import (
 
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -175,6 +176,11 @@ func IsLegalColumnType(typ *types.T) bool {
 		// unlikely to use these types of columns, so disabling their generation
 		// is low risk.
 		// TODO(#95641): Remove this once we correctly handle this edge case.
+		return false
+	case oidext.T_jsonpath, oidext.T__jsonpath:
+		// Jsonpath and Jsonpath[] columns are not supported yet. Customers are very
+		// unlikely to use these types of columns, so disabling their generation
+		// is low risk.
 		return false
 	}
 	ctx := context.Background()

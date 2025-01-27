@@ -308,6 +308,25 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
+	for _, def := range n.n.Defs {
+		colDef, ok := def.(*tree.ColumnTableDef)
+		if !ok {
+			continue
+		}
+		typ, ok := colDef.Type.(*types.T)
+		if !ok {
+			continue
+		}
+
+		if typ.Family() == types.JsonpathFamily ||
+			typ.ArrayContents() != nil && typ.ArrayContents().Family() == types.JsonpathFamily {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"type %s cannot be used as a table column yet", typ.String(),
+			)
+		}
+	}
+
 	schema, err := getSchemaForCreateTable(params, n.dbDesc, n.n.Persistence, &n.n.Table,
 		tree.ResolveRequireTableDesc, n.n.IfNotExists)
 	if err != nil {

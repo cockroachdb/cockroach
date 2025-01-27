@@ -106,7 +106,8 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily,
-		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily:
+		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily,
+		types.JsonpathFamily:
 	// These types are OK.
 
 	case types.TupleFamily:
@@ -129,13 +130,19 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 // column in a regular FORWARD index.
 func ColumnTypeIsIndexable(t *types.T) bool {
 	// NB: .IsAmbiguous checks the content type of array types.
-	if t.IsAmbiguous() || t.Family() == types.TupleFamily || t.Family() == types.RefCursorFamily {
+	if t.IsAmbiguous() {
+		return false
+	}
+
+	switch t.Family() {
+	case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily:
 		return false
 	}
 
 	// If the type is an array, check its content type as well.
 	if unwrapped := t.ArrayContents(); unwrapped != nil {
-		if unwrapped.Family() == types.TupleFamily || unwrapped.Family() == types.RefCursorFamily {
+		switch unwrapped.Family() {
+		case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily:
 			return false
 		}
 	}
@@ -145,12 +152,30 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 	return !MustBeValueEncoded(t) && !ColumnTypeIsOnlyInvertedIndexable(t)
 }
 
+// ColumnTypeIndexesAreSupported returns whether indexes are supported for type t.
+func ColumnTypeIndexesAreSupported(t *types.T) bool {
+	if t.Family() == types.JsonpathFamily {
+		return false
+	}
+	if unwrapped := t.ArrayContents(); unwrapped != nil {
+		if unwrapped.Family() == types.JsonpathFamily {
+			return false
+		}
+	}
+	return true
+}
+
 // ColumnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	switch t.Family() {
 	case types.ArrayFamily:
-		return t.ArrayContents().Family() != types.RefCursorFamily
+		switch t.ArrayContents().Family() {
+		case types.RefCursorFamily, types.JsonpathFamily:
+			return false
+		default:
+			return true
+		}
 	case types.JsonFamily, types.StringFamily:
 		return true
 	}
@@ -198,6 +223,8 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 	case types.TSVectorFamily, types.TSQueryFamily:
 		return true
 	case types.PGVectorFamily:
+		return true
+	case types.JsonpathFamily:
 		return true
 	}
 	return false
@@ -266,6 +293,12 @@ func ValidateColumnForIndex(
 				"you may want to create a vector index instead")
 		}
 
+		if !ColumnTypeIndexesAreSupported(colType) {
+			return errors.WithHint(pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"column %s is of type %s, which does not support forward indexing",
+				colDesc, colType), "forward indexes are not supported for this type")
+		}
 		return sqlerrors.NewColumnNotIndexableError(colDesc, colType.Name(), colType.DebugString())
 	}
 

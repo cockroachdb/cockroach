@@ -959,6 +959,7 @@ func (expr *ComparisonExpr) TypeCheck(
 ) (TypedExpr, error) {
 	var leftTyped, rightTyped TypedExpr
 	var cmpOp *CmpOp
+	var cmpOpSym treecmp.ComparisonOperatorSymbol
 	var alwaysNull bool
 	var err error
 	if expr.Operator.Symbol.HasSubOperator() {
@@ -970,11 +971,7 @@ func (expr *ComparisonExpr) TypeCheck(
 			expr.Left,
 			expr.Right,
 		)
-		if err == nil {
-			err = checkRefCursorComparison(
-				expr.SubOperator.Symbol, leftTyped.ResolvedType(), rightTyped.ResolvedType(),
-			)
-		}
+		cmpOpSym = expr.SubOperator.Symbol
 	} else {
 		leftTyped, rightTyped, cmpOp, alwaysNull, err = typeCheckComparisonOp(
 			ctx,
@@ -983,11 +980,11 @@ func (expr *ComparisonExpr) TypeCheck(
 			expr.Left,
 			expr.Right,
 		)
-		if err == nil {
-			err = checkRefCursorComparison(
-				expr.Operator.Symbol, leftTyped.ResolvedType(), rightTyped.ResolvedType(),
-			)
-		}
+		cmpOpSym = expr.Operator.Symbol
+	}
+	if err == nil {
+		err = runValidations(cmpOpSym, leftTyped.ResolvedType(), rightTyped.ResolvedType(),
+			checkRefCursorComparison, checkJsonpathComparison)
 	}
 	if err != nil {
 		return nil, err
@@ -2164,6 +2161,12 @@ func (d *DGeometry) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (Ty
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d *DJSON) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
+	return d, nil
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DJsonpath) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
 	return d, nil
 }
 
@@ -3803,6 +3806,36 @@ func checkRefCursorComparison(op treecmp.ComparisonOperatorSymbol, left, right *
 		return pgerror.Newf(pgcode.UndefinedFunction,
 			"could not identify a comparison function for type refcursor",
 		)
+	}
+	return nil
+}
+
+// checkJsonpathComparison checks whether the given types are or contain the
+// Jsonpath data type, which is invalid for comparison. We don't simply remove
+// the relevant comparison overloads because we rely on their existence in
+// various locations throughout the codebase.
+func checkJsonpathComparison(op treecmp.ComparisonOperatorSymbol, left, right *types.T) error {
+	// Special case: "JSONPATH IS [NOT] DISTINCT FROM NULL" is allowed.
+	if (op == treecmp.IsDistinctFrom || op == treecmp.IsNotDistinctFrom) &&
+		(left.Family() == types.JsonpathFamily && right.Family() == types.UnknownFamily) {
+		return nil
+	}
+	if left.Family() == types.JsonpathFamily || right.Family() == types.JsonpathFamily {
+		return pgerror.Newf(pgcode.UndefinedFunction,
+			"unsupported comparison operator: %s %s %s", left, op, right)
+	}
+	return nil
+}
+
+func runValidations(
+	op treecmp.ComparisonOperatorSymbol,
+	left, right *types.T,
+	checks ...func(treecmp.ComparisonOperatorSymbol, *types.T, *types.T) error,
+) error {
+	for _, check := range checks {
+		if err := check(op, left, right); err != nil {
+			return err
+		}
 	}
 	return nil
 }

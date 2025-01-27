@@ -252,6 +252,10 @@ func writeTextDatumNotNull(
 	case *tree.DJSON:
 		b.writeLengthPrefixedString(v.JSON.String())
 
+	case *tree.DJsonpath:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
+
 	case *tree.DTSQuery:
 		b.textFormatter.FormatNode(v)
 		b.writeFromFmtCtx(b.textFormatter)
@@ -855,6 +859,13 @@ func writeBinaryDatumNotNull(
 
 	case *tree.DJSON:
 		writeBinaryJSON(b, v.JSON, t)
+
+	case *tree.DJsonpath:
+		// Version number prefix, as of writing, `1` is the only valid value.
+		s := v.String()
+		b.putInt32(int32(len(s) + 1))
+		b.writeByte(1)
+		b.writeString(s)
 
 	case *tree.DOid:
 		b.putInt32(4)
