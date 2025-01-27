@@ -76,6 +76,8 @@ func ParseAndRequireString(
 		d, err = ParseDGeometry(s)
 	case types.JsonFamily:
 		d, err = ParseDJSON(s)
+	case types.JsonpathFamily:
+		d, err = ParseDJsonpath(s)
 	case types.OidFamily:
 		if t.Oid() != oid.T_oid && s == UnknownOidName {
 			d = NewDOidWithType(UnknownOidValue, t)

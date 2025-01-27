@@ -1154,6 +1154,13 @@ func TestRepeatableReadLogic_json_index(
 	runLogicTest(t, "json_index")
 }
 
+func TestRepeatableReadLogic_jsonpath(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonpath")
+}
+
 func TestRepeatableReadLogic_kv_builtin_functions(
 	t *testing.T,
 ) {

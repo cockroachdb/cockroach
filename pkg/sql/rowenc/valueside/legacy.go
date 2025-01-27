@@ -149,6 +149,12 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 			r.SetBytes(data)
 			return r, nil
 		}
+	case types.JsonpathFamily:
+		if v, ok := val.(*tree.DJsonpath); ok {
+			data := []byte(*v)
+			r.SetBytes(data)
+			return r, nil
+		}
 	case types.TSQueryFamily:
 		if v, ok := val.(*tree.DTSQuery); ok {
 			data := tsearch.EncodeTSQueryPGBinary(nil, v.TSQuery)
@@ -407,6 +413,12 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return tree.NewDJSON(jsonDatum), nil
+	case types.JsonpathFamily:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDJsonpath(string(v)), nil
 	case types.TSQueryFamily:
 		v, err := value.GetBytes()
 		if err != nil {

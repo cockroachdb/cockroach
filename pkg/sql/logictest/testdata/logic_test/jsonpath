@@ -1,0 +1,97 @@
+## Basic creation of jsonpath type
+
+query T
+SELECT pg_typeof(JSONPATH '$.a')
+----
+jsonpath
+
+query T
+SELECT '$.a'::JSONPATH
+----
+$.a
+
+statement ok
+CREATE TABLE a (j JSONPATH)
+
+statement ok
+INSERT INTO a VALUES ('$.something'), ('$.other.thing'), ('$.another.thing'), ('$.a[*].b.c[*]')
+
+query T rowsort
+SELECT * FROM a;
+----
+$.something
+$.other.thing
+$.another.thing
+$.a[*].b.c[*]
+
+statement ok
+SELECT '$'::JSONPATH
+
+statement ok
+SELECT '$.*'::JSONPATH
+
+statement ok
+SELECT 'strict $'::JSONPATH
+
+statement ok
+SELECT 'lax $'::JSONPATH
+
+statement ok
+SELECT '$.1a[*]'::JSONPATH
+
+statement ok
+SELECT '$.a1[*]'::JSONPATH
+
+statement ok
+SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH
+
+statement ok
+SELECT '$.a[*] ? (@.b != 1)'::JSONPATH
+
+statement ok
+SELECT '$.a[*] ? (@.b < 1)'::JSONPATH
+
+statement ok
+SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH
+
+statement ok
+SELECT '$.a[*] ? (@.b > 1)'::JSONPATH
+
+statement ok
+SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH
+
+statement ok
+SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH
+
+statement ok
+SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH
+
+statement ok
+SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH
+
+statement ok
+SELECT '$.a.type()'::JSONPATH
+
+## Valid (for now) jsonpath checks
+
+statement ok
+SELECT '$.'::JSONPATH
+
+statement ok
+SELECT 'word $'::JSONPATH
+
+statement ok
+SELECT '$a'::JSONPATH;
+
+## Invalid jsonpath checks
+
+statement error invalid jsonpath
+SELECT ''::JSONPATH
+
+statement error unimplemented
+CREATE TABLE b (j JSONPATH, PRIMARY KEY(j))
+
+statement error unimplemented
+CREATE TABLE c (j JSONPATH[], PRIMARY KEY(j))
+
+## Jsonpath queries
