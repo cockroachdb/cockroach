@@ -286,6 +286,8 @@ func (s *sysbenchSQL) prepConn() {
 	try(s.conn.Exec(s.ctx, "SET plan_cache_mode = force_generic_plan"))
 	// Disable the streamer.
 	try(s.conn.Exec(s.ctx, "SET streamer_enabled = false"))
+	// Disable the vectorized engine.
+	try(s.conn.Exec(s.ctx, "SET vectorize = off"))
 
 	s.stmt.begin = try(s.conn.Prepare(s.ctx, "begin", sysbenchStmtBegin)).Name
 	s.stmt.commit = try(s.conn.Prepare(s.ctx, "commit", sysbenchStmtCommit)).Name
