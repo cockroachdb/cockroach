@@ -40,6 +40,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
+    "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
     "github.com/cockroachdb/cockroach/pkg/util/vector"
     "github.com/cockroachdb/errors"
@@ -940,8 +941,8 @@ func (u *sqlSymUnion) triggerTransitions() []*tree.TriggerTransition {
 func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
   return u.val.(tree.TriggerForEach)
 }
-func (u *sqlSymUnion) indexType() tree.IndexType {
-  return u.val.(tree.IndexType)
+func (u *sqlSymUnion) indexType() idxtype.T {
+  return u.val.(idxtype.T)
 }
 func (u *sqlSymUnion) doBlockOptions() tree.DoBlockOptions {
     return u.val.(tree.DoBlockOptions)
@@ -1546,7 +1547,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <[]*tree.Order> sortby_list sortby_no_index_list
 %type <tree.IndexElemList> index_params create_as_params
 %type <tree.IndexInvisibility> opt_index_visible alter_index_visible
-%type <tree.IndexType> opt_index_access_method
+%type <idxtype.T> opt_index_access_method
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
 %type <*tree.Batch> opt_batch_clause
@@ -11231,7 +11232,7 @@ index_def:
     $$.val = &tree.IndexTableDef{
       Name:             "",
       Columns:          $4.idxElems(),
-      Type:             tree.IndexTypeInverted,
+      Type:             idxtype.INVERTED,
       PartitionByIndex: $6.partitionByIndex(),
       StorageParams:    $7.storageParams(),
       Predicate:        $8.expr(),
@@ -11243,7 +11244,7 @@ index_def:
     $$.val = &tree.IndexTableDef{
       Name:             tree.Name($3),
       Columns:          $5.idxElems(),
-      Type:             tree.IndexTypeInverted,
+      Type:             idxtype.INVERTED,
       PartitionByIndex: $7.partitionByIndex(),
       StorageParams:    $8.storageParams(),
       Predicate:        $9.expr(),
@@ -11255,7 +11256,7 @@ index_def:
     $$.val = &tree.IndexTableDef{
       Name:             "",
       Columns:          $4.idxElems(),
-      Type:             tree.IndexTypeVector,
+      Type:             idxtype.VECTOR,
       PartitionByIndex: $6.partitionByIndex(),
       StorageParams:    $7.storageParams(),
       Predicate:        $8.expr(),
@@ -11267,7 +11268,7 @@ index_def:
     $$.val = &tree.IndexTableDef{
       Name:             tree.Name($3),
       Columns:          $5.idxElems(),
-      Type:             tree.IndexTypeVector,
+      Type:             idxtype.VECTOR,
       PartitionByIndex: $7.partitionByIndex(),
       StorageParams:    $8.storageParams(),
       Predicate:        $9.expr(),
@@ -12236,7 +12237,7 @@ create_index_stmt:
       Name:             tree.Name($6),
       Table:            table,
       Unique:           $2.bool(),
-      Type:             tree.IndexTypeInverted,
+      Type:             idxtype.INVERTED,
       Columns:          $10.idxElems(),
       Storing:          $12.nameList(),
       PartitionByIndex: $13.partitionByIndex(),
@@ -12253,7 +12254,7 @@ create_index_stmt:
       Name:             tree.Name($9),
       Table:            table,
       Unique:           $2.bool(),
-      Type:             tree.IndexTypeInverted,
+      Type:             idxtype.INVERTED,
       IfNotExists:      true,
       Columns:          $13.idxElems(),
       Storing:          $15.nameList(),
@@ -12271,7 +12272,7 @@ create_index_stmt:
       Name:             tree.Name($6),
       Table:            table,
       Unique:           $2.bool(),
-      Type:             tree.IndexTypeVector,
+      Type:             idxtype.VECTOR,
       Columns:          $10.idxElems(),
       Storing:          $12.nameList(),
       PartitionByIndex: $13.partitionByIndex(),
@@ -12288,7 +12289,7 @@ create_index_stmt:
       Name:             tree.Name($9),
       Table:            table,
       Unique:           $2.bool(),
-      Type:             tree.IndexTypeVector,
+      Type:             idxtype.VECTOR,
       IfNotExists:      true,
       Columns:          $13.idxElems(),
       Storing:          $15.nameList(),
@@ -12305,14 +12306,14 @@ opt_index_access_method:
   USING name
   {
     /* FORCE DOC */
-    var val tree.IndexType
+    var val idxtype.T
     switch $2 {
       case "gin", "gist":
-        val = tree.IndexTypeInverted
+        val = idxtype.INVERTED
       case "btree":
-        val = tree.IndexTypeForward
+        val = idxtype.FORWARD
       case "cspann":
-        val = tree.IndexTypeVector
+        val = idxtype.VECTOR
       case "hash", "spgist", "brin":
         return unimplemented(sqllex, "index using " + $2)
       default:
@@ -12323,7 +12324,7 @@ opt_index_access_method:
   }
 | /* EMPTY */
   {
-    $$.val = tree.IndexTypeForward
+    $$.val = idxtype.FORWARD
   }
 
 opt_concurrently:
