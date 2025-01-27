@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
@@ -27,31 +26,16 @@ const plaintextFieldValue = "plain"
 // StoreEncryptionSpec contains the details that can be specified in the cli via
 // the --enterprise-encryption flag.
 type StoreEncryptionSpec struct {
-	Path           string
-	KeyPath        string
-	OldKeyPath     string
-	RotationPeriod time.Duration
-}
-
-// ToEncryptionOptions convert to a serialized EncryptionOptions protobuf.
-func (es StoreEncryptionSpec) ToEncryptionOptions() ([]byte, error) {
-	opts := EncryptionOptions{
-		KeySource: EncryptionKeySource_KeyFiles,
-		KeyFiles: &EncryptionKeyFiles{
-			CurrentKey: es.KeyPath,
-			OldKey:     es.OldKeyPath,
-		},
-		DataKeyRotationPeriod: int64(es.RotationPeriod / time.Second),
-	}
-
-	return protoutil.Marshal(&opts)
+	EncryptionOptions
+	Path string
 }
 
 // String returns a fully parsable version of the encryption spec.
 func (es StoreEncryptionSpec) String() string {
 	// All fields are set.
 	return fmt.Sprintf("path=%s,key=%s,old-key=%s,rotation-period=%s",
-		es.Path, es.KeyPath, es.OldKeyPath, es.RotationPeriod)
+		es.Path, es.KeyFiles.CurrentKey, es.KeyFiles.OldKey, time.Duration(es.DataKeyRotationPeriod)*time.Second,
+	)
 }
 
 // PathMatches returns true if this StoreEncryptionSpec matches the given store path.
@@ -64,8 +48,14 @@ func (es StoreEncryptionSpec) PathMatches(path string) bool {
 // TODO(mberhault): we should share the parsing code with the StoreSpec.
 func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 	const pathField = "path"
-	var es StoreEncryptionSpec
-	es.RotationPeriod = DefaultRotationPeriod
+	es := StoreEncryptionSpec{
+		Path: "",
+		EncryptionOptions: EncryptionOptions{
+			KeySource:             EncryptionKeySource_KeyFiles,
+			KeyFiles:              &EncryptionKeyFiles{},
+			DataKeyRotationPeriod: int64(DefaultRotationPeriod / time.Second),
+		},
+	}
 
 	used := make(map[string]struct{})
 	for _, split := range strings.Split(value, ",") {
@@ -103,30 +93,30 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 			}
 		case "key":
 			if value == plaintextFieldValue {
-				es.KeyPath = plaintextFieldValue
+				es.KeyFiles.CurrentKey = plaintextFieldValue
 			} else {
 				var err error
-				es.KeyPath, err = GetAbsoluteFSPath("key", value)
+				es.KeyFiles.CurrentKey, err = GetAbsoluteFSPath("key", value)
 				if err != nil {
 					return StoreEncryptionSpec{}, err
 				}
 			}
 		case "old-key":
 			if value == plaintextFieldValue {
-				es.OldKeyPath = plaintextFieldValue
+				es.KeyFiles.OldKey = plaintextFieldValue
 			} else {
 				var err error
-				es.OldKeyPath, err = GetAbsoluteFSPath("old-key", value)
+				es.KeyFiles.OldKey, err = GetAbsoluteFSPath("old-key", value)
 				if err != nil {
 					return StoreEncryptionSpec{}, err
 				}
 			}
 		case "rotation-period":
-			var err error
-			es.RotationPeriod, err = time.ParseDuration(value)
+			dur, err := time.ParseDuration(value)
 			if err != nil {
 				return StoreEncryptionSpec{}, errors.Wrapf(err, "could not parse rotation-duration value: %s", value)
 			}
+			es.DataKeyRotationPeriod = int64(dur / time.Second)
 		default:
 			return StoreEncryptionSpec{}, fmt.Errorf("%s is not a valid enterprise-encryption field", field)
 		}
@@ -136,10 +126,10 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 	if es.Path == "" {
 		return StoreEncryptionSpec{}, fmt.Errorf("no path specified")
 	}
-	if es.KeyPath == "" {
+	if es.KeyFiles.CurrentKey == "" {
 		return StoreEncryptionSpec{}, fmt.Errorf("no key specified")
 	}
-	if es.OldKeyPath == "" {
+	if es.KeyFiles.OldKey == "" {
 		return StoreEncryptionSpec{}, fmt.Errorf("no old-key specified")
 	}
 
@@ -191,7 +181,9 @@ func (encl *EncryptionSpecList) Set(value string) error {
 
 // EncryptionOptionsForStore takes a store directory and returns its EncryptionOptions
 // if a matching entry if found in the StoreEncryptionSpecList.
-func EncryptionOptionsForStore(dir string, encryptionSpecs EncryptionSpecList) ([]byte, error) {
+func EncryptionOptionsForStore(
+	dir string, encryptionSpecs EncryptionSpecList,
+) (*EncryptionOptions, error) {
 	// We need an absolute path, but the input may have come in relative.
 	path, err := filepath.Abs(dir)
 	if err != nil {
@@ -199,7 +191,7 @@ func EncryptionOptionsForStore(dir string, encryptionSpecs EncryptionSpecList) (
 	}
 	for _, es := range encryptionSpecs.Specs {
 		if es.PathMatches(path) {
-			return es.ToEncryptionOptions()
+			return &es.EncryptionOptions, nil
 		}
 	}
 	return nil, nil

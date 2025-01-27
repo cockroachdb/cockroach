@@ -257,11 +257,11 @@ func makeExternalWALDir(
 	// If the store is encrypted, we require that all the WAL failover dirs also
 	// be encrypted so that the user doesn't accidentally leak data unencrypted
 	// onto the filesystem.
-	if engineCfg.env.Encryption != nil && len(externalDir.EncryptionOptions) == 0 {
+	if engineCfg.env.Encryption != nil && externalDir.EncryptionOptions == nil {
 		return wal.Dir{}, errors.Newf("must provide --enterprise-encryption flag for %q, used as WAL failover path for encrypted store %q",
 			externalDir.Path, engineCfg.env.Dir)
 	}
-	if engineCfg.env.Encryption == nil && len(externalDir.EncryptionOptions) != 0 {
+	if engineCfg.env.Encryption == nil && externalDir.EncryptionOptions != nil {
 		return wal.Dir{}, errors.Newf("must provide --enterprise-encryption flag for store %q, specified WAL failover path %q is encrypted",
 			engineCfg.env.Dir, externalDir.Path)
 	}
