@@ -2234,7 +2234,7 @@ SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.vers
 			// Early exit?
 			row := rows[i]
 			wg.Add(1)
-			lease := storedLease{
+			lease := &storedLease{
 				id:      descpb.ID(tree.MustBeDInt(row[0])),
 				version: int(tree.MustBeDInt(row[1])),
 			}
@@ -2263,7 +2263,7 @@ SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.vers
 					WaitForSem: true,
 				},
 				func(ctx context.Context) {
-					m.storage.release(ctx, m.stopper, &lease)
+					m.storage.release(ctx, m.stopper, lease)
 					log.Infof(ctx, "released orphaned lease: %+v", lease)
 					wg.Done()
 				}); err != nil {
