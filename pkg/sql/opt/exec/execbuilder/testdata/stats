@@ -352,8 +352,6 @@ limit
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=1]
- │    │   histogram(1)=  0   1
- │    │                <--- NULL
  │    ├── cost: 23.775
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
@@ -361,8 +359,6 @@ limit
  │    ├── scan tj
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1]
- │    │    │   histogram(1)=  0   1    0   1   2   1
- │    │    │                <--- NULL --- '1' --- '{}'
  │    │    ├── cost: 23.695
  │    │    ├── limit hint: 5.00
  │    │    ├── distribution: test

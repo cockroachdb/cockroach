@@ -1547,7 +1547,7 @@ ORDER BY
 statistics_name  column_names  row_count  null_count  has_histogram
 s                {a}           3          0           true
 s                {b}           3          0           true
-s                {j}           3          0           true
+s                {j}           3          0           false
 s                {rowid}       3          0           true
 
 statement ok
@@ -2859,7 +2859,7 @@ statistics_name  column_names  row_count  distinct_count  null_count  has_histog
 j1               {a}           5          5               0           true
 j1               {b,e}         5          5               1           false
 j1               {b}           5          5               1           true
-j1               {c}           5          5               1           true
+j1               {c}           5          5               1           false
 j1               {d}           5          5               1           true
 j1               {e}           5          5               1           true
 j1               {f}           5          5               1           true
@@ -2984,7 +2984,7 @@ j4               {a}                       5          5               0         
 j4               {b,e}                     5          5               1           false
 j4               {b}                       5          5               1           true
 j4               {crdb_internal_idx_expr}  5          5               1           true
-j4               {c}                       5          5               1           true
+j4               {c}                       5          5               1           false
 j4               {d}                       5          5               1           true
 j4               {e}                       5          5               1           true
 j4               {f}                       5          5               1           true

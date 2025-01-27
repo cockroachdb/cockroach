@@ -359,6 +359,7 @@ sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode	ap
 sql.stats.histogram_samples.count	integer	0	number of rows sampled for histogram construction during table statistics collection. Not setting this or setting a value of 0 means that a reasonable sample size will be automatically picked based on the table size.	application
 sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode	application
 sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns	application
+sql.stats.non_indexed_json_histograms.enabled	boolean	false	set to true to collect table statistics histograms on non-indexed JSON columns	application
 sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables before compaction begins	application
 sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job	application
 sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request	application

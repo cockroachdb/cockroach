@@ -64,3 +64,45 @@ BEGIN;
 ALTER TYPE greeting ADD VALUE 'hey';
 SELECT * FROM t122312 WHERE g = 'hi';
 COMMIT;
+
+# Regression test related to #139381. Do not collect histograms on non-indexed
+# JSON columns by default.
+statement ok
+CREATE TABLE t139381 (
+  k INT PRIMARY KEY,
+  j JSON,
+  v STRING AS (j->>'name') VIRTUAL,
+  INDEX (v)
+)
+
+statement ok
+INSERT INTO t139381
+SELECT i, ('{"name": "name_' || i || '", "data": "abcdefghij"}')::JSONB
+FROM (VALUES (1), (2)) v(i)
+
+statement ok
+ANALYZE t139381
+
+query TT rowsort
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t139381]
+----
+{k}  histogram_collected
+{j}  no_histogram_collected
+{v}  histogram_collected
+
+# Histograms are collected on non-indexed JSON columns when the cluster setting
+# is enabled.
+statement ok
+SET CLUSTER SETTING sql.stats.non_indexed_json_histograms.enabled = true
+
+statement ok
+ANALYZE t139381
+
+query TT rowsort
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t139381]
+----
+{k}  histogram_collected
+{j}  histogram_collected
+{v}  histogram_collected
