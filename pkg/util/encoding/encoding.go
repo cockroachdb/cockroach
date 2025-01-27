@@ -1039,6 +1039,14 @@ func EncodeJSONAscending(b []byte) []byte {
 	return append(b, jsonInvertedIndex)
 }
 
+func DecodeUnsafeJsonpathAscendingDeepCopy(b []byte, r []byte) ([]byte, string, error) {
+	return DecodeUnsafeStringAscendingDeepCopy(b, r)
+}
+
+func DecodeUnsafeJsonpathDescending(b []byte, r []byte) ([]byte, string, error) {
+	return DecodeUnsafeStringDescending(b, r)
+}
+
 // Geo inverted keys are formatted as:
 // geoInvertedIndexMarker + EncodeUvarintAscending(cellid) + encoded-bbox
 // We don't have a single function to do the whole encoding since a shape is typically
@@ -1725,6 +1733,14 @@ func DecodeBitArrayDescending(b []byte) ([]byte, bitarray.BitArray, error) {
 	return b, ba, err
 }
 
+func EncodeJsonpathAscending(b []byte, s string) []byte {
+	return EncodeStringAscending(b, s)
+}
+
+func EncodeJsonpathDescending(b []byte, s string) []byte {
+	return EncodeStringDescending(b, s)
+}
+
 // Type represents the type of a value encoded by
 // Encode{Null,NotNull,Varint,Uvarint,Float,Bytes}.
 //
@@ -1786,6 +1802,7 @@ const (
 	JsonEmptyArray     Type = 42
 	JsonEmptyArrayDesc Type = 43
 	PGVector           Type = 44
+	Jsonpath           Type = 45
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -2816,6 +2833,11 @@ func EncodeJSONValue(appendTo []byte, colID uint32, data []byte) []byte {
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
+func EncodeJsonpathValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, Jsonpath)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
 // EncodeTSQueryValue encodes an already-byte-encoded TSQuery value with no
 // value tag but with a length prefix, appends it to the supplied buffer, and
 // returns the final buffer.
@@ -3241,7 +3263,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset + n, err
 	case Float:
 		return dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array, JSON, Geo, TSVector, TSQuery, PGVector:
+	case Bytes, Array, JSON, Jsonpath, Geo, TSVector, TSQuery, PGVector:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
 	case Box2D:

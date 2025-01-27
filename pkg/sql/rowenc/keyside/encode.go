@@ -181,6 +181,11 @@ func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 		return append(b, []byte(*t)...), nil
 	case *tree.DJSON:
 		return encodeJSONKey(b, t, dir)
+	case *tree.DJsonpath:
+		if dir == encoding.Ascending {
+			return encoding.EncodeJsonpathAscending(b, t.String()), nil
+		}
+		return encoding.EncodeJsonpathDescending(b, t.String()), nil
 	}
 	if buildutil.CrdbTestBuild {
 		return nil, errors.AssertionFailedf("unable to encode table key: %T", val)

@@ -33,9 +33,17 @@ const (
 	T__pgvector  = oid.Oid(90007)
 )
 
+// OIDs in this block are not extensions of postgres, but are not in `github.com/lib/pq/oid`
+const (
+	T_jsonpath  = oid.Oid(4072)
+	T__jsonpath = oid.Oid(4073)
+)
+
 // ExtensionTypeName returns a mapping from extension oids
 // to their type name.
 var ExtensionTypeName = map[oid.Oid]string{
+	T_jsonpath:   "JSONPATH",
+	T__jsonpath:  "_JSONPATH",
 	T_geometry:   "GEOMETRY",
 	T__geometry:  "_GEOMETRY",
 	T_geography:  "GEOGRAPHY",

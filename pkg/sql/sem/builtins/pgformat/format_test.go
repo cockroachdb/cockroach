@@ -45,7 +45,7 @@ func TestFormat(t *testing.T) {
 	var skipType func(typ *types.T) bool
 	skipType = func(typ *types.T) bool {
 		switch typ.Family() {
-		case types.AnyFamily, types.OidFamily:
+		case types.AnyFamily, types.OidFamily, types.JsonpathFamily:
 			return true
 		case types.ArrayFamily:
 			if !randgen.IsAllowedForArray(typ.ArrayContents()) {

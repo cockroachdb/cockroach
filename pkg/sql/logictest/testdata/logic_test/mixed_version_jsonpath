@@ -1,0 +1,60 @@
+# LogicTest: cockroach-go-testserver-24.3
+
+# Verify that all nodes are running the previous version
+
+query T nodeidx=0
+SELECT crdb_internal.node_executable_version()
+----
+24.3
+
+query T nodeidx=1
+SELECT crdb_internal.node_executable_version()
+----
+24.3
+
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
+----
+24.3
+
+statement error pq:.*syntax error: unimplemented: this syntax\nHINT: You have attempted to use a feature that is not yet implemented.\n.*\n.*\n.*
+CREATE TABLE t (j JSONPATH)
+
+# Upgrade one node to 25.2
+
+upgrade 1
+
+# Verify that node index 0 is now running 25.2 binary.
+
+query T nodeidx=1
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+25.2
+
+statement error pq:.*syntax error: unimplemented: this syntax\nHINT: You have attempted to use a feature that is not yet implemented.\n.*\n.*\n.*
+CREATE TABLE t (j JSONPATH)
+
+upgrade 0
+
+upgrade 2
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+
+query T nodeidx=1
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+25.2
+
+query T nodeidx=2
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+25.2
+
+query B retry
+SELECT crdb_internal.is_at_least_version('25.1')
+----
+true
+
+statement ok
+CREATE TABLE t (j JSONPATH)

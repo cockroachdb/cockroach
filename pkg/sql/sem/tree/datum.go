@@ -3870,6 +3870,102 @@ func (d *DBox2D) Size() uintptr {
 	return unsafe.Sizeof(*d) + unsafe.Sizeof(d.CartesianBoundingBox)
 }
 
+type DJsonpath string
+
+func NewDJsonpath(d string) *DJsonpath {
+	jsonpath := DJsonpath(d)
+	return &jsonpath
+}
+
+func (d *DJsonpath) UnsafeBytes() []byte {
+	return encoding.UnsafeConvertStringToBytes(string(*d))
+}
+
+var dEmptyJsonpath = NewDJsonpath("")
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DJsonpath) ResolvedType() *types.T {
+	return types.Jsonpath
+}
+
+// Compare implements the Datum interface.
+func (d *DJsonpath) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		return 1, nil
+	}
+	v, ok := cmpCtx.UnwrapDatum(ctx, other).(*DJsonpath)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	return strings.Compare(string(*d), string(*v)), nil
+}
+
+// Prev implements the Datum interface.
+func (d *DJsonpath) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DJsonpath) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DJsonpath) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DJsonpath) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return d == dEmptyJsonpath
+}
+
+// Max implements the Datum interface.
+func (d *DJsonpath) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DJsonpath) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return dEmptyJsonpath, true
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DJsonpath) AmbiguousFormat() bool { return true }
+
+// Size implements the Datum interface.
+func (d *DJsonpath) Size() uintptr {
+	// TODO: + d.Size()?
+	return unsafe.Sizeof(*d)
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DJsonpath) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
+	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
+		buf.WriteString(string(*d))
+	} else {
+		lexbase.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
+	}
+}
+
+func ParseDJsonpath(s string) (Datum, error) {
+	if s == "" {
+		return dEmptyJsonpath, fmt.Errorf("invalid jsonpath: %q", s)
+	}
+	return NewDJsonpath(s), nil
+}
+
+func AsDJsonpath(e Expr) (*DJsonpath, bool) {
+	switch t := e.(type) {
+	case *DJsonpath:
+		return t, true
+	case *DOidWrapper:
+		return AsDJsonpath(t.Wrapped)
+	}
+	return nil, false
+}
+
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
@@ -3990,6 +4086,8 @@ func AsJSON(
 		return json.FromString(t.LogicalRep), nil
 	case *DJSON:
 		return t.JSON, nil
+	case *DJsonpath:
+		return json.FromString(string(*t)), nil
 	case *DArray:
 		builder := json.NewArrayBuilder(t.Len())
 		for _, e := range t.Array {
@@ -5948,6 +6046,8 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 		return dTimeMin, nil
 	case types.JsonFamily:
 		return dNullJSON, nil
+	case types.JsonpathFamily:
+		return dEmptyJsonpath, nil
 	case types.TimeTZFamily:
 		return dZeroTimeTZ, nil
 	case types.GeometryFamily, types.GeographyFamily, types.Box2DFamily:
@@ -6092,6 +6192,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.TSVectorFamily:       {unsafe.Sizeof(DTSVector{}), variableSize},
 	types.IntervalFamily:       {unsafe.Sizeof(DInterval{}), fixedSize},
 	types.JsonFamily:           {unsafe.Sizeof(DJSON{}), variableSize},
+	types.JsonpathFamily:       {unsafe.Sizeof(DJsonpath("")), variableSize},
 	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},

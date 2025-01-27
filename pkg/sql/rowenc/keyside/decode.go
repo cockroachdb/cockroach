@@ -140,6 +140,14 @@ func Decode(
 		}
 		d := a.NewDJSON(tree.DJSON{JSON: json})
 		return d, rkey, err
+	case types.JsonpathFamily:
+		var r string
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeUnsafeJsonpathAscendingDeepCopy(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeUnsafeJsonpathDescending(key, nil)
+		}
+		return a.NewDJsonpath(*tree.NewDJsonpath(r)), rkey, err
 	case types.BytesFamily:
 		var r []byte
 		if dir == encoding.Ascending {
