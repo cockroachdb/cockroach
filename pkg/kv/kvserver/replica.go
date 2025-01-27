@@ -2461,6 +2461,25 @@ func checkIfTxnAborted(
 		return nil
 	}
 
+	// TODO(tbg): add an authoritative cache here that is guaranteed to contain any visible
+	// abort span entries above a low water mark, as tracked by the timestamp in the abort
+	// span entry itself. That timestamp is the transaction's provisional commit timestamp
+	// at the time of being aborted.
+	// Transactions have a "min timestamp" which is the earliest timestamp at which they
+	// may have laid down intents (and thus the txn can only have been aborted with a later provisional timestamp).
+	//If this timestamp is still covered by the cache,/the
+	// transaction can check the cache instead. Otherwise, it has to fall through to disk.
+	//
+	// TODO(tbg): is this true? If the pusher creates the aborted txn record, it gets to
+	// decide on the timestamp. It probably picks `time.Now()` which is "usually" later
+	// than the txn's min timestamp, but there isn't necessarily a causal connection
+	// between the two events. This means clock uncertainty would come into play here.
+	// Actually no, this is wrong. To abort a txn, you need to have seen one of its
+	// intents. So the pusher can avoid chosing anything below the txn's min timestamp.
+	//
+	// This cache rewards short transactions and is O(1) in time and space most of
+	// the time, when there aren't any aborted transactions.
+
 	var entry roachpb.AbortSpanEntry
 	aborted, err := rec.AbortSpan().Get(ctx, reader, txn.ID, &entry)
 	if err != nil {
