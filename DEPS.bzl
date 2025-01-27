@@ -5245,10 +5245,10 @@ def go_deps():
         name = "com_github_jackc_pgx_v5",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jackc/pgx/v5",
-        sha256 = "003bc28d696865bd7cb2819d3902c0415bee4d276b129f92a8438330e6619f4d",
-        strip_prefix = "github.com/jackc/pgx/v5@v5.5.4",
+        sha256 = "221749d6187aaeeb14097a41f2510689eaf35245ef77d243a1f69dc23605d2a2",
+        strip_prefix = "github.com/jackc/pgx/v5@v5.5.5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgx/v5/com_github_jackc_pgx_v5-v5.5.4.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgx/v5/com_github_jackc_pgx_v5-v5.5.5.zip",
         ],
     )
     go_repository(
