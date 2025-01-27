@@ -1349,7 +1349,6 @@ of a range.
 | ----- | ---- | ----- | ----------- | -------------- |
 | index_to_send | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
 | next_raft_index_initial | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
-| next_raft_index | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
 | force_flush_stop_index | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
 | eval_tokens_held | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) | repeated |  | [reserved](#support-status) |
 | send_tokens_held | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) | repeated |  | [reserved](#support-status) |
@@ -1648,7 +1647,6 @@ of a range.
 | ----- | ---- | ----- | ----------- | -------------- |
 | index_to_send | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
 | next_raft_index_initial | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
-| next_raft_index | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
 | force_flush_stop_index | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
 | eval_tokens_held | [int64](#cockroach.server.serverpb.RangesResponse-int64) | repeated |  | [reserved](#support-status) |
 | send_tokens_held | [int64](#cockroach.server.serverpb.RangesResponse-int64) | repeated |  | [reserved](#support-status) |
@@ -4082,7 +4080,6 @@ of a range.
 | ----- | ---- | ----- | ----------- | -------------- |
 | index_to_send | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
 | next_raft_index_initial | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
-| next_raft_index | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
 | force_flush_stop_index | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
 | eval_tokens_held | [int64](#cockroach.server.serverpb.RangeResponse-int64) | repeated |  | [reserved](#support-status) |
 | send_tokens_held | [int64](#cockroach.server.serverpb.RangeResponse-int64) | repeated |  | [reserved](#support-status) |
