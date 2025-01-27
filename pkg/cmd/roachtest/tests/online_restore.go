@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -131,6 +132,10 @@ func registerOnlineRestorePerf(r registry.Registry) {
 					if !useWorkarounds {
 						sp.skip = "used for ad hoc experiments"
 						sp.namePrefix = sp.namePrefix + fmt.Sprintf("/workarounds=%t", useWorkarounds)
+					}
+
+					if sp.skip == "" && !backuptestutils.IsOnlineRestoreSupported() {
+						sp.skip = "online restore is only tested on development branch"
 					}
 
 					sp.initTestName()

@@ -14,6 +14,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/backup/backupbase" // imported for cluster settings.
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -30,6 +31,11 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
+
+func IsOnlineRestoreSupported() bool {
+	// TODO(jeffswenson): relax this check once online restore is in preview.
+	return clusterversion.DevelopmentBranch
+}
 
 const (
 	// SingleNode is the size of a single node test cluster.
