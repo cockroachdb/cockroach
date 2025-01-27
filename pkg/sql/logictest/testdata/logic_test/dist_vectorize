@@ -19,9 +19,11 @@ ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i)
 statement ok
 ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i)
 
+retry
 statement ok
 ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
+retry
 statement ok
 ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
@@ -90,6 +92,9 @@ NULL
 statement ok
 CREATE TABLE t66306 (s STRING);
 INSERT INTO t66306 VALUES ('foo');
+
+retry
+statement ok
 ALTER TABLE t66306 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1);
 
 query IT

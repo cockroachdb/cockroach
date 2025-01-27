@@ -55,6 +55,7 @@ replicas  lease_holder
 {1}       1
 {1}       1
 
+retry
 statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1152921574000000000)
 
@@ -84,6 +85,7 @@ SELECT k FROM geo_table@geom_index WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.
 # Move all the index data that will be read to node 2 while the query executes
 # at node 1. The filtering moves to node 2 when it is distributable.
 
+retry
 statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)
 
@@ -144,6 +146,7 @@ replicas  lease_holder
 {2}       2
 {2}       2
 
+retry
 statement ok
 ALTER INDEX geo_table@geom_index2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'foo', 1152921574000000000)
 
