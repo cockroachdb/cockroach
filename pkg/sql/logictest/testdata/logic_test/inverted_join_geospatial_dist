@@ -32,6 +32,7 @@ INSERT INTO rtable VALUES
 statement ok
 ALTER TABLE ltable SPLIT AT VALUES (2), (3)
 
+retry
 statement ok
 ALTER TABLE ltable EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)
 
