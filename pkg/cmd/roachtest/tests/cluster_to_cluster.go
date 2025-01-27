@@ -474,7 +474,7 @@ type replicationDriver struct {
 	rs replicationSpec
 
 	// beforeWorkloadHook is called before the main workload begins.
-	beforeWorkloadHook func()
+	beforeWorkloadHook func(ctx context.Context) error
 
 	// cutoverStarted closes once the driver issues a cutover commmand.
 	cutoverStarted chan struct{}
@@ -588,7 +588,7 @@ func (rd *replicationDriver) setupC2C(
 	rd.c = c
 	rd.metrics = &c2cMetrics{}
 	rd.replicationStartHook = func(ctx context.Context, sp *replicationDriver) {}
-	rd.beforeWorkloadHook = func() {}
+	rd.beforeWorkloadHook = func(_ context.Context) error { return nil }
 	rd.cutoverStarted = make(chan struct{})
 
 	if !c.IsLocal() {
@@ -691,7 +691,9 @@ func (rd *replicationDriver) startReplicationStream(ctx context.Context) int {
 }
 
 func (rd *replicationDriver) runWorkload(ctx context.Context) error {
-	rd.beforeWorkloadHook()
+	if err := rd.beforeWorkloadHook(ctx); err != nil {
+		return err
+	}
 	return rd.rs.workload.runDriver(ctx, rd.c, rd.t, rd.setup)
 }
 
@@ -1624,9 +1626,15 @@ func registerClusterReplicationResilience(r registry.Registry) {
 
 				shutdownSetupDone := make(chan struct{})
 
-				rrd.beforeWorkloadHook = func() {
-					// Ensure the workload begins after c2c jobs have been set up.
-					<-shutdownSetupDone
+				rrd.beforeWorkloadHook = func(ctx context.Context) error {
+					// Ensure the workload begins after c2c jobs have been set up, or
+					// return early if context was cancelled.
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-shutdownSetupDone:
+						return nil
+					}
 				}
 
 				rrd.replicationStartHook = func(ctx context.Context, rd *replicationDriver) {
@@ -1666,7 +1674,11 @@ func registerClusterReplicationResilience(r registry.Registry) {
 				defer mainMonitor.Wait()
 
 				// Don't begin shutdown process until c2c job is set up.
-				<-shutdownSetupDone
+				select {
+				case <-shutdownSetupDone:
+				case <-ctx.Done():
+					return
+				}
 
 				// Eagerly listen to cutover signal to exercise node shutdown during actual cutover.
 				rrd.setup.dst.sysSQL.Exec(t, `SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval='5s'`)
