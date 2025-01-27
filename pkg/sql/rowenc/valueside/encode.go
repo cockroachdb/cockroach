@@ -95,6 +95,8 @@ func EncodeWithScratch(
 			return nil, nil, err
 		}
 		return encoding.EncodeJSONValue(appendTo, uint32(colID), scratch), scratch, nil
+	case *tree.DJsonpath:
+		return encoding.EncodeJsonpathValue(appendTo, uint32(colID), t.UnsafeBytes()), scratch, nil
 	case *tree.DTSQuery:
 		scratch, err = tsearch.EncodeTSQuery(scratch[:0], t.TSQuery)
 		if err != nil {
