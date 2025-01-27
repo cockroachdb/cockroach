@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -1119,5 +1120,40 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 					require.NoError(t, err)
 				}
 			})
+	}
+}
+
+func TestStatementTimeoutForRenameColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	numNodes := 1
+	tc := serverutils.StartCluster(t, numNodes,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+						RunBeforeResume: func(jobID jobspb.JobID) error {
+							time.Sleep(5 * time.Second)
+							return nil
+						},
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	setup := []string{
+		`SET statement_timeout = '0.1s'`,
+		`CREATE TABLE t (i int)`,
+	}
+
+	db.ExecMultiple(t, setup...)
+	_, err := db.DB.ExecContext(ctx, `ALTER TABLE t RENAME COLUMN i TO j`)
+	if err != nil {
+		require.EqualError(t, err, "pq: query execution canceled due to statement timeout")
+	} else {
+		t.Fatal("stmt wasn't canceled by statement_timeout of 0.1s")
 	}
 }
