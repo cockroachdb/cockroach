@@ -206,6 +206,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
+        "//pkg/ccl/backupccl/backuptestutils",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/changefeedccl/changefeedbase",
