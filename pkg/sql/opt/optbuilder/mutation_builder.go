@@ -1653,7 +1653,7 @@ func partialIndexCount(tab cat.Table) int {
 func vectorIndexCount(tab cat.Table) int {
 	count := 0
 	for i, n := 0, tab.DeletableIndexCount(); i < n; i++ {
-		if tab.Index(i).Type() == tree.IndexTypeVector {
+		if tab.Index(i).Type() == idxtype.VECTOR {
 			count++
 		}
 	}

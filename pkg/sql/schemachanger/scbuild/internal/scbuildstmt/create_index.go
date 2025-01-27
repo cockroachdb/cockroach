@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
@@ -51,7 +52,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	idxSpec.secondary = &scpb.SecondaryIndex{
 		Index: scpb.Index{
 			IsUnique:       n.Unique,
-			IsInverted:     n.Type == tree.IndexTypeInverted,
+			IsInverted:     n.Type == idxtype.INVERTED,
 			IsConcurrently: n.Concurrently,
 			IsNotVisible:   n.Invisibility.Value != 0.0,
 			Invisibility:   n.Invisibility.Value,
@@ -145,7 +146,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	panicIfSchemaChangeIsDisallowed(relationElements, n)
 
 	// Vector indexes are not yet supported.
-	if n.Type == tree.IndexTypeVector {
+	if n.Type == idxtype.VECTOR {
 		panic(unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported"))
 	}
 
@@ -163,7 +164,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 
 	// Inverted indexes do not support hash sharding or unique.
-	if n.Type == tree.IndexTypeInverted {
+	if n.Type == idxtype.INVERTED {
 		b.IncrementSchemaChangeIndexCounter("inverted")
 		if len(n.Columns) > 1 {
 			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
@@ -379,7 +380,7 @@ func processColNodeType(
 		})
 	}
 	// Only certain column types are supported for inverted indexes.
-	if n.Type == tree.IndexTypeInverted && lastColIdx &&
+	if n.Type == idxtype.INVERTED && lastColIdx &&
 		!colinfo.ColumnTypeIsInvertedIndexable(columnType.Type) {
 		colNameForErr := colName
 		if columnNode.Expr != nil {
@@ -387,7 +388,7 @@ func processColNodeType(
 		}
 		panic(tabledesc.NewInvalidInvertedColumnError(colNameForErr,
 			columnType.Type.String()))
-	} else if (n.Type != tree.IndexTypeInverted || !lastColIdx) && !colinfo.ColumnTypeIsIndexable(columnType.Type) {
+	} else if (n.Type != idxtype.INVERTED || !lastColIdx) && !colinfo.ColumnTypeIsIndexable(columnType.Type) {
 		// Otherwise, check if the column type is indexable.
 		panic(unimplemented.NewWithIssueDetailf(35730,
 			columnType.Type.DebugString(),
@@ -492,7 +493,7 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 			columnsToPrepend = append(columnsToPrepend, newIndexColumn)
 		}
 		idxSpec.columns = append(columnsToPrepend, idxSpec.columns...)
-		if n.Type == tree.IndexTypeInverted {
+		if n.Type == idxtype.INVERTED {
 			b.IncrementSchemaChangeIndexCounter("partitioned_inverted")
 		}
 	}
@@ -797,7 +798,7 @@ func maybeCreateVirtualColumnForIndex(
 	tn *tree.TableName,
 	tbl *scpb.Table,
 	expr tree.Expr,
-	typ tree.IndexType,
+	typ idxtype.T,
 	lastColumn bool,
 ) string {
 	validateColumnIndexableType := func(t *types.T) {
@@ -812,7 +813,7 @@ func maybeCreateVirtualColumnForIndex(
 			))
 		}
 		// Check if the column type is indexable for forward indexes.
-		if typ == tree.IndexTypeForward && !colinfo.ColumnTypeIsIndexable(t) {
+		if typ == idxtype.FORWARD && !colinfo.ColumnTypeIsIndexable(t) {
 			panic(pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"index element %s of type %s is not indexable",
@@ -820,7 +821,7 @@ func maybeCreateVirtualColumnForIndex(
 				t.Name()))
 		}
 		// Check if inverted columns are invertible.
-		if typ == tree.IndexTypeInverted && !lastColumn && !colinfo.ColumnTypeIsIndexable(t) {
+		if typ == idxtype.INVERTED && !lastColumn && !colinfo.ColumnTypeIsIndexable(t) {
 			panic(errors.WithHint(
 				pgerror.Newf(
 					pgcode.InvalidTableDefinition,
@@ -831,7 +832,7 @@ func maybeCreateVirtualColumnForIndex(
 				"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
 			))
 		}
-		if typ == tree.IndexTypeInverted && lastColumn && !colinfo.ColumnTypeIsInvertedIndexable(t) {
+		if typ == idxtype.INVERTED && lastColumn && !colinfo.ColumnTypeIsInvertedIndexable(t) {
 			panic(errors.WithHint(
 				pgerror.Newf(
 					pgcode.InvalidTableDefinition,
@@ -912,7 +913,7 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 	expr := b.PartialIndexPredicateExpression(idxSpec.secondary.TableID, n.Predicate)
 	idxSpec.secondary.EmbeddedExpr = b.WrapExpression(idxSpec.secondary.TableID, expr)
 	b.IncrementSchemaChangeIndexCounter("partial")
-	if n.Type == tree.IndexTypeInverted {
+	if n.Type == idxtype.INVERTED {
 		b.IncrementSchemaChangeIndexCounter("partial_inverted")
 	}
 }

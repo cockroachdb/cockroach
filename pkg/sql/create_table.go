@@ -1887,7 +1887,7 @@ func NewTableDesc(
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
-			if d.Type == tree.IndexTypeVector {
+			if d.Type == idxtype.VECTOR {
 				return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
 			}
 			// If the index is named, ensure that the name is unique. Unnamed
@@ -1940,7 +1940,7 @@ func NewTableDesc(
 			if err := idx.FillColumns(columns); err != nil {
 				return nil, err
 			}
-			if d.Type == tree.IndexTypeInverted {
+			if d.Type == idxtype.INVERTED {
 				column, err := catalog.MustFindColumnByName(&desc, idx.InvertedColumnName())
 				if err != nil {
 					return nil, err

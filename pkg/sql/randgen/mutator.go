@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -806,7 +807,7 @@ func postgresCreateTableMutator(
 				// TODO(rafi): Postgres supports inverted indexes with a different
 				// syntax than Cockroach. Maybe we could add it later.
 				// The syntax is `CREATE INDEX name ON table USING gin(column)`.
-				if def.Type == tree.IndexTypeForward {
+				if def.Type == idxtype.FORWARD {
 					mutated = append(mutated, &tree.CreateIndex{
 						Name:    def.Name,
 						Table:   mutatedStmt.Table,
