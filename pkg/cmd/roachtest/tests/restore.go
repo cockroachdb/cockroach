@@ -64,7 +64,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                      "restore/nodeShutdown/worker",
 		Owner:                     registry.OwnerDisasterRecovery,
-		Cluster:                   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+		Cluster:                   sp.hardware.makeClusterSpecs(r),
 		CompatibleClouds:          sp.backup.CompatibleClouds(),
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
@@ -88,7 +88,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                      "restore/nodeShutdown/coordinator",
 		Owner:                     registry.OwnerDisasterRecovery,
-		Cluster:                   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+		Cluster:                   sp.hardware.makeClusterSpecs(r),
 		CompatibleClouds:          sp.backup.CompatibleClouds(),
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
@@ -131,7 +131,7 @@ func registerRestore(r registry.Registry) {
 		Name:                      withPauseSpecs.testName,
 		Owner:                     registry.OwnerDisasterRecovery,
 		Benchmark:                 true,
-		Cluster:                   withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
+		Cluster:                   withPauseSpecs.hardware.makeClusterSpecs(r),
 		Timeout:                   withPauseSpecs.timeout,
 		CompatibleClouds:          withPauseSpecs.backup.CompatibleClouds(),
 		Suites:                    registry.Suites(registry.Nightly),
@@ -424,7 +424,7 @@ func registerRestore(r registry.Registry) {
 			Name:      sp.testName,
 			Owner:     registry.OwnerDisasterRecovery,
 			Benchmark: true,
-			Cluster:   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+			Cluster:   sp.hardware.makeClusterSpecs(r),
 			Timeout:   sp.timeout,
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
@@ -514,9 +514,7 @@ type hardwareSpecs struct {
 	zones []string
 }
 
-func (hw hardwareSpecs) makeClusterSpecs(
-	r registry.Registry, backupCloud spec.Cloud,
-) spec.ClusterSpec {
+func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 	clusterOpts := make([]spec.Option, 0)
 	clusterOpts = append(clusterOpts, spec.CPU(hw.cpus))
 	if hw.volumeSize != 0 {
@@ -528,6 +526,11 @@ func (hw hardwareSpecs) makeClusterSpecs(
 	addWorkloadNode := 0
 	if hw.workloadNode {
 		addWorkloadNode++
+		clusterOpts = append(clusterOpts, spec.WorkloadNodeCount(1))
+		// If the workload node has 32 cpus, we need to specify it.
+		if hw.workloadNode && hw.cpus != 0 {
+			clusterOpts = append(clusterOpts, spec.WorkloadNodeCPU(min(16, hw.cpus)))
+		}
 	}
 	if len(hw.zones) > 0 {
 		// Each test is set up to run on one specific cloud, so it's ok that the
