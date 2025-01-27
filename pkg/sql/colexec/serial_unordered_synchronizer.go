@@ -10,11 +10,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -29,6 +32,13 @@ type SerialUnorderedSynchronizer struct {
 	flowCtx     *execinfra.FlowCtx
 	processorID int32
 	span        *tracing.Span
+
+	// outputBatch is the output batch emitted by the synchronizer.
+	//
+	// The contract of Operator.Next encourages emitting the same batch across
+	// Next calls, so batches coming from the inputs are decomposed into vectors
+	// which are inserted into this batch.
+	outputBatch coldata.Batch
 
 	inputs []colexecargs.OpWithMetaInfo
 	// curSerialInputIdx indicates the index of the current input being consumed.
@@ -65,6 +75,8 @@ func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.Op
 func NewSerialUnorderedSynchronizer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
+	allocator *colmem.Allocator,
+	inputTypes []*types.T,
 	inputs []colexecargs.OpWithMetaInfo,
 	serialInputIdxExclusiveUpperBound uint32,
 	exceedsInputIdxExclusiveUpperBoundError error,
@@ -72,6 +84,7 @@ func NewSerialUnorderedSynchronizer(
 	return &SerialUnorderedSynchronizer{
 		flowCtx:                                 flowCtx,
 		processorID:                             processorID,
+		outputBatch:                             allocator.NewMemBatchNoCols(inputTypes, coldata.BatchSize() /* capacity */),
 		inputs:                                  inputs,
 		serialInputIdxExclusiveUpperBound:       serialInputIdxExclusiveUpperBound,
 		exceedsInputIdxExclusiveUpperBoundError: exceedsInputIdxExclusiveUpperBoundError,
@@ -102,7 +115,11 @@ func (s *SerialUnorderedSynchronizer) Next() coldata.Batch {
 				colexecerror.ExpectedError(s.exceedsInputIdxExclusiveUpperBoundError)
 			}
 		} else {
-			return b
+			for i, vec := range b.ColVecs() {
+				s.outputBatch.ReplaceCol(vec, i)
+			}
+			colexecutils.UpdateBatchState(s.outputBatch, b.Length(), b.Selection() != nil /* usesSel */, b.Selection())
+			return s.outputBatch
 		}
 	}
 }
