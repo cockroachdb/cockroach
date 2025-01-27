@@ -82,7 +82,7 @@ will then convert it to the --format requested in the current invocation.
 		}
 
 		var w tsWriter
-		switch debugTimeSeriesDumpOpts.format {
+		switch cmd := debugTimeSeriesDumpOpts.format; cmd {
 		case tsDumpRaw:
 			if convertFile != "" {
 				return errors.Errorf("input file is already in raw format")
@@ -104,7 +104,11 @@ will then convert it to the --format requested in the current invocation.
 				10_000_000, /* threshold */
 				doRequest,
 			)
-		case tsDumpDatadog:
+		case tsDumpDatadogInit, tsDumpDatadog:
+			if len(args) < 1 {
+				return errors.New("no input file provided")
+			}
+
 			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
 			if err != nil {
 				return err
@@ -112,22 +116,7 @@ will then convert it to the --format requested in the current invocation.
 
 			var datadogWriter = makeDatadogWriter(
 				targetURL,
-				false,
-				debugTimeSeriesDumpOpts.ddApiKey,
-				100,
-				doDDRequest,
-			)
-			return datadogWriter.upload(args[0])
-
-		case tsDumpDatadogInit:
-			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
-			if err != nil {
-				return err
-			}
-
-			var datadogWriter = makeDatadogWriter(
-				targetURL,
-				true,
+				cmd == tsDumpDatadogInit,
 				debugTimeSeriesDumpOpts.ddApiKey,
 				100,
 				doDDRequest,
