@@ -35,7 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // multi-tenant tests
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"    // locality-related table mutations
@@ -7558,8 +7560,8 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		jobCheckpoint := progress.GetChangefeed().Checkpoint
 		require.Less(t, 0, len(jobCheckpoint.Spans))
-		var checkpoint roachpb.SpanGroup
-		checkpoint.Add(jobCheckpoint.Spans...)
+		var checkpointSpanGroup roachpb.SpanGroup
+		checkpointSpanGroup.Add(jobCheckpoint.Spans...)
 
 		// Collect spans we attempt to resolve after when we resume.
 		var resolved []roachpb.Span
@@ -7573,6 +7575,23 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// Resume job.
 		require.NoError(t, jobFeed.Resume())
 
+		// Verify that the resumed job has restored the progress from the checkpoint
+		// to the change frontier.
+		timestampSpansMap := checkpoint.ConvertLegacyCheckpoint(jobCheckpoint, hlc.Timestamp{}, hlc.Timestamp{})
+		expectedFrontier, err := resolvedspan.NewCoordinatorFrontier(jobCheckpoint.Timestamp, *h, tableSpan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.NoError(t, checkpoint.Restore(expectedFrontier, timestampSpansMap))
+
+		var checkedCoordinatorFrontier atomic.Bool
+
+		knobs.AfterCoordinatorFrontierRestore = func(frontier *resolvedspan.CoordinatorFrontier) {
+			require.NotNil(t, frontier)
+			require.Equal(t, expectedFrontier.String(), frontier.String())
+			checkedCoordinatorFrontier.Store(true)
+		}
+
 		// Wait for the high water mark to be non-zero.
 		testutils.SucceedsSoon(t, func() error {
 			prog := loadProgress()
@@ -7582,6 +7601,11 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			return errors.New("waiting for highwater")
 		})
 
+		// Now that we've checked that our checkpoint progress is loaded on resume,
+		// do not make further checks.
+		require.True(t, checkedCoordinatorFrontier.Load())
+		knobs.AfterCoordinatorFrontierRestore = nil
+
 		// At this point, highwater mark should be set, and previous checkpoint should be gone.
 		progress = loadProgress()
 		require.NotNil(t, progress.GetChangefeed())
@@ -7589,7 +7613,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Verify that none of the resolved spans after resume were checkpointed.
 		for _, sp := range resolved {
-			require.Falsef(t, checkpoint.Contains(sp.Key), "span should not have been resolved: %s", sp)
+			require.Falsef(t, checkpointSpanGroup.Contains(sp.Key), "span should not have been resolved: %s", sp)
 		}
 
 		// Consume all potentially buffered kv events
@@ -7597,7 +7621,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		if err := g.Wait(); err != nil {
 			require.NotRegexp(t, "unexpected epoch resolved event", err)
 		}
-		err := drainUntilTimestamp(foo, *progress.GetHighWater())
+		err = drainUntilTimestamp(foo, *progress.GetHighWater())
 		require.NoError(t, err)
 
 		// Verify that the checkpoint does not affect future scans
