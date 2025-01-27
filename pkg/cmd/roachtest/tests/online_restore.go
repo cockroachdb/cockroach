@@ -138,7 +138,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						Name:      sp.testName,
 						Owner:     registry.OwnerDisasterRecovery,
 						Benchmark: true,
-						Cluster:   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+						Cluster:   sp.hardware.makeClusterSpecs(r),
 						Timeout:   sp.timeout,
 						// These tests measure performance. To ensure consistent perf,
 						// disable metamorphic encryption.
@@ -219,7 +219,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 		registry.TestSpec{
 			Name:                      sp.testName,
 			Owner:                     registry.OwnerDisasterRecovery,
-			Cluster:                   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+			Cluster:                   sp.hardware.makeClusterSpecs(r),
 			Timeout:                   sp.timeout,
 			CompatibleClouds:          sp.backup.CompatibleClouds(),
 			Suites:                    sp.suites,

@@ -244,6 +244,7 @@ go_library(
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/roachprod",
+        "//pkg/roachprod/blobfixture",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/install",
