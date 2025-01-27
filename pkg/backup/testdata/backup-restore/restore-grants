@@ -14,6 +14,7 @@ exec-sql
 CREATE USER user1;
 CREATE USER testuser;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 CREATE DATABASE testdb;
@@ -24,6 +25,11 @@ CREATE TABLE testdb.testtable_greeting_usage (a greeting_usage);
 CREATE SCHEMA sc;
 CREATE TABLE testdb.sc.othertable (a INT);
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Grant some privileges to user1.
 # testdb               -> ALL WITH GRANT OPTION
@@ -36,6 +42,9 @@ GRANT ALL ON SCHEMA public TO user1 WITH GRANT OPTION;
 GRANT USAGE ON SCHEMA sc TO user1;
 GRANT SELECT ON testdb.sc.othertable TO user1;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Grant some privileges to testuser.
 # testdb                          -> ALL WITH GRANT OPTION
@@ -48,12 +57,16 @@ GRANT ALL ON SCHEMA public TO testuser WITH GRANT OPTION;
 GRANT USAGE ON TYPE testdb.greeting_usage TO testuser;
 GRANT UPDATE ON testdb.testtable_greeting_usage TO testuser;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Create a type and table with testuser as the owner.
 exec-sql user=testuser
 CREATE TYPE testdb.greeting_owner AS ENUM ('howdy');
 CREATE TABLE testdb.testtable_greeting_owner (a testdb.greeting_owner);
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Ensure that testuser is the owner of the type.
 query-sql
@@ -416,6 +429,7 @@ exec-sql
 USE defaultdb;
 DROP DATABASE testdb CASCADE;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/';
@@ -501,6 +515,8 @@ USE defaultdb;
 DROP DATABASE testdb CASCADE;
 ALTER USER testuser CREATEDB;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Lastly, restore the database as a non-admin (testuser). We expect only root
 # and admin to have privileges, but testuser to be the owner of all objects.

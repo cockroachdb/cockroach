@@ -8,6 +8,10 @@ CREATE ROLE developer WITH CREATEDB;
 CREATE USER abbey WITH PASSWORD 'lincoln';
 GRANT developer TO abbey;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SHOW ROLES

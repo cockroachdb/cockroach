@@ -30,6 +30,7 @@ ReadyForQuery
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"auto-committing transaction before processing DDL due to autocommit_before_ddl setting","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAutoCommitBeforeDDL","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

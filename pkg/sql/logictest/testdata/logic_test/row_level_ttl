@@ -280,6 +280,9 @@ subtest end
 subtest existing_ttl_concurrent_schema_change
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE TABLE tbl_existing_ttl_concurrent_schema_change (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
@@ -303,9 +306,15 @@ CREATE INDEX tbl_idx ON tbl_existing_ttl_concurrent_schema_change (id)
 statement ok
 ROLLBACK
 
+statement ok
+RESET autocommit_before_ddl
+
 subtest end
 
 subtest add_ttl_concurrent_schema_change
+
+statement ok
+SET autocommit_before_ddl = false
 
 statement ok
 CREATE TABLE tbl_add_ttl_concurrent_schema_change (
@@ -338,6 +347,9 @@ CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id)
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
 
 subtest end
 

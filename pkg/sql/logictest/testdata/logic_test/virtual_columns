@@ -905,6 +905,9 @@ ALTER TABLE sc DROP COLUMN v
 # Adding a column and a partial index using that column in the predicate in the
 # same transaction is not allowed.
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
@@ -915,6 +918,9 @@ CREATE INDEX partial_idx ON sc(b) WHERE v > 20
 
 statement ok
 END
+
+statement ok
+RESET autocommit_before_ddl
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
@@ -1082,6 +1088,9 @@ statement error pgcode 0A000 virtual computed column "k" referencing columns \("
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
    ADD COLUMN k INT AS (i+j) VIRTUAL;
 
+statement ok
+SET autocommit_before_ddl = false
+
 statement error pgcode 0A000 virtual computed column "l" referencing columns \("j", "k"\) added in the current transaction
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
     ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
@@ -1092,11 +1101,17 @@ COMMIT;
 statement ok
 ROLLBACK;
 
+statement ok
+RESET autocommit_before_ddl
+
 # Test that adding virtual computed columns to tables which have been created
 # in the current transaction is fine.
 
 statement ok
 DROP TABLE t_ref;
+
+statement ok
+SET autocommit_before_ddl = false
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -1107,6 +1122,9 @@ COMMIT;
 
 statement ok
 DROP TABLE t_ref;
+
+statement ok
+RESET autocommit_before_ddl
 
 # Tests for virtual computed columns that reference foreign key columns.
 subtest referencing_fks

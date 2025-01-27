@@ -2902,7 +2902,7 @@ alter_primary_region_super_region_override                 off                 N
 always_distribute_full_scans                               off                 NULL      NULL        NULL        string
 application_name                                           ·                   NULL      NULL        NULL        string
 authentication_method                                      cert-password       NULL      NULL        NULL        string
-autocommit_before_ddl                                      off                 NULL      NULL        NULL        string
+autocommit_before_ddl                                      on                  NULL      NULL        NULL        string
 avoid_buffering                                            off                 NULL      NULL        NULL        string
 avoid_full_table_scans_in_mutations                        on                  NULL      NULL        NULL        string
 backslash_quote                                            safe_encoding       NULL      NULL        NULL        string
@@ -3107,7 +3107,7 @@ alter_primary_region_super_region_override                 off                 N
 always_distribute_full_scans                               off                 NULL  user     NULL      off                 off
 application_name                                           ·                   NULL  user     NULL      ·                   ·
 authentication_method                                      cert-password       NULL  user     NULL      cert-password       cert-password
-autocommit_before_ddl                                      off                 NULL  user     NULL      off                 off
+autocommit_before_ddl                                      on                  NULL  user     NULL      on                  on
 avoid_buffering                                            off                 NULL  user     NULL      off                 off
 avoid_full_table_scans_in_mutations                        on                  NULL  user     NULL      on                  on
 backslash_quote                                            safe_encoding       NULL  user     NULL      safe_encoding       safe_encoding
@@ -4678,7 +4678,7 @@ WHERE usename IN ('testuser1', 'testuser2')
 ORDER BY usename
 ----
 usename    usecreatedb  useconfig
-testuser1  true         {timezone=America/Los_Angeles,application_name=a}
+testuser1  false        NULL
 testuser2  false        NULL
 
 query TBTBBT colnames
@@ -4687,10 +4687,10 @@ FROM pg_roles
 WHERE rolname IN ('testuser1', 'testuser2', 'testrole1')
 ORDER BY rolname
 ----
-rolname    rolcreatedb  rolconfig                                          rolinherit  rolcanlogin  rolvaliduntil
-testrole1  false        NULL                                               true        false        NULL
-testuser1  true         {timezone=America/Los_Angeles,application_name=a}  true        true         NULL
-testuser2  false        NULL                                               true        true         3022-01-01 00:00:00 +0000 UTC
+rolname    rolcreatedb  rolconfig  rolinherit  rolcanlogin  rolvaliduntil
+testrole1  false        NULL       true        false        NULL
+testuser1  false        NULL       true        true         NULL
+testuser2  false        NULL       true        true         NULL
 
 query TBBBBT colnames
 SELECT rolname, rolcreatedb, rolcreaterole, rolinherit, rolcanlogin, rolvaliduntil
@@ -4701,8 +4701,8 @@ ORDER BY rolname
 rolname    rolcreatedb  rolcreaterole  rolinherit  rolcanlogin  rolvaliduntil
 root       true         true           true        true         NULL
 testrole1  false        false          true        false        NULL
-testuser1  true         false          true        true         NULL
-testuser2  false        true           true        true         3022-01-01 00:00:00 +0000 UTC
+testuser1  false        false          true        true         NULL
+testuser2  false        false          true        true         NULL
 
 # Testing users that have admin role
 
