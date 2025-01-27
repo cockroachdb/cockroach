@@ -18,6 +18,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -184,7 +185,7 @@ func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 		var indexFlags tree.IndexFlags
 		indexNames := make([]tree.Name, 0, len(indexes))
 		for _, index := range indexes {
-			if index.Type == tree.IndexTypeForward {
+			if index.Type == idxtype.FORWARD {
 				indexNames = append(indexNames, index.Name)
 			}
 		}
@@ -499,9 +500,9 @@ func (s *Smither) extractIndexes(
 				return nil, err
 			}
 			if _, ok := indexes[idx]; !ok {
-				indexType := tree.IndexTypeForward
+				indexType := idxtype.FORWARD
 				if inverted {
-					indexType = tree.IndexTypeInverted
+					indexType = idxtype.INVERTED
 				}
 				indexes[idx] = &tree.CreateIndex{
 					Name:  idx,
