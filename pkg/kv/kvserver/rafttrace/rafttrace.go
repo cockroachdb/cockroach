@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
@@ -36,7 +38,7 @@ var MaxConcurrentRaftTraces = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.raft.max_concurrent_traces",
 	"the maximum number of tracked raft traces, 0 will disable tracing",
-	0,
+	10,
 	settings.IntInRange(0, 1000),
 )
 
@@ -66,7 +68,7 @@ type traceValue struct {
 		// logged by each replica peer. This limits the size of the log at a
 		// small risk of missing some important messages in the case of dropped
 		// messages or reproposals.
-		seenMsgAppResp map[raftpb.PeerID]bool
+		seenMsgAppResp map[raftpb.PeerID]time.Time
 
 		// seenMsgStorageAppendResp tracks whether a MsgStorageAppendResp
 		// message has already been logged.
@@ -98,14 +100,35 @@ func (t *traceValue) logf(depth int, format string, args ...interface{}) {
 	}
 }
 
+// slowLeaderMsgAppResp returns true if we have received at least 2 msgApps
+// previously and our local msg app trailed by at least 1 second.
+func (*RaftTracer) slowLeaderMsgAppResp(t *traceValue, leader raftpb.PeerID) bool {
+	numNonLeaderResponses := 0
+	maxNonLeaderTime := time.Time{}
+	leaderTime := time.Time{}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for peer, time := range t.mu.seenMsgAppResp {
+		if peer == leader {
+			leaderTime = time
+		} else {
+			numNonLeaderResponses++
+			if time.After(maxNonLeaderTime) {
+				maxNonLeaderTime = time
+			}
+		}
+	}
+	return numNonLeaderResponses > 2 && leaderTime.Sub(maxNonLeaderTime) > time.Second
+}
+
 // seenMsgAppResp returns true if it hasn't seen an MsgAppResp for this peer.
 func (t *traceValue) seenMsgAppResp(p raftpb.PeerID) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.mu.seenMsgAppResp[p] {
+	if _, found := t.mu.seenMsgAppResp[p]; found {
 		return true
 	}
-	t.mu.seenMsgAppResp[p] = true
+	t.mu.seenMsgAppResp[p] = timeutil.Now()
 	return false
 }
 
@@ -273,7 +296,7 @@ func (r *RaftTracer) newTraceValue(
 	if LogRaftTracesToCockroachLog.Get(&r.st.SV) {
 		tv.ctx = logtags.AddTag(r.ctx, "id", redact.Safe(tv.String()))
 	}
-	tv.mu.seenMsgAppResp = make(map[raftpb.PeerID]bool)
+	tv.mu.seenMsgAppResp = make(map[raftpb.PeerID]time.Time)
 	tv.mu.propCtx = propCtx
 	tv.mu.propSpan = propSpan
 	return tv
@@ -458,6 +481,12 @@ func (r *RaftTracer) traceIfPast(m raftpb.Message) {
 					m.Term,
 					m.Index,
 				)
+				// If our local MsgAppResp was delayed, take a flight recorder snapshot.
+				if m.From == m.To && r.slowLeaderMsgAppResp(t, m.From) {
+					if r.tracer.FlightRecorderSnapshot() {
+						t.logf(4, "took an execution trace for a slow local response")
+					}
+				}
 			}
 		case raftpb.MsgStorageAppendResp:
 			if kvpb.RaftIndex(m.Index) >= index && !t.seenMsgStorageAppendResp() {

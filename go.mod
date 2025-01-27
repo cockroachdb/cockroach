@@ -11,16 +11,16 @@ go 1.22.8
 // for behavior changes, just like we would after a go upgrade.
 require (
 	golang.org/x/crypto v0.31.0
-	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
+	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
 	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
-	golang.org/x/mod v0.20.0 // indirect
-	golang.org/x/net v0.28.0
+	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/net v0.32.0
 	golang.org/x/oauth2 v0.7.0
 	golang.org/x/sync v0.10.0
 	golang.org/x/sys v0.28.0
 	golang.org/x/text v0.21.0
 	golang.org/x/time v0.3.0
-	golang.org/x/tools v0.24.0
+	golang.org/x/tools v0.28.0
 )
 
 // The following dependencies are key infrastructure dependencies and
