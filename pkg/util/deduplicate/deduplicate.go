@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package unique
+package deduplicate
 
 import (
 	"bytes"
@@ -11,10 +11,10 @@ import (
 	"sort"
 )
 
-// UniquifyByteSlices takes as input a slice of slices of bytes, and
-// deduplicates them using a sort and unique. The output will not contain any
-// duplicates but it will be sorted.
-func UniquifyByteSlices(slices [][]byte) [][]byte {
+// ByteSlices takes as input a slice of slices of bytes, and deduplicates them
+// using a sort and unique. The output will not contain any duplicates but it
+// will be sorted.
+func ByteSlices(slices [][]byte) [][]byte {
 	if len(slices) == 0 {
 		return slices
 	}
@@ -37,9 +37,10 @@ func UniquifyByteSlices(slices [][]byte) [][]byte {
 	return slices
 }
 
-// UniquifyAcrossSlices removes elements from both slices that are duplicated
-// across both of the slices. For example, inputs [1,2,3], [2,3,4] would remove
-// 2 and 3 from both lists.
+// AcrossSlices removes elements from both slices that are duplicated across
+// both of the slices. For example, inputs [1,2,3], [2,3,4] would remove 2 and 3
+// from both lists.
+//
 // It assumes that both slices are pre-sorted using the same comparison metric
 // as cmpFunc provides, and also already free of duplicates internally. It
 // returns the slices, which will have also been sorted as a side effect.
@@ -51,7 +52,7 @@ func UniquifyByteSlices(slices [][]byte) [][]byte {
 // The function returns the new lengths of both input slices, whose elements
 // will have been mutated, but whose lengths must be set the new lengths by
 // the caller.
-func UniquifyAcrossSlices(
+func AcrossSlices(
 	left interface{},
 	right interface{},
 	cmpFunc func(l, r int) int,
