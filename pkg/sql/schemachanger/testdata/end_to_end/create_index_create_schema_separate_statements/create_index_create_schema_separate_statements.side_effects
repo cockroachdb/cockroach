@@ -52,6 +52,7 @@ upsert descriptor #104
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -78,6 +79,7 @@ upsert descriptor #104
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -257,6 +259,7 @@ upsert descriptor #104
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -283,6 +286,7 @@ upsert descriptor #104
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -529,6 +533,7 @@ upsert descriptor #104
   +    sharded: {}
   +    storeColumnNames: []
   +    unique: true
+  +    vecConfig: {}
   +    version: 4
      modificationTime: {}
   -  mutations:
@@ -555,6 +560,7 @@ upsert descriptor #104
   -      sharded: {}
   -      storeColumnNames: []
   -      unique: true
+  -      vecConfig: {}
   -      version: 4
   -    mutationId: 1
   -    state: WRITE_ONLY
@@ -581,6 +587,7 @@ upsert descriptor #104
   -      storeColumnNames: []
   -      unique: true
   -      useDeletePreservingEncoding: true
+  -      vecConfig: {}
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY

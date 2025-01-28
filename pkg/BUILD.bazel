@@ -2304,6 +2304,7 @@ GO_TARGETS = [
     "//pkg/sql/vecindex/quantize:quantize",
     "//pkg/sql/vecindex/quantize:quantize_test",
     "//pkg/sql/vecindex/testutils:testutils",
+    "//pkg/sql/vecindex/vecpb:vecpb",
     "//pkg/sql/vecindex/vecstore:vecstore",
     "//pkg/sql/vecindex/vecstore:vecstore_test",
     "//pkg/sql/vecindex:vecindex",
