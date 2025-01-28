@@ -60,7 +60,7 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 }
 
 // prepareInsertOrUpdateBatch constructs a KV batch that inserts or
-// updates a row in KV.
+// updates a row in KV in the primary index.
 //   - batch is the KV batch where commands should be appended.
 //   - helper is the rowHelper that knows about the table being modified.
 //   - primaryIndexKey is the PK prefix for the current row.
@@ -202,7 +202,7 @@ func prepareInsertOrUpdateBatch(
 				if oth.IsSet() {
 					oth.CPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV)
 				} else {
-					putFn(ctx, batch, kvKey, &marshaled, traceKV)
+					putFn(ctx, batch, kvKey, &marshaled, traceKV, helper.primIndexValDirs)
 				}
 			}
 
@@ -263,7 +263,7 @@ func prepareInsertOrUpdateBatch(
 			if oth.IsSet() {
 				oth.CPutFn(ctx, batch, kvKey, kvValue, expBytes, traceKV)
 			} else {
-				putFn(ctx, batch, kvKey, kvValue, traceKV)
+				putFn(ctx, batch, kvKey, kvValue, traceKV, helper.primIndexValDirs)
 			}
 		}
 
