@@ -13,11 +13,11 @@ source $root/build/teamcity/util/roachtest_arch_util.sh
 if [ "$#" -eq 0 ]; then
   echo "Builds components necessary for roachtests and stages them in bin/ and/or lib/."
   echo ""
-  echo "Usage: $(basename $0) [--with-coverage] <os/arch/component>"
+  echo "Usage: $(basename $0) [--with-code-coverage] <os/arch/component>"
   echo "  where os is one of: linux"
   echo "        arch is one of: amd64, arm64, amd64-fips"
   echo "        component is one of: cockroach, cockroach-ea, workload, libgeos, roachtest"
-  echo "  --with-coverage enables go code coverage instrumentation (only applies to cockroach binaries)"
+  echo "  --with-code-coverage enables go code coverage instrumentation (only applies to cockroach binaries)"
   exit 1
 fi
 
