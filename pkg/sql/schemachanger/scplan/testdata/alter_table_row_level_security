@@ -16,7 +16,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[RowLevelSecurityEnabled:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
   ops:
-    *scop.ToggleRowLevelSecurityMode
+    *scop.EnableRowLevelSecurityMode
       Enabled: true
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
@@ -29,9 +29,57 @@ PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
     [[RowLevelSecurityEnabled:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
   ops:
-    *scop.ToggleRowLevelSecurityMode
+    *scop.EnableRowLevelSecurityMode
       Enabled: true
       TableID: 107
+
+ops
+ALTER TABLE db1.sc1.t1 FORCE ROW LEVEL SECURITY;
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[RowLevelSecurityForced:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.ForcedRowLevelSecurityMode
+      Forced: true
+      TableID: 107
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelSecurityForced:{DescID: 107}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelSecurityForced:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.ForcedRowLevelSecurityMode
+      Forced: true
+      TableID: 107
+
+ops
+ALTER TABLE db1.sc1.t1 NO FORCE ROW LEVEL SECURITY;
+----
+StatementPhase stage 1 of 1 with no ops
+  transitions:
+  no ops
+PreCommitPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+
+ops
+ALTER TABLE db1.sc1.t1 DISABLE ROW LEVEL SECURITY;
+----
+StatementPhase stage 1 of 1 with no ops
+  transitions:
+  no ops
+PreCommitPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
 
 ops
 ALTER TABLE db1.sc1.t1 DISABLE ROW LEVEL SECURITY;
@@ -52,7 +100,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[RowLevelSecurityEnabled:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
   ops:
-    *scop.ToggleRowLevelSecurityMode
+    *scop.EnableRowLevelSecurityMode
       Enabled: true
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
@@ -65,6 +113,63 @@ PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
     [[RowLevelSecurityEnabled:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
   ops:
-    *scop.ToggleRowLevelSecurityMode
+    *scop.EnableRowLevelSecurityMode
       Enabled: true
+      TableID: 107
+
+ops
+ALTER TABLE db1.sc1.t1 FORCE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[RowLevelSecurityForced:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.ForcedRowLevelSecurityMode
+      Forced: true
+      TableID: 107
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelSecurityForced:{DescID: 107}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelSecurityForced:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.ForcedRowLevelSecurityMode
+      Forced: true
+      TableID: 107
+
+ops
+ALTER TABLE db1.sc1.t1 ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY, DISABLE ROW LEVEL SECURITY, ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[RowLevelSecurityEnabled:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
+    [[RowLevelSecurityForced:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.EnableRowLevelSecurityMode
+      Enabled: true
+      TableID: 107
+    *scop.ForcedRowLevelSecurityMode
+      Forced: true
+      TableID: 107
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelSecurityEnabled:{DescID: 107}, PUBLIC], PUBLIC] -> ABSENT
+    [[RowLevelSecurityForced:{DescID: 107}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[RowLevelSecurityEnabled:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
+    [[RowLevelSecurityForced:{DescID: 107}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.EnableRowLevelSecurityMode
+      Enabled: true
+      TableID: 107
+    *scop.ForcedRowLevelSecurityMode
+      Forced: true
       TableID: 107
