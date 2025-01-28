@@ -36,7 +36,9 @@ import (
 // //   --with-malloc-conf and malloc_conf are compile-time mechanisms, whereas
 // //   /etc/malloc.conf and MALLOC_CONF can be safely set any time prior to
 // //   program invocation.
+// #ifdef __linux__
 // const char *je_malloc_conf = "background_thread:true,thp:never,metadata_thp:disabled,dirty_decay_ms:2000,muzzy_decay_ms:0";
+// #endif
 //
 // // Checks whether jemalloc profiling is enabled and active.
 // // Returns true if profiling is enabled and active.
