@@ -113,6 +113,7 @@ const (
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
 	OptEncodeJSONValueNullAsObject        = `encode_json_value_null_as_object`
+	OptHeadersJSONColName                 = `headers_json_col_name`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -403,6 +404,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
 	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
+	OptHeadersJSONColName:                 stringOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -423,7 +425,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColName)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -839,6 +841,7 @@ type EncodingOptions struct {
 	Compression                 string
 	CustomKeyColumn             string
 	EnrichedProperties          map[EnrichedProperty]struct{}
+	HeadersJSONColName          string
 }
 
 // GetEncodingOptions populates and validates an EncodingOptions.
@@ -886,6 +889,7 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	o.AvroSchemaPrefix = s.m[OptAvroSchemaPrefix]
 	o.Compression = s.m[OptCompression]
 	o.CustomKeyColumn = s.m[OptCustomKeyColumn]
+	o.HeadersJSONColName = s.m[OptHeadersJSONColName]
 
 	enrichedProperties, err := s.getCSVValues(OptEnrichedProperties)
 	if err != nil {
