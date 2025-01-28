@@ -470,6 +470,7 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         SourceIndexID: 1
         TableID: 104
         TemporaryIndexID: 3
+        Type: 1
       IsSecondaryIndex: true
     *scop.AddColumnToIndex
       ColumnID: 1
@@ -493,6 +494,7 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         IsInverted: true
         SourceIndexID: 1
         TableID: 104
+        Type: 1
       IsSecondaryIndex: true
     *scop.AddColumnToIndex
       ColumnID: 1
@@ -536,6 +538,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         SourceIndexID: 1
         TableID: 104
         TemporaryIndexID: 3
+        Type: 1
       IsSecondaryIndex: true
     *scop.MaybeAddSplitForIndex
       IndexID: 2
@@ -562,6 +565,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         IsInverted: true
         SourceIndexID: 1
         TableID: 104
+        Type: 1
       IsSecondaryIndex: true
     *scop.MaybeAddSplitForIndex
       IndexID: 3

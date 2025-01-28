@@ -307,6 +307,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 104
     temporaryIndexId: 0
+    type: FORWARD
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 104
@@ -892,6 +893,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+    type: FORWARD
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 105
@@ -915,6 +917,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+    type: FORWARD
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -1327,6 +1330,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 104
     temporaryIndexId: 0
+    type: FORWARD
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 104
@@ -1717,6 +1721,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 109
     temporaryIndexId: 0
+    type: FORWARD
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 109
