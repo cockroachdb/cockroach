@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build deadlock
-// +build deadlock
 
 package syncutil
 
