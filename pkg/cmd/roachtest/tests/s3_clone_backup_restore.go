@@ -242,11 +242,11 @@ func (v *s3BackupRestoreValidator) validateBackupRestore(ctx context.Context, s 
 	// Check that the content of the original database and the restored database
 	// are the same.
 	table := "bank"
-	originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
+	originalBank, err := roachtestutil.Fingerprint(ctx, conn, "bank" /* db */, table)
 	if err != nil {
 		v.t.Fatal(err)
 	}
-	restore, err := fingerprint(ctx, conn, "restoreDB" /* db */, table)
+	restore, err := roachtestutil.Fingerprint(ctx, conn, "restoreDB" /* db */, table)
 	if err != nil {
 		v.t.Fatal(err)
 	}

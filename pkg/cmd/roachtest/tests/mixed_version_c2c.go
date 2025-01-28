@@ -315,7 +315,7 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 			if r.Intn(3) == 0 {
 				cm.midUpgradeCatchupMu.Lock()
 				defer cm.midUpgradeCatchupMu.Unlock()
-				return cm.WaitForReplicatedTime(ctx, nowLess30Seconds(), h, r, 5*time.Minute)
+				return cm.WaitForReplicatedTime(ctx, nowLess30Seconds(), h, r, 10*time.Minute)
 			}
 			return nil
 		})

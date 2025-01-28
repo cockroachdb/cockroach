@@ -97,6 +97,7 @@ func RegisterTests(r registry.Registry) {
 	registerLiquibase(r)
 	registerLoadSplits(r)
 	registerLogicalDataReplicationTests(r)
+	registerLDRMixedVersions(r)
 	registerMVCCGC(r)
 	registerMultiStoreRemove(r)
 	registerMultiTenantDistSQL(r)
