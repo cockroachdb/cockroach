@@ -79,8 +79,6 @@ func CheckPrimaryKeyColumns(tableDesc catalog.TableDescriptor, colMap catalog.Ta
 func insertCPutFn(
 	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
-	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
-	// client.Batch wrapper instead of inlining it everywhere.
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", *key, value.PrettyPrint())
 	}
@@ -103,16 +101,6 @@ func insertDelFn(ctx context.Context, b Putter, key *roachpb.Key, traceKV bool) 
 		log.VEventfDepth(ctx, 1, 2, "Del %s", *key)
 	}
 	b.Del(key)
-}
-
-// insertInvertedPutFn is used by insertRow when conflicts should be ignored.
-func insertInvertedPutFn(
-	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
-) {
-	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", *key, value.PrettyPrint())
-	}
-	b.CPut(key, value, nil /* expValue */)
 }
 
 func writeTombstones(
@@ -191,8 +179,6 @@ func (ri *Inserter) InsertRow(
 		return err
 	}
 
-	putFn = insertInvertedPutFn
-
 	// For determinism, add the entries for the secondary indexes in the same
 	// order as they appear in the helper.
 	for idx, index := range ri.Helper.Indexes {
@@ -205,7 +191,7 @@ func (ri *Inserter) InsertRow(
 					// See the comment on (catalog.Index).ForcePut() for more details.
 					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV)
 				} else {
-					putFn(ctx, b, &e.Key, &e.Value, traceKV)
+					insertCPutFn(ctx, b, &e.Key, &e.Value, traceKV)
 				}
 			}
 
