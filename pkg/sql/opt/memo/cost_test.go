@@ -35,6 +35,8 @@ func TestCostLess(t *testing.T) {
 		{memo.MaxCost, memo.MaxCost, false},
 		{memo.MaxCost, memo.Cost{C: 1.0, Flags: memo.CostFlags{FullScanPenalty: true}}, false},
 		{memo.Cost{C: 1.0, Flags: memo.CostFlags{HugeCostPenalty: true}}, memo.MaxCost, true},
+		{memo.Cost{C: 2.0, Flags: memo.CostFlags{}}, memo.Cost{C: 1.0, Flags: memo.CostFlags{UnboundedCardinality: true}}, true},
+		{memo.Cost{C: 1.0, Flags: memo.CostFlags{UnboundedCardinality: true}}, memo.Cost{C: 2.0, Flags: memo.CostFlags{}}, false},
 	}
 	for _, tc := range testCases {
 		if tc.left.Less(tc.right) != tc.expected {
@@ -72,6 +74,8 @@ func TestCostFlagsLess(t *testing.T) {
 		{memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, false},
 		{memo.CostFlags{FullScanPenalty: false}, memo.CostFlags{FullScanPenalty: true}, true},
 		{memo.CostFlags{HugeCostPenalty: false}, memo.CostFlags{HugeCostPenalty: true}, true},
+		{memo.CostFlags{UnboundedCardinality: false}, memo.CostFlags{UnboundedCardinality: true}, true},
+		{memo.CostFlags{UnboundedCardinality: true}, memo.CostFlags{UnboundedCardinality: false}, false},
 	}
 	for _, tc := range testCases {
 		if tc.left.Less(tc.right) != tc.expected {
