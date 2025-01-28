@@ -627,7 +627,7 @@ func (l *nonFatalLogger) Fatalf(format string, args ...interface{}) {
 	l.t.Logf(format, args...)
 }
 
-func TestPebbleKeyValidationFunc(t *testing.T) {
+func TestPebbleValidateKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Capture fatal errors by swapping out the logger.
@@ -636,25 +636,23 @@ func TestPebbleKeyValidationFunc(t *testing.T) {
 	l := &nonFatalLogger{t: t}
 	opt := func(cfg *engineConfig) error {
 		cfg.opts.LoggerAndTracer = l
-		cfg.opts.Experimental.KeyValidationFunc = func(k []byte) error {
+		comparer := *cfg.opts.Comparer
+		comparer.ValidateKey = func(k []byte) error {
 			if bytes.Contains(k, []byte("foo")) {
 				return errors.Errorf("key contains 'foo'")
 			}
 			return nil
 		}
+		cfg.opts.Comparer = &comparer
 		return nil
 	}
 	engine := createTestPebbleEngine(opt).(*Pebble)
 	defer engine.Close()
 
 	ek := EngineKey{Key: roachpb.Key("foo")}
-
-	err := engine.PutEngineKey(ek, []byte("bar"))
-	require.NoError(t, err)
-
+	require.NoError(t, engine.PutEngineKey(ek, []byte("bar")))
 	// Force a flush to trigger the compaction error.
-	err = engine.Flush()
-	require.NoError(t, err)
+	require.NoError(t, engine.Flush())
 
 	// A fatal error was captured by the logger.
 	require.True(t, l.caught.Load().(bool))
