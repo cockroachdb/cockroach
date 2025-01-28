@@ -37,12 +37,13 @@ import {
 import {
   transactionsCountBarChart,
   transactionsBytesReadBarChart,
-  transactionsLatencyBarChart,
+  transactionsServiceLatencyBarChart,
   transactionsContentionBarChart,
   transactionsCPUBarChart,
   transactionsMaxMemUsageBarChart,
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
+  transactionsCommitLatencyBarChart,
 } from "./transactionsBarCharts";
 import { transactionLink } from "./transactionsCells";
 import { tableClasses } from "./transactionsTableClasses";
@@ -114,7 +115,11 @@ export function makeTransactionsColumns(
     transactions,
     defaultBarChartOptions,
   );
-  const latencyBar = transactionsLatencyBarChart(
+  const serviceLatencyBar = transactionsServiceLatencyBarChart(
+    transactions,
+    latencyClasses.barChart,
+  );
+  const commitLatencyBar = transactionsCommitLatencyBarChart(
     transactions,
     latencyClasses.barChart,
   );
@@ -207,9 +212,16 @@ export function makeTransactionsColumns(
     {
       name: "time",
       title: statisticsTableTitles.time(statType),
-      cell: latencyBar,
+      cell: serviceLatencyBar,
       className: latencyClasses.column,
       sort: (item: TransactionInfo) => item.stats_data.stats.service_lat.mean,
+    },
+    {
+      name: "commitLatency",
+      title: statisticsTableTitles.commitLatency(statType),
+      cell: commitLatencyBar,
+      className: latencyClasses.column,
+      sort: (item: TransactionInfo) => item.stats_data.stats.commit_lat.mean,
     },
     {
       name: "contention",
