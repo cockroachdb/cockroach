@@ -3023,7 +3023,7 @@ optimizer_use_improved_trigram_similarity_selectivity      on                  N
 optimizer_use_improved_zigzag_join_costing                 on                  NULL      NULL        NULL        string
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL      NULL        NULL        string
 optimizer_use_lock_op_for_serializable                     off                 NULL      NULL        NULL        string
-optimizer_use_merged_partial_statistics                    off                 NULL      NULL        NULL        string
+optimizer_use_merged_partial_statistics                    on                  NULL      NULL        NULL        string
 optimizer_use_multicol_stats                               on                  NULL      NULL        NULL        string
 optimizer_use_not_visible_indexes                          off                 NULL      NULL        NULL        string
 optimizer_use_polymorphic_parameter_fix                    on                  NULL      NULL        NULL        string
@@ -3228,7 +3228,7 @@ optimizer_use_improved_trigram_similarity_selectivity      on                  N
 optimizer_use_improved_zigzag_join_costing                 on                  NULL  user     NULL      on                  on
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL  user     NULL      on                  on
 optimizer_use_lock_op_for_serializable                     off                 NULL  user     NULL      off                 off
-optimizer_use_merged_partial_statistics                    off                 NULL  user     NULL      off                 off
+optimizer_use_merged_partial_statistics                    on                  NULL  user     NULL      on                  on
 optimizer_use_multicol_stats                               on                  NULL  user     NULL      on                  on
 optimizer_use_not_visible_indexes                          off                 NULL  user     NULL      off                 off
 optimizer_use_polymorphic_parameter_fix                    on                  NULL  user     NULL      on                  on
