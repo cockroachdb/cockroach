@@ -476,13 +476,21 @@ ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
 
-subtest alter_table_rls_enabled_disabled
+subtest alter_table_rls_enable_disable
 
 statement ok
 ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
 
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
+
+subtest alter_table_rls_force_no_force
+
+statement ok
+ALTER TABLE roaches FORCE ROW LEVEL SECURITY;
+
+statement ok
+ALTER TABLE roaches NO FORCE ROW LEVEL SECURITY;
 
 statement ok
 DROP TABLE roaches;

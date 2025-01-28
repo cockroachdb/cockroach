@@ -1133,9 +1133,16 @@ type AddPartitionZoneConfig struct {
 	SubzoneIndexToDelete int32
 }
 
-// ToggleRowLevelSecurityMode sets the row-level security mode on a table.
-type ToggleRowLevelSecurityMode struct {
+// EnableRowLevelSecurityMode sets the row-level security mode on a table.
+type EnableRowLevelSecurityMode struct {
 	immediateMutationOp
 	TableID descpb.ID
 	Enabled bool
+}
+
+// ForcedRowLevelSecurityMode configures the force setting of row-level security on a table.
+type ForcedRowLevelSecurityMode struct {
+	immediateMutationOp
+	TableID descpb.ID
+	Forced  bool
 }

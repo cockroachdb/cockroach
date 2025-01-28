@@ -11,20 +11,20 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.RowLevelSecurityEnabled)(nil),
+	opRegistry.register((*scpb.RowLevelSecurityForced)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.RowLevelSecurityEnabled) *scop.EnableRowLevelSecurityMode {
-					return &scop.EnableRowLevelSecurityMode{TableID: this.TableID, Enabled: true}
+				emit(func(this *scpb.RowLevelSecurityForced) *scop.ForcedRowLevelSecurityMode {
+					return &scop.ForcedRowLevelSecurityMode{TableID: this.TableID, Forced: true}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.RowLevelSecurityEnabled) *scop.EnableRowLevelSecurityMode {
-					return &scop.EnableRowLevelSecurityMode{TableID: this.TableID, Enabled: false}
+				emit(func(this *scpb.RowLevelSecurityForced) *scop.ForcedRowLevelSecurityMode {
+					return &scop.ForcedRowLevelSecurityMode{TableID: this.TableID, Forced: false}
 				}),
 			),
 		),
