@@ -700,7 +700,7 @@ upsert bc
 query T
 EXPLAIN (OPT, MEMO, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
-memo (optimized, ~35KB, required=[presentation: info:25] [distribution: test])
+memo (optimized, ~35KB, required=[presentation: info:19] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:19] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1140,7 +1140,7 @@ update ab
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
 ----
-memo (optimized, ~14KB, required=[presentation: info:15] [distribution: test])
+memo (optimized, ~14KB, required=[presentation: info:11] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:11] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1366,7 +1366,7 @@ update e
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
 ----
-memo (optimized, ~17KB, required=[presentation: info:17] [distribution: test])
+memo (optimized, ~16KB, required=[presentation: info:13] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:13] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -3807,10 +3807,10 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
 ----
-memo (optimized, ~12KB, required=[presentation: info:10] [distribution: test])
- ├── G1: (explain G2 [presentation: min:8] [distribution: test])
- │    └── [presentation: info:10] [distribution: test]
- │         ├── best: (explain G2="[presentation: min:8] [distribution: test]" [presentation: min:8] [distribution: test])
+memo (optimized, ~12KB, required=[presentation: info:8] [distribution: test])
+ ├── G1: (explain G2 [presentation: min:6] [distribution: test])
+ │    └── [presentation: info:8] [distribution: test]
+ │         ├── best: (explain G2="[presentation: min:6] [distribution: test]" [presentation: min:6] [distribution: test])
  │         └── cost: 1138.90
  ├── G2: (project G3 G4 min)
  │    ├── [presentation: min:6] [distribution: test]
