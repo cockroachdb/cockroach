@@ -11,10 +11,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/errors"
@@ -250,24 +250,24 @@ func errConfigOption(err error) func(*engineConfig) error {
 
 func makeExternalWALDir(
 	engineCfg *engineConfig,
-	externalDir base.ExternalPath,
+	externalDir configpb.EncryptedPath,
 	defaultFS vfs.FS,
 	diskWriteStats disk.WriteStatsManager,
 ) (wal.Dir, error) {
 	// If the store is encrypted, we require that all the WAL failover dirs also
 	// be encrypted so that the user doesn't accidentally leak data unencrypted
 	// onto the filesystem.
-	if engineCfg.env.Encryption != nil && len(externalDir.EncryptionOptions) == 0 {
+	if engineCfg.env.Encryption != nil && externalDir.Encryption != nil {
 		return wal.Dir{}, errors.Newf("must provide --enterprise-encryption flag for %q, used as WAL failover path for encrypted store %q",
 			externalDir.Path, engineCfg.env.Dir)
 	}
-	if engineCfg.env.Encryption == nil && len(externalDir.EncryptionOptions) != 0 {
+	if engineCfg.env.Encryption == nil && externalDir.Encryption != nil {
 		return wal.Dir{}, errors.Newf("must provide --enterprise-encryption flag for store %q, specified WAL failover path %q is encrypted",
 			engineCfg.env.Dir, externalDir.Path)
 	}
 	env, err := fs.InitEnv(context.Background(), defaultFS, externalDir.Path, fs.EnvConfig{
-		RW:                engineCfg.env.RWMode(),
-		EncryptionOptions: externalDir.EncryptionOptions,
+		RW:         engineCfg.env.RWMode(),
+		Encryption: externalDir.Encryption,
 	}, diskWriteStats)
 	if err != nil {
 		return wal.Dir{}, err
@@ -283,7 +283,7 @@ func makeExternalWALDir(
 // another volume in the event the WAL becomes blocked on a write that does not
 // complete within a reasonable duration.
 func WALFailover(
-	walCfg base.WALFailoverConfig,
+	walCfg configpb.WALFailover,
 	storeEnvs fs.Envs,
 	defaultFS vfs.FS,
 	diskWriteStats disk.WriteStatsManager,
@@ -295,15 +295,15 @@ func WALFailover(
 	// stores. Note that the store ID is not known when a store is first opened.
 	if len(storeEnvs) == 1 {
 		switch walCfg.Mode {
-		case base.WALFailoverDefault, base.WALFailoverAmongStores:
+		case configpb.WALFailoverMode_WALFailoverDefault, configpb.WALFailoverMode_WALFailoverAmongStores:
 			return noopConfigOption
-		case base.WALFailoverDisabled:
+		case configpb.WALFailoverMode_WALFailoverDisabled:
 			// Check if the user provided an explicit previous path. If they did, they
 			// were previously using WALFailoverExplicitPath and are now disabling it.
 			// We need to add the explicilt path to WALRecoveryDirs.
-			if walCfg.PrevPath.IsSet() {
+			if walCfg.PrevPath != nil {
 				return func(cfg *engineConfig) error {
-					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS, diskWriteStats)
+					walDir, err := makeExternalWALDir(cfg, *walCfg.PrevPath, defaultFS, diskWriteStats)
 					if err != nil {
 						return err
 					}
@@ -317,16 +317,16 @@ func WALFailover(
 			// notices the OPTIONS file encodes a WAL failover secondary that was not
 			// provided to Options.WALRecoveryDirs.
 			return noopConfigOption
-		case base.WALFailoverExplicitPath:
+		case configpb.WALFailoverMode_WALFailoverExplicitPath:
 			// The user has provided an explicit path to which we should fail over WALs.
 			return func(cfg *engineConfig) error {
-				walDir, err := makeExternalWALDir(cfg, walCfg.Path, defaultFS, diskWriteStats)
+				walDir, err := makeExternalWALDir(cfg, *walCfg.Path, defaultFS, diskWriteStats)
 				if err != nil {
 					return err
 				}
 				cfg.opts.WALFailover = makePebbleWALFailoverOptsForDir(cfg.settings, walDir)
-				if walCfg.PrevPath.IsSet() {
-					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS, diskWriteStats)
+				if walCfg.PrevPath != nil {
+					walDir, err := makeExternalWALDir(cfg, *walCfg.PrevPath, defaultFS, diskWriteStats)
 					if err != nil {
 						return err
 					}
@@ -340,27 +340,27 @@ func WALFailover(
 	}
 
 	switch walCfg.Mode {
-	case base.WALFailoverDefault:
+	case configpb.WALFailoverMode_WALFailoverDefault:
 		// If the user specified no WAL failover setting, we default to disabling WAL
 		// failover and assume that the previous process did not have WAL failover
 		// enabled (so there's no need to populate Options.WALRecoveryDirs). If an
 		// operator had WAL failover enabled and now wants to disable it, they must
 		// explicitly set --wal-failover=disabled for the next process.
 		return noopConfigOption
-	case base.WALFailoverDisabled:
+	case configpb.WALFailoverMode_WALFailoverDisabled:
 		// Check if the user provided an explicit previous path; that's unsupported
 		// in multi-store configurations.
-		if walCfg.PrevPath.IsSet() {
+		if walCfg.PrevPath != nil {
 			return errConfigOption(errors.Newf("storage: cannot use explicit prev_path --wal-failover option with multiple stores"))
 		}
 		// No PrevPath was provided, implying that the user previously was using
 		// WALFailoverAmongStores.
 
 		// Fallthrough
-	case base.WALFailoverExplicitPath:
+	case configpb.WALFailoverMode_WALFailoverExplicitPath:
 		// Not supported for multi-store configurations.
 		return errConfigOption(errors.Newf("storage: cannot use explicit path --wal-failover option with multiple stores"))
-	case base.WALFailoverAmongStores:
+	case configpb.WALFailoverMode_WALFailoverAmongStores:
 		// Fallthrough
 	default:
 		panic("unreachable")
@@ -426,9 +426,9 @@ func WALFailover(
 		secondary := wal.Dir{
 			FS: secondaryEnv,
 			// Use auxiliary/wals-among-stores within the other stores directory.
-			Dirname: secondaryEnv.PathJoin(secondaryEnv.Dir, base.AuxiliaryDir, "wals-among-stores"),
+			Dirname: secondaryEnv.PathJoin(secondaryEnv.Dir, configpb.AuxiliaryDir, "wals-among-stores"),
 		}
-		if walCfg.Mode == base.WALFailoverAmongStores {
+		if walCfg.Mode == configpb.WALFailoverMode_WALFailoverAmongStores {
 			cfg.opts.WALFailover = makePebbleWALFailoverOptsForDir(cfg.settings, secondary)
 			return nil
 		}

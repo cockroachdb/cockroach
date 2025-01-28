@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -77,7 +78,7 @@ type TestCLIParams struct {
 	NoServer bool
 
 	// The store specifications for the in-memory server.
-	StoreSpecs []base.StoreSpec
+	StoreConfig configpb.Storage
 
 	// The locality tiers for the in-memory server.
 	Locality roachpb.Locality
@@ -162,7 +163,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 			Insecure:      params.Insecure,
 			Settings:      settings,
 			SSLCertsDir:   c.certsDir,
-			StoreSpecs:    params.StoreSpecs,
+			StoreConfig:   params.StoreConfig,
 			Locality:      params.Locality,
 			ExternalIODir: filepath.Join(certsDir, "extern"),
 			Knobs: base.TestingKnobs{
@@ -262,7 +263,7 @@ func (c *TestCLI) RestartServer(params TestCLIParams) {
 	s, err := serverutils.StartServerOnlyE(params.T, base.TestServerArgs{
 		Insecure:    params.Insecure,
 		SSLCertsDir: c.certsDir,
-		StoreSpecs:  params.StoreSpecs,
+		StoreConfig: params.StoreConfig,
 	})
 	if err != nil {
 		c.fail(err)

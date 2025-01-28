@@ -160,11 +160,7 @@ mode in the current environment.
 // fillEncryptionOptionsForStore fills the EnvConfig fields
 // based on the --enterprise-encryption flag value.
 func fillEncryptionOptionsForStore(dir string, cfg *fs.EnvConfig) error {
-	opts, err := baseccl.EncryptionOptionsForStore(dir, encryptionSpecs)
-	if err != nil {
-		return err
-	}
-	cfg.EncryptionOptions = opts
+	cfg.Encryption = baseccl.EncryptionOptionsForStore(dir, encryptionSpecs)
 	return nil
 }
 

@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -215,9 +215,7 @@ func TestExitIfDiskFull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	err := exitIfDiskFull(mockDiskSpaceFS{FS: vfs.NewMem()}, []base.StoreSpec{
-		{},
-	})
+	err := exitIfDiskFull(mockDiskSpaceFS{FS: vfs.NewMem()}, configpb.Storage{})
 	require.Error(t, err)
 	var cliErr *clierror.Error
 	require.True(t, errors.As(err, &cliErr))

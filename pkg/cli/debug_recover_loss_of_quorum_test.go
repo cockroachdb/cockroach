@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -66,9 +67,9 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
-			1: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-2"}}},
-			2: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-3"}}},
+			0: {StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir + "/store-1"}}}},
+			1: {StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir + "/store-2"}}}},
+			2: {StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir + "/store-3"}}}},
 		},
 	})
 	tc.Start(t)
@@ -112,8 +113,8 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{{InMemory: true}},
-			Insecure:   true,
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{{InMemory: true}}},
+			Insecure:    true,
 			// This logic is specific to the storage layer.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
@@ -190,7 +191,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
+			0: {StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir + "/store-1"}}}},
 		},
 	})
 	tcBefore.Start(t)
@@ -260,7 +261,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		},
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
+			0: {StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir + "/store-1"}}}},
 		},
 	})
 	// NB: If recovery is not performed, new cluster will just hang on startup.
@@ -361,9 +362,9 @@ func TestStageVersionCheck(t *testing.T) {
 						StickyVFSRegistry: storeReg,
 					},
 				},
-				StoreSpecs: []base.StoreSpec{
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{
 					{InMemory: true, StickyVFSID: "1"},
-				},
+				}},
 			},
 		},
 		ReusableListenerReg: listenerReg,
@@ -496,11 +497,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 					},
 				},
 			},
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory: true,
-				},
-			},
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{{InMemory: true}}},
 		}
 	}
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{

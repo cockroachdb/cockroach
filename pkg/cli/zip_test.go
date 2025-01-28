@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -159,9 +160,7 @@ func TestZip(t *testing.T) {
 	defer cleanupFn()
 
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 
@@ -205,9 +204,7 @@ func TestZipQueryFallback(t *testing.T) {
 	defer cleanupFn()
 
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 
@@ -236,9 +233,7 @@ func TestZipRedacted(t *testing.T) {
 	defer cleanupFn()
 
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 
@@ -286,9 +281,7 @@ func TestZipIncludeGoroutineStacks(t *testing.T) {
 			defer cleanupFn()
 
 			c := NewCLITest(TestCLIParams{
-				StoreSpecs: []base.StoreSpec{{
-					Path: dir,
-				}},
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 			})
 			defer c.Cleanup()
 			cmd := "debug zip --concurrency=1 --cpu-profile-duration=1s "
@@ -326,9 +319,7 @@ func TestZipIncludeRangeInfo(t *testing.T) {
 	defer cleanupFn()
 
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 
@@ -360,9 +351,7 @@ func TestZipExcludeRangeInfo(t *testing.T) {
 	defer cleanupFn()
 
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 
@@ -455,9 +444,7 @@ func TestZipSpecialNames(t *testing.T) {
 	defer cleanupFn()
 
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 
@@ -982,9 +969,7 @@ func TestToHex(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 
@@ -1215,9 +1200,7 @@ func TestCommandFlags(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 
@@ -1265,9 +1248,7 @@ func TestPartialZipForExcludedNodes(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 	zipName := filepath.Join(dir, "debug.zip")
@@ -1317,9 +1298,7 @@ func TestIncludeFiles(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 	})
 	defer c.Cleanup()
 	zipName := filepath.Join(dir, "debug.zip")
@@ -1417,9 +1396,7 @@ func TestZipIncludeAndExcludeFilesDataDriven(t *testing.T) {
 			dir, cleanupFn := testutils.TempDir(t)
 			defer cleanupFn()
 			c := NewCLITest(TestCLIParams{
-				StoreSpecs: []base.StoreSpec{{
-					Path: dir,
-				}},
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: dir}}},
 			})
 			defer c.Cleanup()
 

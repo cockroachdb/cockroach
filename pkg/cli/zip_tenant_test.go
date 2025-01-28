@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -78,9 +79,7 @@ func TestTenantZip(t *testing.T) {
 			hostDir, hostDirCleanupFn := testutils.TempDir(t)
 			defer hostDirCleanupFn()
 			c := NewCLITest(tenant.addTenantArgs(TestCLIParams{
-				StoreSpecs: []base.StoreSpec{{
-					Path: hostDir,
-				}},
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: hostDir}}},
 				// TODO(abarganier): Switch to secure mode once underlying infra has been
 				// updated to support it. See: https://github.com/cockroachdb/cockroach/issues/77173
 				Insecure: true,

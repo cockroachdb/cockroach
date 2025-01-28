@@ -204,7 +204,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 			InMemory: true,
 			Settings: st,
 		},
-		base.DefaultTestStoreSpec,
+		base.DefaultTestStoreConfig,
 		nil, /* statsCollector */
 	)
 	if err != nil {
@@ -400,7 +400,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 			InMemory: true,
 			Settings: st,
 		},
-		base.DefaultTestStoreSpec,
+		base.DefaultTestStoreConfig,
 		nil, /* statsCollector */
 	)
 	if err != nil {
@@ -521,7 +521,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			InMemory: true,
 			Settings: st,
 		},
-		base.DefaultTestStoreSpec,
+		base.DefaultTestStoreConfig,
 		nil, /* statsCollector */
 	)
 	if err != nil {
@@ -990,7 +990,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 			InMemory: true,
 			Settings: st,
 		},
-		base.DefaultTestStoreSpec,
+		base.DefaultTestStoreConfig,
 		nil, /* statsCollector */
 	)
 	if err != nil {

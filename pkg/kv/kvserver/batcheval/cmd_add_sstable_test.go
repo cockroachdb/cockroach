@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1403,11 +1404,8 @@ func TestDBAddSSTable(t *testing.T) {
 	t.Run("store=on-disk", func(t *testing.T) {
 		defer log.Scope(t).Close(t)
 		ctx := context.Background()
-		storeSpec := base.DefaultTestStoreSpec
-		storeSpec.InMemory = false
-		storeSpec.Path = t.TempDir()
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{storeSpec},
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: t.TempDir()}}},
 		})
 		defer srv.Stopper().Stop(ctx)
 		s := srv.ApplicationLayer()

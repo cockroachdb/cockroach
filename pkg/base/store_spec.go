@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
@@ -348,7 +346,11 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 
 		switch field {
 		case pathField:
-			ss.Path = value
+			var err error
+			ss.Path, err = GetAbsoluteFSPath(pathField, value)
+			if err != nil {
+				return StoreSpec{}, err
+			}
 		case "size":
 			var err error
 			var minBytesAllowed int64 = MinimumStoreSize
@@ -481,68 +483,6 @@ func (ssl StoreSpecList) String() string {
 		buffer.Truncate(l - 1)
 	}
 	return buffer.String()
-}
-
-// AuxiliaryDir is the path of the auxiliary dir relative to an engine.Engine's
-// root directory. It must not be changed without a proper migration.
-const AuxiliaryDir = "auxiliary"
-
-// EmergencyBallastFile returns the path (relative to a data directory) used
-// for an emergency ballast file. The returned path must be stable across
-// releases (eg, we cannot change these constants), otherwise we may duplicate
-// ballasts.
-func EmergencyBallastFile(pathJoin func(...string) string, dataDir string) string {
-	return pathJoin(dataDir, AuxiliaryDir, "EMERGENCY_BALLAST")
-}
-
-// PreventedStartupFile is the filename (relative to 'dir') used for files that
-// can block server startup.
-func PreventedStartupFile(dir string) string {
-	return filepath.Join(dir, "_CRITICAL_ALERT.txt")
-}
-
-// PriorCriticalAlertError attempts to read the
-// PreventedStartupFile for each store directory and returns their
-// contents as a structured error.
-//
-// These files typically request operator intervention after a
-// corruption event by preventing the affected node(s) from starting
-// back up.
-func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
-	addError := func(newErr error) {
-		if err == nil {
-			err = errors.New("startup forbidden by prior critical alert")
-		}
-		// We use WithDetailf here instead of errors.CombineErrors
-		// because we want the details to be printed to the screen
-		// (combined errors only show up via %+v).
-		err = errors.WithDetailf(err, "%v", newErr)
-	}
-	for _, ss := range ssl.Specs {
-		path := ss.PreventedStartupFile()
-		if path == "" {
-			continue
-		}
-		b, err := os.ReadFile(path)
-		if err != nil {
-			if !oserror.IsNotExist(err) {
-				addError(errors.Wrapf(err, "%s", path))
-			}
-			continue
-		}
-		addError(errors.Newf("From %s:\n\n%s\n", path, b))
-	}
-	return err
-}
-
-// PreventedStartupFile returns the path to a file which, if it exists, should
-// prevent the server from starting up. Returns an empty string for in-memory
-// engines.
-func (ss StoreSpec) PreventedStartupFile() string {
-	if ss.InMemory {
-		return ""
-	}
-	return PreventedStartupFile(filepath.Join(ss.Path, AuxiliaryDir))
 }
 
 // Type returns the underlying type in string form. This is part of pflag's

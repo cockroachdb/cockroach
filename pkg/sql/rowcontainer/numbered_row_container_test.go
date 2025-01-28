@@ -44,7 +44,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreConfig, nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreConfig, nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreConfig, nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +531,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true, Settings: st}, base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true, Settings: st}, base.DefaultTestStoreConfig, nil /* statsCollector */)
 	if err != nil {
 		b.Fatal(err)
 	}

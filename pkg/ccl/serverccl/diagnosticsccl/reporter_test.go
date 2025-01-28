@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -217,7 +218,7 @@ func TestServerReport(t *testing.T) {
 		if minExpected, actual := totalRanges, last.Node.RangeCount; minExpected > actual {
 			return errors.Errorf("expected node ranges at least %v got %v", minExpected, actual)
 		}
-		if minExpected, actual := len(rt.serverArgs.StoreSpecs), len(last.Stores); minExpected > actual {
+		if minExpected, actual := len(rt.serverArgs.StoreConfig.Stores), len(last.Stores); minExpected > actual {
 			return errors.Errorf("expected at least %v stores got %v", minExpected, actual)
 		}
 
@@ -577,14 +578,14 @@ func startReporterTest(
 		},
 	}
 
-	storeSpec := base.DefaultTestStoreSpec
+	storeSpec := base.DefaultTestStoreConfig
 	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{elemName}}
 	rt.serverArgs = base.TestServerArgs{
 		DefaultTestTenant: defaultTestTenant,
-		StoreSpecs: []base.StoreSpec{
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{
 			storeSpec,
-			base.DefaultTestStoreSpec,
-		},
+			base.DefaultTestStoreConfig,
+		}},
 		Settings: rt.settings,
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{

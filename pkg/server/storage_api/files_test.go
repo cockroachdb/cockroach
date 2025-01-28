@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,15 +31,13 @@ func TestStatusGetFiles(t *testing.T) {
 	tempDir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	storeSpec := base.StoreSpec{Path: tempDir}
+	storeSpec := configpb.Store{Path: tempDir}
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
 			base.TestTenantProbabilistic, 112956,
 		),
-		StoreSpecs: []base.StoreSpec{
-			storeSpec,
-		},
+		StoreConfig: configpb.Storage{Stores: []configpb.Store{storeSpec}},
 	})
 	defer srv.Stopper().Stop(context.Background())
 

@@ -7,8 +7,6 @@ package base_test
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -16,8 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 // TestNewStoreSpec verifies that the --store arguments are correctly parsed
@@ -257,38 +253,4 @@ func TestJoinListType(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-
-	boomStoreDir := filepath.Join(dir, "boom")
-	boomAuxDir := filepath.Join(boomStoreDir, base.AuxiliaryDir)
-	okStoreDir := filepath.Join(dir, "ok")
-	okAuxDir := filepath.Join(okStoreDir, base.AuxiliaryDir)
-
-	for _, sd := range []string{boomAuxDir, okAuxDir} {
-		require.NoError(t, os.MkdirAll(sd, 0755))
-	}
-
-	ssl := base.StoreSpecList{
-		Specs: []base.StoreSpec{
-			{Path: "foo", InMemory: true},
-			{Path: okStoreDir},
-			{Path: boomStoreDir},
-		},
-	}
-
-	err := ssl.PriorCriticalAlertError()
-	require.NoError(t, err)
-
-	require.NoError(t, os.WriteFile(ssl.Specs[2].PreventedStartupFile(), []byte("boom"), 0644))
-
-	err = ssl.PriorCriticalAlertError()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "startup forbidden by prior critical alert")
-	require.Contains(t, errors.FlattenDetails(err), "boom")
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -58,8 +59,8 @@ func TestReplicaCollection(t *testing.T) {
 	defer listenerReg.Close()
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{{InMemory: true}},
-			Insecure:   true,
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{{InMemory: true}}},
+			Insecure:    true,
 			Knobs: base.TestingKnobs{
 				LOQRecovery: &loqrecovery.TestingKnobs{
 					MetadataScanTimeout: 15 * time.Second,
@@ -129,8 +130,8 @@ func TestStreamRestart(t *testing.T) {
 	var failCount atomic.Int64
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{{InMemory: true}},
-			Insecure:   true,
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{{InMemory: true}}},
+			Insecure:    true,
 			Knobs: base.TestingKnobs{
 				LOQRecovery: &loqrecovery.TestingKnobs{
 					MetadataScanTimeout: 15 * time.Second,
@@ -747,11 +748,8 @@ func prepTestCluster(
 					ConfigureScratchRange: true,
 				},
 			},
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 		}
 	}
@@ -767,7 +765,7 @@ func prepInMemPlanStores(
 	pss := make(map[int]loqrecovery.PlanStore)
 	for id, args := range serverArgs {
 		reg := args.Knobs.Server.(*server.TestingKnobs).StickyVFSRegistry
-		pss[id] = loqrecovery.NewPlanStore(".", reg.Get(args.StoreSpecs[0].StickyVFSID))
+		pss[id] = loqrecovery.NewPlanStore(".", reg.Get(args.StoreConfig.Stores[0].StickyVFSID))
 	}
 	return pss
 }

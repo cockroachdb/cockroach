@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -917,13 +918,13 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
 	}
 
-	auxDir := cfg.opts.FS.PathJoin(cfg.env.Dir, base.AuxiliaryDir)
+	auxDir := cfg.opts.FS.PathJoin(cfg.env.Dir, configpb.AuxiliaryDir)
 	if !cfg.env.IsReadOnly() {
 		if err := cfg.opts.FS.MkdirAll(auxDir, 0755); err != nil {
 			return nil, err
 		}
 	}
-	ballastPath := base.EmergencyBallastFile(cfg.env.PathJoin, cfg.env.Dir)
+	ballastPath := configpb.EmergencyBallastFile(cfg.env.PathJoin, cfg.env.Dir)
 
 	if d := int64(cfg.blockConcurrencyLimitDivisor); d != 0 {
 		val := (BlockLoadConcurrencyLimit.Get(&cfg.settings.SV) + d - 1) / d
@@ -1179,7 +1180,7 @@ func (p *Pebble) async(fn func()) {
 // experiencing sstable corruption.
 func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError error) {
 	auxDir := p.GetAuxiliaryDir()
-	path := base.PreventedStartupFile(auxDir)
+	path := configpb.PreventedStartupFile(auxDir)
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:
 
@@ -2035,11 +2036,6 @@ func (p *Pebble) NewEventuallyFileOnlySnapshot(keyRanges []roachpb.Span) Eventua
 		parent:    p,
 		keyRanges: keyRanges,
 	}
-}
-
-// Type implements the Engine interface.
-func (p *Pebble) Type() enginepb.EngineType {
-	return enginepb.EngineTypePebble
 }
 
 // IngestLocalFiles implements the Engine interface.

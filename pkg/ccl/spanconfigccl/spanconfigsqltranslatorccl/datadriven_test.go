@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -121,9 +122,9 @@ func TestDataDriven(t *testing.T) {
 					SpanConfig:  scKnobs,
 					SQLExecutor: sqlExecutorKnobs,
 				},
-				StoreSpecs: []base.StoreSpec{
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{
 					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
-				},
+				}},
 			}
 		}
 		// Use 1 node by default to make tests run faster.

@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
@@ -185,7 +185,7 @@ func initTraceDir(ctx context.Context, dir string) {
 }
 
 func initTempStorageConfig(
-	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, stores base.StoreSpecList,
+	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, stores configpb.Storage,
 ) (base.TempStorageConfig, error) {
 	// Initialize the target directory for temporary storage. If encryption at
 	// rest is enabled in any fashion, we'll want temp storage to be encrypted
@@ -198,11 +198,11 @@ func initTempStorageConfig(
 	// encryption gets enabled after the fact—so we check each store.
 	specIdxDisk := -1
 	specIdxEncrypted := -1
-	for i, spec := range stores.Specs {
+	for i, spec := range stores.Stores {
 		if spec.InMemory {
 			continue
 		}
-		if spec.IsEncrypted() && specIdxEncrypted == -1 {
+		if spec.Encryption.KeyFiles != nil && specIdxEncrypted == -1 {
 			// TODO(jackson): One store's EncryptionOptions may say to encrypt
 			// with a real key, while another store's say to use key=plain.
 			// This provides no guarantee that we'll use the encrypted one's.
@@ -227,7 +227,7 @@ func initTempStorageConfig(
 		// Prefer a non-encrypted on-disk store.
 		specIdx = specIdxDisk
 	}
-	useStore := stores.Specs[specIdx]
+	useStore := stores.Stores[specIdx]
 
 	var recordPath string
 	if !useStore.InMemory {
@@ -308,11 +308,105 @@ func initTempStorageConfig(
 	return tempStorageConfig, nil
 }
 
+func convertStoreSpecToStorageConfig(
+	ctx context.Context, cfg *server.Config, externalIODir string,
+) (err error) {
+	config := configpb.Storage{
+		WalFailover: configpb.WALFailover{
+			Mode: configpb.WALFailoverMode(cfg.WALFailover.Mode),
+		},
+	}
+	// TODO: Handle encryption correctly.
+	if cfg.WALFailover.Path.IsSet() {
+		config.WalFailover.Path =
+			&configpb.EncryptedPath{
+				Path:       cfg.WALFailover.Path.Path,
+				Encryption: &cfg.WALFailover.Path.EncryptionOptions,
+			}
+	}
+	if cfg.WALFailover.PrevPath.IsSet() {
+		config.WalFailover.PrevPath =
+			&configpb.EncryptedPath{
+				Path:       cfg.WALFailover.PrevPath.Path,
+				Encryption: &cfg.WALFailover.PrevPath.EncryptionOptions,
+			}
+	}
+
+	for _, spec := range cfg.Stores.Specs {
+		store, err := convertStoreSpecToStore(spec)
+		if err != nil {
+			return err
+		}
+		config.Stores = append(config.Stores, store)
+	}
+	// Prevent anyone from using the store specs, we have pulled all the
+	// information out of it already.
+	cfg.Stores.Specs = nil
+
+	if cfg.BootstrapMount != "" {
+		config, exists, err := storage.LoadNodeStoreConfig(ctx, cfg.BootstrapMount)
+		if err != nil {
+			return errors.Wrap(err, "problem retrieving existing config")
+		}
+		if exists {
+			// TODO: Handle the case where the config and bootstrap config are incompatible.
+			cfg.StorageConfig = config
+		}
+	}
+	// Configure the external I/O directory if already set.
+	if externalIODir != "" {
+		var err error
+		if cfg.StorageConfig.ExternalIODir, err = filepath.Abs(externalIODir); err != nil {
+			return err
+		}
+	} else {
+		// Try to find a directory from the store configuration.
+		for _, ss := range cfg.StorageConfig.Stores {
+			if ss.InMemory {
+				continue
+			}
+			cfg.StorageConfig.ExternalIODir = filepath.Join(ss.Path, "extern")
+			break
+		}
+	}
+
+	return nil
+}
+
+func convertStoreSpecToStore(spec base.StoreSpec) (configpb.Store, error) {
+	if spec.InMemory {
+		return configpb.Store{
+			InMemory:    true,
+			StickyVFSID: spec.StickyVFSID,
+			Attributes:  spec.Attributes,
+		}, nil
+	}
+	absPath, err := filepath.Abs(spec.Path)
+	if err != nil {
+		return configpb.Store{}, err
+	}
+	store := configpb.Store{
+		Path:       absPath,
+		Options:    spec.PebbleOptions,
+		Attributes: spec.Attributes,
+		// TODO: Handle encryption correctly.
+		Encryption: configpb.EncryptionOptions{},
+	}
+	store.Properties.Capacity = spec.Size.InBytes
+	store.Properties.Percent = spec.Size.Percent
+	store.Provisioned.Bandwidth = spec.ProvisionedRateSpec.ProvisionedBandwidth
+
+	if spec.BallastSize != nil {
+		store.Ballast = configpb.DiskProperties{Capacity: spec.BallastSize.InBytes, Percent: spec.BallastSize.Percent}
+	}
+	return store, nil
+}
+
 type newServerFn func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error)
 
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
 
-func runStartSingleNode(cmd *cobra.Command, args []string) error {
+func runStartSingleNode(cmd *cobra.Command, _ []string) error {
 	joinFlag := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name)
 	if joinFlag.Changed {
 		return errCannotUseJoin
@@ -333,11 +427,11 @@ func runStartSingleNode(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return runStart(cmd, args, true /*startSingleNode*/)
+	return runStart(cmd, true /*startSingleNode*/)
 }
 
-func runStartJoin(cmd *cobra.Command, args []string) error {
-	return runStart(cmd, args, false /*startSingleNode*/)
+func runStartJoin(cmd *cobra.Command, _ []string) error {
+	return runStart(cmd, false /*startSingleNode*/)
 }
 
 // runStart starts the cockroach node using --store as the list of
@@ -353,7 +447,7 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 // because we cannot refer to startSingleNodeCmd under
 // runStartInternal: there would be a cyclic dependency between
 // runStart, runStartSingleNode and runStartSingleNodeCmd.
-func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
+func runStart(cmd *cobra.Command, startSingleNode bool) error {
 	const serverType redact.SafeString = "node"
 
 	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error) {
@@ -367,6 +461,11 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 			return nil, err
 		}
 		return s, nil
+	}
+	// Process the combination of parameters to the store to setup the bootstrap
+	// config.
+	if err := convertStoreSpecToStorageConfig(context.Background(), &serverCfg, startCtx.externalIODir); err != nil {
+		return err
 	}
 
 	return runStartInternal(cmd, serverType, serverCfg.InitNode, newServerFn, startSingleNode)
@@ -413,19 +512,24 @@ func runStartInternal(
 		signal.Notify(signalCh, exitAbruptlySignal)
 	}
 
+	// Set up a cancellable context for the entire start command.
+	// The context will be canceled at the end.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Check for stores with full disks and exit with an informative exit
 	// code. This needs to happen early during start, before we perform any
 	// writes to the filesystem including log rotation. We need to guarantee
 	// that the process continues to exit with the Disk Full exit code. A
 	// flapping exit code can affect alerting, including the alerting
 	// performed within CockroachCloud.
-	if err := exitIfDiskFull(vfs.Default, serverCfg.Stores.Specs); err != nil {
+	if err := exitIfDiskFull(vfs.Default, serverCfg.StorageConfig); err != nil {
 		return err
 	}
 
 	// If any store has something to say against a server start-up
 	// (e.g. previously detected corruption), listen to them now.
-	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
+	if err := serverCfg.StorageConfig.PriorCriticalAlertError(); err != nil {
 		return clierror.NewError(err, exit.FatalError())
 	}
 
@@ -433,11 +537,6 @@ func runStartInternal(
 	// against a persistent disk stall that prevents the process from exiting or
 	// making progress.
 	log.SetMakeProcessUnavailableFunc(closeAllSockets)
-
-	// Set up a cancellable context for the entire start command.
-	// The context will be canceled at the end.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// The context annotation ensures that server identifiers show up
 	// in the logging metadata as soon as they are known.
@@ -604,18 +703,13 @@ func runStartInternal(
 	}
 
 	// Derive temporary/auxiliary directory specifications.
-	serverCfg.ExternalIODir = startCtx.externalIODir
+	serverCfg.ExternalIODir = serverCfg.StorageConfig.ExternalIODir
 
 	st := serverCfg.BaseConfig.Settings
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
-		ctx, st, stopper, serverCfg.Stores,
+		ctx, st, stopper, serverCfg.StorageConfig,
 	); err != nil {
 		return err
-	}
-
-	// Configure the default storage engine.
-	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
-		serverCfg.StorageEngine = enginepb.EngineTypePebble
 	}
 
 	// The configuration is now ready to report to the user and the log
@@ -867,7 +961,7 @@ func createAndStartServerAsync(
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			return reportServerInfo(ctx, tBegin, serverCfg, s.ClusterSettings(),
-				serverType, s.InitialStart(), s.LogicalClusterID(), startCtx.externalIODir)
+				serverType, s.InitialStart(), s.LogicalClusterID())
 		}(); err != nil {
 			shutdownReqC <- serverctl.MakeShutdownRequest(
 				serverctl.ShutdownReasonServerStartupError, errors.Wrapf(err, "server startup failed"))
@@ -1185,7 +1279,6 @@ func reportServerInfo(
 	serverType redact.SafeString,
 	initialStart bool,
 	tenantClusterID uuid.UUID,
-	externalIODir string,
 ) error {
 	var buf redact.StringBuilder
 	info := build.GetInfo()
@@ -1233,15 +1326,14 @@ func reportServerInfo(
 	if tmpDir := serverCfg.SQLConfig.TempStorageConfig.Path; tmpDir != "" {
 		buf.Printf("temp dir:\t%s\n", log.SafeManaged(tmpDir))
 	}
-	if externalIODir != "" {
-		buf.Printf("external I/O path: \t%s\n", log.SafeManaged(externalIODir))
+	if serverCfg.ExternalIODir != "" {
+		buf.Printf("external I/O path: \t%s\n", log.SafeManaged(serverCfg.ExternalIODir))
 	} else {
 		buf.Printf("external I/O path: \t<disabled>\n")
 	}
-	for i, spec := range serverCfg.Stores.Specs {
-		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(spec))
+	for i, spec := range serverCfg.StorageConfig.Stores {
+		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(spec.Path))
 	}
-	buf.Printf("storage engine: \t%s\n", &serverCfg.StorageEngine)
 
 	// Print the commong server identifiers.
 	if baseCfg.ClusterName != "" {
@@ -1382,11 +1474,11 @@ func maybeWarnMemorySizes(ctx context.Context) {
 	}
 }
 
-func exitIfDiskFull(fs vfs.FS, specs []base.StoreSpec) error {
+func exitIfDiskFull(fs vfs.FS, specs configpb.Storage) error {
 	var cause error
 	var ballastPaths []string
 	var ballastMissing bool
-	for _, spec := range specs {
+	for _, spec := range specs.Stores {
 		isDiskFull, err := storage.IsDiskFull(fs, spec)
 		if err != nil {
 			return err
@@ -1394,7 +1486,7 @@ func exitIfDiskFull(fs vfs.FS, specs []base.StoreSpec) error {
 		if !isDiskFull {
 			continue
 		}
-		path := base.EmergencyBallastFile(fs.PathJoin, spec.Path)
+		path := configpb.EmergencyBallastFile(fs.PathJoin, spec.Path)
 		ballastPaths = append(ballastPaths, path)
 		if _, err := fs.Stat(path); oserror.IsNotExist(err) {
 			ballastMissing = true

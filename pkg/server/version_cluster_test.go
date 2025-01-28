@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -98,7 +99,7 @@ func setupMixedCluster(
 					Knobs:    knobs,
 				}
 				if dir != "" {
-					args.StoreSpecs = []base.StoreSpec{{Path: filepath.Join(dir, strconv.Itoa(i))}}
+					args.StoreConfig.Stores = []configpb.Store{{Path: filepath.Join(dir, strconv.Itoa(i))}}
 				}
 				serverArgsPerNode[i] = args
 			}

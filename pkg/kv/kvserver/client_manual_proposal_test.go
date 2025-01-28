@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -77,9 +78,10 @@ func TestCreateManyUnappliedProbes(t *testing.T) {
 
 	if _, err := os.Stat(p); err != nil {
 		args := base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{StoreSpecs: []base.StoreSpec{
-				{Path: p},
-			}},
+
+			ServerArgs: base.TestServerArgs{
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{{Path: p}}},
+			},
 			ReplicationMode: base.ReplicationManual,
 		}
 		tc := testcluster.StartTestCluster(t, 1, args)

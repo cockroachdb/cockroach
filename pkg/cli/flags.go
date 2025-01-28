@@ -507,7 +507,7 @@ func init() {
 		cliflagcfg.StringFlag(f, &localityFile, cliflags.LocalityFile)
 
 		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
-		cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
+		cliflagcfg.StringFlag(f, &serverCfg.BootstrapMount, cliflags.BootstrapMount)
 		cliflagcfg.VarFlag(f, &serverCfg.WALFailover, cliflags.WALFailover)
 		cliflagcfg.StringFlag(f, &serverCfg.SharedStorage, cliflags.SharedStorage)
 		cliflagcfg.VarFlag(f, &serverCfg.SecondaryCache, cliflags.SecondaryCache)
@@ -1359,57 +1359,7 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	if fs.Changed(cliflags.Store.Name) {
 		serverCfg.Stores = storeSpecs
 	}
-	// Convert all the store paths to absolute paths. We want this to
-	// ensure canonical directories across invocations; and also to
-	// benefit from the check in GetAbsoluteFSPath() that the user
-	// didn't mistakenly assume a heading '~' would get translated by
-	// CockroachDB. (The shell should be responsible for that.)
-	for i, ss := range serverCfg.Stores.Specs {
-		if ss.InMemory {
-			continue
-		}
-		absPath, err := base.GetAbsoluteFSPath("path", ss.Path)
-		if err != nil {
-			return err
-		}
-		ss.Path = absPath
-		serverCfg.Stores.Specs[i] = ss
-	}
 
-	if serverCfg.WALFailover.Path.IsSet() {
-		absPath, err := base.GetAbsoluteFSPath("wal-failover.path", serverCfg.WALFailover.Path.Path)
-		if err != nil {
-			return err
-		}
-		serverCfg.WALFailover.Path.Path = absPath
-	}
-	if serverCfg.WALFailover.PrevPath.IsSet() {
-		absPath, err := base.GetAbsoluteFSPath("wal-failover.prev_path", serverCfg.WALFailover.PrevPath.Path)
-		if err != nil {
-			return err
-		}
-		serverCfg.WALFailover.PrevPath.Path = absPath
-	}
-
-	// Configure the external I/O directory.
-	if !fs.Changed(cliflags.ExternalIODir.Name) {
-		// Try to find a directory from the store configuration.
-		for _, ss := range serverCfg.Stores.Specs {
-			if ss.InMemory {
-				continue
-			}
-			startCtx.externalIODir = filepath.Join(ss.Path, "extern")
-			break
-		}
-	}
-	if startCtx.externalIODir != "" {
-		// Make the directory name absolute.
-		var err error
-		startCtx.externalIODir, err = base.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -1442,6 +1392,7 @@ func extraClientFlagInit() error {
 	return nil
 }
 
+// FIXME: This is modifying the storage config after it is set up.
 func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 	// Override default store for mt to use a per tenant store directory.
 	fs := cliflagcfg.FlagSetForCmd(cmd)
@@ -1461,18 +1412,12 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		// configs are initialized when start is executed and temp dirs inherit
 		// path from first store.
 		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
-		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
-	}
-
-	// In standalone SQL servers, we do not generate a ballast file,
-	// unless a ballast size was specified explicitly by the user.
-	for i := range serverCfg.Stores.Specs {
-		spec := &serverCfg.Stores.Specs[i]
-		if spec.BallastSize == nil {
-			// Only override if there was no ballast size specified to start
-			// with.
-			zero := base.SizeSpec{InBytes: 0, Percent: 0}
-			spec.BallastSize = &zero
+		serverCfg.StorageConfig.Stores[0].Path += "-tenant-" + tenantID
+	} else {
+		// Process the combination of parameters to the store to setup the bootstrap
+		// config.
+		if err := convertStoreSpecToStorageConfig(context.Background(), &serverCfg, startCtx.externalIODir); err != nil {
+			return err
 		}
 	}
 	return nil

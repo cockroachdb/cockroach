@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -350,13 +351,13 @@ func NewTestCluster(
 			tc.reusableListeners[i] = ln
 		}
 
-		if len(serverArgs.StoreSpecs) == 0 {
-			serverArgs.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
+		if len(serverArgs.StoreConfig.Stores) == 0 {
+			serverArgs.StoreConfig.Stores = []configpb.Store{base.DefaultTestStoreConfig}
 		}
 		if knobs, ok := serverArgs.Knobs.Server.(*server.TestingKnobs); ok && knobs.StickyVFSRegistry != nil {
-			for j := range serverArgs.StoreSpecs {
-				if serverArgs.StoreSpecs[j].StickyVFSID == "" {
-					serverArgs.StoreSpecs[j].StickyVFSID = fmt.Sprintf("auto-node%d-store%d", i+1, j+1)
+			for j := range serverArgs.StoreConfig.Stores {
+				if serverArgs.StoreConfig.Stores[j].StickyVFSID == "" {
+					serverArgs.StoreConfig.Stores[j].StickyVFSID = fmt.Sprintf("auto-node%d-store%d", i+1, j+1)
 				}
 			}
 		}
@@ -1883,7 +1884,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 		return err
 	}
 
-	for i, specs := range serverArgs.StoreSpecs {
+	for i, specs := range serverArgs.StoreConfig.Stores {
 		if specs.InMemory && specs.StickyVFSID == "" {
 			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky VFS", i)
 		}

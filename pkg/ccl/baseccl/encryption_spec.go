@@ -14,10 +14,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
+
+// TODO: Move all this code into SetupBootstrapConfig
 
 // DefaultRotationPeriod is the rotation period used if not specified.
 const DefaultRotationPeriod = time.Hour * 24 * 7 // 1 week, give or take time changes.
@@ -34,18 +36,30 @@ type StoreEncryptionSpec struct {
 	RotationPeriod time.Duration
 }
 
-// ToEncryptionOptions convert to a serialized EncryptionOptions protobuf.
-func (es StoreEncryptionSpec) ToEncryptionOptions() ([]byte, error) {
-	opts := EncryptionOptions{
-		KeySource: EncryptionKeySource_KeyFiles,
-		KeyFiles: &EncryptionKeyFiles{
+// ToEncryptionOptions convert to a protobuf EncryptionOptions
+func (es StoreEncryptionSpec) ToEncryptionOptions() configpb.EncryptionOptions {
+	return configpb.EncryptionOptions{
+		KeySource: configpb.EncryptionKeySource_KeyFiles,
+		KeyFiles: &configpb.EncryptionKeyFiles{
+			CurrentKey: es.KeyPath,
+			OldKey:     es.OldKeyPath,
+		},
+		DataKeyRotationPeriod: int64(es.RotationPeriod / time.Second),
+	}
+}
+
+// ToEncryptionBytes convert to a serialized EncryptionOptions protobuf.
+func (es StoreEncryptionSpec) ToEncryptionBytes() ([]byte, error) {
+	opts := configpb.EncryptionOptions{
+		KeySource: configpb.EncryptionKeySource_KeyFiles,
+		KeyFiles: &configpb.EncryptionKeyFiles{
 			CurrentKey: es.KeyPath,
 			OldKey:     es.OldKeyPath,
 		},
 		DataKeyRotationPeriod: int64(es.RotationPeriod / time.Second),
 	}
 
-	return protoutil.Marshal(&opts)
+	return opts.AsBytes(), nil
 }
 
 // String returns a fully parsable version of the encryption spec.
@@ -211,7 +225,7 @@ func PopulateWithEncryptionOpts(
 					storeSpecs.Specs[i].Path)
 			}
 
-			opts, err := es.ToEncryptionOptions()
+			opts, err := es.ToEncryptionBytes()
 			if err != nil {
 				return err
 			}
@@ -228,15 +242,11 @@ func PopulateWithEncryptionOpts(
 			// WALFailoverConfig.PrevPath are only ever set in single-store
 			// configurations. In multi-store with among-stores failover mode, these
 			// will be empty (so we won't encounter the same path twice).
-			if len(externalPath.EncryptionOptions) > 0 {
+			if externalPath.EncryptionOptions.KeyFiles != nil {
 				return fmt.Errorf("WAL failover path %s already has an encryption setting",
 					externalPath.Path)
 			}
-			opts, err := es.ToEncryptionOptions()
-			if err != nil {
-				return err
-			}
-			externalPath.EncryptionOptions = opts
+			externalPath.EncryptionOptions = es.ToEncryptionOptions()
 			found = true
 		}
 
@@ -249,16 +259,26 @@ func PopulateWithEncryptionOpts(
 
 // EncryptionOptionsForStore takes a store directory and returns its EncryptionOptions
 // if a matching entry if found in the StoreEncryptionSpecList.
-func EncryptionOptionsForStore(dir string, encryptionSpecs EncryptionSpecList) ([]byte, error) {
+func EncryptionOptionsForStore(
+	dir string, encryptionSpecs EncryptionSpecList,
+) *configpb.EncryptionOptions {
 	// We need an absolute path, but the input may have come in relative.
 	path, err := filepath.Abs(dir)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not find absolute path for %s ", dir)
+		return nil
 	}
+
 	for _, es := range encryptionSpecs.Specs {
 		if es.PathMatches(path) {
-			return es.ToEncryptionOptions()
+			return &configpb.EncryptionOptions{
+				KeySource: 0,
+				KeyFiles: &configpb.EncryptionKeyFiles{
+					CurrentKey: es.KeyPath,
+					OldKey:     es.OldKeyPath,
+				},
+				DataKeyRotationPeriod: int64(es.RotationPeriod.Seconds()),
+			}
 		}
 	}
-	return nil, nil
+	return nil
 }

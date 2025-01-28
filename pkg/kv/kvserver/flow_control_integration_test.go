@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -697,11 +698,8 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			for i := 0; i < numServers; i++ {
 				stickyServerArgs[i] = base.TestServerArgs{
 					Settings: settings,
-					StoreSpecs: []base.StoreSpec{
-						{
-							InMemory:    true,
-							StickyVFSID: strconv.FormatInt(int64(i), 10),
-						},
+					StoreConfig: configpb.Storage{Stores: []configpb.Store{
+						{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
@@ -2370,11 +2368,8 @@ func TestFlowControlSendQueue(t *testing.T) {
 		disableWorkQueueGrantingServers[i].Store(true)
 		stickyArgsPerServer[i] = base.TestServerArgs{
 			Settings: settings,
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{

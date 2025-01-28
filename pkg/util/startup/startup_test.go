@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -159,11 +160,8 @@ func runCircuitBreakerTestForKey(
 					ConfigureScratchRange: true,
 				},
 			},
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Listener: lReg.MustGetOrCreate(t, i),
 		}

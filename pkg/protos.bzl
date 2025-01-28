@@ -131,7 +131,6 @@ PROTO_FILES = [
     "//pkg/sql/sessiondatapb:session_revival_token.proto",
     "//pkg/sql/sqlstats/insights:insights.proto",
     "//pkg/sql/types:types.proto",
-    "//pkg/storage/enginepb:engine.proto",
     "//pkg/storage/enginepb:file_registry.proto",
     "//pkg/storage/enginepb:mvcc.proto",
     "//pkg/storage/enginepb:mvcc3.proto",

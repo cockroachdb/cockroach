@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -148,12 +149,9 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 						DisableLeaseQueue: true,
 					},
 				},
-				StoreSpecs: []base.StoreSpec{
-					{
-						InMemory:    true,
-						StickyVFSID: "test",
-					},
-				},
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{
+					{InMemory: true, StickyVFSID: "test"},
+				}},
 			},
 		})
 		defer tc.Stopper().Stop(ctx)

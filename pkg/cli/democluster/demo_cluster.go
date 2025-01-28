@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -907,7 +908,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	stickyVFSRegistry fs.StickyRegistry,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
-	storeSpec := base.DefaultTestStoreSpec
+	storeSpec := base.DefaultTestStoreConfig
 	storeSpec.StickyVFSID = fmt.Sprintf("demo-server%d", serverIdx)
 
 	args := base.TestServerArgs{
@@ -916,7 +917,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		Stopper:                 stop.NewStopper(),
 		JoinAddr:                joinAddr,
 		DisableTLSForHTTP:       true,
-		StoreSpecs:              []base.StoreSpec{storeSpec},
+		StoreConfig:             configpb.Storage{Stores: []configpb.Store{storeSpec}},
 		ExternalIODir:           filepath.Join(demoDir, "nodelocal", fmt.Sprintf("n%d", serverIdx+1)),
 		SQLMemoryPoolSize:       demoCtx.SQLPoolMemorySize,
 		CacheSize:               demoCtx.CacheSize,

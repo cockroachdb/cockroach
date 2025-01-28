@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -51,7 +52,7 @@ func checkGauge(t *testing.T, id string, g gaugeValuer, e int64) {
 func verifyStatsOnServers(
 	t *testing.T,
 	tc *testcluster.TestCluster,
-	specs map[int]base.StoreSpec,
+	specs map[int]configpb.Store,
 	stickyRegistry fs.StickyRegistry,
 	storeIdxSlice ...int,
 ) {
@@ -246,19 +247,19 @@ func TestStoreMetrics(t *testing.T) {
 	const numServers int = 3
 	stickyVFSRegistry := fs.NewStickyRegistry()
 	stickyServerArgs := make(map[int]base.TestServerArgs)
-	specs := make(map[int]base.StoreSpec)
+	specs := make(map[int]configpb.Store)
 	for i := 0; i < numServers; i++ {
-		spec := base.StoreSpec{
+		spec := configpb.Store{
 			InMemory:    true,
 			StickyVFSID: strconv.FormatInt(int64(i), 10),
 			// Specify a size to trigger the BlockCache in Pebble.
-			Size: base.SizeSpec{
-				InBytes: 512 << 20, /* 512 MiB */
+			Properties: configpb.DiskProperties{
+				Capacity: 512 << 20, /* 512 MiB */
 			},
 		}
 		stickyServerArgs[i] = base.TestServerArgs{
-			CacheSize:  2 << 20, /* 2 MiB */
-			StoreSpecs: []base.StoreSpec{spec},
+			CacheSize:   2 << 20, /* 2 MiB */
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{spec}},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: stickyVFSRegistry,

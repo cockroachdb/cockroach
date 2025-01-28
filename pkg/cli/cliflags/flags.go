@@ -1091,12 +1091,11 @@ See the storage.wal_failover.unhealthy_op_threshold cluster setting.
 `,
 	}
 
-	StorageEngine = FlagInfo{
-		Name: "storage-engine",
+	BootstrapMount = FlagInfo{
+		Name: "bootstrap",
 		Description: `
-Storage engine to use for all stores on this cockroach node. The only option is pebble. Deprecated;
-only present for backward compatibility.
-`,
+		Root directory of one store's mount point. This is used to find the server store configuration and load the store.
+		`,
 	}
 
 	SecondaryCache = FlagInfo{

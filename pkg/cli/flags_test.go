@@ -1489,10 +1489,10 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 			err := mtStartSQLCmd.PersistentPreRunE(mtStartSQLCmd, td.args)
 			if td.expectedErr == "" {
 				require.NoError(t, err)
-				assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
-				for _, s := range serverCfg.Stores.Specs {
-					assert.Zero(t, s.BallastSize.InBytes)
-					assert.Zero(t, s.BallastSize.Percent)
+				assert.Equal(t, td.storePath, serverCfg.StorageConfig.Stores[0].Path)
+				for _, s := range serverCfg.StorageConfig.Stores {
+					assert.Zero(t, s.Ballast.Capacity)
+					assert.Zero(t, s.Ballast.Percent)
 				}
 			} else {
 				require.EqualError(t, err, td.expectedErr)

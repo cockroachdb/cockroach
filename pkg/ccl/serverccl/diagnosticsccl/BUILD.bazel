@@ -24,6 +24,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/isql",
+        "//pkg/storage/configpb",
         "//pkg/testutils",
         "//pkg/testutils/diagutils",
         "//pkg/testutils/serverutils",

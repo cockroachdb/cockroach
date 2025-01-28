@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -93,11 +94,9 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	if tr == nil {
 		panic("nil Tracer")
 	}
-	baseCfg := MakeBaseConfig(st, tr, base.DefaultTestStoreSpec)
+	baseCfg := MakeBaseConfig(st, tr, base.DefaultTestStoreConfig)
 	// Test servers start in secure mode by default.
 	baseCfg.Insecure = false
-	// Configure test storage engine.
-	baseCfg.StorageEngine = storage.DefaultStorageEngine
 	// Load test certs. In addition, the tests requiring certs
 	// need to call securityassets.SetLoader(securitytest.EmbeddedAssets)
 	// in their init to mock out the file system calls for calls to AssetFS,
@@ -251,14 +250,14 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
-	if len(params.StoreSpecs) == 0 {
-		params.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
+	if len(params.StoreConfig.Stores) == 0 {
+		params.StoreConfig.Stores = []configpb.Store{base.DefaultTestStoreConfig}
 	}
 	// Validate the store specs.
-	for _, storeSpec := range params.StoreSpecs {
+	for _, storeSpec := range params.StoreConfig.Stores {
 		if storeSpec.InMemory {
-			if storeSpec.Size.Percent > 0 {
-				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
+			if storeSpec.Properties.Percent > 0 {
+				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %v", storeSpec))
 			}
 		} else {
 			// The default store spec is in-memory, so if this one is on-disk then
@@ -283,7 +282,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			}
 		}
 	}
-	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
+
+	cfg.StorageConfig = params.StoreConfig
 	if params.TempStorageConfig.InMemory || params.TempStorageConfig.Path != "" {
 		cfg.TempStorageConfig = params.TempStorageConfig
 		cfg.TempStorageConfig.Settings = st
@@ -2397,10 +2397,12 @@ var TestServerFactory = testServerFactoryImpl{}
 // MakeRangeTestServerargs is part of the rangetestutils.TestServerFactory interface.
 func (testServerFactoryImpl) MakeRangeTestServerArgs() base.TestServerArgs {
 	return base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec,
+		StoreConfig: configpb.Storage{
+			Stores: []configpb.Store{
+				base.DefaultTestStoreConfig,
+				base.DefaultTestStoreConfig,
+				base.DefaultTestStoreConfig,
+			},
 		},
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{

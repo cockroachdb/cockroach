@@ -103,7 +103,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -295,10 +294,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 	stopper.AddCloser(&engines)
 
+	firstStoreEnv := engines[0].Env()
+
 	// Loss of quorum recovery store is created and pending plan is applied to
 	// engines as soon as engines are created and before any data is read in a
 	// way similar to offline engine content patching.
-	planStore, err := newPlanStore(cfg)
+	planStore, err := newPlanStore(cfg, firstStoreEnv)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create loss of quorum plan store")
 	}
@@ -1620,16 +1621,19 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	}.Iter()
 
 	encryptedStore := false
-	for _, storeSpec := range s.cfg.Stores.Specs {
-		if storeSpec.InMemory {
+	for _, eng := range s.engines {
+		dir := eng.Env().Dir
+		// For in-memory stores.
+		if dir == "" {
 			continue
 		}
-		if storeSpec.IsEncrypted() {
+		if eng.Env().Encryption != nil {
 			encryptedStore = true
 		}
 
 		for name, val := range listenerFiles {
-			file := filepath.Join(storeSpec.Path, name)
+			file := filepath.Join(dir, name)
+			// TODO(storage): Write using eng.Env().Create()
 			if err := os.WriteFile(file, []byte(val), 0644); err != nil {
 				return errors.Wrapf(err, "failed to write %s", file)
 			}
@@ -1851,7 +1855,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			"cluster":         s.StorageClusterID().String(),
 			"node":            s.NodeID().String(),
 			"server_id":       fmt.Sprintf("%s-%s", s.StorageClusterID().Short(), s.NodeID()),
-			"engine_type":     s.cfg.StorageEngine.String(),
 			"encrypted_store": strconv.FormatBool(encryptedStore),
 		})
 	})
@@ -1953,7 +1956,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// uses the disk stats map we're initializing.
 	var pmp admission.PebbleMetricsProvider
 	if pmp, err = s.node.registerEnginesForDiskStatsMap(
-		s.cfg.Stores.Specs, s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
+		s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
 
@@ -2002,13 +2005,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	// Record node start in telemetry. Get the right counter for this storage
 	// engine type as well as type of start (initial boot vs restart).
-	nodeStartCounter := "storage.engine."
-	switch s.cfg.StorageEngine {
-	case enginepb.EngineTypeDefault:
-		fallthrough
-	case enginepb.EngineTypePebble:
-		nodeStartCounter += "pebble."
-	}
+	nodeStartCounter := "storage.engine.pebble."
 	if s.InitialStart() {
 		nodeStartCounter += "initial-boot"
 	} else {
@@ -2108,7 +2105,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	}
 
 	// Register the engines debug endpoints.
-	if err := s.debug.RegisterEngines(s.cfg.Stores.Specs, s.engines); err != nil {
+	if err := s.debug.RegisterEngines(s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
 

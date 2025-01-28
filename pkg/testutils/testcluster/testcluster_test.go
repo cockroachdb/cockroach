@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -316,11 +317,8 @@ func TestRestart(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: "TestRestart" + strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: configpb.Storage{Stores: []configpb.Store{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -60,7 +61,7 @@ func TestDebugCheckStore(t *testing.T) {
 		storeID := roachpb.StoreID(i + 1)
 		path := filepath.Join(baseDir, fmt.Sprintf("s%d", storeID))
 		storePaths = append(storePaths, path)
-		args.StoreSpecs = []base.StoreSpec{{Path: path}}
+		args.StoreConfig = configpb.Storage{Stores: []configpb.Store{{Path: path}}}
 		clusterArgs.ServerArgsPerNode[i] = args
 	}
 

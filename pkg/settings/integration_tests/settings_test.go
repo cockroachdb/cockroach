@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/configpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -336,12 +337,12 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				StoreSpecs: []base.StoreSpec{{InMemory: true, StickyVFSID: "1"}},
-				Knobs:      base.TestingKnobs{Server: serverKnobs},
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{{InMemory: true, StickyVFSID: "1"}}},
+				Knobs:       base.TestingKnobs{Server: serverKnobs},
 			},
 			1: {
-				StoreSpecs: []base.StoreSpec{{InMemory: true, StickyVFSID: "2"}},
-				Knobs:      base.TestingKnobs{Server: serverKnobs},
+				StoreConfig: configpb.Storage{Stores: []configpb.Store{{InMemory: true, StickyVFSID: "2"}}},
+				Knobs:       base.TestingKnobs{Server: serverKnobs},
 			},
 		},
 	}
