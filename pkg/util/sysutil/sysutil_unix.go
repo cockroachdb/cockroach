@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build !windows
-// +build !windows
 
 //lint:file-ignore Unconvert (redundant conversions are necessary for cross-platform compatibility)
 
