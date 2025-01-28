@@ -842,6 +842,9 @@ type TableDescriptor interface {
 	// IsRowLevelSecurityEnabled returns true if we have enabled row level
 	// security for the table and false if it is disabled.
 	IsRowLevelSecurityEnabled() bool
+	// IsRowLevelSecurityForced returns true if we have forced row level
+	// security for the table and false if it is no-force.
+	IsRowLevelSecurityForced() bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

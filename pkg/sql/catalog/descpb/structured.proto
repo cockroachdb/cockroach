@@ -1354,7 +1354,10 @@ message TableDescriptor {
   // row_level_security_enabled indicates whether row level security is enabled on this table.
   optional bool row_level_security_enabled = 68 [(gogoproto.nullable) = false];
 
-  // Next ID: 69
+  // row_level_security_forced indicates whether row level security is forced on this table.
+  optional bool row_level_security_forced = 69 [(gogoproto.nullable) = false];
+
+  // Next ID: 70
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside
