@@ -43,6 +43,7 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecstore",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

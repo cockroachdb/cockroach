@@ -22,6 +22,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
+// InitRootPartition is called during a schema change that creates a vector
+// index. It initializes the keyspace with a root partition. It does not require
+// an active VectorIndex or PersistentStore instance.
+func InitRootPartition(
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	tableID descpb.ID,
+	indexID descpb.IndexID,
+	dims int,
+) error {
+	// NOTE: we don't have to worry about ExternalRowData here, because this
+	// function is only called during index creation.
+	prefix := rowenc.MakeIndexKeyPrefix(codec, tableID, indexID)
+	key := EncodePartitionKey(prefix, RootKey)
+	rootCentroid := make(vector.T, dims)
+	meta, err := EncodePartitionMetadata(LeafLevel, rootCentroid)
+	if err != nil {
+		return err
+	}
+	b := txn.NewBatch()
+	b.Put(key, meta)
+	return txn.Run(ctx, b)
+}
+
 // PersistentStore implements the Store interface for KV backed vector indices.
 type PersistentStore struct {
 	db descs.DB // Used to generate new partition IDs

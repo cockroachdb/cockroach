@@ -27,6 +27,7 @@ type deferredState struct {
 	scheduleIDsToDelete          []jobspb.ScheduleID
 	statsToRefresh               catalog.DescriptorIDSet
 	indexesToSplitAndScatter     []indexesToSplitAndScatter
+	vectorIndexesToInit          []vectorIndexesToInit
 	gcJobs
 }
 
@@ -37,6 +38,12 @@ type databaseRoleSettingToDelete struct {
 type indexesToSplitAndScatter struct {
 	tableID catid.DescID
 	indexID catid.IndexID
+}
+
+type vectorIndexesToInit struct {
+	tableID catid.DescID
+	indexID catid.IndexID
+	dims    int
 }
 
 type schemaChangerJobUpdate struct {
@@ -63,6 +70,18 @@ func (s *deferredState) AddIndexForMaybeSplitAndScatter(
 			tableID: tableID,
 			indexID: indexID,
 		})
+}
+
+func (s *deferredState) AddVectorIndexRootPartition(
+	tableID catid.DescID, indexID catid.IndexID, dims int,
+) {
+	s.vectorIndexesToInit = append(s.vectorIndexesToInit,
+		vectorIndexesToInit{
+			tableID: tableID,
+			indexID: indexID,
+			dims:    dims,
+		},
+	)
 }
 
 func (s *deferredState) DeleteSchedule(scheduleID jobspb.ScheduleID) {
@@ -198,6 +217,11 @@ func (s *deferredState) exec(
 			return err
 		}
 		if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc); err != nil {
+			return err
+		}
+	}
+	for _, idx := range s.vectorIndexesToInit {
+		if err := c.InitVectorIndexRootPartition(ctx, idx.tableID, idx.indexID, idx.dims); err != nil {
 			return err
 		}
 	}

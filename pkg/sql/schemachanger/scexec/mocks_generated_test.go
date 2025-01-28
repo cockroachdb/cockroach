@@ -172,6 +172,20 @@ func (mr *MockCatalogMockRecorder) GetZoneConfig(arg0, arg1 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetZoneConfig", reflect.TypeOf((*MockCatalog)(nil).GetZoneConfig), arg0, arg1)
 }
 
+// InitVectorIndexRootPartition mocks base method.
+func (m *MockCatalog) InitVectorIndexRootPartition(arg0 context.Context, arg1 catid.DescID, arg2 catid.IndexID, arg3 int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InitVectorIndexRootPartition", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InitVectorIndexRootPartition indicates an expected call of InitVectorIndexRootPartition.
+func (mr *MockCatalogMockRecorder) InitVectorIndexRootPartition(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitVectorIndexRootPartition", reflect.TypeOf((*MockCatalog)(nil).InitVectorIndexRootPartition), arg0, arg1, arg2, arg3)
+}
+
 // InitializeSequence mocks base method.
 func (m *MockCatalog) InitializeSequence(arg0 catid.DescID, arg1 int64) {
 	m.ctrl.T.Helper()
