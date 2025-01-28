@@ -12,18 +12,14 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // Base config defaults.
@@ -867,161 +863,6 @@ type TempStorageConfig struct {
 	// Settings stores the cluster.Settings this TempStoreConfig will use. Must
 	// not be nil.
 	Settings *cluster.Settings
-}
-
-// WALFailoverMode specifies the mode of WAL failover.
-type WALFailoverMode int8
-
-const (
-	// WALFailoverDefault leaves the WAL failover configuration unspecified. Today
-	// this is interpreted as FailoverDisabled but future releases may default to
-	// another mode.
-	WALFailoverDefault WALFailoverMode = iota
-	// WALFailoverDisabled leaves WAL failover disabled. Commits to the storage
-	// engine observe the latency of a store's primary WAL directly.
-	WALFailoverDisabled
-	// WALFailoverAmongStores enables WAL failover among multiple stores within a
-	// node. This setting has no effect if the node has a single store. When a
-	// storage engine observes high latency writing to its WAL, it may
-	// transparently failover to an arbitrary, predetermined other store's data
-	// directory. If successful in syncing log entries to the other store's
-	// volume, the batch commit latency is insulated from the effects of momentary
-	// disk stalls.
-	WALFailoverAmongStores
-	// WALFailoverExplicitPath enables WAL failover for a single-store node to an
-	// explicitly specified path.
-	WALFailoverExplicitPath
-)
-
-// String implements fmt.Stringer.
-func (m *WALFailoverMode) String() string {
-	return redact.StringWithoutMarkers(m)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (m *WALFailoverMode) SafeFormat(p redact.SafePrinter, _ rune) {
-	switch *m {
-	case WALFailoverDefault:
-		// Empty
-	case WALFailoverDisabled:
-		p.SafeString("disabled")
-	case WALFailoverAmongStores:
-		p.SafeString("among-stores")
-	case WALFailoverExplicitPath:
-		p.SafeString("path")
-	default:
-		p.Printf("<unknown WALFailoverMode %d>", int8(*m))
-	}
-}
-
-// WALFailoverConfig configures a node's stores behavior under high write
-// latency to their write-ahead logs.
-type WALFailoverConfig struct {
-	Mode WALFailoverMode
-	// Path is the non-store path to which WALs should be written when failing
-	// over. It must be nonempty if and only if Mode == WALFailoverExplicitPath.
-	Path ExternalPath
-	// PrevPath is the previously used non-store path. It may be set with Mode ==
-	// WALFailoverExplicitPath (when changing the secondary path) or
-	// WALFailoverDisabled (when disabling WAL failover after it was previously
-	// enabled with WALFailoverExplicitPath). It must be empty for other modes.
-	// If Mode is WALFailoverDisabled and previously WAL failover was enabled
-	// using WALFailoverAmongStores, then PrevPath must not be set.
-	PrevPath ExternalPath
-}
-
-// ExternalPath represents a non-store path and associated encryption-at-rest
-// configuration.
-type ExternalPath struct {
-	Path string
-	// EncryptionOptions is set if encryption is enabled.
-	EncryptionOptions *storagepb.EncryptionOptions
-}
-
-// IsSet returns whether or not the external path was provided.
-func (e ExternalPath) IsSet() bool { return e.Path != "" }
-
-// Type implements the pflag.Value interface.
-func (c *WALFailoverConfig) Type() string { return "string" }
-
-// String implements fmt.Stringer.
-func (c *WALFailoverConfig) String() string {
-	return redact.StringWithoutMarkers(c)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (c *WALFailoverConfig) SafeFormat(p redact.SafePrinter, _ rune) {
-	switch c.Mode {
-	case WALFailoverDefault:
-		// Empty
-	case WALFailoverDisabled:
-		p.SafeString("disabled")
-		if c.PrevPath.IsSet() {
-			p.SafeString(",prev_path=")
-			p.SafeString(redact.SafeString(c.PrevPath.Path))
-		}
-	case WALFailoverAmongStores:
-		p.SafeString("among-stores")
-	case WALFailoverExplicitPath:
-		p.SafeString("path=")
-		p.SafeString(redact.SafeString(c.Path.Path))
-		if c.PrevPath.IsSet() {
-			p.SafeString(",prev_path=")
-			p.SafeString(redact.SafeString(c.PrevPath.Path))
-		}
-	default:
-		p.Printf("<unknown WALFailoverMode %d>", int8(c.Mode))
-	}
-}
-
-// Set implements the pflag.Value interface.
-func (c *WALFailoverConfig) Set(s string) error {
-	switch {
-	case strings.HasPrefix(s, "disabled"):
-		c.Mode = WALFailoverDisabled
-		var ok bool
-		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(strings.TrimPrefix(s, "disabled"))
-		if !ok || c.Path.IsSet() {
-			return errors.Newf("invalid disabled --wal-failover setting: %s "+
-				"expect disabled[,prev_path=<prev_path>]", s)
-		}
-	case s == "among-stores":
-		c.Mode = WALFailoverAmongStores
-	case strings.HasPrefix(s, "path="):
-		c.Mode = WALFailoverExplicitPath
-		var ok bool
-		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(s)
-		if !ok || !c.Path.IsSet() {
-			return errors.Newf("invalid path --wal-failover setting: %s "+
-				"expect path=<path>[,prev_path=<prev_path>]", s)
-		}
-	default:
-		return errors.Newf("invalid --wal-failover setting: %s "+
-			"(possible values: disabled, among-stores, path=<path>)", s)
-	}
-	return nil
-}
-
-func parseWALFailoverPathFields(s string) (path, prevPath string, ok bool) {
-	if s == "" {
-		return "", "", true
-	}
-	if s2 := strings.TrimPrefix(s, "path="); len(s2) < len(s) {
-		s = s2
-		if i := strings.IndexByte(s, ','); i == -1 {
-			return s, "", true
-		} else {
-			path = s[:i]
-			s = s[i:]
-		}
-	}
-
-	// Any remainder must be a prev_path= field.
-	if !strings.HasPrefix(s, ",prev_path=") {
-		return "", "", false
-	}
-	prevPath = strings.TrimPrefix(s, ",prev_path=")
-	return path, prevPath, true
 }
 
 // ExternalIODirConfig describes various configuration options pertaining
