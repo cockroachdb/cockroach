@@ -40,6 +40,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/semenumpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",

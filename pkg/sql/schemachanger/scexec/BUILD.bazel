@@ -38,6 +38,7 @@ go_library(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sessiondata",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
@@ -107,6 +108,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//require",
+        "//pkg/sql/sem/idxtype",
     ],
 )
 

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/errors"
 )
 
@@ -61,9 +62,9 @@ func addNewIndexMutation(
 	}
 
 	// Set up the index descriptor type.
-	indexType := descpb.IndexDescriptor_FORWARD
+	indexType := idxtype.FORWARD
 	if opIndex.IsInverted {
-		indexType = descpb.IndexDescriptor_INVERTED
+		indexType = idxtype.INVERTED
 	}
 	// Set up the encoding type.
 	encodingType := catenumpb.PrimaryIndexEncoding
@@ -408,7 +409,7 @@ func (i *immediateVisitor) AddColumnToIndex(ctx context.Context, op scop.AddColu
 		})
 	}
 	// If this is an inverted column, note that.
-	if indexDesc.Type == descpb.IndexDescriptor_INVERTED && op.ColumnID == indexDesc.InvertedColumnID() {
+	if indexDesc.Type == idxtype.INVERTED && op.ColumnID == indexDesc.InvertedColumnID() {
 		indexDesc.InvertedColumnKinds = []catpb.InvertedIndexColumnKind{op.InvertedKind}
 	}
 	return nil
@@ -447,7 +448,7 @@ func (i *immediateVisitor) RemoveColumnFromIndex(
 			idx.KeyColumnNames = idx.KeyColumnNames[:i]
 			idx.KeyColumnIDs = idx.KeyColumnIDs[:i]
 			idx.KeyColumnDirections = idx.KeyColumnDirections[:i]
-			if idx.Type == descpb.IndexDescriptor_INVERTED && i == len(idx.KeyColumnIDs)-1 {
+			if idx.Type == idxtype.INVERTED && i == len(idx.KeyColumnIDs)-1 {
 				idx.InvertedColumnKinds = nil
 			}
 		}

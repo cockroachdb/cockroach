@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -101,7 +102,7 @@ func indexForDisplay(
 	if index.Unique {
 		f.WriteString("UNIQUE ")
 	}
-	if !f.HasFlags(tree.FmtPGCatalog) && index.Type == descpb.IndexDescriptor_INVERTED {
+	if !f.HasFlags(tree.FmtPGCatalog) && index.Type == idxtype.INVERTED {
 		f.WriteString("INVERTED ")
 	}
 	f.WriteString("INDEX ")
@@ -113,7 +114,7 @@ func indexForDisplay(
 
 	if f.HasFlags(tree.FmtPGCatalog) {
 		f.WriteString(" USING")
-		if index.Type == descpb.IndexDescriptor_INVERTED {
+		if index.Type == idxtype.INVERTED {
 			f.WriteString(" gin")
 		} else {
 			f.WriteString(" btree")
@@ -239,7 +240,7 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
-		if index.Type == descpb.IndexDescriptor_INVERTED &&
+		if index.Type == idxtype.INVERTED &&
 			col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
 			switch index.InvertedColumnKinds[0] {
 			case catpb.InvertedIndexColumnKind_TRIGRAM:
@@ -249,7 +250,7 @@ func FormatIndexElements(
 		// The last column of an inverted index cannot have a DESC direction.
 		// Since the default direction is ASC, we omit the direction entirely
 		// for inverted index columns.
-		if i < n-1 || index.Type != descpb.IndexDescriptor_INVERTED {
+		if i < n-1 || index.Type != idxtype.INVERTED {
 			f.WriteByte(' ')
 			f.WriteString(index.KeyColumnDirections[i].String())
 		}

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -486,7 +487,7 @@ type IndexBackfiller struct {
 // ContainsInvertedIndex returns true if backfilling an inverted index.
 func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 	for _, idx := range ib.added {
-		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
+		if idx.GetType() == idxtype.INVERTED {
 			return true
 		}
 	}

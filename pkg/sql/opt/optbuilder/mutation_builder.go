@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -1117,7 +1118,7 @@ func (mb *mutationBuilder) projectVectorIndexColsImpl(delete bool) {
 			index := mb.tab.Index(i)
 
 			// Skip non-vector indexes.
-			if !index.IsVector() {
+			if index.Type() != idxtype.VECTOR {
 				continue
 			}
 			vectorColOrd := index.VectorColumn().Ordinal()
@@ -1652,7 +1653,7 @@ func partialIndexCount(tab cat.Table) int {
 func vectorIndexCount(tab cat.Table) int {
 	count := 0
 	for i, n := 0, tab.DeletableIndexCount(); i < n; i++ {
-		if tab.Index(i).IsVector() {
+		if tab.Index(i).Type() == idxtype.VECTOR {
 			count++
 		}
 	}

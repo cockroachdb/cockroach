@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -274,7 +275,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					n.tableDesc,
 					tableName,
 					columns,
-					tree.IndexTypeForward,
+					idxtype.FORWARD,
 					false, /* isNewTable */
 					params.p.SemaCtx(),
 					params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),

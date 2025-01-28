@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -862,7 +863,7 @@ func (s *ScanPrivate) IsFullIndexScan() bool {
 // IsInvertedScan returns true if the index being scanned is an inverted
 // index.
 func (s *ScanPrivate) IsInvertedScan(md *opt.Metadata) bool {
-	return md.Table(s.Table).Index(s.Index).IsInverted()
+	return md.Table(s.Table).Index(s.Index).Type() == idxtype.INVERTED
 }
 
 // IsVirtualTable returns true if the table being scanned is a virtual table.

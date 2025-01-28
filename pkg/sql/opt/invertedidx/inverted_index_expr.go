@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -449,7 +450,7 @@ func TryJoinInvertedIndex(
 	index cat.Index,
 	inputCols opt.ColSet,
 ) opt.ScalarExpr {
-	if !index.IsInverted() {
+	if index.Type() != idxtype.INVERTED {
 		return nil
 	}
 

@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/privilege",  # keep
         "//pkg/sql/scanner",
         "//pkg/sql/sem/builtins/builtinsregistry",
+        "//pkg/sql/sem/idxtype",  # keep
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",  # keep
         "//pkg/sql/sem/tree/treecmp",  # keep

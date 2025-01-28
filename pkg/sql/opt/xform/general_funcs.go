@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -59,7 +60,7 @@ func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 
 	// Skip the primary index because it cannot be inverted.
 	for i := 1; i < tab.IndexCount(); i++ {
-		if tab.Index(i).IsInverted() {
+		if tab.Index(i).Type() == idxtype.INVERTED {
 			return true
 		}
 	}

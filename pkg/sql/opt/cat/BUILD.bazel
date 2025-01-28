@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
         "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -271,7 +272,7 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "GetPredicate", idx.GetName())
 		require.Equal(t, idx == s5 || idx == pk, idx.IsUnique(),
 			errMsgFmt, "IsUnique", idx.GetName())
-		require.Equal(t, idx == s2 || idx == s6, idx.GetType() == descpb.IndexDescriptor_INVERTED,
+		require.Equal(t, idx == s2 || idx == s6, idx.GetType() == idxtype.INVERTED,
 			errMsgFmt, "GetType", idx.GetName())
 		require.Equal(t, idx == s4, idx.IsSharded(),
 			errMsgFmt, "IsSharded", idx.GetName())

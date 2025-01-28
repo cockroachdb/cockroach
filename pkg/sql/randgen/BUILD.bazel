@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
