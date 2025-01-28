@@ -1,0 +1,21 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.vecindex.vecpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb";
+
+import "gogoproto/gogo.proto";
+
+option (gogoproto.goproto_getters_all) = false;
+
+// Config encapsulates the information needed to search and maintain a vector
+// index. This includes the dimensions of the vectors and the random seed,
+// neither of which should change after the index is created.
+message Config {
+  option (gogoproto.equal) = true;
+  int32 dims = 1;
+  int64 seed = 2;
+}

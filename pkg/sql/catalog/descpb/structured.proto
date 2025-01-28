@@ -20,6 +20,7 @@ import "sql/catalog/catpb/privilege.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
+import "sql/vecindex/vecpb/vec.proto";
 import "geo/geopb/config.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/metadata.proto";
@@ -503,7 +504,11 @@ message IndexDescriptor {
   // with index visibility in-between as partially not visible.
   optional double invisibility = 29 [(gogoproto.nullable) = false];
 
-  // Next ID: 30
+  // VecConfig, if it's not the zero value, describes configuration for
+  // this vector index.
+  optional vecindex.vecpb.Config vec_config = 30 [(gogoproto.nullable) = false];
+
+  // Next ID: 31
 }
 
 // TriggerDescriptor describes a trigger on a table.
