@@ -711,13 +711,13 @@ CREATE TABLE t2 (x INT PRIMARY KEY) PARTITION BY LIST (x) (
   PARTITION p2 VALUES IN (2)
 );
 CREATE INDEX x1 ON t2 (x) PARTITION BY LIST (x) (
-  PARTITION p1 VALUES IN (1),
-  PARTITION p2 VALUES IN (2)
+  PARTITION p1_x1 VALUES IN (1),
+  PARTITION p2_x1 VALUES IN (2)
 );
 CREATE INDEX x2 ON t2 (x) PARTITION BY LIST (x) (
-  PARTITION p1 VALUES IN (1),
-  PARTITION p2 VALUES IN (2),
-  PARTITION p3 VALUES IN (3)
+  PARTITION p1_x3 VALUES IN (1),
+  PARTITION p2_x3 VALUES IN (2),
+  PARTITION p3_x3 VALUES IN (3)
 )
 
 statement ok
@@ -736,26 +736,8 @@ SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@%' ORDER BY 
 ----
 PARTITION p1 OF INDEX "my database".public.t2@t2_pkey  ALTER PARTITION p1 OF INDEX "my database".public.t2@t2_pkey CONFIGURE ZONE USING
                                                        num_replicas = 1
-PARTITION p1 OF INDEX "my database".public.t2@x1       ALTER PARTITION p1 OF INDEX "my database".public.t2@x1 CONFIGURE ZONE USING
-                                                       num_replicas = 1
-PARTITION p1 OF INDEX "my database".public.t2@x2       ALTER PARTITION p1 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
-                                                       num_replicas = 1
 
-# ALTER PARTITION ... OF TABLE should only succeed if the partition name is
-# unique across all indexes.
-statement error pq: partition "p1" exists on multiple indexes of table "t2"
-ALTER PARTITION p1 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
-
-statement ok
-ALTER PARTITION p3 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
-
-query TT
-SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@x2%' ORDER BY 1
-----
-PARTITION p1 OF INDEX "my database".public.t2@x2  ALTER PARTITION p1 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
-                                                  num_replicas = 1
-PARTITION p3 OF INDEX "my database".public.t2@x2  ALTER PARTITION p3 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
-                                                  num_replicas = 1
+subtest end
 
 statement error pq: partition "p4" does not exist on table "t2"
 ALTER PARTITION p4 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
@@ -794,7 +776,7 @@ CREATE TABLE auth.t (x INT PRIMARY KEY) PARTITION BY LIST (x) (
 
 statement ok
 CREATE INDEX x ON auth.t (x) PARTITION BY LIST (x) (
-  PARTITION p VALUES IN (1)
+  PARTITION p_x VALUES IN (1)
 )
 
 user testuser
@@ -816,7 +798,7 @@ statement error pq: user testuser does not have CREATE or ZONECONFIG privilege o
 ALTER PARTITION p OF TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
 
 statement error pq: user testuser does not have CREATE or ZONECONFIG privilege on relation t
-ALTER PARTITION p OF INDEX auth.t@x CONFIGURE ZONE USING num_replicas = 3
+ALTER PARTITION p_x OF INDEX auth.t@x CONFIGURE ZONE USING num_replicas = 3
 
 # Granting CREATE on databases and tables should allow CONFIGURE ZONE on those
 # objects.
@@ -885,7 +867,7 @@ CREATE TABLE auth.t3 (x INT PRIMARY KEY) PARTITION BY LIST (x) (
   PARTITION p VALUES IN (1)
 );
 CREATE INDEX x ON auth.t3 (x) PARTITION BY LIST (x) (
-  PARTITION p VALUES IN (1)
+  PARTITION p_x VALUES IN (1)
 );
 
 statement ok
@@ -901,7 +883,7 @@ statement ok
 ALTER INDEX auth.t3@x CONFIGURE ZONE USING num_replicas=5;
 
 statement ok
-ALTER PARTITION p OF INDEX auth.t3@x CONFIGURE ZONE USING num_replicas = 3
+ALTER PARTITION p_x OF INDEX auth.t3@x CONFIGURE ZONE USING num_replicas = 3
 
 # Granting the admin role should allow configuring zones on system tables and
 # ranges.

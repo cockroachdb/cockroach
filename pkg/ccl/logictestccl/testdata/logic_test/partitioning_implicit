@@ -469,12 +469,12 @@ CREATE TABLE public.t (
 
 statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
 CREATE INDEX created_idx ON t(c) PARTITION BY LIST (d) (
-  PARTITION one VALUES IN ((1))
+  PARTITION once VALUES IN ((1))
 )
 
 statement error cannot change the partitioning of an index if the table has PARTITION ALL BY defined
 ALTER INDEX t@t_a_idx PARTITION BY LIST (a) (
-  PARTITION one VALUES IN (1)
+  PARTITION once VALUES IN (1)
 )
 
 query T noticetrace
@@ -671,7 +671,7 @@ CREATE TABLE public.t (
 
 statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
 CREATE INDEX created_idx ON t(c) PARTITION BY LIST (d) (
-  PARTITION one VALUES IN ((1))
+  PARTITION one_d VALUES IN ((1))
 )
 
 statement ok

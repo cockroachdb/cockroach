@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -248,4 +250,51 @@ func indexCoveringsForPartitioning(
 	// descendentCoverings are from subpartitions and so get precedence; append
 	// them to the front.
 	return append(descendentCoverings, coverings...), nil
+}
+
+func checkUniquePartitionByForTableIndexes(
+	indexes []descpb.IndexDescriptor, partitionBy *tree.PartitionBy, allowRepartitioning bool,
+) error {
+	// todo ANNIE rename
+	checkSameCols := func(existingCols []string, newCols tree.NameList) bool {
+		cols := make(map[string]struct{}, len(existingCols))
+		for _, col := range existingCols {
+			cols[col] = struct{}{}
+		}
+		for _, col := range newCols {
+			if _, ok := cols[col.String()]; !ok {
+				return false
+			}
+		}
+		return true
+	}
+	partitionNames := make(map[string]struct{})
+	for _, idx := range indexes {
+		partitioning := idx.Partitioning
+		if allowRepartitioning {
+			if checkSameCols(idx.KeyColumnNames, partitionBy.Fields) {
+				return nil
+			}
+		}
+		for _, lp := range partitioning.List {
+			partitionNames[lp.Name] = struct{}{}
+		}
+		for _, rp := range partitioning.Range {
+			partitionNames[rp.Name] = struct{}{}
+		}
+	}
+	// Check if any adding partition name collides with existing partitions.
+	for _, lp := range partitionBy.List {
+		if _, ok := partitionNames[lp.Name.String()]; ok {
+			return pgerror.Newf(pgcode.Syntax, "duplicate partition name %s not allowed",
+				lp.Name.String())
+		}
+	}
+	for _, rp := range partitionBy.Range {
+		if _, ok := partitionNames[rp.Name.String()]; ok {
+			return pgerror.Newf(pgcode.Syntax, "duplicate partition name %s not allowed",
+				rp.Name.String())
+		}
+	}
+	return nil
 }

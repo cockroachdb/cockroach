@@ -272,6 +272,32 @@ func (n *createTableNode) startExec(params runParams) error {
 	defer func(originalDefs tree.TableDefs) { n.n.Defs = originalDefs }(n.n.Defs)
 	n.n.Defs = defsCopy
 
+	// Ensure that the partition names created (if existent) are uniquely named.
+	partitionNames := make(map[string]struct{})
+	for _, def := range n.n.Defs {
+		switch v := def.(type) {
+		case *tree.IndexTableDef:
+			if v.PartitionByIndex != nil && v.PartitionByIndex.PartitionBy != nil {
+				listPartitions := v.PartitionByIndex.PartitionBy.List
+				for _, lp := range listPartitions {
+					if _, ok := partitionNames[lp.Name.String()]; ok {
+						return pgerror.Newf(pgcode.Syntax, "duplicate partition name %s not allowed",
+							lp.Name.String())
+					}
+					partitionNames[lp.Name.String()] = struct{}{}
+				}
+				rangePartitions := v.PartitionByIndex.PartitionBy.Range
+				for _, rp := range rangePartitions {
+					if _, ok := partitionNames[rp.Name.String()]; ok {
+						return pgerror.Newf(pgcode.Syntax, "duplicate partition name %s not allowed",
+							rp.Name.String())
+					}
+					partitionNames[rp.Name.String()] = struct{}{}
+				}
+			}
+		}
+	}
+
 	for _, def := range n.n.Defs {
 		switch v := def.(type) {
 		case *tree.UniqueConstraintTableDef:

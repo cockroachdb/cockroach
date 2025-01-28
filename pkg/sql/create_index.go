@@ -742,6 +742,16 @@ func (n *createIndexNode) startExec(params runParams) error {
 		)
 	}
 
+	if n.n.PartitionByIndex != nil && n.n.PartitionByIndex.PartitionBy != nil {
+		// Check all existing partitions on this table's indexes; ensure the
+		// partition name we might add to this index is unique.
+		indexes := append(n.tableDesc.TableDesc().Indexes, n.tableDesc.TableDesc().PrimaryIndex)
+		if err := checkUniquePartitionByForTableIndexes(indexes, n.n.PartitionByIndex.PartitionBy,
+			false /* allowRepartitioning */); err != nil {
+			return err
+		}
+	}
+
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
 	// Avoid the warning if we have PARTITION ALL BY as all indexes will implicitly

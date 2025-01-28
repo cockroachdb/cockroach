@@ -1518,3 +1518,41 @@ FROM subzone_spans;
 /2/2
 
 subtest end
+
+# Regression for #128692 in which partition names could be non-unique.
+subtest non_unique_partition_names
+
+statement error pgcode 42601 pq: duplicate partition name
+CREATE TABLE foo (
+    i INT,
+    j INT,
+    INDEX idx1 (i) PARTITION BY LIST (i) (
+        PARTITION p1 VALUES IN (1, 5)
+    ),
+    INDEX idx2 (j) PARTITION BY LIST (j) (
+        PARTITION p1 VALUES IN (2, 4)
+    )
+);
+
+statement ok
+CREATE TABLE foo(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+  PARTITION p VALUES IN (1, 5)
+);
+
+statement ok
+SET use_declarative_schema_changer = off
+
+statement error pgcode 42601 pq: duplicate partition name
+CREATE INDEX idx ON foo(j) PARTITION BY LIST (j) (
+  PARTITION p VALUES IN (2, 4)
+);
+
+statement error pgcode 42601 pq: duplicate partition name
+ALTER TABLE foo PARTITION BY LIST (j) (
+  PARTITION p VALUES IN (2, 4)
+);
+
+statement ok
+RESET use_declarative_schema_changer
+
+subtest end

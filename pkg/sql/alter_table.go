@@ -671,6 +671,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning",
 				)
 			}
+			if t.PartitionBy != nil {
+				// Check all existing partitions on this table's indexes; ensure the
+				// partition name we might add to this index is unique.
+				indexes := append(n.tableDesc.TableDesc().Indexes, n.tableDesc.TableDesc().PrimaryIndex)
+				if err := checkUniquePartitionByForTableIndexes(indexes, t.PartitionBy,
+					true /* allowRepartitioning */); err != nil {
+					return err
+				}
+			}
 			newPrimaryIndexDesc := n.tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
 			newImplicitCols, newPartitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
