@@ -1,0 +1,10 @@
+setup
+CREATE TABLE roaches();
+set enable_row_level_security = on;
+ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE roaches FORCE ROW LEVEL SECURITY;
+----
+
+test
+ALTER TABLE roaches NO FORCE ROW LEVEL SECURITY;
+----

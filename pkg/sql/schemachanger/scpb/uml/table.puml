@@ -345,6 +345,11 @@ object RowLevelSecurityEnabled
 
 RowLevelSecurityEnabled :  TableID
 
+object RowLevelSecurityForced
+
+RowLevelSecurityForced :  TableID
+RowLevelSecurityForced :  IsForced
+
 object RowLevelTTL
 
 RowLevelTTL :  TableID
@@ -628,6 +633,7 @@ Policy <|-- PolicyWithCheckExpr
 Table <|-- PrimaryIndex
 View <|-- PrimaryIndex
 Table <|-- RowLevelSecurityEnabled
+Table <|-- RowLevelSecurityForced
 Table <|-- RowLevelTTL
 AliasType <|-- SchemaChild
 EnumType <|-- SchemaChild

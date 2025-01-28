@@ -10,7 +10,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹roaches› EN
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → PUBLIC RowLevelSecurityEnabled:{DescID: 104 (roaches)}
  │         └── 1 Mutation operation
- │              └── ToggleRowLevelSecurityMode {"Enabled":true,"TableID":104}
+ │              └── EnableRowLevelSecurityMode {"Enabled":true,"TableID":104}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
@@ -21,4 +21,4 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹roaches› EN
            ├── 1 element transitioning toward PUBLIC
            │    └── ABSENT → PUBLIC RowLevelSecurityEnabled:{DescID: 104 (roaches)}
            └── 1 Mutation operation
-                └── ToggleRowLevelSecurityMode {"Enabled":true,"TableID":104}
+                └── EnableRowLevelSecurityMode {"Enabled":true,"TableID":104}

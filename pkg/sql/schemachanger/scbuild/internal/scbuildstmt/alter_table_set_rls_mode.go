@@ -6,7 +6,6 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -30,8 +29,12 @@ func alterTableSetRLSMode(
 			TableID: tbl.TableID,
 		})
 	case tree.TableRLSForce:
-		panic(scerrors.NotImplementedErrorf(n, "ALTER TABLE ... FORCE ROW LEVEL SECURITY is not yet implemented"))
+		b.Add(&scpb.RowLevelSecurityForced{
+			TableID: tbl.TableID,
+		})
 	case tree.TableRLSNoForce:
-		panic(scerrors.NotImplementedErrorf(n, "ALTER TABLE ... NO FORCE ROW LEVEL SECURITY is not yet implemented"))
+		b.Drop(&scpb.RowLevelSecurityForced{
+			TableID: tbl.TableID,
+		})
 	}
 }
