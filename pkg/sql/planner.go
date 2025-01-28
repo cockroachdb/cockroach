@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1009,6 +1010,40 @@ func (p *planner) ClearTableStatsCache() {
 	if p.execCfg.TableStatsCache != nil {
 		p.execCfg.TableStatsCache.Clear()
 	}
+}
+
+// FormatVectorIndex is part of the eval.Planner interface.
+func (p *planner) FormatVectorIndex(
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
+) (string, error) {
+	vi, err := p.execCfg.VecIndexManager.Get(ctx, tableID, indexID)
+	if err != nil {
+		return "", err
+	}
+	txn, err := vi.Store().Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err == nil {
+			err = vi.Store().Commit(ctx, txn)
+		} else {
+			err = errors.CombineErrors(err, vi.Store().Abort(ctx, txn))
+		}
+	}()
+	return vi.Format(ctx, txn, vecindex.FormatOptions{})
+}
+
+// ProcessVectorIndexFixups is part of the eval.Planner interface.
+func (p *planner) ProcessVectorIndexFixups(
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
+) error {
+	vi, err := p.execCfg.VecIndexManager.Get(ctx, tableID, indexID)
+	if err != nil {
+		return err
+	}
+	vi.ProcessFixups()
+	return nil
 }
 
 // mustUseLeafTxn returns true if inner plans must use a leaf transaction.

@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/vecindex/quantize",
         "//pkg/sql/vecindex/vecdesc",
         "//pkg/sql/vecindex/vecstore",
+        "//pkg/util/encoding",
         "//pkg/util/log",
         "//pkg/util/num32",
         "//pkg/util/stop",

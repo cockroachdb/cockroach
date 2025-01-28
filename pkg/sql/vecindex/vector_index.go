@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -835,11 +836,20 @@ func (vi *VectorIndex) Format(
 		if options.PrimaryKeyStrings {
 			buf.WriteString(string(key))
 		} else {
-			for i, b := range key {
-				if i != 0 {
-					buf.WriteByte(' ')
+			switch vi.Store().(type) {
+			case *vecstore.InMemoryStore:
+				for i, b := range key {
+					if i != 0 {
+						buf.WriteByte(' ')
+					}
+					buf.WriteString(strconv.FormatUint(uint64(b), 10))
 				}
-				buf.WriteString(strconv.FormatUint(uint64(b), 10))
+			case *vecstore.PersistentStore:
+				vals, _ := encoding.PrettyPrintValuesWithTypes(nil /* valDirs */, key)
+				for i := range vals {
+					buf.WriteByte('/')
+					buf.WriteString(vals[i])
+				}
 			}
 		}
 	}

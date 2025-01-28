@@ -8952,6 +8952,46 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Stable,
 		},
 	),
+	"crdb_internal.display_vector_index": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "table_id", Typ: types.Int},
+				{Name: "index_id", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tableID := descpb.ID(tree.MustBeDInt(args[0]))
+				indexID := descpb.IndexID(tree.MustBeDInt(args[1]))
+				idxStr, err := evalCtx.Planner.FormatVectorIndex(ctx, tableID, indexID)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(idxStr), nil
+			},
+			Info:       "Returns a tree-formatted string representation of a vector index",
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.process_vector_index_fixups": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "table_id", Typ: types.Int},
+				{Name: "index_id", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tableID := descpb.ID(tree.MustBeDInt(args[0]))
+				indexID := descpb.IndexID(tree.MustBeDInt(args[1]))
+				err := evalCtx.Planner.ProcessVectorIndexFixups(ctx, tableID, indexID)
+				if err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info:       "Returns a tree-formatted string representation of a vector index",
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
