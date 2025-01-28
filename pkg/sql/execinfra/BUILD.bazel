@@ -60,6 +60,7 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/stats",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex",
         "//pkg/util/admission",
         "//pkg/util/buildutil",
         "//pkg/util/intsets",

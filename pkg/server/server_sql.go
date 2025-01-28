@@ -805,6 +805,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	rangeStatsFetcher := rangestats.NewFetcher(cfg.db)
 
+	vecIndexManager := vecindex.NewManager(ctx, cfg.stopper, codec, cfg.internalDB)
+
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
 		AmbientContext:   cfg.AmbientCtx,
@@ -867,6 +869,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AdmissionPacerFactory:    cfg.admissionPacerFactory,
 		ExecutorConfig:           execCfg,
 		RootSQLMemoryPoolSize:    cfg.MemoryPoolSize,
+		VecIndexManager:          vecIndexManager,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if codec.ForSystemTenant() {
@@ -1044,7 +1047,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
-		VecIndexManager:            vecindex.NewManager(ctx, cfg.stopper, codec, cfg.internalDB),
+		VecIndexManager:            vecIndexManager,
 		RowMetrics:                 &rowMetrics,
 		InternalRowMetrics:         &internalRowMetrics,
 		ProtectedTimestampProvider: cfg.protectedtsProvider,

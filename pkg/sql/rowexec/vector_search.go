@@ -8,6 +8,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -101,10 +102,9 @@ func newVectorSearchProcessor(
 	spec *execinfrapb.VectorSearchSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
-	// TODO(drewk): retrieve the VectorIndex from the manager.
-	var idx *vecindex.VectorIndex
 	v := vectorSearchProcessor{
 		queryVector: spec.QueryVector,
+		pkCols:      spec.PrimaryKeyColumns,
 	}
 	colTypes := make([]*types.T, len(spec.PrimaryKeyColumns))
 	for i, col := range spec.PrimaryKeyColumns {
@@ -121,6 +121,10 @@ func newVectorSearchProcessor(
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{},
 	); err != nil {
+		return nil, err
+	}
+	idx, err := flowCtx.Cfg.VecIndexManager.Get(ctx, spec.TableID, spec.IndexID)
+	if err != nil {
 		return nil, err
 	}
 	// An index-join + top-k operation will handle the re-ranking later, so we
@@ -146,7 +150,11 @@ func (v *vectorSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 			return nil, v.DrainHelper()
 		}
 	}
-	for v.State == execinfra.StateRunning && v.resIdx >= len(v.res) {
+	for v.State == execinfra.StateRunning {
+		if v.resIdx >= len(v.res) {
+			v.MoveToDraining(nil /* err */)
+			break
+		}
 		next := v.res[v.resIdx]
 		v.resIdx++
 		if err = v.processSearchResult(next); err != nil {
@@ -232,8 +240,6 @@ func (v *vectorSearchProcessor) Child(nth int, verbose bool) execopnode.OpNode {
 
 type vectorMutationSearchProcessor struct {
 	execinfra.ProcessorBase
-	idx        *vecindex.VectorIndex
-	store      *vecstore.PersistentStore
 	input      execinfra.RowSource
 	datumAlloc tree.DatumAlloc
 
@@ -259,11 +265,16 @@ func newVectorMutationSearchProcessor(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
-	// TODO(drewk): retrieve the VectorIndex from the manager.
-	var idx *vecindex.VectorIndex
+	pkColOrds := make([]int, len(spec.PrimaryKeyColumnOrdinals))
+	for i, colOrd := range spec.PrimaryKeyColumnOrdinals {
+		pkColOrds[i] = int(colOrd)
+	}
 	v := vectorMutationSearchProcessor{
-		input:      input,
-		isIndexPut: spec.IsIndexPut,
+		input:             input,
+		queryVectorColOrd: int(spec.QueryVectorColumnOrdinal),
+		primaryKeyColOrds: pkColOrds,
+		primaryKeyCols:    spec.PrimaryKeyColumns,
+		isIndexPut:        spec.IsIndexPut,
 	}
 	// Pass through the input columns, and add the partition column and optional
 	// quantized vector column.
@@ -285,6 +296,10 @@ func newVectorMutationSearchProcessor(
 			InputsToDrain: []execinfra.RowSource{v.input},
 		},
 	); err != nil {
+		return nil, err
+	}
+	idx, err := flowCtx.Cfg.VecIndexManager.Get(ctx, spec.TableID, spec.IndexID)
+	if err != nil {
 		return nil, err
 	}
 	const targetNeighborCount = 1
@@ -403,9 +418,10 @@ func (v *vectorMutationSearchProcessor) encodePrimaryKeyCols(
 	for i, col := range v.primaryKeyCols {
 		colOrdMap.Set(col.ColumnID, i)
 	}
+	// After encoding the key, make sure to append the family 0 sentinel value.
 	var prefix []byte
 	pk, _, err = rowenc.EncodePartialIndexKey(v.primaryKeyCols, colOrdMap, pkVals, prefix)
-	return pk, err
+	return keys.MakeFamilyKey(pk, 0), err
 }
 
 func (v *vectorMutationSearchProcessor) searchAndValidate(
@@ -416,6 +432,11 @@ func (v *vectorMutationSearchProcessor) searchAndValidate(
 		return nil, err
 	}
 	if len(res) == 0 {
+		// An index put should always find somewhere to insert the vector. An index
+		// del may fail to find the entry for the row with the give PK.
+		if v.isIndexPut {
+			return nil, errors.AssertionFailedf("expected non-empty search result for index put")
+		}
 		return nil, nil
 	} else if len(res) > 1 {
 		return nil, errors.AssertionFailedf("unexpected multiple search results")

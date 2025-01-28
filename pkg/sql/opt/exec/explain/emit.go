@@ -433,6 +433,8 @@ var nodeNames = [...]string{
 	updateOp:               "update",
 	upsertOp:               "upsert",
 	valuesOp:               "", // This node does not have a fixed name.
+	vectorSearchOp:         "vector search",
+	vectorMutationSearchOp: "vector mutation search",
 	windowOp:               "window",
 	zigzagJoinOp:           "zigzag join",
 }
@@ -923,6 +925,26 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 	case scanBufferOp:
 		a := n.args.(*scanBufferArgs)
 		ob.Attr("label", a.Label)
+
+	case vectorSearchOp:
+		a := n.args.(*vectorSearchArgs)
+		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
+		ob.Attr("target count", a.TargetNeighborCount)
+		if ob.flags.Verbose {
+			if a.PrefixConstraint != nil {
+				ob.Attr("prefix constraint", a.PrefixConstraint)
+			}
+			ob.Expr("query vector", a.QueryVector, nil /* varColumns */)
+		}
+
+	case vectorMutationSearchOp:
+		a := n.args.(*vectorMutationSearchArgs)
+		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
+		if ob.flags.Verbose {
+			if len(a.PrefixKeyCols) > 0 {
+				e.ob.Attr("prefix cols", printColumnList(a.Input.Columns(), a.PrefixKeyCols))
+			}
+		}
 
 	case insertOp:
 		a := n.args.(*insertArgs)

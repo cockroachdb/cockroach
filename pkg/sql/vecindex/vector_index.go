@@ -488,16 +488,17 @@ func (vi *VectorIndex) searchHelper(searchCtx *searchContext, searchSet *vecstor
 	}
 
 	if searchLevel < searchCtx.Level {
-		// This should only happen when inserting into the root.
+		// This should only happen during the search for an insert when the root
+		// partition is at the leaf level.
 		if searchLevel != searchCtx.Level-1 {
 			panic(errors.AssertionFailedf("caller passed invalid level %d", searchCtx.Level))
 		}
+		res := &vecstore.SearchResult{ChildKey: vecstore.ChildKey{PartitionKey: vecstore.RootKey}}
 		if searchCtx.Options.ReturnVectors {
-			panic(errors.AssertionFailedf("ReturnVectors=true not supported for this case"))
+			// The centroid of the root partition is always the zero-vector.
+			res.Vector = make(vector.T, vi.rootQuantizer.GetRandomDims())
 		}
-		searchSet.Add(&vecstore.SearchResult{
-			ChildKey: vecstore.ChildKey{PartitionKey: vecstore.RootKey},
-		})
+		searchSet.Add(res)
 		return nil
 	}
 

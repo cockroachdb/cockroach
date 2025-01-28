@@ -1100,7 +1100,7 @@ message VectorSearchSpec {
   optional uint32 index_id = 2 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "IndexID",
                                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  repeated cockroach.sql.sqlbase.IndexFetchSpec.KeyColumn primary_key_columns = 3;
+  repeated cockroach.sql.sqlbase.IndexFetchSpec.KeyColumn primary_key_columns = 3 [(gogoproto.nullable) = false];
   // QueryVector is the vector to search for.
   repeated float query_vector = 4;
   // TargetNeighborCount is the number of nearest neighbors to search for.
@@ -1121,6 +1121,6 @@ message VectorMutationSearchSpec {
                                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   optional uint32 query_vector_column_ordinal = 3 [(gogoproto.nullable) = false];
   repeated uint32 primary_key_column_ordinals = 4;
-  repeated cockroach.sql.sqlbase.IndexFetchSpec.KeyColumn primary_key_columns = 5;
+  repeated cockroach.sql.sqlbase.IndexFetchSpec.KeyColumn primary_key_columns = 5 [(gogoproto.nullable) = false];
   optional bool is_index_put = 6 [(gogoproto.nullable) = false];
 }

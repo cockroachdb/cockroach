@@ -3911,7 +3911,7 @@ func (b *Builder) buildVectorMutationSearch(
 
 	var res execPlan
 	res.root, err = b.factory.ConstructVectorMutationSearch(
-		input, table, index, prefixKeyCols, queryVectorCol, primaryKeyCols, isIndexPut,
+		input.root, table, index, prefixKeyCols, queryVectorCol, primaryKeyCols, isIndexPut,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

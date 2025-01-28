@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -206,6 +207,10 @@ type ServerConfig struct {
 	// RootSQLMemoryPoolSize is the size in bytes of the root SQL memory
 	// monitor.
 	RootSQLMemoryPoolSize int64
+
+	// VecIndexManager allows SQL processors to access the vecindex.VectorIndex
+	// for operations on a vector index.
+	VecIndexManager *vecindex.Manager
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

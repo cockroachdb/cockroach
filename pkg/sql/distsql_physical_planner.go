@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -4473,19 +4472,11 @@ func (dsp *DistSQLPlanner) createPlanForVectorSearch(
 
 	p := planCtx.NewPhysicalPlan()
 	colTypes := getTypesFromResultColumns(n.columns)
-
-	// TODO(drewk): this is ugly, clean it up.
 	primaryIdx := n.table.GetPrimaryIndex()
-	pkCols := n.table.IndexFetchSpecKeyAndSuffixColumns(primaryIdx)
-	primaryKeyCols := make([]*fetchpb.IndexFetchSpec_KeyColumn, len(pkCols))
-	for i := range pkCols {
-		primaryKeyCols[i] = &pkCols[i]
-	}
-
 	spec := &execinfrapb.VectorSearchSpec{
 		TableID:             n.table.GetID(),
 		IndexID:             n.index.GetID(),
-		PrimaryKeyColumns:   primaryKeyCols,
+		PrimaryKeyColumns:   n.table.IndexFetchSpecKeyAndSuffixColumns(primaryIdx),
 		QueryVector:         queryVector,
 		TargetNeighborCount: n.targetNeighborCount,
 	}
@@ -4515,21 +4506,17 @@ func (dsp *DistSQLPlanner) createPlanForVectorMutationSearch(
 		outputTypes = append(outputTypes, types.Bytes)
 		plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, len(inputTypes)+1)
 	}
-	// TODO(drewk): this is ugly, clean it up.
 	primaryIdx := n.table.GetPrimaryIndex()
-	pkCols := n.table.IndexFetchSpecKeyAndSuffixColumns(primaryIdx)
 	primaryKeyColumnOrdinals := make([]uint32, len(n.primaryKeyCols))
-	primaryKeyCols := make([]*fetchpb.IndexFetchSpec_KeyColumn, len(n.primaryKeyCols))
 	for i, col := range n.primaryKeyCols {
 		primaryKeyColumnOrdinals[i] = uint32(plan.PlanToStreamColMap[col])
-		primaryKeyCols[i] = &pkCols[i]
 	}
 	spec := &execinfrapb.VectorMutationSearchSpec{
 		TableID:                  n.table.GetID(),
 		IndexID:                  n.index.GetID(),
 		QueryVectorColumnOrdinal: uint32(plan.PlanToStreamColMap[n.queryVectorCol]),
 		PrimaryKeyColumnOrdinals: primaryKeyColumnOrdinals,
-		PrimaryKeyColumns:        primaryKeyCols,
+		PrimaryKeyColumns:        n.table.IndexFetchSpecKeyAndSuffixColumns(primaryIdx),
 		IsIndexPut:               n.isIndexPut,
 	}
 
