@@ -710,10 +710,9 @@ func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *inde
 		if idx.IsPartial() && !idx.Backfilling() {
 			lazyAllocAppendIndex(&c.partial, idx, len(c.all))
 		}
-		// TODO(drewk):
-		//if idx.GetType() == descpb.IndexDescriptor_VECTOR && !idx.Backfilling() {
-		//	lazyAllocAppendIndex(&c.vector, idx, len(c.all))
-		//}
+		if idx.GetType() == descpb.IndexDescriptor_VECTOR && !idx.Backfilling() {
+			lazyAllocAppendIndex(&c.vector, idx, len(c.all))
+		}
 	}
 	return &c
 }

@@ -1579,18 +1579,18 @@ func encodeSecondaryIndexNoFamilies(
 		// The zero value for an index-value is a 0-length bytes value.
 		value = []byte{}
 	}
-	//if index.GetType() == descpb.IndexDescriptor_VECTOR {
-	//	// Vector index values begin with the quantized and encoded vector. It is
-	//	// possible that it is not supplied here (e.g. for an index delete).
-	//	if encVector := vh.QuantizedVecs[index.GetID()]; encVector != nil {
-	//		encVectorBytes, ok := tree.AsDBytes(encVector)
-	//		if !ok {
-	//			return IndexEntry{}, errors.AssertionFailedf(
-	//				"unexpected type for vector index value: %T", encVector)
-	//		}
-	//		value = encoding.EncodeUntaggedBytesValue(value, encVectorBytes.UnsafeBytes())
-	//	}
-	//}
+	if index.GetType() == descpb.IndexDescriptor_VECTOR {
+		// Vector index values begin with the quantized and encoded vector. It is
+		// possible that it is not supplied here (e.g. for an index delete).
+		if encVector := vh.QuantizedVecs[index.GetID()]; encVector != nil {
+			encVectorBytes, ok := tree.AsDBytes(encVector)
+			if !ok {
+				return IndexEntry{}, errors.AssertionFailedf(
+					"unexpected type for vector index value: %T", encVector)
+			}
+			value = encoding.EncodeUntaggedBytesValue(value, encVectorBytes.UnsafeBytes())
+		}
+	}
 	cols := GetValueColumns(index)
 	value, err = writeColumnValues(value, colMap, row, cols)
 	if err != nil {
