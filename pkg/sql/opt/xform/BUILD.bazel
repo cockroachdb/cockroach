@@ -48,6 +48,7 @@ go_library(
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/rowinfra",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondatapb",

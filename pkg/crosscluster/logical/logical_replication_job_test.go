@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -42,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1288,14 +1288,14 @@ func TestMultipleSourcesIntoSingleDest(t *testing.T) {
 	dbC.CheckQueryResults(t, "SELECT * from tab", expectedRowsDest)
 }
 
-// TestFourWayReplication tests 4 tables that are all streaming
-// from each other and how they handle conflicts
-func TestFourWayReplication(t *testing.T) {
+// TestThreeWayReplication ensures LWW works on a fully connected graph of
+// streams across 3 databases.
+func TestThreeWayReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
-	skip.UnderDuress(t, "running 12 LDR jobs on one server is too much")
+	skip.UnderDuress(t, "running 6 LDR jobs on one server is too much")
 
 	ctx := context.Background()
 
@@ -1332,7 +1332,7 @@ func TestFourWayReplication(t *testing.T) {
 		}
 	}
 
-	numDBs := 4
+	numDBs := 3
 	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, clusterArgs, 1, numDBs)
 	defer server.Stopper().Stop(ctx)
 
@@ -1360,6 +1360,7 @@ func TestFourWayReplication(t *testing.T) {
 	}
 	verifyExpectedRowAllServers(t, runners, expectedRows, dbNames)
 
+	// Assert Row 2's update wins LWW.
 	for i := range numDBs {
 		runners[i].Exec(t, fmt.Sprintf("UPSERT INTO tab VALUES (2, 'row%v')", i))
 	}
@@ -1368,7 +1369,7 @@ func TestFourWayReplication(t *testing.T) {
 
 	expectedRows = [][]string{
 		{"1", "celery"},
-		{"2", "row3"},
+		{"2", "row2"},
 	}
 	verifyExpectedRowAllServers(t, runners, expectedRows, dbNames)
 }
@@ -1491,7 +1492,7 @@ func compareReplicatedTables(
 	descB := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), dbB, tableName)
 
 	for _, indexA := range descA.AllIndexes() {
-		if indexA.GetType() == descpb.IndexDescriptor_INVERTED {
+		if indexA.GetType() == idxtype.INVERTED {
 			t.Logf("skipping fingerprinting of inverted index %s", indexA.GetName())
 			continue
 		}

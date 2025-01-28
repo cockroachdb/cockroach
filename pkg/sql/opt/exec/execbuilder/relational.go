@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -584,7 +585,7 @@ func (b *Builder) scanParams(
 	// index in the memo.
 	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index {
 		idx := tab.Index(scan.Flags.Index)
-		isInverted := idx.IsInverted()
+		isInverted := idx.Type() == idxtype.INVERTED
 		_, isPartial := idx.Predicate()
 
 		var err error
@@ -756,11 +757,13 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	}
 
 	idx := tab.Index(scan.Index)
-	if idx.IsInverted() && len(scan.InvertedConstraint) == 0 && scan.Constraint == nil {
-		return execPlan{}, colOrdMap{},
-			errors.AssertionFailedf("expected inverted index scan to have a constraint")
+	if idx.Type() == idxtype.INVERTED {
+		if len(scan.InvertedConstraint) == 0 && scan.Constraint == nil {
+			return execPlan{}, colOrdMap{},
+				errors.AssertionFailedf("expected inverted index scan to have a constraint")
+		}
 	}
-	if idx.IsVector() {
+	if idx.Type() == idxtype.VECTOR {
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"only VectorSearch operators can use vector indexes")
 	}

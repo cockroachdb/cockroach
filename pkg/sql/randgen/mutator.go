@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -806,7 +807,7 @@ func postgresCreateTableMutator(
 				// TODO(rafi): Postgres supports inverted indexes with a different
 				// syntax than Cockroach. Maybe we could add it later.
 				// The syntax is `CREATE INDEX name ON table USING gin(column)`.
-				if def.Type == tree.IndexTypeForward {
+				if def.Type == idxtype.FORWARD {
 					mutated = append(mutated, &tree.CreateIndex{
 						Name:    def.Name,
 						Table:   mutatedStmt.Table,
@@ -1031,8 +1032,7 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 	for _, stmt := range stmts {
 		switch ast := stmt.(type) {
 		case *tree.CreateIndex:
-			if ast.Type != tree.IndexTypeForward {
-				// Only forward indexes support STORING columns for now.
+			if !ast.Type.SupportsStoring() {
 				continue
 			}
 			info, ok := tables[ast.Table.ObjectName]
@@ -1063,8 +1063,7 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 						idx = &defType.IndexTableDef
 					}
 				}
-				if idx == nil || idx.Type != tree.IndexTypeForward {
-					// STORING is not currently supported by non-forward indexes.
+				if idx == nil || !idx.Type.SupportsStoring() {
 					continue
 				}
 				// If we don't have a storing list, make one with 50% chance.

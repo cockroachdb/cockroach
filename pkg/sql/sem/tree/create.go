@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -223,14 +224,6 @@ func (l *IndexElemList) doc(p *PrettyCfg) pretty.Doc {
 	return p.commaSeparated(d...)
 }
 
-type IndexType uint8
-
-const (
-	IndexTypeForward IndexType = iota
-	IndexTypeInverted
-	IndexTypeVector
-)
-
 type IndexInvisibility struct {
 	Value         float64
 	FloatProvided bool
@@ -241,7 +234,7 @@ type CreateIndex struct {
 	Name        Name
 	Table       TableName
 	Unique      bool
-	Type        IndexType
+	Type        idxtype.T
 	IfNotExists bool
 	Columns     IndexElemList
 	Sharded     *ShardedIndexDef
@@ -265,9 +258,9 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString("UNIQUE ")
 	}
 	switch node.Type {
-	case IndexTypeInverted:
+	case idxtype.INVERTED:
 		ctx.WriteString("INVERTED ")
-	case IndexTypeVector:
+	case idxtype.VECTOR:
 		ctx.WriteString("VECTOR ")
 	}
 	ctx.WriteString("INDEX ")
@@ -1041,7 +1034,7 @@ type IndexTableDef struct {
 	Columns          IndexElemList
 	Sharded          *ShardedIndexDef
 	Storing          NameList
-	Type             IndexType
+	Type             idxtype.T
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
 	Predicate        Expr
@@ -1051,9 +1044,9 @@ type IndexTableDef struct {
 // Format implements the NodeFormatter interface.
 func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	switch node.Type {
-	case IndexTypeInverted:
+	case idxtype.INVERTED:
 		ctx.WriteString("INVERTED ")
-	case IndexTypeVector:
+	case idxtype.VECTOR:
 		ctx.WriteString("VECTOR ")
 	}
 	ctx.WriteString("INDEX ")

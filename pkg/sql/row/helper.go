@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -240,7 +241,7 @@ func (rh *RowHelper) encodeTombstonesForIndex(
 	if !index.IsUnique() {
 		return nil, errors.AssertionFailedf("Expected index %s to be unique", index.GetName())
 	}
-	if index.GetType() != descpb.IndexDescriptor_FORWARD {
+	if index.GetType() != idxtype.FORWARD {
 		return nil, errors.AssertionFailedf("Expected index %s to be a forward index", index.GetName())
 	}
 

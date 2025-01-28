@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -86,8 +87,8 @@ func MakeSplitterBase(
 	// If we're looking at a secondary index...
 	if index.GetID() != table.GetPrimaryIndexID() {
 
-		// * The index cannot be inverted.
-		if index.GetType() != descpb.IndexDescriptor_FORWARD {
+		// * The index must be a forward index.
+		if index.GetType() != idxtype.FORWARD {
 			return NoopSplitter()
 		}
 

@@ -989,7 +989,7 @@ func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bo
 	// Check UNIQUE INDEX constraints.
 	for i := 1; i < tab.IndexCount(); i++ {
 		index := tab.Index(i)
-		if !index.IsUnique() || index.IsInverted() || index.IsVector() {
+		if !index.IsUnique() || !index.Type().CanBeUnique() {
 			continue
 		}
 		// If any of the key columns is nullable, uniqueCols is suffixed with the

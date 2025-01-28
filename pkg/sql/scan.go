@@ -230,7 +230,7 @@ func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catal
 	// table where prefixCol is the key column.
 	foundIndex := false
 	for _, idx := range indexes {
-		if idx.GetType() != descpb.IndexDescriptor_FORWARD || idx.IsPartial() {
+		if idx.GetType().AllowsPrefixColumns() || idx.IsPartial() {
 			continue
 		}
 		columns := n.desc.IndexKeyColumns(idx)
