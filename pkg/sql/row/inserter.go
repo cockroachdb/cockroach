@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -77,20 +78,30 @@ func CheckPrimaryKeyColumns(tableDesc catalog.TableDescriptor, colMap catalog.Ta
 // insertCPutFn is used by insertRow when conflicts (i.e. the key already exists)
 // should generate errors.
 func insertCPutFn(
-	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", *key, value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", keys.PrettyPrint(keyEncodingDirs, *key), value.PrettyPrint())
 	}
 	b.CPut(key, value, nil /* expValue */)
 }
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 func insertPutFn(
-	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", *key, value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", keys.PrettyPrint(keyEncodingDirs, *key), value.PrettyPrint())
 	}
 	b.Put(key, value)
 }
@@ -184,9 +195,9 @@ func (ri *Inserter) InsertRow(
 
 				if ri.Helper.Indexes[idx].ForcePut() {
 					// See the comment on (catalog.Index).ForcePut() for more details.
-					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV)
+					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
 				} else {
-					insertCPutFn(ctx, b, &e.Key, &e.Value, traceKV)
+					insertCPutFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
 				}
 			}
 
