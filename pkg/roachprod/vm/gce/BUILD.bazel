@@ -35,9 +35,13 @@ go_library(
 go_test(
     name = "gce_test",
     size = "small",
-    srcs = ["gcloud_test.go"],
+    srcs = [
+        "gcloud_test.go",
+        "utils_test.go",
+    ],
     embed = [":gce"],
     deps = [
+        "//pkg/roachprod/config",
         "//pkg/roachprod/vm",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",

@@ -806,10 +806,24 @@ func (p *Provider) createVM(
 	providerOpts ProviderOpts,
 ) (machine compute.VirtualMachine, err error) {
 	startupArgs := azureStartupArgs{
-		RemoteUser:           remoteUser,
-		DisksInitializedFile: vm.DisksInitializedFile,
-		OSInitializedFile:    vm.OSInitializedFile,
-		StartupLogs:          vm.StartupLogs,
+		StartupArgs: vm.StartupArgs{
+			VMName:               name,
+			SharedUser:           remoteUser,
+			DisksInitializedFile: vm.DisksInitializedFile,
+			OSInitializedFile:    vm.OSInitializedFile,
+			StartupLogs:          vm.StartupLogs,
+			EnableCron:           false,
+			Zfs:                  false,
+			EnableFIPS:           false,
+			ChronyServers: []string{
+				"time1.google.com",
+				"time2.google.com",
+				"time3.google.com",
+				"time4.google.com",
+			},
+		},
+		DiskControllerNVMe: false,
+		AttachedDiskLun:    nil,
 	}
 	useNVMe := MachineSupportsNVMe(providerOpts.MachineType)
 	if useNVMe {

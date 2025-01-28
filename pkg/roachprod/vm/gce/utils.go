@@ -26,18 +26,6 @@ import (
 const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
 
-# ensure any failure fails the entire script
-set -eux
-
-# Redirect output to stdout/err and a log file
-exec &> >(tee -a {{ .StartupLogs }})
-
-# Log the startup of the script with a timestamp
-echo "startup script starting: $(date -u)"
-
-sudo -u {{ .SharedUser }} bash -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
-sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
-
 function setup_disks() {
   first_setup=$1
 
@@ -157,10 +145,12 @@ function setup_disks() {
 	sudo touch {{ .DisksInitializedFile }}
 }
 
-if [ -e {{ .DisksInitializedFile }} ]; then
-  echo "OS and disks already initialized, exiting."
-  exit 0
-fi
+{{ template "head_utils" . }}
+
+sudo -u {{ .SharedUser }} bash -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+
+{{ template "apt_packages" . }}
 
 if [ -e {{ .OSInitializedFile }} ]; then
   echo "OS already initialized, only initializing disks."
@@ -172,125 +162,25 @@ fi
 # Initialize disks and write fstab entries.
 setup_disks true
 
-# sshguard can prevent frequent ssh connections to the same host. Disable it.
-if systemctl is-active --quiet sshguard; then
-    systemctl stop sshguard
-fi
-systemctl mask sshguard
-# increase the number of concurrent unauthenticated connections to the sshd
-# daemon. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Load_Balancing.
-# By default, only 10 unauthenticated connections are permitted before sshd
-# starts randomly dropping connections.
-sudo sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
-# Crank up the logging for issues such as:
-# https://github.com/cockroachdb/cockroach/issues/36929
-sudo sed -i'' 's/LogLevel.*$/LogLevel DEBUG3/' /etc/ssh/sshd_config
-# FIPS is still on Ubuntu 20.04 however, so don't enable if using FIPS.
-{{ if not .EnableFIPS }}
-sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
-{{ end }}
-sudo service sshd restart
-# increase the default maximum number of open file descriptors for
-# root and non-root users. Load generators running a lot of concurrent
-# workers bump into this often.
-sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf'
+{{ template "ulimits" . }}
 
-# N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
-# jepsen uses /usr/sbin, we create a symlink.
-# See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
-# FIPS is still on Ubuntu 20.04 however, so don't create if using FIPS.
-{{ if not .EnableFIPS }}
-sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
-{{ end }}
+{{ template "tcpdump" . }}
 
-# Send TCP keepalives every minute since GCE will terminate idle connections
-# after 10m. Note that keepalives still need to be requested by the application
-# with the SO_KEEPALIVE socket option.
-cat <<EOF > /etc/sysctl.d/99-roachprod-tcp-keepalive.conf
-net.ipv4.tcp_keepalive_time=60
-net.ipv4.tcp_keepalive_intvl=60
-net.ipv4.tcp_keepalive_probes=5
-EOF
+{{ template "keepalives" . }}
 
-sudo apt-get update -q
-sudo apt-get install -qy chrony
+{{ template "cron_utils" . }}
 
-# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
-systemctl stop unattended-upgrades
-sudo rm -rf /var/log/unattended-upgrades
-apt-get purge -y unattended-upgrades
+{{ template "chrony_utils" . }}
 
-{{ if not .EnableCron }}
-systemctl stop cron
-systemctl mask cron
-{{ end }}
+{{ template "timers_services_utils" . }}
 
-# Override the chrony config. In particular,
-# log aggressively when clock is adjusted (0.01s)
-# and exclusively use google's time servers.
-sudo cat <<EOF > /etc/chrony/chrony.conf
-keyfile /etc/chrony/chrony.keys
-commandkey 1
-driftfile /var/lib/chrony/chrony.drift
-log tracking measurements statistics
-logdir /var/log/chrony
-maxupdateskew 100.0
-dumponexit
-dumpdir /var/lib/chrony
-logchange 0.01
-hwclockfile /etc/adjtime
-rtcsync
-server metadata.google.internal prefer iburst
-makestep 0.1 3
-EOF
+{{ template "core_dumps_utils" . }}
 
-sudo /etc/init.d/chrony restart
-sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
+{{ template "hostname_utils" . }}
 
-for timer in apt-daily-upgrade.timer apt-daily.timer e2scrub_all.timer fstrim.timer man-db.timer e2scrub_all.timer ; do
-  systemctl mask $timer
-done
+{{ template "fips_utils" . }}
 
-for service in apport.service atd.service; do
-	if systemctl is-active --quiet $service; then
-    systemctl stop $service
-	fi
-  systemctl mask $service
-done
-
-# Enable core dumps, do this last, something above resets /proc/sys/kernel/core_pattern
-# to just "core".
-cat <<EOF > /etc/security/limits.d/core_unlimited.conf
-* soft core unlimited
-* hard core unlimited
-root soft core unlimited
-root hard core unlimited
-EOF
-
-cat <<'EOF' > /bin/gzip_core.sh
-#!/bin/sh
-exec /bin/gzip -f - > /mnt/data1/cores/core.$1.$2.$3.$4.gz
-EOF
-chmod +x /bin/gzip_core.sh
-
-CORE_PATTERN="|/bin/gzip_core.sh %e %p %h %t"
-echo "$CORE_PATTERN" > /proc/sys/kernel/core_pattern
-sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
-sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
-echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
-
-sysctl --system  # reload sysctl settings
-
-{{ if .EnableFIPS }}
-sudo apt-get install -yq ubuntu-advantage-tools jq
-# Enable FIPS (in practice, it's often already enabled at this point).
-if [ $(sudo pro status --format json | jq '.services[] | select(.name == "fips") | .status') != '"enabled"' ]; then
-  sudo ua enable fips --assume-yes
-fi
-{{ end }}
-
-sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
-sudo service ssh restart
+{{ template "ssh_utils" . }}
 
 sudo touch {{ .OSInitializedFile }}
 `
@@ -305,16 +195,10 @@ func writeStartupScript(
 	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool, enableCron bool,
 ) (string, error) {
 	type tmplParams struct {
-		ExtraMountOpts       string
-		UseMultipleDisks     bool
-		Zfs                  bool
-		EnableFIPS           bool
-		SharedUser           string
-		PublicKey            string
-		EnableCron           bool
-		OSInitializedFile    string
-		DisksInitializedFile string
-		StartupLogs          string
+		vm.StartupArgs
+		ExtraMountOpts   string
+		UseMultipleDisks bool
+		PublicKey        string
 	}
 
 	publicKey, err := config.SSHPublicKey()
@@ -323,16 +207,20 @@ func writeStartupScript(
 	}
 
 	args := tmplParams{
-		ExtraMountOpts:       extraMountOpts,
-		UseMultipleDisks:     useMultiple,
-		Zfs:                  fileSystem == vm.Zfs,
-		EnableFIPS:           enableFIPS,
-		SharedUser:           config.SharedUser,
-		PublicKey:            publicKey,
-		EnableCron:           enableCron,
-		OSInitializedFile:    vm.OSInitializedFile,
-		DisksInitializedFile: vm.DisksInitializedFile,
-		StartupLogs:          vm.StartupLogs,
+		StartupArgs: vm.StartupArgs{
+			VMName:               "",
+			SharedUser:           config.SharedUser,
+			DisksInitializedFile: vm.DisksInitializedFile,
+			OSInitializedFile:    vm.OSInitializedFile,
+			StartupLogs:          vm.StartupLogs,
+			EnableCron:           enableCron,
+			Zfs:                  fileSystem == vm.Zfs,
+			EnableFIPS:           enableFIPS,
+			ChronyServers:        []string{"metadata.google.internal"},
+		},
+		ExtraMountOpts:   extraMountOpts,
+		UseMultipleDisks: useMultiple,
+		PublicKey:        publicKey,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")
@@ -341,7 +229,22 @@ func writeStartupScript(
 	}
 	defer tmpfile.Close()
 
-	t := template.Must(template.New("start").Parse(gceDiskStartupScriptTemplate))
+	t := template.New("start")
+
+	// Parse generic startup script parts.
+	for name, tmpl := range vm.StartupScriptTemplateParts {
+		var err error
+		t, err = t.Parse(tmpl)
+		if err != nil {
+			return "", errors.Wrapf(err, "failed to parse generic startup script template %s", name)
+		}
+	}
+
+	// Parse GCE-specific startup script.
+	t, err = t.Parse(gceDiskStartupScriptTemplate)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to parse GCE startup script template")
+	}
 	if err := t.Execute(tmpfile, args); err != nil {
 		return "", err
 	}

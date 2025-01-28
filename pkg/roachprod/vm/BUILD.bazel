@@ -4,6 +4,7 @@ go_library(
     name = "vm",
     srcs = [
         "dns.go",
+        "startup.go",
         "vm.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm",
