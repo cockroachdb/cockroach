@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
-	"github.com/cockroachdb/cockroach/pkg/util/unique"
+	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/errors"
 )
 
@@ -876,7 +876,7 @@ func encodeArrayInvertedIndexTableKeys(
 		}
 		outKeys = append(outKeys, newKey)
 	}
-	outKeys = unique.UniquifyByteSlices(outKeys)
+	outKeys = deduplicate.ByteSlices(outKeys)
 	return outKeys, nil
 }
 
