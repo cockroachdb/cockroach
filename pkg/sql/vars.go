@@ -3724,6 +3724,7 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
 	// CockroachDB extension.
 	`catalog_digest_staleness_check_enabled`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`catalog_digest_staleness_check_enabled`),
@@ -3740,6 +3741,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 		Hidden:        true,
+	},
+
+	// CockroachDB extension.
+	`optimizer_prefer_bounded_cardinality`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_prefer_bounded_cardinality`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_prefer_bounded_cardinality", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerPreferBoundedCardinality(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerPreferBoundedCardinality), nil
+		},
+		GlobalDefault: globalFalse,
 	},
 }
 

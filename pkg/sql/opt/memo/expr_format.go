@@ -914,6 +914,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if cost.Flags.HugeCostPenalty {
 				b.WriteString(" huge-cost-penalty")
 			}
+			if cost.Flags.UnboundedCardinality {
+				b.WriteString(" unbounded-cardinality")
+			}
 			tp.Child(b.String())
 		}
 	}
