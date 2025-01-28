@@ -16,6 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
+// defaultFlushInterval specifies a default for the amount of time an ingester
+// will go before flushing its contents to the registry.
+const defaultFlushInterval = time.Millisecond * 500
+
 // ConcurrentBufferIngester amortizes the locking cost of writing to an
 // insights registry concurrently from multiple goroutines. To that end, it
 // contains nothing specific to the insights domain; it is merely a bit of
@@ -29,6 +33,9 @@ type ConcurrentBufferIngester struct {
 	opts struct {
 		// noTimedFlush prevents time-triggered flushes from being scheduled.
 		noTimedFlush bool
+		// flushInterval is an optional override flush interval
+		// a value of zero will be set to the 500ms default.
+		flushInterval time.Duration
 	}
 
 	eventBufferCh chan eventBufChPayload
@@ -77,6 +84,13 @@ func WithoutTimedFlush() BufferOpt {
 	}
 }
 
+// WithFlushInterval allows for the override of the default flush interval
+func WithFlushInterval(intervalMS int) BufferOpt {
+	return func(i *ConcurrentBufferIngester) {
+		i.opts.flushInterval = time.Millisecond * time.Duration(intervalMS)
+	}
+}
+
 func (i *ConcurrentBufferIngester) Start(
 	ctx context.Context, stopper *stop.Stopper, opts ...BufferOpt,
 ) {
@@ -103,10 +117,14 @@ func (i *ConcurrentBufferIngester) Start(
 	})
 
 	if !i.opts.noTimedFlush {
+		flushInterval := i.opts.flushInterval
+		if flushInterval == 0 {
+			flushInterval = defaultFlushInterval
+		}
 		// This task eagerly flushes partial buffers into the channel, to avoid
 		// delays identifying insights in low-traffic clusters and tests.
 		_ = stopper.RunAsyncTask(ctx, "insights-ingester-flush", func(ctx context.Context) {
-			ticker := time.NewTicker(500 * time.Millisecond)
+			ticker := time.NewTicker(flushInterval)
 
 			for {
 				select {
