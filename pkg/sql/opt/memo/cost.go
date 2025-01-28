@@ -19,8 +19,12 @@ type Cost struct {
 // group members during testing, by setting their cost so high that any other
 // member will have a lower cost.
 var MaxCost = Cost{
-	C:     math.Inf(+1),
-	Flags: CostFlags{FullScanPenalty: true, HugeCostPenalty: true},
+	C: math.Inf(+1),
+	Flags: CostFlags{
+		FullScanPenalty:      true,
+		HugeCostPenalty:      true,
+		UnboundedCardinality: true,
+	},
 }
 
 // Less returns true if this cost is lower than the given cost.
@@ -57,6 +61,10 @@ type CostFlags struct {
 	// used when the optimizer is forced to use a particular plan, and will error
 	// if it cannot be used.
 	HugeCostPenalty bool
+	// UnboundedCardinality is true if the operator or any of its descendants
+	// have no guaranteed upperbound on the number of rows that they can
+	// produce. See props.AnyCardinality.
+	UnboundedCardinality bool
 }
 
 // Less returns true if these flags indicate a lower penalty than the other
@@ -71,6 +79,9 @@ func (c CostFlags) Less(other CostFlags) bool {
 	if c.FullScanPenalty != other.FullScanPenalty {
 		return !c.FullScanPenalty
 	}
+	if c.UnboundedCardinality != other.UnboundedCardinality {
+		return !c.UnboundedCardinality
+	}
 	return false
 }
 
@@ -78,9 +89,10 @@ func (c CostFlags) Less(other CostFlags) bool {
 func (c *CostFlags) Add(other CostFlags) {
 	c.FullScanPenalty = c.FullScanPenalty || other.FullScanPenalty
 	c.HugeCostPenalty = c.HugeCostPenalty || other.HugeCostPenalty
+	c.UnboundedCardinality = c.UnboundedCardinality || other.UnboundedCardinality
 }
 
 // Empty returns true if these flags are empty.
 func (c CostFlags) Empty() bool {
-	return !c.FullScanPenalty && !c.HugeCostPenalty
+	return !c.FullScanPenalty && !c.HugeCostPenalty && !c.UnboundedCardinality
 }
