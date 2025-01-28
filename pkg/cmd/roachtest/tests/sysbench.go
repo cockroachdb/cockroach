@@ -61,6 +61,7 @@ var sysbenchWorkloadName = map[sysbenchWorkload]string{
 type extraSetup struct {
 	nameSuffix string
 	stmts      []string
+	useDRPC    bool
 }
 
 func (w sysbenchWorkload) String() string {
@@ -150,7 +151,12 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 	} else {
 		t.Status("installing cockroach")
-		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
+		settings := install.MakeClusterSettings()
+		if opts.extra.useDRPC {
+			settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_DRPC_ENABLED=true")
+			t.L().Printf("extra setup to use DRPC")
+		}
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.CRDBNodes())
 		if len(c.CRDBNodes()) >= 3 {
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), c.Conn(ctx, t.L(), 1))
 			require.NoError(t, err)
@@ -250,12 +256,18 @@ func registerSysbench(r registry.Registry) {
 		{n: 1, cpus: 32},
 		{n: 3, cpus: 32},
 		{n: 3, cpus: 8, pick: coreThree},
-		{n: 3, cpus: 8, pick: coreThree, extra: extraSetup{nameSuffix: "-settings", stmts: []string{
-			`set cluster setting sql.stats.flush.enabled = false`,
-			`set cluster setting sql.metrics.statement_details.enabled = false`,
-			`set cluster setting kv.split_queue.enabled = false`,
-			`set cluster setting sql.stats.histogram_collection.enabled = false`,
-			`set cluster setting kv.consistency_queue.enabled = false`}},
+		{n: 3, cpus: 8, pick: coreThree,
+			extra: extraSetup{
+				nameSuffix: "-settings",
+				stmts: []string{
+					`set cluster setting sql.stats.flush.enabled = false`,
+					`set cluster setting sql.metrics.statement_details.enabled = false`,
+					`set cluster setting kv.split_queue.enabled = false`,
+					`set cluster setting sql.stats.histogram_collection.enabled = false`,
+					`set cluster setting kv.consistency_queue.enabled = false`,
+				},
+				useDRPC: true,
+			},
 		},
 	} {
 		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
@@ -277,6 +289,7 @@ func registerSysbench(r registry.Registry) {
 			if d.extra.nameSuffix != "" {
 				benchname += d.extra.nameSuffix
 			}
+
 			r.Add(registry.TestSpec{
 				Name:                      fmt.Sprintf("%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, d.n, d.cpus, conc),
 				Benchmark:                 true,
