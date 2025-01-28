@@ -128,6 +128,7 @@ func makeJSONEncoder(
 					encodeJSONValueNullAsObject: opts.EncodeJSONValueNullAsObject,
 					encodeKeyAsObject:           opts.Envelope == changefeedbase.OptEnvelopeEnriched,
 					includeKeyObjectSchema:      inclSchema,
+					headersJSONColName:          opts.HeadersJSONColName,
 				}
 			}).(*versionEncoder)
 		},
@@ -168,6 +169,7 @@ func makeJSONEncoder(
 // versionEncoder memoizes version specific encoding state.
 type versionEncoder struct {
 	encodeJSONValueNullAsObject, encodeKeyAsObject, includeKeyObjectSchema bool
+	headersJSONColName                                                     string
 	valueBuilder                                                           *json.FixedKeysObjectBuilder
 }
 
@@ -276,7 +278,11 @@ func (e *versionEncoder) rowAsGoNative(
 
 	if e.valueBuilder == nil {
 		keys := make([]string, 0, len(row.ResultColumns()))
-		_ = row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
+		it := row.ForEachColumn()
+		if e.headersJSONColName != "" {
+			it = cdcevent.NewSkipIterator(it, e.headersJSONColName)
+		}
+		_ = it.Col(func(col cdcevent.ResultColumn) error {
 			keys = append(keys, col.Name)
 			return nil
 		})
@@ -290,7 +296,11 @@ func (e *versionEncoder) rowAsGoNative(
 		e.valueBuilder = b
 	}
 
-	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+	it := row.ForEachColumn()
+	if e.headersJSONColName != "" {
+		it = cdcevent.NewSkipIterator(it, e.headersJSONColName)
+	}
+	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		j, err := e.datumToJSON(ctx, d)
 		if err != nil {
 			return err
