@@ -7,6 +7,9 @@ syntax = "proto3";
 package cockroach.storage.storagepb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/storage/storagepb";
 
+import "gogoproto/gogo.proto";
+import "roachpb/metadata.proto";
+
 enum EncryptionKeySource {
   // Plain key files.
   KeyFiles = 0;
@@ -28,4 +31,61 @@ message EncryptionOptions {
 
   // Default data key rotation in seconds.
   int64 data_key_rotation_period = 3;
+}
+
+// EncryptedPath is a path with encryption options.
+message EncryptedPath {
+  // The path to the directory.
+  string path = 1;
+  // The encryption options for the directory. May be nil.
+  EncryptionOptions encryption = 2;
+}
+
+enum WALFailoverMode {
+  // WALFailoverDefault leaves the WAL failover configuration unspecified. Today
+  // this is interpreted as FailoverDisabled but future releases may default to
+  // another mode.
+  WALFailoverDefault = 0;
+  // WALFailoverDisabled leaves WAL failover disabled. Commits to the
+  // storage engine observe the latency of a store's primary WAL directly.
+  WALFailoverDisabled = 1;
+  // WALFailoverAmongStores enables WAL failover among multiple
+  // stores within a node. This setting has no effect if the node
+  // has a single store. When a storage engine observes high latency
+  // writing to its WAL, it may transparently failover to an
+  // arbitrary, predetermined other store's data directory. If
+  // successful in syncing log entries to the other store's volume,
+  // the batch commit latency is insulated from the effects of
+  // momentary disk stalls.
+  WALFailoverAmongStores = 2;
+  // WALFailoverExplicitPath enables WAL failover for a single-store node to
+  // an explicitly specified path.
+  WALFailoverExplicitPath = 3;
+}
+
+// WALFailoverConfig configures a node's stores behavior under high write
+// latency to their write-ahead logs.
+message WALFailover {
+  option (gogoproto.goproto_stringer) = false;
+  WALFailoverMode Mode = 1;
+  // Path is the non-store path to which WALs should be written when failing
+  // over. It must be nonempty if and only if Mode ==
+  // WALFailoverExplicitPath.
+  EncryptedPath Path = 2 [ (gogoproto.nullable) = false ];
+  // PrevPath is the previously used non-store path. It may be set
+  // with Mode == WALFailoverExplicitPath (when changing the
+  // secondary path) or WALFailoverDisabled (when disabling WAL
+  // failover after it was previously enabled with
+  // WALFailoverExplicitPath). It must be empty for other modes. If
+  // Mode is WALFailoverDisabled and previously WAL failover was
+  // enabled using WALFailoverAmongStores, then PrevPath must not be
+  // set.
+  EncryptedPath PrevPath = 3 [ (gogoproto.nullable) = false ];
+}
+
+message Storage {
+  // WALFailover enables and configures automatic WAL failover when latency to
+  // a store's primary WAL increases.
+  WALFailover walFailover = 2
+      [ (gogoproto.nullable) = false, (gogoproto.customname) = "WALFailover" ];
 }

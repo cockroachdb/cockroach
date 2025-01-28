@@ -626,7 +626,7 @@ func (jls *JoinListType) Set(value string) error {
 // unmatched EncryptionSpec causes an error.
 func PopulateWithEncryptionOpts(
 	storeSpecs StoreSpecList,
-	walFailoverConfig *WALFailoverConfig,
+	walFailoverConfig *storagepb.WALFailover,
 	encryptionSpecs storagepb.EncryptionSpecList,
 ) error {
 	for _, es := range encryptionSpecs.Specs {
@@ -648,7 +648,7 @@ func PopulateWithEncryptionOpts(
 			break
 		}
 
-		for _, externalPath := range [2]*ExternalPath{&walFailoverConfig.Path, &walFailoverConfig.PrevPath} {
+		for _, externalPath := range [2]storagepb.EncryptedPath{walFailoverConfig.Path, walFailoverConfig.PrevPath} {
 			if !externalPath.IsSet() || !es.PathMatches(externalPath.Path) {
 				continue
 			}
@@ -656,12 +656,12 @@ func PopulateWithEncryptionOpts(
 			// WALFailoverConfig.PrevPath are only ever set in single-store
 			// configurations. In multi-store with among-stores failover mode, these
 			// will be empty (so we won't encounter the same path twice).
-			if externalPath.EncryptionOptions != nil {
+			if externalPath.Encryption != nil {
 				return fmt.Errorf("WAL failover path %s already has an encryption setting",
 					externalPath.Path)
 			}
 			opts := es.ToEncryptionOptions()
-			externalPath.EncryptionOptions = opts
+			externalPath.Encryption = opts
 			found = true
 		}
 
