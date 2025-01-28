@@ -24,7 +24,9 @@ import "server/status/statuspb/status.proto";
 import "sql/appstatspb/app_stats.proto";
 import "sql/contentionpb/contention.proto";
 import "sql/sqlstats/insights/insights.proto";
+import "storage/enginepb/key_registry.proto";
 import "storage/enginepb/mvcc.proto";
+import "storage/enginepb/stats.proto";
 import "kv/kvserver/kvserverpb/lease_status.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
@@ -1654,7 +1656,7 @@ message StoreDetails {
   // - encryption settings
 
   // encryption_status is a serialized
-  // ccl/storageccl/engineccl/enginepbccl/stats.go::EncryptionStatus protobuf.
+  // storage/enginepb/stats.go::EncryptionStatus protobuf.
   bytes encryption_status = 2;
 
   // Basic file stats when encryption is enabled.

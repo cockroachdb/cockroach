@@ -4,8 +4,8 @@
 // included in the /LICENSE file.
 
 syntax = "proto3";
-package cockroach.ccl.baseccl;
-option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/baseccl";
+package cockroach.storage.storagepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/storagepb";
 
 enum EncryptionKeySource {
   // Plain key files.
