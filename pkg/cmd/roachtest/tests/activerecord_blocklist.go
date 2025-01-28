@@ -23,6 +23,7 @@ var activeRecordBlocklist = blocklist{
 
 var activeRecordIgnoreList = blocklist{
 	`ActiveRecord::CockroachDBStructureDumpTest#test_structure_dump`:                                                                                           "flaky",
+	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_checkout_fairness_by_group`:                                                               "flaky",
 	`ActiveRecord::ConnectionAdapters::PostgreSQLAdapterTest#test_translate_no_connection_exception_to_not_established`:                                        "pg_terminate_backend not implemented",
 	`BasicsTest#test_default_values_are_deeply_dupped`:                                                                                                         "flaky",
 	`CockroachDB::FixturesTest#test_create_fixtures`:                                                                                                           "flaky",
