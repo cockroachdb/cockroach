@@ -115,7 +115,10 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 				splitPrevRowVersion: isPrev && opts.encodeForQuery && opts.Envelope != changefeedbase.OptEnvelopeBare,
 			}
 			return getCachedOrCreate(key, versionCache, func() interface{} {
-				return &versionEncoder{encodeJSONValueNullAsObject: opts.EncodeJSONValueNullAsObject}
+				return &versionEncoder{
+					encodeJSONValueNullAsObject: opts.EncodeJSONValueNullAsObject,
+					headersJSONColName:          opts.HeadersJSONColName,
+				}
 			}).(*versionEncoder)
 		},
 	}
@@ -147,6 +150,7 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 // versionEncoder memoizes version specific encoding state.
 type versionEncoder struct {
 	encodeJSONValueNullAsObject bool
+	headersJSONColName          string // TODO: impl in avro too
 	valueBuilder                *json.FixedKeysObjectBuilder
 }
 
@@ -213,6 +217,9 @@ func (e *versionEncoder) rowAsGoNative(
 	if e.valueBuilder == nil {
 		keys := make([]string, 0, len(row.ResultColumns()))
 		_ = row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
+			if e.headersJSONColName != "" && col.Name == e.headersJSONColName {
+				return nil
+			}
 			keys = append(keys, col.Name)
 			return nil
 		})
@@ -227,6 +234,9 @@ func (e *versionEncoder) rowAsGoNative(
 	}
 
 	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		if e.headersJSONColName != "" && col.Name == e.headersJSONColName {
+			return nil
+		}
 		j, err := e.datumToJSON(ctx, d)
 		if err != nil {
 			return err

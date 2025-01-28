@@ -8619,6 +8619,7 @@ func (s *memoryHoggingSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	headers map[string][]byte,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
