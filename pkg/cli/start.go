@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
@@ -611,11 +610,6 @@ func runStartInternal(
 		ctx, st, stopper, serverCfg.Stores,
 	); err != nil {
 		return err
-	}
-
-	// Configure the default storage engine.
-	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
-		serverCfg.StorageEngine = enginepb.EngineTypePebble
 	}
 
 	// The configuration is now ready to report to the user and the log
@@ -1241,7 +1235,6 @@ func reportServerInfo(
 	for i, spec := range serverCfg.Stores.Specs {
 		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(spec))
 	}
-	buf.Printf("storage engine: \t%s\n", &serverCfg.StorageEngine)
 
 	// Print the commong server identifiers.
 	if baseCfg.ClusterName != "" {
