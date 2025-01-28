@@ -101,11 +101,11 @@ func (s *Smither) ReloadSchemas() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	var err error
-	s.types, err = s.extractTypes()
+	s.tables, err = s.extractTables()
 	if err != nil {
 		return err
 	}
-	s.tables, err = s.extractTables()
+	s.types, err = s.extractTypes()
 	if err != nil {
 		return err
 	}
@@ -265,6 +265,8 @@ func (s *Smither) getRandUserDefinedType() (*types.T, *tree.TypeName, bool) {
 	return s.types.udts[idx], &s.types.udtNames[idx], true
 }
 
+// extractTypes populates the type information. It must be called after
+// extractTables.
 func (s *Smither) extractTypes() (*typeInfo, error) {
 	rows, err := s.db.Query(`
 SELECT
@@ -323,12 +325,35 @@ FROM
 	// Make sure that future appends to udts force a copy.
 	udts = udts[:len(udts):len(udts)]
 
-	return &typeInfo{
+	info := &typeInfo{
 		udts:        udts,
 		udtNames:    udtNames,
 		scalarTypes: append(udts, types.Scalar...),
 		seedTypes:   append(udts, randgen.SeedTypes...),
-	}, nil
+	}
+
+	// Include all implicit RECORD types that correspond to the user tables.
+NEXT_TABLE:
+	for _, t := range s.tables {
+		contents := make([]*types.T, 0, len(t.Columns))
+		labels := make([]string, 0, len(t.Columns))
+		for _, col := range t.Columns {
+			if colinfo.IsSystemColumnName(string(col.Name)) {
+				// Ignore system columns since they are inaccessible.
+				continue
+			}
+			typ, ok := col.Type.(*types.T)
+			if !ok {
+				continue NEXT_TABLE
+			}
+			contents = append(contents, typ)
+			labels = append(labels, string(col.Name))
+		}
+		typ := types.MakeLabeledTuple(contents, labels)
+		info.seedTypes = append(info.seedTypes, typ)
+	}
+
+	return info, nil
 }
 
 type schemaRef struct {
