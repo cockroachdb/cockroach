@@ -25,16 +25,19 @@ func TestChangefeedNemeses(t *testing.T) {
 	skip.UnderRace(t, "takes >1 min under race")
 
 	testutils.RunValues(t, "nemeses_options=", cdctest.NemesesOptions, func(t *testing.T, nop cdctest.NemesesOption) {
-		if nop.EnableSQLSmith == true {
-			skip.WithIssue(t, 137125)
-		}
 		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 			rng, seed := randutil.NewPseudoRand()
 			t.Logf("random seed: %d", seed)
 
 			sqlDB := sqlutils.MakeSQLRunner(s.DB)
-			withLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
-
+			// TODO(#137125): decoder encounters a bug when the declarative schema
+			// changer is enabled with SQLSmith
+			withLegacySchemaChanger := nop.EnableSQLSmith || rng.Float32() < 0.1
+			if withLegacySchemaChanger {
+				t.Log("using legacy schema changer")
+				sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
+				sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
+			}
 			v, err := cdctest.RunNemesis(f, s.DB, t.Name(), withLegacySchemaChanger, rng, nop)
 			if err != nil {
 				t.Fatalf("%+v", err)
