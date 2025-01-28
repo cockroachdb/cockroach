@@ -1371,81 +1371,113 @@ func TestStepIgnoreOldTermMsg(t *testing.T) {
 	assert.False(t, called)
 }
 
-// TestHandleMsgApp ensures:
-//  1. Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm.
-//  2. If an existing entry conflicts with a new one (same index but different terms),
-//     delete the existing entry and all that follow it; append any new entries not already in the log.
-//  3. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
 func TestHandleMsgApp(t *testing.T) {
-	tests := []struct {
-		m       pb.Message
+	for _, tt := range []struct {
+		ls     logSlice
+		commit uint64
+		match  uint64
+
 		wIndex  uint64
 		wCommit uint64
 		wReject bool
+		wPanic  bool
 	}{
-		// Ensure 1
-		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 2, Commit: 3}, 2, 0, true}, // previous log mismatch
-		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 3, Commit: 3}, 2, 0, true}, // previous log non-exist
+		// Append rejections cases.
+		{ls: entryID{index: 1, term: 1}.append(1), wReject: true}, // stale append
+		{ls: entryID{index: 2, term: 1}.append(), wReject: true},  // prev mismatch
+		{ls: entryID{index: 3, term: 2}.append(), wReject: true},  // prev missing
+		// LogMark regression causes a panic.
+		{ls: entryID{index: 1, term: 1}.append().withTerm(4), match: 1, wPanic: true},
+		{ls: entryID{index: 10, term: 3}.append(), match: 5, wPanic: true},
+		// No-op append that only bumps the commit index.
+		{
+			ls: entryID{term: 1, index: 1}.append().withTerm(2), commit: 1,
+			wIndex: 2, wCommit: 1,
+		},
+		// Appends that overwrite a suffix of the log.
+		{ls: entryID{}.append(3), commit: 1, wIndex: 1, wCommit: 1},
+		{ls: entryID{index: 1, term: 1}.append(3, 3), commit: 2, wIndex: 3, wCommit: 2},
+		{ls: entryID{index: 2, term: 2}.append(2, 2), commit: 3, wIndex: 4, wCommit: 3},
+		{ls: entryID{index: 2, term: 2}.append(2), commit: 4, wIndex: 3, wCommit: 3},
+		// Commit index bumps, capped at the follower's log last index.
+		{ls: entryID{index: 1, term: 1}.append(), commit: 3, wIndex: 2, wCommit: 1},
+		{ls: entryID{index: 1, term: 1}.append(2), commit: 3, wIndex: 2, wCommit: 2},
+		{ls: entryID{index: 1, term: 1}.append(2), commit: 4, wIndex: 2, wCommit: 2},
+		{ls: entryID{index: 2, term: 2}.append(), commit: 3, wIndex: 2, wCommit: 2},
+		{ls: entryID{index: 2, term: 2}.append(), commit: 4, wIndex: 2, wCommit: 2},
+	} {
+		t.Run("", func(t *testing.T) {
+			defer func() { require.Equal(t, tt.wPanic, recover() != nil) }()
 
-		// Ensure 2
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 1}, 2, 1, false},
-		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 0, Index: 0, Commit: 1, Entries: []pb.Entry{{Index: 1, Term: 3}}}, 1, 1, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3, Entries: []pb.Entry{{Index: 3, Term: 2}, {Index: 4, Term: 2}}}, 4, 3, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4, Entries: []pb.Entry{{Index: 3, Term: 2}}}, 3, 3, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 4, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false},
-
-		// Ensure 3
-		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3}, 2, 1, false},                                           // match entry 1, commit up to last new entry 1
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 3, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3}, 2, 2, false},                                           // match entry 2, commit up to last new entry 2
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4}, 2, 2, false},                                           // commit up to log.last()
-	}
-
-	for i, tt := range tests {
-		storage := newTestMemoryStorage(withPeers(1))
-		require.NoError(t, storage.Append(index(1).terms(1, 2)))
-		sm := newTestRaft(1, 10, 1, storage)
-		sm.becomeFollower(2, None)
-
-		sm.handleAppendEntries(tt.m)
-		assert.Equal(t, tt.wIndex, sm.raftLog.lastIndex(), "#%d", i)
-		assert.Equal(t, tt.wCommit, sm.raftLog.committed, "#%d", i)
-		m := sm.readMessages()
-		require.Len(t, m, 1, "#%d", i)
-		assert.Equal(t, tt.wReject, m[0].Reject, "#%d", i)
+			storage := newTestMemoryStorage(withPeers(1))
+			require.NoError(t, storage.Append(index(1).terms(1, 2)))
+			sm := newTestRaft(1, 10, 1, storage)
+			sm.becomeFollower(3, None)
+			sm.handleAppendEntries(pb.Message{
+				To:      sm.id,
+				Type:    pb.MsgApp,
+				Term:    tt.ls.term,
+				Index:   tt.ls.prev.index,
+				LogTerm: tt.ls.prev.term,
+				Entries: tt.ls.entries,
+				Commit:  tt.commit,
+				Match:   tt.match,
+			})
+			m := sm.readMessages()
+			require.Len(t, m, 1)
+			assert.Equal(t, tt.wReject, m[0].Reject)
+			if tt.wReject {
+				// The log and the commit index should stay the same.
+				assert.Equal(t, uint64(2), sm.raftLog.lastIndex())
+				assert.Equal(t, uint64(0), sm.raftLog.committed)
+			} else {
+				assert.Equal(t, tt.wIndex, sm.raftLog.lastIndex())
+				assert.Equal(t, tt.wCommit, sm.raftLog.committed)
+			}
+		})
 	}
 }
 
 // TestHandleHeartbeat ensures that the follower handles heartbeats properly.
 func TestHandleHeartbeat(t *testing.T) {
-	commit := uint64(2)
-	tests := []struct {
-		m       pb.Message
+	const commit = uint64(2)
+	for _, tt := range []struct {
 		accTerm uint64
+		commit  LogMark
+		match   uint64
 		wCommit uint64
+		wPanic  bool
 	}{
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 1}, 2, commit + 1},
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit - 1}, 2, commit}, // do not decrease commit
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit - 1}, 1, commit},
-
+		// Commit marks at the same term.
+		{accTerm: 2, commit: LogMark{Term: 2, Index: commit}, wCommit: commit},     // no-op
+		{accTerm: 2, commit: LogMark{Term: 2, Index: commit - 1}, wCommit: commit}, // do not regress
+		{accTerm: 2, commit: LogMark{Term: 2, Index: commit + 1}, wCommit: commit + 1},
 		// Do not increase the commit index if the log is not guaranteed to be a
 		// prefix of the leader's log.
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 1}, 1, commit},
+		{accTerm: 1, commit: LogMark{Term: 2, Index: commit + 1}, wCommit: commit + 1},
 		// Do not increase the commit index beyond our log size.
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 10}, 2, commit + 1}, // do not decrease commit
-	}
+		{commit: LogMark{Term: 2, Index: commit + 10}, accTerm: 2, wCommit: commit + 1},
+		// LogMark regression causes a panic.
+		{accTerm: 2, commit: LogMark{Term: 3, Index: commit + 1}, match: 3, wPanic: true},
+	} {
+		t.Run("", func(t *testing.T) {
+			defer func() { require.Equal(t, tt.wPanic, recover() != nil) }()
 
-	for i, tt := range tests {
-		storage := newTestMemoryStorage(withPeers(1, 2))
-		init := entryID{}.append(1, 1, tt.accTerm)
-		require.NoError(t, storage.Append(init.entries))
-		sm := newTestRaft(1, 5, 1, storage)
-		sm.becomeFollower(init.term, 2)
-		sm.raftLog.commitTo(LogMark{Term: init.term, Index: commit})
-		sm.handleHeartbeat(tt.m)
-		m := sm.readMessages()
-		require.Len(t, m, 1, "#%d", i)
-		assert.Equal(t, pb.MsgHeartbeatResp, m[0].Type, "#%d", i)
+			storage := newTestMemoryStorage(withPeers(1, 2))
+			init := entryID{}.append(1, 1, tt.accTerm)
+			require.NoError(t, storage.Append(init.entries))
+			sm := newTestRaft(1, 5, 1, storage)
+			sm.becomeFollower(init.term, 2)
+			sm.raftLog.commitTo(LogMark{Term: init.term, Index: commit})
+			sm.handleHeartbeat(pb.Message{
+				From: 2, To: 1, Type: pb.MsgHeartbeat,
+				Term: tt.commit.Term, Commit: tt.commit.Index,
+				Match: tt.match,
+			})
+			m := sm.readMessages()
+			require.Len(t, m, 1)
+			assert.Equal(t, pb.MsgHeartbeatResp, m[0].Type)
+		})
 	}
 }
 

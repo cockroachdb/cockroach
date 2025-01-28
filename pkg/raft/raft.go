@@ -2359,7 +2359,7 @@ func logSliceFromMsgApp(m *pb.Message) LogSlice {
 }
 
 func (r *raft) handleAppendEntries(m pb.Message) {
-	r.checkMatch(m.Match)
+	r.checkMatch(LogMark{Term: m.Term, Index: m.Match})
 
 	// TODO(pav-kv): construct LogSlice up the stack next to receiving the
 	// message, and validate it before taking any action (e.g. bumping term).
@@ -2421,22 +2421,34 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	})
 }
 
-// checkMatch ensures that the follower's log size does not contradict to the
-// leader's idea where it matches.
-func (r *raft) checkMatch(match uint64) {
-	// TODO(pav-kv): lastIndex() might be not yet durable. Make this check
-	// stronger by comparing `match` with the last durable index.
-	//
-	// TODO(pav-kv): make this check stronger when the raftLog stores the last
-	// accepted term. If `match` is non-zero, this follower's log last accepted
-	// term must equal the leader term, and have entries up to `match` durable.
-	if last := r.raftLog.lastIndex(); last < match {
-		r.logger.Panicf("match(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", match, last)
+// checkMatch ensures that this peer's log mark does not contradict to the
+// leader's idea about its lower bound.
+func (r *raft) checkMatch(match LogMark) {
+	if match.Index == 0 {
+		return
+	}
+	// TODO(pav-kv): make this check against the real raftLog.mark() when the last
+	// accepted term is persisted and can't regress (#122446). For now, we check
+	// against a pseudo-LogMark, with the Term conservatively bumped to raft.Term
+	// (which is >= accTerm). This is safe because match.After(pseudo) implies
+	// match.After(raftLog.mark()), so there are no false panics. We may miss some
+	// kinds of regressions though.
+	pseudo := LogMark{Term: r.Term, Index: r.raftLog.lastIndex()}
+	// NB: technically, we should be comparing against a persisted LogMark, rather
+	// than the unstable one. However, the leader can learn our persisted state
+	// earlier than this RawNode, due to the fact that MsgAppResp is sent from
+	// outside the RawNode immediately after the log sync event. We can't do
+	// better here unless we ensure that the storage syncs are delivered to this
+	// RawNode earlier than a match LogMark from the leader. A stronger check
+	// could be done at the log storage level.
+	if match.After(pseudo) {
+		r.logger.Panicf("match(t%d,i%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?",
+			match.Term, match.Index, pseudo.Index)
 	}
 }
 
 func (r *raft) handleHeartbeat(m pb.Message) {
-	r.checkMatch(m.Match)
+	r.checkMatch(LogMark{Term: m.Term, Index: m.Match})
 
 	// The m.Term leader is indicating to us through this heartbeat message
 	// that indices <= m.Commit in its log are committed. If our log matches

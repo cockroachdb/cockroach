@@ -18,6 +18,7 @@
 package raft
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
@@ -979,4 +980,12 @@ func intRange[T constraints.Integer](from, to T) []T {
 		slice[i] = from + T(i)
 	}
 	return slice
+}
+
+func (s logSlice) withTerm(term uint64) logSlice {
+	if term < s.term {
+		panic(fmt.Sprintf("can't bump logSlice term from %d to %d", s.term, term))
+	}
+	s.term = term
+	return s
 }
