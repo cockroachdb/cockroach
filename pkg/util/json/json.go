@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	uniq "github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1186,7 +1186,7 @@ func (j jsonArray) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// to emit duplicate keys from this method, as it's more expensive to
 	// deduplicate keys via KV (which will actually write the keys) than to do
 	// it now (just an in-memory sort and distinct).
-	outKeys = uniq.UniquifyByteSlices(outKeys)
+	outKeys = deduplicate.ByteSlices(outKeys)
 	return outKeys, nil
 }
 

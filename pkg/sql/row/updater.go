@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -335,7 +335,7 @@ func (ru *Updater) UpdateRow(
 			sort.Slice(newIndexEntries, func(i, j int) bool {
 				return compareIndexEntries(newIndexEntries[i], newIndexEntries[j]) < 0
 			})
-			oldLen, newLen := unique.UniquifyAcrossSlices(
+			oldLen, newLen := deduplicate.AcrossSlices(
 				oldIndexEntries, newIndexEntries,
 				func(l, r int) int {
 					return compareIndexEntries(oldIndexEntries[l], newIndexEntries[r])

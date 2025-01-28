@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package unique
+package deduplicate
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func TestUniquifyByteSlices(t *testing.T) {
+func TestDeduplicateByteSlices(t *testing.T) {
 	tests := []struct {
 		input    []string
 		expected []string
@@ -56,8 +56,8 @@ func TestUniquifyByteSlices(t *testing.T) {
 			for i := range tt.expected {
 				expected[i] = []byte(tt.expected[i])
 			}
-			if got := UniquifyByteSlices(input); !reflect.DeepEqual(got, expected) {
-				t.Errorf("UniquifyByteSlices() = %v, expected %v", got, expected)
+			if got := ByteSlices(input); !reflect.DeepEqual(got, expected) {
+				t.Errorf("ByteSlices() = %v, expected %v", got, expected)
 			}
 		})
 	}
@@ -70,7 +70,7 @@ type uasTestCase = struct {
 	expectedRight []int
 }
 
-func TestUniquifyAcrossSlices(t *testing.T) {
+func TestDeduplicateAcrossSlices(t *testing.T) {
 	tests := []uasTestCase{
 		{
 			left:          []int{0, 5, 7, 10},
@@ -130,7 +130,7 @@ func TestUniquifyAcrossSlices(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			leftLen, rightLen := UniquifyAcrossSlices(tt.left, tt.right,
+			leftLen, rightLen := AcrossSlices(tt.left, tt.right,
 				func(l, r int) int {
 					if tt.left[l] < tt.right[r] {
 						return -1
