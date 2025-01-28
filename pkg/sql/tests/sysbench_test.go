@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/benchmark"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -700,11 +701,20 @@ func BenchmarkSysbench(b *testing.B) {
 					rng := rand.New(rand.NewSource(0))
 					sys.prep(rng)
 
+					benchmark.Warmup(func() {
+						workload.opFn(sys, rng)
+					})
+
+					scatterPlot := benchmark.NewScatterPlot(b)
+					defer scatterPlot.Stop(b)
 					defer startAllocsProfile(b).Stop(b)
+
 					defer b.StopTimer()
+					scatterPlot.Start()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						workload.opFn(sys, rng)
+						scatterPlot.Measure(i)
 					}
 				})
 			}
