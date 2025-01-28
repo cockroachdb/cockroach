@@ -3544,17 +3544,12 @@ func (s *statusServer) CancelQueryByKey(
 	// second. But if an attacker crafts the CancelRequests to all target the
 	// same SQLInstance, then that one instance would have to process 100*X
 	// requests per second.
-	alloc, err := s.cancelSemaphore.TryAcquire(ctx, 1)
-	if err != nil {
+	var alloc *quotapool.IntAlloc
+	alloc, retErr = s.cancelSemaphore.TryAcquire(ctx, 1)
+	if retErr != nil {
 		return nil, status.Errorf(codes.ResourceExhausted, "exceeded rate limit of pgwire cancellation requests")
 	}
 	defer func() {
-		// If we acquired the semaphore but the cancellation request failed, then
-		// hold on to the semaphore for longer. This helps mitigate a DoS attack
-		// of random cancellation requests.
-		if err != nil || (resp != nil && !resp.Canceled) {
-			time.Sleep(1 * time.Second)
-		}
 		alloc.Release()
 	}()
 
@@ -3576,9 +3571,10 @@ func (s *statusServer) CancelQueryByKey(
 	// This request needs to be forwarded to another node.
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
-	client, err := s.dialNode(ctx, roachpb.NodeID(req.SQLInstanceID))
-	if err != nil {
-		return nil, err
+	var client serverpb.StatusClient
+	client, retErr = s.dialNode(ctx, roachpb.NodeID(req.SQLInstanceID))
+	if retErr != nil {
+		return nil, retErr
 	}
 	return client.CancelQueryByKey(ctx, req)
 }
