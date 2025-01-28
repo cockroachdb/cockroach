@@ -1047,17 +1047,17 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		// Do not allow collated string types. These are not supported in UDFs.
 		// Do not allow RECORD-type parameters for PL/pgSQL routines.
 		// TODO(#105713): lift the RECORD-type restriction.
-		ptyp := s.randType()
+		ptyp, ptypResolvable := s.randType()
 		for ptyp.Family() == types.CollatedStringFamily ||
 			(lang == tree.RoutineLangPLpgSQL && ptyp.Identical(types.AnyTuple)) {
-			ptyp = s.randType()
+			ptyp, ptypResolvable = s.randType()
 		}
 		pname := fmt.Sprintf("p%d", i)
 		// TODO(88947): choose VARIADIC once supported too.
 		const numSupportedParamClasses = 4
 		params[i] = tree.RoutineParam{
 			Name:  tree.Name(pname),
-			Type:  ptyp,
+			Type:  ptypResolvable,
 			Class: tree.RoutineParamClass(s.rnd.Intn(numSupportedParamClasses)),
 		}
 		if params[i].Class != tree.RoutineParamOut {
@@ -1086,12 +1086,12 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	// Return a record 50% of the time, which means the UDF can return any number
 	// or type in its final SQL statement. Otherwise, pick a random type from
 	// this smither's available types.
-	rTyp := types.AnyTuple
+	rTyp, rTypResolvable := types.AnyTuple, tree.ResolvableTypeReference(types.AnyTuple)
 	if s.coin() {
 		// Do not allow collated string types. These are not supported in UDFs.
-		rTyp = s.randType()
+		rTyp, rTypResolvable = s.randType()
 		for rTyp.Family() == types.CollatedStringFamily {
-			rTyp = s.randType()
+			rTyp, rTypResolvable = s.randType()
 		}
 	}
 
@@ -1116,9 +1116,9 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		// how many columns there are to avoid return type mismatch errors.
 		if !rTyp.Identical(types.AnyTuple) {
 			if len(stmtRefs) == 1 && s.coin() && stmtRefs[0].typ.Family() != types.CollatedStringFamily {
-				rTyp = stmtRefs[0].typ
+				rTyp, rTypResolvable = stmtRefs[0].typ, stmtRefs[0].typ
 			} else {
-				rTyp = types.AnyTuple
+				rTyp, rTypResolvable = types.AnyTuple, types.AnyTuple
 			}
 		}
 	} else {
@@ -1129,7 +1129,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 			numTyps := s.rnd.Intn(3) + 1
 			typs := make([]*types.T, numTyps)
 			for i := range typs {
-				typs[i] = s.randType()
+				typs[i], _ = s.randType()
 			}
 			plpgsqlRTyp = types.MakeTuple(typs)
 		}
@@ -1153,7 +1153,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		Params:  params,
 		Options: opts,
 		ReturnType: &tree.RoutineReturnType{
-			Type:  rTyp,
+			Type:  rTypResolvable,
 			SetOf: setof,
 		},
 	}
