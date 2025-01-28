@@ -10,6 +10,7 @@ import (
 	"hash"
 	"hash/crc32"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -26,11 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // eventContext holds metadata pertaining to event.
@@ -448,9 +451,14 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
 	stop()
 
+	headers, err := c.makeRowHeaders(ctx, updatedRow)
+	if err != nil {
+		return err
+	}
+
 	c.metrics.Timers.EmitRow.Time(func() {
 		err = c.sink.EmitRow(
-			ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
+			ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc, headers,
 		)
 	})
 	if err != nil {
@@ -461,9 +469,63 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		return err
 	}
 	if log.V(3) {
-		log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
+		log.Infof(ctx, `r %s: %s(%+v) -> %s`, updatedRow.TableName, keyCopy, headers, valueCopy)
 	}
 	return nil
+}
+
+var jsonHeaderWrongTypeLogLim = log.Every(1 * time.Minute)
+var jsonHeaderWrongValTypeLogLim = log.Every(1 * time.Minute)
+
+type rowHeaders map[string][]byte
+
+func (c *kvEventToRowConsumer) makeRowHeaders(
+	ctx context.Context, updatedRow cdcevent.Row,
+) (rowHeaders, error) {
+	if c.encodingOpts.HeadersJSONColName == "" {
+		return nil, nil
+	}
+
+	headersJSON, err := readOneJSONValue(updatedRow, c.encodingOpts.HeadersJSONColName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read headers column %s: %s", c.encodingOpts.HeadersJSONColName, updatedRow.DebugString())
+	}
+	// Allow & ignore both kinds of null.
+	if headersJSON == nil || headersJSON.Type() == json.NullJSONType {
+		return nil, nil
+	}
+
+	headers := make(rowHeaders, headersJSON.Len())
+	objIt, err := headersJSON.ObjectIter()
+	if err != nil {
+		return nil, err
+	}
+	if objIt == nil {
+		if jsonHeaderWrongTypeLogLim.ShouldLog() || log.V(2) {
+			log.Warningf(ctx, "headers column %s must be a JSON object, was %s, in: %s", c.encodingOpts.HeadersJSONColName, redact.SafeString(headersJSON.Type().String()), updatedRow.DebugString())
+		}
+		return nil, nil
+	}
+	// Format the object's kv pairs. The intended use case is to have string
+	// values, but permit & stringify other primitive types. Nested arrays &
+	// objects will be skipped with a rate-limited warning. Nulls are skipped.
+	for objIt.Next() {
+		switch objIt.Value().Type() {
+		case json.StringJSONType:
+			str, _ := objIt.Value().AsText()
+			headers[objIt.Key()] = []byte(*str)
+		case json.NullJSONType:
+			continue
+		case json.NumberJSONType, json.TrueJSONType, json.FalseJSONType:
+			headers[objIt.Key()] = []byte(objIt.Value().String())
+		default:
+			if jsonHeaderWrongValTypeLogLim.ShouldLog() || log.V(2) {
+				log.Warningf(ctx, "headers column %s must be a JSON object with primitive values, got %s - %s, in: %s",
+					c.encodingOpts.HeadersJSONColName, redact.SafeString(objIt.Value().Type().String()), objIt.Value(), updatedRow.DebugString())
+			}
+		}
+	}
+	return headers, nil
 }
 
 // Close closes this consumer.
@@ -726,4 +788,34 @@ func (c *parallelEventConsumer) Close() error {
 	// it will be returned by c.g.Wait().
 	close(c.doneCh)
 	return c.g.Wait()
+}
+
+// readOneJSONValue reads exactly one JSON value from the given row and converts
+// it to json. It returns nil if the value is a SQL NULL.
+func readOneJSONValue(row cdcevent.Row, colName string) (*tree.DJSON, error) {
+	it, err := row.DatumNamed(colName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get column")
+	}
+
+	var valJSON *tree.DJSON
+	var ok bool
+	num := 0
+	err = it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		num++
+		if d == tree.DNull {
+			return nil
+		}
+		if valJSON, ok = tree.AsDJSON(d); !ok {
+			return errors.Newf("expected a JSON object, got %s", d.ResolvedType())
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if num != 1 {
+		return nil, errors.AssertionFailedf("expected exactly one column got %d", num)
+	}
+	return valJSON, nil
 }

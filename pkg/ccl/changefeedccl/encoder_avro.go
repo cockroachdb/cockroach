@@ -38,6 +38,7 @@ type confluentAvroEncoder struct {
 	targets                   changefeedbase.Targets
 	envelopeType              changefeedbase.EnvelopeType
 	customKeyColumn           string
+	headersJSONColumnName     string
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -93,6 +94,7 @@ func newConfluentAvroEncoder(
 	e.updatedField = opts.UpdatedTimestamps
 	e.beforeField = opts.Diff
 	e.customKeyColumn = opts.CustomKeyColumn
+	e.headersJSONColumnName = opts.HeadersJSONColName
 	e.mvccTimestampField = opts.MVCCTimestamps
 	e.enrichedSourceProvider = enrichedSourceProvider
 
@@ -245,13 +247,13 @@ func (e *confluentAvroEncoder) EncodeValue(
 		var sourceDataSchema *avro.FunctionalRecord
 		if e.beforeField && prevRow.IsInitialized() {
 			var err error
-			beforeDataSchema, err = avro.TableToAvroSchema(prevRow, `before`, e.schemaPrefix)
+			beforeDataSchema, err = avro.TableToAvroSchema(prevRow, `before`, e.schemaPrefix, e.headersJSONColumnName)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		currentSchema, err := avro.TableToAvroSchema(updatedRow, avro.SchemaNoSuffix, e.schemaPrefix)
+		currentSchema, err := avro.TableToAvroSchema(updatedRow, avro.SchemaNoSuffix, e.schemaPrefix, e.headersJSONColumnName)
 		if err != nil {
 			return nil, err
 		}
@@ -323,7 +325,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
-	return registered.schema.BinaryFromRow(header, meta, prevRow, updatedRow, updatedRow)
+	return registered.schema.BinaryFromRow(header, meta, prevRow, updatedRow, updatedRow, "" /* omitColumn */)
 }
 
 // EncodeResolvedTimestamp implements the Encoder interface.
@@ -362,7 +364,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
 	var nilRow cdcevent.Row
-	return registered.schema.BinaryFromRow(header, meta, nilRow, nilRow, nilRow)
+	return registered.schema.BinaryFromRow(header, meta, nilRow, nilRow, nilRow, "")
 }
 
 func (e *confluentAvroEncoder) register(

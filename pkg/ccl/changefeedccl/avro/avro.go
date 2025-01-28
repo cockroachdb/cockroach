@@ -158,6 +158,7 @@ func (r *Record) Schema() string {
 type DataRecord struct {
 	Record
 
+	omitColumn       string
 	colIdxByFieldIdx map[int]int
 	fieldIdxByName   map[string]int
 	// Allocate Go native representation once, to avoid repeated map allocation
@@ -848,7 +849,9 @@ const (
 // TableToAvroSchema constructs avro schema for the event values.
 // If a name suffix is provided (as opposed to avroSchemaNoSuffix), it will be
 // appended to the end of the avro record's name.
-func TableToAvroSchema(row cdcevent.Row, nameSuffix string, namespace string) (*DataRecord, error) {
+func TableToAvroSchema(
+	row cdcevent.Row, nameSuffix string, namespace string, omitColumn string,
+) (*DataRecord, error) {
 	var sqlName string
 	// Even though we now always specify a family,
 	// for backwards compatibility schemas for tables with only one family
@@ -861,7 +864,17 @@ func TableToAvroSchema(row cdcevent.Row, nameSuffix string, namespace string) (*
 	if nameSuffix != SchemaNoSuffix {
 		sqlName = sqlName + `_` + nameSuffix
 	}
-	return NewSchemaForRow(row.ForEachColumn(), sqlName, namespace)
+
+	it := row.ForEachColumn()
+	if omitColumn != `` {
+		it = cdcevent.NewSkipIterator(it, omitColumn)
+	}
+	rec, err := NewSchemaForRow(it, sqlName, namespace)
+	if err != nil {
+		return nil, err
+	}
+	rec.omitColumn = omitColumn
+	return rec, nil
 }
 
 // BinaryFromRow encodes the given row data into avro's defined binary format.
@@ -913,6 +926,9 @@ func (r *DataRecord) nativeFromRow(it cdcevent.Iterator) (interface{}, error) {
 		r.native = make(map[string]interface{}, len(r.Fields))
 	}
 
+	if r.omitColumn != "" {
+		it = cdcevent.NewSkipIterator(it, r.omitColumn)
+	}
 	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) (err error) {
 		fieldIdx, ok := r.fieldIdxByName[col.Name]
 		if !ok {
@@ -1063,7 +1079,7 @@ func NewEnvelopeRecord(
 // BinaryFromRow encodes the given metadata and row data into avro's defined
 // binary format.
 func (r *EnvelopeRecord) BinaryFromRow(
-	buf []byte, meta Metadata, beforeRow, afterRow, recordRow cdcevent.Row,
+	buf []byte, meta Metadata, beforeRow, afterRow, recordRow cdcevent.Row, omitColumn string,
 ) ([]byte, error) {
 	native := map[string]interface{}{}
 	if r.Opts.BeforeField {

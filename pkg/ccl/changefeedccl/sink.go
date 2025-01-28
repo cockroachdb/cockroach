@@ -111,6 +111,7 @@ type EventSink interface {
 		key, value []byte,
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
+		headers rowHeaders,
 	) error
 
 	// Flush blocks until every message enqueued by EmitRow
@@ -369,8 +370,9 @@ func (s errorWrapperSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	headers rowHeaders,
 ) error {
-	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
+	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc, headers); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -460,6 +462,7 @@ func (s *bufferSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
+	_headers rowHeaders,
 ) error {
 	defer r.Release(ctx)
 	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
@@ -571,6 +574,7 @@ func (n *nullSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
+	_headers rowHeaders,
 ) error {
 	defer r.Release(ctx)
 	defer n.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
@@ -649,10 +653,11 @@ func (s *safeSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	headers rowHeaders,
 ) error {
 	s.Lock()
 	defer s.Unlock()
-	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc)
+	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc, headers)
 }
 
 func (s *safeSink) Flush(ctx context.Context) error {
