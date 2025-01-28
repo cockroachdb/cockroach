@@ -27,12 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -311,7 +311,8 @@ func (r *replicationStreamManagerImpl) buildReplicationStreamSpec(
 
 	var spanConfigsStreamID streampb.StreamID
 	if forSpanConfigs {
-		spanConfigsStreamID = streampb.StreamID(builtins.GenerateUniqueInt(builtins.ProcessUniqueID(evalCtx.NodeID.SQLInstanceID())))
+		instanceID := unique.ProcessUniqueID(evalCtx.NodeID.SQLInstanceID())
+		spanConfigsStreamID = streampb.StreamID(unique.GenerateUniqueInt(instanceID))
 	}
 
 	res := &streampb.ReplicationStreamSpec{
