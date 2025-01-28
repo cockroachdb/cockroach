@@ -1341,11 +1341,9 @@ func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 // FailPartial creates a partial blackhole failure between the given node and
 // peers.
 func (f *blackholeFailer) FailPartial(ctx context.Context, nodeID int, peerIDs []int) {
-	peerIPs, err := f.c.InternalIP(ctx, f.t.L(), peerIDs)
-	require.NoError(f.t, err)
-
-	for _, peerIP := range peerIPs {
+	for _, peerID := range peerIDs {
 		pgport := fmt.Sprintf("{pgport:%d}", nodeID)
+		peerIP := fmt.Sprintf("{ip:%d}", peerID)
 
 		// When dropping both input and output, make sure we drop packets in both
 		// directions for both the inbound and outbound TCP connections, such that
