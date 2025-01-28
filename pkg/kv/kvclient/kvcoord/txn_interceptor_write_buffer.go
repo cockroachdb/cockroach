@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 )
 
 // BufferedWritesEnabled is used to enable write buffering.
@@ -21,6 +22,13 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic,
 )
+
+// TODO(arul): calm down staticcheck for now. These should go away shortly.
+var _ = bufferedValue{}
+var _ = bufferedValue{}.val
+var _ = bufferedValue{}.seq
+var _ = bufferedWrite{}.vals
+var _ = txnWriteBuffer{}.buffer
 
 // txnWriteBuffer is a txnInterceptor that buffers transactional writes until
 // commit time. Moreover, it also decomposes read-write KV operations (e.g.
@@ -102,6 +110,8 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 type txnWriteBuffer struct {
 	enabled bool
 
+	buffer btree // nolint:staticcheck
+
 	wrapped lockedSender
 }
 
@@ -141,3 +151,36 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 
 // closeLocked implements the txnInterceptor interface.
 func (twb *txnWriteBuffer) closeLocked() {}
+
+// bufferedWrite is a buffered write operation to a given key. It maps a key to
+// possibly multiple values[1], each with an associated sequence number.
+//
+// [1] A transaction is allowed to write to a single key multiple times. Of
+// this, only the final write needs to be flushed to the KV layer. However, we
+// track intermediate values in the buffer to support read-your-own-writes and
+// savepoint rollbacks.
+type bufferedWrite struct {
+	id     uint64
+	key    roachpb.Key
+	endKey roachpb.Key     // used in btree iteration
+	vals   []bufferedValue // sorted in increasing sequence number order
+}
+
+// bufferedValue is a value written to a key at a given sequence number.
+type bufferedValue struct {
+	val roachpb.Value
+	seq enginepb.TxnSeq
+}
+
+//go:generate ../../../util/interval/generic/gen.sh *bufferedWrite kvcoord
+
+// Methods required by util/interval/generic type contract.
+
+func (bw *bufferedWrite) ID() uint64          { return bw.id }
+func (bw *bufferedWrite) Key() []byte         { return bw.key }
+func (bw *bufferedWrite) EndKey() []byte      { return bw.endKey }
+func (bw *bufferedWrite) String() string      { return bw.key.String() }
+func (bw *bufferedWrite) New() *bufferedWrite { return new(bufferedWrite) }
+func (bw *bufferedWrite) SetID(v uint64)      { bw.id = v }
+func (bw *bufferedWrite) SetKey(v []byte)     { bw.key = v }
+func (bw *bufferedWrite) SetEndKey(v []byte)  { bw.endKey = v }
