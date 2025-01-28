@@ -131,6 +131,8 @@ func NewPersistentStore(
 
 	vectorColumnID := index.GetKeyColumnID(index.NumKeyColumns() - 1)
 
+	// TODO(drewk): for an index with ExternalRowData, we should use that index's
+	// codec, and avoid starting the fixup processor.
 	return NewPersistentStoreWithColumnID(ctx, db, quantizer, codec, tableDesc, indexID, vectorColumnID)
 }
 
@@ -174,20 +176,21 @@ func (s *PersistentStore) QuantizeAndEncode(
 	workspace := &internal.Workspace{}
 	ctx = internal.WithWorkspace(ctx, workspace)
 
-	// Determine the correct quantizer for the partition.
+	// Randomize the query vector, if the quantizer requires it. Unconditionally
+	// use the non-root quantizer for this step.
+	// TODO(drewk): looks like a bug? But have to do the same thing as the other
+	// codepaths, for now.
+	tempRandomized := workspace.AllocVector(s.quantizer.GetRandomDims())
+	defer workspace.FreeVector(tempRandomized)
+	s.quantizer.RandomizeVector(ctx, v, tempRandomized, false /* invert */)
+
+	// Quantize and encode the randomized vector.
 	var quantizer quantize.Quantizer
 	if partition == RootKey {
 		quantizer = s.rootQuantizer
 	} else {
 		quantizer = s.quantizer
 	}
-
-	// Randomize the query vector, if the quantizer requires it.
-	tempRandomized := workspace.AllocVector(quantizer.GetRandomDims())
-	defer workspace.FreeVector(tempRandomized)
-	quantizer.RandomizeVector(ctx, v, tempRandomized, false /* invert */)
-
-	// Quantizer and encode the randomized vector.
 	codec := newPersistentStoreCodec(quantizer)
 	return codec.encodeVector(ctx, tempRandomized, centroid)
 }

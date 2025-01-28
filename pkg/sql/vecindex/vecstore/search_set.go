@@ -47,6 +47,10 @@ type SearchResult struct {
 	ChildKey ChildKey
 	// Vector is the original, full-size data vector. This is nil by default,
 	// and is only set after an optional reranking step.
+	//
+	// TODO(drewk): the persistent store will also need a way to return the value
+	// bytes following the quantized vector in the KV value. This will be used for
+	// composite key columns, as well as for stored columns in the future.
 	Vector vector.T
 }
 

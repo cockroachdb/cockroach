@@ -7,7 +7,6 @@ package vecstore
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -18,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -109,8 +109,8 @@ func (psc *persistentStoreCodec) encodeVectorFromSet(
 		dist := vs.GetCentroidDistances()
 		return EncodeUnquantizedVector([]byte{}, dist[idx], vs.(*quantize.UnQuantizedVectorSet).Vectors.At(idx))
 	case *quantize.RaBitQuantizer:
-		dist := psc.tmpVectorSet.GetCentroidDistances()
-		qs := psc.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet)
+		dist := vs.GetCentroidDistances()
+		qs := vs.(*quantize.RaBitQuantizedVectorSet)
 		return EncodeRaBitQVector(
 			[]byte{},
 			qs.CodeCounts[idx],
@@ -185,7 +185,7 @@ func (psTxn *persistentStoreTxn) decodePartition(
 	// Clear and ensure storage for the vector entries and child keys.
 	codec.clear(len(vectorEntries), centroid)
 	if cap(psTxn.tmpChildKeys) < len(vectorEntries) {
-		psTxn.tmpChildKeys = slices.Grow(psTxn.tmpChildKeys, len(vectorEntries)-cap(psTxn.tmpChildKeys))
+		psTxn.tmpChildKeys = make([]ChildKey, len(vectorEntries))
 	}
 	psTxn.tmpChildKeys = psTxn.tmpChildKeys[:len(vectorEntries)]
 
@@ -196,7 +196,12 @@ func (psTxn *persistentStoreTxn) decodePartition(
 		}
 		psTxn.tmpChildKeys[i] = childKey
 
-		if err = codec.decodeVector(entry.ValueBytes()); err != nil {
+		// The quantized and serialized vector is encoded in the value as a blob.
+		_, encVector, err := encoding.DecodeUntaggedBytesValue(entry.ValueBytes())
+		if err != nil {
+			return nil, err
+		}
+		if err = codec.decodeVector(encVector); err != nil {
 			return nil, err
 		}
 	}
@@ -259,7 +264,8 @@ func (psTxn *persistentStoreTxn) insertPartition(
 		if err != nil {
 			return err
 		}
-		b.Put(k, encodedVector)
+		// The quantized and serialized vector is encoded in the value as a blob.
+		b.Put(k, encoding.EncodeUntaggedBytesValue([]byte{}, encodedVector))
 	}
 
 	return psTxn.kv.Run(ctx, b)
@@ -327,7 +333,8 @@ func (psTxn *persistentStoreTxn) AddToPartition(
 	if err != nil {
 		return -1, err
 	}
-	b.Put(entryKey, encodedVector)
+	// The quantized and serialized vector is encoded in the value as a blob.
+	b.Put(entryKey, encoding.EncodeUntaggedBytesValue([]byte{}, encodedVector))
 
 	// This scan is purely for returning partition cardinality.
 	startKey := psTxn.encodePartitionKey(partitionKey)
@@ -537,8 +544,8 @@ func (psTxn *persistentStoreTxn) GetFullVectors(ctx context.Context, refs []Vect
 // partition's metadata. Vector data can be read by scanning from the metadata to
 // the next partition's metadata.
 func (psTxn *persistentStoreTxn) encodePartitionKey(partitionKey PartitionKey) roachpb.Key {
-	keyBuffer := make(roachpb.Key, len(psTxn.store.prefix)+EncodedPartitionKeyLen(partitionKey))
-	copy(keyBuffer, psTxn.store.prefix)
+	keyBuffer := make(roachpb.Key, 0, len(psTxn.store.prefix)+EncodedPartitionKeyLen(partitionKey))
+	keyBuffer = append(keyBuffer, psTxn.store.prefix...)
 	keyBuffer = EncodePartitionKey(keyBuffer, partitionKey)
 	return keyBuffer
 }
