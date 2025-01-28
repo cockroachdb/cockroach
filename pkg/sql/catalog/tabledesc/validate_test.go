@@ -185,6 +185,7 @@ var validationMap = []struct {
 			"UseDeletePreservingEncoding": {status: thisFieldReferencesNoObjects},
 			"ConstraintID":                {status: iSolemnlySwearThisFieldIsValidated},
 			"CreatedAtNanos":              {status: thisFieldReferencesNoObjects},
+			"VecConfig":                   {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
