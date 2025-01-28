@@ -57,6 +57,7 @@ export const statisticsColumnLabels = {
   statementsCount: "Statements",
   status: "Status",
   time: "Time",
+  commitLatency: "Commit Latency",
   transactionFingerprintId: "Transaction Fingerprint ID",
   transactions: "Transactions",
   txnDuration: "Transaction Duration",
@@ -551,6 +552,24 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("bytesRead")}
+      </Tooltip>
+    );
+  },
+  commitLatency: (statType: StatisticType) => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            <p>
+              Average commit latency of this transaction. The gray bar indicates the mean latency. The blue bar indicates
+              one standard deviation from the mean.
+            </p>
+          </>
+        }
+      >
+        {getLabel("commitLatency", statType)}
       </Tooltip>
     );
   },

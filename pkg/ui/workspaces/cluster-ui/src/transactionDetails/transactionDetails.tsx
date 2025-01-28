@@ -404,6 +404,16 @@ export class TransactionDetails extends React.Component<
             ) : (
               unavailableTooltip
             );
+            const meanCommitLatency = transactionSampled ? (
+              <Text>
+                {formatNumberForDisplay(
+                  get(transactionStats, "commit_lat.mean", 0),
+                  duration,
+                )}
+              </Text>
+            ) : (
+              unavailableTooltip
+            );
             const meansRows = `${formatNumberForDisplay(
               transactionStats.rows_read.mean,
               formatTwoPlaces,
@@ -513,6 +523,10 @@ export class TransactionDetails extends React.Component<
                         <SummaryCardItem
                           label="Idle latency"
                           value={meanIdleLatency}
+                        />
+                        <SummaryCardItem
+                          label="Commit latency"
+                          value={meanCommitLatency}
                         />
                         <SummaryCardItem
                           label="Mean rows/bytes read"

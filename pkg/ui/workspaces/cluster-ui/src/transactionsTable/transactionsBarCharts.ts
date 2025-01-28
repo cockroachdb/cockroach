@@ -31,14 +31,23 @@ const bytesReadBar = [
 const bytesReadStdDev = bar(cx("bytes-read-dev"), (d: Transaction) =>
   stdDevLong(d.stats_data.stats.bytes_read, d.stats_data.stats.count),
 );
-const latencyBar = [
+const serviceLatencyBar = [
   bar(
     "bar-chart__service-lat",
     (d: Transaction) => d.stats_data.stats.service_lat.mean,
   ),
 ];
-const latencyStdDev = bar(cx("bar-chart__overall-dev"), (d: Transaction) =>
+const serviceLatencyStdDev = bar(cx("bar-chart__overall-dev"), (d: Transaction) =>
   stdDevLong(d.stats_data.stats.service_lat, d.stats_data.stats.count),
+);
+const commitLatencyBar = [
+  bar(
+    "bar-chart__commit-lat",
+    (d: Transaction) => d.stats_data.stats.commit_lat.mean,
+  ),
+];
+const commitLatencyStdDev = bar(cx("bar-chart__commit-dev"), (d: Transaction) =>
+  stdDevLong(d.stats_data.stats.commit_lat, d.stats_data.stats.count),
 );
 const contentionBar = [
   bar(
@@ -103,11 +112,17 @@ export const transactionsBytesReadBarChart = barChartFactory(
   Bytes,
   bytesReadStdDev,
 );
-export const transactionsLatencyBarChart = barChartFactory(
+export const transactionsServiceLatencyBarChart = barChartFactory(
   "grey",
-  latencyBar,
+  serviceLatencyBar,
   v => Duration(v * 1e9),
-  latencyStdDev,
+  serviceLatencyStdDev,
+);
+export const transactionsCommitLatencyBarChart = barChartFactory(
+  "grey",
+  commitLatencyBar,
+  v => Duration(v * 1e9),
+  commitLatencyStdDev,
 );
 export const transactionsContentionBarChart = barChartFactory(
   "grey",
