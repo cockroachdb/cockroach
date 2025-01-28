@@ -124,6 +124,15 @@ func (s *Smither) isScalarType(t *types.T) bool {
 	return false
 }
 
+func (s *Smither) makeRandTupleType() *types.T {
+	numTyps := s.rnd.Intn(3) + 1
+	typs := make([]*types.T, numTyps)
+	for i := range typs {
+		typs[i], _ = s.randType()
+	}
+	return types.MakeTuple(typs)
+}
+
 func (s *Smither) randType() (*types.T, tree.ResolvableTypeReference) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
