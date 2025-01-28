@@ -79,7 +79,7 @@ var indexBackfillBatchSize = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"bulkio.index_backfill.batch_size",
 	"the number of rows for which we construct index entries in a single batch",
-	50000,
+	30000,
 	settings.NonNegativeInt, /* validateFn */
 )
 
