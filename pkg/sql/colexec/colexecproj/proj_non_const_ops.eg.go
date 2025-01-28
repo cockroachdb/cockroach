@@ -38,10 +38,11 @@ import (
 // pick up the right packages when run within the bazel sandbox.
 var (
 	_ duration.Duration
-	_ = coldataext.CompareDatum
 	_ sqltelemetry.EnumTelemetryType
 	_ telemetry.Counter
 	_ apd.Context
+	_ = coldataext.CompareDatum
+	_ = encoding.UnsafeConvertStringToBytes
 )
 
 // projOpBase contains all of the fields for non-constant projections.

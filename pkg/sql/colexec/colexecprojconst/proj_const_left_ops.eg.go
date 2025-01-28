@@ -41,6 +41,7 @@ var (
 	_ telemetry.Counter
 	_ json.JSON
 	_ = coldataext.CompareDatum
+	_ = encoding.UnsafeConvertStringToBytes
 )
 
 type projBitandInt16ConstInt16Op struct {
