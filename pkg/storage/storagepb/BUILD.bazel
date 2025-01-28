@@ -7,6 +7,10 @@ proto_library(
     srcs = ["storage.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:roachpb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
 )
 
 go_proto_library(
@@ -15,17 +19,25 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/storagepb",
     proto = ":storagepb_proto",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )
 
 go_library(
     name = "storagepb",
-    srcs = ["encryption_spec.go"],
+    srcs = [
+        "encryption_spec.go",
+        "wal_failover.go",
+    ],
     embed = [":storagepb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/storagepb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cli/cliflags",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_spf13_pflag//:pflag",
     ],
 )

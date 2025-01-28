@@ -12,7 +12,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -82,17 +81,17 @@ func TestWALFailover(t *testing.T) {
 				td.ScanArgs(t, "open", &openDir)
 				td.ScanArgs(t, "envs", &envDirs)
 
-				var cfg base.WALFailoverConfig
+				var cfg storagepb.WALFailover
 				if flagStr != "" {
 					if err := cfg.Set(flagStr); err != nil {
 						return fmt.Sprintf("error parsing flag: %q", err)
 					}
 				}
 				if td.HasArg("path-encrypted") {
-					cfg.Path.EncryptionOptions = &storagepb.EncryptionOptions{}
+					cfg.Path.Encryption = &storagepb.EncryptionOptions{}
 				}
 				if td.HasArg("prev-path-encrypted") {
-					cfg.PrevPath.EncryptionOptions = &storagepb.EncryptionOptions{}
+					cfg.PrevPath.Encryption = &storagepb.EncryptionOptions{}
 				}
 				openEnv := getEnv(openDir)
 				if openEnv == nil {
