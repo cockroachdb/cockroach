@@ -15,9 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -278,7 +278,7 @@ func (psTxn *persistentStoreTxn) InsertPartition(
 	ctx context.Context, partition *Partition,
 ) (PartitionKey, error) {
 	instanceID := psTxn.store.db.Context().NodeID.SQLInstanceID()
-	partitionID := PartitionKey(builtins.GenerateUniqueInt(builtins.ProcessUniqueID(instanceID)))
+	partitionID := PartitionKey(unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID)))
 	return partitionID, psTxn.insertPartition(ctx, partitionID, partition)
 }
 
