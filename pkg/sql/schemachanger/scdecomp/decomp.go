@@ -640,6 +640,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			IndexID:             idx.GetID(),
 			IsUnique:            idx.IsUnique(),
 			IsInverted:          idx.GetType() == idxtype.INVERTED,
+			Type:                idx.GetType(),
 			IsCreatedExplicitly: idx.IsCreatedExplicitly(),
 			ConstraintID:        idx.GetConstraintID(),
 			IsNotVisible:        idx.GetInvisibility() != 0.0,
@@ -650,7 +651,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 		}
 		for i, c := range cpy.KeyColumnIDs {
 			invertedKind := catpb.InvertedIndexColumnKind_DEFAULT
-			if index.IsInverted && c == idx.InvertedColumnID() {
+			if index.Type == idxtype.INVERTED && c == idx.InvertedColumnID() {
 				invertedKind = idx.InvertedColumnKind()
 			}
 			w.ev(scpb.Status_PUBLIC, &scpb.IndexColumn{

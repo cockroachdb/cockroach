@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/privilege",  # keep
         "//pkg/sql/sem/catid",  # keep
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/util/debugutil",
         "//pkg/util/protoutil",
@@ -42,6 +43,7 @@ go_proto_library(
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/sem/catid",  # keep
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/semenumpb",
         "//pkg/sql/types",
         "@com_github_gogo_protobuf//gogoproto",
@@ -61,6 +63,7 @@ proto_library(
         "//pkg/geo/geopb:geopb_proto",
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
+        "//pkg/sql/sem/idxtype:idxtype_proto",
         "//pkg/sql/sem/semenumpb:semenumpb_proto",
         "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -110,6 +113,7 @@ go_test(
     deps = [
         "//pkg/clusterversion",
         "//pkg/sql/catalog/catpb",
+        "//pkg/sql/sem/idxtype",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -9,6 +9,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb
 
 import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
+import "sql/sem/idxtype/idxtype.proto";
 import "sql/sem/semenumpb/constraint.proto";
 import "sql/sem/semenumpb/trigger.proto";
 import "sql/catalog/catpb/function.proto";
@@ -290,7 +291,9 @@ message Index {
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 
   bool is_unique = 10;
-  bool is_inverted = 11;
+  // IsInverted is replaced by the Type enumeration.
+  bool is_inverted = 11 [deprecated = true];
+  cockroach.sql.sem.idxtype.T type = 26;
   cockroach.sql.catalog.catpb.ShardedDescriptor sharding = 12;
 
   // IsCreatedExplicitly specifies whether this index was created explicitly
@@ -318,6 +321,8 @@ message Index {
 
   // Invisibility specifies index invisibility to the optimizer.
   double invisibility = 25;
+
+  // Next field is 27.
 
   reserved 3, 4, 5, 6, 7;
 }
