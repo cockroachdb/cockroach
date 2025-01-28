@@ -120,6 +120,12 @@ type Catalog interface {
 
 	// InitializeSequence initializes the initial value for a sequence.
 	InitializeSequence(id descpb.ID, startVal int64)
+
+	// InitVectorIndexRootPartition initializes the root partition for a newly
+	// created vector index.
+	InitVectorIndexRootPartition(
+		ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, dims int,
+	) error
 }
 
 // Telemetry encapsulates metrics gather for the declarative schema changer.

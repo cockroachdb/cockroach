@@ -26,6 +26,7 @@ type DeferredMutationVisitor interface {
 	DeleteSchedule(context.Context, DeleteSchedule) error
 	RefreshStats(context.Context, RefreshStats) error
 	MaybeAddSplitForIndex(context.Context, MaybeAddSplitForIndex) error
+	MaybeAddVectorIndexRootPartition(context.Context, MaybeAddVectorIndexRootPartition) error
 }
 
 // Visit is part of the DeferredMutationOp interface.
@@ -71,4 +72,9 @@ func (op RefreshStats) Visit(ctx context.Context, v DeferredMutationVisitor) err
 // Visit is part of the DeferredMutationOp interface.
 func (op MaybeAddSplitForIndex) Visit(ctx context.Context, v DeferredMutationVisitor) error {
 	return v.MaybeAddSplitForIndex(ctx, op)
+}
+
+// Visit is part of the DeferredMutationOp interface.
+func (op MaybeAddVectorIndexRootPartition) Visit(ctx context.Context, v DeferredMutationVisitor) error {
+	return v.MaybeAddVectorIndexRootPartition(ctx, op)
 }

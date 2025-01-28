@@ -147,4 +147,8 @@ type DeferredMutationStateUpdater interface {
 	AddIndexForMaybeSplitAndScatter(
 		tableID catid.DescID, indexID catid.IndexID,
 	)
+
+	// AddVectorIndexRootPartition initializes the index key space for a vector
+	// index with the root partition.
+	AddVectorIndexRootPartition(tableID catid.DescID, indexID catid.IndexID, dims int)
 }

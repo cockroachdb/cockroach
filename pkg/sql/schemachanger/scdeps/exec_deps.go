@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/errors"
 )
 
@@ -444,6 +445,13 @@ func (d *txnDeps) SetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span,
 ) error {
 	panic("implement me")
+}
+
+// InitVectorIndexRootPartition implements the scexec.Catalog interface.
+func (d *txnDeps) InitVectorIndexRootPartition(
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, dims int,
+) error {
+	return vecstore.InitRootPartition(ctx, d.txn.KV(), d.codec, tableID, indexID, dims)
 }
 
 type execDeps struct {

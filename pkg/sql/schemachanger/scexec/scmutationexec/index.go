@@ -499,6 +499,13 @@ func (m *deferredVisitor) MaybeAddSplitForIndex(
 	return nil
 }
 
+func (m *deferredVisitor) MaybeAddVectorIndexRootPartition(
+	_ context.Context, op scop.MaybeAddVectorIndexRootPartition,
+) error {
+	m.AddVectorIndexRootPartition(op.TableID, op.IndexID, op.Dims)
+	return nil
+}
+
 func (i *immediateVisitor) AddIndexZoneConfig(_ context.Context, op scop.AddIndexZoneConfig) error {
 	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(
 		op.TableID, op.Subzone, op.SubzoneSpans, op.SubzoneIndexToDelete)

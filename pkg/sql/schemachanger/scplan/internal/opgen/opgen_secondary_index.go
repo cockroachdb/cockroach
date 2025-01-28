@@ -52,6 +52,16 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.MaybeAddVectorIndexRootPartition {
+					if this.IsVector {
+						return &scop.MaybeAddVectorIndexRootPartition{
+							TableID: this.TableID,
+							IndexID: this.IndexID,
+							Dims:    int(this.VecConfig.Dims),
+						}
+					}
+					return nil
+				}),
 			),
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.BackfillIndex {

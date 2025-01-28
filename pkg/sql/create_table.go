@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -523,6 +524,17 @@ func (n *createTableNode) startExec(params runParams) error {
 			if err != nil {
 				return errors.Wrap(err, "error adding backreference to multi-region enum")
 			}
+		}
+	}
+
+	// Vector indexes must initialize the root partition upon creation.
+	for _, idx := range desc.VectorIndexes() {
+		tableID, indexID := desc.GetID(), idx.GetID()
+		indexDims := int(idx.GetVecConfig().Dims)
+		if err = vecstore.InitRootPartition(
+			params.ctx, params.p.txn, params.ExecCfg().Codec, tableID, indexID, indexDims,
+		); err != nil {
+			return err
 		}
 	}
 

@@ -91,3 +91,12 @@ type MaybeAddSplitForIndex struct {
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
+
+// MaybeAddVectorIndexRootPartition initializes the keyspace of a vector index
+// with the root partition.
+type MaybeAddVectorIndexRootPartition struct {
+	deferredMutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+	Dims    int
+}

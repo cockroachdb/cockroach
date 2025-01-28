@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -878,6 +879,17 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// Add all newly created type back references.
 	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, n.tableDesc); err != nil {
 		return err
+	}
+
+	// Vector indexes must initialize the root partition upon creation.
+	if indexDesc.Type == descpb.IndexDescriptor_VECTOR {
+		tableID, indexID := n.tableDesc.GetID(), indexDesc.ID
+		indexDims := int(indexDesc.VecConfig.Dims)
+		if err = vecstore.InitRootPartition(
+			params.ctx, params.p.txn, params.ExecCfg().Codec, tableID, indexID, indexDims,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Record index creation in the event log. This is an auditable log
