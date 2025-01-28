@@ -1352,7 +1352,7 @@ RESET CLUSTER SETTING sql.stats.histogram_samples.count
 # Verify that optimizer_use_merged_partial_statistics can be used to enable and
 # disable merged stat usage in the optimizer.
 statement ok
-RESET optimizer_use_merged_partial_statistics
+SET optimizer_use_merged_partial_statistics = off
 
 statement ok
 DELETE FROM ka
