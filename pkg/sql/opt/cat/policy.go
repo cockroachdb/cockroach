@@ -15,7 +15,7 @@ import (
 // It determines whether a policy is enforced for specific operations or if an operation
 // is exempt from row-level security. The operations checked must align with the policy
 // commands defined in the CREATE POLICY SQL syntax.
-type PolicyCommandScope int
+type PolicyCommandScope uint8
 
 const (
 	// PolicyScopeSelect indicates that the policy applies to SELECT operations.
@@ -33,24 +33,57 @@ const (
 // Policy defines an interface for a row-level security (RLS) policy on a table.
 // Policies use expressions to filter rows during read operations and/or restrict
 // new rows during write operations.
-type Policy interface {
-	// Name returns the name of the policy. The name is unique within a table
+type Policy struct {
+	// Name is the name of the policy. The name is unique within a table
 	// and cannot be qualified.
-	Name() tree.Name
-
-	// GetUsingExpr returns the optional filter expression evaluated on rows during
-	// read operations. If the policy does not define a USING expression, this returns
+	Name tree.Name
+	// UsingExpr is the optional filter expression evaluated on rows during
+	// read operations. If the policy does not define a USING expression, this is
 	// an empty string.
-	GetUsingExpr() string
-
-	// GetWithCheckExpr returns the optional validation expression applied to new rows
+	UsingExpr string
+	// WithCheckExpr is the optional validation expression applied to new rows
 	// during write operations. If the policy does not define a WITH CHECK expression,
-	// this returns an empty string.
-	GetWithCheckExpr() string
+	// this is an empty string.
+	WithCheckExpr string
+	// Command is the command that the policy was defined for.
+	Command catpb.PolicyCommand
+	// roles are the roles the applies to. If the policy applies to all roles (aka
+	// public), this will be nil.
+	roles map[string]struct{}
+}
 
-	// GetPolicyCommand returns the command that the policy was defined for.
-	GetPolicyCommand() catpb.PolicyCommand
+// Policies contains the policies for a single table.
+type Policies struct {
+	Permissive  []Policy
+	Restrictive []Policy
+}
 
-	// AppliesToRole checks whether the policy applies to the give role.
-	AppliesToRole(user username.SQLUsername) bool
+// InitRoles builds up the list of roles in the policy.
+func (p *Policy) InitRoles(roleNames []string) {
+	if len(roleNames) == 0 {
+		p.roles = nil
+		return
+	}
+	roles := make(map[string]struct{})
+	for _, r := range roleNames {
+		if r == username.PublicRole {
+			// If the public role is defined, there is no need to check the
+			// remaining roles since the policy applies to everyone. We will clear
+			// out the roles map to signal that all roles apply.
+			roles = nil
+			break
+		}
+		roles[r] = struct{}{}
+	}
+	p.roles = roles
+}
+
+// AppliesToRole checks whether the policy applies to the give role.
+func (p *Policy) AppliesToRole(user username.SQLUsername) bool {
+	// If no roles are specified, assume the policy applies to all users (public role).
+	if p.roles == nil {
+		return true
+	}
+	_, found := p.roles[user.Normalized()]
+	return found
 }
