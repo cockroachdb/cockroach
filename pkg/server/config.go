@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
@@ -221,9 +222,9 @@ type BaseConfig struct {
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
 
-	// WALFailover enables and configures automatic WAL failover when latency to
-	// a store's primary WAL increases.
-	WALFailover base.WALFailoverConfig
+	// StorageConfig is the configuration of storage based on the Stores,
+	// WALFailover and SharedStorage and BootstrapMount.
+	StorageConfig storagepb.NodeConfig
 
 	// SharedStorage is specified to enable disaggregated shared storage.
 	SharedStorage                    string
@@ -314,7 +315,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.MaxOffset = MaxOffsetType(base.DefaultMaxClockOffset)
 	cfg.DisableMaxOffsetCheck = false
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
-	cfg.WALFailover = base.WALFailoverConfig{Mode: base.WALFailoverDefault}
+	cfg.StorageConfig.WALFailover = storagepb.WALFailover{}
 	cfg.TestingInsecureWebAccess = disableWebLogin
 	cfg.Stores = base.StoreSpecList{
 		Specs: []base.StoreSpec{storeSpec},
@@ -763,7 +764,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 	defer storeEnvs.CloseAll()
 
-	walFailoverConfig := storage.WALFailover(cfg.WALFailover, storeEnvs, vfs.Default, cfg.DiskWriteStats)
+	walFailoverConfig := storage.WALFailover(cfg.StorageConfig.WALFailover, storeEnvs, vfs.Default, cfg.DiskWriteStats)
 
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
