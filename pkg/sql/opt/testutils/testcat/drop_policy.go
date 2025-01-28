@@ -34,5 +34,10 @@ func (tc *Catalog) DropPolicy(n *tree.DropPolicy) {
 		}
 		panic(errors.Newf("cannot find policy %q on table %q", n.PolicyName, ts.Name))
 	}
-	ts.policies[policyType] = append(ts.policies[policyType][:inx], ts.policies[policyType][inx+1:]...)
+	switch policyType {
+	case tree.PolicyTypeRestrictive:
+		ts.policies.Restrictive = append(ts.policies.Restrictive[:inx], ts.policies.Restrictive[inx+1:]...)
+	default:
+		ts.policies.Permissive = append(ts.policies.Permissive[:inx], ts.policies.Permissive[inx+1:]...)
+	}
 }

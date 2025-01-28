@@ -32,6 +32,7 @@ go_library(
         "plpgsql.go",
         "project.go",
         "routine.go",
+        "row_level_security.go",
         "scalar.go",
         "scope.go",
         "scope_column.go",

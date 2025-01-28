@@ -8,7 +8,6 @@ package testcat
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,46 +32,39 @@ func (tc *Catalog) CreatePolicy(n *tree.CreatePolicy) {
 		panic(errors.Newf(`policy %q already exists on table %q`, n.PolicyName, ts.Name()))
 	}
 
-	policy := &Policy{name: n.PolicyName}
+	policy := cat.Policy{Name: n.PolicyName}
 	switch n.Cmd {
 	case tree.PolicyCommandAll, tree.PolicyCommandDefault:
-		policy.command = catpb.PolicyCommand_ALL
+		policy.Command = catpb.PolicyCommand_ALL
 	case tree.PolicyCommandSelect:
-		policy.command = catpb.PolicyCommand_SELECT
+		policy.Command = catpb.PolicyCommand_SELECT
 	case tree.PolicyCommandInsert:
-		policy.command = catpb.PolicyCommand_INSERT
+		policy.Command = catpb.PolicyCommand_INSERT
 	case tree.PolicyCommandUpdate:
-		policy.command = catpb.PolicyCommand_UPDATE
+		policy.Command = catpb.PolicyCommand_UPDATE
 	case tree.PolicyCommandDelete:
-		policy.command = catpb.PolicyCommand_DELETE
+		policy.Command = catpb.PolicyCommand_DELETE
 	default:
 		panic(errors.Newf("unknown policy command: %v", n.Cmd))
 	}
 	if n.Exprs.Using != nil {
-		policy.usingExpr = n.Exprs.Using.String()
+		policy.UsingExpr = tree.Serialize(n.Exprs.Using)
 	}
 	if n.Exprs.WithCheck != nil {
-		policy.withCheckExpr = n.Exprs.WithCheck.String()
+		policy.WithCheckExpr = tree.Serialize(n.Exprs.WithCheck)
 	}
-	// If all roles are omitted, we default to adding the PUBLIC role so that it
-	// applies to everyone. We set roles to nil to indicate that.
-	if len(n.Roles) > 0 {
-		policy.roles = make(map[string]struct{})
-		for _, r := range n.Roles {
-			if r.Name == username.PublicRole {
-				// Clear the roles to indicate the policy applies to all users (public role).
-				policy.roles = nil
-				break
-			}
-			policy.roles[r.Name] = struct{}{}
-		}
+	roleNames := make([]string, len(n.Roles))
+	for i := range n.Roles {
+		roleNames[i] = n.Roles[i].Name
 	}
+	policy.InitRoles(roleNames)
 
-	// Determine the policy type. Default to permissive if no type is specified.
-	policyType := n.Type
-	if policyType == tree.PolicyTypeDefault {
-		policyType = tree.PolicyTypePermissive
+	// Add the policy to the appropriate slice based on its type. Default to
+	// permissive if no type is specified.
+	switch n.Type {
+	case tree.PolicyTypePermissive, tree.PolicyTypeDefault:
+		ts.policies.Permissive = append(ts.policies.Permissive, policy)
+	default:
+		ts.policies.Restrictive = append(ts.policies.Restrictive, policy)
 	}
-	// Add the policy to the appropriate map based on its type.
-	ts.policies[policyType] = append(ts.policies[policyType], policy)
 }
