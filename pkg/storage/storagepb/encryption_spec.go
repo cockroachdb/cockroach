@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package baseccl
+package storagepb
 
 import (
 	"bytes"
@@ -12,8 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -97,7 +96,7 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 				es.Path = value
 			} else {
 				var err error
-				es.Path, err = base.GetAbsoluteFSPath(pathField, value)
+				es.Path, err = GetAbsoluteFSPath(pathField, value)
 				if err != nil {
 					return StoreEncryptionSpec{}, err
 				}
@@ -107,7 +106,7 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 				es.KeyPath = plaintextFieldValue
 			} else {
 				var err error
-				es.KeyPath, err = base.GetAbsoluteFSPath("key", value)
+				es.KeyPath, err = GetAbsoluteFSPath("key", value)
 				if err != nil {
 					return StoreEncryptionSpec{}, err
 				}
@@ -117,7 +116,7 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 				es.OldKeyPath = plaintextFieldValue
 			} else {
 				var err error
-				es.OldKeyPath, err = base.GetAbsoluteFSPath("old-key", value)
+				es.OldKeyPath, err = GetAbsoluteFSPath("old-key", value)
 				if err != nil {
 					return StoreEncryptionSpec{}, err
 				}
@@ -160,7 +159,7 @@ var _ pflag.Value = &EncryptionSpecList{}
 func (encl EncryptionSpecList) String() string {
 	var buffer bytes.Buffer
 	for _, ss := range encl.Specs {
-		fmt.Fprintf(&buffer, "--%s=%s ", cliflagsccl.EnterpriseEncryption.Name, ss)
+		fmt.Fprintf(&buffer, "--%s=%s ", cliflags.EnterpriseEncryption.Name, ss)
 	}
 	// Trim the extra space from the end if it exists.
 	if l := buffer.Len(); l > 0 {
@@ -190,63 +189,6 @@ func (encl *EncryptionSpecList) Set(value string) error {
 	return nil
 }
 
-// PopulateWithEncryptionOpts iterates through the EncryptionSpecList and looks
-// for matching paths in the StoreSpecList and WAL failover config. Any
-// unmatched EncryptionSpec causes an error.
-func PopulateWithEncryptionOpts(
-	storeSpecs base.StoreSpecList,
-	walFailoverConfig *base.WALFailoverConfig,
-	encryptionSpecs EncryptionSpecList,
-) error {
-	for _, es := range encryptionSpecs.Specs {
-		var found bool
-		for i := range storeSpecs.Specs {
-			if !es.PathMatches(storeSpecs.Specs[i].Path) {
-				continue
-			}
-
-			// Found a matching path.
-			if len(storeSpecs.Specs[i].EncryptionOptions) > 0 {
-				return fmt.Errorf("store with path %s already has an encryption setting",
-					storeSpecs.Specs[i].Path)
-			}
-
-			opts, err := es.ToEncryptionOptions()
-			if err != nil {
-				return err
-			}
-			storeSpecs.Specs[i].EncryptionOptions = opts
-			found = true
-			break
-		}
-
-		for _, externalPath := range [2]*base.ExternalPath{&walFailoverConfig.Path, &walFailoverConfig.PrevPath} {
-			if !externalPath.IsSet() || !es.PathMatches(externalPath.Path) {
-				continue
-			}
-			// NB: The external paths WALFailoverConfig.Path and
-			// WALFailoverConfig.PrevPath are only ever set in single-store
-			// configurations. In multi-store with among-stores failover mode, these
-			// will be empty (so we won't encounter the same path twice).
-			if len(externalPath.EncryptionOptions) > 0 {
-				return fmt.Errorf("WAL failover path %s already has an encryption setting",
-					externalPath.Path)
-			}
-			opts, err := es.ToEncryptionOptions()
-			if err != nil {
-				return err
-			}
-			externalPath.EncryptionOptions = opts
-			found = true
-		}
-
-		if !found {
-			return fmt.Errorf("no usage of path %s found for encryption setting: %v", es.Path, es)
-		}
-	}
-	return nil
-}
-
 // EncryptionOptionsForStore takes a store directory and returns its EncryptionOptions
 // if a matching entry if found in the StoreEncryptionSpecList.
 func EncryptionOptionsForStore(dir string, encryptionSpecs EncryptionSpecList) ([]byte, error) {
@@ -261,4 +203,19 @@ func EncryptionOptionsForStore(dir string, encryptionSpecs EncryptionSpecList) (
 		}
 	}
 	return nil, nil
+}
+
+// GetAbsoluteFSPath takes a (possibly relative) and returns the absolute path.
+// Returns an error if the path begins with '~' or Abs fails.
+// 'fieldName' is used in error strings.
+func GetAbsoluteFSPath(fieldName string, p string) (string, error) {
+	if p[0] == '~' {
+		return "", fmt.Errorf("%s cannot start with '~': %s", fieldName, p)
+	}
+
+	ret, err := filepath.Abs(p)
+	if err != nil {
+		return "", errors.Wrapf(err, "could not find absolute path for %s %s", fieldName, p)
+	}
+	return ret, nil
 }

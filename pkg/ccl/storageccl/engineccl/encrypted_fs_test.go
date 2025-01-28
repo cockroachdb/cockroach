@@ -18,13 +18,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -237,9 +236,9 @@ func TestPebbleEncryption(t *testing.T) {
 	keyFile128 := "111111111111111111111111111111111234567890123456"
 	writeToFile(t, stickyRegistry.Get(stickyVFSID), "16.key", []byte(keyFile128))
 
-	encOptionsBytes, err := protoutil.Marshal(&baseccl.EncryptionOptions{
-		KeySource: baseccl.EncryptionKeySource_KeyFiles,
-		KeyFiles: &baseccl.EncryptionKeyFiles{
+	encOptionsBytes, err := protoutil.Marshal(&storagepb.EncryptionOptions{
+		KeySource: storagepb.EncryptionKeySource_KeyFiles,
+		KeyFiles: &storagepb.EncryptionKeyFiles{
 			CurrentKey: "16.key",
 			OldKey:     "plain",
 		},
@@ -273,7 +272,7 @@ func TestPebbleEncryption(t *testing.T) {
 
 		var fileRegistry enginepb.FileRegistry
 		require.NoError(t, protoutil.Unmarshal(r.FileRegistry, &fileRegistry))
-		var keyRegistry enginepbccl.DataKeysRegistry
+		var keyRegistry enginepb.DataKeysRegistry
 		require.NoError(t, protoutil.Unmarshal(r.KeyRegistry, &keyRegistry))
 
 		stats, err := db.GetEnvStats()
@@ -282,10 +281,10 @@ func TestPebbleEncryption(t *testing.T) {
 		require.GreaterOrEqual(t, stats.TotalFiles, uint64(3))
 		// We also created markers for the format version and the manifest.
 		require.Equal(t, uint64(5), stats.ActiveKeyFiles)
-		var s enginepbccl.EncryptionStatus
+		var s enginepb.EncryptionStatus
 		require.NoError(t, protoutil.Unmarshal(stats.EncryptionStatus, &s))
 		require.Equal(t, "16.key", s.ActiveStoreKey.Source)
-		require.Equal(t, int32(enginepbccl.EncryptionType_AES128_CTR), stats.EncryptionType)
+		require.Equal(t, int32(enginepb.EncryptionType_AES128_CTR), stats.EncryptionType)
 		t.Logf("EnvStats:\n%+v\n\n", *stats)
 
 		batch := db.NewWriteBatch()
@@ -375,9 +374,9 @@ func TestPebbleEncryption2(t *testing.T) {
 	addKeyAndValidate := func(
 		key string, val string, encKeyFile string, oldEncFileKey string,
 	) {
-		encOptionsBytes, err := protoutil.Marshal(&baseccl.EncryptionOptions{
-			KeySource: baseccl.EncryptionKeySource_KeyFiles,
-			KeyFiles: &baseccl.EncryptionKeyFiles{
+		encOptionsBytes, err := protoutil.Marshal(&storagepb.EncryptionOptions{
+			KeySource: storagepb.EncryptionKeySource_KeyFiles,
+			KeyFiles: &storagepb.EncryptionKeyFiles{
 				CurrentKey: encKeyFile,
 				OldKey:     oldEncFileKey,
 			},
@@ -436,13 +435,13 @@ func TestCanRegistryElide(t *testing.T) {
 	require.True(t, canRegistryElide(entry))
 
 	entry = &enginepb.FileEntry{EnvType: enginepb.EnvType_Store}
-	settings := &enginepbccl.EncryptionSettings{EncryptionType: enginepbccl.EncryptionType_Plaintext}
+	settings := &enginepb.EncryptionSettings{EncryptionType: enginepb.EncryptionType_Plaintext}
 	b, err := protoutil.Marshal(settings)
 	require.NoError(t, err)
 	entry.EncryptionSettings = b
 	require.True(t, canRegistryElide(entry))
 
-	settings = &enginepbccl.EncryptionSettings{EncryptionType: enginepbccl.EncryptionType_AES128_CTR}
+	settings = &enginepb.EncryptionSettings{EncryptionType: enginepb.EncryptionType_AES128_CTR}
 	b, err = protoutil.Marshal(settings)
 	require.NoError(t, err)
 	entry.EncryptionSettings = b
@@ -564,9 +563,9 @@ func makeEncryptedTestFS(t *testing.T, errorProb float64, errorRand *rand.Rand) 
 	require.NoError(t, dir.Sync())
 	require.NoError(t, dir.Close())
 
-	var encOptions baseccl.EncryptionOptions
-	encOptions.KeySource = baseccl.EncryptionKeySource_KeyFiles
-	encOptions.KeyFiles = &baseccl.EncryptionKeyFiles{
+	var encOptions storagepb.EncryptionOptions
+	encOptions.KeySource = storagepb.EncryptionKeySource_KeyFiles
+	encOptions.KeyFiles = &storagepb.EncryptionKeyFiles{
 		CurrentKey: "16.key",
 		OldKey:     "plain",
 	}
