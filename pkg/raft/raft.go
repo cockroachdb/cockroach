@@ -1039,7 +1039,10 @@ func (r *raft) maybeCommit() bool {
 	// way, then all prior entries are committed indirectly because of the Log
 	// Matching Property.
 	//
-	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
+	// This comparison is a logical invariant to:
+	// if !r.raftLog.matchTerm(entryID{term: r.Term, index: index})
+	// But avoids (potentially) going into storage
+	if index <= r.idxPreLeading {
 		return false
 	}
 
