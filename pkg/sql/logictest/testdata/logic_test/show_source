@@ -138,6 +138,7 @@ opt_split_scan_limit                                       2048
 optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
+optimizer_prefer_bounded_cardinality                       off
 optimizer_prove_implication_with_virtual_computed_columns  on
 optimizer_push_limit_into_project_filtered_scan            on
 optimizer_push_offset_into_index_join                      on
