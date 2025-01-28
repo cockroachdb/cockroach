@@ -33,10 +33,7 @@ import "cloud/cloudpb/external_storage.proto";
 // descriptor in the database, and doesn't emit any rows nor support
 // any post-processing.
 message BackfillerSpec {
-  // TODO(lidor): job_id is not needed when interoperability with 22.2 is
-  // dropped, the new way to send the job tag is using 'job_tag' in the
-  // SetupFlowRequest message.
-  optional int64 job_id = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+  reserved 13; // job_id
   enum Type {
     Invalid = 0;
     Column = 1;
