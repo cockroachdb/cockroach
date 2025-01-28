@@ -10,6 +10,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -173,4 +174,25 @@ func ValidateTokensReturned(
 			// empty and there are no inflight requests.
 		}, waitTime)
 	}
+}
+
+// Fingerprint returns a fingerprint of `db.table`.
+func Fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string, error) {
+	var b strings.Builder
+
+	query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table)
+	rows, err := conn.QueryContext(ctx, query)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, fp string
+		if err := rows.Scan(&name, &fp); err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&b, "%s: %s\n", name, fp)
+	}
+
+	return b.String(), rows.Err()
 }

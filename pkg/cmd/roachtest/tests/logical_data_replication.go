@@ -731,6 +731,14 @@ func (mcs multiClusterSpec) ToSpec(r registry.Registry) spec.ClusterSpec {
 	return r.MakeClusterSpec(mcs.NodeCount(), mcs.clusterOpts...)
 }
 
+func (mcs *multiClusterSpec) LeftNodesList() option.NodeListOption {
+	return option.NewNodeListOptionRange(1, mcs.leftNodes)
+}
+
+func (mcs *multiClusterSpec) RightNodesList() option.NodeListOption {
+	return option.NewNodeListOptionRange(mcs.leftNodes+1, mcs.leftNodes+mcs.rightNodes)
+}
+
 type multiCluster struct {
 	spec multiClusterSpec
 	rng  *rand.Rand
