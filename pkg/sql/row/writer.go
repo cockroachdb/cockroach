@@ -62,8 +62,6 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 // prepareInsertOrUpdateBatch constructs a KV batch that inserts or
 // updates a row in KV.
 //   - batch is the KV batch where commands should be appended.
-//   - putFn is the functions that can append Put/CPut commands to the batch.
-//     (must be adapted depending on whether 'overwrite' is set)
 //   - helper is the rowHelper that knows about the table being modified.
 //   - primaryIndexKey is the PK prefix for the current row.
 //   - fetchedCols is the list of schema columns that have been fetched
@@ -92,7 +90,6 @@ func prepareInsertOrUpdateBatch(
 	kvKey *roachpb.Key,
 	kvValue *roachpb.Value,
 	rawValueBuf []byte,
-	putFn func(ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool),
 	oth *OriginTimestampCPutHelper,
 	oldValues []tree.Datum,
 	overwrite, traceKV bool,
@@ -105,6 +102,10 @@ func prepareInsertOrUpdateBatch(
 	// we error if we ever see such writes.
 	if oth.IsSet() && len(families) > 1 {
 		return nil, errors.AssertionFailedf("OriginTimestampCPutHelper is not yet testing with multi-column family writes")
+	}
+	putFn := insertCPutFn
+	if overwrite {
+		putFn = insertPutFn
 	}
 
 	for i := range families {

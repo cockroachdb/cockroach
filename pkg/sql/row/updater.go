@@ -357,7 +357,7 @@ func (ru *Updater) UpdateRow(
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
-			ctx, putter, ru.newValues, pm, oth, false /* ignoreConflicts */, traceKV,
+			ctx, putter, ru.newValues, pm, oth, false /* overwrite */, traceKV,
 		); err != nil {
 			return nil, err
 		}
@@ -370,7 +370,7 @@ func (ru *Updater) UpdateRow(
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.UpdateColIDtoRowIndex,
-		&ru.key, &ru.value, ru.valueBuf, insertPutFn, oth, oldValues, true /* overwrite */, traceKV)
+		&ru.key, &ru.value, ru.valueBuf, oth, oldValues, true /* overwrite */, traceKV)
 	if err != nil {
 		return nil, err
 	}

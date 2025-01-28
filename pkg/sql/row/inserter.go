@@ -141,11 +141,6 @@ func (ri *Inserter) InsertRow(
 		return errors.Errorf("got %d values but expected %d", len(values), len(ri.InsertCols))
 	}
 
-	putFn := insertCPutFn
-	if overwrite {
-		putFn = insertPutFn
-	}
-
 	// We don't want to insert any empty k/v's, so set includeEmpty to false.
 	// Consider the following case:
 	// TABLE t (
@@ -170,7 +165,7 @@ func (ri *Inserter) InsertRow(
 		&ri.Helper, primaryIndexKey, ri.InsertCols,
 		values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex,
-		&ri.key, &ri.value, ri.valueBuf, putFn, oth, nil, overwrite, traceKV)
+		&ri.key, &ri.value, ri.valueBuf, oth, nil /* oldValues */, overwrite, traceKV)
 	if err != nil {
 		return err
 	}
