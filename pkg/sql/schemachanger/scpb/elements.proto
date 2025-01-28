@@ -89,6 +89,7 @@ message ElementProto {
     Trigger trigger = 136 [(gogoproto.moretags) = "parent:\"Table, View\""];
     Policy policy = 137 [(gogoproto.moretags) = "parent:\"Table\""];
     RowLevelSecurityEnabled row_level_security_enabled = 138 [(gogoproto.moretags) = "parent:\"Table\""];
+    RowLevelSecurityForced row_level_security_forced = 139 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -416,9 +417,15 @@ message PolicyDeps {
   repeated uint32 uses_function_ids = 5 [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
-// EnableRLS handles enabling and disabling row level security of a table.
+// RowLevelSecurityEnabled handles enabling and disabling row level security of a table.
 message RowLevelSecurityEnabled {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// RowLevelSecurityForced handles forced and no-force row level security of a table.
+message RowLevelSecurityForced {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  bool is_forced = 2;
 }
 
 message Sequence {

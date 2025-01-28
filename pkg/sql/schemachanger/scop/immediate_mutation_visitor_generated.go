@@ -164,7 +164,8 @@ type ImmediateMutationVisitor interface {
 	AddTableZoneConfig(context.Context, AddTableZoneConfig) error
 	AddIndexZoneConfig(context.Context, AddIndexZoneConfig) error
 	AddPartitionZoneConfig(context.Context, AddPartitionZoneConfig) error
-	ToggleRowLevelSecurityMode(context.Context, ToggleRowLevelSecurityMode) error
+	EnableRowLevelSecurityMode(context.Context, EnableRowLevelSecurityMode) error
+	ForcedRowLevelSecurityMode(context.Context, ForcedRowLevelSecurityMode) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -903,6 +904,11 @@ func (op AddPartitionZoneConfig) Visit(ctx context.Context, v ImmediateMutationV
 }
 
 // Visit is part of the ImmediateMutationOp interface.
-func (op ToggleRowLevelSecurityMode) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.ToggleRowLevelSecurityMode(ctx, op)
+func (op EnableRowLevelSecurityMode) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.EnableRowLevelSecurityMode(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op ForcedRowLevelSecurityMode) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.ForcedRowLevelSecurityMode(ctx, op)
 }

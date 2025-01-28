@@ -136,13 +136,26 @@ func (i *immediateVisitor) SetPolicyForwardReferences(
 	return nil
 }
 
-func (i *immediateVisitor) ToggleRowLevelSecurityMode(
-	ctx context.Context, op scop.ToggleRowLevelSecurityMode,
+func (i *immediateVisitor) EnableRowLevelSecurityMode(
+	ctx context.Context, op scop.EnableRowLevelSecurityMode,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
+
 	tbl.RowLevelSecurityEnabled = op.Enabled
+	return nil
+}
+
+func (i *immediateVisitor) ForcedRowLevelSecurityMode(
+	ctx context.Context, op scop.ForcedRowLevelSecurityMode,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+
+	tbl.RowLevelSecurityForced = op.Forced
 	return nil
 }

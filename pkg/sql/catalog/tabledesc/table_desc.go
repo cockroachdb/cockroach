@@ -717,3 +717,8 @@ func (desc *wrapper) ExternalRowData() *descpb.ExternalRowData {
 func (desc *wrapper) IsRowLevelSecurityEnabled() bool {
 	return desc.RowLevelSecurityEnabled
 }
+
+// IsRowLevelSecurityForced implements the TableDescriptor interface.
+func (desc *wrapper) IsRowLevelSecurityForced() bool {
+	return desc.RowLevelSecurityForced
+}

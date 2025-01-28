@@ -1,0 +1,26 @@
+/* setup */
+CREATE TABLE roaches();
+set enable_row_level_security = on;
+ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE roaches FORCE ROW LEVEL SECURITY;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹roaches› FORCE ROW LEVEL SECURITY;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC RowLevelSecurityForced:{DescID: 104 (roaches)}
+ │         └── 1 Mutation operation
+ │              └── ForcedRowLevelSecurityMode {"Forced":true,"TableID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT RowLevelSecurityForced:{DescID: 104 (roaches)}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC RowLevelSecurityForced:{DescID: 104 (roaches)}
+           └── 1 Mutation operation
+                └── ForcedRowLevelSecurityMode {"Forced":true,"TableID":104}
