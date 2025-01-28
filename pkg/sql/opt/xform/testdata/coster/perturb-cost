@@ -23,6 +23,7 @@ sort
  ├── columns: x:1!null y:2 x:5!null
  ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(5)=1000, null(5)=0]
  ├── cost: 2406.28819
+ ├── cost-flags: unbounded-cardinality
  ├── key: (5)
  ├── fd: (1)-->(2), (1)==(5), (5)==(1)
  ├── ordering: +2
@@ -31,18 +32,21 @@ sort
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(5)=1000, null(5)=0]
       ├── cost: 2156.80625
+      ├── cost-flags: unbounded-cardinality
       ├── key: (5)
       ├── fd: (1)-->(2), (1)==(5), (5)==(1)
       ├── scan a
       │    ├── columns: a.x:1!null y:2
       │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
       │    ├── cost: 1068.42
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       ├── scan b
       │    ├── columns: b.x:5!null
       │    ├── stats: [rows=1000, distinct(5)=1000, null(5)=0]
       │    ├── cost: 1048.22
+      │    ├── cost-flags: unbounded-cardinality
       │    └── key: (5)
       └── filters
            └── a.x:1 = b.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
