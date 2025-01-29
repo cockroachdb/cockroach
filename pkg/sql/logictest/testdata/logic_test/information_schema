@@ -4007,6 +4007,7 @@ optimizer                                                  on
 optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
+optimizer_min_row_count                                    0
 optimizer_prefer_bounded_cardinality                       off
 optimizer_prove_implication_with_virtual_computed_columns  on
 optimizer_push_limit_into_project_filtered_scan            on
