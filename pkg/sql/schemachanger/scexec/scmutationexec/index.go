@@ -61,11 +61,6 @@ func addNewIndexMutation(
 		tbl.NextConstraintID = opIndex.ConstraintID + 1
 	}
 
-	// Set up the index descriptor type.
-	indexType := idxtype.FORWARD
-	if opIndex.IsInverted {
-		indexType = idxtype.INVERTED
-	}
 	// Set up the encoding type.
 	encodingType := catenumpb.PrimaryIndexEncoding
 	indexVersion := descpb.LatestIndexDescriptorVersion
@@ -80,7 +75,7 @@ func addNewIndexMutation(
 		NotVisible:                  opIndex.IsNotVisible,
 		Invisibility:                opIndex.Invisibility,
 		Version:                     indexVersion,
-		Type:                        indexType,
+		Type:                        opIndex.Type,
 		CreatedExplicitly:           true,
 		EncodingType:                encodingType,
 		ConstraintID:                opIndex.ConstraintID,

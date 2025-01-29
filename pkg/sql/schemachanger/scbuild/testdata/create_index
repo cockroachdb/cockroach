@@ -41,7 +41,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]
-  {indexId: 2, isConcurrently: true, isInverted: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
+  {indexId: 2, isConcurrently: true, isInverted: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3, type: INVERTED}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 2, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
@@ -51,7 +51,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
 - [[IndexName:{DescID: 104, Name: id2, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: id2, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  {constraintId: 1, indexId: 3, isConcurrently: true, isInverted: true, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 104}
+  {constraintId: 1, indexId: 3, isConcurrently: true, isInverted: true, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 104, type: INVERTED}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]

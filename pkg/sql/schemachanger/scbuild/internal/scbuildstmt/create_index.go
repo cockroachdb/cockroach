@@ -53,6 +53,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		Index: scpb.Index{
 			IsUnique:       n.Unique,
 			IsInverted:     n.Type == idxtype.INVERTED,
+			Type:           n.Type,
 			IsConcurrently: n.Concurrently,
 			IsNotVisible:   n.Invisibility.Value != 0.0,
 			Invisibility:   n.Invisibility.Value,
