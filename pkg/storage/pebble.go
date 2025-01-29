@@ -350,6 +350,9 @@ var EngineComparer = func() pebble.Comparer {
 		}
 		return EngineKeyFormatter{key: decoded}
 	}
+	// TODO(jackson): Consider overriding ValidateKey and using the stricter
+	// EngineKey.Validate. Today some tests create lock-table keys without the
+	// lock table prefix and these test keys fail EngineKey.Validate.
 	return c
 }()
 
@@ -528,19 +531,6 @@ func DefaultPebbleOptions() *pebble.Options {
 	// SSDs, that kick off an expensive GC if a lot of files are deleted at
 	// once.
 	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
-	// Validate min/max keys in each SSTable when performing a compaction. This
-	// serves as a simple protection against corruption or programmer-error in
-	// Pebble.
-	opts.Experimental.KeyValidationFunc = func(userKey []byte) error {
-		engineKey, ok := DecodeEngineKey(userKey)
-		if !ok {
-			return errors.Newf("key %s could not be decoded as an EngineKey", string(userKey))
-		}
-		if err := engineKey.Validate(); err != nil {
-			return err
-		}
-		return nil
-	}
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 	opts.Experimental.RequiredInPlaceValueBound = pebble.UserKeyPrefixBound{
 		Lower: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
