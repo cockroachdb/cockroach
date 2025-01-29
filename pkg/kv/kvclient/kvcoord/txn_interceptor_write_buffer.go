@@ -103,7 +103,9 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 type txnWriteBuffer struct {
 	enabled bool
 
-	buffer btree // nolint:staticcheck
+	buffer        btree
+	bufferSeek    bufferedWrite // re-use while seeking
+	bufferIDAlloc uint64
 
 	wrapped lockedSender
 }
@@ -114,7 +116,22 @@ func (twb *txnWriteBuffer) SendLocked(
 	if !twb.enabled {
 		return twb.wrapped.SendLocked(ctx, ba)
 	}
-	panic("unimplemented")
+
+	if _, ok := ba.GetArg(kvpb.EndTxn); ok {
+		// TODO(arul): should we only flush if the transaction is being committed?
+		// If the transaction is being rolled back, we shouldn't needlessly flush
+		// writes.
+		return twb.flushWithEndTxn(ctx, ba)
+	}
+
+	ba, transformations := twb.applyTransformations(ctx, ba)
+
+	br, pErr := twb.wrapped.SendLocked(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	return twb.mergeResponseWithTransformations(ctx, transformations, br), nil
 }
 
 // setWrapped implements the txnInterceptor interface.
@@ -145,6 +162,198 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 // closeLocked implements the txnInterceptor interface.
 func (twb *txnWriteBuffer) closeLocked() {}
 
+// applyTransformations applies any applicable transformations to the supplied
+// batch request. In doing so, the batch request is modified in place, and a
+// list of transformations that were applied is returned. The caller must handle
+// these on the response path.
+//
+// Some examples of transformations include:
+//
+// 1. Blind writes (Put/Delete requests) are stripped from the batch and
+// buffered locally.
+//
+// TODO(arul): Augment this comment as these expand.
+func (twb *txnWriteBuffer) applyTransformations(
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchRequest, transformations) {
+	baRemote := ba.ShallowCopy()
+	baRemote.Requests = nil
+
+	var transformations transformations
+
+	for i, ru := range ba.Requests {
+		req := ru.GetInner()
+		switch t := req.(type) {
+		case *kvpb.PutRequest:
+			var ru kvpb.ResponseUnion
+			ru.MustSetInner(&kvpb.PutResponse{})
+			transformations = append(transformations, transformation{
+				stripped: true,
+				index:    i,
+				resp:     ru,
+			})
+
+			twb.addToBuffer(t.Key, t.Value, t.Sequence)
+		case *kvpb.DeleteRequest:
+			var ru kvpb.ResponseUnion
+			ru.MustSetInner(&kvpb.DeleteResponse{
+				// TODO(arul): We need to add a flag to DeleteRequests to indicate
+				// whether we care about the return value or not. If we do, we need to
+				// decompose the Delete into a read-write phase. Otherwise, we can
+				// consider the Delete a blind write, and return false here.
+				FoundKey: false,
+			})
+			transformations = append(transformations, transformation{
+				stripped: true,
+				index:    i,
+				resp:     ru,
+			})
+			twb.addToBuffer(t.Key, roachpb.Value{}, t.Sequence)
+
+		default:
+			baRemote.Requests = append(baRemote.Requests, ru)
+		}
+	}
+	return baRemote, transformations
+}
+
+// mergeResponsesWithTransformations merges responses from the KV layer with the
+// transformations that were applied by the txnWriteBuffer before sending the
+// batch request. As a result, interceptors above the txnWriteBuffer remain
+// oblivious to its decision to buffer any writes.
+func (twb *txnWriteBuffer) mergeResponseWithTransformations(
+	ctx context.Context, transformations transformations, br *kvpb.BatchResponse,
+) *kvpb.BatchResponse {
+	if transformations.Empty() {
+		return br
+	}
+	mergedResps := make([]kvpb.ResponseUnion, len(br.Responses)+len(transformations))
+	for i := range mergedResps {
+		if len(transformations) > 0 && transformations[0].index == i {
+			// The transformation applies at this index.
+			mergedResps[i] = transformations[0].toResp()
+			transformations = transformations[1:]
+
+			// TODO(arul): we'll also need to handle !transformation.stripped case here
+			// as well. In particular, if a transformation didn't strip the request,
+			// but instead modified it, we'll need to trim from br.Responses and trim
+			// the mergedResps slice -- we'd otherwise be overcounting.
+			continue
+		}
+
+		// No transformation applies at this index. Copy over the response as is.
+		mergedResps[i] = br.Responses[0]
+		br.Responses = br.Responses[1:]
+	}
+	br.Responses = mergedResps
+	return br
+}
+
+// transformation is a modification applied by the txnWriteBuffer on a batch
+// request that needs to be accounted for when returning the response.
+type transformation struct {
+	// stripped, if true, indicates that the request was stripped from the batch
+	// and never sent to the KV layer.
+	stripped bool
+	// index of the request in the original batch to which the transformation applies
+	index int
+	// resp is locally produced response that needs to be merged with any
+	// responses returned by the KV layer. This is set for requests that can be
+	// evaluated locally (e.g. blind writes, reads that can be served entirely
+	// from the buffer). If non-empty, stripped must also be true.
+	resp kvpb.ResponseUnion
+}
+
+// toResp returns the response that should be added to the batch response as
+// a result of applying the transformation.
+func (t transformation) toResp() kvpb.ResponseUnion {
+	if t.stripped {
+		return t.resp
+	}
+
+	// This is only possible once we start decomposing read-write requests into
+	// separate bits.
+	panic("unimplemented")
+
+	// TODO(arul): in the future, when we'll evaluate CPuts locally, we'll have
+	// this function take in the result of the KVGet, save the CPut function
+	// locally on the transformation, and use these two things to evaluate the
+	// condition here, on the client. We'll then construct and return the
+	// appropriate response.
+}
+
+// transformations is a list of transformations applied by the txnWriteBuffer.
+type transformations []transformation
+
+func (t transformations) Empty() bool {
+	return len(t) == 0
+}
+
+// addToBuffer adds a write to the given key to the buffer.
+func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq) {
+	it := twb.buffer.MakeIter()
+	seek := &twb.bufferSeek
+	seek.key = key
+
+	it.FirstOverlap(seek)
+	if it.Valid() {
+		// We've already seen a write for this key.
+		bw := it.Cur()
+		bw.vals = append(bw.vals, bufferedValue{val: val, seq: seq})
+	} else {
+		twb.bufferIDAlloc++
+		twb.buffer.Set(&bufferedWrite{
+			id:   twb.bufferIDAlloc,
+			key:  key,
+			vals: []bufferedValue{{val: val, seq: seq}},
+		})
+	}
+}
+
+// flushWithEndTxn flushes all buffered writes to the KV layer along with the
+// EndTxn request. Responses from the flushing are stripped before returning.
+func (twb *txnWriteBuffer) flushWithEndTxn(
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
+	numBuffered := twb.buffer.Len()
+	if numBuffered == 0 {
+		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
+	}
+	// Iterate over the buffered writes and flush all buffered writes to the KV
+	// layer by adding them to the batch.
+	reqs := make([]kvpb.RequestUnion, 0, numBuffered+len(ba.Requests))
+	it := twb.buffer.MakeIter()
+	for it.First(); it.Valid(); it.Next() {
+		reqs = append(reqs, it.Cur().toRequest())
+	}
+
+	reqs = append(reqs, ba.Requests...)
+	ba.Requests = reqs
+
+	br, pErr := twb.wrapped.SendLocked(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
+	}
+	// Strip out responses for all the flushed buffered writes.
+	br.Responses = br.Responses[numBuffered:]
+	return br, nil
+}
+
+// testingBufferedWritesAsSlice returns all buffered writes, in key order, as a
+// slice.
+func (twb *txnWriteBuffer) testingBufferedWritesAsSlice() []bufferedWrite {
+	var writes []bufferedWrite
+	it := twb.buffer.MakeIter()
+	for it.First(); it.Valid(); it.Next() {
+		bw := *it.Cur()
+		// Scrub the id/endKey for the benefit of tests.
+		bw.id = 0
+		bw.endKey = nil
+		writes = append(writes, bw)
+	}
+	return writes
+}
+
 // bufferedWrite is a buffered write operation to a given key. It maps a key to
 // possibly multiple values[1], each with an associated sequence number.
 //
@@ -155,13 +364,11 @@ func (twb *txnWriteBuffer) closeLocked() {}
 type bufferedWrite struct {
 	id     uint64
 	key    roachpb.Key
-	endKey roachpb.Key // used in btree iteration
-	// nolint:staticcheck
-	vals []bufferedValue // sorted in increasing sequence number order
+	endKey roachpb.Key     // used in btree iteration
+	vals   []bufferedValue // sorted in increasing sequence number order
 }
 
 // bufferedValue is a value written to a key at a given sequence number.
-// nolint:staticcheck
 type bufferedValue struct {
 	val roachpb.Value
 	seq enginepb.TxnSeq
@@ -179,3 +386,35 @@ func (bw *bufferedWrite) New() *bufferedWrite { return new(bufferedWrite) }
 func (bw *bufferedWrite) SetID(v uint64)      { bw.id = v }
 func (bw *bufferedWrite) SetKey(v []byte)     { bw.key = v }
 func (bw *bufferedWrite) SetEndKey(v []byte)  { bw.endKey = v }
+
+func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
+	var ru kvpb.RequestUnion
+	// A key may be written to multiple times during the course of a transaction.
+	// However, when flushing to KV, we only need to flush the most recent write
+	// (read: the one with the highest sequence number). As we store values in
+	// increasing sequence number order, this should be the last value in the
+	// slice.
+	val := bw.vals[len(bw.vals)-1]
+	if val.val.IsPresent() {
+		putAlloc := new(struct {
+			put   kvpb.PutRequest
+			union kvpb.RequestUnion_Put
+		})
+		// TODO(arul): should we use a sync.Pool here?
+		putAlloc.put.Key = bw.key
+		putAlloc.put.Value = val.val
+		putAlloc.put.Sequence = val.seq
+		putAlloc.union.Put = &putAlloc.put
+		ru.Value = &putAlloc.union
+	} else {
+		delAlloc := new(struct {
+			del   kvpb.DeleteRequest
+			union kvpb.RequestUnion_Delete
+		})
+		delAlloc.del.Key = bw.key
+		delAlloc.del.Sequence = val.seq
+		delAlloc.union.Delete = &delAlloc.del
+		ru.Value = &delAlloc.union
+	}
+	return ru
+}
