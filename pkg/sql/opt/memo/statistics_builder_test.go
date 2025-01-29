@@ -111,7 +111,8 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		relProps := &props.Relational{Cardinality: props.AnyCardinality}
 		relProps.NotNullCols = cs.ExtractNotNullCols(&evalCtx)
 		s := relProps.Statistics()
-		s.Init(relProps)
+		const minRowCount = 0
+		s.Init(relProps, minRowCount)
 
 		// Calculate distinct counts.
 		sb.applyConstraintSet(cs, true /* tight */, sel, relProps, relProps.Statistics())
