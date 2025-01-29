@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,7 +64,7 @@ func TestWALFailover(t *testing.T) {
 
 				var envConfig fs.EnvConfig
 				if td.HasArg("encrypted-at-rest") {
-					envConfig.EncryptionOptions = []byte("test-encryption-options")
+					envConfig.EncryptionOptions = &storagepb.EncryptionOptions{}
 				}
 				if td.HasArg("read-only") {
 					envConfig.RW = fs.ReadOnly
@@ -88,10 +89,10 @@ func TestWALFailover(t *testing.T) {
 					}
 				}
 				if td.HasArg("path-encrypted") {
-					cfg.Path.EncryptionOptions = []byte("path-encryption-options")
+					cfg.Path.EncryptionOptions = &storagepb.EncryptionOptions{}
 				}
 				if td.HasArg("prev-path-encrypted") {
-					cfg.PrevPath.EncryptionOptions = []byte("prev-encryption-options")
+					cfg.PrevPath.EncryptionOptions = &storagepb.EncryptionOptions{}
 				}
 				openEnv := getEnv(openDir)
 				if openEnv == nil {

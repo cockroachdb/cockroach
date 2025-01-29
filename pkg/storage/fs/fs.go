@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
@@ -121,7 +122,7 @@ func InitEnvFromStoreSpec(
 // EnvConfig provides additional configuration settings for Envs.
 type EnvConfig struct {
 	RW                RWMode
-	EncryptionOptions []byte
+	EncryptionOptions *storagepb.EncryptionOptions
 }
 
 // InitEnv initializes a new virtual filesystem environment.

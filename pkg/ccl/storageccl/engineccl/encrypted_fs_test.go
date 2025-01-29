@@ -236,15 +236,14 @@ func TestPebbleEncryption(t *testing.T) {
 	keyFile128 := "111111111111111111111111111111111234567890123456"
 	writeToFile(t, stickyRegistry.Get(stickyVFSID), "16.key", []byte(keyFile128))
 
-	encOptionsBytes, err := protoutil.Marshal(&storagepb.EncryptionOptions{
+	encOptions := &storagepb.EncryptionOptions{
 		KeySource: storagepb.EncryptionKeySource_KeyFiles,
 		KeyFiles: &storagepb.EncryptionKeyFiles{
 			CurrentKey: "16.key",
 			OldKey:     "plain",
 		},
 		DataKeyRotationPeriod: 1000, // arbitrary seconds
-	})
-	require.NoError(t, err)
+	}
 
 	func() {
 		// Initialize the filesystem env.
@@ -254,7 +253,7 @@ func TestPebbleEncryption(t *testing.T) {
 				InMemory:          true,
 				Attributes:        roachpb.Attributes{},
 				Size:              base.SizeSpec{InBytes: 512 << 20},
-				EncryptionOptions: encOptionsBytes,
+				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
 			fs.ReadWrite,
@@ -303,7 +302,7 @@ func TestPebbleEncryption(t *testing.T) {
 				InMemory:          true,
 				Attributes:        roachpb.Attributes{},
 				Size:              base.SizeSpec{InBytes: 512 << 20},
-				EncryptionOptions: encOptionsBytes,
+				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
 			fs.ReadWrite,
@@ -374,15 +373,14 @@ func TestPebbleEncryption2(t *testing.T) {
 	addKeyAndValidate := func(
 		key string, val string, encKeyFile string, oldEncFileKey string,
 	) {
-		encOptionsBytes, err := protoutil.Marshal(&storagepb.EncryptionOptions{
+		encOptions := &storagepb.EncryptionOptions{
 			KeySource: storagepb.EncryptionKeySource_KeyFiles,
 			KeyFiles: &storagepb.EncryptionKeyFiles{
 				CurrentKey: encKeyFile,
 				OldKey:     oldEncFileKey,
 			},
 			DataKeyRotationPeriod: 1000,
-		})
-		require.NoError(t, err)
+		}
 
 		// Initialize the filesystem env.
 		ctx := context.Background()
@@ -392,7 +390,7 @@ func TestPebbleEncryption2(t *testing.T) {
 				InMemory:          true,
 				Attributes:        roachpb.Attributes{},
 				Size:              base.SizeSpec{InBytes: 512 << 20},
-				EncryptionOptions: encOptionsBytes,
+				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
 			fs.ReadWrite,
@@ -507,10 +505,10 @@ func (ptfs *plainTestFS) syncDir(t *testing.T) {}
 // encryptedTestFS is the encrypted FS being tested.
 type encryptedTestFS struct {
 	// The base strict FS which is wrapped for error injection and encryption.
-	mem             *vfs.MemFS
-	encOptionsBytes []byte
-	errorProb       float64
-	errorRand       *rand.Rand
+	mem        *vfs.MemFS
+	encOptions *storagepb.EncryptionOptions
+	errorProb  float64
+	errorRand  *rand.Rand
 
 	encEnv *fs.EncryptionEnv
 }
@@ -543,7 +541,7 @@ func (etfs *encryptedTestFS) restart() error {
 		return err
 	}
 	encEnv, err := newEncryptedEnv(
-		fsMeta, fileRegistry, "", false, etfs.encOptionsBytes)
+		fsMeta, fileRegistry, "", false, etfs.encOptions)
 	if err != nil {
 		return err
 	}
@@ -574,14 +572,12 @@ func makeEncryptedTestFS(t *testing.T, errorProb float64, errorRand *rand.Rand) 
 	// TODO(sumeer): Do deterministic data key rotation. Inject kmTimeNow and
 	// operations that advance time.
 	encOptions.DataKeyRotationPeriod = 100000
-	encOptionsBytes, err := protoutil.Marshal(&encOptions)
-	require.NoError(t, err)
 	etfs := &encryptedTestFS{
-		mem:             mem,
-		encOptionsBytes: encOptionsBytes,
-		errorProb:       errorProb,
-		errorRand:       errorRand,
-		encEnv:          nil,
+		mem:        mem,
+		encOptions: &encOptions,
+		errorProb:  errorProb,
+		errorRand:  errorRand,
+		encEnv:     nil,
 	}
 	require.NoError(t, etfs.restart())
 	return etfs
