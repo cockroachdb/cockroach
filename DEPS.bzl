@@ -2445,10 +2445,10 @@ def go_deps():
         name = "com_github_dataexmachina_dev_side_eye_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataExMachina-dev/side-eye-go",
-        sha256 = "ea5676af6abb1965ba70c24a9090932c9e45a002411e9c86298f60f60f16a10a",
-        strip_prefix = "github.com/DataExMachina-dev/side-eye-go@v0.0.0-20250102012104-645b45402adf",
+        sha256 = "60518729ea3c6b1bd57ae454216967e4952923f5b7d7b8ee6f3ab8112ec59d76",
+        strip_prefix = "github.com/DataExMachina-dev/side-eye-go@v0.0.0-20250129155449-07ef0520771b",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataExMachina-dev/side-eye-go/com_github_dataexmachina_dev_side_eye_go-v0.0.0-20250102012104-645b45402adf.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataExMachina-dev/side-eye-go/com_github_dataexmachina_dev_side_eye_go-v0.0.0-20250129155449-07ef0520771b.zip",
         ],
     )
     go_repository(
