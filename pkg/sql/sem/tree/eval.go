@@ -1478,7 +1478,7 @@ func cmpOpFixups(
 	cmpOps map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads,
 ) map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads {
 	findVolatility := func(op treecmp.ComparisonOperatorSymbol, t *types.T) volatility.V {
-		for _, o := range cmpOps[treecmp.EQ].overloads {
+		for _, o := range cmpOps[op].overloads {
 			if o.LeftType.Equivalent(t) && o.RightType.Equivalent(t) {
 				return o.Volatility
 			}
