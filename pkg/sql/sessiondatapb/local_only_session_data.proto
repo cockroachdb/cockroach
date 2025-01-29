@@ -598,6 +598,12 @@ message LocalOnlySessionData {
   // plans in which every expression has a bounded cardinality over plans with
   // one or more expressions with unbounded cardinality.
   bool optimizer_prefer_bounded_cardinality = 154;
+  // OptimizerMinRowCount set a lower bound on row count estimates for
+  // relational expressions during query planning. A value of zero indicates no
+  // lower bound. Note that if this is set to a value greater than zero, a row
+  // count of zero can still be estimated for expressions with a cardinality of
+  // zero, e.g., for a contradictory filter.
+  double optimizer_min_row_count = 155;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
