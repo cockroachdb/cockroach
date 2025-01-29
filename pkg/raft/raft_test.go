@@ -2596,8 +2596,9 @@ func TestLeaderAppResp(t *testing.T) {
 		// Follower 2 responds to leader, indicating log index 2 is replicated.
 		// Leader tries to commit, but commit index doesn't advance since the index
 		// is from a previous term.
-		// We hit maybeCommit() and do term check by getting the term number from
-		// storage.
+		// We hit maybeCommit() and do term check comparison by using the invariant
+		// raft.idxPreLeading.
+		// There is no storage access for term in the maybeCommit() code path
 		{2, false, 2, 7, 1, 2, 0, 2},
 
 		// NB: For the following tests, we are skipping the MsgAppResp for the first
