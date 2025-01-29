@@ -112,6 +112,12 @@ func (v verifyingLockTable) QueryLockTableState(
 	return v.lt.QueryLockTableState(span, opts)
 }
 
+func (v verifyingLockTable) ExportUnreplicatedLocks(
+	span roachpb.Span, exporter func(*roachpb.LockAcquisition),
+) {
+	v.lt.ExportUnreplicatedLocks(span, exporter)
+}
+
 // Metrics implements the lockTable interface.
 func (v verifyingLockTable) Metrics() LockTableMetrics {
 	return v.lt.Metrics()
