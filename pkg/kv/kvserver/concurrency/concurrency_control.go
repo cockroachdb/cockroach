@@ -285,6 +285,14 @@ type RangeStateListener interface {
 	// updated.
 	OnRangeDescUpdated(*roachpb.RangeDescriptor)
 
+	// OnRangeLeaseTransferEval informs the concurrency manager that the range is
+	// evaluating a lease transfer. It is called during evalutation of a lease
+	// transfer. The returned LockAcquisition structs represent held locks that we
+	// may want to flush to disk as replicated. Since lease transfers declare
+	// latches that conflict with all requests, the caller knows that nothing is
+	// going to modify the lock table as its evaluating.
+	OnRangeLeaseTransferEval() []*roachpb.LockAcquisition
+
 	// OnRangeLeaseUpdated informs the concurrency manager that its range's
 	// lease has been updated. The argument indicates whether this manager's
 	// replica is the leaseholder going forward.
@@ -745,6 +753,14 @@ type lockTable interface {
 
 	// QueryLockTableState returns detailed metadata on locks managed by the lockTable.
 	QueryLockTableState(span roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
+
+	// ExportUnreplicatedLocks runs exporter on each held, unreplicated lock
+	// in the given span.
+	//
+	// Note that the caller is responsible for acquiring latches across the span
+	// it is exporting if it needs to be sure that the exported locks won't be
+	// updated in the lock table while it is still referencing them.
+	ExportUnreplicatedLocks(span roachpb.Span, exporter func(*roachpb.LockAcquisition))
 
 	// Metrics returns information about the state of the lockTable.
 	Metrics() LockTableMetrics
