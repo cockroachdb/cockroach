@@ -802,6 +802,7 @@ func generateNewProgress(
 			Progress: &jobspb.Progress_HighWater{},
 			Details: &jobspb.Progress_Changefeed{
 				Changefeed: &jobspb.ChangefeedProgress{
+					//lint:ignore SA1019 deprecated usage
 					Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
 						Spans: existingTargetSpans,
 					},
@@ -832,6 +833,7 @@ func generateNewProgress(
 		Progress: &jobspb.Progress_HighWater{},
 		Details: &jobspb.Progress_Changefeed{
 			Changefeed: &jobspb.ChangefeedProgress{
+				//lint:ignore SA1019 deprecated usage
 				Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
 					Spans: mergedSpanGroup.Slice(),
 				},

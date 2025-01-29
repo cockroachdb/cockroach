@@ -6,7 +6,9 @@
 package jobspb
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
@@ -61,3 +63,33 @@ func (rse ResolvedSpanEntries) Equal(rse2 ResolvedSpanEntries) bool {
 
 // SafeValue implements the redact.SafeValue interface.
 func (ResolvedSpan_BoundaryType) SafeValue() {}
+
+// NewTimestampSpansMap takes a go timestamp-to-spans map and converts
+// it into a new TimestampSpansMap.
+func NewTimestampSpansMap(m map[hlc.Timestamp]roachpb.Spans) *TimestampSpansMap {
+	if len(m) == 0 {
+		return nil
+	}
+	tsm := &TimestampSpansMap{
+		Entries: make([]TimestampSpansMap_Entry, 0, len(m)),
+	}
+	for ts, spans := range m {
+		tsm.Entries = append(tsm.Entries, TimestampSpansMap_Entry{
+			Timestamp: ts,
+			Spans:     spans,
+		})
+	}
+	return tsm
+}
+
+// ToGoMap converts a TimestampSpansMap into a go map.
+func (tsm *TimestampSpansMap) ToGoMap() map[hlc.Timestamp]roachpb.Spans {
+	if tsm == nil {
+		return nil
+	}
+	m := make(map[hlc.Timestamp]roachpb.Spans, len(tsm.Entries))
+	for _, entry := range tsm.Entries {
+		m[entry.Timestamp] = entry.Spans
+	}
+	return m
+}

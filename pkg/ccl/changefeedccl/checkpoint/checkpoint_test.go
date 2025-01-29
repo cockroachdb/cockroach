@@ -57,6 +57,7 @@ func TestCheckpointMake(t *testing.T) {
 		frontier hlc.Timestamp
 		spans    checkpointSpans
 		maxBytes int64
+		//lint:ignore SA1019 deprecated usage
 		expected jobspb.ChangefeedProgress_Checkpoint
 	}{
 		"all spans ahead of frontier checkpointed": {
@@ -68,6 +69,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(4)},
 			},
 			maxBytes: 100,
+			//lint:ignore SA1019 deprecated usage
 			expected: jobspb.ChangefeedProgress_Checkpoint{
 				Timestamp: ts(2),
 				Spans: []roachpb.Span{
@@ -85,6 +87,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(4)},
 			},
 			maxBytes: 2,
+			//lint:ignore SA1019 deprecated usage
 			expected: jobspb.ChangefeedProgress_Checkpoint{
 				Timestamp: ts(2),
 				Spans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
@@ -99,6 +102,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(4)},
 			},
 			maxBytes: 0,
+			//lint:ignore SA1019 deprecated usage
 			expected: jobspb.ChangefeedProgress_Checkpoint{
 				Timestamp: ts(2),
 			},
@@ -112,6 +116,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(1)},
 			},
 			maxBytes: 100,
+			//lint:ignore SA1019 deprecated usage
 			expected: jobspb.ChangefeedProgress_Checkpoint{},
 		},
 		"adjacent spans ahead of frontier merged before being checkpointed": {
@@ -123,6 +128,7 @@ func TestCheckpointMake(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(1)},
 			},
 			maxBytes: 100,
+			//lint:ignore SA1019 deprecated usage
 			expected: jobspb.ChangefeedProgress_Checkpoint{
 				Timestamp: ts(2),
 				Spans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}},
