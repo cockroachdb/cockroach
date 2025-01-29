@@ -804,32 +804,16 @@ func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 		stmtBuf.WriteString(`)`)
 
 		// Also verify that the key matches the value.
-		type wrapper struct {
-			After map[string]interface{} `json:"after"`
-		}
-		var value wrapper
-		if err := gojson.Unmarshal([]byte(row.value), &value); err != nil {
-			return err
-		}
-		primaryKeyDatums := make([]interface{}, len(v.primaryKeyCols))
 		for idx, primaryKeyCol := range v.primaryKeyCols {
-			primaryKeyDatums[idx] = value.After[primaryKeyCol]
-		}
-		primaryKeyJSON, err := gojson.Marshal(primaryKeyDatums)
-		if err != nil {
-			return err
-		}
-
-		rowKey := row.key
-		if len(primaryKeyDatums) > 1 {
-			// format the key using the Go marshaller; otherwise, differences
-			// in formatting could lead to the comparison below failing
-			rowKey = asGoJSON(row.key)
-		}
-		if string(primaryKeyJSON) != rowKey {
-			v.failures = append(v.failures,
-				fmt.Sprintf(`key %s did not match expected key %s for value %s`,
-					rowKey, primaryKeyJSON, row.value))
+			valueJSON, err := afterJSON.FetchValKey(primaryKeyCol)
+			if err != nil {
+				return err
+			}
+			if rowKeyValue := keyJSONAsArray[idx]; valueJSON != rowKeyValue {
+				v.failures = append(v.failures,
+					fmt.Sprintf(`key %s did not match expected key %s for value %s`,
+						primaryKeyCol, rowKeyValue, valueJSON))
+			}
 		}
 	} else {
 		// DELETE
@@ -1095,23 +1079,4 @@ func fetchPrimaryKeyCols(sqlDB *gosql.DB, tableStr string) ([]string, error) {
 		return nil, errors.Errorf("no primary key information found for %s", tableStr)
 	}
 	return primaryKeyCols, nil
-}
-
-// asGoJSON tries to unmarshal the given string as JSON; if
-// successful, the struct is marshalled back to JSON. This is to
-// enforce the default formatting of the standard library marshaller,
-// allowing comparisons of JSON strings when we don't control the
-// formatting of the strings.
-func asGoJSON(s string) string {
-	var obj interface{}
-	if err := gojson.Unmarshal([]byte(s), &obj); err != nil {
-		return s
-	}
-
-	blob, err := gojson.Marshal(obj)
-	if err != nil {
-		return s
-	}
-
-	return string(blob)
 }
