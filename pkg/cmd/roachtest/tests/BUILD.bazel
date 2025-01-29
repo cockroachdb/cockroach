@@ -119,6 +119,7 @@ go_library(
         "mixed_version_decommission.go",
         "mixed_version_import.go",
         "mixed_version_job_compatibility_in_declarative_schema_changer.go",
+        "mixed_version_ldr.go",
         "mixed_version_multi_region.go",
         "mixed_version_schemachange.go",
         "mixed_version_sql_stats.go",
