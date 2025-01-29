@@ -51,6 +51,7 @@ type OperationConfig struct {
 	Merge          MergeConfig
 	ChangeReplicas ChangeReplicasConfig
 	ChangeLease    ChangeLeaseConfig
+	ChangeSetting  ChangeSettingConfig
 	ChangeZone     ChangeZoneConfig
 }
 
@@ -324,6 +325,13 @@ type ChangeLeaseConfig struct {
 	TransferLease int
 }
 
+// ChangeSettingConfig configures the relative probability of generating a
+// cluster setting change operation.
+type ChangeSettingConfig struct {
+	// SetLeaseType changes the default range lease type.
+	SetLeaseType int
+}
+
 // ChangeZoneConfig configures the relative probability of generating a zone
 // configuration change operation.
 type ChangeZoneConfig struct {
@@ -442,6 +450,9 @@ func newAllOperationsConfig() GeneratorConfig {
 		},
 		ChangeLease: ChangeLeaseConfig{
 			TransferLease: 1,
+		},
+		ChangeSetting: ChangeSettingConfig{
+			SetLeaseType: 1,
 		},
 		ChangeZone: ChangeZoneConfig{
 			ToggleGlobalReads: 1,
@@ -683,6 +694,7 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	transferLeaseFn := makeTransferLeaseFn(key, append(voters, nonVoters...))
 	addOpGen(&allowed, transferLeaseFn, g.Config.Ops.ChangeLease.TransferLease)
 
+	addOpGen(&allowed, setLeaseType, g.Config.Ops.ChangeSetting.SetLeaseType)
 	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
 
 	return step(g.selectOp(rng, allowed))
@@ -1452,6 +1464,14 @@ func makeTransferLeaseFn(key string, current []roachpb.ReplicationTarget) opGenF
 	}
 }
 
+func setLeaseType(_ *generator, rng *rand.Rand) Operation {
+	leaseTypes := roachpb.TestingAllLeaseTypes()
+	leaseType := leaseTypes[rng.Intn(len(leaseTypes))]
+	op := changeSetting(ChangeSettingType_SetLeaseType)
+	op.ChangeSetting.LeaseType = leaseType
+	return op
+}
+
 func toggleGlobalReads(_ *generator, _ *rand.Rand) Operation {
 	return changeZone(ChangeZoneType_ToggleGlobalReads)
 }
@@ -1926,6 +1946,10 @@ func changeReplicas(key string, changes ...kvpb.ReplicationChange) Operation {
 
 func transferLease(key string, target roachpb.StoreID) Operation {
 	return Operation{TransferLease: &TransferLeaseOperation{Key: []byte(key), Target: target}}
+}
+
+func changeSetting(changeType ChangeSettingType) Operation {
+	return Operation{ChangeSetting: &ChangeSettingOperation{Type: changeType}}
 }
 
 func changeZone(changeType ChangeZoneType) Operation {
