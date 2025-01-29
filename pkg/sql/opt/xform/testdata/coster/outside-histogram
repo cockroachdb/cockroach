@@ -70,7 +70,7 @@ ALTER TABLE t INJECT STATISTICS '[
 # Q1
 # --------------------------------------------------
 
-opt set=(optimizer_prefer_bounded_cardinality=false)
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k IN (110, 120, 130, 140) AND i = 500
 ----
 index-join t
@@ -99,7 +99,7 @@ index-join t
       ├── key: (1)
       └── fd: ()-->(2)
 
-opt set=(optimizer_prefer_bounded_cardinality=true)
+opt set=(optimizer_prefer_bounded_cardinality=true,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k IN (110, 120, 130, 140) AND i = 500
 ----
 index-join t
@@ -127,12 +127,42 @@ index-join t
       ├── cost: 24.01
       ├── key: (1)
       └── fd: ()-->(2)
+
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=1)
+SELECT * FROM t WHERE k IN (110, 120, 130, 140) AND i = 500
+----
+select
+ ├── columns: k:1!null i:2!null s:3
+ ├── cardinality: [0 - 4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+ │   histogram(1)=  0 0.25  0 0.25  0 0.25  0 0.25
+ │                <--- 110 --- 120 --- 130 --- 140
+ │   histogram(2)=
+ ├── cost: 24.21
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── scan t
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── constraint: /1
+ │    │    ├── [/110 - /110]
+ │    │    ├── [/120 - /120]
+ │    │    ├── [/130 - /130]
+ │    │    └── [/140 - /140]
+ │    ├── cardinality: [0 - 4]
+ │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
+ │    │   histogram(1)=  0   1   0   1   0   1   0   1
+ │    │                <--- 110 --- 120 --- 130 --- 140
+ │    ├── cost: 24.15
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── i:2 = 500 [outer=(2), constraints=(/2: [/500 - /500]; tight), fd=()-->(2)]
 
 # --------------------------------------------------
 # Q2
 # --------------------------------------------------
 
-opt set=(optimizer_prefer_bounded_cardinality=false)
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i > 500
 ----
 index-join t
@@ -167,7 +197,7 @@ index-join t
       └── filters
            └── k:1 IN (100, 110, 120, 130) [outer=(1), constraints=(/1: [/100 - /100] [/110 - /110] [/120 - /120] [/130 - /130]; tight)]
 
-opt set=(optimizer_prefer_bounded_cardinality=true)
+opt set=(optimizer_prefer_bounded_cardinality=true,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i > 500
 ----
 select
@@ -197,11 +227,41 @@ select
  └── filters
       └── i:2 > 500 [outer=(2), constraints=(/2: [/501 - ]; tight)]
 
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=1)
+SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i > 500
+----
+select
+ ├── columns: k:1!null i:2!null s:3
+ ├── cardinality: [0 - 4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+ │   histogram(1)=  0 0.25  0 0.25  0 0.25  0 0.25
+ │                <--- 100 --- 110 --- 120 --- 130
+ │   histogram(2)=
+ ├── cost: 24.21
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan t
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── constraint: /1
+ │    │    ├── [/100 - /100]
+ │    │    ├── [/110 - /110]
+ │    │    ├── [/120 - /120]
+ │    │    └── [/130 - /130]
+ │    ├── cardinality: [0 - 4]
+ │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
+ │    │   histogram(1)=  0   1   0   1   0   1   0   1
+ │    │                <--- 100 --- 110 --- 120 --- 130
+ │    ├── cost: 24.15
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── i:2 > 500 [outer=(2), constraints=(/2: [/501 - ]; tight)]
+
 # --------------------------------------------------
 # Q3
 # --------------------------------------------------
 
-opt set=(optimizer_prefer_bounded_cardinality=false)
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k IN (410, 420, 430) AND i > 500
 ----
 index-join t
@@ -234,7 +294,7 @@ index-join t
       └── filters
            └── k:1 IN (410, 420, 430) [outer=(1), constraints=(/1: [/410 - /410] [/420 - /420] [/430 - /430]; tight)]
 
-opt set=(optimizer_prefer_bounded_cardinality=true)
+opt set=(optimizer_prefer_bounded_cardinality=true,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k IN (410, 420, 430) AND i > 500
 ----
 select
@@ -261,11 +321,38 @@ select
  └── filters
       └── i:2 > 500 [outer=(2), constraints=(/2: [/501 - ]; tight)]
 
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=1)
+SELECT * FROM t WHERE k IN (410, 420, 430) AND i > 500
+----
+select
+ ├── columns: k:1!null i:2!null s:3
+ ├── cardinality: [0 - 3]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+ │   histogram(1)=
+ │   histogram(2)=
+ ├── cost: 19.03
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan t
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── constraint: /1
+ │    │    ├── [/410 - /410]
+ │    │    ├── [/420 - /420]
+ │    │    └── [/430 - /430]
+ │    ├── cardinality: [0 - 3]
+ │    ├── stats: [rows=6e-07, distinct(1)=6e-07, null(1)=0]
+ │    │   histogram(1)=
+ │    ├── cost: 19.01
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── i:2 > 500 [outer=(2), constraints=(/2: [/501 - ]; tight)]
+
 # --------------------------------------------------
 # Q4
 # --------------------------------------------------
 
-opt set=(optimizer_prefer_bounded_cardinality=false)
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i = 400 AND s < 'apple'
 ----
 select
@@ -311,7 +398,7 @@ select
  └── filters
       └── i:2 = 400 [outer=(2), constraints=(/2: [/400 - /400]; tight), fd=()-->(2)]
 
-opt set=(optimizer_prefer_bounded_cardinality=true)
+opt set=(optimizer_prefer_bounded_cardinality=true,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i = 400 AND s < 'apple'
 ----
 select
@@ -344,11 +431,44 @@ select
       ├── i:2 = 400 [outer=(2), constraints=(/2: [/400 - /400]; tight), fd=()-->(2)]
       └── s:3 < 'apple' [outer=(3), constraints=(/3: (/NULL - /'apple'); tight)]
 
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=1)
+SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i = 400 AND s < 'apple'
+----
+select
+ ├── columns: k:1!null i:2!null s:3!null
+ ├── cardinality: [0 - 4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0, distinct(1-3)=1, null(1-3)=0]
+ │   histogram(1)=  0 0.25  0 0.25  0 0.25  0 0.25
+ │                <--- 100 --- 110 --- 120 --- 130
+ │   histogram(2)=  0   1
+ │                <--- 400
+ │   histogram(3)=
+ ├── cost: 24.22
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── scan t
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── constraint: /1
+ │    │    ├── [/100 - /100]
+ │    │    ├── [/110 - /110]
+ │    │    ├── [/120 - /120]
+ │    │    └── [/130 - /130]
+ │    ├── cardinality: [0 - 4]
+ │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
+ │    │   histogram(1)=  0   1   0   1   0   1   0   1
+ │    │                <--- 100 --- 110 --- 120 --- 130
+ │    ├── cost: 24.15
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      ├── i:2 = 400 [outer=(2), constraints=(/2: [/400 - /400]; tight), fd=()-->(2)]
+      └── s:3 < 'apple' [outer=(3), constraints=(/3: (/NULL - /'apple'); tight)]
+
 # --------------------------------------------------
 # Q5
 # --------------------------------------------------
 
-opt set=(enable_zigzag_join=false,optimizer_prefer_bounded_cardinality=false)
+opt set=(enable_zigzag_join=false,optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=0)
 SELECT * FROM t WHERE i = 400 AND s > 'z'
 ----
 select
@@ -377,7 +497,7 @@ select
  └── filters
       └── i:2 = 400 [outer=(2), constraints=(/2: [/400 - /400]; tight), fd=()-->(2)]
 
-opt set=(enable_zigzag_join=false,optimizer_prefer_bounded_cardinality=true)
+opt set=(enable_zigzag_join=false,optimizer_prefer_bounded_cardinality=true,optimizer_min_row_count=0)
 SELECT * FROM t WHERE i = 400 AND s > 'z'
 ----
 select
@@ -409,11 +529,40 @@ select
  └── filters
       └── i:2 = 400 [outer=(2), constraints=(/2: [/400 - /400]; tight), fd=()-->(2)]
 
+opt set=(enable_zigzag_join=false,optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=1)
+SELECT * FROM t WHERE i = 400 AND s > 'z'
+----
+select
+ ├── columns: k:1!null i:2!null s:3!null
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │   histogram(2)=  0   1
+ │                <--- 400
+ │   histogram(3)=
+ ├── cost: 25.1375
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── index-join t
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── stats: [rows=1]
+ │    ├── cost: 25.0975
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan t@t_s_idx
+ │         ├── columns: k:1!null s:3!null
+ │         ├── constraint: /3/1: [/e'z\x00' - ]
+ │         ├── stats: [rows=1, distinct(3)=1, null(3)=0]
+ │         │   histogram(3)=
+ │         ├── cost: 19.045
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3)
+ └── filters
+      └── i:2 = 400 [outer=(2), constraints=(/2: [/400 - /400]; tight), fd=()-->(2)]
+
 # --------------------------------------------------
 # Q6
 # --------------------------------------------------
 
-opt set=(optimizer_prefer_bounded_cardinality=false)
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k = 100 AND i = 500 AND s = 'zzz'
 ----
 select
@@ -448,7 +597,7 @@ select
  └── filters
       └── s:3 = 'zzz' [outer=(3), constraints=(/3: [/'zzz' - /'zzz']; tight), fd=()-->(3)]
 
-opt set=(optimizer_prefer_bounded_cardinality=true)
+opt set=(optimizer_prefer_bounded_cardinality=true,optimizer_min_row_count=0)
 SELECT * FROM t WHERE k = 100 AND i = 500 AND s = 'zzz'
 ----
 select
@@ -481,4 +630,32 @@ select
  │         ├── key: ()
  │         └── fd: ()-->(1,2)
  └── filters
+      └── s:3 = 'zzz' [outer=(3), constraints=(/3: [/'zzz' - /'zzz']; tight), fd=()-->(3)]
+
+opt set=(optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=1)
+SELECT * FROM t WHERE k = 100 AND i = 500 AND s = 'zzz'
+----
+select
+ ├── columns: k:1!null i:2!null s:3!null
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+ │   histogram(1)=  0   1
+ │                <--- 100
+ │   histogram(2)=
+ │   histogram(3)=
+ ├── cost: 9.085
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan t
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── constraint: /1: [/100 - /100]
+ │    ├── cardinality: [0 - 1]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    │   histogram(1)=  0   1
+ │    │                <--- 100
+ │    ├── cost: 9.045
+ │    ├── key: ()
+ │    └── fd: ()-->(1-3)
+ └── filters
+      ├── i:2 = 500 [outer=(2), constraints=(/2: [/500 - /500]; tight), fd=()-->(2)]
       └── s:3 = 'zzz' [outer=(3), constraints=(/3: [/'zzz' - /'zzz']; tight), fd=()-->(3)]
