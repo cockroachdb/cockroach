@@ -494,11 +494,8 @@ func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) 
 
 	for _, node := range c.VMs {
 
-		// only gce is supported for prometheus
-		if !cl.IsSupportedNodeProvider(node.Provider) {
-			continue
-		}
-		if !cl.IsSupportedPromProject(node.Project) {
+		reachability := cl.ProviderReachability(node.Provider)
+		if reachability == promhelperclient.None {
 			continue
 		}
 
