@@ -805,23 +805,12 @@ func (p *Provider) createVM(
 	opts vm.CreateOpts,
 	providerOpts ProviderOpts,
 ) (machine compute.VirtualMachine, err error) {
+
 	startupArgs := azureStartupArgs{
-		StartupArgs: vm.StartupArgs{
-			VMName:               name,
-			SharedUser:           remoteUser,
-			DisksInitializedFile: vm.DisksInitializedFile,
-			OSInitializedFile:    vm.OSInitializedFile,
-			StartupLogs:          vm.StartupLogs,
-			EnableCron:           false,
-			Zfs:                  false,
-			EnableFIPS:           false,
-			ChronyServers: []string{
-				"time1.google.com",
-				"time2.google.com",
-				"time3.google.com",
-				"time4.google.com",
-			},
-		},
+		StartupArgs: vm.DefaultStartupArgs(
+			vm.WithVMName(name),
+			vm.WithSharedUser(remoteUser),
+		),
 		DiskControllerNVMe: false,
 		AttachedDiskLun:    nil,
 	}

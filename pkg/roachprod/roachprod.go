@@ -817,31 +817,47 @@ func updatePrometheusTargets(
 	}
 
 	cl := promhelperclient.NewPromClient()
-	nodeIPPorts := make(map[int]*promhelperclient.NodeInfo)
+	nodeIPPorts := make(map[int][]*promhelperclient.NodeInfo)
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
 	for _, node := range c.Nodes {
 
 		// only gce is supported for prometheus
-		if !cl.IsSupportedNodeProvider(c.VMs[node-1].Provider) {
-			continue
-		}
-		if !cl.IsSupportedPromProject(c.VMs[node-1].Project) {
+		reachability := cl.ProviderReachability(c.VMs[node-1].Provider)
+		if reachability == promhelperclient.None {
 			continue
 		}
 
 		wg.Add(1)
-		go func(index int, v vm.VM) {
+		go func(nodeID int, v vm.VM) {
 			defer wg.Done()
-			desc, err := c.DiscoverService(ctx, install.Node(index), "", install.ServiceTypeUI, 0)
+			desc, err := c.DiscoverService(ctx, install.Node(nodeID), "", install.ServiceTypeUI, 0)
 			if err != nil {
-				l.Errorf("error getting the port for node %d: %v", index, err)
+				l.Errorf("error getting the port for node %d: %v", nodeID, err)
 				return
 			}
-			nodeInfo := fmt.Sprintf("%s:%d", v.PrivateIP, desc.Port)
+			nodeIP := v.PrivateIP
+			if reachability == promhelperclient.Public {
+				nodeIP = v.PublicIP
+			}
+			nodeInfo := fmt.Sprintf("%s:%d", nodeIP, desc.Port)
 			nodeIPPortsMutex.Lock()
 			// ensure atomicity in map update
-			nodeIPPorts[index] = &promhelperclient.NodeInfo{Target: nodeInfo, CustomLabels: createLabels(v)}
+			if _, ok := nodeIPPorts[nodeID]; !ok {
+				nodeIPPorts[nodeID] = []*promhelperclient.NodeInfo{
+					{
+						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.NodeExporterPort),
+						CustomLabels: createLabels(v, "node_exporter", !c.Secure),
+					},
+				}
+			}
+			nodeIPPorts[nodeID] = append(
+				nodeIPPorts[nodeID],
+				&promhelperclient.NodeInfo{
+					Target:       nodeInfo,
+					CustomLabels: createLabels(v, "cockroachdb", !c.Secure),
+				},
+			)
 			nodeIPPortsMutex.Unlock()
 		}(int(node), c.VMs[node-1])
 
@@ -849,7 +865,7 @@ func updatePrometheusTargets(
 	wg.Wait()
 	if len(nodeIPPorts) > 0 {
 		if err := cl.UpdatePrometheusTargets(ctx,
-			c.Name, false, nodeIPPorts, !c.Secure, l); err != nil {
+			c.Name, false, nodeIPPorts, false, l); err != nil {
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
 	}
@@ -860,14 +876,15 @@ func updatePrometheusTargets(
 var regionRegEx = regexp.MustCompile("(^.+[0-9]+)(-[a-f]$)")
 
 // createLabels returns the labels to be populated in the target configuration in prometheus
-func createLabels(v vm.VM) map[string]string {
+func createLabels(v vm.VM, job string, insecure bool) map[string]string {
 	labels := map[string]string{
-		"cluster":  v.Labels["cluster"],
-		"instance": v.Name,
-		"host_ip":  v.PrivateIP,
-		"project":  v.Project,
-		"zone":     v.Zone,
-		"job":      "cockroachdb",
+		"cluster":        v.Labels["cluster"],
+		"instance":       v.Name,
+		"host_ip":        v.PrivateIP,
+		"host_public_ip": v.PublicIP,
+		"project":        v.Project,
+		"zone":           v.Zone,
+		"job":            job,
 	}
 	match := regionRegEx.FindStringSubmatch(v.Zone)
 	if len(match) > 1 {
@@ -880,6 +897,18 @@ func createLabels(v vm.VM) map[string]string {
 	if t, ok := v.Labels["test_run_id"]; ok {
 		labels["test_run_id"] = t
 	}
+	switch job {
+	case "cockroachdb":
+		labels["__metrics_path__"] = "/_status/vars"
+		if insecure {
+			labels["__scheme__"] = "http"
+		}
+	case "node_exporter":
+		labels["__metrics_path__"] = vm.NodeExporterMetricsPath
+		// node exporter is always scraped over http
+		labels["__scheme__"] = "http"
+	}
+
 	return labels
 }
 
@@ -1967,7 +1996,7 @@ func StartGrafana(
 			promCfg.WithGrafanaDashboardJSON(str)
 		}
 	}
-	_, err = prometheus.Init(ctx, l, c, arch, *promCfg)
+	_, err = prometheus.Init(ctx, l, c, *promCfg)
 	if err != nil {
 		return err
 	}
