@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build metamorphic_disable
-// +build metamorphic_disable
 
 package metamorphic
 
