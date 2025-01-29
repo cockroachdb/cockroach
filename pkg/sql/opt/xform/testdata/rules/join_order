@@ -360,7 +360,7 @@ memo (optimized, ~24KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
 memo set=reorder_joins_limit=2
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~35KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
+memo (optimized, ~36KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G2 G3 G8 inner-join,+1,+10) (merge-join G3 G2 G8 inner-join,+10,+1) (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12)) (merge-join G5 G6 G8 inner-join,+5,+11) (merge-join G6 G5 G8 inner-join,+11,+5) (lookup-join G6 G8 cy,keyCols=[11],outCols=(1,2,5,6,9-12))
  │    └── [presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12]
  │         ├── best: (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12))
@@ -521,7 +521,7 @@ inner-join (cross)
 memo set=reorder_joins_limit=0
 SELECT * FROM bx, cy, dz, abc WHERE x = y AND y = z AND z = a
 ----
-memo (optimized, ~31KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
+memo (optimized, ~32KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
  ├── G1: (inner-join G2 G3 G4) (merge-join G2 G3 G5 inner-join,+2,+6)
  │    └── [presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16]
  │         ├── best: (inner-join G2 G3 G4)
@@ -2774,7 +2774,7 @@ SELECT (
 )
   FROM table80901_1 AS tab_42921;
 ----
-memo (optimized, ~71KB, required=[presentation: ?column?:50])
+memo (optimized, ~72KB, required=[presentation: ?column?:50])
  ├── G1: (project G2 G3)
  │    └── [presentation: ?column?:50]
  │         ├── best: (project G2 G3)
@@ -3547,7 +3547,7 @@ right-join (hash)
 
 # Only 2 joins are considered (instead of 8) when the STRAIGHT hint is present in one join.
 reorderjoins format=hide-all
-SELECT * 
+SELECT *
 FROM straight_join1
 INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
 INNER JOIN straight_join3 ON straight_join1.x = straight_join3.z
@@ -3597,7 +3597,7 @@ inner-join (hash)
 
 # No joins are considered when the STRAIGHT hint is present in both joins.
 reorderjoins format=hide-all
-SELECT * 
+SELECT *
 FROM straight_join1
 INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
 INNER STRAIGHT JOIN straight_join3 ON straight_join1.x = straight_join3.z

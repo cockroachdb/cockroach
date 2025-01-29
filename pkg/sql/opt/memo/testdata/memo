@@ -413,7 +413,7 @@ memo (optimized, ~6KB, required=[presentation: array_cat_agg:6])
 memo
 SELECT DISTINCT info FROM [EXPLAIN SELECT 123 AS k]
 ----
-memo (optimized, ~9KB, required=[presentation: info:3])
+memo (optimized, ~10KB, required=[presentation: info:3])
  ├── G1: (distinct-on G2 G3 cols=(3))
  │    └── [presentation: info:3]
  │         ├── best: (distinct-on G2 G3 cols=(3))

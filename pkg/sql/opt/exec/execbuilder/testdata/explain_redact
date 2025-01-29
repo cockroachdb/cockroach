@@ -1366,7 +1366,7 @@ update e
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
 ----
-memo (optimized, ~16KB, required=[presentation: info:13] [distribution: test])
+memo (optimized, ~17KB, required=[presentation: info:13] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:13] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -3103,7 +3103,7 @@ anti-join-apply
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
 ----
-memo (optimized, ~22KB, required=[presentation: info:11] [distribution: test])
+memo (optimized, ~23KB, required=[presentation: info:11] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1] [distribution: test])
  │    └── [presentation: info:11] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
@@ -3430,7 +3430,7 @@ top-k
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
 ----
-memo (optimized, ~7KB, required=[presentation: info:7] [distribution: test])
+memo (optimized, ~8KB, required=[presentation: info:7] [distribution: test])
  ├── G1: (explain G2 [presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test])
  │    └── [presentation: info:7] [distribution: test]
  │         ├── best: (explain G2="[presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test]" [presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test])
@@ -3931,7 +3931,7 @@ create-table
 query T
 EXPLAIN (OPT, MEMO, REDACT) CREATE TABLE t (col STRING CHECK (col != 'secret'))
 ----
-memo (optimized, ~3KB, required=[presentation: info:1] [distribution: test])
+memo (optimized, ~4KB, required=[presentation: info:1] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:1] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
