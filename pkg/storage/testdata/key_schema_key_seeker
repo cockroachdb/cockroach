@@ -169,3 +169,73 @@ MaterializeUserKey(-1, 0) = hex:6d6f6f0000000000b2d05e0109
 MaterializeUserKey(0, 1) = hex:6d6f6f0000000000b2d05e00000000020d
 MaterializeUserKey(1, 2) = hex:6d6f6f0000000000b2d05e00000000010d
 MaterializeUserKey(2, 3) = hex:6d6f6f0000000000b2d05e0009
+
+
+define-block
+moo
+moo@3000000002,1
+moo@3000000001,1
+moo@0000000001,0
+----
+Parse("moo") = hex:6d6f6f00
+Parse("moo@3000000002,1") = hex:6d6f6f0029a2241b6d619400000000010d
+Parse("moo@3000000001,1") = hex:6d6f6f0029a2241b31c6ca00000000010d
+Parse("moo@0000000001,0") = hex:6d6f6f00000000003b9aca0009
+
+# IsLowerBound should return false for all keys because the first key of the
+# block sorts before all the provided keys. Previously, a bug did not account
+# for the empty suffix sorting first.
+is-lower-bound
+moo@9000000000,2
+moo@8000000000,2
+moo@8000000000,1
+moo@8000000000,0
+moo@7000000000,9
+moo@3000000000,2
+moo@3000000000,1
+moo@3000000000,0
+moo@0000000000,1
+----
+IsLowerBound("moo@9000000000,2", "") = false
+IsLowerBound("moo@8000000000,2", "") = false
+IsLowerBound("moo@8000000000,1", "") = false
+IsLowerBound("moo@8000000000,0", "") = false
+IsLowerBound("moo@7000000000,9", "") = false
+IsLowerBound("moo@3000000000,2", "") = false
+IsLowerBound("moo@3000000000,1", "") = false
+IsLowerBound("moo@3000000000,0", "") = false
+IsLowerBound("moo@0000000000,1", "") = false
+
+define-block
+moo@0000000000,1
+moo@3000000002,1
+moo@3000000001,1
+moo@0000000001,0
+----
+Parse("moo@0000000000,1") = hex:6d6f6f000000000000000000000000010d
+Parse("moo@3000000002,1") = hex:6d6f6f0029a2241b6d619400000000010d
+Parse("moo@3000000001,1") = hex:6d6f6f0029a2241b31c6ca00000000010d
+Parse("moo@0000000001,0") = hex:6d6f6f00000000003b9aca0009
+
+is-lower-bound
+moo
+moo@9000000000,2
+moo@8000000000,2
+moo@8000000000,1
+moo@8000000000,0
+moo@7000000000,9
+moo@3000000000,2
+moo@3000000000,1
+moo@3000000000,0
+moo@0000000000,1
+----
+IsLowerBound("moo", "") = true
+IsLowerBound("moo@9000000000,2", "") = true
+IsLowerBound("moo@8000000000,2", "") = true
+IsLowerBound("moo@8000000000,1", "") = true
+IsLowerBound("moo@8000000000,0", "") = true
+IsLowerBound("moo@7000000000,9", "") = true
+IsLowerBound("moo@3000000000,2", "") = true
+IsLowerBound("moo@3000000000,1", "") = true
+IsLowerBound("moo@3000000000,0", "") = true
+IsLowerBound("moo@0000000000,1", "") = true
