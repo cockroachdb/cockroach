@@ -2598,7 +2598,7 @@ func TestLeaderAppResp(t *testing.T) {
 		// is from a previous term.
 		// We hit maybeCommit() and do term check by getting the term number from
 		// storage.
-		{2, false, 2, 7, 1, 2, 0, 3},
+		{2, false, 2, 7, 1, 2, 0, 2},
 
 		// NB: For the following tests, we are skipping the MsgAppResp for the first
 		// 3 entries, by directly processing MsgAppResp for later entries.
