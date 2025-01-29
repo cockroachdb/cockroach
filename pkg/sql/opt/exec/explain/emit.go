@@ -35,8 +35,9 @@ func Emit(
 	plan *Plan,
 	ob *OutputBuilder,
 	spanFormatFn SpanFormatFn,
+	createPostQueryPlanIfMissing bool,
 ) error {
-	return emitInternal(ctx, evalCtx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
+	return emitInternal(ctx, evalCtx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */, createPostQueryPlanIfMissing)
 }
 
 // MaybeAdjustVirtualIndexScan is injected from the sql package.
@@ -70,6 +71,7 @@ func emitInternal(
 	ob *OutputBuilder,
 	spanFormatFn SpanFormatFn,
 	visitedFKsByCascades map[string]struct{},
+	createPostQueryPlanIfMissing bool,
 ) error {
 	e := makeEmitter(ob, spanFormatFn)
 	var walk func(n *Node) error
@@ -146,12 +148,15 @@ func emitInternal(
 		}
 		ob.LeaveNode()
 	}
-	emitPostQuery := func(pq exec.PostQuery, pqPlan exec.Plan) error {
+	emitPostQuery := func(pq exec.PostQuery, pqPlan exec.Plan, alreadyEmitted bool) error {
 		if pqPlan != nil {
-			return emitInternal(ctx, evalCtx, pqPlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades)
+			return emitInternal(ctx, evalCtx, pqPlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades, createPostQueryPlanIfMissing)
 		}
-		// Either we have already emitted the plan for the post-query and want to
-		// avoid infinite recursion, or we cannot produce the plan.
+		if !alreadyEmitted {
+			// The plan wasn't produced which means its execution was
+			// short-circuited.
+			ob.Attr("short-circuited", "")
+		}
 		if buffer := pq.Buffer; buffer != nil {
 			ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
 		}
@@ -166,25 +171,18 @@ func emitInternal(
 		// Come up with a custom "id" for this FK.
 		fk := cascade.FKConstraint
 		fkID := fmt.Sprintf("%d%s", fk.OriginTableID(), fk.Name())
-		// Here we do want to allow creation of the plans for the cascades to be
-		// able to include them into the EXPLAIN output. The exception is when there
-		// are BEFORE triggers on the cascaded mutation, in which case we can only
-		// build the plan if the transaction is still open (see #135157)
-		createPlanIfMissing := true
-		if cascade.CascadeHasBeforeTriggers {
-			createPlanIfMissing = evalCtx.Txn != nil && evalCtx.Txn.IsOpen()
-		}
 		var err error
 		var cascadePlan exec.Plan
-		if _, alreadyEmitted := visitedFKsByCascades[fkID]; !alreadyEmitted {
-			cascadePlan, err = cascade.GetExplainPlan(ctx, createPlanIfMissing)
+		var alreadyEmitted bool
+		if _, alreadyEmitted = visitedFKsByCascades[fkID]; !alreadyEmitted {
+			cascadePlan, err = cascade.GetExplainPlan(ctx, createPostQueryPlanIfMissing)
 			if err != nil {
 				return err
 			}
 			visitedFKsByCascades[fkID] = struct{}{}
 			defer delete(visitedFKsByCascades, fkID)
 		}
-		if err = emitPostQuery(cascade, cascadePlan); err != nil {
+		if err = emitPostQuery(cascade, cascadePlan, alreadyEmitted); err != nil {
 			return err
 		}
 		ob.LeaveNode()
@@ -201,15 +199,11 @@ func emitInternal(
 		for _, trigger := range afterTriggers.Triggers {
 			ob.Attr("trigger", trigger.Name())
 		}
-		// Only allow new plans to be built for AFTER triggers if the transaction is
-		// still open. This is necessary because the transaction might have been
-		// auto-committed by the time we are emitting the plan (see #135157).
-		createPlanIfMissing := evalCtx.Txn != nil && evalCtx.Txn.IsOpen()
-		afterTriggersPlan, err := afterTriggers.GetExplainPlan(ctx, createPlanIfMissing)
+		afterTriggersPlan, err := afterTriggers.GetExplainPlan(ctx, createPostQueryPlanIfMissing)
 		if err != nil {
 			return err
 		}
-		if err = emitPostQuery(afterTriggers, afterTriggersPlan); err != nil {
+		if err = emitPostQuery(afterTriggers, afterTriggersPlan, false /* alreadyEmitted */); err != nil {
 			return err
 		}
 		ob.LeaveNode()
