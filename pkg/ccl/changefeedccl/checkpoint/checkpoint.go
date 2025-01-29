@@ -24,7 +24,8 @@ type SpanIter func(forEachSpan span.Operation)
 // spans above the high-water mark.
 func Make(
 	frontier hlc.Timestamp, forEachSpan SpanIter, maxBytes int64, metrics *Metrics,
-) jobspb.ChangefeedProgress_Checkpoint {
+) jobspb. //lint:ignore SA1019 deprecated usage
+		ChangefeedProgress_Checkpoint {
 	start := timeutil.Now()
 
 	// Collect leading spans into a SpanGroup to merge adjacent spans and store
@@ -41,6 +42,7 @@ func Make(
 		return span.ContinueMatch
 	})
 	if checkpointSpanGroup.Len() == 0 {
+		//lint:ignore SA1019 deprecated usage
 		return jobspb.ChangefeedProgress_Checkpoint{}
 	}
 
@@ -55,6 +57,7 @@ func Make(
 		checkpointSpans = append(checkpointSpans, span)
 	}
 
+	//lint:ignore SA1019 deprecated usage
 	cp := jobspb.ChangefeedProgress_Checkpoint{
 		Spans:     checkpointSpans,
 		Timestamp: checkpointTS,
