@@ -512,6 +512,11 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerPreferBoundedCardinality = false
 	notStale()
 
+	evalCtx.SessionData().OptimizerMinRowCount = 1.0
+	stale()
+	evalCtx.SessionData().OptimizerMinRowCount = 0
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
