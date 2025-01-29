@@ -1152,9 +1152,7 @@ func newOptTable(
 	ot.triggers = getOptTriggers(desc.GetTriggers())
 
 	// Store row-level security information
-	// TODO(136717): Update this to utilize the tableDescriptor's field for
-	// indicating if RLS is enabled once the field is added.
-	ot.rlsEnabled = false
+	ot.rlsEnabled = desc.IsRowLevelSecurityEnabled()
 	ot.policies = getOptPolicies(desc.GetPolicies())
 
 	// Add stats last, now that other metadata is initialized.
