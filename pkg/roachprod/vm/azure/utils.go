@@ -85,6 +85,7 @@ echo $ts_dev_id | sudo tee /sys/bus/vmbus/drivers/hv_utils/unbind
 {{ template "hostname_utils" . }}
 {{ template "fips_utils" . }}
 {{ template "ssh_utils" . }}
+{{ template "node_exporter" . }}
 
 sudo touch {{ .OSInitializedFile }}
 `

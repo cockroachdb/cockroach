@@ -23,16 +23,9 @@ func TestWriteStartupScriptTemplate(t *testing.T) {
 	err := generateStartupScript(
 		content,
 		azureStartupArgs{
-			StartupArgs: vm.StartupArgs{
-				VMName:               "vm_name",
-				SharedUser:           "ubuntu",
-				DisksInitializedFile: vm.DisksInitializedFile,
-				OSInitializedFile:    vm.OSInitializedFile,
-				StartupLogs:          vm.StartupLogs,
-				ChronyServers: []string{
-					"time1.google.com",
-				},
-			},
+			StartupArgs: vm.DefaultStartupArgs(
+				vm.WithVMName("vm_name"),
+			),
 		})
 	require.NoError(t, err)
 
