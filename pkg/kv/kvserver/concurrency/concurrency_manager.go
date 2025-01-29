@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -582,6 +583,24 @@ func (m *managerImpl) GetDependents(txnID uuid.UUID) []uuid.UUID {
 // OnRangeDescUpdated implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 	m.twq.OnRangeDescUpdated(desc)
+}
+
+var allKeysSpan = roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}
+
+// OnRangeLeaseTransferEval implements the RangeStateListener interface. It is
+// called during evalutation of a lease transfer. The returned LockAcquisition
+// structs represent held locks that we may want to flush to disk as replicated.
+func (m *managerImpl) OnRangeLeaseTransferEval() []*roachpb.LockAcquisition {
+	if !UnreplicatedLockReliability.Get(&m.st.SV) {
+		return nil
+	}
+
+	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
+	acquistions := make([]*roachpb.LockAcquisition, 0)
+	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) {
+		acquistions = append(acquistions, acq)
+	})
+	return acquistions
 }
 
 // OnRangeLeaseUpdated implements the RangeStateListener interface.

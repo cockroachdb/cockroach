@@ -156,7 +156,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	// them everywhere.
 	{
 		act := fmt.Sprintf("%+v", result.Metrics{})
-		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0 AddSSTableAsWrites:0 SplitsWithEstimatedStats:0 SplitEstimatedTotalBytesDiff:0}"
+		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 LeaseTransferLocksWritten:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0 AddSSTableAsWrites:0 SplitsWithEstimatedStats:0 SplitEstimatedTotalBytesDiff:0}"
 		if act != exp {
 			t.Errorf("need to update this test due to added fields: %v", act)
 		}
