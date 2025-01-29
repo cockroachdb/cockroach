@@ -11,7 +11,7 @@ debug-disable-txn-pushes
 # lock-table and acquiring the lease enables the lock-table.
 #
 # Setup: txn1 acquires locks on k and k2
-#        
+#
 # Test:  txn2 enters lock's wait-queue
 #        replica loses lease
 #        txn2 proceeds
@@ -106,6 +106,11 @@ num=2
     active: true req: 2, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
  lock: "k2"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# Replica should inform command evaluation of locks to replicate
+on-lease-transfer-eval
+----
+[-] eval transfer lease: locks to propose as replicated: 2
 
 # Replica loses lease.
 on-lease-updated leaseholder=false lease-seq=2

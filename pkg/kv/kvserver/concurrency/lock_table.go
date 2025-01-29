@@ -4654,6 +4654,52 @@ func (t *lockTableImpl) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
 	return t.tryClearLocksGE(key)
 }
 
+// ExportUnreplicatedLocks implements the lockTable interface.
+//
+// TODO(ssd): Once we have the full set of functions we need for lock flushing, we
+// should do a refactoring pass to reduce some of the duplication.
+func (t *lockTableImpl) ExportUnreplicatedLocks(
+	span roachpb.Span, exporter func(*roachpb.LockAcquisition),
+) {
+	t.enabledMu.RLock()
+	defer t.enabledMu.RUnlock()
+	if !t.enabled {
+		return
+	}
+
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+
+	iter := t.locks.MakeIter()
+	for iter.SeekGE(&keyLocks{key: span.Key}); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+		if !l.key.Less(span.EndKey) {
+			return
+		}
+
+		for hl := l.holders.Front(); hl != nil; hl = hl.Next() {
+			tl := hl.Value
+			if tl == nil || tl.unreplicatedInfo.isEmpty() {
+				continue
+			}
+
+			for _, str := range unreplicatedHolderStrengths {
+				if tl.unreplicatedInfo.held(str) {
+					exporter(&roachpb.LockAcquisition{
+						Span: roachpb.Span{
+							Key: l.key,
+						},
+						Txn:            *hl.Value.txn,
+						Durability:     lock.Unreplicated,
+						Strength:       str,
+						IgnoredSeqNums: tl.unreplicatedInfo.ignoredSeqNums,
+					})
+				}
+			}
+		}
+	}
+}
+
 // QueryLockTableState implements the lockTable interface.
 func (t *lockTableImpl) QueryLockTableState(
 	span roachpb.Span, opts QueryLockTableOptions,
