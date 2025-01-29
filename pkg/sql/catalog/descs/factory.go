@@ -144,12 +144,19 @@ func (cf *CollectionFactory) NewCollection(ctx context.Context, options ...Optio
 		opt(&cfg)
 	}
 	v := cf.settings.Version.ActiveVersion(ctx)
+	// If the leaseMgr  is nil then ensure we have a nil LeaseManager interface,
+	// otherwise comparisons against a nil implementation will fail.
+	var lm LeaseManager
+	lm = cf.leaseMgr
+	if cf.leaseMgr == nil {
+		lm = nil
+	}
 	return &Collection{
 		settings:                cf.settings,
 		version:                 v,
 		hydrated:                cf.hydrated,
 		virtual:                 makeVirtualDescriptors(cf.virtualSchemas),
-		leased:                  makeLeasedDescriptors(cf.leaseMgr),
+		leased:                  makeLeasedDescriptors(lm),
 		uncommitted:             makeUncommittedDescriptors(cfg.monitor),
 		uncommittedComments:     makeUncommittedComments(),
 		uncommittedZoneConfigs:  makeUncommittedZoneConfigs(),
