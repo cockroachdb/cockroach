@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/errors"
 )
@@ -115,7 +116,7 @@ func TestingCreateMultiRegionClusterWithRegionList(
 			serverArgs[totalServerCount] = base.TestServerArgs{
 				Settings:      params.settings,
 				Knobs:         knobs,
-				ExternalIODir: params.baseDir,
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: params.baseDir},
 				UseDatabase:   params.useDatabase,
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "region", Value: region}},

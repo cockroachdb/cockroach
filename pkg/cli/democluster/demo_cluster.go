@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -911,13 +912,15 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	storeSpec.StickyVFSID = fmt.Sprintf("demo-server%d", serverIdx)
 
 	args := base.TestServerArgs{
-		SocketFile:              sock.filename(),
-		PartOfCluster:           true,
-		Stopper:                 stop.NewStopper(),
-		JoinAddr:                joinAddr,
-		DisableTLSForHTTP:       true,
-		StoreSpecs:              []base.StoreSpec{storeSpec},
-		ExternalIODir:           filepath.Join(demoDir, "nodelocal", fmt.Sprintf("n%d", serverIdx+1)),
+		SocketFile:        sock.filename(),
+		PartOfCluster:     true,
+		Stopper:           stop.NewStopper(),
+		JoinAddr:          joinAddr,
+		DisableTLSForHTTP: true,
+		StoreSpecs:        []base.StoreSpec{storeSpec},
+		StorageConfig: storagepb.NodeConfig{
+			ExternalIODir: filepath.Join(demoDir, "nodelocal", fmt.Sprintf("n%d", serverIdx+1)),
+		},
 		SQLMemoryPoolSize:       demoCtx.SQLPoolMemorySize,
 		CacheSize:               demoCtx.CacheSize,
 		NoAutoInitializeCluster: true,

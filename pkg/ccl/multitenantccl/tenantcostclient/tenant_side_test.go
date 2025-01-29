@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1437,7 +1438,7 @@ func TestConsumptionExternalStorage(t *testing.T) {
 	defer dirCleanupFn()
 	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		ExternalIODir:     dir,
+		StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer hostServer.Stopper().Stop(context.Background())
 	hostSQL := sqlutils.MakeSQLRunner(hostDB)
@@ -1450,7 +1451,7 @@ func TestConsumptionExternalStorage(t *testing.T) {
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		TenantID:      serverutils.TestTenantID(),
 		Settings:      st,
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 		TestingKnobs: base.TestingKnobs{
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {

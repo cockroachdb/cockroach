@@ -19,6 +19,7 @@ import (
 	ectestutils "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/testutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -57,7 +58,7 @@ func TestDataDriven(t *testing.T) {
 					ExternalConnection: ecTestingKnobs,
 				},
 				ExternalIODirConfig: base.ExternalIODirConfig{},
-				ExternalIODir:       dir,
+				StorageConfig:       storagepb.NodeConfig{ExternalIODir: dir},
 			},
 		})
 		defer tc.Stopper().Stop(ctx)

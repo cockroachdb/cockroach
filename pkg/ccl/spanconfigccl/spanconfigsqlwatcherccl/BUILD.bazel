@@ -24,6 +24,7 @@ go_test(
         "//pkg/spanconfig/spanconfigsqlwatcher",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

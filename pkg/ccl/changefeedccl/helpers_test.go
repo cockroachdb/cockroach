@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -407,7 +408,7 @@ func startTestFullServer(
 		// tenants. No need for the test tenant.
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		UseDatabase:       `d`,
-		ExternalIODir:     options.externalIODir,
+		StorageConfig:     storagepb.NodeConfig{ExternalIODir: options.externalIODir},
 		Settings:          options.settings,
 	}
 
@@ -521,7 +522,7 @@ func startTestTenant(
 		TenantID:      tenantID,
 		UseDatabase:   `d`,
 		TestingKnobs:  knobs,
-		ExternalIODir: options.externalIODir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: options.externalIODir},
 		Settings:      options.settings,
 	}
 

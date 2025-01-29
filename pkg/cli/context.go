@@ -498,10 +498,6 @@ var startCtx struct {
 	// temporary directory to use to spill computation results to disk.
 	tempDir string
 
-	// directory to use for remotely-initiated operations that can
-	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
-	externalIODir string
-
 	// inBackground is set to true when restarting in the
 	// background after --background was processed.
 	inBackground bool
@@ -543,7 +539,6 @@ func setStartContextDefaults() {
 	startCtx.serverListenAddr = ""
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""
-	startCtx.externalIODir = ""
 	startCtx.listeningURLFile = ""
 	startCtx.pidFile = ""
 	startCtx.inBackground = false

@@ -130,7 +130,7 @@ func TestDataDriven(t *testing.T) {
 				args := replicationtestutils.DefaultTenantStreamingClustersArgs
 				args.NoMetamorphicExternalConnection = d.HasArg("no-external-conn")
 				tempDir, dirCleanup := testutils.TempDir(t)
-				args.ExternalIODir = tempDir
+				args.StorageConfig.ExternalIODir = tempDir
 				var cleanup func()
 				ds.replicationClusters, cleanup = replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 				ds.cleanupFns = append(ds.cleanupFns, func() error {

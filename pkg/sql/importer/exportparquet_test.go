@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -179,7 +180,7 @@ func TestRandomParquetExports(t *testing.T) {
 	dbName := "rand"
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase:   dbName,
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -275,7 +276,7 @@ func TestBasicParquetTypes(t *testing.T) {
 	dbName := "baz"
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase:   dbName,
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -403,7 +404,7 @@ func TestMemoryMonitor(t *testing.T) {
 	defer dirCleanupFn()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				Export: &importer.ExportTestingKnobs{

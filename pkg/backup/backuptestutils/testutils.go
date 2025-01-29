@@ -186,10 +186,10 @@ func setTestClusterDefaults(params *base.TestClusterArgs, dataDir string, useDat
 		}
 	}
 
-	params.ServerArgs.ExternalIODir = dataDir
+	params.ServerArgs.StorageConfig.ExternalIODir = dataDir
 	for i := range params.ServerArgsPerNode {
 		param := params.ServerArgsPerNode[i]
-		param.ExternalIODir = dataDir + param.ExternalIODir
+		param.StorageConfig.ExternalIODir = dataDir + param.StorageConfig.ExternalIODir
 		params.ServerArgsPerNode[i] = param
 	}
 

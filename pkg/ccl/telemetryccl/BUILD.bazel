@@ -23,6 +23,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltestutils",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

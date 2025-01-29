@@ -21,6 +21,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -159,7 +160,7 @@ func TestFileUpload(t *testing.T) {
 	defer cleanup()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: localExternalDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: localExternalDir},
 	})
 	defer s.Stopper().Stop(context.Background())
 	tt := s.ApplicationLayer()
@@ -188,7 +189,7 @@ func TestUploadEmptyFile(t *testing.T) {
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: localExternalDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: localExternalDir},
 	})
 	defer s.Stopper().Stop(context.Background())
 	tt := s.ApplicationLayer()
@@ -216,7 +217,7 @@ func TestFileNotExist(t *testing.T) {
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: localExternalDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: localExternalDir},
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -234,7 +235,7 @@ func TestFileExist(t *testing.T) {
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: localExternalDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: localExternalDir},
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -265,7 +266,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	s, rootDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: localExternalDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: localExternalDir},
 		Insecure:      true,
 	})
 	defer s.Stopper().Stop(context.Background())
@@ -300,7 +301,7 @@ func TestUserfileNotAdmin(t *testing.T) {
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	s, rootDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: localExternalDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: localExternalDir},
 		Insecure:      true,
 	})
 	defer s.Stopper().Stop(context.Background())

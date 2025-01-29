@@ -110,6 +110,12 @@ message NodeConfig {
   WALFailover wal_failover = 2
       [ (gogoproto.nullable) = false, (gogoproto.customname) = "WALFailover" ];
 
+  // ExternalIODir is the local file path under which remotely-initiated
+  // operations that can specify node-local I/O paths (such as BACKUP, RESTORE
+  // or IMPORT) can access files. If it is not explicitly set, it is computed
+  // based on the store configuration.
+  string external_io_dir = 3 [ (gogoproto.customname) = "ExternalIODir" ];
+
   // SharedStorage is specified to enable disaggregated shared storage. It is
   // enabled if the uri is set.
   SharedStorage shared_storage = 4 [ (gogoproto.nullable) = false ];

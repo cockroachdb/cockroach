@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
@@ -1545,7 +1546,7 @@ func (t *logicTest) newCluster(
 				},
 			},
 			ClusterName:   "testclustername",
-			ExternalIODir: t.sharedIODir,
+			StorageConfig: storagepb.NodeConfig{ExternalIODir: t.sharedIODir},
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.
@@ -1641,7 +1642,7 @@ func (t *logicTest) newCluster(
 				Locality:          paramsPerNode[i].Locality,
 				TracingDefault:    params.ServerArgs.TracingDefault,
 				// Give every tenant its own ExternalIO directory.
-				ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(i)),
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(i))},
 			}
 			setSQLTestingKnobs(&tenantArgs.TestingKnobs)
 
