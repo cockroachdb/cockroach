@@ -1953,7 +1953,7 @@ func TestUserPrivileges(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -1966,7 +1966,8 @@ func TestUserPrivileges(t *testing.T) {
 	testuser2 := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser+"2"), serverutils.DBName("a")))
 
 	var jobAID jobspb.JobID
-	testuser2.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	createStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
+	testuser2.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
 
 	t.Run("view-control-job", func(t *testing.T) {
 		showJobStmt := "select job_id from [SHOW JOBS] where job_id=$1"
@@ -2006,11 +2007,17 @@ func TestUserPrivileges(t *testing.T) {
 		testuser.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBaseWithSchema, "testschema", "tab"))
 	})
 
-	t.Run("replication", func(t *testing.T) {
-		createWithUDFStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'testschema.repl_apply'"
-		testuser.ExpectErr(t, "user testuser does not have REPLICATION system privilege", createWithUDFStmt, dbBURL.String())
+	t.Run("replication-dest", func(t *testing.T) {
+		testuser.ExpectErr(t, "user testuser does not have REPLICATION system privilege", createStmt, dbBURL.String())
 		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser))
-		testuser.QueryRow(t, createWithUDFStmt, dbBURL.String()).Scan(&jobAID)
+		testuser.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
+	})
+	t.Run("replication-src", func(t *testing.T) {
+		dbB.Exec(t, "CREATE USER testuser3")
+		dbBURL2 := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"), serverutils.User(username.TestUser+"3"))
+		testuser.ExpectErr(t, "user testuser3 does not have REPLICATION system privilege", createStmt, dbBURL2.String())
+		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"3"))
+		testuser.QueryRow(t, createStmt, dbBURL2.String()).Scan(&jobAID)
 	})
 }
 
