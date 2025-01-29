@@ -13,6 +13,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	// GrafanaEnterpriseVersion is the version of Grafana Enterprise installed
+	// during the grafana-start command.
+	GrafanaEnterpriseVersion = "9.2.3"
+	// PrometheusVersion is the version of Prometheus installed during the
+	// grafana-start command.
+	PrometheusVersion = "2.27.1"
+	// NodeExporterVersion is the version of NodeExporter installed on each node
+	// in the startup script and during the grafana-start command.
+	NodeExporterVersion = "1.2.2"
+	// NodeExporterPort is the port that NodeExporter listens on.
+	NodeExporterPort = "9100"
+	// NodeExporterMetricsPath is the path that NodeExporter serves metrics on.
+	NodeExporterMetricsPath = "/metrics"
+)
+
 type StartupArgs struct {
 	VMName               string   // Name of the VM
 	SharedUser           string   // The name of the shared user
@@ -35,6 +51,7 @@ var (
 		"fips_utils":            startupScriptFIPS,
 		"head_utils":            startupScriptHead,
 		"hostname_utils":        startupScriptHostname,
+		"node_exporter":         startupScriptNodeExporter,
 		"keepalives":            startupScriptKeepalives,
 		"ssh_utils":             startupScriptSSH,
 		"tcpdump":               startupScriptTcpdump,
@@ -149,6 +166,29 @@ net.ipv4.tcp_keepalive_probes=5
 EOF
 
 sysctl --system  # reload sysctl settings`
+
+// This installs node_exporter and starts it.
+// It also sets up firewall rules so that only localhost, the internal network
+// and prometheus.testeng.crdb.io can scrape system metrics.
+const startupScriptNodeExporter = `
+# Add and start node_exporter, only authorize scrapping from internal network.
+export ARCH=$(dpkg --print-architecture)
+export DEFAULT_USER_HOME="/home/$(id -nu 1000)"
+mkdir -p ${DEFAULT_USER_HOME}/node_exporter && curl -fsSL \
+	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-` + NodeExporterVersion + `.linux-${ARCH}.tar.gz |
+	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/node_exporter \
+	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter
+
+sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,prometheus.testeng.crdb.io -p tcp --dport ` + NodeExporterPort + ` -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport ` + NodeExporterPort + ` -j DROP
+(
+	chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter && \
+	cd ${DEFAULT_USER_HOME}/node_exporter && \
+	sudo systemd-run --unit node_exporter --same-dir \
+		./node_exporter --collector.systemd --collector.interrupts --collector.processes \
+		--web.listen-address=":` + NodeExporterPort + `" \
+		--web.telemetry-path="` + NodeExporterMetricsPath + `"
+)`
 
 const startupScriptSSH = `
 # sshguard can prevent frequent ssh connections to the same host. Disable it.

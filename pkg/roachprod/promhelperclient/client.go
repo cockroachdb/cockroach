@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
@@ -36,6 +38,21 @@ const (
 	// when a requests to the prometheus helper service yields a non 200 status.
 	ErrorMessage       = ErrorMessagePrefix + ` on url %s and error %s`
 	ErrorMessagePrefix = "request failed with status %d"
+)
+
+// NodeProviderReachability is the reachability of the node provider.
+type NodeProviderReachability string
+
+const (
+	// NodeProviderReachabilityNone indicates that the node provider
+	// is not reachable.
+	NodeProviderReachabilityNone NodeProviderReachability = "none"
+	// NodeProviderReachabilityPrivate indicates that the node provider
+	// is reachable via private network.
+	NodeProviderReachabilityPrivate NodeProviderReachability = "private"
+	// NodeProviderReachabilityPublic indicates that the node provider
+	// is reachable via public network.
+	NodeProviderReachabilityPublic NodeProviderReachability = "public"
 )
 
 // The URL for the Prometheus registration service. An empty string means that the
@@ -62,10 +79,7 @@ type PromClient struct {
 		oauth2.TokenSource, error)
 
 	// supportedPromProviders are the providers supported for prometheus target
-	supportedPromProviders map[string]struct{}
-
-	// supportedPromProjects are the projects supported for prometheus target
-	supportedPromProjects map[string]struct{}
+	supportedPromProviders map[string]NodeProviderReachability
 }
 
 // IsNotFoundError returns true if the error is a 404 error.
@@ -76,13 +90,16 @@ func IsNotFoundError(err error) bool {
 // NewPromClient returns a new instance of PromClient
 func NewPromClient() *PromClient {
 	return &PromClient{
-		promUrl:                promRegistrationUrl,
-		disabled:               promRegistrationUrl == "",
-		httpPut:                httputil.Put,
-		httpDelete:             httputil.Delete,
-		newTokenSource:         idtoken.NewTokenSource,
-		supportedPromProviders: map[string]struct{}{gce.ProviderName: {}},
-		supportedPromProjects:  map[string]struct{}{gce.DefaultProject(): {}},
+		promUrl:        promRegistrationUrl,
+		disabled:       promRegistrationUrl == "",
+		httpPut:        httputil.Put,
+		httpDelete:     httputil.Delete,
+		newTokenSource: idtoken.NewTokenSource,
+		supportedPromProviders: map[string]NodeProviderReachability{
+			gce.ProviderName:   NodeProviderReachabilityPrivate,
+			aws.ProviderName:   NodeProviderReachabilityPublic,
+			azure.ProviderName: NodeProviderReachabilityPublic,
+		},
 	}
 }
 
@@ -103,7 +120,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 	ctx context.Context,
 	clusterName string,
 	forceFetchCreds bool,
-	nodes map[int]*NodeInfo,
+	nodes map[int][]*NodeInfo,
 	insecure bool,
 	l *logger.Logger,
 ) error {
@@ -185,18 +202,12 @@ func getUrl(promUrl, clusterName string) string {
 	return fmt.Sprintf("%s/%s/%s/%s", promUrl, resourceVersion, resourceName, clusterName)
 }
 
-// IsSupportedNodeProvider returns true if the provider is supported
-// for prometheus target.
-func (c *PromClient) IsSupportedNodeProvider(provider string) bool {
-	_, ok := c.supportedPromProviders[provider]
-	return ok
-}
-
-// IsSupportedPromProject returns true if the project is supported
-// for prometheus target.
-func (c *PromClient) IsSupportedPromProject(project string) bool {
-	_, ok := c.supportedPromProjects[project]
-	return ok
+// ProviderReachability returns the reachability of the provider
+func (c *PromClient) ProviderReachability(provider string) NodeProviderReachability {
+	if reachability, ok := c.supportedPromProviders[provider]; ok {
+		return reachability
+	}
+	return NodeProviderReachabilityNone
 }
 
 // CCParams are the params for the cluster configs
@@ -212,18 +223,20 @@ type NodeInfo struct {
 }
 
 // createClusterConfigFile creates the cluster config file per node
-func buildCreateRequest(nodes map[int]*NodeInfo, insecure bool) (io.Reader, error) {
+func buildCreateRequest(nodes map[int][]*NodeInfo, insecure bool) (io.Reader, error) {
 	configs := make([]*CCParams, 0)
 	for _, n := range nodes {
-		params := &CCParams{
-			Targets: []string{n.Target},
-			Labels:  map[string]string{},
+		for _, node := range n {
+			params := &CCParams{
+				Targets: []string{node.Target},
+				Labels:  map[string]string{},
+			}
+			// custom labels - this can override the default labels if needed
+			for n, v := range node.CustomLabels {
+				params.Labels[n] = v
+			}
+			configs = append(configs, params)
 		}
-		// custom labels - this can override the default labels if needed
-		for n, v := range n.CustomLabels {
-			params.Labels[n] = v
-		}
-		configs = append(configs, params)
 	}
 	cb, err := yaml.Marshal(&configs)
 	if err != nil {

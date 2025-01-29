@@ -170,6 +170,7 @@ setup_disks true
 {{ template "hostname_utils" . }}
 {{ template "fips_utils" . }}
 {{ template "ssh_utils" . }}
+{{ template "node_exporter" . }}
 
 sudo touch {{ .OSInitializedFile }}
 `
