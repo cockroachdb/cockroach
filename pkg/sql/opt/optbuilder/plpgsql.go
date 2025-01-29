@@ -2201,13 +2201,34 @@ func (b *plpgsqlBuilder) buildSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt
 		// For lazy SQL evaluation, replace all expressions with NULL.
 		return memo.NullSingleton
 	}
+	// Save any outer CTEs before building the expression, which may have
+	// subqueries with inner CTEs.
+	prevCTEs := b.ob.ctes
+	b.ob.ctes = nil
+	defer func() {
+		b.ob.ctes = prevCTEs
+	}()
 	expr, _ = tree.WalkExpr(s, expr)
 	typedExpr, err := expr.TypeCheck(b.ob.ctx, b.ob.semaCtx, typ)
 	if err != nil {
 		panic(err)
 	}
 	scalar := b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
-	return b.coerceType(scalar, typ)
+	scalar = b.coerceType(scalar, typ)
+	if len(b.ob.ctes) == 0 {
+		return scalar
+	}
+	// There was at least one CTE within the scalar expression. It is possible to
+	// "hoist" them above this point, but building them eagerly here means that
+	// callers don't have to worry about CTE handling.
+	f := b.ob.factory
+	valuesCol := f.Metadata().AddColumn("", scalar.DataType())
+	valuesExpr := f.ConstructValues(
+		memo.ScalarListExpr{f.ConstructTuple(memo.ScalarListExpr{scalar}, scalar.DataType())},
+		&memo.ValuesPrivate{Cols: opt.ColList{valuesCol}, ID: f.Metadata().NextUniqueID()},
+	)
+	withExpr := b.ob.buildWiths(valuesExpr, b.ob.ctes)
+	return f.ConstructSubquery(withExpr, &memo.SubqueryPrivate{})
 }
 
 // buildSQLStatement type-checks and builds the given SQL statement into a
