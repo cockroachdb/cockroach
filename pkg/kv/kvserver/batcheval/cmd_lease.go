@@ -66,6 +66,16 @@ func evalNewLease(
 			// allowed to invalidate prior reads.
 			localReadSum := rec.GetCurrentReadSummary(ctx)
 			priorReadSum = &localReadSum
+
+			// If this is a lease transfer, we write out all unreplicated leases to
+			// storage, so that any waiters will discover them on the new leaseholder.
+			acquisitions := rec.GetConcurrencyManager().OnRangeLeaseTransferEval()
+			for _, acq := range acquisitions {
+				if err := storage.MVCCAcquireLock(ctx, readWriter,
+					&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, ms, 0, 0); err != nil {
+					return newFailedLeaseTrigger(isTransfer), err
+				}
+			}
 		} else {
 			// If the new lease is not equivalent to the old lease (i.e. either the
 			// lease is changing hands or the leaseholder restarted), construct a

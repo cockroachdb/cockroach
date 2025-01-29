@@ -4634,6 +4634,48 @@ func (t *lockTableImpl) ClearRHS(key roachpb.Key) []roachpb.LockAcquisition {
 	return t.tryClearLocksRHS(key)
 }
 
+// UnreplicatedLockAcquistionsToFlush implements the lockTable interface.
+// TODO: We could reuse QueryLockTableState here.
+func (t *lockTableImpl) UnreplicatedLockAcquistionsToFlush() []roachpb.LockAcquisition {
+	t.enabledMu.RLock()
+	defer t.enabledMu.RUnlock()
+	if !t.enabled {
+		return nil
+	}
+
+	// NOTE(ssd): In QueryLockTableState, we get a snapshot and release the lock.
+	// Here, we hold the lock for the whole time. The caller has a latch on all
+	// keys on the range for the duration of it using this returned data.
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+
+	acquistions := make([]roachpb.LockAcquisition, 0, t.locks.Len())
+	iter := t.locks.MakeIter()
+	for iter.First(); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+		for hl := l.holders.Front(); hl != nil; hl = hl.Next() {
+			tl := hl.Value
+			if tl == nil || tl.unreplicatedInfo.isEmpty() {
+				continue
+			}
+			for _, str := range unreplicatedHolderStrengths {
+				if tl.unreplicatedInfo.held(str) {
+					acquistions = append(acquistions, roachpb.LockAcquisition{
+						Span: roachpb.Span{
+							Key: l.key,
+						},
+						Txn:            *hl.Value.txn,
+						Durability:     lock.Unreplicated,
+						Strength:       str,
+						IgnoredSeqNums: tl.unreplicatedInfo.ignoredSeqNums,
+					})
+				}
+			}
+		}
+	}
+	return acquistions
+}
+
 // QueryLockTableState implements the lockTable interface.
 func (t *lockTableImpl) QueryLockTableState(
 	span roachpb.Span, opts QueryLockTableOptions,

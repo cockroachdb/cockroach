@@ -285,6 +285,10 @@ type RangeStateListener interface {
 	// updated.
 	OnRangeDescUpdated(*roachpb.RangeDescriptor)
 
+	// OnRangeLeaseTransferEval informs the concurrency manager that the range is
+	// evaluating a lease transfer.
+	OnRangeLeaseTransferEval() []roachpb.LockAcquisition
+
 	// OnRangeLeaseUpdated informs the concurrency manager that its range's
 	// lease has been updated. The argument indicates whether this manager's
 	// replica is the leaseholder going forward.
@@ -743,6 +747,11 @@ type lockTable interface {
 
 	// QueryLockTableState returns detailed metadata on locks managed by the lockTable.
 	QueryLockTableState(span roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
+
+	// UnreplicatedLockAcquisitionsToFlush returns roachpb.LockAcquisition structs
+	// representing all of the lock acquistions that the concurrency manager may want
+	// to flush as replicated.
+	UnreplicatedLockAcquistionsToFlush() []roachpb.LockAcquisition
 
 	// Metrics returns information about the state of the lockTable.
 	Metrics() LockTableMetrics

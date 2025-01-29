@@ -584,6 +584,16 @@ func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 	m.twq.OnRangeDescUpdated(desc)
 }
 
+// OnRangeLeaseTransferEval implements the RangeStateListener interface. It is
+// called during evalutation of a lease transfer. The returned LockAcquisition
+// structs represent held locks that we may want to flush to disk as replicated.
+func (m *managerImpl) OnRangeLeaseTransferEval() []roachpb.LockAcquisition {
+	if !UnreplicatedLockReliabilityUpgrade.Get(&m.st.SV) {
+		return nil
+	}
+	return m.lt.UnreplicatedLockAcquistionsToFlush()
+}
+
 // OnRangeLeaseUpdated implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeaseholder bool) {
 	if isLeaseholder {
