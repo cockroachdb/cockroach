@@ -3054,7 +3054,10 @@ func (s *adminServer) dataDistributionHelper(
 	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
 		row := it.Cur()
 		target := string(tree.MustBeDString(row[0]))
-		zcSQL := tree.MustBeDString(row[1])
+		var zcSQL string
+		if zcSQLDatum, ok := tree.AsDString(row[1]); ok {
+			zcSQL = string(zcSQLDatum)
+		}
 		zcBytes := tree.MustBeDBytes(row[2])
 		var zcProto zonepb.ZoneConfig
 		if err := protoutil.Unmarshal([]byte(zcBytes), &zcProto); err != nil {
@@ -3064,7 +3067,7 @@ func (s *adminServer) dataDistributionHelper(
 		resp.ZoneConfigs[target] = serverpb.DataDistributionResponse_ZoneConfig{
 			Target:    target,
 			Config:    zcProto,
-			ConfigSQL: string(zcSQL),
+			ConfigSQL: zcSQL,
 		}
 	}
 	if err != nil {
