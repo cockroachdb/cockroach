@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -164,7 +165,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 			SSLCertsDir:   c.certsDir,
 			StoreSpecs:    params.StoreSpecs,
 			Locality:      params.Locality,
-			ExternalIODir: filepath.Join(certsDir, "extern"),
+			StorageConfig: storagepb.NodeConfig{ExternalIODir: filepath.Join(certsDir, "extern")},
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
 			},
@@ -173,7 +174,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 			argsFn(&args)
 		}
 		if params.NoNodelocal {
-			args.ExternalIODir = ""
+			args.StorageConfig.ExternalIODir = ""
 		}
 		s, err := serverutils.StartServerOnlyE(params.T, args)
 		if err != nil {

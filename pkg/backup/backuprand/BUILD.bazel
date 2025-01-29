@@ -20,6 +20,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/fingerprintutils",
         "//pkg/testutils/jobutils",

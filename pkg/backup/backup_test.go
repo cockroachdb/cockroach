@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -457,28 +458,28 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				ExternalIODir: "/west0",
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: "/west0"},
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "0"},
 					{Key: "region", Value: "west"},
 				}},
 			},
 			1: {
-				ExternalIODir: "/west1",
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: "/west1"},
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "1"},
 					{Key: "region", Value: "west"},
 				}},
 			},
 			2: {
-				ExternalIODir: "/east0",
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: "/east0"},
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "0"},
 					{Key: "region", Value: "east"},
 				}},
 			},
 			3: {
-				ExternalIODir: "/east1",
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: "/east1"},
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "1"},
 					{Key: "region", Value: "east"},
@@ -2781,7 +2782,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	args := base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	}
 
 	// Generate some testdata and back it up.
@@ -3141,7 +3142,9 @@ func TestBackupRestoreIncremental(t *testing.T) {
 
 	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	args := base.TestServerArgs{
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
+	}
 	rng, _ := randutil.NewTestRand()
 
 	backupDir := "nodelocal://1/backup"
@@ -4028,11 +4031,14 @@ func TestNonLinearChain(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	tc := testcluster.NewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled, ExternalIODir: dir, Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
-	}})
+	tc := testcluster.NewTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+			StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		}})
 
 	tc.Start(t)
 	defer tc.Stopper().Stop(context.Background())
@@ -4647,7 +4653,7 @@ func TestRestoredPrivileges(t *testing.T) {
 	const numAccounts = 1
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	args := base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}}
 
 	rootOnly := sqlDB.QueryStr(t, `SHOW GRANTS ON data.bank`)
 
@@ -4725,7 +4731,9 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	tc, origDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	s := tc.ApplicationLayer(0)
-	args := base.TestServerArgs{ExternalIODir: s.ExternalIODir()}
+	args := base.TestServerArgs{
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: s.ExternalIODir()},
+	}
 
 	for _, q := range []string{
 		`CREATE DATABASE d2`,
@@ -5201,7 +5209,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	args := base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	}
 
 	backupLoc := localFoo
@@ -5416,7 +5424,9 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	const numAccounts = 1
 	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	args := base.TestServerArgs{
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
+	}
 
 	// Setup for sequence ownership backup/restore tests in the same database.
 	backupLoc := localFoo + `/d`
@@ -6026,7 +6036,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.StorageConfig.ExternalIODir = dir
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.DefaultTestTenant = base.TestControlsTenantsExplicitly
 	tc := testcluster.StartTestCluster(t, 1, params)
@@ -6344,7 +6354,7 @@ func TestRestoreErrorPropagates(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			ExternalIODir: dir,
+			StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
@@ -6391,7 +6401,7 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.StorageConfig.ExternalIODir = dir
 	params.ServerArgs.Knobs.ProtectedTS = &protectedts.TestingKnobs{
 		// The meta table is used to track limits.
 		UseMetaTable: true,
@@ -6412,7 +6422,7 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	// TODO(adityamaru): Remove in 22.2 once no records protect spans.
 	t.Run("deprecated-spans-limit", func(t *testing.T) {
 		params := base.TestClusterArgs{}
-		params.ServerArgs.ExternalIODir = dir
+		params.ServerArgs.StorageConfig.ExternalIODir = dir
 		params.ServerArgs.Knobs.ProtectedTS = &protectedts.TestingKnobs{
 			DisableProtectedTimestampForMultiTenant: true,
 			// The meta table is used to track limits.
@@ -7092,7 +7102,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 	t.Run("restore-tenant10-to-latest", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir:     dir,
+				StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs:             base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			}},
@@ -7271,7 +7281,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 	t.Run("restore-t10-from-cluster-backup", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir:     dir,
+				StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			}},
 		)
@@ -7329,7 +7339,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 	t.Run("restore-tenant10-to-ts1", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir:     dir,
+				StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			}},
 		)
@@ -7365,7 +7375,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 	t.Run("restore-tenant20-to-latest", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir:     dir,
+				StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			}},
 		)
@@ -7540,7 +7550,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	params := base.TestClusterArgs{}
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.StorageConfig.ExternalIODir = dir
 	const numAccounts = 10
 	ctx := context.Background()
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 2 /* nodes */, numAccounts,
@@ -8627,7 +8637,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	baseDir := "testdata"
 	args := base.TestServerArgs{
-		ExternalIODir: baseDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: baseDir},
 		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
@@ -9196,7 +9206,7 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		ExternalIODir: baseDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: baseDir},
 		// This test hangs when run within a tenant. It's likely that
 		// the cause of the hang is the fact that we're waiting on the GC to
 		// complete, and we don't have visibility into the GC completing from
@@ -9485,7 +9495,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 		DisableLastProcessedCheck: true,
 	}
 	args.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	args.ServerArgs.ExternalIODir = localExternalDir
+	args.ServerArgs.StorageConfig.ExternalIODir = localExternalDir
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
@@ -9579,7 +9589,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.StorageConfig.ExternalIODir = dir
 	// Test fails when run within a tenant. More investigation is
 	// required. Tracked with #76378.
 	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
@@ -10424,9 +10434,9 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 
 	baseDir := "testdata"
 	args := base.TestServerArgs{
-
-		ExternalIODir: baseDir,
-		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: baseDir},
+		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
 		InitManualReplication, params)
@@ -11043,7 +11053,8 @@ func TestExportResponseDataSizeZeroCPUPagination(t *testing.T) {
 	externalDir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: externalDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: externalDir},
+
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 				for _, ru := range request.Requests {

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -38,7 +39,7 @@ func TestS3ExternalConnection(t *testing.T) {
 	defer dirCleanupFn()
 
 	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer ts.Stopper().Stop(context.Background())
 
@@ -203,7 +204,7 @@ func TestAWSKMSExternalConnection(t *testing.T) {
 	defer dirCleanupFn()
 
 	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer ts.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -311,7 +312,7 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 	defer dirCleanupFn()
 
 	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer ts.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)

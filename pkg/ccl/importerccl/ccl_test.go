@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -424,7 +425,7 @@ func TestExportInsideTenant(t *testing.T) {
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		ExternalIODir:     dir,
+		StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer srv.Stopper().Stop(context.Background())
 
@@ -452,7 +453,7 @@ func TestImportInTenant(t *testing.T) {
 	ctx := context.Background()
 	baseDir := sharedTestdata(t)
 	args := base.TestServerArgs{
-		ExternalIODir: baseDir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: baseDir},
 		// Test is designed to run inside a tenant so no need to
 		// probabilistically run it inside the default test tenant.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -510,7 +511,7 @@ func TestImportInMultiServerTenant(t *testing.T) {
 		// Test is designed to run inside a tenant so no need to
 		// probabilistically run it inside the default test tenant.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     baseDir,
+		StorageConfig:     storagepb.NodeConfig{ExternalIODir: baseDir},
 	}
 	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)

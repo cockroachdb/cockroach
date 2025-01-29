@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -71,7 +72,7 @@ func newAlterSchedulesTestHelper(
 	}
 
 	args := base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: knobs,
 		},

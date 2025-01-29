@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -77,7 +78,7 @@ type TenantStreamingClustersArgs struct {
 	MultiTenantSingleClusterTestRegions []string
 
 	NoMetamorphicExternalConnection bool
-	ExternalIODir                   string
+	StorageConfig                   storagepb.NodeConfig
 
 	RoutingMode streamclient.RoutingMode
 }
@@ -408,7 +409,7 @@ func CreateServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
 				EnableTenantIDReuse: true,
 			},
 		},
-		ExternalIODir: args.ExternalIODir,
+		StorageConfig: args.StorageConfig,
 	}
 }
 

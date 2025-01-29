@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -85,7 +86,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 						StickyVFSRegistry: stickyVFSRegistry,
 					},
 				},
-				ExternalIODir: "nodelocal/n1",
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: "nodelocal/n1"},
 			},
 		},
 		{
@@ -113,7 +114,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 						StickyVFSRegistry: stickyVFSRegistry,
 					},
 				},
-				ExternalIODir: "nodelocal/n3",
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: "nodelocal/n3"},
 			},
 		},
 	}

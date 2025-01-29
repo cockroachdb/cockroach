@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -241,7 +242,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107812),
 
 		Knobs:         knobs,
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 		Settings:      cs,
 	}
 	// TODO(dan): This currently doesn't work with AddSSTable on in-memory
@@ -261,7 +262,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			DB: s.InternalDB().(descs.DB),
 			ExternalStorage: func(ctx context.Context, dest cloudpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
 				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-					s.ClusterSettings(), blobs.TestBlobServiceClient(args.ExternalIODir),
+					s.ClusterSettings(), blobs.TestBlobServiceClient(args.StorageConfig.ExternalIODir),
 					nil, /* db */
 					nil, /* limiters */
 					cloud.NilMetrics,

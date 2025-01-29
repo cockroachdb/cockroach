@@ -269,11 +269,6 @@ type BaseConfig struct {
 
 	// CidrLookup is used to look up the tag name for a given IP address.
 	CidrLookup *cidr.Lookup
-
-	// ExternalIODir is the local file path under which remotely-initiated
-	// operations that can specify node-local I/O paths (such as BACKUP, RESTORE
-	// or IMPORT) can access files.
-	ExternalIODir string
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -617,6 +612,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 // multiple times.
 func (cfg *Config) SetDefaults(ctx context.Context, st *cluster.Settings) {
 	storeSpec, tempStorageCfg := makeStorageCfg(ctx, st)
+	cfg.StorageConfig = storagepb.NodeConfig{}
 	cfg.SQLConfig.SetDefaults(tempStorageCfg)
 	cfg.KVConfig.SetDefaults()
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
