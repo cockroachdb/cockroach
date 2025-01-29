@@ -55,7 +55,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 
 	cmdWrite := fmt.Sprintf(
-		"./workload run json --read-percent=0 --duration %s {pgurl%s} --batch 1000 --sequential",
+		"./workload run json --read-percent=0 --duration %s {pgurl%s} --batch 200 --sequential",
 		initialDataDuration.String(), c.CRDBNodes(),
 	)
 	m.Go(func(ctx context.Context) error {
