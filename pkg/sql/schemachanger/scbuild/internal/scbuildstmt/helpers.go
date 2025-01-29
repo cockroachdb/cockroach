@@ -234,6 +234,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			dropCascadeDescriptor(next, t.FunctionID)
 		case *scpb.TriggerDeps:
 			dropCascadeDescriptor(next, t.TableID)
+		case *scpb.PolicyDeps:
+			dropCascadeDescriptor(next, t.TableID)
 		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
 			// These only have type references.
 			break
@@ -245,6 +247,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			*scpb.ColumnDefaultExpression,
 			*scpb.ColumnOnUpdateExpression,
 			*scpb.ColumnComputeExpression,
+			*scpb.PolicyUsingExpr,
+			*scpb.PolicyWithCheckExpr,
 			*scpb.CheckConstraint,
 			*scpb.CheckConstraintUnvalidated,
 			*scpb.ForeignKeyConstraint,
@@ -253,7 +257,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			*scpb.DatabaseRegionConfig:
 			b.Drop(e)
 		default:
-			panic(errors.AssertionFailedf("un-dropped backref %T (%v) should be either be"+
+			panic(errors.AssertionFailedf("un-dropped backref %T (%v) should either be "+
 				"dropped or skipped", e, target))
 		}
 	})

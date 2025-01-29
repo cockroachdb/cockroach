@@ -456,6 +456,9 @@ func (i *immediateVisitor) RemovePolicyBackReferenceInFunctions(
 	return nil
 }
 
+// updateBackReferencesInSequences will maintain the back-references in the
+// sequence to a given table (and optional column).
+//
 // Look through `seqID`'s dependedOnBy slice, find the back-reference to `tblID`,
 // and update it to either
 //   - upsert `colID` to ColumnIDs field of that back-reference, if `forwardRefs` contains `seqID`; or
@@ -473,15 +476,21 @@ func updateBackReferencesInSequences(
 		return err
 	}
 	var current, updated catalog.TableColSet
+	var hasExistingFwdRef bool
 	_ = seq.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 		if dep.ID == tblID {
+			hasExistingFwdRef = true
 			current = catalog.MakeTableColSet(dep.ColumnIDs...)
 			return iterutil.StopIteration()
 		}
 		return nil
 	})
 	if forwardRefs.Contains(seqID) {
-		if current.Contains(colID) {
+		// The sequence should maintain a back reference to the table. Check if the
+		// current reference is sufficient. We can skip updating if the forward reference
+		// already points to the correct column (if specified) or, if no column is given,
+		// the table itself has an existing reference.
+		if current.Contains(colID) || (colID == 0 && hasExistingFwdRef) {
 			return nil
 		}
 		updated.UnionWith(current)
@@ -489,7 +498,10 @@ func updateBackReferencesInSequences(
 			updated.Add(colID)
 		}
 	} else {
-		if !current.Contains(colID) && colID != 0 {
+		// The sequence should no longer reference the table—either for the specified
+		// column (if provided) or for the entire table if no column is given. Check
+		// if an update is needed.
+		if (colID != 0 && !current.Contains(colID)) || (colID == 0 && !hasExistingFwdRef) {
 			return nil
 		}
 		current.ForEach(func(id descpb.ColumnID) {
