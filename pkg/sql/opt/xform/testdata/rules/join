@@ -2152,7 +2152,7 @@ left-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=b
 ----
-memo (optimized, ~17KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~18KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G3 G2 G4)
@@ -2190,7 +2190,7 @@ CREATE TABLE kfloat (k FLOAT PRIMARY KEY)
 memo
 SELECT * FROM abc JOIN kfloat ON a=k
 ----
-memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,k:7])
+memo (optimized, ~14KB, required=[presentation: a:1,b:2,c:3,k:7])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,k:7]
  │         ├── best: (inner-join G3 G2 G4)
