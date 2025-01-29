@@ -1865,21 +1865,24 @@ func makeCreateStats(s *Smither) (tree.Statement, bool) {
 
 	// Names slightly change behavior of statistics, so pick randomly between:
 	// ~50%: __auto__ (simulating auto stats)
-	// ~33%: random (simulating manual CREATE STATISTICS statements)
+	// ~17%: __auto_partial__ (simulating auto partial stats)
+	// ~17%: random (simulating manual CREATE STATISTICS statements)
 	// ~17%: blank (simulating manual ANALYZE statements)
 	var name tree.Name
 	switch s.d6() {
 	case 1, 2, 3:
 		name = jobspb.AutoStatsName
-	case 4, 5:
+	case 4:
+		name = jobspb.AutoPartialStatsName
+	case 5:
 		name = s.name("stats")
 	}
 
-	// Pick specific columns ~17% of the time. We only do this for simulated
+	// Pick specific columns ~8% of the time. We only do this for simulated
 	// manual CREATE STATISTICS statements because neither auto stats nor ANALYZE
 	// allow column selection.
 	var columns tree.NameList
-	if name != jobspb.AutoStatsName && name != "" && s.coin() {
+	if name != jobspb.AutoStatsName && name != jobspb.AutoPartialStatsName && name != "" && s.coin() {
 		for _, col := range table.Columns {
 			if !colinfo.IsSystemColumnName(string(col.Name)) {
 				columns = append(columns, col.Name)
@@ -1892,12 +1895,14 @@ func makeCreateStats(s *Smither) (tree.Statement, bool) {
 	}
 
 	var options tree.CreateStatsOptions
-	if name == jobspb.AutoStatsName {
+	if name == jobspb.AutoStatsName || name == jobspb.AutoPartialStatsName {
 		// For auto stats we always set throttling and AOST.
 		options.Throttling = 0.9
 		// For auto stats we use AOST -30s by default, but this will make things
 		// non-deterministic, so we use the smallest legal AOST instead.
 		options.AsOf = tree.AsOfClause{Expr: tree.NewStrVal("-0.001ms")}
+		// For auto partial stats we always set UsingExtremes.
+		options.UsingExtremes = name == jobspb.AutoPartialStatsName
 	} else if name == "" {
 		// ANALYZE only sets AOST.
 		options.AsOf = tree.AsOfClause{Expr: tree.NewStrVal("-0.001ms")}
