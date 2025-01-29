@@ -10,7 +10,6 @@
 // This code originated in github.com/gofrs/uuid.
 
 //go:build gofuzz
-// +build gofuzz
 
 package uuid
 
