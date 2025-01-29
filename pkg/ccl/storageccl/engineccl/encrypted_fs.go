@@ -287,17 +287,16 @@ func init() {
 }
 
 // newEncryptedEnv creates an encrypted environment and returns the vfs.FS to use for reading and
-// writing data. The optionBytes is a binary serialized storagepb.EncryptionOptions, so that non-CCL
-// code does not depend on CCL code.
+// writing data.
 //
 // See the comment at the top of this file for the structure of this environment.
 func newEncryptedEnv(
-	unencryptedFS vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+	unencryptedFS vfs.FS,
+	fr *fs.FileRegistry,
+	dbDir string,
+	readOnly bool,
+	options *storagepb.EncryptionOptions,
 ) (*fs.EncryptionEnv, error) {
-	options := &storagepb.EncryptionOptions{}
-	if err := protoutil.Unmarshal(optionBytes, options); err != nil {
-		return nil, err
-	}
 	if options.KeySource != storagepb.EncryptionKeySource_KeyFiles {
 		return nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
 	}
