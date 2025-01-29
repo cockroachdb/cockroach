@@ -824,6 +824,10 @@ type optTable struct {
 
 	triggers []optTrigger
 
+	// Row-level security (RLS) fields
+	rlsEnabled bool
+	policies   cat.Policies
+
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
 	colMap catalog.TableColMap
@@ -1147,6 +1151,12 @@ func newOptTable(
 	// Move all triggers into the opt table.
 	ot.triggers = getOptTriggers(desc.GetTriggers())
 
+	// Store row-level security information
+	// TODO(136717): Update this to utilize the tableDescriptor's field for
+	// indicating if RLS is enabled once the field is added.
+	ot.rlsEnabled = false
+	ot.policies = getOptPolicies(desc.GetPolicies())
+
 	// Add stats last, now that other metadata is initialized.
 	if stats != nil {
 		ot.stats = make([]optTableStat, len(stats))
@@ -1465,6 +1475,32 @@ func (ot *optTable) TriggerCount() int {
 // Trigger is part of the cat.Table interface.
 func (ot *optTable) Trigger(i int) cat.Trigger {
 	return &ot.triggers[i]
+}
+
+// IsRowLevelSecurityEnabled is part of the cat.Table interface.
+func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
+
+// PolicyCount is part of the cat.Table interface
+func (ot *optTable) PolicyCount(polType tree.PolicyType) int {
+	if !ot.rlsEnabled {
+		return 0
+	}
+	switch polType {
+	case tree.PolicyTypeRestrictive:
+		return len(ot.policies.Restrictive)
+	default:
+		return len(ot.policies.Permissive)
+	}
+}
+
+// Policy is part of the cat.Table interface
+func (ot *optTable) Policy(polType tree.PolicyType, i int) cat.Policy {
+	switch polType {
+	case tree.PolicyTypeRestrictive:
+		return ot.policies.Restrictive[i]
+	default:
+		return ot.policies.Permissive[i]
+	}
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -2569,6 +2605,17 @@ func (ot *optVirtualTable) Trigger(i int) cat.Trigger {
 	panic(errors.AssertionFailedf("no triggers"))
 }
 
+// IsRowLevelSecurityEnabled is part of the cat.Table interface.
+func (ot *optVirtualTable) IsRowLevelSecurityEnabled() bool { return false }
+
+// PolicyCount is part of the cat.Table interface
+func (ot *optVirtualTable) PolicyCount(polType tree.PolicyType) int { return 0 }
+
+// Policy is part of the cat.Table interface
+func (ot *optVirtualTable) Policy(polType tree.PolicyType, i int) cat.Policy {
+	panic(errors.AssertionFailedf("no policies"))
+}
+
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy
 // PK column.
@@ -2913,6 +2960,30 @@ func getOptTriggers(descTriggers []descpb.TriggerDescriptor) []optTrigger {
 		}
 	}
 	return triggers
+}
+
+// getOptPolicies maps from descpb.PolicyDescriptor to cat.Policies
+func getOptPolicies(descPolicies []descpb.PolicyDescriptor) cat.Policies {
+	policies := cat.Policies{
+		Permissive:  make([]cat.Policy, 0, len(descPolicies)),
+		Restrictive: make([]cat.Policy, 0, len(descPolicies)),
+	}
+	for i := range descPolicies {
+		descPolicy := &descPolicies[i]
+		policy := cat.Policy{
+			Name:          tree.Name(descPolicy.Name),
+			UsingExpr:     descPolicy.UsingExpr,
+			WithCheckExpr: descPolicy.WithCheckExpr,
+			Command:       descPolicy.Command,
+		}
+		policy.InitRoles(descPolicy.RoleNames)
+		if descPolicy.Type != catpb.PolicyType_RESTRICTIVE {
+			policies.Permissive = append(policies.Permissive, policy)
+		} else {
+			policies.Restrictive = append(policies.Restrictive, policy)
+		}
+	}
+	return policies
 }
 
 // collectTypes walks the given column's default and computed expression,

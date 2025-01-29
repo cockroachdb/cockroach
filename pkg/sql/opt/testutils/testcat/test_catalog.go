@@ -55,6 +55,13 @@ type Catalog struct {
 
 	udfs           map[string]*tree.ResolvedFunctionDefinition
 	revokedUDFOids intsets.Fast
+
+	users       map[username.SQLUsername]roleMembership
+	currentUser username.SQLUsername
+}
+
+type roleMembership struct {
+	isMemberOfAdminRole bool
 }
 
 type dataSource interface {
@@ -66,6 +73,9 @@ var _ cat.Catalog = &Catalog{}
 
 // New creates a new empty instance of the test catalog.
 func New() *Catalog {
+	users := make(map[username.SQLUsername]roleMembership)
+	users[username.RootUserName()] = roleMembership{isMemberOfAdminRole: true}
+
 	return &Catalog{
 		testSchema: Schema{
 			SchemaID: 1,
@@ -77,6 +87,8 @@ func New() *Catalog {
 			},
 			dataSources: make(map[string]dataSource),
 		},
+		users:       users,
+		currentUser: username.RootUserName(),
 	}
 }
 
@@ -307,7 +319,11 @@ func (tc *Catalog) CheckExecutionPrivilege(
 
 // HasAdminRole is part of the cat.Catalog interface.
 func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
-	return true, nil
+	roleMembership, found := tc.users[tc.currentUser]
+	if !found {
+		return false, errors.AssertionFailedf("user %q not found", tc.currentUser)
+	}
+	return roleMembership.isMemberOfAdminRole, nil
 }
 
 // HasRoleOption is part of the cat.Catalog interface.
@@ -334,7 +350,7 @@ func (tc *Catalog) Optimizer() interface{} {
 
 // GetCurrentUser is part of the cat.Catalog interface.
 func (tc *Catalog) GetCurrentUser() username.SQLUsername {
-	return username.EmptyRoleName()
+	return tc.currentUser
 }
 
 // GetRoutineOwner is part of the cat.Catalog interface.
@@ -583,6 +599,22 @@ func (tc *Catalog) executeDDLStmtWithIndexVersion(
 		tc.DropTrigger(stmt)
 		return "", nil
 
+	case *tree.CreatePolicy:
+		tc.CreatePolicy(stmt)
+		return "", nil
+
+	case *tree.DropPolicy:
+		tc.DropPolicy(stmt)
+		return "", nil
+
+	case *tree.SetVar:
+		tc.SetVar(stmt)
+		return "", nil
+
+	case *tree.CreateRole:
+		tc.CreateRole(stmt)
+		return "", nil
+
 	default:
 		return "", errors.AssertionFailedf("unsupported statement: %v", stmt)
 	}
@@ -800,6 +832,9 @@ type Table struct {
 	implicitRBRIndexElem *tree.IndexElem
 
 	homeRegion string
+
+	rlsEnabled bool
+	policies   cat.Policies
 }
 
 var _ cat.Table = &Table{}
@@ -1073,6 +1108,49 @@ func (tt *Table) TriggerCount() int {
 // Trigger is a part of the cat.Table interface.
 func (tt *Table) Trigger(i int) cat.Trigger {
 	return &tt.Triggers[i]
+}
+
+// IsRowLevelSecurityEnabled is part of the cat.Table interface.
+func (tt *Table) IsRowLevelSecurityEnabled() bool { return tt.rlsEnabled }
+
+// PolicyCount is part of the cat.Table interface
+func (tt *Table) PolicyCount(polType tree.PolicyType) int {
+	switch polType {
+	case tree.PolicyTypeRestrictive:
+		return len(tt.policies.Restrictive)
+	default:
+		return len(tt.policies.Permissive)
+	}
+}
+
+// Policy is part of the cat.Table interface
+func (tt *Table) Policy(policyType tree.PolicyType, index int) cat.Policy {
+	var policies []cat.Policy
+	switch policyType {
+	case tree.PolicyTypeRestrictive:
+		policies = tt.policies.Restrictive
+	default:
+		policies = tt.policies.Permissive
+	}
+	if index >= len(policies) {
+		panic(errors.AssertionFailedf("policy of type %v at index %d not found", policyType, index))
+	}
+	return policies[index]
+}
+
+// findPolicyByName will lookup the policy by its name. It returns it's policy
+// type and index within that policy type slice so that callers can do removal
+// if needed.
+func (tt *Table) findPolicyByName(policyName tree.Name) (*cat.Policy, tree.PolicyType, int) {
+	for _, pt := range []tree.PolicyType{tree.PolicyTypePermissive, tree.PolicyTypeRestrictive} {
+		for i := range tt.PolicyCount(pt) {
+			p := tt.Policy(pt, i)
+			if p.Name == policyName {
+				return &p, pt, i
+			}
+		}
+	}
+	return nil, tree.PolicyTypePermissive, -1
 }
 
 // Index implements the cat.Index interface for testing purposes.

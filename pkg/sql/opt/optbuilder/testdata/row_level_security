@@ -1,0 +1,223 @@
+# Tests for row-level security policies.
+
+exec-ddl
+CREATE TABLE t1 (c1 INT);
+----
+
+exec-ddl
+ALTER TABLE t1 ENABLE ROW LEVEL SECURITY;
+----
+
+# Show a build with no policies for the admin user (default). Nothing should be
+# added for RLS.
+
+build
+SELECT c1 FROM T1;
+----
+project
+ ├── columns: c1:1
+ └── scan t1
+      └── columns: c1:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+
+# Repeat for a user that isn't an admin. All rows should be filtered.
+
+exec-ddl
+CREATE USER user1;
+----
+
+exec-ddl
+SET ROLE user1;
+----
+
+build
+SELECT c1 FROM T1;
+----
+project
+ ├── columns: c1:1
+ └── select
+      ├── columns: c1:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan t1
+      │    └── columns: c1:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── false
+
+# Add a policy with a USING expression to see that a SELECT fill include that
+# expression in its filter.
+
+exec-ddl
+CREATE POLICY p1 on t1 USING (c1 > 0);
+----
+
+build
+SELECT c1 FROM T1;
+----
+project
+ ├── columns: c1:1!null
+ └── select
+      ├── columns: c1:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan t1
+      │    └── columns: c1:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── c1:1 > 0
+
+exec-ddl
+DROP POLICY p1 on t1;
+----
+
+# Verify that a policy for SELECT isn't used for UPDATE.
+
+exec-ddl
+CREATE POLICY p1 on t1 FOR SELECT USING (c1 % 2 = 0);
+----
+
+build
+UPDATE T1 SET c1 = c1 * 2 WHERE c1 > 0;
+----
+update t1
+ ├── columns: <none>
+ ├── fetch columns: c1:5 rowid:6
+ ├── update-mapping:
+ │    └── c1_new:9 => c1:1
+ └── project
+      ├── columns: c1_new:9!null c1:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── select
+      │    ├── columns: c1:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    ├── select
+      │    │    ├── columns: c1:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    │    ├── scan t1
+      │    │    │    ├── columns: c1:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── false
+      │    └── filters
+      │         └── c1:5 > 0
+      └── projections
+           └── c1:5 * 2 [as=c1_new:9]
+
+exec-ddl
+CREATE POLICY p2 on t1 FOR UPDATE USING (c1 < 100);
+----
+
+build
+UPDATE T1 SET c1 = c1 * 2 WHERE c1 > 0;
+----
+update t1
+ ├── columns: <none>
+ ├── fetch columns: c1:5 rowid:6
+ ├── update-mapping:
+ │    └── c1_new:9 => c1:1
+ └── project
+      ├── columns: c1_new:9!null c1:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── select
+      │    ├── columns: c1:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    ├── select
+      │    │    ├── columns: c1:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    │    ├── scan t1
+      │    │    │    ├── columns: c1:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── c1:5 < 100
+      │    └── filters
+      │         └── c1:5 > 0
+      └── projections
+           └── c1:5 * 2 [as=c1_new:9]
+
+# Verify a DELETE won't use policies for SELECT or UPDATE.
+
+build
+DELETE FROM T1 WHERE c1 BETWEEN 0 AND 20;
+----
+delete t1
+ ├── columns: <none>
+ ├── fetch columns: c1:5 rowid:6
+ └── select
+      ├── columns: c1:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── select
+      │    ├── columns: c1:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    ├── scan t1
+      │    │    ├── columns: c1:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── false
+      └── filters
+           └── (c1:5 >= 0) AND (c1:5 <= 20)
+
+exec-ddl
+CREATE POLICY p3 on t1 FOR DELETE USING (c1 between 8 and 12);
+----
+
+build
+DELETE FROM T1 WHERE c1 BETWEEN 0 AND 20;
+----
+delete t1
+ ├── columns: <none>
+ ├── fetch columns: c1:5 rowid:6
+ └── select
+      ├── columns: c1:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── select
+      │    ├── columns: c1:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    ├── scan t1
+      │    │    ├── columns: c1:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    │    └── flags: avoid-full-scan
+      │    └── filters
+      │         └── (c1:5 >= 8) AND (c1:5 <= 12)
+      └── filters
+           └── (c1:5 >= 0) AND (c1:5 <= 20)
+
+exec-ddl
+DROP POLICY p1 on t1;
+----
+
+exec-ddl
+DROP POLICY p2 on t1;
+----
+
+exec-ddl
+DROP POLICY p3 on t1;
+----
+
+# Verify policies only apply to a specific role.
+
+exec-ddl
+CREATE USER fred;
+----
+
+exec-ddl
+CREATE POLICY p1 on t1 TO fred USING (c1 > 0);
+----
+
+build
+SELECT c1 FROM t1 where C1 between 0 and 9;
+----
+project
+ ├── columns: c1:1!null
+ └── select
+      ├── columns: c1:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── select
+      │    ├── columns: c1:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    ├── scan t1
+      │    │    └── columns: c1:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    └── filters
+      │         └── false
+      └── filters
+           └── (c1:1 >= 0) AND (c1:1 <= 9)
+
+exec-ddl
+SET ROLE fred;
+----
+
+build
+SELECT c1 FROM t1 where C1 between 0 and 9;
+----
+project
+ ├── columns: c1:1!null
+ └── select
+      ├── columns: c1:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── select
+      │    ├── columns: c1:1!null rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    ├── scan t1
+      │    │    └── columns: c1:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    └── filters
+      │         └── c1:1 > 0
+      └── filters
+           └── (c1:1 >= 0) AND (c1:1 <= 9)
