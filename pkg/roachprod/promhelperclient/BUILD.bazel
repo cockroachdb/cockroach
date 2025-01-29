@@ -9,6 +9,8 @@ go_library(
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/roachprodutil",
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/azure",
         "//pkg/roachprod/vm/gce",
         "//pkg/util/httputil",
         "@com_github_cockroachdb_errors//:errors",

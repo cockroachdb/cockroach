@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "dns.go",
         "startup.go",
+        "startup_args_overrides.go",
         "vm.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm",
@@ -21,7 +22,13 @@ go_library(
 go_test(
     name = "vm_test",
     size = "small",
-    srcs = ["vm_test.go"],
+    srcs = [
+        "startup_test.go",
+        "vm_test.go",
+    ],
     embed = [":vm"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )
