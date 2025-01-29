@@ -353,34 +353,58 @@ func (ks *cockroachKeySeeker) IsLowerBound(k []byte, syntheticSuffix []byte) boo
 	if len(syntheticSuffix) > 0 {
 		return EnginePointSuffixCompare(syntheticSuffix, k[len(ek.Key)+1:]) >= 0
 	}
+	firstRowWall := ks.mvccWallTimes.At(0)
+	firstLogical := ks.mvccLogical.At(0)
+	// If the first row's WallTime and LogicalTime are both zero, the first row
+	// is either (a) unversioned (and sorts before all other suffixes) or (b) is
+	// a non-MVCC key with an untyped version.
+	if firstRowWall == 0 && firstLogical == 0 {
+		return EnginePointSuffixCompare(ks.untypedVersions.At(0), ek.Version) >= 0
+	}
 	var wallTime uint64
 	var logicalTime uint32
 	switch len(ek.Version) {
 	case engineKeyNoVersion:
+		// The zero-length version is the smallest possible suffix.
+		return true
 	case engineKeyVersionWallTimeLen:
 		wallTime = binary.BigEndian.Uint64(ek.Version[:8])
 	case engineKeyVersionWallAndLogicalTimeLen, engineKeyVersionWallLogicalAndSyntheticTimeLen:
 		wallTime = binary.BigEndian.Uint64(ek.Version[:8])
 		logicalTime = binary.BigEndian.Uint32(ek.Version[8:12])
 	default:
-		// The provided key `k` is not a MVCC key. Assert that the first key in
-		// the block is also not an MVCC key. If it were, that would mean there
-		// exists both a MVCC key and a non-MVCC key with the same prefix.
+		// The provided key `k` is not a MVCC key.
 		//
-		// TODO(jackson): Double check that we'll never produce index separators
-		// that are invalid version lengths.
-		if buildutil.CrdbTestBuild && ks.mvccWallTimes.At(0) != 0 {
-			panic("comparing timestamp with untyped suffix")
+		// The first row IS an MVCC key. We don't expect this to happen in
+		// practice, so this path is not performance sensitive. We reconsistute
+		// the first row's MVCC suffix and then compare it to the provided key's
+		// non-MVCC suffix.
+		//gcassert:noescape
+		var buf [13]byte
+		//gcassert:inline
+		binary.BigEndian.PutUint64(buf[:], firstRowWall)
+		var firstRowSuffix []byte
+		if firstLogical == 0 {
+			buf[8] = 9
+			firstRowSuffix = buf[:9]
+		} else {
+			//gcassert:inline
+			binary.BigEndian.PutUint32(buf[8:], uint32(firstLogical))
+			buf[12] = 13
+			firstRowSuffix = buf[:13]
 		}
-		return EnginePointSuffixCompare(ks.untypedVersions.At(0), ek.Version) >= 0
+		return EnginePointSuffixCompare(firstRowSuffix, ek.Version) >= 0
 	}
 
 	// NB: The sign comparison is inverted because suffixes are sorted such that
 	// the largest timestamps are "smaller" in the lexicographical ordering.
-	if v := cmp.Compare(ks.mvccWallTimes.At(0), wallTime); v != 0 {
+	if v := cmp.Compare(firstRowWall, wallTime); v != 0 {
+		// The empty-suffixed zero-timestamped key sorts first. If the first row
+		// has zero wall and logical times, it sorts before k and k is not a
+		// lower bound.
 		return v < 0
 	}
-	return cmp.Compare(uint32(ks.mvccLogical.At(0)), logicalTime) <= 0
+	return cmp.Compare(uint32(firstLogical), logicalTime) <= 0
 }
 
 // SeekGE is part of the KeySeeker interface.
