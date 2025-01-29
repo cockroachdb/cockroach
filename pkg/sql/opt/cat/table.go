@@ -181,6 +181,16 @@ type Table interface {
 
 	// Trigger returns the ith trigger, where i < TriggerCount.
 	Trigger(i int) Trigger
+
+	// IsRowLevelSecurityEnabled is true if policies should be applied during the query.
+	IsRowLevelSecurityEnabled() bool
+
+	// PolicyCount returns the number of policies in the table for the given type.
+	PolicyCount(polType tree.PolicyType) int
+
+	// Policy retrieves the policy of the specified type at the given index (i),
+	// where i < PolicyCount for the specified type.
+	Policy(polType tree.PolicyType, i int) Policy
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints

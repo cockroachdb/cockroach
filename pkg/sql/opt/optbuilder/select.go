@@ -165,6 +165,7 @@ func (b *Builder) buildDataSource(
 				}),
 				indexFlags, locking, inScope,
 				false, /* disableNotVisibleIndex */
+				cat.PolicyScopeSelect,
 			)
 
 		case cat.Sequence:
@@ -481,6 +482,7 @@ func (b *Builder) buildScanFromTableRef(
 	locking = b.lockingSpecForTableScan(locking, tabMeta)
 	return b.buildScan(
 		tabMeta, ordinals, indexFlags, locking, inScope, false, /* disableNotVisibleIndex */
+		cat.PolicyScopeSelect,
 	)
 }
 
@@ -532,6 +534,7 @@ func (b *Builder) buildScan(
 	locking lockingSpec,
 	inScope *scope,
 	disableNotVisibleIndex bool,
+	policyCommandScope cat.PolicyCommandScope,
 ) (outScope *scope) {
 	if ordinals == nil {
 		panic(errors.AssertionFailedf("no ordinals"))
@@ -749,6 +752,7 @@ func (b *Builder) buildScan(
 	// Add the partial indexes after constructing the scan so we can use the
 	// logical properties of the scan to fully normalize the index predicates.
 	b.addPartialIndexPredicatesForTable(tabMeta, outScope.expr)
+	b.addRowLevelSecurityFilter(tabMeta, outScope, policyCommandScope)
 
 	if !virtualColIDs.Empty() {
 		// Project the expressions for the virtual columns (and pass through all
