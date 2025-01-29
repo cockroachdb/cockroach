@@ -506,6 +506,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 104
     temporaryIndexId: 0
+    type: FORWARD
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 104
@@ -527,6 +528,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 104
     temporaryIndexId: 0
+    type: INVERTED
   Status: PUBLIC
 - Table:
     isTemporary: false
@@ -937,6 +939,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+    type: FORWARD
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 105
@@ -958,6 +961,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+    type: FORWARD
   Status: PUBLIC
 - Table:
     isTemporary: false
