@@ -217,6 +217,12 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		post_id INT REFERENCES roachblog.posts,
 		body text
 	)`)
+
+	// Test for null raw sql config column in crdb_internal.zones,
+	// see: https://github.com/cockroachdb/cockroach/issues/140044
+	sqlDB.Exec(t, `CREATE TABLE roachblog.t (i INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `ALTER TABLE roachblog.t CONFIGURE ZONE = ''`)
+
 	sqlDB.Exec(t, `CREATE SCHEMA roachblog."foo bar"`)
 	sqlDB.Exec(t, `CREATE TABLE roachblog."foo bar".other_stuff(id INT PRIMARY KEY, body TEXT)`)
 	// Test special characters in DB and table names.
@@ -244,6 +250,13 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 					},
 				},
 				`"foo bar".other_stuff`: {
+					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
+						1: 1,
+						2: 1,
+						3: 1,
+					},
+				},
+				`public.t`: {
 					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
 						1: 1,
 						2: 1,
