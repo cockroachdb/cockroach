@@ -61,6 +61,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	var relation scpb.Element
 	var sourceIndex *scpb.PrimaryIndex
+	partitionNames := make(map[string]struct{})
 	relationElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		switch t := e.(type) {
 		case *scpb.Table:
@@ -97,6 +98,13 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			if target == scpb.ToPublic {
 				sourceIndex = t
 			}
+		case *scpb.IndexPartitioning:
+			for _, lp := range t.List {
+				partitionNames[lp.Name] = struct{}{}
+			}
+			for _, rp := range t.Range {
+				partitionNames[rp.Name] = struct{}{}
+			}
 		}
 	})
 	if idxSpec.secondary.TableID == catid.InvalidDescID || sourceIndex == nil {
@@ -119,6 +127,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			}
 			panic(pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name))
 		}
+	}
+	if n.PartitionByIndex != nil && n.PartitionByIndex.PartitionBy != nil {
+		panicIfDuplicatePartitionName(partitionNames, n.PartitionByIndex.PartitionBy)
 	}
 	// We don't support handling zone config related properties for tables required
 	// for regional by row tables.
@@ -954,4 +965,24 @@ func fallbackIfRelationIsNotTable(node tree.NodeFormatter, element scpb.Element)
 		panic(scerrors.NotImplementedErrorf(node, "relation is not a table"))
 	}
 	panic(errors.AssertionFailedf("element is not a relation type"))
+}
+
+// panicIfDuplicatePartitionName panics if the given partitionBy has a partition
+// name that already exists in our map of partition names.
+func panicIfDuplicatePartitionName(
+	currPartitionNames map[string]struct{}, partitionBy *tree.PartitionBy,
+) {
+	for _, lp := range partitionBy.List {
+		if _, ok := currPartitionNames[lp.Name.String()]; ok {
+			panic(pgerror.Newf(pgcode.Syntax, "duplicate partition name %s not allowed",
+				lp.Name.String()))
+		}
+	}
+
+	for _, rp := range partitionBy.Range {
+		if _, ok := currPartitionNames[rp.Name.String()]; ok {
+			panic(pgerror.Newf(pgcode.Syntax, "duplicate partition name %s not allowed",
+				rp.Name.String()))
+		}
+	}
 }

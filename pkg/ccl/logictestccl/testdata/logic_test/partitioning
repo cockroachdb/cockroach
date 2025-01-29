@@ -1539,9 +1539,6 @@ CREATE TABLE foo(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
   PARTITION p VALUES IN (1, 5)
 );
 
-statement ok
-SET use_declarative_schema_changer = off
-
 statement error pgcode 42601 pq: duplicate partition name
 CREATE INDEX idx ON foo(j) PARTITION BY LIST (j) (
   PARTITION p VALUES IN (2, 4)
@@ -1551,8 +1548,5 @@ statement error pgcode 42601 pq: duplicate partition name
 ALTER TABLE foo PARTITION BY LIST (j) (
   PARTITION p VALUES IN (2, 4)
 );
-
-statement ok
-RESET use_declarative_schema_changer
 
 subtest end
