@@ -145,7 +145,7 @@ func (s *Container) RecordStatement(
 		// stats size + stmtKey size + hash of the statementKey
 		estimatedMemoryAllocBytes := stats.sizeUnsafeLocked() + statementKey.size() + 8
 
-		// We also account for the memory used for s.sampledPlanMetadataCache.
+		// We also account for the memory used for s.sampledStatementCache.
 		// timestamp size + key size + hash.
 		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
 		s.mu.Lock()
@@ -186,14 +186,37 @@ func (s *Container) RecordStatementExecStats(
 	return nil
 }
 
-// ShouldSample implements sqlstats.Writer interface.
-func (s *Container) ShouldSample(fingerprint string, implicitTxn bool, database string) bool {
-	_, previouslySampled := s.getLogicalPlanLastSampled(sampledPlanKey{
+// StatementSampled returns true if the statement with the given fingerprint
+// exists in the sampled statement cache.
+func (s *Container) StatementSampled(fingerprint string, implicitTxn bool, database string) bool {
+	key := sampledPlanKey{
 		stmtNoConstants: fingerprint,
 		implicitTxn:     implicitTxn,
 		database:        database,
-	})
-	return previouslySampled
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.mu.sampledStatementCache[key]
+	return ok
+}
+
+// TrySetStatementSampled attempts to add the statement to the sampled
+// statement cache. If the statement is already in the cache, it returns false.
+func (s *Container) TrySetStatementSampled(
+	fingerprint string, implicitTxn bool, database string,
+) bool {
+	key := sampledPlanKey{
+		stmtNoConstants: fingerprint,
+		implicitTxn:     implicitTxn,
+		database:        database,
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.mu.sampledStatementCache[key]; ok {
+		return false
+	}
+	s.mu.sampledStatementCache[key] = struct{}{}
+	return true
 }
 
 // RecordTransaction saves per-transaction statistics.
