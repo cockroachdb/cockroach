@@ -2004,11 +2004,11 @@ func runMVCCAcquireLockCommon(
 				txn = &txn2
 			}
 			// Acquire a shared and an exclusive lock on the key.
-			err := MVCCAcquireLock(ctx, eng, txn, lock.Shared, key, nil, 0, 0)
+			err := MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Shared, key, nil, 0, 0)
 			if err != nil {
 				b.Fatal(err)
 			}
-			err = MVCCAcquireLock(ctx, eng, txn, lock.Exclusive, key, nil, 0, 0)
+			err = MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Exclusive, key, nil, 0, 0)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -2032,7 +2032,7 @@ func runMVCCAcquireLockCommon(
 		if checkFor {
 			err = MVCCCheckForAcquireLock(ctx, rw, txn, strength, key, 0, 0)
 		} else {
-			err = MVCCAcquireLock(ctx, rw, txn, strength, key, ms, 0, 0)
+			err = MVCCAcquireLock(ctx, rw, &txn.TxnMeta, txn.IgnoredSeqNums, strength, key, ms, 0, 0)
 		}
 		if heldOtherTxn {
 			if err == nil {

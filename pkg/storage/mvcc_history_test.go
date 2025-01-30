@@ -1183,7 +1183,13 @@ func cmdAcquireLock(e *evalCtx) error {
 		str := e.getStrength()
 		maxLockConflicts := e.getMaxLockConflicts()
 		targetLockConflictBytes := e.getTargetLockConflictBytes()
-		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts, targetLockConflictBytes)
+		var txnMeta *enginepb.TxnMeta
+		var ignoredSeq []enginepb.IgnoredSeqNumRange
+		if txn != nil {
+			txnMeta = &txn.TxnMeta
+			ignoredSeq = txn.IgnoredSeqNums
+		}
+		return storage.MVCCAcquireLock(e.ctx, rw, txnMeta, ignoredSeq, str, key, e.ms, maxLockConflicts, targetLockConflictBytes)
 	})
 }
 
