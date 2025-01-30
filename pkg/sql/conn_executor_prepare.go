@@ -228,6 +228,7 @@ func (ex *connExecutor) prepare(
 		if err := ex.maybeUpgradeToSerializable(ctx, stmt); err != nil {
 			return err
 		}
+		ex.maybeDisableBufferedWrites(ctx, stmt)
 
 		if placeholderHints == nil {
 			placeholderHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)

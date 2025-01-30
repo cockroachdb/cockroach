@@ -80,6 +80,18 @@ func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Sta
 	return nil
 }
 
+// maybeDisableBufferedWrites checks if the statement is a schema change, and
+// disables the buffered writes on the transaction (if they were enabled) if it
+// is.
+func (ex *connExecutor) maybeDisableBufferedWrites(ctx context.Context, stmt Statement) {
+	if tree.CanModifySchema(stmt.AST) {
+		if ex.state.mu.txn.BufferedWritesEnabled() {
+			ex.state.setBufferedWritesEnabled(false /* enabled */)
+			ex.planner.BufferClientNotice(ctx, pgnotice.Newf("disabling buffered writes on this txn due to schema change"))
+		}
+	}
+}
+
 // runPreCommitStages is part of the new schema changer infrastructure to
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {

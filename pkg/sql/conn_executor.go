@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -1158,6 +1159,12 @@ func (s *Server) newConnExecutor(
 			mode = tree.ReadOnly
 		}
 		return ex.state.setReadOnlyMode(mode)
+	}
+	// kv_transaction_buffered_writes_enabled is special since it modifies the
+	// currently open txn (in addition to the future txns in the current
+	// session).
+	ex.dataMutatorIterator.setBufferedWritesEnabled = func(enabled bool) {
+		ex.state.setBufferedWritesEnabled(enabled)
 	}
 	ex.dataMutatorIterator.onTempSchemaCreation = func() {
 		ex.hasCreatedTemporarySchema = true
@@ -3743,6 +3750,13 @@ func (ex *connExecutor) omitInRangefeeds() bool {
 		return false
 	}
 	return ex.sessionData().DisableChangefeedReplication
+}
+
+func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
+	if ex.sessionData() == nil {
+		return false
+	}
+	return ex.sessionData().BufferedWritesEnabled && ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2)
 }
 
 // initEvalCtx initializes the fields of an extendedEvalContext that stay the

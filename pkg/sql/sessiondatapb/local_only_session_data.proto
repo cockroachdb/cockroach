@@ -594,6 +594,9 @@ message LocalOnlySessionData {
   // CatalogDigestStalenessCheckEnabled is used to enable using the catalog
   // digest information to do fast memo checks.
   bool catalog_digest_staleness_check_enabled = 153;
+  // BufferedWritesEnabled controls whether the buffered writes KV transaction
+  // protocol is used for user queries on the current session.
+  bool buffered_writes_enabled = 154;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
