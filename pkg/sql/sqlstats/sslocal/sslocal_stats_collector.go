@@ -187,14 +187,28 @@ func (s *StatsCollector) EndTransaction(
 	return discardedStats
 }
 
-// ShouldSample returns two booleans, the first one indicates whether we
-// ever sampled (i.e. collected statistics for) the given combination of
-// statement metadata, and the second one whether we should save the logical
-// plan description for it.
-func (s *StatsCollector) ShouldSample(
+// ShouldSampleNewStatement returns true if the statement is a new statement
+// and we should sample its execution statistics.
+func (s *StatsCollector) ShouldSampleNewStatement(
 	fingerprint string, implicitTxn bool, database string,
-) (previouslySampled bool) {
-	return s.flushTarget.ShouldSample(fingerprint, implicitTxn, database)
+) bool {
+	if s.uniqueServerCounts.GetStatementCount() >= s.uniqueServerCounts.UniqueStmtFingerprintLimit.Get(&s.st.SV) {
+		// The container is full. Since we can't insert more statements
+		// into the sql stats container, there's no point in sampling this
+		// statement.
+		return false
+	}
+	previouslySampled := s.flushTarget.StatementSampled(fingerprint, implicitTxn, database)
+	if previouslySampled {
+		return false
+	}
+	return s.flushTarget.TrySetStatementSampled(fingerprint, implicitTxn, database)
+}
+
+func (s *StatsCollector) SetStatementSampled(
+	fingerprint string, implicitTxn bool, database string,
+) {
+	s.flushTarget.TrySetStatementSampled(fingerprint, implicitTxn, database)
 }
 
 // UpgradeImplicitTxn informs the StatsCollector that the current txn has been
@@ -333,12 +347,6 @@ func (s *StatsCollector) ObserveTransaction(
 	if s.insightsWriter != nil {
 		s.insightsWriter.ObserveTransaction(value.SessionID, &insight)
 	}
-}
-
-// StatementsContainerFull returns true if the current statement
-// container is at capacity.
-func (s *StatsCollector) StatementsContainerFull() bool {
-	return s.uniqueServerCounts.GetStatementCount() >= s.uniqueServerCounts.UniqueStmtFingerprintLimit.Get(&s.st.SV)
 }
 
 // RecordStatement records the statistics of a statement.
