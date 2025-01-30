@@ -136,6 +136,8 @@ type tpcc struct {
 	resetTableCancelFn context.CancelFunc
 
 	asOfSystemTime string
+
+	prepareReadOnly bool
 }
 
 type waitSetter struct {
@@ -271,6 +273,7 @@ var tpccMeta = workload.Meta{
 			`fake-time`:                {RuntimeOnly: true},
 			`txn-preamble-file`:        {RuntimeOnly: true},
 			`aost`:                     {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`prepare-read-only`:        {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
@@ -316,6 +319,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.asOfSystemTime, "aost", "",
 			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
 				"check. Example values are (\"'-1m'\", \"'-1h'\")")
+		g.flags.BoolVar(&g.prepareReadOnly, "prepare-read-only", false, "only prepare read only statements. If true, mix must not include write queries")
 
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)

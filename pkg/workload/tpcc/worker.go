@@ -45,6 +45,7 @@ type txInfo struct {
 	keyingTime  int     // keying time in seconds, see 5.2.5.7
 	thinkTime   float64 // minimum mean of think time distribution, 5.2.5.7
 	weight      int     // percent likelihood that each transaction type is run
+	readOnly    bool
 }
 
 var allTxs = [...]txInfo{
@@ -65,6 +66,7 @@ var allTxs = [...]txInfo{
 		constructor: createOrderStatus,
 		keyingTime:  2,
 		thinkTime:   10,
+		readOnly:    true,
 	},
 	{
 		name:        "delivery",
@@ -77,6 +79,7 @@ var allTxs = [...]txInfo{
 		constructor: createStockLevel,
 		keyingTime:  2,
 		thinkTime:   5,
+		readOnly:    true,
 	},
 }
 
@@ -191,6 +194,9 @@ func newWorker(
 	}
 	for i := range w.txs {
 		var err error
+		if config.prepareReadOnly && !config.txInfos[i].readOnly {
+			continue
+		}
 		w.txs[i], err = config.txInfos[i].constructor(ctx, config, mcp)
 		if err != nil {
 			return nil, err
