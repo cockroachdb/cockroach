@@ -311,8 +311,9 @@ func processColNodeType(
 		panic(pgerror.New(pgcode.DatatypeMismatch,
 			"operator classes are only allowed for the last column of an inverted index"))
 	}
-	// Disallow descending last columns in inverted indexes.
-	if !n.Type.AllowExplicitDirection() && columnNode.Direction == tree.Descending && lastColIdx {
+	// Disallow descending last column in inverted indexes because they have no
+	// linear ordering.
+	if !n.Type.HasLinearOrdering() && columnNode.Direction == tree.Descending && lastColIdx {
 		panic(pgerror.New(pgcode.FeatureNotSupported,
 			"the last column in an inverted index cannot have the DESC option"))
 	}
@@ -387,15 +388,11 @@ func processColNodeType(
 		if columnNode.Expr != nil {
 			colNameForErr = columnNode.Expr.String()
 		}
-		panic(tabledesc.NewInvalidInvertedColumnError(colNameForErr,
-			columnType.Type.String()))
+		panic(sqlerrors.NewInvalidLastColumnError(colNameForErr, columnType.Type.String(), n.Type))
 	} else if (n.Type != idxtype.INVERTED || !lastColIdx) && !colinfo.ColumnTypeIsIndexable(columnType.Type) {
 		// Otherwise, check if the column type is indexable.
-		panic(unimplemented.NewWithIssueDetailf(35730,
-			columnType.Type.DebugString(),
-			"column %s is of type %s and thus is not indexable",
-			colName,
-			columnType.Type))
+		panic(sqlerrors.NewColumnNotIndexableError(
+			colName, columnType.Type.String(), columnType.Type.DebugString()))
 	}
 	return invertedKind
 }
