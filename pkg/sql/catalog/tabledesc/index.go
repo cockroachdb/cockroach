@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -223,6 +224,20 @@ func (w index) InvertedColumnKind() catpb.InvertedIndexColumnKind {
 	return w.desc.InvertedColumnKinds[0]
 }
 
+// VectorColumnID returns the ColumnID of the vector column of the vector index.
+// This is always the last column in KeyColumnIDs. Panics if the index is not a
+// vector index.
+func (w index) VectorColumnID() descpb.ColumnID {
+	return w.desc.VectorColumnID()
+}
+
+// VectorColumnName returns the name of the vector column of the vector index.
+// This is always the last column in KeyColumnIDs. Panics if the index is not a
+// vector index.
+func (w index) VectorColumnName() string {
+	return w.desc.VectorColumnName()
+}
+
 // CollectKeyColumnIDs creates a new set containing the column IDs in the key
 // of this index.
 func (w index) CollectKeyColumnIDs() catalog.TableColSet {
@@ -263,6 +278,11 @@ func (w index) CollectCompositeColumnIDs() catalog.TableColSet {
 // GetGeoConfig returns the geo config in the index descriptor.
 func (w index) GetGeoConfig() geopb.Config {
 	return w.desc.GeoConfig
+}
+
+// GetVecConfig returns the vec config in the index descriptor.
+func (w index) GetVecConfig() vecpb.Config {
+	return w.desc.VecConfig
 }
 
 // GetSharded returns the ShardedDescriptor in the index descriptor

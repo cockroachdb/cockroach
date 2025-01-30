@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1088,90 +1087,87 @@ func notIndexableError(cols []descpb.ColumnDescriptor) error {
 	if len(cols) == 0 {
 		return nil
 	}
-	var msg string
-	var typInfo string
 	if len(cols) == 1 {
 		col := &cols[0]
-		msg = "column %s is of type %s and thus is not indexable"
-		typInfo = col.Type.DebugString()
-		msg = fmt.Sprintf(msg, col.Name, col.Type.Name())
-	} else {
-		msg = "the following columns are not indexable due to their type: "
-		for i := range cols {
-			col := &cols[i]
-			msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.Name())
-			typInfo += col.Type.DebugString()
-			if i != len(cols)-1 {
-				msg += ", "
-				typInfo += ","
-			}
+		return sqlerrors.NewColumnNotIndexableError(col.Name, col.Type.Name(), col.Type.DebugString())
+	}
+
+	// Use more specific error message when there are multiple columns that
+	// cannot be indexed.
+	var typInfo string
+	msg := "the following columns are not indexable due to their type: "
+	for i := range cols {
+		col := &cols[i]
+		msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.Name())
+		typInfo += col.Type.DebugString()
+		if i != len(cols)-1 {
+			msg += ", "
+			typInfo += ","
 		}
 	}
 	return unimplemented.NewWithIssueDetailf(35730, typInfo, "%s", msg)
 }
 
-func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error {
+func checkColumnsValidForIndex(tableDesc *Mutable, indexDesc *descpb.IndexDescriptor) error {
+	indexColNames := indexDesc.KeyColumnNames
+	indexColDirs := indexDesc.KeyColumnDirections
 	invalidColumns := make([]descpb.ColumnDescriptor, 0, len(indexColNames))
-	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.NonDropColumns() {
-			if col.GetName() == indexCol {
-				if !colinfo.ColumnTypeIsIndexable(col.GetType()) {
-					invalidColumns = append(invalidColumns, *col.ColumnDesc())
+	lastCol := len(indexColNames) - 1
+	for i, indexCol := range indexColNames {
+		for _, tableCol := range tableDesc.NonDropColumns() {
+			// Skip until we find the matching column in the table, by name.
+			if tableCol.GetName() != indexCol {
+				continue
+			}
+
+			// Report error if the index type does not allow DESC to be used in
+			// the last column, because it has no linear ordering.
+			if !indexDesc.Type.HasLinearOrdering() {
+				if i == lastCol && indexColDirs[i] == catenumpb.IndexColumn_DESC {
+					return pgerror.Newf(pgcode.FeatureNotSupported,
+						"the last column in %s cannot have the DESC option",
+						idxtype.ErrorText(indexDesc.Type))
 				}
 			}
+
+			// Prefix columns are treated as regular FORWARD columns, but the last
+			// column has special rules depending on the index type.
+			if i == lastCol && indexDesc.Type.AllowsPrefixColumns() {
+				switch indexDesc.Type {
+				case idxtype.INVERTED:
+					if !colinfo.ColumnTypeIsInvertedIndexable(tableCol.GetType()) {
+						return sqlerrors.NewInvalidInvertedColumnError(tableCol.GetName(), tableCol.GetType().String())
+					}
+				case idxtype.VECTOR:
+					if !colinfo.ColumnTypeIsVectorIndexable(tableCol.GetType()) {
+						return sqlerrors.NewInvalidVectorColumnError(tableCol.GetName(), tableCol.GetType().String())
+					} else if tableCol.GetType().Width() <= 0 {
+						return sqlerrors.NewInvalidVectorColumnWidthError(tableCol.GetName(), tableCol.GetType().String())
+					}
+				}
+			} else {
+				if !colinfo.ColumnTypeIsIndexable(tableCol.GetType()) {
+					// Use a more specific error message for column types that can
+					// be indexed by the right kind of index as the last column.
+					if colinfo.ColumnTypeIsInvertedIndexable(tableCol.GetType()) {
+						return sqlerrors.NewColumnOnlyInvertedIndexableError(
+							tableCol.GetName(), tableCol.GetType().Name())
+					} else if colinfo.ColumnTypeIsVectorIndexable(tableCol.GetType()) {
+						return sqlerrors.NewColumnOnlyVectorIndexableError(
+							tableCol.GetName(), tableCol.GetType().Name())
+					}
+
+					invalidColumns = append(invalidColumns, *tableCol.ColumnDesc())
+				}
+			}
+
+			break
 		}
 	}
 	if len(invalidColumns) > 0 {
 		return notIndexableError(invalidColumns)
 	}
 	return nil
-}
-
-func checkColumnsValidForInvertedIndex(
-	tableDesc *Mutable, indexColNames []string, colDirs []catenumpb.IndexColumn_Direction,
-) error {
-	lastCol := len(indexColNames) - 1
-	for i, indexCol := range indexColNames {
-		for _, col := range tableDesc.NonDropColumns() {
-			if col.GetName() == indexCol {
-				// The last column indexed by an inverted index must be
-				// inverted indexable.
-				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()) {
-					return NewInvalidInvertedColumnError(col.GetName(), col.GetType().String())
-				}
-				if i == lastCol && colDirs[i] == catenumpb.IndexColumn_DESC {
-					return pgerror.New(pgcode.FeatureNotSupported,
-						"the last column in an inverted index cannot have the DESC option")
-				}
-				// Any preceding columns must not be inverted indexable.
-				if i < lastCol && !colinfo.ColumnTypeIsIndexable(col.GetType()) {
-					return errors.WithHint(
-						pgerror.Newf(
-							pgcode.FeatureNotSupported,
-							"column %s of type %s is only allowed as the last column in an inverted index",
-							col.GetName(),
-							col.GetType().Name(),
-						),
-						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
-					)
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// NewInvalidInvertedColumnError returns an error for a column that's not
-// inverted indexable.
-func NewInvalidInvertedColumnError(colName, colType string) error {
-	return errors.WithHint(
-		pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"column %s of type %s is not allowed as the last column in an inverted index",
-			colName, colType,
-		),
-		"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
-	)
 }
 
 // AddColumn adds a column to the table.
@@ -1187,10 +1183,10 @@ func (desc *Mutable) AddFamily(fam descpb.ColumnFamilyDescriptor) {
 // AddPrimaryIndex adds a primary index to a mutable table descriptor, assuming
 // that none has yet been set, and performs some sanity checks.
 func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
-	if idx.Type == idxtype.INVERTED {
-		return fmt.Errorf("primary index cannot be inverted")
+	if !idx.Type.CanBePrimary() {
+		return fmt.Errorf("primary index cannot be %s", idxtype.ErrorText(idx.Type))
 	}
-	if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
+	if err := checkColumnsValidForIndex(desc, &idx); err != nil {
 		return err
 	}
 	if desc.PrimaryIndex.Name != "" {
@@ -1227,16 +1223,8 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 
 // AddSecondaryIndex adds a secondary index to a mutable table descriptor.
 func (desc *Mutable) AddSecondaryIndex(idx descpb.IndexDescriptor) error {
-	if idx.Type == idxtype.FORWARD {
-		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
-			return err
-		}
-	} else {
-		if err := checkColumnsValidForInvertedIndex(
-			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
-		); err != nil {
-			return err
-		}
+	if err := checkColumnsValidForIndex(desc, &idx); err != nil {
+		return err
 	}
 	desc.AddPublicNonPrimaryIndex(idx)
 	return nil
@@ -2022,7 +2010,7 @@ func (desc *Mutable) AddColumnMutation(
 // AddDropIndexMutation adds a a dropping index mutation for the given
 // index descriptor.
 func (desc *Mutable) AddDropIndexMutation(idx *descpb.IndexDescriptor) error {
-	if err := desc.checkValidIndex(idx); err != nil {
+	if err := checkColumnsValidForIndex(desc, idx); err != nil {
 		return err
 	}
 	m := descpb.DescriptorMutation{
@@ -2038,7 +2026,7 @@ func (desc *Mutable) AddDropIndexMutation(idx *descpb.IndexDescriptor) error {
 func (desc *Mutable) AddIndexMutationMaybeWithTempIndex(
 	idx *descpb.IndexDescriptor, direction descpb.DescriptorMutation_Direction,
 ) error {
-	if err := desc.checkValidIndex(idx); err != nil {
+	if err := checkColumnsValidForIndex(desc, idx); err != nil {
 		return err
 	}
 	m := descpb.DescriptorMutation{
@@ -2056,7 +2044,7 @@ func (desc *Mutable) AddIndexMutation(
 	direction descpb.DescriptorMutation_Direction,
 	state descpb.DescriptorMutation_State,
 ) error {
-	if err := desc.checkValidIndex(idx); err != nil {
+	if err := checkColumnsValidForIndex(desc, idx); err != nil {
 		return err
 	}
 	stateIsValid := func() bool {
@@ -2080,22 +2068,6 @@ func (desc *Mutable) AddIndexMutation(
 		Descriptor_: &descpb.DescriptorMutation_Index{Index: idx},
 		Direction:   direction,
 	}, state)
-	return nil
-}
-
-func (desc *Mutable) checkValidIndex(idx *descpb.IndexDescriptor) error {
-	switch idx.Type {
-	case idxtype.FORWARD:
-		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
-			return err
-		}
-	case idxtype.INVERTED:
-		if err := checkColumnsValidForInvertedIndex(
-			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
-		); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 

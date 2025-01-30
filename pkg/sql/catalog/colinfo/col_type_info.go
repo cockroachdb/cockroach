@@ -172,6 +172,12 @@ func ColumnTypeIsOnlyInvertedIndexable(t *types.T) bool {
 	return true
 }
 
+// ColumnTypeIsVectorIndexable returns true if the type t can be indexed using a
+// vector index.
+func ColumnTypeIsVectorIndexable(t *types.T) bool {
+	return t.Family() == types.PGVectorFamily
+}
+
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType *types.T) bool {

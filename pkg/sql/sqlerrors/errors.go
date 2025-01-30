@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -510,6 +511,73 @@ func NewInsufficientPrivilegeOnDescriptorError(
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, privsStr, descType, descName)
+}
+
+// NewColumnNotIndexableError returns an error for a column type that cannot be
+// indexed.
+func NewColumnNotIndexableError(colName string, colType string, detail string) error {
+	return unimplemented.NewWithIssueDetailf(35730,
+		detail,
+		"column %s is of type %s and thus is not indexable",
+		colName,
+		colType)
+}
+
+// NewInvalidInvertedColumnError returns an error for a column that's not
+// inverted indexable.
+func NewInvalidInvertedColumnError(colName, colType string) error {
+	return errors.WithHint(
+		pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"column %s of type %s is not allowed as the last column in an inverted index",
+			colName, colType,
+		),
+		"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
+	)
+}
+
+// NewColumnOnlyInvertedIndexableError returns an error for a column with a type
+// that can only be indexed as the last column in an inverted index.
+func NewColumnOnlyInvertedIndexableError(colName string, colType string) error {
+	return errors.WithHint(pgerror.Newf(
+		pgcode.FeatureNotSupported,
+		"column %s of type %s is only allowed as the last column in an inverted index",
+		colName,
+		colType,
+	), "see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"))
+}
+
+// NewInvalidVectorColumnError returns an error for a column that cannot be
+// indexed by a vector index.
+func NewInvalidVectorColumnError(colName, colType string) error {
+	return pgerror.Newf(
+		pgcode.FeatureNotSupported,
+		"column %s of type %s is not allowed as the last column in a vector index",
+		colName, colType,
+	)
+}
+
+// NewInvalidVectorColumnWidthError returns an error for a vector column that
+// cannot be indexed by a vector index due to invalid type width.
+func NewInvalidVectorColumnWidthError(colName string, colType string) error {
+	return errors.WithDetail(
+		pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"column %s of type %s is not allowed as the last column in a vector index",
+			colName, colType,
+		),
+		"the vector index column must have a fixed positive number of dimensions",
+	)
+}
+
+// NewColumnOnlyVectorIndexableError returns an error for a column with a type
+// that can only be indexed as the last column in a vector index.
+func NewColumnOnlyVectorIndexableError(colName string, colType string) error {
+	return pgerror.Newf(
+		pgcode.FeatureNotSupported,
+		"column %s of type %s is only allowed as the last column in a vector index",
+		colName,
+		colType)
 }
 
 // QueryTimeoutError is an error representing a query timeout.
