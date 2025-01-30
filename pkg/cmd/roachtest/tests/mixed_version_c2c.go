@@ -185,8 +185,9 @@ type c2cMixed struct {
 	// state.
 	midUpgradeCatchupMu syncutil.Mutex
 
-	ingestionJobID  catpb.JobID
-	workloadStopper mixedversion.StopFunc
+	ingestionJobID          catpb.JobID
+	workloadStopper         mixedversion.StopFunc
+	readOnlyWorkloadStopper mixedversion.StopFunc
 }
 
 func (cm *c2cMixed) SetupHook(ctx context.Context) {
@@ -239,7 +240,7 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 			sourceInfo := chanReadCtx(ctx, sourceInfoChan)
 
 			if err := h.Exec(r, fmt.Sprintf(
-				"CREATE TENANT %q FROM REPLICATION OF %q ON $1",
+				"CREATE TENANT %q FROM REPLICATION OF %q ON $1 WITH READ VIRTUAL CLUSTER",
 				destTenantName, sourceInfo.name,
 			), sourceInfo.pgurl.String()); err != nil {
 				return errors.Wrap(err, "creating destination tenant")
@@ -271,6 +272,17 @@ func (cm *c2cMixed) WorkloadHook(ctx context.Context) {
 		Option("tolerate-errors").
 		Flag("warehouses", 500)
 	cm.workloadStopper = cm.sourceMvt.Workload("tpcc", cm.c.WorkloadNode(), tpccInitCmd, tpccRunCmd)
+
+	readerTenantName := fmt.Sprintf("%s-readonly", destTenantName)
+
+	tpccStandbyRunCmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
+		Arg("{pgurl%s:%s}", cm.c.Range(cm.sp.srcNodes+1, cm.sp.srcNodes+cm.sp.dstNodes), readerTenantName).
+		Option("tolerate-errors").
+		Flag("warehouses", 500).
+		Flag("mix", "newOrder=0,payment=0,orderStatus=1,delivery=0,stockLevel=1")
+
+	cm.readOnlyWorkloadStopper = cm.destMvt.Workload("tpcc-read-only", cm.c.WorkloadNode(), nil, tpccStandbyRunCmd)
+
 }
 
 func (cm *c2cMixed) LatencyHook(ctx context.Context) {
@@ -435,6 +447,7 @@ func (cm *c2cMixed) sourceFingerprintAndCompare(
 ) error {
 	args := chanReadCtx(ctx, cm.fingerprintArgsChan)
 	cm.workloadStopper()
+	cm.readOnlyWorkloadStopper()
 	var sourceFingerprint int64
 	if err := h.System.QueryRow(r,
 		fmt.Sprintf(fingerprintQuery, args.retainedTime.AsOfSystemTime(), args.cutoverTime.AsOfSystemTime()),
