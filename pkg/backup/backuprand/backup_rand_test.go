@@ -76,6 +76,13 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 		runSchemaOnlyExtension = ", schema_only"
 	}
 
+	// Use a smither as a type resolver for PopulateTableWithRandData.
+	var typeResolver tree.TypeReferenceResolver
+	smither, err := sqlsmith.NewSmither(tc.Conns[0], rng)
+	require.NoError(t, err)
+	defer smither.Close()
+	typeResolver = smither
+
 	tables := sqlDB.Query(t, `SELECT name FROM crdb_internal.tables WHERE 
 database_name = 'rand' AND schema_name = 'public'`)
 	var tableNames []string
@@ -87,7 +94,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 		// Note: we do not care how many rows successfully populate
 		// the given table
 		if _, err := randgen.PopulateTableWithRandData(rng, tc.Conns[0], tableName,
-			numInserts, nil); err != nil {
+			numInserts, nil, typeResolver); err != nil {
 			t.Fatal(err)
 		}
 		tableNames = append(tableNames, tableName)

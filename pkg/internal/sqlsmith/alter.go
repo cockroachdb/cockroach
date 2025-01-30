@@ -114,7 +114,13 @@ func makeCreateSchema(s *Smither) (tree.Statement, bool) {
 }
 
 func makeCreateTable(s *Smither) (tree.Statement, bool) {
-	table := randgen.RandCreateTable(context.Background(), s.rnd, "", 0, randgen.TableOptNone)
+	seedTypes := randgen.SeedTypes
+	if s.types != nil {
+		seedTypes = s.types.seedTypes
+	}
+	table := randgen.RandCreateTableWithTypes(
+		context.Background(), s.rnd, "", 0, randgen.TableOptNone, seedTypes,
+	)
 	schemaOrd := s.rnd.Intn(len(s.schemas))
 	schema := s.schemas[schemaOrd]
 	table.Table = tree.MakeTableNameWithSchema(tree.Name(s.dbName), schema.SchemaName, s.name("tab"))
@@ -418,10 +424,12 @@ func makeCreateType(s *Smither) (tree.Statement, bool) {
 	name := s.name("typ")
 
 	if s.coin() {
-		return randgen.RandCreateEnumType(s.rnd, string(name), letters), true
+		stmt, _ := randgen.RandCreateEnumType(s.rnd, string(name), letters)
+		return stmt, true
 	}
 
-	return randgen.RandCreateCompositeType(s.rnd, string(name), letters), true
+	stmt, _ := randgen.RandCreateCompositeType(s.rnd, string(name), letters)
+	return stmt, true
 }
 
 func makeDropType(s *Smither) (tree.Statement, bool) {
@@ -580,12 +588,12 @@ func makeAlterDatabasePlacement(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterTypeDropValue(s *Smither) (tree.Statement, bool) {
-	enumVal, udtName, ok := s.getRandUserDefinedTypeLabel()
+	enumVal, enumName, ok := s.getRandEnumVal()
 	if !ok {
 		return nil, false
 	}
 	return &tree.AlterType{
-		Type: udtName.ToUnresolvedObjectName(),
+		Type: enumName.ToUnresolvedObjectName(),
 		Cmd: &tree.AlterTypeDropValue{
 			Val: *enumVal,
 		},
@@ -593,12 +601,12 @@ func makeAlterTypeDropValue(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterTypeAddValue(s *Smither) (tree.Statement, bool) {
-	_, udtName, ok := s.getRandUserDefinedTypeLabel()
+	_, enumName, ok := s.getRandEnumVal()
 	if !ok {
 		return nil, false
 	}
 	return &tree.AlterType{
-		Type: udtName.ToUnresolvedObjectName(),
+		Type: enumName.ToUnresolvedObjectName(),
 		Cmd: &tree.AlterTypeAddValue{
 			NewVal:      tree.EnumValue(s.name("added_val")),
 			IfNotExists: true,
@@ -607,12 +615,12 @@ func makeAlterTypeAddValue(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterTypeRenameValue(s *Smither) (tree.Statement, bool) {
-	enumVal, udtName, ok := s.getRandUserDefinedTypeLabel()
+	enumVal, enumName, ok := s.getRandEnumVal()
 	if !ok {
 		return nil, false
 	}
 	return &tree.AlterType{
-		Type: udtName.ToUnresolvedObjectName(),
+		Type: enumName.ToUnresolvedObjectName(),
 		Cmd: &tree.AlterTypeRenameValue{
 			OldVal: *enumVal,
 			NewVal: tree.EnumValue(s.name("renamed_val")),
@@ -621,7 +629,7 @@ func makeAlterTypeRenameValue(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterTypeRenameType(s *Smither) (tree.Statement, bool) {
-	_, udtName, ok := s.getRandUserDefinedTypeLabel()
+	_, udtName, ok := s.getRandUserDefinedType()
 	if !ok {
 		return nil, false
 	}

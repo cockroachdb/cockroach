@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,19 +47,24 @@ func MakeSchemaName(ifNotExists bool, schema string, authRole tree.RoleSpec) *tr
 	}
 }
 
-// RandCreateEnumType creates a random CREATE TYPE <type_name> AS ENUM statement.
-// The resulting type's name will be name, the enum members will
-// be random strings generated from alphabet.
-func RandCreateEnumType(rng *rand.Rand, name, alphabet string) tree.Statement {
+// RandCreateEnumType creates a random CREATE TYPE <type_name> AS ENUM
+// statement. The resulting type's name will be name, the enum members will be
+// random strings generated from alphabet. RandCreateEnumType also returns a
+// partial *types.T which represents the type that will be created. This
+// *types.T does not have correct OID or metadata, but should be enough for
+// RandCreateTableWithTypes to work with.
+func RandCreateEnumType(rng *rand.Rand, name, alphabet string) (tree.Statement, *types.T) {
 	numLabels := rng.Intn(6) + 1
 	labels := make(tree.EnumValueList, numLabels)
-	labelsMap := make(map[string]struct{})
+	labelsMap := make(map[string]struct{}, numLabels)
+	members := make([]string, numLabels)
 
 	for i := 0; i < numLabels; {
 		s := util.RandString(rng, rng.Intn(6)+1, alphabet)
 		if _, ok := labelsMap[s]; !ok {
 			labels[i] = tree.EnumValue(s)
 			labelsMap[s] = struct{}{}
+			members[i] = s
 			i++
 		}
 	}
@@ -66,27 +73,49 @@ func RandCreateEnumType(rng *rand.Rand, name, alphabet string) tree.Statement {
 	if err != nil {
 		panic(err)
 	}
-	return &tree.CreateType{
+	stmt := &tree.CreateType{
 		TypeName:   un,
 		Variety:    tree.Enum,
 		EnumLabels: labels,
 	}
+
+	// Create a partial *types.T with the enum members. The OID and physical
+	// representation won't be correct, but this partial type should be enough for
+	// RandCreateTableWithTypes to work with.
+	typ := types.MakeEnum(catid.TypeIDToOID(descpb.ID(1)), catid.TypeIDToOID(descpb.ID(2)))
+	typ.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Name: name,
+		},
+		EnumData: &types.EnumMetadata{
+			LogicalRepresentations: members,
+			// The physical representations don't matter in this case, but the
+			// enum related code in tree expects that the length of
+			// PhysicalRepresentations is equal to the length of LogicalRepresentations.
+			PhysicalRepresentations: make([][]byte, len(members)),
+			IsMemberReadOnly:        make([]bool, len(members)),
+		},
+	}
+	return stmt, typ
 }
 
 // RandCreateCompositeType creates a random composite type statement.
-func RandCreateCompositeType(rng *rand.Rand, name, alphabet string) tree.Statement {
-	var compositeTypeList []tree.CompositeTypeElem
-
+func RandCreateCompositeType(rng *rand.Rand, name, alphabet string) (tree.Statement, *types.T) {
 	numTypes := rng.Intn(6) + 1
-	uniqueNames := make(map[string]struct{})
+	compositeTypeList := make([]tree.CompositeTypeElem, numTypes)
+	uniqueNames := make(map[string]struct{}, numTypes)
+	contents := make([]*types.T, numTypes)
+	labels := make([]string, numTypes)
 
 	for i := 0; i < numTypes; {
 		randomName := util.RandString(rng, rng.Intn(6)+1, alphabet)
 		randomType := RandTypeFromSlice(rng, types.Scalar)
 
 		if _, ok := uniqueNames[randomName]; !ok {
-			compositeTypeList = append(compositeTypeList, tree.CompositeTypeElem{Label: tree.Name(randomName), Type: randomType})
+			compositeTypeList[i] = tree.CompositeTypeElem{Label: tree.Name(randomName), Type: randomType}
 			uniqueNames[randomName] = struct{}{}
+			contents[i] = randomType
+			labels[i] = randomName
 			i++
 		}
 	}
@@ -95,11 +124,24 @@ func RandCreateCompositeType(rng *rand.Rand, name, alphabet string) tree.Stateme
 	if err != nil {
 		panic(err)
 	}
-	return &tree.CreateType{
+	stmt := &tree.CreateType{
 		TypeName:          un,
 		Variety:           tree.Composite,
 		CompositeTypeList: compositeTypeList,
 	}
+
+	// Create a partial *types.T with the composite type elements. The OID and
+	// won't be correct, but this partial type should be enough for
+	// RandCreateTableWithTypes to work with.
+	typ := types.NewCompositeType(
+		catid.TypeIDToOID(descpb.ID(1)), catid.TypeIDToOID(descpb.ID(2)), contents, labels,
+	)
+	typ.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Name: name,
+		},
+	}
+	return stmt, typ
 }
 
 type TableOpt uint8
@@ -117,9 +159,15 @@ func (t TableOpt) IsSet(o TableOpt) bool {
 	return t&o == o
 }
 
-// RandCreateTables creates random table definitions.
-func RandCreateTables(
-	ctx context.Context, rng *rand.Rand, prefix string, num int, opt TableOpt, mutators ...Mutator,
+// RandCreateTablesWithTypes creates random table definitions.
+func RandCreateTablesWithTypes(
+	ctx context.Context,
+	rng *rand.Rand,
+	prefix string,
+	num int,
+	opt TableOpt,
+	typs []*types.T,
+	mutators ...Mutator,
 ) []tree.Statement {
 	if num < 1 {
 		panic("at least one table required")
@@ -128,7 +176,7 @@ func RandCreateTables(
 	// Make some random tables.
 	tables := make([]tree.Statement, num)
 	for i := 0; i < num; i++ {
-		t := RandCreateTable(ctx, rng, prefix, i+1, opt)
+		t := RandCreateTableWithTypes(ctx, rng, prefix, i+1, opt, typs)
 		tables[i] = t
 	}
 
@@ -143,8 +191,15 @@ func RandCreateTables(
 func RandCreateTable(
 	ctx context.Context, rng *rand.Rand, prefix string, tableIdx int, opt TableOpt,
 ) *tree.CreateTable {
-	return RandCreateTableWithColumnIndexNumberGenerator(
-		ctx, rng, prefix, tableIdx, opt, nil, /* generateColumnIndexNumber */
+	return RandCreateTableWithTypes(ctx, rng, prefix, tableIdx, opt, SeedTypes)
+}
+
+// RandCreateTable creates a random CreateTable definition.
+func RandCreateTableWithTypes(
+	ctx context.Context, rng *rand.Rand, prefix string, tableIdx int, opt TableOpt, typs []*types.T,
+) *tree.CreateTable {
+	return randCreateTableWithColumnIndexNumberGeneratorAndTypes(
+		ctx, rng, prefix, tableIdx, opt, nil /* generateColumnIndexNumber */, typs,
 	)
 }
 
@@ -164,6 +219,20 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	opt TableOpt,
 	generateColumnIndexSuffix func() string,
 ) *tree.CreateTable {
+	return randCreateTableWithColumnIndexNumberGeneratorAndTypes(
+		ctx, rng, prefix, tableIdx, opt, generateColumnIndexSuffix, SeedTypes,
+	)
+}
+
+func randCreateTableWithColumnIndexNumberGeneratorAndTypes(
+	ctx context.Context,
+	rng *rand.Rand,
+	prefix string,
+	tableIdx int,
+	opt TableOpt,
+	generateColumnIndexSuffix func() string,
+	typs []*types.T,
+) *tree.CreateTable {
 	var name string
 	if opt.IsSet(TableOptCrazyNames) {
 		g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
@@ -172,7 +241,7 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 		name = fmt.Sprintf("%s%d", prefix, tableIdx)
 	}
 	return randCreateTableWithColumnIndexNumberGeneratorAndName(
-		ctx, rng, name, tableIdx, opt, generateColumnIndexSuffix,
+		ctx, rng, name, tableIdx, opt, generateColumnIndexSuffix, typs,
 	)
 }
 
@@ -180,7 +249,7 @@ func RandCreateTableWithName(
 	ctx context.Context, rng *rand.Rand, tableName string, tableIdx int, opt TableOpt,
 ) *tree.CreateTable {
 	return randCreateTableWithColumnIndexNumberGeneratorAndName(
-		ctx, rng, tableName, tableIdx, opt, nil, /* generateColumnIndexSuffix */
+		ctx, rng, tableName, tableIdx, opt, nil /* generateColumnIndexSuffix */, SeedTypes,
 	)
 }
 
@@ -191,6 +260,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	tableIdx int,
 	opt TableOpt,
 	generateColumnIndexSuffix func() string,
+	typs []*types.T,
 ) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
@@ -211,7 +281,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	nComputedColumns := randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
 	nNormalColumns := nColumns - nComputedColumns
 	for i := 0; i < nNormalColumns; i++ {
-		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i), opt)
+		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i), opt, typs)
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -219,7 +289,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make defs for computed columns.
 	normalColDefs := columnDefs
 	for i := nNormalColumns; i < nColumns; i++ {
-		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i), opt)
+		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i), opt, typs)
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -375,11 +445,33 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 // If a non-nil inserts is provided, it will be populated with the successful
 // insert statements.
 //
+// If the table could use user-defined types, a type resolver must be
+// provided. Often it's convenient to use a smither as a type resolver, for
+// example:
+//
+//	// Create tables that could contain user-defined types.
+//	...
+//
+//	// Use a smither as a type resolver for PopulateTableWithRandData.
+//	var typeResolver tree.TypeReferenceResolver
+//	smither, err := sqlsmith.NewSmither(conn, rng)
+//	require.NoError(t, err)
+//	defer smither.Close()
+//	typeResolver = smither
+//
+//	// Populate those tables with random data.
+//	rows, err := randgen.PopulateTableWithRandData(rng, conn, ..., typeResolver)
+//
 // If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
 // handle this table's schema. Consider increasing numInserts or filing a bug.
 // TODO(harding): Populate data in partitions.
 func PopulateTableWithRandData(
-	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int, inserts *[]string,
+	rng *rand.Rand,
+	db *gosql.DB,
+	tableName string,
+	numInserts int,
+	inserts *[]string,
+	typeResolver tree.TypeReferenceResolver,
 ) (numRowsInserted int, err error) {
 	var createStmtSQL string
 	res := db.QueryRow(fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tree.NameString(tableName)))
@@ -390,6 +482,19 @@ func PopulateTableWithRandData(
 	createStmt, err := parseCreateStatement(createStmtSQL)
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to determine table schema")
+	}
+
+	// Resolve user-defined types.
+	if typeResolver != nil {
+		for _, def := range createStmt.Defs {
+			if col, ok := def.(*tree.ColumnTableDef); ok {
+				typ, err := tree.ResolveType(context.Background(), col.Type, typeResolver)
+				if err != nil {
+					return 0, err
+				}
+				col.Type = typ
+			}
+		}
 	}
 
 	// Find columns subject to a foreign key constraint
@@ -431,8 +536,9 @@ func PopulateTableWithRandData(
 				// them to the list of columns to insert data into.
 				continue
 			}
+			// Skip columns with unresolved types.
 			if _, ok := col.Type.(*types.T); !ok {
-				return 0, errors.Newf("No type for %v", col)
+				continue
 			}
 			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type))
 			nullable = append(nullable, col.Nullable.Nullability == tree.Null)
@@ -463,7 +569,7 @@ func PopulateTableWithRandData(
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
 func randColumnTableDef(
-	rng *rand.Rand, tableIdx int, colSuffix string, opt TableOpt,
+	rng *rand.Rand, tableIdx int, colSuffix string, opt TableOpt, typs []*types.T,
 ) *tree.ColumnTableDef {
 	var colName tree.Name
 	if opt.IsSet(TableOptCrazyNames) {
@@ -476,7 +582,7 @@ func randColumnTableDef(
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		Name: colName,
-		Type: RandColumnType(rng),
+		Type: RandColumnTypeFromSlice(rng, typs),
 	}
 	// Slightly prefer non-nullable columns
 	if columnDef.Type.(*types.T).Family() == types.OidFamily {
@@ -502,8 +608,9 @@ func randComputedColumnTableDef(
 	tableIdx int,
 	colSuffix string,
 	opt TableOpt,
+	typs []*types.T,
 ) *tree.ColumnTableDef {
-	newDef := randColumnTableDef(rng, tableIdx, colSuffix, opt)
+	newDef := randColumnTableDef(rng, tableIdx, colSuffix, opt, typs)
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = rng.Intn(2) == 0
 

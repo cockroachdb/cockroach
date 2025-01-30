@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Setup generates a SQL query that can be executed to initialize a database
@@ -128,13 +129,30 @@ func randTablesN(r *rand.Rand, n int, prefix string, isMultiRegion bool) []strin
 	// based on them nondeterministic, so disable stats forecasting.
 	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.forecasts.enabled = false;`)
 
+	// Create some random types to use in tables.
+	numTypes := r.Intn(5) + 1
+	seedTypes := make([]*types.T, numTypes, numTypes+len(randgen.SeedTypes))
+	for i := range seedTypes {
+		name := fmt.Sprintf("rand_typ_%d", i)
+		if r.Intn(2) == 0 {
+			stmt, typ := randgen.RandCreateEnumType(r, name, letters)
+			stmts = append(stmts, stmt.String())
+			seedTypes[i] = typ
+		} else {
+			stmt, typ := randgen.RandCreateCompositeType(r, name, letters)
+			stmts = append(stmts, stmt.String())
+			seedTypes[i] = typ
+		}
+	}
+	seedTypes = append(seedTypes, randgen.SeedTypes...)
+
 	// Create the random tables.
 	opt := randgen.TableOptCrazyNames
 	if isMultiRegion {
 		opt |= randgen.TableOptMultiRegion
 	}
-	createTableStatements := randgen.RandCreateTables(
-		context.Background(), r, "table", n, opt, randgen.StatisticsMutator,
+	createTableStatements := randgen.RandCreateTablesWithTypes(
+		context.Background(), r, "table", n, opt, seedTypes, randgen.StatisticsMutator,
 		randgen.PartialIndexMutator, randgen.ForeignKeyMutator,
 	)
 
@@ -149,24 +167,13 @@ func randTablesN(r *rand.Rand, n int, prefix string, isMultiRegion bool) []strin
 		stmts = append(stmts, stmt)
 	}
 
-	// Create some random types as well.
-	numTypes := r.Intn(5) + 1
-	for i := 0; i < numTypes; i++ {
-		name := fmt.Sprintf("rand_typ_%d", i)
-		if r.Intn(2) == 0 {
-			stmt := randgen.RandCreateEnumType(r, name, letters)
-			stmts = append(stmts, stmt.String())
-		} else {
-			stmt := randgen.RandCreateCompositeType(r, name, letters)
-			stmts = append(stmts, stmt.String())
-		}
-	}
 	return stmts
 }
 
 const (
 	seedTable = `
 BEGIN; CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning'); COMMIT;
+BEGIN; CREATE TYPE dimensions AS (length INT, width INT, height INT); COMMIT;
 BEGIN;
 CREATE TABLE IF NOT EXISTS seed AS
 	SELECT
@@ -186,7 +193,8 @@ CREATE TABLE IF NOT EXISTS seed AS
 		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid,
 		'0.0.0.0'::INET + g AS _inet,
 		g::STRING::JSONB AS _jsonb,
-		enum_range('hello'::greeting)[g] as _enum
+		enum_range('hello'::greeting)[g] as _enum,
+		(g, g, g)::dimensions AS _composite
 	FROM
 		generate_series(1, 5) AS g;
 COMMIT;
