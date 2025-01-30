@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -107,6 +108,10 @@ func (s *Smither) ReloadSchemas() error {
 		return err
 	}
 	s.tables, err = s.extractTables()
+	if err != nil {
+		return err
+	}
+	s.types.tableImplicitRecordTypes, s.types.tableImplicitRecordTypeNames, err = s.extractTableImplicitRecordTypes()
 	if err != nil {
 		return err
 	}
@@ -266,6 +271,7 @@ func (s *Smither) getRandUserDefinedType() (*types.T, *tree.TypeName, bool) {
 	return s.types.udts[idx], &s.types.udtNames[idx], true
 }
 
+// extractTypes should be called before extractTables.
 func (s *Smither) extractTypes() (*typeInfo, error) {
 	rows, err := s.db.Query(`
 SELECT
@@ -330,6 +336,37 @@ FROM
 		scalarTypes: append(udts, types.Scalar...),
 		seedTypes:   append(udts, randgen.SeedTypes...),
 	}, nil
+}
+
+// extractTableImplicitRecordTypes should only be called after extractTables.
+func (s *Smither) extractTableImplicitRecordTypes() (
+	[]*types.T,
+	[]tree.ResolvableTypeReference,
+	error,
+) {
+	var tableImplicitRecordTypes []*types.T
+	var tableImplicitRecordTypeNames []tree.ResolvableTypeReference
+	for _, t := range s.tables {
+		contents := make([]*types.T, 0, len(t.Columns))
+		labels := make([]string, 0, len(t.Columns))
+		for _, col := range t.Columns {
+			if colinfo.IsSystemColumnName(string(col.Name)) {
+				// Ignore system columns since they are inaccessible.
+				continue
+			}
+			typ, ok := col.Type.(*types.T)
+			if !ok {
+				return nil, nil, errors.AssertionFailedf("unexpectedly column type is not *types.T: %T", col.Type)
+			}
+			contents = append(contents, typ)
+			labels = append(labels, string(col.Name))
+		}
+		typ := types.MakeLabeledTuple(contents, labels)
+		tableImplicitRecordTypes = append(tableImplicitRecordTypes, typ)
+		typeName := tree.MakeSchemaQualifiedTypeName(t.TableName.Schema(), t.TableName.Table())
+		tableImplicitRecordTypeNames = append(tableImplicitRecordTypeNames, &typeName)
+	}
+	return tableImplicitRecordTypes, tableImplicitRecordTypeNames, nil
 }
 
 type schemaRef struct {

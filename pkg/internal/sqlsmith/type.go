@@ -33,18 +33,18 @@ func (s *Smither) typeFromSQLTypeSyntax(typeStr string) (*types.T, error) {
 func (s *Smither) pickAnyType(typ *types.T) *types.T {
 	switch typ.Family() {
 	case types.AnyFamily:
-		typ = s.randType()
+		typ, _ = s.randType()
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.AnyFamily {
 			typ = randgen.RandArrayContentsType(s.rnd)
 		}
 	case types.DecimalFamily:
 		if s.disableDecimals {
-			typ = s.randType()
+			typ, _ = s.randType()
 		}
 	case types.OidFamily:
 		if s.disableOIDs {
-			typ = s.randType()
+			typ, _ = s.randType()
 		}
 	}
 	return typ
@@ -124,11 +124,33 @@ func (s *Smither) isScalarType(t *types.T) bool {
 	return false
 }
 
-func (s *Smither) randType() *types.T {
+func (s *Smither) makeRandTupleType() *types.T {
+	numTyps := s.rnd.Intn(3) + 1
+	typs := make([]*types.T, numTyps)
+	for i := range typs {
+		typs[i], _ = s.randType()
+	}
+	return types.MakeTuple(typs)
+}
+
+func (s *Smither) randType() (*types.T, tree.ResolvableTypeReference) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	seedTypes := randgen.SeedTypes
 	if s.types != nil {
+		if !s.simpleScalarTypes && len(s.types.tableImplicitRecordTypes) > 0 {
+			// If we have some implicit record type names, then choose them with
+			// some probability, proportional to the number of such types, but
+			// no more than 30%.
+			p := 0.05 * float64(len(s.types.tableImplicitRecordTypes))
+			if p > 0.3 {
+				p = 0.3
+			}
+			if s.rnd.Float64() < p {
+				idx := s.rnd.Intn(len(s.types.tableImplicitRecordTypes))
+				return s.types.tableImplicitRecordTypes[idx], s.types.tableImplicitRecordTypeNames[idx]
+			}
+		}
 		seedTypes = s.types.seedTypes
 	}
 	var typ *types.T
@@ -148,13 +170,14 @@ func (s *Smither) randType() *types.T {
 		}
 		break
 	}
-	return typ
+	return typ, typ
 }
 
 func (s *Smither) makeDesiredTypes() []*types.T {
 	var typs []*types.T
 	for {
-		typs = append(typs, s.randType())
+		typ, _ := s.randType()
+		typs = append(typs, typ)
 		if s.d6() < 2 || !s.canRecurse() {
 			break
 		}
@@ -163,10 +186,12 @@ func (s *Smither) makeDesiredTypes() []*types.T {
 }
 
 type typeInfo struct {
-	udts        []*types.T
-	udtNames    []tree.TypeName
-	seedTypes   []*types.T
-	scalarTypes []*types.T
+	udts                         []*types.T
+	udtNames                     []tree.TypeName
+	seedTypes                    []*types.T
+	scalarTypes                  []*types.T
+	tableImplicitRecordTypes     []*types.T
+	tableImplicitRecordTypeNames []tree.ResolvableTypeReference
 }
 
 // ResolveType implements the tree.TypeReferenceResolver interface.

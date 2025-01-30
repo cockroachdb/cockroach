@@ -26,6 +26,9 @@ func TestChangefeedNemeses(t *testing.T) {
 
 	testutils.RunValues(t, "nemeses_options=", cdctest.NemesesOptions, func(t *testing.T, nop cdctest.NemesesOption) {
 		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			if nop.EnableSQLSmith {
+				skip.UnderDeadlock(t, "takes too long under deadlock")
+			}
 			rng, seed := randutil.NewPseudoRand()
 			t.Logf("random seed: %d", seed)
 
