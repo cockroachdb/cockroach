@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kafkaauth",
@@ -8,6 +8,7 @@ go_library(
         "sasl_msk.go",
         "sasl_oauth.go",
         "sasl_plain.go",
+        "sasl_proprietary_oauth.go",
         "sasl_scram.go",
         "scram_client.go",
     ],
@@ -15,6 +16,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/util/timeutil",
         "@com_github_aws_aws_msk_iam_sasl_signer_go//signer",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_ibm_sarama//:sarama",
@@ -26,5 +28,17 @@ go_library(
         "@com_github_xdg_go_scram//:scram",
         "@org_golang_x_oauth2//:oauth2",
         "@org_golang_x_oauth2//clientcredentials",
+    ],
+)
+
+go_test(
+    name = "kafkaauth_test",
+    srcs = ["sasl_proprietary_oauth_test.go"],
+    embed = [":kafkaauth"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
