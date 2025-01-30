@@ -78,7 +78,6 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 			context.Background(),
 			sqlstats.IteratorOptions{},
 			func(
-				ctx context.Context,
 				statistics *appstatspb.CollectedStatementStatistics,
 			) error {
 				var found bool
@@ -197,7 +196,6 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 			context.Background(),
 			sqlstats.IteratorOptions{},
 			func(
-				ctx context.Context,
 				statistics *appstatspb.CollectedStatementStatistics,
 			) error {
 				require.Equal(t, "testdb", statistics.Key.Database)
@@ -295,7 +293,6 @@ func TestSQLStatsTxnStatsBulkIngest(t *testing.T) {
 			context.Background(),
 			sqlstats.IteratorOptions{},
 			func(
-				ctx context.Context,
 				statistics *appstatspb.CollectedTransactionStatistics,
 			) error {
 				foundStats[statistics.TransactionFingerprintID] = statistics.Stats.Count
@@ -626,7 +623,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			err = statsCollector.IterateStatementStats(
 				ctx,
 				sqlstats.IteratorOptions{},
-				func(_ context.Context, s *appstatspb.CollectedStatementStatistics) error {
+				func(s *appstatspb.CollectedStatementStatistics) error {
 					stats = append(stats, s)
 					return nil
 				},
@@ -1751,12 +1748,12 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	require.Equal(t, expectedCountStats, consumedTxnCount)
 
 	// Assert that no stats left after ConsumeStats func is executed.
-	err = sqlStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, _ *appstatspb.CollectedStatementStatistics) error {
+	err = sqlStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(_ *appstatspb.CollectedStatementStatistics) error {
 		require.Fail(t, "no stats should be available after calling ConsumeStats func")
 		return nil
 	})
 	require.NoError(t, err)
-	err = sqlStats.IterateTransactionStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, _ *appstatspb.CollectedTransactionStatistics) error {
+	err = sqlStats.IterateTransactionStats(context.Background(), sqlstats.IteratorOptions{}, func(_ *appstatspb.CollectedTransactionStatistics) error {
 		require.Fail(t, "no stats should be available after calling ConsumeStats func")
 		return nil
 	})

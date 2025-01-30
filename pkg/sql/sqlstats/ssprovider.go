@@ -9,7 +9,6 @@
 package sqlstats
 
 import (
-	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,12 +39,12 @@ type IteratorOptions struct {
 // StatementVisitor is the callback that is invoked when caller iterate through
 // all statement statistics using IterateStatementStats(). If an error is
 // encountered when calling the visitor, the iteration is aborted.
-type StatementVisitor func(context.Context, *appstatspb.CollectedStatementStatistics) error
+type StatementVisitor func(stats *appstatspb.CollectedStatementStatistics) error
 
 // TransactionVisitor is the callback that is invoked when caller iterate through
 // all transaction statistics using IterateTransactionStats(). If an error is
 // encountered when calling the visitor, the iteration is aborted.
-type TransactionVisitor func(context.Context, *appstatspb.CollectedTransactionStatistics) error
+type TransactionVisitor func(stats *appstatspb.CollectedTransactionStatistics) error
 
 // AggregatedTransactionVisitor is the callback invoked when iterate through
 // transaction statistics collected at the application level using

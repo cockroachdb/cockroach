@@ -884,13 +884,13 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 		srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					ConsumeStmtStatsInterceptor: func(ctx context.Context, stats *appstatspb.CollectedStatementStatistics) error {
+					ConsumeStmtStatsInterceptor: func(stats *appstatspb.CollectedStatementStatistics) error {
 						if stats.Key.App == appName {
 							flushedStmtStats++
 						}
 						return nil
 					},
-					ConsumeTxnStatsInterceptor: func(ctx context.Context, stats *appstatspb.CollectedTransactionStatistics) error {
+					ConsumeTxnStatsInterceptor: func(stats *appstatspb.CollectedTransactionStatistics) error {
 						if stats.App == appName {
 							flushedTxnStats++
 						}
@@ -1095,7 +1095,7 @@ func verifyInMemoryStatsCorrectness(
 	t *testing.T, tcs []testCase, statsProvider *persistedsqlstats.PersistedSQLStats,
 ) {
 	for _, tc := range tcs {
-		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(statistics *appstatspb.CollectedStatementStatistics) error {
 			if tc.stmtNoConst == statistics.Key.Query {
 				require.Equal(t, tc.count, statistics.Stats.Count, "fingerprint: %s", tc.stmtNoConst)
 			}
@@ -1124,7 +1124,7 @@ func verifyInMemoryStatsEmpty(t *testing.T, statsProvider *persistedsqlstats.Per
 	fingerprintCount := statsProvider.GetTotalFingerprintCount()
 	var count int64
 	err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+		func(statistics *appstatspb.CollectedStatementStatistics) error {
 			// We should have cleared the sql stats containers on flush.
 			if statistics.Key.App != "" && !strings.HasPrefix(statistics.Key.App, catconstants.InternalAppNamePrefix) {
 				return errors.Newf("unexpected non-internal statement: %s from app %s",
@@ -1136,7 +1136,7 @@ func verifyInMemoryStatsEmpty(t *testing.T, statsProvider *persistedsqlstats.Per
 	require.NoError(t, err)
 
 	err = statsProvider.SQLStats.IterateTransactionStats(context.Background(), sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
+		func(statistics *appstatspb.CollectedTransactionStatistics) error {
 			// We should have cleared the sql stats containers on flush.
 			if statistics.App != "" && !strings.HasPrefix(statistics.App, catconstants.InternalAppNamePrefix) {
 				return errors.Newf("unexpected non-internal transaction from app %s", statistics.App)

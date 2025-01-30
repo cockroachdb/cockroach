@@ -58,7 +58,7 @@ func TestSampledStatsCollection(t *testing.T) {
 				IterateStatementStats(
 					ctx,
 					sqlstats.IteratorOptions{},
-					func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+					func(statistics *appstatspb.CollectedStatementStatistics) error {
 						if statistics.Key.Query == key.Query &&
 							statistics.Key.ImplicitTxn == key.ImplicitTxn &&
 							statistics.Key.Database == key.Database {
@@ -85,7 +85,7 @@ func TestSampledStatsCollection(t *testing.T) {
 			IterateTransactionStats(
 				ctx,
 				sqlstats.IteratorOptions{},
-				func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
+				func(statistics *appstatspb.CollectedTransactionStatistics) error {
 					if statistics.TransactionFingerprintID == key {
 						stats = statistics
 					}

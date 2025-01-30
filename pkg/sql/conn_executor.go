@@ -725,7 +725,7 @@ func (s *Server) GetUnscrubbedStmtStats(
 	ctx context.Context,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
 	var stmtStats []appstatspb.CollectedStatementStatistics
-	stmtStatsVisitor := func(_ context.Context, stat *appstatspb.CollectedStatementStatistics) error {
+	stmtStatsVisitor := func(stat *appstatspb.CollectedStatementStatistics) error {
 		stmtStats = append(stmtStats, *stat)
 		return nil
 	}
@@ -744,7 +744,7 @@ func (s *Server) GetUnscrubbedTxnStats(
 	ctx context.Context,
 ) ([]appstatspb.CollectedTransactionStatistics, error) {
 	var txnStats []appstatspb.CollectedTransactionStatistics
-	txnStatsVisitor := func(_ context.Context, stat *appstatspb.CollectedTransactionStatistics) error {
+	txnStatsVisitor := func(stat *appstatspb.CollectedTransactionStatistics) error {
 		txnStats = append(txnStats, *stat)
 		return nil
 	}
@@ -771,7 +771,7 @@ func (s *Server) getScrubbedStmtStats(
 	salt := ClusterSecret.Get(&s.cfg.Settings.SV)
 
 	var scrubbedStats []appstatspb.CollectedStatementStatistics
-	stmtStatsVisitor := func(_ context.Context, stat *appstatspb.CollectedStatementStatistics) error {
+	stmtStatsVisitor := func(stat *appstatspb.CollectedStatementStatistics) error {
 		if limit <= (len(scrubbedStats)) {
 			return nil
 		}

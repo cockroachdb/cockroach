@@ -215,7 +215,7 @@ func (s *StatsCollector) SetStatementSampled(
 // should be updated accordingly.
 func (s *StatsCollector) UpgradeImplicitTxn(ctx context.Context) error {
 	err := s.currentTransactionStatementStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
-		func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+		func(statistics *appstatspb.CollectedStatementStatistics) error {
 			statistics.Key.ImplicitTxn = false
 			return nil
 		})

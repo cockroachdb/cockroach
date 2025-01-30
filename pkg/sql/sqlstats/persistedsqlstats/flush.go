@@ -90,14 +90,14 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 
 	flushBegin := s.getTimeNow()
 	s.SQLStats.ConsumeStats(ctx, stopper,
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+		func(statistics *appstatspb.CollectedStatementStatistics) error {
 			s.doFlush(ctx, func() error {
 				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
 			}, "failed to flush statement statistics" /* errMsg */)
 
 			return nil
 		},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
+		func(statistics *appstatspb.CollectedTransactionStatistics) error {
 			s.doFlush(ctx, func() error {
 				return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)
 			}, "failed to flush transaction statistics" /* errMsg */)

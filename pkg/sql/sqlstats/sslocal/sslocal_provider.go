@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
@@ -114,12 +115,14 @@ func (s *SQLStats) GetLastReset() time.Time {
 }
 
 func (s *SQLStats) IterateStatementStats(
-	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
+	ctx context.Context,
+	options sqlstats.IteratorOptions,
+	visitor func(stats *appstatspb.CollectedStatementStatistics) error,
 ) error {
 	iter := s.StmtStatsIterator(options)
 
 	for iter.Next() {
-		if err := visitor(ctx, iter.Cur()); err != nil {
+		if err := visitor(iter.Cur()); err != nil {
 			return err
 		}
 	}
@@ -167,7 +170,7 @@ func (s *SQLStats) ConsumeStats(
 
 			for _, stat := range stmtStats {
 				stat := stat
-				if err := stmtVisitor(ctx, stat); err != nil {
+				if err := stmtVisitor(stat); err != nil {
 					log.Warningf(ctx, "failed to consume statement statistics, %s", err.Error())
 				}
 			}
@@ -186,7 +189,7 @@ func (s *SQLStats) ConsumeStats(
 
 			for _, stat := range txnStats {
 				stat := stat
-				if err := txnVisitor(ctx, stat); err != nil {
+				if err := txnVisitor(stat); err != nil {
 					log.Warningf(ctx, "failed to consume transaction statistics, %s", err.Error())
 				}
 			}
@@ -208,13 +211,15 @@ func (s *SQLStats) StmtStatsIterator(options sqlstats.IteratorOptions) StmtStats
 }
 
 func (s *SQLStats) IterateTransactionStats(
-	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
+	ctx context.Context,
+	options sqlstats.IteratorOptions,
+	visitor func(stats *appstatspb.CollectedTransactionStatistics) error,
 ) error {
 	iter := s.TxnStatsIterator(options)
 
 	for iter.Next() {
 		stats := iter.Cur()
-		if err := visitor(ctx, stats); err != nil {
+		if err := visitor(stats); err != nil {
 			return err
 		}
 	}
