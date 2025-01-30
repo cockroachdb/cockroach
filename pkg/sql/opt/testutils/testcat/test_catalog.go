@@ -477,6 +477,7 @@ func (tc *Catalog) GetDependencyDigest() cat.DependencyDigest {
 	tc.dependencyDigest++
 	return cat.DependencyDigest{
 		LeaseGeneration: tc.dependencyDigest,
+		CurrentUser:     tc.currentUser,
 	}
 }
 

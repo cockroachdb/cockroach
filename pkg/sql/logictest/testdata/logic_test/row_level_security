@@ -567,16 +567,15 @@ nationals NL
 statement ok
 set role buck
 
-# TODO(136717): Reusing the statement cache prevents recompiling a new plan,
-# which leads to incorrect results in this case.
+# Retry the same query issue before to ensure memo is properly invalidated.
 query TT
 select team, league from bbteams where team != 'cardinals' order by league, team;
 ----
 jays AL
 orioles AL
 tigers AL
-nationals NL
 
+# Try another query we know isn't in the statement cache.
 query TT
 select team, league from bbteams where team != 'astros' order by league, team;
 ----
@@ -595,14 +594,14 @@ statement ok
 set role buck;
 
 # This is the same query as before, but since admin changed, we will see all of the rows.
-# TODO(136717): We are mistakenly reusing the statement plan here. So we see the rows as if
-# the policies were applied.
 query TT
 select team, league from bbteams where team != 'astros' order by league, team;
 ----
 jays AL
 orioles AL
 tigers AL
+cardinals NL
+nationals NL
 
 # Retry with a query never tried before so we avoid the statement cache.
 query TT
@@ -619,6 +618,20 @@ set role root
 
 statement ok
 REVOKE admin FROM buck;
+
+statement ok
+set role buck
+
+# Retry same query we ran before to ensure it's properly invalidated in the statement cache.
+query TT
+select team, league from bbteams where team != 'mariners' order by league, team;
+----
+jays AL
+orioles AL
+tigers AL
+
+statement ok
+set role root
 
 # Add policies that apply to other commands. Only SELECT will return rows.
 statement ok
