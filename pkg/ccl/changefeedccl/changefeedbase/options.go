@@ -149,6 +149,7 @@ const (
 	OptEnvelopeDeprecatedRow EnvelopeType = `deprecated_row`
 	OptEnvelopeWrapped       EnvelopeType = `wrapped`
 	OptEnvelopeBare          EnvelopeType = `bare`
+	OptEnvelopeEnriched      EnvelopeType = `enriched`
 
 	OptFormatJSON    FormatType = `json`
 	OptFormatAvro    FormatType = `avro`
@@ -239,8 +240,8 @@ const (
 	Topics = `topics`
 )
 
-func makeStringSet(opts ...string) map[string]struct{} {
-	res := make(map[string]struct{}, len(opts))
+func makeStringSet[T ~string](opts ...T) map[T]struct{} {
+	res := make(map[T]struct{}, len(opts))
 	for _, opt := range opts {
 		res[opt] = struct{}{}
 	}
@@ -336,7 +337,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptCursor:                             timestampOption,
 	OptCustomKeyColumn:                    stringOption,
 	OptEndTime:                            timestampOption,
-	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare"),
+	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare", "enriched"),
 	OptFormat:                             enum("json", "avro", "csv", "experimental_avro", "parquet"),
 	OptFullTableName:                      flagOption,
 	OptKeyInValue:                         flagOption,
@@ -390,6 +391,12 @@ var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
 var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig)
+
+// smth like this?
+// TODO: cdcquery forbidden alsog
+var KafkaValidEnvelopeTypes = makeStringSet(OptEnvelopeKeyOnly, OptEnvelopeRow, OptEnvelopeWrapped, OptEnvelopeBare, OptEnvelopeEnriched)
+var PubsubValidEnvelopeTypes = makeStringSet(OptEnvelopeKeyOnly, OptEnvelopeRow, OptEnvelopeWrapped, OptEnvelopeBare, OptEnvelopeEnriched)
+var WebhookValidEnvelopeTypes = makeStringSet(OptEnvelopeKeyOnly, OptEnvelopeRow, OptEnvelopeWrapped, OptEnvelopeBare, OptEnvelopeEnriched)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -842,6 +849,11 @@ func (e EncodingOptions) Validate() error {
 	if e.Format != OptFormatJSON && e.EncodeJSONValueNullAsObject {
 		return errors.Errorf(`%s is only usable with %s=%s`, OptEncodeJSONValueNullAsObject, OptFormat, OptFormatJSON)
 	}
+	if e.Envelope == OptEnvelopeEnriched && !(e.Format == OptFormatJSON || e.Format == OptFormatAvro) {
+		return errors.Errorf(`%s=%s is only usable with %s=%s/%s`, OptEnvelope, OptEnvelopeEnriched, OptFormat, OptFormatJSON, OptFormatAvro)
+	}
+
+	// TODO: what's the reasoning here?
 	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
 		requiresWrap := []struct {
 			k string

@@ -152,9 +152,6 @@ func maybeHelpfulErrorMessage(saslEnabled bool, u *changefeedbase.SinkURL) error
 			changefeedbase.SinkParamSASLTokenURL,
 			changefeedbase.SinkParamSASLGrantType,
 			changefeedbase.SinkParamSASLScopes,
-			changefeedbase.SinkParamSASLAwsIAMRoleArn,
-			changefeedbase.SinkParamSASLAwsRegion,
-			changefeedbase.SinkParamSASLAwsIAMSessionName,
 		}
 		for _, p := range saslOnlyParams {
 			if u.PeekParam(p) != "" {

@@ -953,15 +953,32 @@ func validateSink(
 		))
 	}
 
+	if details.Opts[changefeedbase.OptEnvelope] == string(changefeedbase.OptEnvelopeEnriched) && details.Select != `` {
+		return errors.Newf("envelope %s is incompatible with SELECT statement", changefeedbase.OptEnvelopeEnriched)
+	}
+
 	var nilOracle timestampLowerBoundOracle
 	canarySink, err := getAndDialSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
 		nilOracle, p.User(), jobID, sli)
 	if err != nil {
 		return err
 	}
+	sinkTy := canarySink.getConcreteType()
 	if err := canarySink.Close(); err != nil {
 		return err
 	}
+
+	// envelope=enriched is only allowed for non-query feeds and certain sinks.
+	if details.Opts[changefeedbase.OptEnvelope] == string(changefeedbase.OptEnvelopeEnriched) {
+		if details.Select != `` {
+			return errors.Newf("envelope %s is incompatible with SELECT statement", changefeedbase.OptEnvelopeEnriched)
+		}
+		allowedSinkTypes := map[sinkType]struct{}{sinkTypeNull: {}, sinkTypePubsub: {}, sinkTypeKafka: {}, sinkTypeWebhook: {}, sinkTypeSinklessBuffer: {}}
+		if _, ok := allowedSinkTypes[sinkTy]; !ok {
+			return errors.Newf("envelope %s is incompatible with %s sink", changefeedbase.OptEnvelopeEnriched, sinkTy)
+		}
+	}
+
 	// If there's no projection we may need to force some options to ensure messages
 	// have enough information.
 	if details.Select == `` {
