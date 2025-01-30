@@ -2,6 +2,11 @@
 # but there's no way to encapsulate that in logictests.
 skip_on_retry
 
+# This test file is focused specifically on testing schema changes in
+# transactions, so we disable autocommit behavior.
+statement ok
+SET autocommit_before_ddl = false
+
 subtest create_and_add_fk_in_same_txn
 
 statement ok

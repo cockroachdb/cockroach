@@ -2700,6 +2700,8 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 				defer cleanupFn()
 
 				// Create a database with a type.
+				sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = false")
+				sqlDB.Exec(t, "SET autocommit_before_ddl = false")
 				sqlDB.Exec(t, `
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
@@ -11086,6 +11088,7 @@ func TestBackupRestoreForeignKeys(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE DATABASE test`)
 	sqlDB.Exec(t, `SET database = test`)
+	sqlDB.Exec(t, `SET autocommit_before_ddl = false`)
 	sqlDB.Exec(t, `
 CREATE TABLE circular (k INT8 PRIMARY KEY, selfid INT8 UNIQUE);
 ALTER TABLE circular ADD CONSTRAINT self_fk FOREIGN KEY (selfid) REFERENCES circular (selfid);
@@ -11093,6 +11096,7 @@ CREATE TABLE parent (k INT8 PRIMARY KEY, j INT8 UNIQUE);
 CREATE TABLE child (k INT8 PRIMARY KEY, parent_i INT8 REFERENCES parent, parent_j INT8 REFERENCES parent (j));
 CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 `)
+	sqlDB.Exec(t, `RESET autocommit_before_ddl`)
 
 	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, localFoo)
 

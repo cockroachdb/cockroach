@@ -226,8 +226,10 @@ func TestFailedInsights(t *testing.T) {
 		if testRedacted {
 			conn = s.SQLConn(t, serverutils.User("testuser"))
 		}
-
-		_, err := conn.Exec("SET SESSION application_name=$1", appName)
+		conn.SetMaxOpenConns(1)
+		_, err := conn.Exec("SET autocommit_before_ddl = false")
+		require.NoError(t, err)
+		_, err = conn.Exec("SET SESSION application_name=$1", appName)
 		require.NoError(t, err)
 
 		testCases := []struct {
@@ -393,7 +395,6 @@ WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 			require.Equal(t, tc.problems, replacedSlowProblems, "received: %s, used to compare: %s", problems, replacedSlowProblems)
 
 		}
-
 	})
 }
 

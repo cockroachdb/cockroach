@@ -202,11 +202,21 @@ query TTT
 SELECT global_id, owner, database FROM system.prepared_transactions
 ----
 
+statement ok
+SET autocommit_before_ddl = false
 
 # Verify prepare must be executed inside a transaction block.
 statement error pgcode 25P01 there is no transaction in progress
 PREPARE TRANSACTION 'implicit-txn'
 
+statement ok
+RESET autocommit_before_ddl
+
+query T noticetrace
+PREPARE TRANSACTION 'implicit-txn'
+----
+WARNING: there is no transaction in progress
+SQLSTATE: 25P01
 
 # Verify commit/rollback cannot be executed inside a transaction block.
 statement ok

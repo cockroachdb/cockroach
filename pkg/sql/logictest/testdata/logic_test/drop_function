@@ -63,6 +63,9 @@ DROP FUNCTION IF EXISTS f_not_existing;
 statement error pgcode 42883 pq: unknown function: f_not_existing\(\)
 DROP FUNCTION f_not_existing;
 
+statement ok
+SET autocommit_before_ddl = false
+
 # drop a function twice should fail.
 statement error pgcode 42883 pq: function f_test_drop\(\) does not exist
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -72,6 +75,9 @@ COMMIT;
 
 statement ok
 ROLLBACK;
+
+statement ok
+RESET autocommit_before_ddl
 
 statement error pgcode 42883 procedure f_test_drop\(\) does not exist
 DROP PROCEDURE f_test_drop
