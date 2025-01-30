@@ -7,6 +7,7 @@ package xform
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/pheromone"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -627,6 +629,12 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	// all else being equal.
 	if candidate.Relational().Cardinality.IsUnbounded() {
 		cost.C += cpuCostFactor
+	}
+
+	if pheromone.VisibleToPheromone(candidate) &&
+		!required.Pheromone.Any() && !required.Pheromone.Matches(candidate.Op()) {
+		fmt.Println("setting pheromone mismatch penalty for", candidate, "due to mismatch with", required.Pheromone)
+		cost.Flags.PheromoneMismatchPenalty = true
 	}
 
 	if !cost.Less(memo.MaxCost) {

@@ -911,6 +911,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if cost.Flags.FullScanPenalty {
 				b.WriteString(" full-scan-penalty")
 			}
+			if cost.Flags.PheromoneMismatchPenalty {
+				b.WriteString(" pheromone-mismatch-penalty")
+			}
 			if cost.Flags.HugeCostPenalty {
 				b.WriteString(" huge-cost-penalty")
 			}

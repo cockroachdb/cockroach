@@ -44,6 +44,7 @@ go_library(
         "//pkg/sql/opt/ordering",
         "//pkg/sql/opt/partialidx",
         "//pkg/sql/opt/partition",
+        "//pkg/sql/opt/pheromone",
         "//pkg/sql/opt/props",
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/rowinfra",

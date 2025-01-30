@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pheromone",
+    srcs = ["pheromone.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/pheromone",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/util/json",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

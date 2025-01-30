@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -3724,6 +3725,7 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
 	// CockroachDB extension.
 	`catalog_digest_staleness_check_enabled`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`catalog_digest_staleness_check_enabled`),
@@ -3740,6 +3742,24 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 		Hidden:        true,
+	},
+
+	// CockroachDB extension.
+	`pheromone`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			p, err := physical.PheromoneFromString(s)
+			if err != nil {
+				return err
+			}
+			m.SetPheromone(p.String())
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().Pheromone, nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return ""
+		},
 	},
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/pheromone"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,7 +37,8 @@ func CanProvidePhysicalProps(
 	// need to check for that.
 	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
 	canProvideDistribution := e.Op() == opt.DistributeOp || distribution.CanProvide(ctx, evalCtx, e, &required.Distribution)
-	return canProvideOrdering && canProvideDistribution
+	canProvidePheromone := !required.Pheromone.HasAlternates()
+	return canProvideOrdering && canProvideDistribution && canProvidePheromone
 }
 
 // BuildChildPhysicalProps returns the set of physical properties required of
@@ -51,6 +53,23 @@ func BuildChildPhysicalProps(
 	mem *memo.Memo, parent memo.RelExpr, nth int, parentProps *physical.Required,
 ) *physical.Required {
 	var childProps physical.Required
+
+	/*
+		// a hack here to handle pheromone alternates...
+		if pheromone.VisibleToPheromone(parent) && parentProps.Pheromone.HasAlternates() {
+			childProps = *parentProps
+			matchingAlternates := parentProps.Pheromone.GetMatchingAlternates(parent.Op())
+			if len(matchingAlternates) == 0 {
+				childProps.Pheromone = &physical.NonePheromone
+			} else {
+				if len(matchingAlternates) <= nth {
+					fmt.Println("BuildChildPhysicalProps cannot find alternate", nth, "in", matchingAlternates)
+				}
+				childProps.Pheromone = matchingAlternates[nth]
+			}
+			return mem.InternPhysicalProps(&childProps)
+		}
+	*/
 
 	// ScalarExprs don't support required physical properties; don't build
 	// physical properties for them.
@@ -83,6 +102,8 @@ func BuildChildPhysicalProps(
 
 	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
 	childProps.Distribution = distribution.BuildChildRequired(parent, &parentProps.Distribution, nth)
+	// needs to be aware of the current operator, I think, to skip over projection and explain
+	childProps.Pheromone = pheromone.BuildChildRequired(parent, parentProps.Pheromone, nth)
 
 	switch parent.Op() {
 	case opt.LimitOp:

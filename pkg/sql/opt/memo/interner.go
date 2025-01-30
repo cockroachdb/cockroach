@@ -643,12 +643,18 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	h.HashOrderingChoice(val.Ordering)
 	h.HashFloat64(val.LimitHint)
 	h.HashDistribution(val.Distribution)
+	h.HashPheromone(val.Pheromone)
 }
 
 func (h *hasher) HashDistribution(val physical.Distribution) {
 	for _, region := range val.Regions {
 		h.HashString(region)
 	}
+}
+
+func (h *hasher) HashPheromone(val *physical.Pheromone) {
+	// this is a hack
+	h.HashString(val.String())
 }
 
 func (h *hasher) HashLocking(val opt.Locking) {

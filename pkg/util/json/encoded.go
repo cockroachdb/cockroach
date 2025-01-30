@@ -596,11 +596,11 @@ func (j *jsonEncoded) Compare(other JSON) (_ int, err error) {
 	// We must first check for the special case of empty arrays, which are the
 	// minimum JSON value.
 	switch {
-	case isEmptyArray(j) && isEmptyArray(other):
+	case IsEmptyArray(j) && IsEmptyArray(other):
 		return 0, nil
-	case isEmptyArray(j):
+	case IsEmptyArray(j):
 		return -1, nil
-	case isEmptyArray(other):
+	case IsEmptyArray(other):
 		return 1, nil
 	}
 	if cmp := cmpJSONTypes(j.Type(), other.Type()); cmp != 0 {

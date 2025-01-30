@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/pheromone"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -160,11 +161,28 @@ func (b *Builder) buildExplainOpt(
 	return ep, b.outputColsFromList(explain.ColList), nil
 }
 
+func (b *Builder) buildExplainPheromone(
+	explain *memo.ExplainExpr,
+) (_ execPlan, outputCols colOrdMap, err error) {
+	p := pheromone.PheromoneFromExpr(explain.Input)
+	var envOpts exec.ExplainEnvData
+	var ep execPlan
+	ep.root, err = b.factory.ConstructExplainOpt(p.String(), envOpts)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	return ep, b.outputColsFromList(explain.ColList), nil
+}
+
 func (b *Builder) buildExplain(
 	explainExpr *memo.ExplainExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
 	if explainExpr.Options.Mode == tree.ExplainOpt {
 		return b.buildExplainOpt(explainExpr)
+	}
+
+	if explainExpr.Options.Mode == tree.ExplainPheromone {
+		return b.buildExplainPheromone(explainExpr)
 	}
 
 	var ep execPlan
