@@ -4010,7 +4010,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// Session is considered active when executing a transaction.
 		ex.totalActiveTimeStopWatch.Start()
 
-		if err := ex.maybeSetSQLLivenessSessionAndGeneration(); err != nil {
+		if err := ex.maybeSetSQLLivenessSession(); err != nil {
 			return advanceInfo{}, err
 		}
 	case txnCommit:
@@ -4115,7 +4115,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// In addition to resetting the extraTxnState, the restart event may
 		// also need to reset the sqlliveness.Session.
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)
-		if err := ex.maybeSetSQLLivenessSessionAndGeneration(); err != nil {
+		if err := ex.maybeSetSQLLivenessSession(); err != nil {
 			return advanceInfo{}, err
 		}
 	default:
@@ -4186,7 +4186,7 @@ func (ex *connExecutor) waitForTxnJobs() error {
 	return retErr
 }
 
-func (ex *connExecutor) maybeSetSQLLivenessSessionAndGeneration() error {
+func (ex *connExecutor) maybeSetSQLLivenessSession() error {
 	if !ex.server.cfg.Codec.ForSystemTenant() ||
 		ex.server.cfg.TestingKnobs.ForceSQLLivenessSession {
 		// Update the leased descriptor collection with the current sqlliveness.Session.
@@ -4201,8 +4201,6 @@ func (ex *connExecutor) maybeSetSQLLivenessSessionAndGeneration() error {
 		}
 		ex.extraTxnState.descCollection.SetSession(session)
 	}
-	// Reset the lease generation at the same time.
-	ex.extraTxnState.descCollection.ResetLeaseGeneration()
 	return nil
 }
 
