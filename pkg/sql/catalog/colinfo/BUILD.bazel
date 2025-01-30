@@ -16,6 +16,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/docs",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
@@ -24,7 +25,9 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",

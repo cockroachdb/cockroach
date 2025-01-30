@@ -1,0 +1,140 @@
+# ------------------------------------------------------------------------------
+# CREATE TABLE tests.
+# ------------------------------------------------------------------------------
+
+# Simple vector index.
+statement ok
+CREATE TABLE simple (
+  a INT PRIMARY KEY,
+  vec1 VECTOR(3),
+  VECTOR INDEX (vec1),
+  FAMILY (a, vec1)
+)
+
+query TT
+SHOW CREATE TABLE simple
+----
+simple  CREATE TABLE public.simple (
+          a INT8 NOT NULL,
+          vec1 VECTOR(3) NULL,
+          CONSTRAINT simple_pkey PRIMARY KEY (a ASC),
+          VECTOR INDEX simple_vec1_idx (vec1),
+          FAMILY fam_0_a_vec1 (a, vec1)
+        )
+
+statement ok
+SHOW INDEX FROM simple
+
+# Specify name for index.
+statement ok
+CREATE TABLE alt_syntax (
+  a INT PRIMARY KEY,
+  vec1 VECTOR(3),
+  VECTOR INDEX vec_idx (vec1),
+  FAMILY (a, vec1)
+)
+
+query TT
+SHOW CREATE TABLE alt_syntax
+----
+alt_syntax  CREATE TABLE public.alt_syntax (
+              a INT8 NOT NULL,
+              vec1 VECTOR(3) NULL,
+              CONSTRAINT alt_syntax_pkey PRIMARY KEY (a ASC),
+              VECTOR INDEX vec_idx (vec1),
+              FAMILY fam_0_a_vec1 (a, vec1)
+            )
+
+# Multiple vector indexes on same table.
+statement ok
+CREATE TABLE multiple_indexes (
+  a INT PRIMARY KEY,
+  vec1 VECTOR(3),
+  vec2 VECTOR(1000),
+  VECTOR INDEX (vec1),
+  VECTOR INDEX (vec2),
+  FAMILY (a, vec1, vec2)
+)
+
+query TT
+SHOW CREATE TABLE multiple_indexes
+----
+multiple_indexes  CREATE TABLE public.multiple_indexes (
+                    a INT8 NOT NULL,
+                    vec1 VECTOR(3) NULL,
+                    vec2 VECTOR(1000) NULL,
+                    CONSTRAINT multiple_indexes_pkey PRIMARY KEY (a ASC),
+                    VECTOR INDEX multiple_indexes_vec1_idx (vec1),
+                    VECTOR INDEX multiple_indexes_vec2_idx (vec2),
+                    FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
+                  )
+
+# Use prefix columns in the vector index.
+statement ok
+CREATE TABLE prefix_cols (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  vec1 VECTOR(3),
+  VECTOR INDEX (c DESC, b, vec1),
+  FAMILY (a, b, c, vec1)
+)
+
+query TT
+SHOW CREATE TABLE prefix_cols
+----
+prefix_cols  CREATE TABLE public.prefix_cols (
+               a INT8 NOT NULL,
+               b INT8 NULL,
+               c INT8 NULL,
+               vec1 VECTOR(3) NULL,
+               CONSTRAINT prefix_cols_pkey PRIMARY KEY (a ASC),
+               VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1),
+               FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
+             )
+
+# Use mixed-case column for vector index.
+statement ok
+CREATE TABLE mixed_case (
+  a INT PRIMARY KEY,
+  qUuX VECTOR(3),
+  VECTOR INDEX (qUuX)
+)
+
+# Try to use vector in primary key.
+statement error column a has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
+CREATE TABLE t (a VECTOR(3), PRIMARY KEY (a))
+
+statement error column b has type int, which is not allowed as the last column in a vector index
+CREATE TABLE t (a INT PRIMARY KEY, b INT, VECTOR INDEX (b))
+
+statement error column c has type vector, which is only allowed as the last column in a vector index
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (c, b))
+
+# Try to use inverted indexable type in vector index.
+statement error column b has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+CREATE TABLE t (a INT PRIMARY KEY, b TSVECTOR, c VECTOR(3), VECTOR INDEX (b, c))
+
+statement error the last column in a vector index cannot have the DESC option
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC))
+
+statement error vector column b does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
+CREATE TABLE t (a INT PRIMARY KEY, b VECTOR, VECTOR INDEX (b))
+
+# Try to use vector type in forward index.
+statement error pq: column c has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), INDEX (b, c))
+
+# ------------------------------------------------------------------------------
+# Execution tests.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE exec_test (
+  a INT PRIMARY KEY,
+  vec1 VECTOR(3),
+  VECTOR INDEX (vec1)
+)
+
+statement error unimplemented: execution planning for vector index search is not yet implemented
+INSERT INTO exec_test (a, vec1) values (1, '[1, 2, 3]');

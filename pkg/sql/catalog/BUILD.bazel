@@ -46,6 +46,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlclustersettings",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/intsets",

@@ -12,7 +12,7 @@ CREATE TABLE v (v vector(0))
 statement error pgcode 42601 dimensions for type vector cannot exceed 16000
 CREATE TABLE v (v vector(16001))
 
-statement error column v is of type vector and thus is not indexable
+statement error column v has type vector, which is not indexable in a non-vector index
 CREATE TABLE v (v vector(2) PRIMARY KEY)
 
 statement ok
@@ -188,8 +188,5 @@ CREATE INDEX ON t_vec USING CSPANN (v);
 
 statement ok
 DROP TABLE t_vec;
-
-statement error pgcode 0A000 pq: unimplemented: VECTOR indexes are not yet supported
-CREATE TABLE t_vec (k INT PRIMARY KEY, v VECTOR(128), VECTOR INDEX (v));
 
 subtest end

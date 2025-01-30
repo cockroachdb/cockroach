@@ -85,6 +85,15 @@ var (
 	// index is created. This includes both regular and inverted expression
 	// indexes.
 	ExpressionIndexCounter = telemetry.GetCounterOnce("sql.schema.expression_index")
+
+	// VectorIndexCounter is to be incremented every time a vector index is
+	// created. This includes single-column vector indexes, multi-column vector
+	// indexes, and partial vector indexes.
+	VectorIndexCounter = telemetry.GetCounterOnce("sql.schema.vector_index")
+
+	// MultiColumnVectorIndexCounter is to be incremented every time a
+	// multi-column vector index is created.
+	MultiColumnVectorIndexCounter = telemetry.GetCounterOnce("sql.schema.multi_column_vector_index")
 )
 
 // SchemaChangeIndexCounter is to be incremented for certain CREATE
