@@ -448,6 +448,9 @@ func (v *vectorMutationSearchProcessor) searchAndValidate(
 		if res[0].Vector == nil {
 			return nil, errors.AssertionFailedf("missing partition centroid")
 		}
+		// Unconditionally queue a split fixup - the fixup manager will check that
+		// it's actually needed before executing the fixup.
+		v.helper.idx.Fixups().AddSplit(v.Ctx(), res[0].ParentPartitionKey, res[0].ChildKey.PartitionKey)
 	}
 	return &res[0], nil
 }
