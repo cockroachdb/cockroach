@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -750,6 +751,6 @@ func GetServerCfgStores() base.StoreSpecList {
 // WARNING: consider very carefully whether you should be using this.
 // If you are not writing CCL code that performs command-line flag
 // parsing, you probably should not be using this.
-func GetWALFailoverConfig() *base.WALFailoverConfig {
-	return &serverCfg.WALFailover
+func GetWALFailoverConfig() *storagepb.WALFailover {
+	return &serverCfg.StorageConfig.WALFailover
 }
