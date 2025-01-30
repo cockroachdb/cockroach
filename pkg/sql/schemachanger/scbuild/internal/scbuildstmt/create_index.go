@@ -387,15 +387,11 @@ func processColNodeType(
 		if columnNode.Expr != nil {
 			colNameForErr = columnNode.Expr.String()
 		}
-		panic(tabledesc.NewInvalidInvertedColumnError(colNameForErr,
-			columnType.Type.String()))
+		panic(sqlerrors.NewInvalidInvertedColumnError(colNameForErr, columnType.Type.String()))
 	} else if (n.Type != idxtype.INVERTED || !lastColIdx) && !colinfo.ColumnTypeIsIndexable(columnType.Type) {
 		// Otherwise, check if the column type is indexable.
-		panic(unimplemented.NewWithIssueDetailf(35730,
-			columnType.Type.DebugString(),
-			"column %s is of type %s and thus is not indexable",
-			colName,
-			columnType.Type))
+		panic(sqlerrors.NewColumnNotIndexableError(
+			colName, columnType.Type.Name(), columnType.Type.DebugString()))
 	}
 	return invertedKind
 }

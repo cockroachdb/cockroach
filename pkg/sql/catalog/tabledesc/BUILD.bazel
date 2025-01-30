@@ -21,7 +21,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/docs",
         "//pkg/geo/geopb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -59,6 +58,7 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/util",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
@@ -122,6 +122,7 @@ go_test(
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/semenumpb",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

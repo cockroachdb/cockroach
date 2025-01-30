@@ -1887,9 +1887,6 @@ func NewTableDesc(
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
-			if d.Type == idxtype.VECTOR {
-				return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
-			}
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
@@ -1949,6 +1946,14 @@ func NewTableDesc(
 					ctx, evalCtx.Settings, column, &idx, columns[len(columns)-1]); err != nil {
 					return nil, err
 				}
+			}
+			if d.Type == idxtype.VECTOR {
+				column, err := catalog.MustFindColumnByName(&desc, idx.VectorColumnName())
+				if err != nil {
+					return nil, err
+				}
+				idx.VecConfig.Dims = column.GetType().Width()
+				idx.VecConfig.Seed = evalCtx.GetRNG().Int63()
 			}
 
 			var idxPartitionBy *tree.PartitionBy
@@ -2391,6 +2396,12 @@ func NewTableDesc(
 			}
 			if idx.PartitioningColumnCount() != 0 {
 				telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+			}
+		}
+		if idx.GetType() == idxtype.VECTOR {
+			telemetry.Inc(sqltelemetry.VectorIndexCounter)
+			if idx.NumKeyColumns() > 1 {
+				telemetry.Inc(sqltelemetry.MultiColumnVectorIndexCounter)
 			}
 		}
 		if idx.IsPartial() {
