@@ -246,6 +246,7 @@ var tpccMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`mix`:                      {RuntimeOnly: true},
 			`partitions`:               {RuntimeOnly: true},
+			`ignore-partitions`:        {RuntimeOnly: true},
 			`client-partitions`:        {RuntimeOnly: true},
 			`partition-affinity`:       {RuntimeOnly: true},
 			`partition-strategy`:       {RuntimeOnly: true},
