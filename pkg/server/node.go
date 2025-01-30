@@ -1726,7 +1726,7 @@ func (n *Node) batchInternal(
 	// To avoid log spam for now we only log the trace if the request was an
 	// ExportRequest.
 	if pErr != nil && ctx.Err() != nil && args.IsSingleExportRequest() {
-		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
+		if sp := tracing.SpanFromContext(ctx); sp != nil {
 			recording := sp.GetConfiguredRecording()
 			if recording.Len() != 0 {
 				log.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
@@ -2058,7 +2058,7 @@ func setupSpanForIncomingRPC(
 			tracing.WithServerSpanKind)
 	}
 
-	if newSpan != nil && !newSpan.IsNoop() {
+	if newSpan != nil {
 		newSpan.SetLazyTag("request", ba.ShallowCopy())
 	}
 	return ctx, spanForRequest{

@@ -155,7 +155,7 @@ func StreamServerInterceptor(tracer *tracing.Tracer) grpc.StreamServerIntercepto
 		// workaround for the following issue:
 		//
 		// https://github.com/cockroachdb/cockroach/issues/135686
-		if (sp == nil || sp.IsNoop()) && !tracing.SpanInclusionFuncForServer(tracer, spanMeta) {
+		if sp == nil && !tracing.SpanInclusionFuncForServer(tracer, spanMeta) {
 			return handler(srv, ss)
 		}
 
