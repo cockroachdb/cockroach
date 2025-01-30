@@ -6,6 +6,7 @@
 package ssmemstorage
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -77,7 +78,7 @@ func (s *StmtStatsIterator) Next() bool {
 	}
 
 	statementStats.mu.Lock()
-	data := statementStats.mu.data
+	data := copyDataLocked(statementStats)
 	distSQLUsed := statementStats.mu.distSQLUsed
 	vectorized := statementStats.mu.vectorized
 	fullScan := statementStats.mu.fullScan
@@ -103,6 +104,20 @@ func (s *StmtStatsIterator) Next() bool {
 	}
 
 	return true
+}
+
+// copyDataLocked Copies the statement stat's data object under the mutex.
+// This function requires that there is a lock on the stats object.
+func copyDataLocked(stats *stmtStats) appstatspb.StatementStatistics {
+	stats.mu.AssertHeld()
+	data := stats.mu.data
+	data.Nodes = slices.Clone(data.Nodes)
+	data.KVNodeIDs = slices.Clone(data.KVNodeIDs)
+	data.Regions = slices.Clone(data.Regions)
+	data.PlanGists = slices.Clone(data.PlanGists)
+	data.IndexRecommendations = slices.Clone(data.IndexRecommendations)
+	data.Indexes = slices.Clone(data.Indexes)
+	return data
 }
 
 // Cur returns the appstatspb.CollectedStatementStatistics at the current internal
