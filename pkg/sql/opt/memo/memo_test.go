@@ -538,6 +538,11 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().LegacyVarcharTyping = false
 	notStale()
 
+	evalCtx.SessionData().OptimizerPreferBoundedCardinality = true
+	stale()
+	evalCtx.SessionData().OptimizerPreferBoundedCardinality = false
+	notStale()
+
 	evalCtx.SessionData().Internal = true
 	stale()
 	evalCtx.SessionData().Internal = false

@@ -4004,6 +4004,10 @@ func (m *sessionDataMutator) SetCatalogDigestStalenessCheckEnabled(b bool) {
 	m.data.CatalogDigestStalenessCheckEnabled = b
 }
 
+func (m *sessionDataMutator) SetOptimizerPreferBoundedCardinality(b bool) {
+	m.data.OptimizerPreferBoundedCardinality = b
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

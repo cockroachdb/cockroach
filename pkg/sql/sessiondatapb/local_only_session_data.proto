@@ -594,6 +594,10 @@ message LocalOnlySessionData {
   // CatalogDigestStalenessCheckEnabled is used to enable using the catalog
   // digest information to do fast memo checks.
   bool catalog_digest_staleness_check_enabled = 153;
+  // OptimizerPreferBoundedCardinality instructs the optimizer to prefer query
+  // plans in which every expression has a bounded cardinality over plans with
+  // one or more expressions with unbounded cardinality.
+  bool optimizer_prefer_bounded_cardinality = 154;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
