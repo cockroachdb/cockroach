@@ -60,7 +60,7 @@ type VectorIndexOptions struct {
 	DisableErrorBounds bool
 	// Seed is used to initialize a deterministic random number generator for
 	// testing purposes. If this is zero, then the global random number generator
-	// is used intead.
+	// is used instead.
 	Seed int64
 	// MaxWorkers specifies the maximum number of background workers that can be
 	// created to process fixups for this vector index instance.
