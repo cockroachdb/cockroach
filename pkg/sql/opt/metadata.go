@@ -376,6 +376,23 @@ func (md *Metadata) dependencyDigestEquals(currentDigest *cat.DependencyDigest) 
 	return currentDigest.Equal(&md.digest.depDigest)
 }
 
+// leaseObjectsInMetaData ensures that all references within this metadata
+// are leased to prevent schema changes from modifying the underlying objects
+// excessively.
+func (md *Metadata) leaseObjectsInMetaData(ctx context.Context, optCatalog cat.Catalog) error {
+	for id := range md.dataSourceDeps {
+		if err := optCatalog.LeaseByStableID(ctx, id); err != nil {
+			return err
+		}
+	}
+	for id := range md.routineDeps {
+		if err := optCatalog.LeaseByStableID(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CheckDependencies resolves (again) each database object on which this
 // metadata depends, in order to check the following conditions:
 //  1. The object has not been modified.
@@ -402,6 +419,9 @@ func (md *Metadata) CheckDependencies(
 		evalCtx.AsOfSystemTime == nil &&
 		!evalCtx.Txn.ReadTimestampFixed() &&
 		md.dependencyDigestEquals(&currentDigest) {
+		if err := md.leaseObjectsInMetaData(ctx, optCatalog); err != nil {
+			return false, err
+		}
 		return true, nil
 	}
 
