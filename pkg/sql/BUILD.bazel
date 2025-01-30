@@ -600,6 +600,7 @@ go_library(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/tsearch",
         "//pkg/util/uint128",
+        "//pkg/util/unique",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_crlib//crtime",

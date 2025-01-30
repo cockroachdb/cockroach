@@ -347,6 +347,7 @@ go_library(
         "//pkg/util/tracing/tracingui",
         "//pkg/util/tracing/zipper",
         "//pkg/util/uint128",
+        "//pkg/util/unique",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_cmux//:cmux",
