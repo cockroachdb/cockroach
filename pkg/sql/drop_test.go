@@ -941,6 +941,9 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := tx.Exec(`SET LOCAL autocommit_before_ddl = false`); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := tx.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
@@ -1103,6 +1106,8 @@ WHERE
 
 	codec := s.Codec()
 	txn, err := conn.Begin()
+	require.NoError(t, err)
+	_, err = txn.Exec("SET LOCAL autocommit_before_ddl = false")
 	require.NoError(t, err)
 	// Let's find out our transaction ID for our transaction by running a query.
 	// We'll also use this query to install a refresh span over the table data.

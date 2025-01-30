@@ -544,6 +544,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, `SET autocommit_before_ddl = false`)
 
 	// Create the table and the row entry.
 	r.Exec(t, `

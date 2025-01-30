@@ -3972,12 +3972,16 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	var payloadErr error
 	// If we had an error from DDL statement execution due to the presence of
 	// other concurrent schema changes when attempting a schema change, wait for
-	// the completion of those schema changes first.
+	// the completion of those schema changes. The state machine transition above
+	// (ApplyWithPayload) may have moved the state to NoTxn, so we also need to
+	// check that the txn is open.
 	if p, ok := payload.(payloadWithError); ok {
 		payloadErr = p.errorCause()
-		if descID := scerrors.ConcurrentSchemaChangeDescID(payloadErr); descID != descpb.InvalidID {
-			if err := ex.handleWaitingForConcurrentSchemaChanges(ex.Ctx(), descID); err != nil {
-				return advanceInfo{}, err
+		if _, isOpen := ex.machine.CurState().(stateOpen); isOpen {
+			if descID := scerrors.ConcurrentSchemaChangeDescID(payloadErr); descID != descpb.InvalidID {
+				if err := ex.handleWaitingForConcurrentSchemaChanges(ex.Ctx(), descID); err != nil {
+					return advanceInfo{}, err
+				}
 			}
 		}
 	}

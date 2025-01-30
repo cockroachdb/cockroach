@@ -18,6 +18,9 @@ INSERT INTO foofoo VALUES (10, 'x0');
 CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
 INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 
 exec-sql
@@ -227,6 +230,8 @@ DROP TABLE d.foo;
 DROP TABLE d.foofoo;
 DROP TABLE d.baz;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 
 restore aost=t0
@@ -296,6 +301,8 @@ DROP TABLE d.foo;
 DROP TABLE d.foofoo;
 DROP TABLE d.baz;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 
 exec-sql

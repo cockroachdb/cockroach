@@ -67,6 +67,7 @@ func Example_sql() {
 	// $ cockroach sql
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// CREATE DATABASE
+	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
 	// INSERT 0 1
 	// sql -e select 3 as "3" -e select * from t.f
@@ -108,6 +109,7 @@ func Example_sql() {
 	// count
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// CREATE DATABASE
+	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
 	// x
 	// sql -e copy t.f from stdin
@@ -209,6 +211,7 @@ func Example_misc_table() {
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
 	// CREATE DATABASE
+	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
 	// sql --format=table -e select '  hai' as x
 	//     x
@@ -247,6 +250,7 @@ func Example_in_memory() {
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// CREATE DATABASE
+	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
 	// INSERT 0 1
 	// node ls
@@ -270,6 +274,7 @@ func Example_pretty_print_numerical_strings() {
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
 	// CREATE DATABASE
+	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
 	// sql -e insert into t.t values (e'0', 'positive numerical string')
 	// INSERT 0 1

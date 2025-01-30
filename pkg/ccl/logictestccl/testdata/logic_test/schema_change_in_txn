@@ -12,6 +12,9 @@ skip_on_retry
 subtest index_resolution_does_not_lead_to_new_version
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE DATABASE db;
 CREATE TABLE db.t(i INT PRIMARY KEY, j INT, k INT);
@@ -29,6 +32,9 @@ SELECT (crdb_internal.pb_to_json('desc', descriptor)->'table'->>'version')::INT8
  WHERE id = 'db.t'::regclass;
 ----
 1
+
+statement ok
+RESET autocommit_before_ddl
 
 statement ok
 DROP DATABASE db

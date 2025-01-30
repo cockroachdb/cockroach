@@ -12,6 +12,14 @@ GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser2;
 GRANT SELECT ON crdb_internal.databases, crdb_internal.tables TO testuser2;
 GRANT ALL ON EXTERNAL CONNECTION foo TO testuser2;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SELECT username, path, privileges, grant_options FROM system.privileges order by username, path

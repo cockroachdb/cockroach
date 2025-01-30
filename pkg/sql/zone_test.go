@@ -210,6 +210,10 @@ func TestValidSetShowZones(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, err = txn.Exec("SET LOCAL autocommit_before_ddl = false")
+	if err != nil {
+		t.Fatal(err)
+	}
 	sqlutils.TxnSetZoneConfig(t, sqlDB, txn, "RANGE default", gcOverride)
 	sqlutils.TxnSetZoneConfig(t, sqlDB, txn, "TABLE d.t",
 		fmt.Sprintf("num_replicas = %d", *s.DefaultZoneConfig().NumReplicas)) // this should pick up the overridden default config

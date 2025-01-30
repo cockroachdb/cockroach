@@ -1163,6 +1163,7 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 	// into timestamp.
 	if _, err := sqlDB.Exec(`
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 CREATE DATABASE t;
 CREATE SCHEMA t.sc1;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
@@ -1629,6 +1630,9 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := txRetry.Exec(`SET LOCAL autocommit_before_ddl = false`); err != nil {
+		t.Fatal(err)
+	}
 	_, err = txRetry.Exec("SAVEPOINT cockroach_restart;")
 	if err != nil {
 		t.Fatal(err)
@@ -1744,6 +1748,9 @@ INSERT INTO t.kv VALUES ('a', 'b');
 
 	txRetry, err := sqlDB.Begin()
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txRetry.Exec(`SET LOCAL autocommit_before_ddl = false`); err != nil {
 		t.Fatal(err)
 	}
 

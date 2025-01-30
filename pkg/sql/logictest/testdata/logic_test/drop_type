@@ -24,6 +24,9 @@ statement ok
 CREATE TYPE t AS ENUM ('hello');
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 DROP TYPE t;
 
@@ -32,6 +35,9 @@ DROP TYPE t
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
 
 # We should be able to drop a type multiple times in the same statement.
 statement ok
@@ -216,6 +222,9 @@ CREATE TYPE t4 AS ENUM ('cheers')
 # the dependencies are picked up.
 
 statement ok
+SET autocommit_before_ddl = false;
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE expr ADD COLUMN x BOOL DEFAULT ('hello'::t1 = 'hello'::t1)
 
@@ -254,6 +263,9 @@ DROP TYPE t4
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
 
 # Now add all of the schema elements.
 statement ok

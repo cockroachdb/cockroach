@@ -2,6 +2,9 @@
 # ends up partially committed and partially aborted.
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE TABLE t (x INT); INSERT INTO t (x) VALUES (0);
 
 statement ok
@@ -35,3 +38,6 @@ t  CREATE TABLE public.t (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
    )
+
+statement ok
+RESET autocommit_before_ddl
