@@ -65,8 +65,8 @@ var _ Encoder = &jsonEncoder{}
 func canJSONEncodeMetadata(e changefeedbase.EnvelopeType) bool {
 	// bare envelopes use the _crdb_ key to avoid collisions with column names.
 	// wrapped envelopes can put metadata at the top level because the columns
-	// are nested under the "after:" key.
-	return e == changefeedbase.OptEnvelopeBare || e == changefeedbase.OptEnvelopeWrapped
+	// are nested under the "after:" key. enriched envelopes put metadata in a ".payload.source" object
+	return e == changefeedbase.OptEnvelopeBare || e == changefeedbase.OptEnvelopeWrapped || e == changefeedbase.OptEnvelopeEnriched
 }
 
 // getCachedOrCreate returns cached object, or creates and caches new one.
