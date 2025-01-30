@@ -721,6 +721,21 @@ func (s *statusServer) dialNode(
 	return serverpb.NewStatusClient(conn), nil
 }
 
+// Gossip returns current state of gossip information on the given node
+// which is crucial for monitoring and debugging the gossip protocol in
+// CockroachDB cluster.
+func (t *statusServer) Gossip(
+	ctx context.Context, req *serverpb.GossipRequest,
+) (*gossip.InfoStatus, error) {
+	ctx = t.AnnotateCtx(ctx)
+
+	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	return t.sqlServer.tenantConnect.Gossip(ctx, req)
+}
+
 // Gossip returns gossip network status. It is implemented
 // in the systemStatusServer since the system tenant has
 // access to gossip.
