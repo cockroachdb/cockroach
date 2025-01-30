@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 )
@@ -93,6 +94,28 @@ func (v *ValuesCoreSpec) summary() (string, []string) {
 	}
 	detail := fmt.Sprintf("%s (%d chunks)", humanize.IBytes(bytes), len(v.RawBytes))
 	return "Values", []string{detail}
+}
+
+// summary implements the diagramCellType interface.
+func (v *VectorSearchSpec) summary() (string, []string) {
+	// TODO(drewk): finish this.
+	details := []string{
+		fmt.Sprintf("Nearest Neighbor Target Count: %d", v.TargetNeighborCount),
+		fmt.Sprintf("Query Vector: %s", vector.T(v.QueryVector).String()),
+	}
+	return "VectorSearch", details
+}
+
+// summary implements the diagramCellType interface.
+func (v *VectorMutationSearchSpec) summary() (string, []string) {
+	// TODO(drewk): finish this.
+	details := []string{fmt.Sprintf("Query Vector Col: @%d", v.QueryVectorColumnOrdinal)}
+	if v.IsIndexPut {
+		details = append(details, "Index Put")
+	} else {
+		details = append(details, "Index Delete")
+	}
+	return "VectorMutationSearch", details
 }
 
 // summary implements the diagramCellType interface.
