@@ -598,6 +598,11 @@ message LocalOnlySessionData {
   // plans in which every expression has a bounded cardinality over plans with
   // one or more expressions with unbounded cardinality.
   bool optimizer_prefer_bounded_cardinality = 154;
+  // BufferedWritesEnabled controls whether the buffered writes KV transaction
+  // protocol is used for user queries on the current session. If this variable
+  // is modified in an explicit txn, then the change will be applied only to
+  // future txns on the session.
+  bool buffered_writes_enabled = 155;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
