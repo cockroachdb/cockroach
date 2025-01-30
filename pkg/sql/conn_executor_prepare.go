@@ -228,6 +228,7 @@ func (ex *connExecutor) prepare(
 		if err := ex.maybeUpgradeToSerializable(ctx, stmt); err != nil {
 			return err
 		}
+		// TODO(yuzefovich): consider disabling buffered writes on a DDL.
 
 		if placeholderHints == nil {
 			placeholderHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
