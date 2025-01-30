@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build bazel
-// +build bazel
 
 // process-bep-file is a binary to parse test results from a "build event
 // protocol" binary file, as constructed by
