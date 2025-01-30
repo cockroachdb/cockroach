@@ -457,7 +457,7 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 	grp memo.RelExpr,
 	_ *physical.Required,
 	sp *memo.ScanPrivate,
-	outCols opt.ColSet,
+	passthrough opt.ColSet,
 	vectorCol, distanceCol opt.ColumnID,
 	distanceExpr, queryVector opt.ScalarExpr,
 	limit tree.Datum,
@@ -487,12 +487,12 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 		// Add an index join to get the rest of the columns. The index join is
 		// always necessary because the vector column is not projected by the
 		// VectorSearch operator.
-		indexJoinPrivate := memo.IndexJoinPrivate{Table: sp.Table, Cols: outCols}
+		indexJoinPrivate := memo.IndexJoinPrivate{Table: sp.Table, Cols: sp.Cols}
 		vectorSearch = c.e.f.ConstructIndexJoin(vectorSearch, &indexJoinPrivate)
 
 		// Project the distance column.
 		projections := memo.ProjectionsExpr{c.e.f.ConstructProjectionsItem(distanceExpr, distanceCol)}
-		vectorSearch = c.e.f.ConstructProject(vectorSearch, projections, outCols)
+		vectorSearch = c.e.f.ConstructProject(vectorSearch, projections, passthrough)
 
 		// Build a top-k operator ordering by the distance column and limited by the
 		// NN count to obtain the final result.

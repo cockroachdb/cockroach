@@ -3875,3 +3875,40 @@ top-k
       │    └── fd: (1)-->(2-11)
       └── projections
            └── '[3,1,2]' <-> vec1:9 [as=column15:15, outer=(9), immutable]
+
+# Regression test for failure to project the vector column from the index join.
+exec-ddl
+CREATE TABLE IF NOT EXISTS image_embeddings (
+    id UUID default gen_random_uuid() PRIMARY KEY,
+    photo_id TEXT NOT NULL,
+    photo_url TEXT NOT NULL,
+    description TEXT,
+    embedding vector(5) NOT NULL,
+	VECTOR INDEX (embedding)
+);
+----
+
+opt
+SELECT photo_id, photo_url, description FROM image_embeddings
+ORDER BY embedding <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.036530]'
+LIMIT 5;
+----
+top-k
+ ├── columns: photo_id:2!null photo_url:3!null description:4  [hidden: column8:8]
+ ├── internal-ordering: +8
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── ordering: +8
+ └── project
+      ├── columns: column8:8 photo_id:2!null photo_url:3!null description:4
+      ├── immutable
+      ├── index-join image_embeddings
+      │    ├── columns: photo_id:2!null photo_url:3!null description:4 embedding:5!null
+      │    └── vector-search image_embeddings@image_embeddings_embedding_idx,vector
+      │         ├── columns: id:1!null
+      │         ├── target nearest neighbors: 5
+      │         ├── key: (1)
+      │         └── '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]'
+      └── projections
+           └── embedding:5 <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]' [as=column8:8, outer=(5), immutable]
