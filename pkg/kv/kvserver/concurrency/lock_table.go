@@ -1037,6 +1037,46 @@ type unreplicatedLockHolderInfo struct {
 	// highest lock strength for unreplicated locks is Exclusive.
 	strengths [len(unreplicatedHolderStrengths)]enginepb.TxnSeq
 
+	// The ignoredSeqNums slice is the last-seen ignoredSeqNums
+	// from the acquiring transaction. At a given point in time,
+	// the transaction may have a larger set of ignoredSeqNums.
+	//
+	// The intent is to use this for potential re-acquisition of
+	// unreplicated locks as replicated locks. When doing this
+	// acquisition, we want to avoid clobbering existing replicatd locks.
+	//
+	// Motivating Example:
+	//
+	//    replicated lock @ seq1 (no ignored seq nums)
+	//  unreplicated lock @ seq2 (seq 1 ignored)
+	//
+	//  In this case, when we go to flush our unreplicated lock as
+	//  a replicated lock, we want to write the unreplicated lock
+	//  to the lock table, correctly ignoring the lock a seq1.
+	//
+	//    replicated lock @ seq1 (no ignored seq nums)
+	//  unreplicated lock @ seq2 (no ignored seq nums)
+	//  unreplicated lock @ seq3 (seq 2 ignored)
+	//
+	//  In this case, when we go to flush our unreplicated
+	//  lock@seq 3 as a replicated lock, we want to actually
+	//  preserve the seq 1 lock, we can't do without _some_
+	//  kind of tracking of the ignore sequence numbers.
+	//
+	//  Note in the second case if seq3 has been rolled back since
+	//  we stored the ignoredSeqNums, that is OK, we have a lock
+	//  at seq 1 still. If seq 1 has been rolled back since we
+	//  stored the ingoredSeqNums, that is also OK, because future
+	//  requests will include it in the ignored seq number list
+	//  and we also know there is no way to rollback 1 without
+	//  rolling back 3.
+	//
+	//  We may ask whether the min sequence number in strengths
+	//  above is sufficient. But we dont believe it is, in the
+	//  cases above, it cannot tell you whether or not you need to
+	//  preserve the replicated lock at seq1 or overwrite it.
+	ignoredSeqNums []enginepb.IgnoredSeqNumRange
+
 	// The timestamp at which the unreplicated lock is held. Must not regress.
 	ts hlc.Timestamp
 }
@@ -1074,6 +1114,7 @@ func (ulh *unreplicatedLockHolderInfo) init() {
 // clear removes previously tracked unreplicated lock holder information.
 func (ulh *unreplicatedLockHolderInfo) clear() {
 	ulh.resetStrengths()
+	ulh.ignoredSeqNums = nil
 	ulh.ts = hlc.Timestamp{}
 }
 
@@ -1097,12 +1138,32 @@ func (ulh *unreplicatedLockHolderInfo) minSeqNumber(str lock.Strength) enginepb.
 	return ulh.strengths[unreplicatedLockHolderStrengthToIndexMap[str]]
 }
 
+func (ulh *unreplicatedLockHolderInfo) ignoredSequenceNumbersEqual(
+	acq *roachpb.LockAcquisition,
+) bool {
+	// TODO(ssd): This uses structural equality rather than semantic equality. We
+	// should update this tomake sure that the lists are semantically equivalent
+	// and add an assertion that the inbound set is a superset of the existing
+	// set.
+	if len(ulh.ignoredSeqNums) != len(acq.IgnoredSeqNums) {
+		return false
+	}
+	for i := range ulh.ignoredSeqNums {
+		if ulh.ignoredSeqNums[i] != acq.IgnoredSeqNums[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // acquire updates tracking on the receiver, if necessary[1], to denote the lock
 // is held with the supplied lock strength at the supplied sequence number.
 //
 // [1] We only track the lowest (non-rolled back) sequence number with which a
 // lock is held, as doing so is sufficient.
-func (ulh *unreplicatedLockHolderInfo) acquire(str lock.Strength, seqNum enginepb.TxnSeq) error {
+func (ulh *unreplicatedLockHolderInfo) acquire(
+	str lock.Strength, seqNum enginepb.TxnSeq, ignoredSeqNums []enginepb.IgnoredSeqNumRange,
+) error {
 	if ulh.held(str) && seqNum < ulh.minSeqNumber(str) {
 		// If the lock is already held at the given strength, with a given sequence
 		// number, that sequence number is not allowed to regress. This invariant
@@ -1115,6 +1176,8 @@ func (ulh *unreplicatedLockHolderInfo) acquire(str lock.Strength, seqNum enginep
 	if !ulh.held(str) {
 		ulh.strengths[unreplicatedLockHolderStrengthToIndexMap[str]] = seqNum
 	}
+	ulh.ignoredSeqNums = ignoredSeqNums
+
 	return nil
 }
 
@@ -1142,6 +1205,7 @@ func (ulh *unreplicatedLockHolderInfo) rollbackIgnoredSeqNumbers(
 			ulh.strengths[strIdx] = -1
 		}
 	}
+	ulh.ignoredSeqNums = ignoredSeqNums
 }
 
 func (ulh *unreplicatedLockHolderInfo) isEmpty() bool {
@@ -1175,6 +1239,9 @@ func (ulh *unreplicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 		)
 	}
 	sb.SafeString("]")
+	if len(ulh.ignoredSeqNums) > 0 {
+		sb.Printf(" ign seq: %v", ulh.ignoredSeqNums)
+	}
 }
 
 // Fixed length slice for all supported lock strengths for replicated locks. May
@@ -1476,6 +1543,7 @@ func (tl *txnLock) getLockMode() lock.Mode {
 func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) bool {
 	assert(tl.getLockHolderTxn().ID == acq.Txn.ID,
 		"existing lock transaction is different from the acquisition")
+
 	switch acq.Durability {
 	case lock.Unreplicated:
 		if !tl.unreplicatedInfo.held(acq.Strength) { // unheld lock
@@ -1488,7 +1556,7 @@ func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) boo
 			// idempotent. Strictly speaking, we could tighten this condition to
 			// consider lock re-acquisition at lower timestamps idempotent, as a
 			// lock's timestamp at a given durability never regresses.
-			tl.unreplicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+			tl.unreplicatedInfo.ts.Equal(acq.Txn.WriteTimestamp) && tl.unreplicatedInfo.ignoredSequenceNumbersEqual(acq)
 	case lock.Replicated:
 		// Lock is being re-acquired with the same strength.
 		return tl.replicatedInfo.held(acq.Strength) &&
@@ -1540,6 +1608,7 @@ func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 	if tl.isIdempotentLockAcquisition(acq) {
 		return nil // nothing more to do here.
 	}
+
 	// Forward the lock's timestamp instead of assigning to it blindly.
 	// While lock acquisition uses monotonically increasing timestamps
 	// from the perspective of the transaction's coordinator, this does
@@ -1580,7 +1649,7 @@ func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 	switch acq.Durability {
 	case lock.Unreplicated:
 		tl.unreplicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
-		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence); err != nil {
+		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence, acq.IgnoredSeqNums); err != nil {
 			return err
 		}
 	case lock.Replicated:
@@ -2952,7 +3021,7 @@ func (kl *keyLocks) acquireLock(
 	switch acq.Durability {
 	case lock.Unreplicated:
 		tl.unreplicatedInfo.ts = acq.Txn.WriteTimestamp
-		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence); err != nil {
+		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence, acq.IgnoredSeqNums); err != nil {
 			return err
 		}
 	case lock.Replicated:
