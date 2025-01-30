@@ -412,6 +412,13 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Next: stateAborted{WasUpgraded: fsm.Var("wasUpgraded")},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
+				func() {
+					ts.mu.Lock()
+					defer ts.mu.Unlock()
+					if !ts.mu.hasSavepoints {
+						_ = ts.mu.txn.Rollback(ts.Ctx)
+					}
+				}()
 				ts.setAdvanceInfo(skipBatch, noRewind, txnEvent{eventType: noEvent})
 				return nil
 			},
