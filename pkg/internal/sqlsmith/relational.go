@@ -981,8 +981,11 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 
 	// RoutineLanguage
 	lang := tree.RoutineLangSQL
+	// Simulate RETURNS TABLE syntax of SQL UDFs in 10% cases.
+	returnsTable := s.rnd.Float64() < 0.1
 	if s.coin() {
 		lang = tree.RoutineLangPLpgSQL
+		returnsTable = false
 	}
 	opts = append(opts, lang)
 
@@ -1045,20 +1048,24 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	refs := make(colRefs, paramCnt)
 	for i := 0; i < paramCnt; i++ {
 		// Do not allow collated string types. These are not supported in UDFs.
-		// Do not allow RECORD-type parameters for PL/pgSQL routines.
-		// TODO(#105713): lift the RECORD-type restriction.
-		ptyp := s.randType()
-		for ptyp.Family() == types.CollatedStringFamily ||
-			(lang == tree.RoutineLangPLpgSQL && ptyp.Identical(types.AnyTuple)) {
-			ptyp = s.randType()
+		// Do not allow RECORD-type parameters for SQL routines.
+		// TODO(#105713): lift the RECORD-type restriction for PL/pgSQL.
+		ptyp, ptypResolvable := s.randType()
+		for ptyp.Family() == types.CollatedStringFamily || ptyp.Identical(types.AnyTuple) {
+			ptyp, ptypResolvable = s.randType()
 		}
 		pname := fmt.Sprintf("p%d", i)
 		// TODO(88947): choose VARIADIC once supported too.
-		const numSupportedParamClasses = 4
+		var numAllowedParamClasses = 4
+		if returnsTable {
+			// We cannot use explicit OUT and INOUT parameters when simulating
+			// RETURNS TABLE syntax.
+			numAllowedParamClasses = 2
+		}
 		params[i] = tree.RoutineParam{
 			Name:  tree.Name(pname),
-			Type:  ptyp,
-			Class: tree.RoutineParamClass(s.rnd.Intn(numSupportedParamClasses)),
+			Type:  ptypResolvable,
+			Class: tree.RoutineParamClass(s.rnd.Intn(numAllowedParamClasses)),
 		}
 		if params[i].Class != tree.RoutineParamOut {
 			// OUT parameters aren't allowed to have DEFAULT expressions.
@@ -1086,12 +1093,23 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	// Return a record 50% of the time, which means the UDF can return any number
 	// or type in its final SQL statement. Otherwise, pick a random type from
 	// this smither's available types.
-	rTyp := types.AnyTuple
+	rTyp, rTypResolvable := types.AnyTuple, tree.ResolvableTypeReference(types.AnyTuple)
 	if s.coin() {
 		// Do not allow collated string types. These are not supported in UDFs.
-		rTyp = s.randType()
+		rTyp, rTypResolvable = s.randType()
 		for rTyp.Family() == types.CollatedStringFamily {
-			rTyp = s.randType()
+			rTyp, rTypResolvable = s.randType()
+		}
+	}
+	if returnsTable {
+		// Try to pick an existing tuple type for some time. If that doesn't
+		// happen, create a new one.
+		for i := 0; rTyp.Family() != types.TupleFamily && i < 10; i++ {
+			rTyp, rTypResolvable = s.randType()
+		}
+		if rTyp.Family() != types.TupleFamily {
+			rTyp = s.makeRandTupleType()
+			rTypResolvable = rTyp
 		}
 	}
 
@@ -1112,13 +1130,13 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		if !ok {
 			return nil, false
 		}
-		// If the rType isn't a RECORD, change it to stmtRefs or RECORD depending
-		// how many columns there are to avoid return type mismatch errors.
-		if !rTyp.Identical(types.AnyTuple) {
+		// If the rTyp isn't a RECORD, change it to stmtRefs or RECORD depending
+		// on how many columns there are to avoid return type mismatch errors.
+		if !rTyp.Equivalent(types.AnyTuple) {
 			if len(stmtRefs) == 1 && s.coin() && stmtRefs[0].typ.Family() != types.CollatedStringFamily {
-				rTyp = stmtRefs[0].typ
+				rTyp, rTypResolvable = stmtRefs[0].typ, stmtRefs[0].typ
 			} else {
-				rTyp = types.AnyTuple
+				rTyp, rTypResolvable = types.AnyTuple, types.AnyTuple
 			}
 		}
 	} else {
@@ -1126,12 +1144,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		if plpgsqlRTyp.Identical(types.AnyTuple) {
 			// If the return type is RECORD, choose a concrete type for generating
 			// RETURN statements.
-			numTyps := s.rnd.Intn(3) + 1
-			typs := make([]*types.T, numTyps)
-			for i := range typs {
-				typs[i] = s.randType()
-			}
-			plpgsqlRTyp = types.MakeTuple(typs)
+			plpgsqlRTyp = s.makeRandTupleType()
 		}
 		body = s.makeRoutineBodyPLpgSQL(paramTypes, plpgsqlRTyp, funcVol)
 	}
@@ -1139,7 +1152,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 
 	// Return multiple rows with the SETOF option about 33% of the time.
 	// PL/pgSQL functions do not currently support SETOF.
-	setof := false
+	setof := returnsTable
 	if lang == tree.RoutineLangSQL && s.d6() < 3 {
 		setof = true
 	}
@@ -1153,7 +1166,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		Params:  params,
 		Options: opts,
 		ReturnType: &tree.RoutineReturnType{
-			Type:  rTyp,
+			Type:  rTypResolvable,
 			SetOf: setof,
 		},
 	}

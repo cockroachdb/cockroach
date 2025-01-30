@@ -59,11 +59,11 @@ func (s *Smither) makePLpgSQLDeclarations(
 	decls := make([]ast.Statement, numDecls)
 	for i := 0; i < numDecls; i++ {
 		varName := s.makePLpgSQLVarName("decl", newScope)
-		varTyp := s.randType()
+		varTyp, varTypResolvable := s.randType()
 		for varTyp.Identical(types.AnyTuple) || varTyp.Family() == types.CollatedStringFamily {
 			// TODO(#114874): allow record types here when they are supported.
 			// TODO(#105245): allow collated strings when they are supported.
-			varTyp = s.randType()
+			varTyp, varTypResolvable = s.randType()
 		}
 		constant := s.d6() == 1
 		var expr ast.Expr
@@ -74,7 +74,7 @@ func (s *Smither) makePLpgSQLDeclarations(
 		decls[i] = &ast.Declaration{
 			Var:      varName,
 			Constant: constant,
-			Typ:      varTyp,
+			Typ:      varTypResolvable,
 			Expr:     expr,
 		}
 		newScope.addVariable(string(varName), varTyp, constant)
