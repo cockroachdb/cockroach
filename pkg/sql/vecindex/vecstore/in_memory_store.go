@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -342,8 +343,7 @@ func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
 	}
 
 	storeProto := StoreProto{
-		Dims:       s.dims,
-		Seed:       s.seed,
+		Config:     vecpb.Config{Dims: int32(s.dims), Seed: s.seed},
 		Partitions: make([]PartitionProto, 0, len(s.mu.partitions)),
 		NextKey:    s.mu.nextKey,
 		Vectors:    make([]VectorProto, 0, len(s.mu.vectors)),
@@ -395,8 +395,8 @@ func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 
 	// Construct the InMemoryStore object.
 	inMemStore := &InMemoryStore{
-		dims: storeProto.Dims,
-		seed: storeProto.Seed,
+		dims: int(storeProto.Config.Dims),
+		seed: storeProto.Config.Seed,
 	}
 	inMemStore.mu.clock = 2
 	inMemStore.mu.partitions = make(map[PartitionKey]*inMemoryPartition, len(storeProto.Partitions))
@@ -405,8 +405,8 @@ func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 	inMemStore.mu.stats = storeProto.Stats
 	inMemStore.mu.pending.Init()
 
-	raBitQuantizer := quantize.NewRaBitQuantizer(storeProto.Dims, storeProto.Seed)
-	unquantizer := quantize.NewUnQuantizer(storeProto.Dims)
+	raBitQuantizer := quantize.NewRaBitQuantizer(int(storeProto.Config.Dims), storeProto.Config.Seed)
+	unquantizer := quantize.NewUnQuantizer(int(storeProto.Config.Dims))
 
 	// Construct the Partition objects.
 	for i := range storeProto.Partitions {

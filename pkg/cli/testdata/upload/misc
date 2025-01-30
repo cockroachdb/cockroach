@@ -16,4 +16,3 @@ body: {"message":{"events":[{"timestamp":"2025-01-21T05:17:42.857695Z","event_ty
 body: {"message":{"key_values":{"admission.disk_bandwidth_tokens.elastic.enabled":{"value":"true","type":"b","description":"when true, and provisioned bandwidth for the disk corresponding to a store is configured, tokens for elastic work will be limited if disk bandwidth becomes a bottleneck","public":true,"name":"admission.disk_bandwidth_tokens.elastic.enabled"}}},"ddtags":"cluster:ABC,file_name:settings.json,upload_id:abc-20241114000000"}
 body: {"message":{"node_id":1,"problems_by_node_id":{"1":{}}},"ddtags":"cluster:ABC,file_name:reports/problemranges.json,upload_id:abc-20241114000000"}
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=misc
-
