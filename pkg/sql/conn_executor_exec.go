@@ -3163,6 +3163,7 @@ func (ex *connExecutor) makeExecPlan(
 	if err := ex.maybeUpgradeToSerializable(ctx, planner.stmt); err != nil {
 		return ctx, err
 	}
+	// TODO(yuzefovich): consider disabling buffered writes on a DDL.
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
@@ -3450,6 +3451,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.QualityOfService(),
 				ex.txnIsolationLevelToKV(ctx, s.Modes.Isolation),
 				ex.omitInRangefeeds(),
+				ex.bufferedWritesEnabled(ctx),
 			)
 	case *tree.ShowCommitTimestamp:
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
@@ -3488,6 +3490,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.QualityOfService(),
 				ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 				ex.omitInRangefeeds(),
+				ex.bufferedWritesEnabled(ctx),
 			)
 	}
 }
@@ -3521,6 +3524,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			qos,
 			ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 			ex.omitInRangefeeds(),
+			ex.bufferedWritesEnabled(ctx),
 		)
 }
 
