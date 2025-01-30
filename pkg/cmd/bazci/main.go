@@ -15,7 +15,6 @@
 // them.
 
 //go:build bazel
-// +build bazel
 
 package main
 
