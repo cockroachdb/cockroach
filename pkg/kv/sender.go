@@ -127,6 +127,16 @@ type TxnSender interface {
 	// Transaction proto.
 	SetOmitInRangefeeds()
 
+	// SetBufferedWritesEnabled toggles whether the writes are buffered on the
+	// gateway node until the commit time. Only allowed on the RootTxn. Buffered
+	// writes cannot be enabled on a txn that performed any requests.
+	// TODO(yuzefovich): should we flush the buffer when going from "enabled" to
+	// "disabled"?
+	SetBufferedWritesEnabled(bool)
+
+	// BufferedWritesEnabled returns whether the buffered writes are enabled.
+	BufferedWritesEnabled() bool
+
 	// String returns a string representation of the txn.
 	String() string
 

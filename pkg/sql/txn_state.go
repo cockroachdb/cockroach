@@ -157,30 +157,29 @@ const (
 // and returns the ID of the new transaction.
 //
 // connCtx: The context in which the new transaction is started (usually a
-//
-//	connection's context). ts.Ctx will be set to a child context and should be
-//	used for everything that happens within this SQL transaction.
+// connection's context). ts.Ctx will be set to a child context and should be
+// used for everything that happens within this SQL transaction.
 //
 // txnType: The type of the starting txn.
-// sqlTimestamp: The timestamp to report for current_timestamp(), now() etc.
-// historicalTimestamp: If non-nil indicates that the transaction is historical
 //
-//	and should be fixed to this timestamp.
+// sqlTimestamp: The timestamp to report for current_timestamp(), now() etc.
+//
+// historicalTimestamp: If non-nil indicates that the transaction is historical
+// and should be fixed to this timestamp.
 //
 // priority: The transaction's priority. Pass roachpb.UnspecifiedUserPriority if the txn arg is
-//
-//	not nil.
+// not nil.
 //
 // readOnly: The read-only character of the new txn.
-// txn: If not nil, this txn will be used instead of creating a new txn. If so,
 //
-//	all the other arguments need to correspond to the attributes of this txn
-//	(unless otherwise specified).
+// txn: If not nil, this txn will be used instead of creating a new txn. If so,
+// all the other arguments need to correspond to the attributes of this txn
+// (unless otherwise specified).
 //
 // tranCtx: A bag of extra execution context.
-// qualityOfService: If txn is nil, the QoSLevel/WorkPriority to assign the new
 //
-//	transaction for use in admission queues.
+// qualityOfService: If txn is nil, the QoSLevel/WorkPriority to assign the new
+// transaction for use in admission queues.
 func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
@@ -193,6 +192,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	qualityOfService sessiondatapb.QoSLevel,
 	isoLevel isolation.Level,
 	omitInRangefeeds bool,
+	bufferedWritesEnabled bool,
 ) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
@@ -242,6 +242,9 @@ func (ts *txnState) resetForNewSQLTxn(
 			}
 			if err := ts.setIsolationLevelLocked(isoLevel); err != nil {
 				panic(err)
+			}
+			if bufferedWritesEnabled {
+				ts.mu.txn.SetBufferedWritesEnabled(true /* enabled */)
 			}
 		} else {
 			if priority != roachpb.UnspecifiedUserPriority {

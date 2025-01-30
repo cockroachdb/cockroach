@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -3781,6 +3782,25 @@ var varGen = map[string]sessionVar{
 			}
 			m.SetOptimizerMinRowCount(f)
 			return nil
+		},
+	},
+
+	// CockroachDB extension.
+	`kv_transaction_buffered_writes_enabled`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().BufferedWritesEnabled), nil
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("kv_transaction_buffered_writes_enabled"),
+		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`kv_transaction_buffered_writes_enabled`, s)
+			if err != nil {
+				return err
+			}
+			m.SetBufferedWritesEnabled(b)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(kvcoord.BufferedWritesEnabled.Get(sv))
 		},
 	},
 }

@@ -108,6 +108,14 @@ func (m *MockTransactionalSender) SetOmitInRangefeeds() {
 	m.txn.OmitInRangefeeds = true
 }
 
+// SetBufferedWritesEnabled is part of the TxnSender interface.
+func (m *MockTransactionalSender) SetBufferedWritesEnabled(enabled bool) {}
+
+// BufferedWritesEnabled is part of the TxnSender interface.
+func (m *MockTransactionalSender) BufferedWritesEnabled() bool {
+	return false
+}
+
 // String is part of the TxnSender interface.
 func (m *MockTransactionalSender) String() string {
 	return m.txn.String()
