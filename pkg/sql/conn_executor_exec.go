@@ -2564,8 +2564,14 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 	ex.recordDDLTxnTelemetry(true /* failed */)
 
-	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
-		log.Warningf(ctx, "txn rollback failed: %s", err)
+	needRollback := true
+	if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
+		needRollback = ex.state.mu.hasSavepoints
+	}
+	if needRollback {
+		if err := ex.state.mu.txn.Rollback(ctx); err != nil {
+			log.Warningf(ctx, "txn rollback failed: %s", err)
+		}
 	}
 	if err := ex.reportSessionDataChanges(func() error {
 		ex.sessionDataStack.PopAll()

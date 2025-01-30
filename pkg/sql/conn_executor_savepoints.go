@@ -31,6 +31,7 @@ const commitOnReleaseSavepointName = "cockroach_restart"
 func (ex *connExecutor) execSavepointInOpenState(
 	ctx context.Context, s *tree.Savepoint, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload, error) {
+	ex.state.mu.hasSavepoints = true
 	savepoints := &ex.extraTxnState.savepoints
 	// Sanity check for "SAVEPOINT cockroach_restart".
 	commitOnRelease := ex.isCommitOnReleaseSavepoint(s.Name)

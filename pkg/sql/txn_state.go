@@ -35,9 +35,7 @@ import (
 // txnState contains state associated with an ongoing SQL txn; it constitutes
 // the ExtendedState of a connExecutor's state machine (defined in conn_fsm.go).
 // It contains fields that are mutated as side-effects of state transitions;
-// notably the kv.Txn. All mutations to txnState are performed through calling
-// fsm.Machine.Apply(event); see conn_fsm.go for the definition of the state
-// machine.
+// notably the kv.Txn.
 type txnState struct {
 	// Mutable fields accessed from goroutines not synchronized by this txn's
 	// session, such as when a SHOW SESSIONS statement is executed on another
@@ -77,6 +75,8 @@ type txnState struct {
 		// REPEATABLE READ and SERIALIZABLE. It's 0 whenever the transaction state
 		// is not stateOpen.
 		autoRetryCounter int32
+
+		hasSavepoints bool
 	}
 
 	// connCtx is the connection's context. This is the parent of Ctx.
