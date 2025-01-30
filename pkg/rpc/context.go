@@ -783,7 +783,7 @@ func makeInternalClientAdapter(
 			// look closer to a remote call from the tracing point of view.
 			if separateTracers {
 				sp := tracing.SpanFromContext(ctx)
-				if sp != nil && !sp.IsNoop() {
+				if sp != nil {
 					// Fill in ba.TraceInfo. For remote RPCs (not done throught the
 					// internalClientAdapter), this is done by the TracingInternalClient
 					ba = ba.ShallowCopy()

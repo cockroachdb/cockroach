@@ -287,11 +287,6 @@ var spanReusePercent = metamorphic.ConstantWithTestRange(
 // this won't be the case if the cluster settings move away from using global
 // state.
 type Tracer struct {
-	// Preallocated noopSpans, used to avoid creating spans when we are not using
-	// x/net/trace or OpenTelemetry and we are not recording.
-	noopSpan        *Span
-	sterileNoopSpan *Span
-
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
 
@@ -641,8 +636,6 @@ func NewTracer() *Tracer {
 			return h
 		},
 	}
-	t.noopSpan = &Span{i: spanInner{tracer: t}}
-	t.sterileNoopSpan = &Span{i: spanInner{tracer: t, sterile: true}}
 	return t
 }
 
@@ -1068,6 +1061,9 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 func (t *Tracer) StartSpanCtx(
 	ctx context.Context, operationName string, os ...SpanOption,
 ) (context.Context, *Span) {
+	if t == nil {
+		return ctx, nil
+	}
 	// NB: apply takes and returns a value to avoid forcing
 	// `opts` on the heap here.
 	var opts spanOptions
@@ -1101,7 +1097,7 @@ func (t *Tracer) forceOpNameVerbose(opName string) bool {
 // startSpanFast implements a fast path for the common case of tracing
 // being disabled on the current span and its parent. We make only the
 // checks necessary to ensure that recording is disabled and wrap the
-// context in a `noopSpan`.
+// context in a nil span.
 func (t *Tracer) startSpanFast(
 	ctx context.Context, opName string, opts *spanOptions,
 ) (context.Context, *Span) {
@@ -1127,10 +1123,10 @@ func (t *Tracer) startSpanFast(
 			recordingType = opts.minRecordingTypeOpt
 		}
 
-		shouldBeNoopSpan := !(t.AlwaysTrace() || opts.ForceRealSpan || recordingType != tracingpb.RecordingOff)
+		shouldBeNilSpan := !(t.AlwaysTrace() || opts.ForceRealSpan || recordingType != tracingpb.RecordingOff)
 		forceVerbose := t.forceOpNameVerbose(opName)
-		if shouldBeNoopSpan && !forceVerbose && !opts.Sterile {
-			return maybeWrapCtx(ctx, t.noopSpan)
+		if shouldBeNilSpan && !forceVerbose && !opts.Sterile {
+			return maybeWrapCtx(ctx, nil)
 		}
 	}
 	return t.startSpanGeneric(ctx, opName, opts)
@@ -1147,16 +1143,14 @@ func (t *Tracer) startSpanGeneric(
 	}
 
 	if !opts.Parent.empty() {
-		if !opts.Parent.IsNoop() {
-			// If we don't panic, opts.Parent will be moved into the child, and this
-			// release() will be a no-op.
-			// Note that we can't call release() on a no-op span.
-			defer opts.Parent.release()
-		}
+		// If we don't panic, opts.Parent will be moved into the child, and this
+		// release() will be a no-op.
+		defer opts.Parent.release()
 
 		if !opts.RemoteParent.Empty() {
 			panic(errors.AssertionFailedf("can't specify both Parent and RemoteParent"))
 		}
+
 		if opts.Parent.i.sterile {
 			// A sterile parent should have been optimized away by
 			// WithParent.
@@ -1178,25 +1172,18 @@ child operation: %s, tracer created at:
 %s`,
 				opts.Parent.OperationName(), s.stack, opName, t.stack))
 		}
-		if opts.Parent.IsNoop() {
-			// If the parent is a no-op, we'll create a root span.
-			opts.Parent = spanRef{}
-		}
 	}
 
 	// Are we tracing everything, or have a parent, or want a real span, or were
 	// asked for a recording? Then we create a real trace span. In all other
-	// cases, a noop span will do.
-	shouldBeNoopSpan := !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan || opts.recordingType() != tracingpb.RecordingOff)
+	// cases, a nil span will do.
+	shouldBeNilSpan := !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan || opts.recordingType() != tracingpb.RecordingOff)
 	// Finally, we should check to see if this opName is configured to always be forced to the
 	// tracingpb.RecordingVerbose RecordingType. If it is, we'll want to create a real trace
 	// span.
 	forceVerbose := t.forceOpNameVerbose(opName)
-	if shouldBeNoopSpan && !forceVerbose {
-		if !opts.Sterile {
-			return maybeWrapCtx(ctx, t.noopSpan)
-		}
-		return maybeWrapCtx(ctx, t.sterileNoopSpan)
+	if shouldBeNilSpan && !forceVerbose {
+		return maybeWrapCtx(ctx, nil)
 	}
 
 	if opts.LogTags == nil {
@@ -1765,7 +1752,7 @@ func (w MetadataCarrier) ForEach(fn func(key, val string) error) error {
 //
 // See #17177.
 func SpanInclusionFuncForClient(parent *Span) bool {
-	return parent != nil && !parent.IsNoop()
+	return parent != nil
 }
 
 // SpanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
