@@ -221,6 +221,12 @@ const (
 	SinkParamSASLAwsIAMSessionName  = `sasl_aws_iam_session_name`
 	SinkParamTableNameAttribute     = `with_table_name_attribute`
 
+	// These are custom fields required for proprietary oauth. They should not
+	// be documented.
+	SinkParamSASLProprietaryResource            = `sasl_proprietary_resource`
+	SinkParamSASLProprietaryClientAssertionType = `sasl_proprietary_client_assertion_type`
+	SinkParamSASLProprietaryClientAssertion     = `sasl_proprietary_client_assertion`
+
 	SinkSchemeConfluentKafka    = `confluent-cloud`
 	SinkParamConfluentAPIKey    = `api_key`
 	SinkParamConfluentAPISecret = `api_secret`
