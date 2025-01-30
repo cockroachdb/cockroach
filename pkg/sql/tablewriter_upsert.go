@@ -168,8 +168,17 @@ func (tu *tableUpserter) row(
 	insertEnd := len(tu.ri.InsertCols)
 	if tu.canaryOrdinal == -1 {
 		// No canary column means that existing row should be overwritten (i.e.
-		// the insert and update columns are the same, so no need to choose).
-		return tu.insertNonConflictingRow(ctx, row[:insertEnd], pm, true /* overwrite */, traceKV)
+		// the insert and update columns are the same, so no need to choose, or
+		// we're in the UPSERT fast-path).
+		overwrite := true
+		if tu.bufferedWritesEnabled {
+			// When buffered writes are enabled, we still want to use the CPut
+			// on the relevant KV in order to acquire a lock on the key.
+			// TODO(yuzefovich): add a tracing test for this once buffered
+			// writes are more fleshed out.
+			overwrite = false
+		}
+		return tu.insertNonConflictingRow(ctx, row[:insertEnd], pm, overwrite, traceKV)
 	}
 	if row[tu.canaryOrdinal] == tree.DNull {
 		// No conflict, so insert a new row.
