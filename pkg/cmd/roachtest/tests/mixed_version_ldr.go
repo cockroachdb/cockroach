@@ -86,11 +86,12 @@ func InitLDRMixed(
 	)
 
 	return &ldrMixed{
-		leftMvt:  leftMvt,
-		rightMvt: rightMvt,
-		sp:       sp,
-		t:        t,
-		c:        c,
+		leftMvt:         leftMvt,
+		rightMvt:        rightMvt,
+		leftStartedChan: make(chan struct{}),
+		sp:              sp,
+		t:               t,
+		c:               c,
 	}
 }
 
@@ -117,9 +118,15 @@ func workloadRunCmd(nodes option.NodeListOption) *roachtestutil.Command {
 
 type ldrMixed struct {
 	leftMvt, rightMvt *mixedversion.Test
-	sp                multiClusterSpec
-	t                 test.Test
-	c                 cluster.Cluster
+
+	// leftStartedSchan ensures the left cluster is started before the
+	// right cluster is started. The left must be created before the right
+	// due to a limitation in roachprod #129318.
+	leftStartedChan chan struct{}
+
+	sp multiClusterSpec
+	t  test.Test
+	c  cluster.Cluster
 	// midUpgradeCatchupMu _attempts_ to prevent the source from upgrading while
 	// the destination is waiting for the stream to catch up in some mixed version
 	// state.
@@ -181,6 +188,8 @@ func (lm *ldrMixed) SetupHook(ctx context.Context) {
 
 	lm.leftMvt.OnStartup("setup",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+			close(lm.leftStartedChan)
+
 			initCmd := workloadInitCmd(lm.sp.LeftNodesList(), 1000)
 			leftPGURL, err := lm.commonSetup(ctx, l, r, h, initCmd)
 			if err != nil {
@@ -421,7 +430,7 @@ func (lm *ldrMixed) Run(t task.Tasker) {
 			}
 		}()
 		defer wg.Done()
-
+		chanReadCtx(taskCtx, lm.leftStartedChan)
 		lm.rightMvt.Run()
 		return nil
 	})

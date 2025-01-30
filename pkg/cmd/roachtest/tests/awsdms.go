@@ -25,10 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -513,12 +514,12 @@ func setupAWSDMS(
 			return string(b)
 		}()
 
-		g := ctxgroup.WithContext(ctx)
+		g := t.NewErrorGroup(task.WithContext(ctx))
 		g.Go(setupRDSCluster(ctx, t, rdsCli, awsdmsPassword, &rdsCluster, &sourcePGConn))
-		g.Go(setupCockroachDBCluster(ctx, t, c))
+		g.Go(setupCockroachDBCluster(ctx, c))
 		g.Go(setupDMSReplicationInstance(ctx, t, dmsCli, &replicationARN))
 
-		if err := g.Wait(); err != nil {
+		if err := g.WaitE(); err != nil {
 			return err
 		}
 		smInput := &secretsmanager.GetSecretValueInput{
@@ -554,13 +555,15 @@ func setupAWSDMS(
 	return sourcePGConn, nil
 }
 
-func setupCockroachDBCluster(ctx context.Context, t test.Test, c cluster.Cluster) func() error {
-	return func() error {
-		t.L().Printf("setting up cockroach")
+func setupCockroachDBCluster(
+	ctx context.Context, c cluster.Cluster,
+) func(context.Context, *logger.Logger) error {
+	return func(_ context.Context, l *logger.Logger) error {
+		l.Printf("setting up cockroach")
 		settings := install.MakeClusterSettings(install.SecureOption(false))
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.All())
+		c.Start(ctx, l, option.DefaultStartOpts(), settings, c.All())
 
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, l, 1)
 		for _, stmt := range []string{
 			fmt.Sprintf("CREATE USER %s", awsdmsCRDBUser),
 			fmt.Sprintf("GRANT admin TO %s", awsdmsCRDBUser),
@@ -577,9 +580,9 @@ func setupCockroachDBCluster(ctx context.Context, t test.Test, c cluster.Cluster
 
 func setupDMSReplicationInstance(
 	ctx context.Context, t test.Test, dmsCli *dms.Client, replicationARN *string,
-) func() error {
-	return func() error {
-		t.L().Printf("setting up DMS replication instance")
+) func(context.Context, *logger.Logger) error {
+	return func(_ context.Context, l *logger.Logger) error {
+		l.Printf("setting up DMS replication instance")
 		createReplOut, err := dmsCli.CreateReplicationInstance(
 			ctx,
 			&dms.CreateReplicationInstanceInput{
@@ -592,7 +595,7 @@ func setupDMSReplicationInstance(
 		}
 		*replicationARN = *createReplOut.ReplicationInstance.ReplicationInstanceArn
 		// Wait for replication instance to become available
-		t.L().Printf("waiting for all replication instance to be available")
+		l.Printf("waiting for all replication instance to be available")
 		if err := dms.NewReplicationInstanceAvailableWaiter(dmsCli).Wait(ctx, dmsDescribeInstancesInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 			return err
 		}
@@ -607,10 +610,10 @@ func setupRDSCluster(
 	awsdmsPassword string,
 	rdsCluster **rdstypes.DBCluster,
 	sourcePGConn **pgx.Conn,
-) func() error {
-	return func() error {
+) func(context.Context, *logger.Logger) error {
+	return func(_ context.Context, l *logger.Logger) error {
 		// Setup AWS RDS.
-		t.L().Printf("setting up new AWS RDS parameter group")
+		l.Printf("setting up new AWS RDS parameter group")
 		rdsGroup, err := rdsCli.CreateDBClusterParameterGroup(
 			ctx,
 			&rds.CreateDBClusterParameterGroupInput{
@@ -643,7 +646,7 @@ func setupRDSCluster(
 			return err
 		}
 
-		t.L().Printf("setting up new AWS RDS cluster")
+		l.Printf("setting up new AWS RDS cluster")
 		rdsClusterOutput, err := rdsCli.CreateDBCluster(
 			ctx,
 			&rds.CreateDBClusterInput{
@@ -661,7 +664,7 @@ func setupRDSCluster(
 		}
 		*rdsCluster = rdsClusterOutput.DBCluster
 
-		t.L().Printf("setting up new AWS RDS instance")
+		l.Printf("setting up new AWS RDS instance")
 		if _, err := rdsCli.CreateDBInstance(
 			ctx,
 			&rds.CreateDBInstanceInput{
@@ -675,7 +678,7 @@ func setupRDSCluster(
 			return err
 		}
 
-		t.L().Printf("waiting for RDS instances to become available")
+		l.Printf("waiting for RDS instances to become available")
 		if err := rds.NewDBInstanceAvailableWaiter(rdsCli).Wait(ctx, rdsDescribeInstancesInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 			return err
 		}
@@ -688,7 +691,7 @@ func setupRDSCluster(
 			*rdsClusterOutput.DBCluster.DatabaseName,
 		)
 		if t.IsDebug() {
-			t.L().Printf("pgurl: %s\n", pgURL)
+			l.Printf("pgurl: %s\n", pgURL)
 		}
 		pgConn, err := pgx.Connect(ctx, pgURL)
 		if err != nil {
@@ -954,10 +957,10 @@ func tearDownAWSDMS(
 		}
 
 		// Delete the replication and rds instances in parallel.
-		g := ctxgroup.WithContext(ctx)
+		g := t.NewErrorGroup(task.WithContext(ctx))
 		g.Go(tearDownDMSInstances(ctx, t, dmsCli))
 		g.Go(tearDownRDSInstances(ctx, t, rdsCli))
-		return g.Wait()
+		return g.WaitE()
 	}(); err != nil {
 		return errors.Wrapf(err, "failed to tear down DMS")
 	}
@@ -1044,8 +1047,10 @@ func tearDownDMSEndpoints(
 	return nil
 }
 
-func tearDownDMSInstances(ctx context.Context, t test.Test, dmsCli *dms.Client) func() error {
-	return func() error {
+func tearDownDMSInstances(
+	ctx context.Context, t test.Test, dmsCli *dms.Client,
+) func(context.Context, *logger.Logger) error {
+	return func(_ context.Context, l *logger.Logger) error {
 		dmsInstances, err := dmsCli.DescribeReplicationInstances(ctx, dmsDescribeInstancesInput(t.BuildVersion()))
 		if err != nil {
 			if !isDMSResourceNotFound(err) {
@@ -1053,7 +1058,7 @@ func tearDownDMSInstances(ctx context.Context, t test.Test, dmsCli *dms.Client) 
 			}
 		} else {
 			for _, dmsInstance := range dmsInstances.ReplicationInstances {
-				t.L().Printf("deleting DMS replication instance %s (arn: %s)", *dmsInstance.ReplicationInstanceIdentifier, *dmsInstance.ReplicationInstanceArn)
+				l.Printf("deleting DMS replication instance %s (arn: %s)", *dmsInstance.ReplicationInstanceIdentifier, *dmsInstance.ReplicationInstanceArn)
 				if _, err := dmsCli.DeleteReplicationInstance(ctx, &dms.DeleteReplicationInstanceInput{
 					ReplicationInstanceArn: dmsInstance.ReplicationInstanceArn,
 				}); err != nil {
@@ -1062,7 +1067,7 @@ func tearDownDMSInstances(ctx context.Context, t test.Test, dmsCli *dms.Client) 
 			}
 
 			// Wait for the replication instance to be deleted.
-			t.L().Printf("waiting for all replication instances to be deleted")
+			l.Printf("waiting for all replication instances to be deleted")
 			if err := dms.NewReplicationInstanceDeletedWaiter(dmsCli).Wait(ctx, dmsDescribeInstancesInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 				return err
 			}
@@ -1071,8 +1076,10 @@ func tearDownDMSInstances(ctx context.Context, t test.Test, dmsCli *dms.Client) 
 	}
 }
 
-func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) func() error {
-	return func() error {
+func tearDownRDSInstances(
+	ctx context.Context, t test.Test, rdsCli *rds.Client,
+) func(context.Context, *logger.Logger) error {
+	return func(_ context.Context, l *logger.Logger) error {
 		rdsInstances, err := rdsCli.DescribeDBInstances(ctx, rdsDescribeInstancesInput(t.BuildVersion()))
 		if err != nil {
 			if !errors.HasType(err, &rdstypes.ResourceNotFoundFault{}) {
@@ -1080,7 +1087,7 @@ func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) 
 			}
 		} else {
 			for _, rdsInstance := range rdsInstances.DBInstances {
-				t.L().Printf("attempting to delete instance %s", *rdsInstance.DBInstanceIdentifier)
+				l.Printf("attempting to delete instance %s", *rdsInstance.DBInstanceIdentifier)
 				if _, err := rdsCli.DeleteDBInstance(
 					ctx,
 					&rds.DeleteDBInstanceInput{
@@ -1092,7 +1099,7 @@ func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) 
 					return err
 				}
 			}
-			t.L().Printf("waiting for all cluster db instances to be deleted")
+			l.Printf("waiting for all cluster db instances to be deleted")
 			if err := rds.NewDBInstanceDeletedWaiter(rdsCli).Wait(ctx, rdsDescribeInstancesInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 				return err
 			}
@@ -1108,7 +1115,7 @@ func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) 
 			}
 		} else {
 			for _, rdsCluster := range rdsClusters.DBClusters {
-				t.L().Printf("attempting to delete cluster %s", *rdsCluster.DBClusterIdentifier)
+				l.Printf("attempting to delete cluster %s", *rdsCluster.DBClusterIdentifier)
 				if _, err := rdsCli.DeleteDBCluster(
 					ctx,
 					&rds.DeleteDBClusterInput{
@@ -1130,7 +1137,7 @@ func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) 
 			}
 		} else {
 			for _, rdsGroup := range rdsParamGroups.DBClusterParameterGroups {
-				t.L().Printf("attempting to delete param group %s", *rdsGroup.DBClusterParameterGroupName)
+				l.Printf("attempting to delete param group %s", *rdsGroup.DBClusterParameterGroupName)
 
 				// This can sometimes fail as the cluster still relies on the param
 				// group but the cluster takes a while to wind down. Ideally, we wait
@@ -1153,7 +1160,7 @@ func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) 
 					if err == nil {
 						break
 					}
-					t.L().Printf("expected error: failed to delete cluster param group, retrying: %+v", err)
+					l.Printf("expected error: failed to delete cluster param group, retrying: %+v", err)
 				}
 				if lastErr != nil {
 					return errors.Wrapf(lastErr, "failed to delete param group")

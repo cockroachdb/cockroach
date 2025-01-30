@@ -274,7 +274,6 @@ go_library(
         "//pkg/util",
         "//pkg/util/allstacks",
         "//pkg/util/cancelchecker",
-        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
