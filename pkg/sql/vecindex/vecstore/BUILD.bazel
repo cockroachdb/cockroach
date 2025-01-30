@@ -9,6 +9,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/vecindex/quantize:quantize_proto",
+        "//pkg/sql/vecindex/vecpb:vecpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -21,6 +22,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/vecindex/quantize",
+        "//pkg/sql/vecindex/vecpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
@@ -58,6 +60,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/vecindex/internal",
         "//pkg/sql/vecindex/quantize",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/container/heap",
         "//pkg/util/container/list",
         "//pkg/util/encoding",

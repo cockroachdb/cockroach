@@ -8,6 +8,7 @@ package cockroach.sql.vecindex.vecstore;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore";
 
 import "sql/vecindex/quantize/quantize.proto";
+import "sql/vecindex/vecpb/vec.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.goproto_getters_all) = false;
@@ -52,12 +53,11 @@ message IndexStats {
 
 // StoreProto serializes the fields of the in-memory store.
 message StoreProto {
-  int64 dims = 1 [(gogoproto.casttype) = "int"];
-  int64 seed = 2;
-  repeated PartitionProto partitions = 3 [(gogoproto.nullable) = false];
-  uint64 next_key = 4 [(gogoproto.casttype) = "PartitionKey"];
-  repeated VectorProto vectors = 5 [(gogoproto.nullable) = false];
-  IndexStats stats = 6 [(gogoproto.nullable) = false];
+  vecpb.Config config = 1 [(gogoproto.nullable) = false];
+  repeated PartitionProto partitions = 2 [(gogoproto.nullable) = false];
+  uint64 next_key = 3 [(gogoproto.casttype) = "PartitionKey"];
+  repeated VectorProto vectors = 4 [(gogoproto.nullable) = false];
+  IndexStats stats = 5 [(gogoproto.nullable) = false];
 }
 
 // PartitionProto serializes the fields of a partition.
