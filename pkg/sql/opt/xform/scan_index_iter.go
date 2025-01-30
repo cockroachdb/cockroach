@@ -364,15 +364,14 @@ func (it *scanIndexIter) filtersImplyPredicate(
 // the given filters and of types that do not have composite encodings.
 func (it *scanIndexIter) extractConstNonCompositeColumns(f memo.FiltersExpr) opt.ColSet {
 	constCols := memo.ExtractConstColumns(it.e.ctx, f, it.evalCtx)
-	var constNonCompositeCols opt.ColSet
 	for col, ok := constCols.Next(0); ok; col, ok = constCols.Next(col + 1) {
 		ord := it.tabMeta.MetaID.ColumnOrdinal(col)
 		typ := it.tabMeta.Table.Column(ord).DatumType()
-		if !colinfo.CanHaveCompositeKeyEncoding(typ) {
-			constNonCompositeCols.Add(col)
+		if colinfo.CanHaveCompositeKeyEncoding(typ) {
+			constCols.Remove(col)
 		}
 	}
-	return constNonCompositeCols
+	return constCols
 }
 
 // buildConstProjectionsFromPredicate builds a ProjectionsExpr that projects
