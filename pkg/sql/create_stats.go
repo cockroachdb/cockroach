@@ -578,6 +578,10 @@ func createStatsDefaultColumns(
 
 	// Add column stats for each secondary index.
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
+		if idx.GetType() == idxtype.VECTOR {
+			// Skip vector indexes for now.
+			continue
+		}
 		for j, n := 0, idx.NumKeyColumns(); j < n; j++ {
 			colID := idx.GetKeyColumnID(j)
 			isInverted := idx.GetType() == idxtype.INVERTED && colID == idx.InvertedColumnID()

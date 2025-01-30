@@ -13,6 +13,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -172,6 +174,12 @@ func ColumnTypeIsOnlyInvertedIndexable(t *types.T) bool {
 	return true
 }
 
+// ColumnTypeIsVectorIndexable returns true if the type t can be indexed using a
+// vector index.
+func ColumnTypeIsVectorIndexable(t *types.T) bool {
+	return t.Family() == types.PGVectorFamily
+}
+
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType *types.T) bool {
@@ -191,4 +199,49 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		return true
 	}
 	return false
+}
+
+// ValidateColumnForIndex checks that the given column type is allowed in the
+// given index. If "isLastCol" is true, then it is the last column in the index.
+func ValidateColumnForIndex(
+	indexType idxtype.T, colName string, colType *types.T, isLastCol bool,
+) error {
+	// Index types that do not define a linear ordering on the last indexed
+	// column require special handling.
+	if !indexType.HasLinearOrdering() && isLastCol {
+		switch indexType {
+		case idxtype.INVERTED:
+			// Inverted indexes only allow certain types for the last column.
+			if !ColumnTypeIsInvertedIndexable(colType) {
+				return sqlerrors.NewInvalidLastColumnError(colName, colType.Name(), indexType)
+			}
+		case idxtype.VECTOR:
+			// Vector indexes only allow certain types for the last column.
+			if !ColumnTypeIsVectorIndexable(colType) {
+				return sqlerrors.NewInvalidLastColumnError(
+					colName, colType.String(), indexType)
+			} else if colType.Width() <= 0 {
+				return sqlerrors.NewInvalidVectorColumnWidthError(colName, colType.Name())
+			}
+		default:
+			return errors.AssertionFailedf("index type %v is unhandled", indexType)
+		}
+		return nil
+	}
+
+	// Check the index-ability of other columns (that have a linear ordering
+	// defined).
+	if !ColumnTypeIsIndexable(colType) {
+		// If the column is indexable as the last column in the right kind of index,
+		// then use a more descriptive error message.
+		if ColumnTypeIsInvertedIndexable(colType) {
+			return sqlerrors.NewColumnOnlyIndexableError(colName, colType.Name(), idxtype.INVERTED)
+		} else if ColumnTypeIsVectorIndexable(colType) {
+			return sqlerrors.NewColumnOnlyIndexableError(colName, colType.Name(), idxtype.VECTOR)
+		}
+
+		return sqlerrors.NewColumnNotIndexableError(colName, colType.Name(), colType.DebugString())
+	}
+
+	return nil
 }

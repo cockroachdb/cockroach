@@ -117,16 +117,16 @@ geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {geo_table_geog_idx,geo_table
 geom    GEOMETRY(POINT)           true   NULL  ·  {geo_table_geom_idx,geo_table_pkey}                     false
 orphan  GEOGRAPHY                 true   NULL  ·  {geo_table_pkey}                                        false
 
-statement error column bad_pk is of type geography and thus is not indexable
+statement error column bad_pk of type geography is only allowed as the last column in an inverted index
 CREATE TABLE bad_geog_table(bad_pk geography primary key)
 
-statement error column bad_pk is of type geometry and thus is not indexable
+statement error column bad_pk of type geometry is only allowed as the last column in an inverted index
 CREATE TABLE bad_geom_table(bad_pk geometry primary key)
 
-statement error column geog is of type geography and thus is not indexable
+statement error column geog of type geography is only allowed as the last column in an inverted index
 CREATE INDEX geog_idx ON geo_table(geog)
 
-statement error column geom is of type geometry and thus is not indexable
+statement error column geom of type geometry is only allowed as the last column in an inverted index
 CREATE INDEX geom_idx ON geo_table(geom)
 
 statement ok

@@ -2505,6 +2505,13 @@ func TestReadCommittedLogic_values(
 	runLogicTest(t, "values")
 }
 
+func TestReadCommittedLogic_vector_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index")
+}
+
 func TestReadCommittedLogic_vectorize_agg(
 	t *testing.T,
 ) {
