@@ -339,13 +339,15 @@ fk1  CREATE TABLE public.fk1 (
 # test that notices are generated on index drops
 subtest notice_on_drop_index
 
+statement ok
+CREATE TABLE drop_index_test(a int);
+CREATE INDEX drop_index_test_index ON drop_index_test(a);
+
 # Weak isolation levels emit extra notices, so skip them.
 skipif config weak-iso-level-configs
 query T noticetrace
-CREATE TABLE drop_index_test(a int); CREATE INDEX drop_index_test_index ON drop_index_test(a); DROP INDEX drop_index_test_index
+DROP INDEX drop_index_test_index
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 NOTICE: the data for dropped indexes is reclaimed asynchronously
 HINT: The reclamation delay can be customized in the zone configuration for the table.
 
