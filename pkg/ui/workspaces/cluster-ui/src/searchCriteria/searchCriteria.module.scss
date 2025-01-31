@@ -5,15 +5,15 @@
 
 @import "../core/index.module";
 
-:global(.crl-ant-dropdown-menu-submenu-popup ul) {
+:global(.crdb-ant-dropdown-menu-submenu-popup ul) {
   padding-bottom: 5px;
 }
 
-:global(.crl-ant-dropdown-menu-item:hover) {
+:global(.crdb-ant-dropdown-menu-item:hover) {
   background-color: $colors--primary-blue-8;
 }
 
-:global(.crl-ant-dropdown-menu-submenu-title:hover) {
+:global(.crdb-ant-dropdown-menu-submenu-title:hover) {
   background-color: $colors--primary-blue-8;
 }
 
@@ -39,7 +39,7 @@
     font-size: $font-size--medium;
     font-weight: $font-weight--light;
 
-    :global(.crl-ant-btn) {
+    :global(.crdb-ant-btn) {
       border-color: $colors--neutral-4;
     }
   }
