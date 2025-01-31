@@ -2467,8 +2467,40 @@ func (r *raft) handleSnapshot(m pb.Message) {
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
+
+		// To send MsgAppResp to any leader, we must be sure that our log is
+		// consistent with that leader's log.
+		//
+		// After restore(s), our log ends at the entryID of this snapshot.
+		// The snapshot came from a node at m.Term (typically the leader).
+		// Everything in this snapshot has been committed during m.Term or earlier,
+		// and will be present in all future term logs. It is thus safe to send
+		// MsgAppResp to any leader at term >= m.Term.
+		//
+		// From section 5.4 of the Raft paper:
+		// if a log entry is committed in a given term, then that entry will be
+		// present in the logs of the leaders for all higher-numbered terms.
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex(),
 			Commit: r.raftLog.committed})
+
+		// A leadership change may have happened while the snapshot was in flight.
+		// Therefore we need to send the MsgAppResp to the new leader as well.
+		//
+		// If we don't send response to the new leader, the new leader will not
+		// know that we have committed up to the snapshot index. This will cause
+		// delay for the new leader to transfer this follower to stateReplicate.
+		// (Since the new leader may send its own snapshot to this follower and
+		// wait for the MsgAppResp of that snapshot).
+		// Which may ultimately cause unwanted commit delay for client.
+		//
+		// Sending this response to the new leader allows the new leader to know
+		// this follower is caught up ASAP.
+		//
+		// TODO(pav-kv): consider if we can only send to r.lead.
+		if r.lead != None && r.lead != m.From {
+			r.send(pb.Message{To: r.lead, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex(),
+				Commit: r.raftLog.committed})
+		}
 	} else {
 		r.logger.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
