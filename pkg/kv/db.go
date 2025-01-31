@@ -614,8 +614,7 @@ func (db *DB) DelRange(
 }
 
 // DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
-// (exclusive) using an MVCC range tombstone. Callers must check the
-// MVCCRangeTombstones version gate before using this.
+// (exclusive) using an MVCC range tombstone.
 func (db *DB) DelRangeUsingTombstone(ctx context.Context, begin, end interface{}) error {
 	b := &Batch{}
 	b.DelRangeUsingTombstone(begin, end)
@@ -765,9 +764,6 @@ func (db *DB) AdminRelocateRange(
 }
 
 // AddSSTable links a file into the Pebble log-structured merge-tree.
-//
-// The disallowConflicts, disallowShadowingBelow parameters
-// require the MVCCAddSSTable version gate, as they are new in 22.1.
 func (db *DB) AddSSTable(
 	ctx context.Context,
 	begin, end interface{},
@@ -830,8 +826,6 @@ func (db *DB) LinkExternalSSTable(
 // merge-tree. All keys in the SST must have batchTs as their timestamp, but the
 // batch timestamp at which the sst is actually ingested -- and that those keys
 // end up with after it is ingested -- may be updated if the request is pushed.
-//
-// Should only be called after checking the MVCCAddSSTable version gate.
 func (db *DB) AddSSTableAtBatchTimestamp(
 	ctx context.Context,
 	begin, end interface{},
