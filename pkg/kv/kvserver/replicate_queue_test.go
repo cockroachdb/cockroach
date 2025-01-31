@@ -204,7 +204,6 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 		spec = func(node int, store int) base.StoreSpec {
 			return base.StoreSpec{
 				Path: filepath.Join(td, fmt.Sprintf("n%ds%d", node, store)),
-				Size: base.SizeSpec{},
 			}
 		}
 		t.Cleanup(func() {

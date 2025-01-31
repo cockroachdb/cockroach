@@ -526,8 +526,11 @@ func init() {
 		_ = pf.MarkHidden(cliflags.StorageEngine.Name)
 
 		cliflagcfg.VarFlag(f, &serverCfg.StorageConfig.WALFailover, cliflags.WALFailover)
-		cliflagcfg.StringFlag(f, &serverCfg.SharedStorage, cliflags.SharedStorage)
-		cliflagcfg.VarFlag(f, &serverCfg.SecondaryCache, cliflags.SecondaryCache)
+		// TODO(storage): Consider combining the uri and cache manual settings.
+		// Alternatively remove the ability to configure shared storage without
+		// passing a bootstrap configuration file.
+		cliflagcfg.StringFlag(f, &serverCfg.StorageConfig.SharedStorage.URI, cliflags.SharedStorage)
+		cliflagcfg.VarFlag(f, &serverCfg.StorageConfig.SharedStorage.Cache, cliflags.SecondaryCache)
 		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
 		cliflagcfg.BoolFlag(f, &serverCfg.DisableMaxOffsetCheck, cliflags.DisableMaxOffsetCheck)
 		cliflagcfg.StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
@@ -981,7 +984,7 @@ func init() {
 		f := debugRangeDataCmd.Flags()
 		cliflagcfg.BoolFlag(f, &debugCtx.replicated, cliflags.Replicated)
 		cliflagcfg.IntFlag(f, &debugCtx.maxResults, cliflags.Limit)
-		cliflagcfg.StringFlag(f, &serverCfg.SharedStorage, cliflags.SharedStorage)
+		cliflagcfg.StringFlag(f, &serverCfg.StorageConfig.SharedStorage.URI, cliflags.SharedStorage)
 	}
 	{
 		f := debugGossipValuesCmd.Flags()
@@ -1488,7 +1491,7 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		if spec.BallastSize == nil {
 			// Only override if there was no ballast size specified to start
 			// with.
-			zero := base.SizeSpec{InBytes: 0, Percent: 0}
+			zero := storagepb.SizeSpec{Capacity: 0, Percent: 0}
 			spec.BallastSize = &zero
 		}
 	}

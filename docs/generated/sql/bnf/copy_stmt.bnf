@@ -1,16 +1,16 @@
 copy_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN' 'WITH' copy_options ( ( copy_options ) )* 
 	| 'COPY' table_name opt_column_list 'FROM' 'STDIN'  copy_options ( ( copy_options ) )* 
-	| 'COPY' table_name opt_column_list 'FROM' 'STDIN' 'WITH' '(' copy_generic_options_list ')' 
-	| 'COPY' table_name opt_column_list 'FROM' 'STDIN'  '(' copy_generic_options_list ')' 
+	| 'COPY' table_name opt_column_list 'FROM' 'STDIN' 'WITH'  
+	| 'COPY' table_name opt_column_list 'FROM' 'STDIN'   
 	| 'COPY' table_name opt_column_list 'FROM' 'STDIN'  
 	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' 'WITH' copy_options ( ( copy_options ) )*
 	| 'COPY' table_name opt_column_list 'TO' 'STDOUT'  copy_options ( ( copy_options ) )*
-	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' 'WITH' '(' copy_generic_options_list ')'
-	| 'COPY' table_name opt_column_list 'TO' 'STDOUT'  '(' copy_generic_options_list ')'
+	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' 'WITH' 
+	| 'COPY' table_name opt_column_list 'TO' 'STDOUT'  
 	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' 
-	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT' 'WITH' copy_options ( ( copy_options ) )*
-	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT'  copy_options ( ( copy_options ) )*
-	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT' 'WITH' '(' copy_generic_options_list ')'
-	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT'  '(' copy_generic_options_list ')'
-	| 'COPY' '(' copy_to_stmt ')' 'TO' 'STDOUT' 
+	| 'COPY' '(' query ')' 'TO' 'STDOUT' 'WITH' copy_options ( ( copy_options ) )*
+	| 'COPY' '(' query ')' 'TO' 'STDOUT'  copy_options ( ( copy_options ) )*
+	| 'COPY' '(' query ')' 'TO' 'STDOUT' 'WITH' 
+	| 'COPY' '(' query ')' 'TO' 'STDOUT'  
+	| 'COPY' '(' query ')' 'TO' 'STDOUT' 

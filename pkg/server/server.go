@@ -290,6 +290,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {
+		if true {
+			panic(err)
+		}
 		return nil, errors.Wrap(err, "failed to create engines")
 	}
 	stopper.AddCloser(&engines)
@@ -880,7 +883,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVMemoryMonitor:              kvMemoryMonitor,
 		RangefeedBudgetFactory:       rangeFeedBudgetFactory,
 		RaftEntriesMonitor:           raftEntriesMonitor,
-		SharedStorageEnabled:         cfg.SharedStorage != "",
+		SharedStorageEnabled:         cfg.StorageConfig.SharedStorage.URI != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
 		RangeLogWriter:               rangeLogWriter,

@@ -80,6 +80,27 @@ message WALFailover {
   ExternalPath prev_path = 3 [ (gogoproto.nullable) = false ];
 }
 
+// SizeSpec are used to specify how much of a file system can be used. It
+// can be specified in either a capacity or a percent.
+message SizeSpec {
+  option (gogoproto.goproto_stringer) = false;
+  // Capacity is how much space on the file system to use. if 0 then use the
+  // entire disk.
+  int64 capacity = 1;
+  // Percent can only be set if capacity is 0. If it is set then capacity is
+  // computed based on the space on this percent of the disk.
+  double percent = 2;
+}
+
+// SharedStorage specifies the properties of the shared storage.
+message SharedStorage {
+  // URI is the base location to read and write shared storage files.
+  string uri = 1 [ (gogoproto.customname) = "URI" ];
+  // Cache is the size of the secondary cache used to store blocks from
+  // disaggregated shared storage.
+  SizeSpec cache = 2 [ (gogoproto.nullable) = false ];
+}
+
 // NodeConfig is all the node level storage related configurations for this
 // node. This structure is persisted to all stores and can be used to bootstrap
 // the node.
@@ -88,4 +109,8 @@ message NodeConfig {
   // a store's primary WAL increases.
   WALFailover wal_failover = 2
       [ (gogoproto.nullable) = false, (gogoproto.customname) = "WALFailover" ];
+
+  // SharedStorage is specified to enable disaggregated shared storage. It is
+  // enabled if the uri is set.
+  SharedStorage shared_storage = 4 [ (gogoproto.nullable) = false ];
 }
