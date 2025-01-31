@@ -900,7 +900,8 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		if skip && !all {
 			continue
 		}
-		if _, ok := sessionVarNeedsEscaping[varName]; ok {
+		if _, ok := sessionVarNeedsEscaping[varName]; ok ||
+			regexp.MustCompile(`\s+`).MatchString(value) {
 			value = lexbase.EscapeSQLString(value)
 		}
 		if value == "" {
