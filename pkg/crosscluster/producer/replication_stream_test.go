@@ -767,7 +767,7 @@ USE d;
 
 	// Using same batch ts so that this SST can be emitted through rangefeed.
 	_, _, _, err := h.SysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
-		false, hlc.Timestamp{}, nil, false, batchHLCTime)
+		hlc.Timestamp{}, nil, false, batchHLCTime)
 	require.NoError(t, err)
 
 	receivedKVs, receivedDelRangeSpans := consumeUntilTimestamp(batchHLCTime)

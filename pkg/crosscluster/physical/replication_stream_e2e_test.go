@@ -674,7 +674,7 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 				storageutils.RangeKV(string(tableSpan.Key), string(tableSpan.EndKey), int(batchHLCTime.WallTime), ""),
 			})
 			_, _, _, err := c.SrcSysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
-				false, hlc.Timestamp{}, nil, false, batchHLCTime)
+				hlc.Timestamp{}, nil, false, batchHLCTime)
 			require.NoError(t, err)
 		} else {
 			// Use DelRange directly.
