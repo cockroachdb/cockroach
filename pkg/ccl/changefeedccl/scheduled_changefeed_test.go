@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -425,7 +426,7 @@ CREATE TABLE t2(b INT PRIMARY KEY, c STRING);
 INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 `)
 
-	getFeed := func(isBare bool, db *gosql.DB) (string, *webhookFeed, func()) {
+	getFeed := func(envelopeType changefeedbase.EnvelopeType, db *gosql.DB) (string, *webhookFeed, func()) {
 		cert, _, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -441,7 +442,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		feed := &webhookFeed{
 			seenTrackerMap: make(map[string]struct{}),
 			mockSink:       sinkDest,
-			isBare:         isBare,
+			envelopeType:   envelopeType,
 			jobFeed:        newJobFeed(db, dummyWrapper),
 		}
 
@@ -453,7 +454,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		name            string
 		scheduleStmt    string
 		expectedPayload []string
-		isBare          bool
+		envelopeType    changefeedbase.EnvelopeType
 	}{
 		{
 			name:         "one-table",
@@ -463,7 +464,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 				`t1: [10]->{"after": {"a": 10, "b": "ten"}}`,
 				`t1: [100]->{"after": {"a": 100, "b": "hundred"}}`,
 			},
-			isBare: false,
+			envelopeType: changefeedbase.OptEnvelopeWrapped,
 		},
 		{
 			name:         "two-table",
@@ -476,7 +477,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 				`t2: [2]->{"after": {"b": 2, "c": "two"}}`,
 				`t2: [1]->{"after": {"b": 1, "c": "one"}}`,
 			},
-			isBare: false,
+			envelopeType: changefeedbase.OptEnvelopeWrapped,
 		},
 		{
 			name: "changefeed-expressions",
@@ -487,13 +488,13 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 				`t1: [10]->{"b": "ten"}`,
 				`t1: [100]->{"b": "hundred"}`,
 			},
-			isBare: true,
+			envelopeType: changefeedbase.OptEnvelopeBare,
 		},
 	}
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			sinkURI, feed, cleanup := getFeed(test.isBare, th.db)
+			sinkURI, feed, cleanup := getFeed(test.envelopeType, th.db)
 			defer cleanup()
 
 			sj, err := th.createChangefeedSchedule(
@@ -532,7 +533,7 @@ CREATE TABLE t2(b INT PRIMARY KEY, c STRING);
 INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 `)
 
-	getFeed := func(isBare bool, db *gosql.DB) (string, *webhookFeed, func()) {
+	getFeed := func(envelopeType changefeedbase.EnvelopeType, db *gosql.DB) (string, *webhookFeed, func()) {
 		cert, _, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -548,7 +549,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		feed := &webhookFeed{
 			seenTrackerMap: make(map[string]struct{}),
 			mockSink:       sinkDest,
-			isBare:         isBare,
+			envelopeType:   envelopeType,
 			jobFeed:        newJobFeed(db, dummyWrapper),
 		}
 
@@ -560,7 +561,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		name            string
 		scheduleStmt    string
 		expectedPayload []string
-		isBare          bool
+		envelopeType    changefeedbase.EnvelopeType
 	}{
 		name:         "one-table",
 		scheduleStmt: "CREATE SCHEDULE FOR changefeed TABLE t1 INTO $1 RECURRING '@hourly'",
@@ -569,11 +570,11 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 			`t1: [10]->{"after": {"a": 10, "b": "ten"}}`,
 			`t1: [100]->{"after": {"a": 100, "b": "hundred"}}`,
 		},
-		isBare: false,
+		envelopeType: changefeedbase.OptEnvelopeWrapped,
 	}
 
 	t.Run(testCase.name, func(t *testing.T) {
-		sinkURI, feed, cleanup := getFeed(testCase.isBare, th.db)
+		sinkURI, feed, cleanup := getFeed(testCase.envelopeType, th.db)
 		defer cleanup()
 
 		sj, err := th.createChangefeedSchedule(
