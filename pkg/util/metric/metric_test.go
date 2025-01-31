@@ -968,3 +968,14 @@ func BenchmarkHistogramRecordValue(b *testing.B) {
 		}
 	})
 }
+
+func TestCollectHistogramBoundsCountsLengths(t *testing.T) {
+	h := prometheus.NewHistogram(prometheus.HistogramOpts{})
+	assert.Equal(t, collectHistogramBoundsCountsLengths(h), "len(upperBounds): 11, len(counts[0].buckets): 11, len(counts[1].buckets): 11")
+	// If this code has gone a year without recurring, remove this test, and the corresponding code underneath it.
+	cutoff := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	if time.Now().After(cutoff) {
+		// Remove this test and the `collectHistogramBoundsCountsLengths` function.
+		t.Fatalf("This test has expired! It's now %v, which is after %v", time.Now(), cutoff)
+	}
+}

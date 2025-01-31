@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -467,9 +469,59 @@ func (h *Histogram) CumulativeSnapshot() HistogramSnapshot {
 	return MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
 }
 
+// collects various private fields from a prometheus histogram to debug
+// whether the lengths of various internal slices are mis-matched.
+func collectHistogramBoundsCountsLengths(h prometheus.HistogramInternal) (resp string) {
+	// handle panics in case we change the histogram version
+	defer func() {
+		if r := recover(); r != nil {
+			resp = fmt.Sprintf("%v", r)
+		}
+	}()
+	v := reflect.ValueOf(h)
+	for v.Kind() == reflect.Interface || v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	upperBounds := v.FieldByName("upperBounds")
+	parts := []string{fmt.Sprintf("len(upperBounds): %d", upperBounds.Len())}
+	counts := v.FieldByName("counts")
+	for i := 0; i < counts.Len(); i++ {
+		ptr := counts.Index(i)
+		if ptr.IsNil() {
+			// If the pointer is nil, just report that
+			parts = append(parts, fmt.Sprintf("len(counts[%d].buckets): nil", i))
+			continue
+		}
+		// Dereference to get the histogramCounts struct
+		countStruct := ptr.Elem()
+
+		// Within the struct, get the "buckets" field (a slice)
+		bucketsField := countStruct.FieldByName("buckets")
+		parts = append(parts, fmt.Sprintf("len(counts[%d].buckets): %d", i, bucketsField.Len()))
+	}
+	resp = strings.Join(parts, ", ")
+	return resp
+}
+
+// DebugAugmentPanic attaches information about a panicking goroutine from
+// a seemingly impossible situation seen in the ticket
+// https://github.com/cockroachdb/cockroach/issues/136186.
+// The goal is to see how the values of h.windowed.[cur/prev].[upperBounds/counts]
+// differ.
+func (h *Histogram) debugAugmentPanic() {
+	if r := recover(); r != nil {
+		stack := debug.Stack()
+		extraInfo := "h.windowed.cur" + collectHistogramBoundsCountsLengths(h.windowed.cur)
+		extraInfo += "h.windowed.prev" + collectHistogramBoundsCountsLengths(h.windowed.prev)
+		panic(fmt.Errorf("DebugAugmentPanic: %v\nExtra info: %s\nOriginal stack:\n%s",
+			r, extraInfo, string(stack)))
+	}
+}
+
 func (h *Histogram) WindowedSnapshot() HistogramSnapshot {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
+	defer h.debugAugmentPanic()
 	cur := &prometheusgo.Metric{}
 	prev := &prometheusgo.Metric{}
 	if err := h.windowed.cur.Write(cur); err != nil {
