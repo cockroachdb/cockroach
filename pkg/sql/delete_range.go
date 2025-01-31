@@ -118,7 +118,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 			b.Header.MaxSpanRequestKeys = row.TableTruncateChunkSize
 			b.Header.LockTimeout = params.SessionData().LockTimeout
 			b.Header.DeadlockTimeout = params.SessionData().DeadlockTimeout
-			d.deleteSpans(params, b, spans)
+			d.deleteSpans(params, b, spans, params.p.txn.BufferedWritesEnabled())
 			log.VEventf(ctx, 2, "fast delete: processing %d spans", len(spans))
 			if err := params.p.txn.Run(ctx, b); err != nil {
 				return row.ConvertBatchError(ctx, d.desc, b)
@@ -141,7 +141,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		b := params.p.txn.NewBatch()
 		b.Header.LockTimeout = params.SessionData().LockTimeout
 		b.Header.DeadlockTimeout = params.SessionData().DeadlockTimeout
-		d.deleteSpans(params, b, spans)
+		d.deleteSpans(params, b, spans, params.p.txn.BufferedWritesEnabled())
 		log.VEventf(ctx, 2, "fast delete: processing %d spans and committing", len(spans))
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
 			return row.ConvertBatchError(ctx, d.desc, b)
@@ -162,20 +162,29 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 
 // deleteSpans adds each input span to a Del or a DelRange command in the given
 // batch.
-func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roachpb.Spans) {
+func (d *deleteRangeNode) deleteSpans(
+	params runParams, b *kv.Batch, spans roachpb.Spans, bufferedWritesEnabled bool,
+) {
 	ctx := params.ctx
 	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	delFn, delRangeFn := b.Del, b.DelRange
+	if bufferedWritesEnabled {
+		// TODO(yuzefovich): we could consider using the locking variants
+		// unconditionally, even with buffered writes disabled, since in that
+		// case the deletion itself acquires the locks.
+		delFn, delRangeFn = b.DelLockIfExists, b.DelRangeLockExisting
+	}
 	for _, span := range spans {
 		if span.EndKey == nil {
 			if traceKV {
 				log.VEventf(ctx, 2, "Del %s", span.Key)
 			}
-			b.Del(span.Key)
+			delFn(span.Key)
 		} else {
 			if traceKV {
 				log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
 			}
-			b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
+			delRangeFn(span.Key, span.EndKey, true /* returnKeys */)
 		}
 	}
 }

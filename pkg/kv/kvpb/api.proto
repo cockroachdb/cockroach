@@ -425,6 +425,10 @@ message IncrementResponse {
 // A DeleteRequest is the argument to the Delete() method.
 message DeleteRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // LockIfExists instructs the KV client to acquire a lock on the key to be
+  // deleted if it exists when the writes are buffered on the client (if writes
+  // aren't buffered, then this flag has no effect).
+  bool lock_if_exists = 2;
 }
 
 // A DeleteResponse is the return value from the Delete() method.
@@ -477,6 +481,10 @@ message DeleteRangeRequest {
   // queue to delete this data as soon as it can, and helps optimizing GC for
   // bulk deletions.
   bool update_range_delete_gc_hint = 8 [(gogoproto.customname) = "UpdateRangeDeleteGCHint"];
+  // LockExisting instructs the KV client to acquire a lock on all existing keys
+  // to be deleted when the writes are buffered on the client (if writes aren't
+  // buffered, then this flag has no effect).
+  bool lock_existing = 9;
 
   DeleteRangePredicates predicates = 6 [(gogoproto.nullable) = false];
 }

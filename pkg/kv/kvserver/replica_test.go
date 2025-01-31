@@ -2200,7 +2200,7 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	tc.manualClock.MustAdvanceTo(timeutil.Unix(2, 0))
 	ts2 := tc.Clock().Now()
 	key := roachpb.Key("b")
-	drArgs := kvpb.NewDeleteRange(key, key.Next(), false /* returnKeys */)
+	drArgs := kvpb.NewDeleteRange(key, key.Next(), false /* returnKeys */, false /* usingTombstone */, false /* lockExisting */)
 
 	if _, pErr := tc.SendWrappedWith(kvpb.Header{Timestamp: ts2}, drArgs); pErr != nil {
 		t.Error(pErr)

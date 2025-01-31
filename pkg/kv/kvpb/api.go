@@ -1691,23 +1691,28 @@ func NewConditionalPutInline(
 }
 
 // NewDelete returns a Request initialized to delete the value at key.
-func NewDelete(key roachpb.Key) Request {
+func NewDelete(key roachpb.Key, lockIfExists bool) Request {
 	return &DeleteRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
+		LockIfExists: lockIfExists,
 	}
 }
 
 // NewDeleteRange returns a Request initialized to delete the values in
 // the given key range (excluding the endpoint).
-func NewDeleteRange(startKey, endKey roachpb.Key, returnKeys bool) Request {
+func NewDeleteRange(
+	startKey, endKey roachpb.Key, returnKeys bool, usingTombstone bool, lockExisting bool,
+) Request {
 	return &DeleteRangeRequest{
 		RequestHeader: RequestHeader{
 			Key:    startKey,
 			EndKey: endKey,
 		},
-		ReturnKeys: returnKeys,
+		ReturnKeys:        returnKeys,
+		UseRangeTombstone: usingTombstone,
+		LockExisting:      lockExisting,
 	}
 }
 

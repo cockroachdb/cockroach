@@ -4000,7 +4000,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 
 				ba := &kvpb.BatchRequest{}
 				ba.Txn = txn.Clone()
-				ba.Add(kvpb.NewDeleteRange(roachpb.Key("a"), roachpb.Key("c"), false /* returnKeys */))
+				ba.Add(kvpb.NewDeleteRange(roachpb.Key("a"), roachpb.Key("c"), false /* returnKeys */, false /* usingTombstone */, false /* lockExisting */))
 
 				expWriteTimestamp := txn.WriteTimestamp
 				if tc.err1 != nil {

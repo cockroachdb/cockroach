@@ -834,6 +834,16 @@ func (b *Batch) ReverseScanForShare(s, e interface{}, dur kvpb.KeyLockingDurabil
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Del(keys ...interface{}) {
+	b.delImpl(false /* lockIfExists */, keys...)
+}
+
+// DelLockIfExists is the same as Del but also sets LockIfExists flag on the
+// DeleteRequest.
+func (b *Batch) DelLockIfExists(keys ...interface{}) {
+	b.delImpl(true /* lockIfExists */, keys...)
+}
+
+func (b *Batch) delImpl(lockIfExists bool, keys ...interface{}) {
 	reqs := make([]kvpb.Request, 0, len(keys))
 	for _, key := range keys {
 		k, err := marshalKey(key)
@@ -841,7 +851,7 @@ func (b *Batch) Del(keys ...interface{}) {
 			b.initResult(len(keys), 0, notRaw, err)
 			return
 		}
-		reqs = append(reqs, kvpb.NewDelete(k))
+		reqs = append(reqs, kvpb.NewDelete(k, lockIfExists))
 		b.approxMutationReqBytes += len(k)
 	}
 	b.appendReqs(reqs...)
@@ -855,6 +865,24 @@ func (b *Batch) Del(keys ...interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
+	b.delRangeImpl(s, e, returnKeys, false /* usingTombstone */, false /* lockExisting */)
+}
+
+// DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
+// (exclusive) using an MVCC range tombstone.
+func (b *Batch) DelRangeUsingTombstone(s, e interface{}) {
+	b.delRangeImpl(s, e, false /* returnKeys */, true /* usingTombstone */, false /* lockExisting */)
+}
+
+// DelRangeLockExisting is the same as DelRange but also sets LockExisting flag
+// on the DeleteRangeRequest.
+func (b *Batch) DelRangeLockExisting(s, e interface{}, returnKeys bool) {
+	b.delRangeImpl(s, e, returnKeys, false /* usingTombstone */, true /* lockExisting */)
+}
+
+func (b *Batch) delRangeImpl(
+	s, e interface{}, returnKeys bool, usingTombstone bool, lockExisting bool,
+) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -865,31 +893,7 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	b.appendReqs(kvpb.NewDeleteRange(begin, end, returnKeys))
-	b.initResult(1, 0, notRaw, nil)
-}
-
-// DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
-// (exclusive) using an MVCC range tombstone. Callers must check
-// storage.CanUseMVCCRangeTombstones before using this.
-func (b *Batch) DelRangeUsingTombstone(s, e interface{}) {
-	start, err := marshalKey(s)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	end, err := marshalKey(e)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	b.appendReqs(&kvpb.DeleteRangeRequest{
-		RequestHeader: kvpb.RequestHeader{
-			Key:    start,
-			EndKey: end,
-		},
-		UseRangeTombstone: true,
-	})
+	b.appendReqs(kvpb.NewDeleteRange(begin, end, returnKeys, usingTombstone, lockExisting))
 	b.initResult(1, 0, notRaw, nil)
 }
 
