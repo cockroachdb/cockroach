@@ -5299,3 +5299,61 @@ func (c *filterCount) add(other filterCount) {
 	c.unknown += other.unknown
 	c.similarity += other.similarity
 }
+
+// CalculateEstimatedRowCount is a placeholder function to calculate the EstimatedRowCount.
+// Currently, it returns a hardcoded value but can be extended with actual logic.
+func CalculateEstimatedRowCount(table string) int64 {
+	// Placeholder logic, returning a hardcoded value for now.
+	return 1000
+}
+
+// GetMaxFrequency is a placeholder function to simulate getting the max frequency of a column in a table.
+// Replace with actual implementation when available.
+func GetMaxFrequency(tableName, columnName string) int64 {
+	// Placeholder logic, returning a hardcoded value for now.
+	return 5
+}
+
+// CalculateUpperBoundRecursive calculates the upper bound for joining n tables.
+// tablesAndColumns is a slice of pairs where each pair contains a table name and a column name.
+func CalculateUpperBoundRecursive(tablesAndColumns [][2]string, n int) int64 {
+	if n == 2 {
+		// Base case: Calculate upper bound for the first two tables
+		table1, column1 := tablesAndColumns[0][0], tablesAndColumns[0][1]
+		table2, column2 := tablesAndColumns[1][0], tablesAndColumns[1][1]
+
+		rows1 := CalculateEstimatedRowCount(table1)
+		MF1 := GetMaxFrequency(table1, column1)
+
+		rows2 := CalculateEstimatedRowCount(table2)
+		MF2 := GetMaxFrequency(table2, column2)
+
+		minDistinctValues := minInt(rows1/MF1, rows2/MF2)
+		upperBound := minDistinctValues * MF1 * MF2
+		return upperBound
+	} else {
+		// Recursive case: Calculate upper bound for the first n-1 tables and join with the nth table
+		prevUpperBound := CalculateUpperBoundRecursive(tablesAndColumns, n-1)
+
+		// Previous table and column
+		tablePrev, columnPrev := tablesAndColumns[n-2][0], tablesAndColumns[n-2][1]
+		MFPrev := GetMaxFrequency(tablePrev, columnPrev)
+
+		// Current table and column
+		tableCurr, columnCurr := tablesAndColumns[n-1][0], tablesAndColumns[n-1][1]
+		rowsCurr := CalculateEstimatedRowCount(tableCurr)
+		MFCurr := GetMaxFrequency(tableCurr, columnCurr)
+
+		minDistinctValues := minInt(prevUpperBound/MFPrev, rowsCurr/MFCurr)
+		upperBound := minDistinctValues * MFPrev * MFCurr
+		return upperBound
+	}
+}
+
+// min is a helper function to return the minimum of two int64 values.
+func minInt(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
