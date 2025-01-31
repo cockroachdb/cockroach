@@ -147,7 +147,14 @@ SHOW CREATE TABLE multi_pol_tab1
 multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                   c1 INT8 NOT NULL,
                   CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
-                )
+                );
+                CREATE POLICY "policy 1" ON public.multi_pol_tab1;
+                CREATE POLICY "policy 2" ON public.multi_pol_tab1 AS RESTRICTIVE;
+                CREATE POLICY "policy 3" ON public.multi_pol_tab1;
+                CREATE POLICY "policy 4" ON public.multi_pol_tab1 FOR INSERT;
+                CREATE POLICY "policy 5" ON public.multi_pol_tab1 FOR UPDATE;
+                CREATE POLICY "policy 6" ON public.multi_pol_tab1 FOR DELETE;
+                CREATE POLICY "policy 7" ON public.multi_pol_tab1 FOR SELECT
 
 statement ok
 DROP POLICY "policy 1" ON multi_pol_tab1
@@ -164,7 +171,11 @@ SHOW CREATE TABLE multi_pol_tab1
 multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                   c1 INT8 NOT NULL,
                   CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
-                )
+                );
+                CREATE POLICY "policy 2" ON public.multi_pol_tab1 AS RESTRICTIVE;
+                CREATE POLICY "policy 4" ON public.multi_pol_tab1 FOR INSERT;
+                CREATE POLICY "policy 6" ON public.multi_pol_tab1 FOR DELETE;
+                CREATE POLICY "policy 7" ON public.multi_pol_tab1 FOR SELECT
 
 statement ok
 DROP TABLE multi_pol_tab1
@@ -260,7 +271,8 @@ SHOW CREATE TABLE target
 target  CREATE TABLE public.target (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT target_pkey PRIMARY KEY (rowid ASC)
-        )
+        );
+        CREATE POLICY pol ON public.target TO john, testuser
 
 user root
 

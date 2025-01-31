@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -193,6 +194,24 @@ func ShowCreateTable(
 		return "", err
 	}
 
+	if desc.IsRowLevelSecurityEnabled() {
+		if err := showAlterTableRLS(tn, &f.Buffer, tree.TableRLSEnable); err != nil {
+			return "", err
+		}
+	}
+
+	if desc.IsRowLevelSecurityForced() {
+		if err := showAlterTableRLS(tn, &f.Buffer, tree.TableRLSForce); err != nil {
+			return "", err
+		}
+	}
+
+	for _, policyDesc := range desc.GetPolicies() {
+		if err := showCreatePolicies(tn, &f.Buffer, policyDesc); err != nil {
+			return "", err
+		}
+	}
+
 	if !displayOptions.IgnoreComments {
 		if err := showComments(tn, desc, selectComment(ctx, p, desc.GetID()), &f.Buffer); err != nil {
 			return "", err
@@ -200,6 +219,84 @@ func ShowCreateTable(
 	}
 
 	return f.CloseAndGetString(), nil
+}
+
+// showAlterTableRLS prints out the ALTER TABLE ... ROW LEVEL SECURITY statements
+func showAlterTableRLS(tn *tree.TableName, buf *bytes.Buffer, rlsMode tree.TableRLSMode) error {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	un := tn.ToUnresolvedObjectName()
+
+	f.WriteString(";\n")
+	f.FormatNode(&tree.AlterTable{
+		Table: un,
+		Cmds: []tree.AlterTableCmd{
+			&tree.AlterTableSetRLSMode{
+				Mode: rlsMode,
+			},
+		},
+	})
+
+	buf.WriteString(f.CloseAndGetString())
+
+	return nil
+}
+
+// showCreatePolicies prints out the CREATE POLICY statements
+func showCreatePolicies(
+	tn *tree.TableName, buf *bytes.Buffer, policyDesc descpb.PolicyDescriptor,
+) error {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	un := tn.ToUnresolvedObjectName()
+
+	// Check if we have a non-default permissive policy type
+	var policyType tree.PolicyType
+	if policyDesc.Type != catpb.PolicyType(tree.PolicyTypePermissive) {
+		policyType = tree.PolicyType(policyDesc.Type)
+	}
+
+	// Check if we have a non-default FOR ALL policy command
+	var policyCommand tree.PolicyCommand
+	if policyDesc.Command != catpb.PolicyCommand(tree.PolicyCommandAll) {
+		policyCommand = tree.PolicyCommand(policyDesc.Command)
+	}
+
+	var policyRoleSpecList []tree.RoleSpec
+	for _, roleName := range policyDesc.RoleNames {
+		// check that we do not add the default public role
+		if roleName == "public" {
+			continue
+		}
+		policyRoleSpecList = append(policyRoleSpecList, tree.MakeRoleSpecWithRoleName(roleName))
+	}
+
+	// Check if we have a policy using expression
+	var exprUsing tree.Expr
+	if len(policyDesc.UsingExpr) != 0 {
+		exprUsing = tree.NewStrVal(policyDesc.UsingExpr)
+	}
+
+	// Check if we have a policy with check expression
+	var exprCheck tree.Expr
+	if len(policyDesc.WithCheckExpr) != 0 {
+		exprCheck = tree.NewStrVal(policyDesc.WithCheckExpr)
+	}
+
+	f.WriteString(";\n")
+	f.FormatNode(&tree.CreatePolicy{
+		PolicyName: tree.Name(policyDesc.Name),
+		TableName:  un,
+		Type:       policyType,
+		Cmd:        policyCommand,
+		Roles:      policyRoleSpecList,
+		Exprs: tree.PolicyExpressions{
+			Using:     exprUsing,
+			WithCheck: exprCheck,
+		},
+	})
+
+	buf.WriteString(f.CloseAndGetString())
+
+	return nil
 }
 
 // formatQuoteNames quotes and adds commas between names.
