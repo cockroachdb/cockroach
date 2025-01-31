@@ -171,6 +171,7 @@ func TestColdStartLatency(t *testing.T) {
 		} else {
 			stmts = []string{`
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER DATABASE system PRIMARY REGION "us-east1";
 ALTER DATABASE system ADD REGION "us-west1";
 ALTER DATABASE system ADD REGION "europe-west1";
