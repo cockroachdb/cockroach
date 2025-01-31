@@ -367,6 +367,12 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 	} {
 		rSys.Exec(t, sql)
 	}
+	for _, sql := range []string{
+		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1",
+	} {
+		r.Exec(t, sql)
+	}
 
 	const initialRowCount = 500000
 	const rowsDeletedPerIteration = 200000
@@ -374,6 +380,7 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 
 	for _, tc := range []struct {
 		name                 string
+		tableName            string
 		backfillSchemaChange string
 		jobDescriptionPrefix string
 		postTestQuery        string
@@ -381,33 +388,32 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 	}{
 		{
 			name:                 "create materialized view",
-			backfillSchemaChange: "CREATE MATERIALIZED VIEW test AS (SELECT n from t)",
+			tableName:            "t_mat_view",
+			backfillSchemaChange: "CREATE MATERIALIZED VIEW test AS (SELECT n from t_mat_view)",
 			jobDescriptionPrefix: "CREATE MATERIALIZED VIEW",
 			postTestQuery:        "SELECT count(*) FROM test",
 			expectedCount:        initialRowCount - rowsDeletedPerIteration + rowsAddedPerIteration,
 		},
 		{
 			name:                 "create index",
-			backfillSchemaChange: "CREATE INDEX idx ON t(n)",
+			tableName:            "t_idx",
+			backfillSchemaChange: "CREATE INDEX idx ON t_idx(n)",
 			jobDescriptionPrefix: "CREATE INDEX idx",
-			postTestQuery:        "SELECT count(*) FROM t@idx",
+			postTestQuery:        "SELECT count(*) FROM t_idx@idx",
 			expectedCount:        initialRowCount - 2*rowsDeletedPerIteration + 2*rowsAddedPerIteration,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, sql := range []string{
-				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-				"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 5",
-				"DROP TABLE IF EXISTS t CASCADE",
-				"CREATE TABLE t(n int)",
-				"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 5",
-				fmt.Sprintf("INSERT INTO t(n) SELECT * FROM generate_series(1, %d)", initialRowCount),
+				fmt.Sprintf("CREATE TABLE %s(n int)", tc.tableName),
+				fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 1", tc.tableName),
+				fmt.Sprintf("INSERT INTO %s(n) SELECT * FROM generate_series(1, %d)", tc.tableName, initialRowCount),
 			} {
 				r.Exec(t, sql)
 			}
 
 			getTableID := func() (tableID uint32) {
-				r.QueryRow(t, `SELECT 't'::regclass::oid`).Scan(&tableID)
+				r.QueryRow(t, fmt.Sprintf(`SELECT '%s'::regclass::oid`, tc.tableName)).Scan(&tableID)
 				return tableID
 			}
 			tableID = getTableID()
@@ -432,8 +438,8 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 							return errors.Wrap(err, "failed to set sql_safe_updates")
 						}
 						if _, err := db.ExecContext(ctx, fmt.Sprintf(
-							"BEGIN; DELETE FROM t LIMIT %d; INSERT INTO t VALUES('9999999'); COMMIT",
-							rowsDeletedPerIteration,
+							"BEGIN; DELETE FROM %[1]s LIMIT %[2]d; INSERT INTO %[1]s VALUES('9999999'); COMMIT",
+							tc.tableName, rowsDeletedPerIteration,
 						)); err != nil {
 							return errors.Wrap(err, "failed to DELETE and INSERT")
 						}
@@ -443,9 +449,9 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 						if err := refreshPTSCacheTo(ctx, ts.Clock().Now()); err != nil {
 							return errors.Wrap(err, "failed to refresh PTS cache")
 						}
-						if _, err := db.ExecContext(ctx, `
+						if _, err := db.ExecContext(ctx, fmt.Sprintf(`
 SELECT crdb_internal.kv_enqueue_replica(range_id, 'mvccGC', true)
-FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); err != nil {
+FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key);`, tc.tableName)); err != nil {
 							return errors.Wrap(err, "failed to enqueue replica for GC")
 						}
 						row := db.QueryRowContext(ctx, "SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
