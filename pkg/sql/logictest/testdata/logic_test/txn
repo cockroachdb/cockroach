@@ -188,7 +188,7 @@ ROLLBACK TRANSACTION
 # COMMIT/ROLLBACK without a transaction are allowed when autocommit_before_ddl=true.
 
 statement ok
-RESET autocommit_before_ddl
+SET autocommit_before_ddl = true
 
 statement ok
 COMMIT TRANSACTION
@@ -207,7 +207,7 @@ SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
 # Set isolation level without a transaction is a warning when autocommit_before_ddl=true.
 
 statement ok
-RESET autocommit_before_ddl
+SET autocommit_before_ddl = true
 
 query T noticetrace
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
@@ -544,7 +544,7 @@ statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION PRIORITY LOW
 
 statement ok
-RESET autocommit_before_ddl
+SET autocommit_before_ddl = true
 
 query T noticetrace
 SET TRANSACTION PRIORITY LOW
