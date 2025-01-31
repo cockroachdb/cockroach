@@ -399,7 +399,6 @@ CREATE TABLE crdb_internal.databases (
 						createNode.Placement = tree.DataPlacementUnspecified
 					}
 
-					createNode.SurvivalGoal = tree.SurvivalGoalDefault
 					switch db.GetRegionConfig().SurvivalGoal {
 					case descpb.SurvivalGoal_ZONE_FAILURE:
 						survivalGoal = tree.NewDString("zone")
