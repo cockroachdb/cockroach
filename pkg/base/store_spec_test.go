@@ -222,44 +222,6 @@ type StoreSpec = base.StoreSpec
 // SizeSpec aliases storagepb.SizeSpec for convenience.
 type SizeSpec = storagepb.SizeSpec
 
-func TestJoinListType(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testData := []struct {
-		join string
-		exp  string
-		err  string
-	}{
-		{"", "", "no address specified in --join"},
-		{":", "--join=:" + base.DefaultPort, ""},
-		{"a", "--join=a:" + base.DefaultPort, ""},
-		{"a,b", "--join=a:" + base.DefaultPort + " --join=b:" + base.DefaultPort, ""},
-		{"a,,b", "--join=a:" + base.DefaultPort + " --join=b:" + base.DefaultPort, ""},
-		{",a", "--join=a:" + base.DefaultPort, ""},
-		{"a,", "--join=a:" + base.DefaultPort, ""},
-		{"a:123,b", "--join=a:123 --join=b:" + base.DefaultPort, ""},
-		{"[::1]:123,b", "--join=[::1]:123 --join=b:" + base.DefaultPort, ""},
-		{"[::1,b", "", `address \[::1: missing ']' in address`},
-	}
-
-	for _, test := range testData {
-		t.Run(test.join, func(t *testing.T) {
-			var jls base.JoinListType
-			err := jls.Set(test.join)
-			if !testutils.IsError(err, test.err) {
-				t.Fatalf("error: expected %q, got: %+v", test.err, err)
-			}
-			if test.err != "" {
-				return
-			}
-			actual := jls.String()
-			if actual != test.exp {
-				t.Errorf("expected: %q, got: %q", test.exp, actual)
-			}
-		})
-	}
-}
-
 func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

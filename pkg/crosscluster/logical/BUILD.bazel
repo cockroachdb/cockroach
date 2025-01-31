@@ -119,6 +119,7 @@ go_test(
     ],
     data = ["//c-deps:libgeos"],
     embed = [":logical"],
+    exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
         "//pkg/ccl",

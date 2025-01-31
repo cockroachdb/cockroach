@@ -8,7 +8,6 @@ package base
 import (
 	"bytes"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
@@ -28,8 +26,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// This file implements method receivers for members of server.Config struct
-// -- 'Stores' and 'JoinList', which satisfies pflag's value interface
+// This file implements method receivers for server.Config struct
+// -- 'Stores', which satisfies pflag's value interface
 
 // MinimumStoreSize is the smallest size in bytes that a store can have. This
 // number is based on config's defaultZoneConfig's RangeMaxBytes, which is
@@ -443,61 +441,6 @@ func (ssl *StoreSpecList) Set(value string) error {
 		ssl.updated = true
 	} else {
 		ssl.Specs = append(ssl.Specs, spec)
-	}
-	return nil
-}
-
-// JoinListType is a slice of strings that implements pflag's value
-// interface.
-type JoinListType []string
-
-// String returns a string representation of all the JoinListType. This is part
-// of pflag's value interface.
-func (jls JoinListType) String() string {
-	var buffer bytes.Buffer
-	for _, jl := range jls {
-		fmt.Fprintf(&buffer, "--join=%s ", jl)
-	}
-	// Trim the extra space from the end if it exists.
-	if l := buffer.Len(); l > 0 {
-		buffer.Truncate(l - 1)
-	}
-	return buffer.String()
-}
-
-// Type returns the underlying type in string form. This is part of pflag's
-// value interface.
-func (jls *JoinListType) Type() string {
-	return "string"
-}
-
-// Set adds a new value to the JoinListType. It is the important part of
-// pflag's value interface.
-func (jls *JoinListType) Set(value string) error {
-	if strings.TrimSpace(value) == "" {
-		// No value, likely user error.
-		return errors.New("no address specified in --join")
-	}
-	for _, v := range strings.Split(value, ",") {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			// --join=a,,b  equivalent to --join=a,b
-			continue
-		}
-		// Try splitting the address. This validates the format
-		// of the address and tolerates a missing delimiter colon
-		// between the address and port number.
-		addr, port, err := addr.SplitHostPort(v, "")
-		if err != nil {
-			return err
-		}
-		// Default the port if unspecified.
-		if len(port) == 0 {
-			port = DefaultPort
-		}
-		// Re-join the parts. This guarantees an address that
-		// will be valid for net.SplitHostPort().
-		*jls = append(*jls, net.JoinHostPort(addr, port))
 	}
 	return nil
 }
