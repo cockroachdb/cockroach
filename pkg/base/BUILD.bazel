@@ -10,6 +10,7 @@ go_library(
         "constants.go",
         "license.go",
         "node_id.go",
+        "size_spec.go",
         "store_spec.go",
         "test_cluster_replication_mode.go",
         "test_server_args.go",
