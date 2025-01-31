@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -143,6 +144,10 @@ type Metadata struct {
 	// as a builtin function.
 	builtinRefsByName map[tree.UnresolvedName]struct{}
 
+	// rlsMeta stores row-level security policy metadata enforced during query
+	// execution.
+	rlsMeta RowLevelSecurityMeta
+
 	digest struct {
 		syncutil.Mutex
 		depDigest cat.DependencyDigest
@@ -249,7 +254,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 		len(md.sequences) != 0 || len(md.views) != 0 || len(md.userDefinedTypes) != 0 ||
 		len(md.userDefinedTypesSlice) != 0 || len(md.dataSourceDeps) != 0 ||
 		len(md.routineDeps) != 0 || len(md.objectRefsByName) != 0 || len(md.privileges) != 0 ||
-		len(md.builtinRefsByName) != 0 {
+		len(md.builtinRefsByName) != 0 || md.rlsMeta.IsInitialized {
 		panic(errors.AssertionFailedf("CopyFrom requires empty destination"))
 	}
 	md.schemas = append(md.schemas, from.schemas...)
@@ -328,6 +333,8 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 
 	// We cannot copy the bound expressions; they must be rebuilt in the new memo.
 	md.withBindings = nil
+
+	md.rlsMeta = from.rlsMeta
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from
@@ -535,6 +542,11 @@ func (md *Metadata) CheckDependencies(
 		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid, optCatalog.GetCurrentUser()); err != nil {
 			return false, err
 		}
+	}
+
+	// Check for staleness from a row-level security point of view.
+	if upToDate, err := md.checkRLSDependencies(ctx, evalCtx, optCatalog); err != nil || !upToDate {
+		return upToDate, err
 	}
 
 	// Update the digest after a full dependency check, since our fast
@@ -1247,4 +1259,49 @@ func (md *Metadata) TestingObjectRefsByName() map[cat.StableID][]*tree.Unresolve
 // TestingPrivileges exposes the privileges for testing.
 func (md *Metadata) TestingPrivileges() map[cat.StableID]privilegeBitmap {
 	return md.privileges
+}
+
+// SetRLSEnabled will update the metadata to indicate we came across a table
+// that had row-level security enabled.
+func (md *Metadata) SetRLSEnabled(user username.SQLUsername, isAdmin bool) {
+	md.rlsMeta.MaybeInit(user, isAdmin)
+}
+
+// ClearRLSEnabled will clear out the initialized state for the rls meta. This
+// is used as a test helper.
+func (md *Metadata) ClearRLSEnabled() {
+	md.rlsMeta.Clear()
+}
+
+// checkRLSDependencies will check the metadata for row-level security
+// dependencies to see if it is up to date.
+func (md *Metadata) checkRLSDependencies(
+	ctx context.Context, evalCtx *eval.Context, optCatalog cat.Catalog,
+) (upToDate bool, err error) {
+	// rlsMeta is lazily updated. If we didn't initialize it, then we didn't come
+	// across any RLS enabled tables. So, from a rls point of view the memo is up
+	// to date.
+	if !md.rlsMeta.IsInitialized {
+		return true, nil
+	}
+
+	// RLS policies that get applied could differ vastly based on the role. So, if
+	// the user is different, we cannot trust anything in the current memo.
+	if md.rlsMeta.User != evalCtx.SessionData().User() {
+		return false, nil
+	}
+
+	// If the role membership changes, resulting in the user gaining or losing
+	// admin privileges, the memo is considered stale. Admins are exempt from
+	// RLS policies.
+	if hasAdminRole, err := optCatalog.HasAdminRole(ctx); err != nil {
+		return false, err
+	} else if md.rlsMeta.HasAdminRole != hasAdminRole {
+		return false, nil
+	}
+
+	// We do not check for specific policy changes. Any time a policy is modified
+	// on a table, a new version of the table descriptor is created. The metadata
+	// dependency check already accounts for changes in the table descriptor version.
+	return true, nil
 }

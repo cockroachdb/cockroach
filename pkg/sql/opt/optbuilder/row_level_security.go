@@ -31,6 +31,7 @@ func (b *Builder) addRowLevelSecurityFilter(
 	if err != nil {
 		panic(err)
 	}
+	b.factory.Metadata().SetRLSEnabled(b.evalCtx.SessionData().User(), isAdmin)
 	if isAdmin {
 		return
 	}
