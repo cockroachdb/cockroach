@@ -3311,8 +3311,14 @@ mutation         {crdb_internal_a_shard_3}    10         true
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = ''
 
+let $job
+SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t118537 ALTER PRIMARY KEY USING COLUMNS (a) USING HASH' AND status LIKE 'pause%' FETCH FIRST 1 ROWS ONLY
+
 statement ok
-RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t118537 ALTER PRIMARY KEY USING COLUMNS (a) USING HASH' AND status = 'paused' FETCH FIRST 1 ROWS ONLY)
+RESUME JOB $job
+
+statement ok
+SHOW JOB WHEN COMPLETE $job
 
 # Test optimizer_use_virtual_computed_column_stats.
 
@@ -3480,6 +3486,78 @@ upper_bound   range_rows  distinct_range_rows  equal_rows
 'paid'        0           0                    1
 'dispatched'  0           0                    1
 'delivered'   0           0                    1
+
+# Regression test for #138809: check that we can still use stats on virtual
+# computed columns after dropping the column.
+
+statement ok
+CREATE TABLE t138809 (
+  a INT PRIMARY KEY,
+  b INT AS (a + 1) VIRTUAL,
+  c INT AS (a + 2) VIRTUAL
+)
+
+statement ok
+INSERT INTO t138809 (a) VALUES (1), (2)
+
+statement ok
+ANALYZE t138809
+
+query TIIIIB colnames
+SELECT column_names, row_count, null_count, distinct_count, avg_size, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE t138809]
+ORDER BY column_names::STRING
+----
+column_names  row_count  null_count  distinct_count  avg_size  has_histogram
+{a}           2          0           2               8         true
+{b}           2          0           2               8         true
+{c}           2          0           2               8         true
+
+query T
+EXPLAIN SELECT count(*) FROM t138809 WHERE b > 1
+----
+distribution: full
+vectorized: true
+·
+• group (scalar)
+│ estimated row count: 1
+│
+└── • scan
+      estimated row count: 2 (100% of the table; stats collected <hidden> ago)
+      table: t138809@t138809_pkey
+      spans: [/1 - ]
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.root..1'
+
+statement error job \d+ was paused before it completed with reason: pause point "schemachanger\.root\.\.1" hit
+ALTER TABLE t138809 DROP COLUMN c
+
+query T
+EXPLAIN SELECT count(*) FROM t138809 WHERE b > 1
+----
+distribution: full
+vectorized: true
+·
+• group (scalar)
+│ estimated row count: 1
+│
+└── • scan
+      estimated row count: 2 (100% of the table; stats collected <hidden> ago)
+      table: t138809@t138809_pkey
+      spans: [/1 - ]
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = DEFAULT
+
+let $job
+SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t138809 DROP COLUMN c' AND status LIKE 'pause%' FETCH FIRST 1 ROWS ONLY
+
+statement ok
+RESUME JOB $job
+
+statement ok
+SHOW JOB WHEN COMPLETE $job
 
 # Verify that partial stats are collected on single column prefixes of forward
 # indexes and skips over partial, sharded, and implicitly partitioned indexes
