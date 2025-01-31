@@ -63,6 +63,18 @@ var statsOnVirtualCols = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+// Collecting histograms on non-indexed JSON columns can require a lot of memory
+// when the JSON values are large. This is true even when only two histogram
+// buckets are generated because we still sample many JSON values which exist in
+// memory for the duration of the stats collection job. By default, we do not
+// collect histograms for non-indexed JSON columns.
+var nonIndexJSONHistograms = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.non_indexed_json_histograms.enabled",
+	"set to true to collect table statistics histograms on non-indexed JSON columns",
+	true,
+	settings.WithPublic)
+
 const nonIndexColHistogramBuckets = 2
 
 // StubTableStats generates "stub" statistics for a table which are missing
@@ -73,6 +85,7 @@ func StubTableStats(
 ) ([]*stats.TableStatisticProto, error) {
 	colStats, err := createStatsDefaultColumns(
 		context.Background(), desc, false /* virtColEnabled */, false, /* multiColEnabled */
+		false,                            /* nonIndexJSONHistograms */
 		nonIndexColHistogramBuckets, nil, /* evalCtx */
 	)
 	if err != nil {
@@ -255,7 +268,9 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		}
 		defaultHistogramBuckets := stats.GetDefaultHistogramBuckets(n.p.ExecCfg().SV(), tableDesc)
 		if colStats, err = createStatsDefaultColumns(
-			ctx, tableDesc, virtColEnabled, multiColEnabled, defaultHistogramBuckets, n.p.EvalContext(),
+			ctx, tableDesc, virtColEnabled, multiColEnabled,
+			nonIndexJSONHistograms.Get(n.p.ExecCfg().SV()),
+			defaultHistogramBuckets, n.p.EvalContext(),
 		); err != nil {
 			return nil, err
 		}
@@ -367,13 +382,16 @@ const maxNonIndexCols = 100
 // predicate expressions are also likely to appear in query filters, so stats
 // are collected for those columns as well.
 //
+// If nonIndexJsonHistograms is true, 2-bucket histograms are collected for
+// non-indexed JSON columns.
+//
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
 // other columns from the table. We only collect histograms for index columns,
 // plus any other boolean or enum columns (where the "histogram" is tiny).
 func createStatsDefaultColumns(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	virtColEnabled, multiColEnabled bool,
+	virtColEnabled, multiColEnabled, nonIndexJSONHistograms bool,
 	defaultHistogramBuckets uint32,
 	evalCtx *eval.Context,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
@@ -629,9 +647,13 @@ func createStatsDefaultColumns(
 		if col.GetType().Family() == types.BoolFamily || col.GetType().Family() == types.EnumFamily {
 			maxHistBuckets = defaultHistogramBuckets
 		}
+		hasHistogram := !colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
+		if col.GetType().Family() == types.JsonFamily {
+			hasHistogram = nonIndexJSONHistograms
+		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colIDs,
-			HasHistogram:        !colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType()),
+			HasHistogram:        hasHistogram,
 			HistogramMaxBuckets: maxHistBuckets,
 		})
 		nonIdxCols++
