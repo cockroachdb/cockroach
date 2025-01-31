@@ -915,6 +915,7 @@ func TestChangefeedEnvelope(t *testing.T) {
 			defer closeFeed(t, foo)
 			assertPayloads(t, foo, []string{`foo: [1]->{"after": {"a": 1, "b": "a"}, "key": [1]}`})
 		})
+		// TODO(#139660): add envelope=enriched here
 	}
 
 	// some sinks are incompatible with envelope
@@ -1300,7 +1301,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
-			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false, changefeedbase.OptEnvelopeWrapped)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				// Skip errors that may come up during SQL execution. If the SQL query
@@ -3856,11 +3857,19 @@ func TestChangefeedEnriched(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope=enriched`)
-		// The feed should allow this configuration.
 		defer closeFeed(t, foo)
-		// TODO(#139660): assert messages once this envelope type is integrated into the test suite.
+		// TODO(#139660): the webhook sink forces topic_in_value, but
+		// this is not supported by the enriched envelope type. We should adapt
+		// the test framework to account for this.
+		topic := "foo"
+		if _, ok := foo.(*webhookFeed); ok {
+			topic = ""
+		}
+		assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{
+			fmt.Sprintf(`%s: [0]->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic),
+		})
 	}
-	supportedSinks := []string{"webhook", "kafka", "pubsub", "sinkless", "webhook"}
+	supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
 	for _, sink := range supportedSinks {
 		cdcTest(t, testFn, feedTestForceSink(sink))
 	}
@@ -9075,7 +9084,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 					nada, expectTimeout,
 					func(ctx context.Context) error {
 						return assertPayloadsBaseErr(
-							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false)
+							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false, changefeedbase.OptEnvelopeWrapped)
 					})
 				return nil
 			}, 20*expectTimeout))
