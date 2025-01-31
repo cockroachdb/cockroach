@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -222,6 +223,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			{"testing_optimizer_random_seed", "123"},
 			{"timezone", "+8"},
 			{"unconstrained_non_covering_index_scan_enabled", "on"},
+			{"default_transaction_isolation", "'read committed'"},
 		}
 		for _, tc := range testcases {
 			t.Run(tc.sessionVar, func(t *testing.T) {
@@ -234,6 +236,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 							reg := regexp.MustCompile(fmt.Sprintf("SET %s.*-- default value", tc.sessionVar))
 							if reg.FindString(contents) == "" {
 								return errors.Errorf("could not find 'SET %s' in env.sql", tc.sessionVar)
+							}
+							if _, err := parser.Parse(contents); err != nil {
+								return errors.Wrap(err, "could not parse env.sql")
 							}
 						}
 						return nil
