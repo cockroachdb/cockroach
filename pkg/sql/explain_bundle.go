@@ -822,6 +822,8 @@ func init() {
 	binarySVForBundle = &st.SV
 }
 
+var anyWhitespace = regexp.MustCompile(`\s+`)
+
 // PrintSessionSettings appends information about all session variables that
 // differ from their defaults.
 //
@@ -900,7 +902,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		if skip && !all {
 			continue
 		}
-		if _, ok := sessionVarNeedsEscaping[varName]; ok {
+		if _, ok := sessionVarNeedsEscaping[varName]; ok || anyWhitespace.MatchString(value) {
 			value = lexbase.EscapeSQLString(value)
 		}
 		if value == "" {
