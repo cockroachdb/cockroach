@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -105,7 +106,7 @@ func TestPebbleDiskWriteMetrics(t *testing.T) {
 	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		StoreSpecs: []base.StoreSpec{
-			{Size: base.SizeSpec{InBytes: base.MinimumStoreSize}, Path: tmpDir},
+			{Size: storagepb.SizeSpec{Capacity: base.MinimumStoreSize}, Path: tmpDir},
 		},
 	})
 	defer ts.Stopper().Stop(ctx)
