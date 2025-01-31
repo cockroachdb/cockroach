@@ -4062,6 +4062,32 @@ geospatial_table_pkey  CREATE UNIQUE INDEX geospatial_table_pkey ON test.public.
 idxa                   CREATE INDEX idxa ON test.public.geospatial_table USING gin (a)
 idxb                   CREATE INDEX idxb ON test.public.geospatial_table USING gin (b)
 
+subtest vector
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE TABLE vector_table (
+  id UUID PRIMARY KEY,
+  a vector(3),
+  VECTOR INDEX idxa (a)
+)
+
+statement ok
+CREATE VECTOR INDEX idxb ON vector_table (a)
+
+query TT colnames
+SELECT indexname, indexdef
+FROM pg_catalog.pg_indexes
+WHERE tablename = 'vector_table'
+ORDER BY indexname
+----
+indexname          indexdef
+idxa               CREATE INDEX idxa ON test.public.vector_table USING cspann (a)
+idxb               CREATE INDEX idxb ON test.public.vector_table USING cspann (a)
+vector_table_pkey  CREATE UNIQUE INDEX vector_table_pkey ON test.public.vector_table USING btree (id ASC)
+
 subtest partial_index
 
 statement ok
@@ -4135,13 +4161,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-173  173  jt
+174  174  jt
 
 query ITT rowsort
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1    NULL  NULL
-173  173   jt
+174  174   jt
 
 subtest regression_49207
 statement ok
@@ -4800,7 +4826,7 @@ JOIN pg_class ON pg_statistic_ext.stxrelid = pg_class.oid
 ----
 relname  stxname  stxnamespace  stxowner  stxstattarget  stxkeys  stxkind
 stxtbl   stxobj   105           NULL      -1             {2,3}    {d}
-stxtbl2  stxobj2  195           NULL      -1             {1,3}    {d}
+stxtbl2  stxobj2  196           NULL      -1             {1,3}    {d}
 stx      NULL     105           NULL      -1             {2}      {d}
 stx      NULL     105           NULL      -1             {1}      {d}
 
@@ -5316,7 +5342,7 @@ query TO colnames,rowsort
 SELECT typname, typrelid FROM pg_catalog.pg_type WHERE typrelid = 'u'::regtype::oid;
 ----
 typname  typrelid
-u        100207
+u        100208
 
 query TOO colnames,rowsort
 SELECT typname, typrelid, typarray FROM pg_catalog.pg_type WHERE oid = 'u[]'::regtype::oid;

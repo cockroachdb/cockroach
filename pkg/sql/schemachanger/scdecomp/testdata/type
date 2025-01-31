@@ -670,6 +670,7 @@ ElementState:
     tableId: 108
     temporaryIndexId: 0
     type: FORWARD
+    vecConfig: null
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 108
@@ -697,6 +698,7 @@ ElementState:
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
+    vecConfig: null
   Status: PUBLIC
 - Table:
     isTemporary: false
@@ -1671,6 +1673,7 @@ ElementState:
     tableId: 111
     temporaryIndexId: 0
     type: FORWARD
+    vecConfig: null
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 111
@@ -1698,6 +1701,7 @@ ElementState:
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
+    vecConfig: null
   Status: PUBLIC
 - Table:
     isTemporary: false

@@ -46,6 +46,7 @@ go_proto_library(
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/semenumpb",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
@@ -66,6 +67,7 @@ proto_library(
         "//pkg/sql/sem/idxtype:idxtype_proto",
         "//pkg/sql/sem/semenumpb:semenumpb_proto",
         "//pkg/sql/types:types_proto",
+        "//pkg/sql/vecindex/vecpb:vecpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )

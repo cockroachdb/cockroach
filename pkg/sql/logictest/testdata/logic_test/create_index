@@ -137,21 +137,25 @@ statement ok
 CREATE TABLE telemetry (
   x INT PRIMARY KEY,
   y INT,
-  z JSONB
+  z JSONB,
+  v VECTOR(3)
 )
 
 statement ok
 CREATE INVERTED INDEX ON telemetry (z);
+CREATE VECTOR INDEX ON telemetry (v);
 CREATE INDEX ON telemetry (y) USING HASH WITH (bucket_count=4)
 
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage
 WHERE feature_name IN (
   'sql.schema.inverted_index',
+  'sql.schema.vector_index',
   'sql.schema.hash_sharded_index'
 )
 ----
 sql.schema.inverted_index
+sql.schema.vector_index
 sql.schema.hash_sharded_index
 
 subtest create_index_concurrently

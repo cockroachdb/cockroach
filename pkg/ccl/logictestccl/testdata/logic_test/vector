@@ -174,19 +174,3 @@ ORDER BY
 	tab_1270.tableoid
 LIMIT
 	83:::INT8;
-
-subtest vector_index
-
-statement ok
-CREATE TABLE t_vec (k INT PRIMARY KEY, v VECTOR(128));
-
-statement error pgcode 0A000 pq: unimplemented: VECTOR indexes are not yet supported
-CREATE VECTOR INDEX ON t_vec (v);
-
-statement error pgcode 0A000 pq: unimplemented: VECTOR indexes are not yet supported
-CREATE INDEX ON t_vec USING CSPANN (v);
-
-statement ok
-DROP TABLE t_vec;
-
-subtest end

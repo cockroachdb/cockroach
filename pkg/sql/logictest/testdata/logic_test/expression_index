@@ -5,11 +5,13 @@ CREATE TABLE t (
   b INT,
   c STRING,
   j JSON,
+  v VECTOR,
   comp INT AS (a + 10) VIRTUAL,
   INDEX t_a_plus_b_idx ((a + b)),
   INDEX t_lower_c_a_plus_b_idx (lower(c), (a + b)),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a') ASC),
-  FAMILY (k, a, b, c, j)
+  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3))),
+  FAMILY (k, a, b, c, j, v)
 )
 
 query T
@@ -21,12 +23,14 @@ CREATE TABLE public.t (
   b INT8 NULL,
   c STRING NULL,
   j JSONB NULL,
+  v VECTOR NULL,
   comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a':::STRING)),
-  FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
+  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3))),
+  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 )
 
 query T
@@ -38,24 +42,27 @@ CREATE TABLE public.t (
   b INT8 NULL,
   c STRING NULL,
   j JSONB NULL,
+  v VECTOR NULL,
   comp INT8 NULL AS (a + ‹×›:::INT8) VIRTUAL,
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->‹×›:::STRING)),
-  FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
+  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3))),
+  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 )
 
 query TTBTTTB colnames
 SELECT * FROM [SHOW COLUMNS FROM t] ORDER BY column_name
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices                                                     is_hidden
-a            INT8       true         NULL            ·                      {t_pkey}                                                    false
-b            INT8       true         NULL            ·                      {t_b_j_a_asc,t_pkey}                                        false
-c            STRING     true         NULL            ·                      {t_pkey}                                                    false
-comp         INT8       true         NULL            a + 10                 {}                                                          false
-j            JSONB      true         NULL            ·                      {t_pkey}                                                    false
-k            INT8       false        NULL            ·                      {t_a_plus_b_idx,t_b_j_a_asc,t_lower_c_a_plus_b_idx,t_pkey}  false
+column_name  data_type  is_nullable  column_default  generation_expression  indices                                                           is_hidden
+a            INT8       true         NULL            ·                      {t_pkey,t_vec}                                                    false
+b            INT8       true         NULL            ·                      {t_b_j_a_asc,t_pkey}                                              false
+c            STRING     true         NULL            ·                      {t_pkey}                                                          false
+comp         INT8       true         NULL            a + 10                 {}                                                                false
+j            JSONB      true         NULL            ·                      {t_pkey}                                                          false
+k            INT8       false        NULL            ·                      {t_a_plus_b_idx,t_b_j_a_asc,t_lower_c_a_plus_b_idx,t_pkey,t_vec}  false
+v            VECTOR     true         NULL            ·                      {t_pkey}                                                          false
 
 # Referencing an inaccessible column in a CHECK constraint is not allowed.
 statement error column \"crdb_internal_idx_expr\" is inaccessible and cannot be referenced
@@ -111,17 +118,32 @@ CREATE TABLE err (a INT, INDEX (a, (NULL)))
 statement ok
 CREATE TABLE t_null_cast (a INT, INDEX (a, (NULL::TEXT)))
 
-statement error index element \(a, b\) of type record is not indexable
+statement error column \(\(a, b\)\) has type record, which is not indexable
 CREATE TABLE err (a INT, b INT, INDEX (a, (row(a, b))))
 
-statement error index element a \+ b of type int is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column \(a \+ b\) has type int, which is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (a + b)))
 
-statement error index element \(a, b\) of type record is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column \(\(a, b\)\) has type record, which is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (row(a, b))))
 
 statement error the last column in an inverted index cannot have the DESC option
 CREATE TABLE err (a INT, j JSON, INVERTED INDEX (a, (j->'a') DESC))
+
+statement error column \(a \+ b\) has type int, which is not allowed as the last column in a vector index
+CREATE TABLE err (a INT, b INT, VECTOR INDEX (a, (a + b)))
+
+statement error column \(vec1::VECTOR\(3\)\) has type vector, which is only allowed as the last column in a vector index
+CREATE TABLE err (a INT, vec1 VECTOR, VECTOR INDEX ((vec1::VECTOR(3)), a))
+
+statement error the last column in a vector index cannot have the DESC option
+CREATE TABLE err (a INT, vec1 VECTOR, VECTOR INDEX (a, (vec1::VECTOR(3)) DESC))
+
+statement error vector column \(vec1::VECTOR\) does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
+CREATE TABLE err (a INT, vec1 VECTOR(3), VECTOR INDEX (a, (vec1::VECTOR)))
+
+statement error column \(vec1::VECTOR\(3\)\) has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
+CREATE TABLE err (a INT, vec1 VECTOR, INDEX (a, (vec1::VECTOR(3))))
 
 statement error random\(\): volatile functions are not allowed in EXPRESSION INDEX ELEMENT
 CREATE TABLE err (a INT, INDEX ((a + random()::INT)))
@@ -154,8 +176,9 @@ CREATE TABLE t (
   b INT,
   c STRING,
   j JSON,
+  v VECTOR NULL,
   comp INT AS (a + 10) VIRTUAL,
-  FAMILY (k, a, b, c, j)
+  FAMILY (k, a, b, c, j, v)
 )
 
 statement ok
@@ -182,13 +205,14 @@ CREATE TABLE public.t (
   b INT8 NULL,
   c STRING NULL,
   j JSONB NULL,
+  v VECTOR NULL,
   comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_idx (lower(c) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INDEX t_a_plus_ten_idx ((a + 10:::INT8) ASC),
-  FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
+  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 )
 
 # Referencing an inaccessible column in a CHECK constraint is not allowed.
@@ -256,7 +280,7 @@ SELECT * FROM (
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
 ) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_2"'
 ----
-{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "a + 10:::INT8", "id": 10, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
 skipif config local-legacy-schema-changer
 query T
@@ -266,7 +290,7 @@ SELECT * FROM (
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
 ) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_2"'
 ----
-{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "a + 10:::INT8", "id": 10, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
 statement ok
 DROP INDEX t_lower_c_a_plus_b_idx
@@ -283,8 +307,8 @@ SELECT cols.desc FROM (
 ) AS cols WHERE cols.desc->>'name' IN ('crdb_internal_idx_expr', 'crdb_internal_idx_expr_1')
 ORDER BY id
 ----
-{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
-{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
+{"computeExpr": "a + b", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "lower(c)", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
 
 onlyif config local-legacy-schema-changer
 query T
@@ -295,8 +319,8 @@ SELECT cols.desc FROM (
 ) AS cols WHERE cols.desc->>'name' IN ('crdb_internal_idx_expr', 'crdb_internal_idx_expr_1')
 ORDER BY id
 ----
-{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
-{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
+{"computeExpr": "a + b", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "lower(c)", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
 
 statement ok
 DROP INDEX t_a_plus_b_idx
@@ -340,7 +364,7 @@ CREATE INDEX err ON t (a, (j->'a'));
 statement ok
 DROP INDEX err
 
-statement error index element \(a, b\) of type record is not indexable
+statement error column \(\(a, b\)\) has type record, which is not indexable
 CREATE INDEX err ON t (a, (row(a, b)));
 
 statement ok
@@ -349,10 +373,10 @@ CREATE INVERTED INDEX err ON t ((j->'a'), j);
 statement ok
 DROP INDEX err
 
-statement error index element a \+ b of type int is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column \(a \+ b\) has type int, which is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX err ON t (a, (a + b));
 
-statement error index element \(a, b\) of type record is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column \(\(a, b\)\) has type record, which is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX err ON t (a, (row(a, b)));
 
 statement error the last column in an inverted index cannot have the DESC option
@@ -360,6 +384,27 @@ CREATE INVERTED INDEX err ON t (a, (j->'a') DESC);
 
 statement ok
 CREATE INVERTED INDEX ON t (a, (j->'a') ASC);
+
+statement ok
+CREATE VECTOR INDEX err ON t (b, (v::VECTOR(3)));
+
+statement ok
+DROP INDEX err
+
+statement error column \(a \+ b\) has type int, which is not allowed as the last column in a vector index
+CREATE VECTOR INDEX err ON t (a, (a + b))
+
+statement error column \(v::VECTOR\(3\)\) has type vector, which is only allowed as the last column in a vector index
+CREATE VECTOR INDEX err ON t ((v::VECTOR(3)), a)
+
+statement error the last column in a vector index cannot have the DESC option
+CREATE VECTOR INDEX err ON t (a, (v::VECTOR(3)) DESC)
+
+statement error vector column \(v::VECTOR\) does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
+CREATE VECTOR INDEX err ON t (a, (v::VECTOR))
+
+statement error column \(v::VECTOR\(3\)\) has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
+CREATE INDEX err ON t (a, (v::VECTOR(3)))
 
 statement ok
 CREATE TABLE other (
@@ -405,11 +450,13 @@ CREATE TABLE src (
   a INT,
   b INT,
   j JSON,
+  v VECTOR,
   comp INT8 AS (1 + 10) VIRTUAL,
   INDEX ((a + b)),
   INDEX named_idx ((a + 1)),
   UNIQUE INDEX ((a + 10)),
-  INVERTED INDEX ((a + b), (j->'a'))
+  INVERTED INDEX ((a + b), (j->'a')),
+  VECTOR INDEX (b, (v::VECTOR(3)))
 );
 CREATE TABLE copy (LIKE src);
 CREATE TABLE copy_generated (LIKE src INCLUDING GENERATED);
@@ -424,6 +471,7 @@ CREATE TABLE public.copy (
   a INT8 NULL,
   b INT8 NULL,
   j JSONB NULL,
+  v VECTOR NULL,
   comp INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC)
@@ -448,6 +496,7 @@ CREATE TABLE public.copy_generated (
   a INT8 NULL,
   b INT8 NULL,
   j JSONB NULL,
+  v VECTOR NULL,
   comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC)
@@ -472,12 +521,14 @@ CREATE TABLE public.copy_indexes (
   a INT8 NULL,
   b INT8 NULL,
   j JSONB NULL,
+  v VECTOR NULL,
   comp INT8 NULL,
   CONSTRAINT src_pkey PRIMARY KEY (k ASC),
   INDEX src_expr_idx ((a + b) ASC),
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING))
+  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
+  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)))
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -489,7 +540,7 @@ SELECT count(*) FROM (
   ) AS desc FROM system.descriptor WHERE id = 'copy_indexes'::REGCLASS
 ) AS cols WHERE cols.desc->>'name' LIKE 'crdb_internal_idx_expr%'
 ----
-4
+5
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_all]
@@ -499,12 +550,14 @@ CREATE TABLE public.copy_all (
   a INT8 NULL,
   b INT8 NULL,
   j JSONB NULL,
+  v VECTOR NULL,
   comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
   CONSTRAINT src_pkey PRIMARY KEY (k ASC),
   INDEX src_expr_idx ((a + b) ASC),
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING))
+  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
+  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)))
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -516,7 +569,7 @@ SELECT count(*) FROM (
   ) AS desc FROM system.descriptor WHERE id = 'copy_all'::REGCLASS
 ) AS cols WHERE cols.desc->>'name' LIKE 'crdb_internal_idx_expr%'
 ----
-4
+5
 
 # Test anonymous index name generation.
 
