@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -438,10 +439,14 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		// You must call th.waitForSuccessfulScheduledJob prior to reading
 		// feed messages. If messages are tried to access before they are present,
 		// this feed will panic because sink synchronizer is not initialized.
+		envelopeType := changefeedbase.OptEnvelopeWrapped
+		if isBare {
+			envelopeType = changefeedbase.OptEnvelopeBare
+		}
 		feed := &webhookFeed{
 			seenTrackerMap: make(map[string]struct{}),
 			mockSink:       sinkDest,
-			isBare:         isBare,
+			envelopeType:   envelopeType,
 			jobFeed:        newJobFeed(db, dummyWrapper),
 		}
 
@@ -545,10 +550,14 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		// You must call th.waitForSuccessfulScheduledJob prior to reading
 		// feed messages. If messages are tried to access before they are present,
 		// this feed will panic because sink synchronizer is not initialized.
+		envelopeType := changefeedbase.OptEnvelopeWrapped
+		if isBare {
+			envelopeType = changefeedbase.OptEnvelopeBare
+		}
 		feed := &webhookFeed{
 			seenTrackerMap: make(map[string]struct{}),
 			mockSink:       sinkDest,
-			isBare:         isBare,
+			envelopeType:   envelopeType,
 			jobFeed:        newJobFeed(db, dummyWrapper),
 		}
 
