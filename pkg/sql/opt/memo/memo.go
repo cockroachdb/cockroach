@@ -199,6 +199,8 @@ type Memo struct {
 	pushLimitIntoProjectFilteredScan           bool
 	unsafeAllowTriggersModifyingCascades       bool
 	legacyVarcharTyping                        bool
+	preferBoundedCardinality                   bool
+	minRowCount                                float64
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -289,6 +291,8 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		pushLimitIntoProjectFilteredScan:           evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan,
 		unsafeAllowTriggersModifyingCascades:       evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades,
 		legacyVarcharTyping:                        evalCtx.SessionData().LegacyVarcharTyping,
+		preferBoundedCardinality:                   evalCtx.SessionData().OptimizerPreferBoundedCardinality,
+		minRowCount:                                evalCtx.SessionData().OptimizerMinRowCount,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -457,6 +461,8 @@ func (m *Memo) IsStale(
 		m.pushLimitIntoProjectFilteredScan != evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan ||
 		m.unsafeAllowTriggersModifyingCascades != evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades ||
 		m.legacyVarcharTyping != evalCtx.SessionData().LegacyVarcharTyping ||
+		m.preferBoundedCardinality != evalCtx.SessionData().OptimizerPreferBoundedCardinality ||
+		m.minRowCount != evalCtx.SessionData().OptimizerMinRowCount ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
@@ -502,7 +508,7 @@ func (m *Memo) SetBestProps(
 				redact.Safe(e.Cost()),
 				required.String(),
 				provided.String(), // Call String() so provided doesn't escape.
-				cost,
+				cost.C,
 			))
 		}
 		return
@@ -535,7 +541,7 @@ func (m *Memo) OptimizationCost() Cost {
 	// This cpuCostFactor is the same as cpuCostFactor in the coster.
 	// TODO(mgartner): Package these constants up in a shared location.
 	const cpuCostFactor = 0.01
-	return Cost(m.Metadata().NumTables()) * 1000 * cpuCostFactor
+	return Cost{C: float64(m.Metadata().NumTables()) * 1000 * cpuCostFactor}
 }
 
 // NextRank returns a new rank that can be assigned to a scalar expression.
