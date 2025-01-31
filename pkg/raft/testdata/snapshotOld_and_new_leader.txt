@@ -243,6 +243,7 @@ stabilize 3
   Snapshot Index:15 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
   3->2 MsgAppResp Term:2 Log:1/15 Rejected (Hint: 11) Commit:11
+  3->2 MsgAppResp Term:2 Log:0/15 Commit:15
   3->1 MsgAppResp Term:2 Log:0/15 Commit:15
 
 # 3 has applied the snapshot
@@ -273,17 +274,20 @@ stabilize 2
   DEBUG 2 decreased progress of 3 to [StateProbe match=0 next=12 sentCommit=11 matchCommit=11]
   DEBUG 2 [firstindex: 16, commit: 16] sent snapshot[index: 16, term: 2] to 3 [StateProbe match=0 next=12 sentCommit=11 matchCommit=11]
   DEBUG 2 paused sending replication messages to 3 [StateSnapshot match=0 next=17 sentCommit=16 matchCommit=11 paused pendingSnap=16]
+  3->2 MsgAppResp Term:2 Log:0/15 Commit:15
+  DEBUG 2 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=15 next=17 sentCommit=16 matchCommit=15 paused pendingSnap=16]
 > 2 handling Ready
   Ready MustSync=false:
   Messages:
   2->3 MsgSnap Term:2 Log:0/0
     Snapshot: Index:16 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  2->3 MsgApp Term:2 Log:1/15 Commit:16 Entries:[2/16 EntryNormal ""]
 
 status 2
 ----
 1: StateReplicate match=16 next=17 sentCommit=16 matchCommit=16
 2: StateReplicate match=16 next=17 sentCommit=15 matchCommit=15
-3: StateSnapshot match=0 next=17 sentCommit=16 matchCommit=11 paused pendingSnap=16
+3: StateReplicate match=15 next=17 sentCommit=16 matchCommit=15 inflight=1
 
 deliver-msgs type=MsgSnap 3
 ----
@@ -300,5 +304,11 @@ stabilize 3
   Ready MustSync=true:
   HardState Term:2 Commit:16 Lead:2 LeadEpoch:0
   Snapshot Index:16 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  Messages:
+  3->2 MsgAppResp Term:2 Log:0/16 Commit:16
+> 3 receiving messages
+  2->3 MsgApp Term:2 Log:1/15 Commit:16 Entries:[2/16 EntryNormal ""]
+> 3 handling Ready
+  Ready MustSync=false:
   Messages:
   3->2 MsgAppResp Term:2 Log:0/16 Commit:16
