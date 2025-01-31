@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -119,6 +120,50 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 		return err
 	}
 
+	var demoLocalityInfo string
+	schema := string(bundle.schema)
+	if strings.Contains(schema, "REGIONS = ") {
+		// We have at least one multi-region DB, so we'll extract all regions.
+		regions := make(map[string]struct{})
+		for _, line := range strings.Split(schema, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "CREATE DATABASE") {
+				stmt, err := parser.ParseOne(line)
+				if err != nil {
+					return err
+				}
+				createDB, ok := stmt.AST.(*tree.CreateDatabase)
+				if !ok {
+					return errors.Errorf("expected *tree.CreateDatabase AST node but got %T for %s", stmt.AST, line)
+				}
+				for _, region := range createDB.Regions.ToStrings() {
+					if _, ok = regions[region]; !ok {
+						regions[region] = struct{}{}
+					}
+				}
+			}
+		}
+		if len(regions) > 0 {
+			// Every region will get exactly one node.
+			demoCtx.NumNodes = len(regions)
+			var regionsString string
+			for region := range regions {
+				demoCtx.Localities = append(demoCtx.Localities, roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: region},
+						{Key: "az", Value: "1"}, // this shouldn't matter
+					},
+				})
+				if regionsString != "" {
+					regionsString += `, "` + region + `"`
+				} else {
+					regionsString += `"` + region + `"`
+				}
+			}
+			demoLocalityInfo = fmt.Sprintf("\n# Started %d nodes with regions %s.", len(regions), regionsString)
+		}
+	}
+
 	demoCtx.UseEmptyDatabase = true
 	demoCtx.Multitenant = false
 	return runDemoInternal(cmd, nil /* gen */, func(ctx context.Context, conn clisqlclient.Conn) error {
@@ -129,10 +174,28 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 		for i := 1; i < len(initStmts); i++ {
 			initStmts[i] = "SET CLUSTER SETTING " + initStmts[i]
 		}
+		// All stmts before the first SET CLUSTER SETTING are SET stmts. We need
+		// to handle 'SET database = ' stmt separately if found - the target
+		// database might not exist yet.
+		setStmts := strings.Split(initStmts[0], "\n")
+		initStmts = initStmts[1:]
+		var setDBStmt string
+		for i, stmt := range setStmts {
+			stmt = strings.TrimSpace(stmt)
+			if strings.HasPrefix(stmt, "SET database = ") {
+				setDBStmt = stmt
+				setStmts = append(setStmts[:i], setStmts[i+1:]...)
+				break
+			}
+		}
+		initStmts = append(initStmts, setStmts...)
 		// Disable auto stats collection (which would override the injected
 		// stats).
 		initStmts = append(initStmts, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
 		initStmts = append(initStmts, string(bundle.schema))
+		if setDBStmt != "" {
+			initStmts = append(initStmts, setDBStmt)
+		}
 		for _, stats := range bundle.stats {
 			initStmts = append(initStmts, string(stats))
 		}
@@ -156,13 +219,13 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 		}
 
 		cliCtx.PrintfUnlessEmbedded(`#
-# Statement bundle %s loaded.
+# Statement bundle %s loaded.%s
 # Autostats disabled.
 #
 # Statement %swas:
 #
 # %s
-`, zipdir, placeholderInfo, stmt+";")
+`, zipdir, demoLocalityInfo, placeholderInfo, stmt+";")
 
 		if placeholderPairs != nil {
 			placeholderToColMap := make(map[int]string)

@@ -283,9 +283,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		contentCheck := func(name, contents string) error {
 			if name == "schema.sql" {
 				for _, tableName := range tableNames {
-					if regexp.MustCompile("CREATE TABLE defaultdb.public."+tableName).FindString(contents) == "" {
+					if regexp.MustCompile("USE defaultdb;\nCREATE TABLE public."+tableName).FindString(contents) == "" {
 						return errors.Newf(
-							"could not find 'CREATE TABLE defaultdb.public.%s' in schema.sql:\n%s", tableName, contents)
+							"could not find 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", tableName, contents)
 					}
 				}
 			}
@@ -328,13 +328,21 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	t.Run("types", func(t *testing.T) {
 		r.Exec(t, "CREATE TYPE test_type1 AS ENUM ('hello','world');")
 		r.Exec(t, "CREATE TYPE test_type2 AS ENUM ('goodbye','earth');")
-		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 1;")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 'hello'::test_type1;")
 		checkBundle(
-			t, fmt.Sprint(rows), "test_type1", nil, false, /* expectErrors */
-			base, plans, "distsql.html vec.txt vec-v.txt",
-		)
-		checkBundle(
-			t, fmt.Sprint(rows), "test_type2", nil, false, /* expectErrors */
+			t, fmt.Sprint(rows), "test_type1", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("test_type1")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type1' type in schema.sql")
+					}
+					reg = regexp.MustCompile("test_type2")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("Found irrelevant user defined type 'test_type2' in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -379,6 +387,68 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				return nil
 			}, false /* expectErrors */, base, plans,
 			"distsql.html vec-v.txt vec.txt")
+	})
+
+	t.Run("different schema UDF", func(t *testing.T) {
+		r.Exec(t, "CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		r.Exec(t, "CREATE FUNCTION s.foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT s.foo();")
+		checkBundle(
+			t, fmt.Sprint(rows), "s.foo", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`s\.foo`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 's.foo' function in schema.sql")
+					}
+					reg = regexp.MustCompile(`^CREATE FUNCTION public\.foo`)
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("found irrelevant function 'foo' in schema.sql")
+					}
+					reg = regexp.MustCompile(`s\.a`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
+					}
+					reg = regexp.MustCompile("abc")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 'abc' in schema.sql")
+					}
+				}
+				return nil
+			},
+			false /* expectErrors */, base, plans,
+			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt",
+		)
+	})
+
+	t.Run("different schema procedure", func(t *testing.T) {
+		r.Exec(t, "CREATE PROCEDURE bar() LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		r.Exec(t, "CREATE PROCEDURE s.bar() LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) CALL s.bar();")
+		checkBundle(
+			t, fmt.Sprint(rows), "s.bar", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`s\.bar`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 's.bar' procedure in schema.sql")
+					}
+					reg = regexp.MustCompile(`^CREATE PROCEDURE public\.bar`)
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("Found irrelevant procedure 'bar' in schema.sql")
+					}
+					reg = regexp.MustCompile(`s\.a`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
+					}
+					reg = regexp.MustCompile("abc")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 'abc' in schema.sql")
+					}
+				}
+				return nil
+			},
+			false /* expectErrors */, base, plans,
+			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt",
+		)
 	})
 
 	t.Run("permission error", func(t *testing.T) {
@@ -447,12 +517,30 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		r.Exec(t, "CREATE TABLE db2.s2.t2 (pk INT PRIMARY KEY);")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM db1.t1, db2.s2.t2;")
 		checkBundle(
-			t, fmt.Sprint(rows), "db1.public.t1", nil, false, /* expectErrors */
+			t, fmt.Sprint(rows), "public.t1", nil, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
 		)
 		checkBundle(
-			t, fmt.Sprint(rows), "db2.s2.t2", nil, false, /* expectErrors */
+			t, fmt.Sprint(rows), "s2.t2", nil, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
+		)
+	})
+
+	t.Run("multiple databases and special characters", func(t *testing.T) {
+		r.Exec(t, `CREATE DATABASE "db.name";`)
+		r.Exec(t, `CREATE DATABASE "db'name";`)
+		r.Exec(t, `CREATE SCHEMA "db.name"."sc.name"`)
+		r.Exec(t, `CREATE SCHEMA "db'name"."sc'name"`)
+		r.Exec(t, `CREATE TABLE "db.name"."sc.name".t (pk INT PRIMARY KEY);`)
+		r.Exec(t, `CREATE TABLE "db'name"."sc'name".t (pk INT PRIMARY KEY);`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db.name"."sc.name".t, "db'name"."sc'name".t;`)
+		checkBundle(
+			t, fmt.Sprint(rows), `"sc.name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
+		)
+		checkBundle(
+			t, fmt.Sprint(rows), `"sc'name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
 		)
 	})
 }
@@ -462,8 +550,8 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 // arbitrary number of strings; each string contains one or more filenames
 // separated by a space.
 // - tableName: if non-empty, checkBundle asserts that the substring equal to
-// tableName is present in schema.sql. It doesn't have to be a fully qualified
-// name, but that is encouraged.
+// tableName is present in schema.sql. It is expected to be either
+// schema-qualified or just the table name.
 // - expectErrors: if set, indicates that non-critical errors might have
 // occurred during the bundle collection and shouldn't fail the test.
 func checkBundle(
@@ -634,7 +722,7 @@ func TestExplainBundleEnv(t *testing.T) {
 		_, err := sqlDB.ExecContext(ctx, line)
 		if err != nil {
 			words := strings.Split(line, " ")
-			t.Fatalf("%v: probably need to add %q into 'sessionVarNeedsQuotes' map", err, words[1])
+			t.Fatalf("%s\n%v: probably need to add %q into 'sessionVarNeedsEscaping' map", line, err, words[1])
 		}
 	}
 
