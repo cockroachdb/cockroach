@@ -54,6 +54,10 @@ type Statistics struct {
 	// expressions with Cardinality.Max > 0, RowCount will be >= epsilon.
 	RowCount float64
 
+	// minRowCount, if greater than zero, limits the lower bound of RowCount
+	// when it is updated by ApplySelectivity. See Init for more details.
+	minRowCount float64
+
 	// VirtualCols is the set of virtual computed columns produced by our input
 	// that we have statistics on. Any of these could appear in ColStats. This set
 	// is maintained separately from OutputCols to allow lookup of statistics on
@@ -87,10 +91,19 @@ type Statistics struct {
 }
 
 // Init initializes the data members of Statistics.
-func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
+//
+// minRowCount, if greater than zero, limits the lower bound of RowCount when it
+// is updated by ApplySelectivity. If minRowCount is zero, then there is no
+// lower bound (however, in practice there is some lower bound due to
+// Selectivity being at least epsilon). Note that if minRowCount is non-zero,
+// RowCount can still be zero if the cardinality of the expression is zero,
+// e.g., for a contradictory filter.
+func (s *Statistics) Init(relProps *Relational, minRowCount float64) (zeroCardinality bool) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Reusing fields must be done explicitly.
-	*s = Statistics{}
+	*s = Statistics{
+		minRowCount: minRowCount,
+	}
 	if relProps.Cardinality.IsZero() {
 		s.RowCount = 0
 		s.Selectivity = ZeroSelectivity
@@ -126,12 +139,15 @@ func (s *Statistics) CopyFrom(other *Statistics) {
 // counts, and histograms.
 func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
 	if selectivity == ZeroSelectivity {
-		s.RowCount = 0
 		s.Selectivity = ZeroSelectivity
-		return
+		s.RowCount = 0
+	} else if r := s.RowCount * selectivity.AsFloat(); r < s.minRowCount {
+		s.Selectivity.Multiply(MakeSelectivityFromFraction(s.minRowCount, s.RowCount))
+		s.RowCount = s.minRowCount
+	} else {
+		s.Selectivity.Multiply(selectivity)
+		s.RowCount = r
 	}
-	s.RowCount *= selectivity.AsFloat()
-	s.Selectivity.Multiply(selectivity)
 }
 
 // UnionWith unions this Statistics object with another Statistics object. It
