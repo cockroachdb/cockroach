@@ -185,6 +185,12 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			default:
 			}
 		})
+		SQLStatsFlushJobEnabled.SetOnChange(&s.cfg.Settings.SV, func(ctx context.Context) {
+			select {
+			case resetIntervalChanged <- struct{}{}:
+			default:
+			}
+		})
 
 		initialDelay := s.nextFlushInterval()
 		var timer timeutil.Timer
@@ -192,8 +198,12 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 
 		log.Infof(ctx, "starting sql-stats-worker with initial delay: %s", initialDelay)
 		for {
-			waitInterval := s.nextFlushInterval()
-			timer.Reset(waitInterval)
+			if !SQLStatsFlushJobEnabled.Get(&s.cfg.Settings.SV) {
+				waitInterval := s.nextFlushInterval()
+				timer.Reset(waitInterval)
+			} else {
+				timer.Stop()
+			}
 
 			select {
 			case <-timer.C:
@@ -269,6 +279,9 @@ func (s *PersistedSQLStats) GetEnabledSQLInstanceID() base.SQLInstanceID {
 		return s.cfg.SQLIDContainer.SQLInstanceID()
 	}
 	return 0
+}
+func (s *PersistedSQLStats) NextFlushInterval() time.Duration {
+	return s.nextFlushInterval()
 }
 
 // nextFlushInterval calculates the wait interval that is between:

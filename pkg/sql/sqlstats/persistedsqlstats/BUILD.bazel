@@ -101,6 +101,7 @@ go_test(
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
         "//pkg/sql/sqlstats/ssmemstorage",
+        "//pkg/sql/tablemetadatacache/util",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
@@ -119,6 +120,7 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//rand",
     ],
 )
 

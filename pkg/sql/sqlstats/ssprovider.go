@@ -113,3 +113,10 @@ type RecordedTxnStats struct {
 	SessionData             *sessiondata.SessionData
 	TxnErr                  error
 }
+
+// Interface for getting SQL stats
+type SSProvider interface {
+	// GetStats Stats that are consumed will permanently be removed from their source.
+	// Once the stats are fetched, they cannot be processed again
+	PopAllStats(ctx context.Context) ([]*appstatspb.CollectedStatementStatistics, []*appstatspb.CollectedTransactionStatistics)
+}

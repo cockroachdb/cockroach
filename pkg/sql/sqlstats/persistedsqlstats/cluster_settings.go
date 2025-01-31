@@ -59,6 +59,16 @@ var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
 	true, /* defaultValue */
 	settings.WithPublic)
 
+// SQLStatsFlushJobEnabled is the cluster setting that controls if the sqlstats
+// subsystem persists the statistics into system table.
+var SQLStatsFlushJobEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.flush.job.enabled",
+	"if set, SQL execution statistics are periodically flushed to disk via job. "+
+		"If this is enabled, the per node flush will be disable",
+	true, /* defaultValue */
+	settings.WithPublic)
+
 // SQLStatsFlushJitter specifies the jitter fraction on the interval between
 // attempts to flush SQL Stats.
 //

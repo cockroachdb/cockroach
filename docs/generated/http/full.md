@@ -4969,6 +4969,105 @@ Response object returned by ResetSQLStats.
 
 
 
+## PopAllSqlStats
+
+`GET /_status/popallstats`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.PopAllSqlStatsRequest-string) |  |  | [reserved](#support-status) |
+| aggregated_ts | [google.protobuf.Timestamp](#cockroach.server.serverpb.PopAllSqlStatsRequest-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statements | [StatementsResponse.CollectedStatementStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics) | repeated |  | [reserved](#support-status) |
+| last_reset | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementsResponse-google.protobuf.Timestamp) |  | Timestamp of the last stats reset. | [reserved](#support-status) |
+| internal_app_name_prefix | [string](#cockroach.server.serverpb.StatementsResponse-string) |  | If set and non-empty, indicates the prefix to application_name used for statements/queries issued internally by CockroachDB. | [reserved](#support-status) |
+| transactions | [StatementsResponse.ExtendedCollectedTransactionStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedCollectedTransactionStatistics) | repeated | Transactions is transaction-level statistics for the collection of statements in this response. | [reserved](#support-status) |
+| stmts_total_runtime_secs | [float](#cockroach.server.serverpb.StatementsResponse-float) |  |  | [reserved](#support-status) |
+| txns_total_runtime_secs | [float](#cockroach.server.serverpb.StatementsResponse-float) |  |  | [reserved](#support-status) |
+| oldest_aggregated_ts_returned | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementsResponse-google.protobuf.Timestamp) |  | OldestAggregatedTsReturned is the timestamp of the oldest entry returned, or null if there is no data returned. | [reserved](#support-status) |
+| stmts_source_table | [string](#cockroach.server.serverpb.StatementsResponse-string) |  | StmtsSourceTable returns the table used to return the statements data. | [reserved](#support-status) |
+| txns_source_table | [string](#cockroach.server.serverpb.StatementsResponse-string) |  | TxnsSourceTable returns the table used to return the transactions data. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics"></a>
+#### StatementsResponse.CollectedStatementStatistics
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [StatementsResponse.ExtendedStatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey) |  |  | [reserved](#support-status) |
+| id | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) |  |  | [reserved](#support-status) |
+| stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
+| txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) | repeated | In 23.1 we expect the response to only group on fingerprint_id and app_name in the overview page. We now return the aggregated list of unique txn fingerprint ids, leaving the txn_fingerprint_id field in the key empty. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey"></a>
+#### StatementsResponse.ExtendedStatementStatisticsKey
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key_data | [cockroach.sql.StatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.StatementStatisticsKey) |  |  | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.StatementsResponse-int32) |  |  | [reserved](#support-status) |
+| aggregated_ts | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| aggregation_interval | [google.protobuf.Duration](#cockroach.server.serverpb.StatementsResponse-google.protobuf.Duration) |  | The aggregation duration. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedCollectedTransactionStatistics"></a>
+#### StatementsResponse.ExtendedCollectedTransactionStatistics
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| stats_data | [cockroach.sql.CollectedTransactionStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.CollectedTransactionStatistics) |  |  | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.StatementsResponse-int32) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
 ## IndexUsageStatistics
 
 `GET /_status/indexusagestatistics`

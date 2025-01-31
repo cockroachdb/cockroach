@@ -1747,6 +1747,10 @@ type InternalDB struct {
 	monitor    *mon.BytesMonitor
 }
 
+func (ief *InternalDB) GetServer() *Server {
+	return ief.server
+}
+
 // NewShimInternalDB is used to bootstrap the server which needs access to
 // components which will ultimately have a handle to an InternalDB. Some of
 // those components may attempt to access the *kv.DB before the InternalDB

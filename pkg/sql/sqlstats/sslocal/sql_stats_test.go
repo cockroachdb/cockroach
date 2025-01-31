@@ -1680,9 +1680,9 @@ func TestSQLStatsRegions(t *testing.T) {
 	}
 }
 
-// TestSQLStats_ConsumeStats validates that ConsumeStats function pops all statement and transaction stats from the
+// TestSQLStats_PopAllStats validates that PopAllStats function pops all statement and transaction stats from the
 // in-memory stats and clears it.
-func TestSQLStats_ConsumeStats(t *testing.T) {
+func TestSQLStats_PopAllStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1732,23 +1732,9 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	err = sqlStats.AddAppStats(context.Background(), "app", txnContainer)
 	require.NoError(t, err)
 
-	// Validate that ConsumeStats calls functions for every stmt and txn stats respectively.
-	consumedStmtsCount := 0
-	consumedTxnCount := 0
-	sqlStats.ConsumeStats(
-		context.Background(),
-		stopper,
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			consumedStmtsCount++
-			return nil
-		},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
-			consumedTxnCount++
-			return nil
-		},
-	)
-	require.Equal(t, expectedCountStats, consumedStmtsCount)
-	require.Equal(t, expectedCountStats, consumedTxnCount)
+	stmtStats, txnStats := sqlStats.PopAllStats(context.Background())
+	require.Equal(t, expectedCountStats, len(stmtStats))
+	require.Equal(t, expectedCountStats, len(txnStats))
 
 	// Assert that no stats left after ConsumeStats func is executed.
 	err = sqlStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, _ *appstatspb.CollectedStatementStatistics) error {

@@ -1699,6 +1699,11 @@ message StatementsRequest {
   FetchMode fetch_mode = 5;
 }
 
+message PopAllSqlStatsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  google.protobuf.Timestamp aggregated_ts = 2 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
+}
+
 message StatementsResponse {
   message ExtendedStatementStatisticsKey {
     cockroach.sql.StatementStatisticsKey key_data = 1 [(gogoproto.nullable) = false];
@@ -2671,6 +2676,11 @@ service Status {
     option (google.api.http) = {
       post: "/_status/resetsqlstats"
       body: "*"
+    };
+  }
+  rpc PopAllSqlStats(PopAllSqlStatsRequest) returns (StatementsResponse) {
+    option (google.api.http) = {
+      get: "/_status/popallstats"
     };
   }
 

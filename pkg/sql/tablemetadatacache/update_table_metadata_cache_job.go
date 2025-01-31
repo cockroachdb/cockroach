@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssremote"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -41,12 +43,13 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	// This job is a forever running background job, and it is always safe to
 	// terminate the SQL pod whenever the job is running, so mark it as idle.
 	j.job.MarkIdle(true)
-
 	execCtx := execCtxI.(sql.JobExecContext)
 	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().
 		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
 	j.metrics = &metrics
 	testKnobs := execCtx.ExecCfg().TableMetadataKnobs
+	sqlStatsFlusher := execCtx.ExecCfg().InternalDB.GetServer().GetSQLStatsProvider()
+	sqlStatsProvider := ssremote.New(execCtx.ExecCfg())
 	var updater tablemetadatacacheutil.ITableMetadataUpdater
 	var onJobStartKnob, onJobCompleteKnob, onJobReady func()
 	if testKnobs != nil {
@@ -75,13 +78,13 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	settings := execCtx.ExecCfg().Settings
 	// Register callbacks to signal the job to reset the timer when timer related settings change.
 	scheduleSettingsCh := make(chan struct{})
-	AutomaticCacheUpdatesEnabledSetting.SetOnChange(&settings.SV, func(_ context.Context) {
+	persistedsqlstats.SQLStatsFlushJobEnabled.SetOnChange(&settings.SV, func(_ context.Context) {
 		select {
 		case scheduleSettingsCh <- struct{}{}:
 		default:
 		}
 	})
-	DataValidDurationSetting.SetOnChange(&settings.SV, func(_ context.Context) {
+	persistedsqlstats.SQLStatsFlushInterval.SetOnChange(&settings.SV, func(_ context.Context) {
 		select {
 		case scheduleSettingsCh <- struct{}{}:
 		default:
@@ -93,8 +96,8 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		onJobReady()
 	}
 	for {
-		if AutomaticCacheUpdatesEnabledSetting.Get(&settings.SV) {
-			timer.Reset(DataValidDurationSetting.Get(&settings.SV))
+		if persistedsqlstats.SQLStatsFlushJobEnabled.Get(&settings.SV) {
+			timer.Reset(sqlStatsFlusher.NextFlushInterval())
 		}
 		select {
 		case <-scheduleSettingsCh:
@@ -115,11 +118,8 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		}
 
 		j.markAsRunning(ctx)
-		err := updater.RunUpdater(ctx)
-		if err != nil {
-			log.Errorf(ctx, "error running table metadata update job: %s", err)
-			j.metrics.Errors.Inc(1)
-		}
+		log.Infof(ctx, "Flushing sql stats")
+		sqlStatsFlusher.MaybeFlushWithProvider(ctx, execCtx.ExecCfg().Stopper, sqlStatsProvider)
 		j.markAsCompleted(ctx)
 		if onJobCompleteKnob != nil {
 			onJobCompleteKnob()

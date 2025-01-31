@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ssremote",
+    srcs = ["ssremote_provider.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssremote",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/serverpb",
+        "//pkg/sql",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/sqlstats",
+        "//pkg/util/log",
+    ],
+)
