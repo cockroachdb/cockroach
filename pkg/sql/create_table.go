@@ -2400,8 +2400,14 @@ func NewTableDesc(
 		}
 		if idx.GetType() == idxtype.VECTOR {
 			telemetry.Inc(sqltelemetry.VectorIndexCounter)
+			if idx.IsPartial() {
+				telemetry.Inc(sqltelemetry.PartialVectorIndexCounter)
+			}
 			if idx.NumKeyColumns() > 1 {
 				telemetry.Inc(sqltelemetry.MultiColumnVectorIndexCounter)
+			}
+			if idx.PartitioningColumnCount() != 0 {
+				telemetry.Inc(sqltelemetry.PartitionedVectorIndexCounter)
 			}
 		}
 		if idx.IsPartial() {

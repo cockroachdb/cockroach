@@ -553,6 +553,73 @@ statement ok
 DROP TABLE t2
 
 ##################################################################################
+# Check Invisible Vector Index and Partial Vector Index.
+##################################################################################
+statement ok
+CREATE TABLE t1 (
+  id INT,
+  a INT,
+  v VECTOR(3),
+  VECTOR INDEX idx_vec_visible (v) VISIBLE
+);
+
+# idx_vec_visible is chosen because it is visible.
+statement error execution planning for vector index search is not yet implemented
+EXPLAIN SELECT * FROM t1 ORDER BY v <-> '[3,1,2]' LIMIT 5;
+
+statement ok
+DROP INDEX idx_vec_visible
+
+statement ok
+CREATE INDEX idx_vec_invisible ON t1 USING CSPANN (v) NOT VISIBLE;
+
+# Check invisible vector index: ignored idx_vec_invisible.
+query T
+EXPLAIN SELECT * FROM t1 ORDER BY v <-> '[3,1,2]' LIMIT 5;
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ order: +column9
+│ k: 5
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: FULL SCAN
+
+# Add partial index.
+statement ok
+CREATE VECTOR INDEX idx_partial_invisible ON t1 (a, v) WHERE a > 10 NOT VISIBLE
+
+# Check invisible vector partial index: ignored idx_partial_invisible.
+query T
+EXPLAIN SELECT * FROM t1 WHERE a > 10 ORDER BY v <-> '[3,1,2]' LIMIT 5;
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ order: +column9
+│ k: 5
+│
+└── • render
+    │
+    └── • filter
+        │ filter: a > 10
+        │
+        └── • scan
+              missing stats
+              table: t1@t1_pkey
+              spans: FULL SCAN
+
+statement ok
+DROP TABLE t1
+
+##################################################################################
 # Check Invisible Inverted Index and Partial Inverted Index.
 ##################################################################################
 statement ok
