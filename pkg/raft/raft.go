@@ -2473,6 +2473,21 @@ func (r *raft) handleSnapshot(m pb.Message) {
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
+		// This is safe because r.lead must be at least as up to date as m.From.
+		//
+		// Everytime we apply a snapshot, the snapshot must have come from a
+		// (once)legitimate leader that has committed everything in that snapshot.
+		//
+		// And from section 5.4 of the Raft paper, we know that:
+		// if a log entry is committed in a given term, then that entry will be
+		// present in the logs of the leaders for all higher-numbered terms.
+		if r.lead != None && r.lead != m.From {
+			r.send(pb.Message{To: r.lead, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex(),
+				Commit: r.raftLog.committed})
+		}
+		// For safety, we also send MsgAppResp back to the original sender for now.
+		// This might not be necessary, but it's safe and doesn't hurt.
+		// TODO(pav-kv): verify
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex(),
 			Commit: r.raftLog.committed})
 	} else {
