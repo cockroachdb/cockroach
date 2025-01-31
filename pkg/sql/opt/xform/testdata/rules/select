@@ -557,6 +557,43 @@ project
       ├── columns: k:1!null
       └── key: (1)
 
+exec-ddl
+CREATE TABLE t140019 (
+  k INT PRIMARY KEY,
+  i INT,
+  j INT,
+  INDEX (k) WHERE i = 0 AND j = 1
+)
+----
+
+# Regression test for #140019. Do not project unnecessary columns, like i=0,
+# that are held constant by the partial index predicate.
+opt disable=SimplifyZeroCardinalityGroup
+SELECT NULL FROM t140019 WHERE false GROUP BY j
+----
+project
+ ├── columns: "?column?":6
+ ├── cardinality: [0 - 0]
+ ├── fd: ()-->(6)
+ ├── distinct-on
+ │    ├── columns: j:3
+ │    ├── grouping columns: j:3
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: (3)
+ │    └── select
+ │         ├── columns: j:3
+ │         ├── cardinality: [0 - 0]
+ │         ├── project
+ │         │    ├── columns: j:3!null
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── scan t140019@t140019_k_idx,partial
+ │         │    └── projections
+ │         │         └── 1 [as=j:3]
+ │         └── filters
+ │              └── false [constraints=(contradiction; tight)]
+ └── projections
+      └── NULL [as="?column?":6]
+
 # --------------------------------------------------
 # GenerateConstrainedScans
 # --------------------------------------------------

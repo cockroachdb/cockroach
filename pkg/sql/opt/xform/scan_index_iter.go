@@ -306,8 +306,9 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 				isCovering = true
 
 				// Build a projection only for constant columns not in the
-				// index.
-				constCols = constCols.Difference(indexCols)
+				// index and produced by the original scan.
+				constCols.DifferenceWith(indexCols)
+				constCols.IntersectionWith(it.scanPrivate.Cols)
 				constProj = it.buildConstProjectionsFromPredicate(predFilters, constCols)
 			}
 		}
