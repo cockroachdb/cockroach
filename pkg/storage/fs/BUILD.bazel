@@ -55,6 +55,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/storagepb",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "//pkg/util/debugutil",
