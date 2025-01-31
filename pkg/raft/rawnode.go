@@ -272,6 +272,44 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 	return rd
 }
 
+// acceptReady is called when the consumer of the RawNode has decided to go
+// ahead and handle a Ready. Nothing must alter the state of the RawNode between
+// this call and the prior call to Ready().
+func (rn *RawNode) acceptReady(rd Ready) {
+	if rd.SoftState != nil {
+		rn.prevSoftSt = rd.SoftState
+	}
+	if !IsEmptyHardState(rd.HardState) {
+		rn.prevHardSt = rd.HardState
+	}
+	if !rn.asyncStorageWrites {
+		if len(rn.stepsOnAdvance) != 0 {
+			rn.raft.logger.Panicf("two accepted Ready structs without call to Advance")
+		}
+		for _, m := range rn.raft.msgsAfterAppend {
+			if m.To == rn.raft.id {
+				rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
+			}
+		}
+		if needStorageAppendRespMsg(rd) {
+			m := newStorageAppendRespMsg(rn.raft, rd)
+			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
+		}
+		if needStorageApplyRespMsg(rd) {
+			m := newStorageApplyRespMsg(rn.raft, rd.CommittedEntries)
+			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
+		}
+	}
+	rn.raft.msgs = nil
+	rn.raft.msgsAfterAppend = nil
+	rn.raft.raftLog.acceptUnstable()
+	if len(rd.CommittedEntries) > 0 {
+		ents := rd.CommittedEntries
+		index := ents[len(ents)-1].Index
+		rn.raft.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
+	}
+}
+
 // MustSync returns true if the hard state and count of Raft entries indicate
 // that a synchronous write to persistent storage is required.
 // NOTE: MustSync isn't used under AsyncStorageWrites mode.
@@ -462,44 +500,6 @@ func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
 		From:    LocalApplyThread,
 		Term:    0, // committed entries don't apply under a specific term
 		Entries: ents,
-	}
-}
-
-// acceptReady is called when the consumer of the RawNode has decided to go
-// ahead and handle a Ready. Nothing must alter the state of the RawNode between
-// this call and the prior call to Ready().
-func (rn *RawNode) acceptReady(rd Ready) {
-	if rd.SoftState != nil {
-		rn.prevSoftSt = rd.SoftState
-	}
-	if !IsEmptyHardState(rd.HardState) {
-		rn.prevHardSt = rd.HardState
-	}
-	if !rn.asyncStorageWrites {
-		if len(rn.stepsOnAdvance) != 0 {
-			rn.raft.logger.Panicf("two accepted Ready structs without call to Advance")
-		}
-		for _, m := range rn.raft.msgsAfterAppend {
-			if m.To == rn.raft.id {
-				rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
-			}
-		}
-		if needStorageAppendRespMsg(rd) {
-			m := newStorageAppendRespMsg(rn.raft, rd)
-			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
-		}
-		if needStorageApplyRespMsg(rd) {
-			m := newStorageApplyRespMsg(rn.raft, rd.CommittedEntries)
-			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
-		}
-	}
-	rn.raft.msgs = nil
-	rn.raft.msgsAfterAppend = nil
-	rn.raft.raftLog.acceptUnstable()
-	if len(rd.CommittedEntries) > 0 {
-		ents := rd.CommittedEntries
-		index := ents[len(ents)-1].Index
-		rn.raft.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
 	}
 }
 
