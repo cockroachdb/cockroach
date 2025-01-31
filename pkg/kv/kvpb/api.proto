@@ -461,10 +461,6 @@ message DeleteRangeRequest {
   // cheaper constant-time write operation (but still requires a scan to check
   // for conflicts and adjust MVCC stats). This option cannot be used in a
   // transaction, and it cannot be combined with Inline or ReturnKeys.
-  //
-  // The caller must check storage.CanUseMVCCRangeTombstones before using this
-  // parameter: it is new in 22.2, and controlled by the default-off cluster
-  // setting storage.mvcc.range_tombstones.enabled.
   bool use_range_tombstone = 5;
   // If enabled together with UseRangeTombstone, the MVCC range tombstone will
   // only be written if there exists point key/tombstones in the span that
@@ -2023,9 +2019,6 @@ message AdminVerifyProtectedTimestampResponse {
 // inline values). It cannot be used in a transaction, cannot be split across
 // ranges, and must be alone in a batch.
 //
-// MVCC range tombstones are supported in 22.2, but check the
-// MVCCRangeTombstones version gate before writing them.
-//
 // By default, AddSSTable will blindly write the SST contents into Pebble, with
 // fixed MVCC timestamps unaffected by pushes. This can violate many CRDB
 // guarantees, including ACID, serializability and single-key linearizability:
@@ -2082,8 +2075,6 @@ message AddSSTableRequest {
   // only bumped when the values are subsequently read). Use DisallowConflicts
   // or DisallowShadowing in addition to guarantee MVCC correctness and
   // serializability.
-  //
-  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   util.hlc.Timestamp sst_timestamp_to_request_timestamp = 6 [
     (gogoproto.customname) = "SSTTimestampToRequestTimestamp", (gogoproto.nullable) = false];
 
@@ -2096,8 +2087,6 @@ message AddSSTableRequest {
   // single-key linearizability, since it can write to a timestamp that another
   // reader has already observed, changing the value at that timestamp and above
   // it. Use with SSTTimestampToRequestTimestamp to guarantee serializability.
-  //
-  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   //
   // TODO(erikgrinaker): It might be possible to avoid this parameter if we
   // could pick an MVCC timestamp that's guaranteed to not collide with
@@ -2129,8 +2118,6 @@ message AddSSTableRequest {
   //
   // If this parameter is used, the value of DisallowShadowing is ignored, so
   // callers may pass both for forward and backwards compatibility.
-  //
-  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   util.hlc.Timestamp disallow_shadowing_below = 8 [(gogoproto.nullable) = false];
 
   // MVCCStats, if set, is the MVCCStats for the contents of this SSTable and is

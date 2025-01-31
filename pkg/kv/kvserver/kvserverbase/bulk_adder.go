@@ -42,8 +42,7 @@ type BulkAdderOptions struct {
 	// permitted when the SSTables produced by this adder are ingested. See the
 	// comment on kvpb.AddSSTableRequest for more details. Note that if this is
 	// set to a non-empty timestamp, the older flag DisallowShadowing will be set
-	// on all requests as well, so callers should expect older nodes to handle any
-	// requests accordingly or check the MVCCAddSSTable version gate.
+	// on all requests as well.
 	DisallowShadowingBelow hlc.Timestamp
 
 	// BatchTimestamp is the timestamp to use on AddSSTable requests (which can be
