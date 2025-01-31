@@ -1643,7 +1643,7 @@ func (s *SQLServer) preStart(
 	// care about what uses the SQL server before those migrations
 	// run.
 
-	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
+	s.leaseMgr.StartRefreshLeasesTask(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.RunBackgroundLeasingTask(ctx)
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {

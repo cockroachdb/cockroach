@@ -1193,6 +1193,10 @@ type Manager struct {
 	// detected by the lease manager. Once this count is incremented new data
 	// is available.
 	leaseGeneration atomic.Int64
+
+	// waitForInit used when the lease manager is starting up prevent leases from
+	// being acquired before the range feed.
+	waitForInit chan struct{}
 }
 
 const leaseConcurrencyLimit = 5
@@ -1287,7 +1291,8 @@ func NewLeaseManager(
 	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher, lm)
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
-	// We are going to start the range feed later when RefreshLeases
+	lm.waitForInit = make(chan struct{})
+	// We are going to start the range feed later when StartRefreshLeasesTask
 	// is invoked inside pre-start. So, that guarantees all range feed events
 	// that will be generated will be after the current time. So, historical
 	// queries with in this tenant (i.e. PCR catalog reader) before this point are
@@ -1642,8 +1647,17 @@ func (m *Manager) isDescriptorStateEmpty(id descpb.ID) bool {
 	return len(st.mu.active.data) == 0
 }
 
+// maybeWaitForInit waits for the lease manager to startup.
+func (m *Manager) maybeWaitForInit() {
+	select {
+	case <-m.waitForInit:
+	case <-m.stopper.ShouldQuiesce():
+	}
+}
+
 // If create is set, cache and stopper need to be set as well.
 func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorState {
+	m.maybeWaitForInit()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t := m.mu.descriptors[id]
@@ -1654,13 +1668,14 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 	return t
 }
 
-// RefreshLeases starts a goroutine that refreshes the lease manager
+// StartRefreshLeasesTask starts a goroutine that refreshes the lease manager
 // leases for descriptors received in the latest system configuration via gossip or
 // rangefeeds. This function must be passed a non-nil gossip if
 // RangefeedLeases is not active.
-func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB) {
+func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, db *kv.DB) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	defer close(m.waitForInit)
 	m.watchForUpdates(ctx)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
@@ -2451,4 +2466,12 @@ func (m *Manager) TestingSetDisableRangeFeedCheckpointFn(disable bool) chan stru
 		m.testingKnobs.RangeFeedResetChannel = nil
 	}
 	return m.testingKnobs.RangeFeedResetChannel
+}
+
+// TestingMarkInit marks the lease manager as initialized without a range feed being started.
+// This is only used for testing.
+func (m *Manager) TestingMarkInit() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	close(m.waitForInit)
 }
