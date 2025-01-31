@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package base
+package storagepb
 
 import (
 	"bytes"
@@ -32,29 +32,20 @@ import (
 // a separate check.
 var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-9]+(\.[0-9]*)?%))$`)
 
-// SizeSpec contains size in different kinds of formats supported by CLI(%age, bytes).
-type SizeSpec struct {
-	// InBytes is used for calculating free space and making rebalancing
-	// decisions. Zero indicates that there is no maximum size. This value is not
-	// actually used by the engine and thus not enforced.
-	InBytes int64
-	Percent float64
+type IntInterval struct {
+	Min *int64
+	Max *int64
 }
 
-type intInterval struct {
-	min *int64
-	max *int64
-}
-
-type floatInterval struct {
-	min *float64
-	max *float64
+type FloatInterval struct {
+	Min *float64
+	Max *float64
 }
 
 // NewSizeSpec parses the string passed into a --size flag and returns a
 // SizeSpec if it is correctly parsed.
 func NewSizeSpec(
-	field redact.SafeString, value string, bytesRange *intInterval, percentRange *floatInterval,
+	field redact.SafeString, value string, bytesRange *IntInterval, percentRange *FloatInterval,
 ) (SizeSpec, error) {
 	var size SizeSpec
 	if fractionRegex.MatchString(value) {
@@ -71,31 +62,31 @@ func NewSizeSpec(
 			return SizeSpec{}, errors.Wrapf(err, "could not parse %s size (%s)", field, value)
 		}
 		if percentRange != nil {
-			if (percentRange.min != nil && size.Percent < *percentRange.min) ||
-				(percentRange.max != nil && size.Percent > *percentRange.max) {
+			if (percentRange.Min != nil && size.Percent < *percentRange.Min) ||
+				(percentRange.Max != nil && size.Percent > *percentRange.Max) {
 				return SizeSpec{}, errors.Newf(
 					"%s size (%s) must be between %f%% and %f%%",
 					field,
 					value,
-					*percentRange.min,
-					*percentRange.max,
+					*percentRange.Min,
+					*percentRange.Max,
 				)
 			}
 		}
 	} else {
 		var err error
-		size.InBytes, err = humanizeutil.ParseBytes(value)
+		size.Capacity, err = humanizeutil.ParseBytes(value)
 		if err != nil {
 			return SizeSpec{}, errors.Wrapf(err, "could not parse %s size (%s)", field, value)
 		}
 		if bytesRange != nil {
-			if bytesRange.min != nil && size.InBytes < *bytesRange.min {
+			if bytesRange.Min != nil && size.Capacity < *bytesRange.Min {
 				return SizeSpec{}, errors.Newf("%s size (%s) must be larger than %s",
-					field, value, humanizeutil.IBytes(*bytesRange.min))
+					field, value, humanizeutil.IBytes(*bytesRange.Min))
 			}
-			if bytesRange.max != nil && size.InBytes > *bytesRange.max {
+			if bytesRange.Max != nil && size.Capacity > *bytesRange.Max {
 				return SizeSpec{}, errors.Newf("%s size (%s) must be smaller than %s",
-					field, value, humanizeutil.IBytes(*bytesRange.max))
+					field, value, humanizeutil.IBytes(*bytesRange.Max))
 			}
 		}
 	}
@@ -106,8 +97,8 @@ func NewSizeSpec(
 // of pflag's value interface.
 func (ss *SizeSpec) String() string {
 	var buffer bytes.Buffer
-	if ss.InBytes != 0 {
-		fmt.Fprintf(&buffer, "--size=%s,", humanizeutil.IBytes(ss.InBytes))
+	if ss.Capacity != 0 {
+		fmt.Fprintf(&buffer, "--size=%s,", humanizeutil.IBytes(ss.Capacity))
 	}
 	if ss.Percent != 0 {
 		fmt.Fprintf(&buffer, "--size=%s%%,", humanize.Ftoa(ss.Percent))
@@ -130,7 +121,7 @@ func (ss *SizeSpec) Set(value string) error {
 	if err != nil {
 		return err
 	}
-	ss.InBytes = spec.InBytes
+	ss.Capacity = spec.Capacity
 	ss.Percent = spec.Percent
 	return nil
 }

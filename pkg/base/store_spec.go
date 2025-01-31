@@ -95,8 +95,8 @@ func newStoreProvisionedRateSpec(
 // to the --store flag.
 type StoreSpec struct {
 	Path        string
-	Size        SizeSpec
-	BallastSize *SizeSpec
+	Size        storagepb.SizeSpec
+	BallastSize *storagepb.SizeSpec
 	InMemory    bool
 	Attributes  roachpb.Attributes
 	// StickyVFSID is a unique identifier associated with a given store which
@@ -126,15 +126,15 @@ func (ss StoreSpec) String() string {
 	if ss.InMemory {
 		fmt.Fprint(&buffer, "type=mem,")
 	}
-	if ss.Size.InBytes > 0 {
-		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.InBytes))
+	if ss.Size.Capacity > 0 {
+		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.Capacity))
 	}
 	if ss.Size.Percent > 0 {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Size.Percent))
 	}
 	if ss.BallastSize != nil {
-		if ss.BallastSize.InBytes > 0 {
-			fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.InBytes))
+		if ss.BallastSize.Capacity > 0 {
+			fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.Capacity))
 		}
 		if ss.BallastSize.Percent > 0 {
 			fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent))
@@ -234,11 +234,11 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			var minBytesAllowed int64 = MinimumStoreSize
 			var minPercent float64 = 1
 			var maxPercent float64 = 100
-			ss.Size, err = NewSizeSpec(
+			ss.Size, err = storagepb.NewSizeSpec(
 				"store",
 				value,
-				&intInterval{min: &minBytesAllowed},
-				&floatInterval{min: &minPercent, max: &maxPercent},
+				&storagepb.IntInterval{Min: &minBytesAllowed},
+				&storagepb.FloatInterval{Min: &minPercent, Max: &maxPercent},
 			)
 			if err != nil {
 				return StoreSpec{}, err
@@ -247,11 +247,11 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			var minBytesAllowed int64
 			var minPercent float64 = 0
 			var maxPercent float64 = 50
-			ballastSize, err := NewSizeSpec(
+			ballastSize, err := storagepb.NewSizeSpec(
 				"ballast",
 				value,
-				&intInterval{min: &minBytesAllowed},
-				&floatInterval{min: &minPercent, max: &maxPercent},
+				&storagepb.IntInterval{Min: &minBytesAllowed},
+				&storagepb.FloatInterval{Min: &minPercent, Max: &maxPercent},
 			)
 			if err != nil {
 				return StoreSpec{}, err
@@ -328,7 +328,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		if ss.Path != "" {
 			return StoreSpec{}, fmt.Errorf("path specified for in memory store")
 		}
-		if ss.Size.Percent == 0 && ss.Size.InBytes == 0 {
+		if ss.Size.Percent == 0 && ss.Size.Capacity == 0 {
 			return StoreSpec{}, fmt.Errorf("size must be specified for an in memory store")
 		}
 		if ss.BallastSize != nil {
