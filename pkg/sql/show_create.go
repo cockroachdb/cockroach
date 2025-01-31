@@ -12,12 +12,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 type shouldOmitFKClausesFromCreate int
@@ -193,6 +197,16 @@ func ShowCreateTable(
 		return "", err
 	}
 
+	if err := showAlterTableRLS(tn, &f.Buffer, desc.IsRowLevelSecurityEnabled(), desc.IsRowLevelSecurityForced()); err != nil {
+		return "", err
+	}
+
+	for _, policyDesc := range desc.GetPolicies() {
+		if err := showCreatePolicies(ctx, desc, p.EvalContext(), &p.semaCtx, p.SessionData(), tn, &f.Buffer, policyDesc); err != nil {
+			return "", err
+		}
+	}
+
 	if !displayOptions.IgnoreComments {
 		if err := showComments(tn, desc, selectComment(ctx, p, desc.GetID()), &f.Buffer); err != nil {
 			return "", err
@@ -200,6 +214,138 @@ func ShowCreateTable(
 	}
 
 	return f.CloseAndGetString(), nil
+}
+
+// showAlterTableRLS prints out the ALTER TABLE ... ROW LEVEL SECURITY statements
+func showAlterTableRLS(tn *tree.TableName, buf *bytes.Buffer, enabled bool, forced bool) error {
+	if !enabled && !forced {
+		return nil
+	}
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	un := tn.ToUnresolvedObjectName()
+
+	var cmds []tree.AlterTableCmd
+
+	if enabled {
+		enabledCmd := &tree.AlterTableSetRLSMode{
+			Mode: tree.TableRLSEnable,
+		}
+		cmds = append(cmds, enabledCmd)
+	}
+
+	if forced {
+		forcedCmd := &tree.AlterTableSetRLSMode{
+			Mode: tree.TableRLSForce,
+		}
+		cmds = append(cmds, forcedCmd)
+	}
+
+	f.WriteString(";\n")
+	f.FormatNode(&tree.AlterTable{
+		Table: un,
+		Cmds:  cmds,
+	})
+
+	buf.WriteString(f.CloseAndGetString())
+
+	return nil
+}
+
+// showCreatePolicies prints out the CREATE POLICY statements
+func showCreatePolicies(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	tn *tree.TableName,
+	buf *bytes.Buffer,
+	policyDesc descpb.PolicyDescriptor,
+) error {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	un := tn.ToUnresolvedObjectName()
+
+	var policyRoleSpecList []tree.RoleSpec
+	for _, roleName := range policyDesc.RoleNames {
+		policyRoleSpecList = append(policyRoleSpecList, tree.MakeRoleSpecWithRoleName(roleName))
+	}
+
+	// Check if we have a policy using expression
+	var exprUsing tree.Expr
+	if len(policyDesc.UsingExpr) != 0 {
+		formattedExpr, err := schemaexpr.FormatExprForDisplay(
+			ctx, desc, policyDesc.UsingExpr, evalCtx, semaCtx, sessionData, tree.FmtParsable,
+		)
+		if err != nil {
+			return err
+		}
+		exprUsing, err = parser.ParseExpr(formattedExpr)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Check if we have a policy with check expression
+	var exprCheck tree.Expr
+	if len(policyDesc.WithCheckExpr) != 0 {
+		formattedExpr, err := schemaexpr.FormatExprForDisplay(
+			ctx, desc, policyDesc.WithCheckExpr, evalCtx, semaCtx, sessionData, tree.FmtParsable,
+		)
+		if err != nil {
+			return err
+		}
+		exprCheck, err = parser.ParseExpr(formattedExpr)
+		if err != nil {
+			return err
+		}
+	}
+
+	f.WriteString(";\n")
+	f.FormatNode(&tree.CreatePolicy{
+		PolicyName: tree.Name(policyDesc.Name),
+		TableName:  un,
+		Type:       convertPolicyType(policyDesc.Type),
+		Cmd:        convertPolicyCommand(policyDesc.Command),
+		Roles:      policyRoleSpecList,
+		Exprs: tree.PolicyExpressions{
+			Using:     exprUsing,
+			WithCheck: exprCheck,
+		},
+	})
+
+	buf.WriteString(f.CloseAndGetString())
+
+	return nil
+}
+
+// convertPolicyType will convert from a catpb.PolicyType to a tree.PolicyType
+func convertPolicyType(in catpb.PolicyType) tree.PolicyType {
+	switch in {
+	case catpb.PolicyType_RESTRICTIVE:
+		return tree.PolicyTypeRestrictive
+	case catpb.PolicyType_PERMISSIVE:
+		return tree.PolicyTypePermissive
+	default:
+		panic(errors.AssertionFailedf("cannot convert catpb.PolicyType: %v", in))
+	}
+}
+
+// convertPolicyCommand will convert from a catpb.PolicyCommand to a tree.PolicyCommand
+func convertPolicyCommand(in catpb.PolicyCommand) tree.PolicyCommand {
+	switch in {
+	case catpb.PolicyCommand_ALL:
+		return tree.PolicyCommandAll
+	case catpb.PolicyCommand_SELECT:
+		return tree.PolicyCommandSelect
+	case catpb.PolicyCommand_INSERT:
+		return tree.PolicyCommandInsert
+	case catpb.PolicyCommand_UPDATE:
+		return tree.PolicyCommandUpdate
+	case catpb.PolicyCommand_DELETE:
+		return tree.PolicyCommandDelete
+	default:
+		panic(errors.AssertionFailedf("cannot convert catpb.PolicyCommand: %v", in))
+	}
 }
 
 // formatQuoteNames quotes and adds commas between names.

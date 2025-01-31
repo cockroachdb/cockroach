@@ -141,13 +141,27 @@ CREATE POLICY "policy 6" ON multi_pol_tab1 FOR DELETE
 statement ok
 CREATE POLICY "policy 7" ON multi_pol_tab1 FOR SELECT
 
+statement ok
+CREATE USER papa_roach;
+
+statement ok
+CREATE POLICY "policy 8" ON multi_pol_tab1 FOR ALL TO papa_roach, public
+
 query TT
 SHOW CREATE TABLE multi_pol_tab1
 ----
 multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                   c1 INT8 NOT NULL,
                   CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
-                )
+                );
+                CREATE POLICY "policy 1" ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public;
+                CREATE POLICY "policy 2" ON public.multi_pol_tab1 AS RESTRICTIVE FOR ALL TO public;
+                CREATE POLICY "policy 3" ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public;
+                CREATE POLICY "policy 4" ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
+                CREATE POLICY "policy 5" ON public.multi_pol_tab1 AS PERMISSIVE FOR UPDATE TO public;
+                CREATE POLICY "policy 6" ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
+                CREATE POLICY "policy 7" ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
+                CREATE POLICY "policy 8" ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
 
 statement ok
 DROP POLICY "policy 1" ON multi_pol_tab1
@@ -164,7 +178,12 @@ SHOW CREATE TABLE multi_pol_tab1
 multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                   c1 INT8 NOT NULL,
                   CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
-                )
+                );
+                CREATE POLICY "policy 2" ON public.multi_pol_tab1 AS RESTRICTIVE FOR ALL TO public;
+                CREATE POLICY "policy 4" ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
+                CREATE POLICY "policy 6" ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
+                CREATE POLICY "policy 7" ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
+                CREATE POLICY "policy 8" ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
 
 statement ok
 DROP TABLE multi_pol_tab1
@@ -260,7 +279,8 @@ SHOW CREATE TABLE target
 target  CREATE TABLE public.target (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT target_pkey PRIMARY KEY (rowid ASC)
-        )
+        );
+        CREATE POLICY pol ON public.target AS PERMISSIVE FOR ALL TO john, testuser
 
 user root
 
@@ -462,6 +482,43 @@ DROP TABLE t1;
 statement ok
 DROP TABLE t2;
 
+subtest create_policy_udt_using_check
+
+statement ok
+create type roach_type as enum('flying','crawling')
+
+statement ok
+create table flying_roaches (check ('flying'::roach_type = 'crawling'::roach_type))
+
+statement ok
+create policy p1 on flying_roaches using ('flying'::roach_type = 'crawling'::roach_type)
+
+query TT
+SHOW CREATE TABLE flying_roaches
+----
+flying_roaches  CREATE TABLE public.flying_roaches (
+                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                  CONSTRAINT flying_roaches_pkey PRIMARY KEY (rowid ASC),
+                  CONSTRAINT "check" CHECK ('flying':::public.roach_type = 'crawling':::public.roach_type)
+                );
+                CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)
+
+query T
+select create_statement from crdb_internal.create_statements where descriptor_name='flying_roaches'
+----
+CREATE TABLE public.flying_roaches (
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT flying_roaches_pkey PRIMARY KEY (rowid ASC),
+  CONSTRAINT "check" CHECK ('flying':::public.roach_type = 'crawling':::public.roach_type)
+);
+CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)
+
+statement ok
+drop table flying_roaches
+
+statement ok
+drop type roach_type
+
 subtest alter_table_rls_legacy_unimplemented
 
 statement ok
@@ -481,16 +538,92 @@ subtest alter_table_rls_enable_disable
 statement ok
 ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
 
+query TT
+SHOW CREATE TABLE roaches
+----
+roaches  CREATE TABLE public.roaches (
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+         );
+         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY
+
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
+
+query TT
+SHOW CREATE TABLE roaches
+----
+roaches  CREATE TABLE public.roaches (
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+         )
 
 subtest alter_table_rls_force_no_force
 
 statement ok
 ALTER TABLE roaches FORCE ROW LEVEL SECURITY;
 
+query TT
+SHOW CREATE TABLE roaches
+----
+roaches  CREATE TABLE public.roaches (
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+         );
+         ALTER TABLE public.roaches FORCE ROW LEVEL SECURITY
+
 statement ok
 ALTER TABLE roaches NO FORCE ROW LEVEL SECURITY;
+
+query TT
+SHOW CREATE TABLE roaches
+----
+roaches  CREATE TABLE public.roaches (
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+         )
+
+subtest alter_table_rls_enable_force
+
+statement ok
+ALTER TABLE roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+query TT
+SHOW CREATE TABLE roaches
+----
+roaches  CREATE TABLE public.roaches (
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+         );
+         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
+
+query T
+select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
+----
+CREATE TABLE public.roaches (
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+);
+ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
+
+statement ok
+ALTER TABLE roaches DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY;
+
+query TT
+SHOW CREATE TABLE roaches
+----
+roaches  CREATE TABLE public.roaches (
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+         )
+
+query T
+select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
+----
+CREATE TABLE public.roaches (
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+)
 
 statement ok
 DROP TABLE roaches;
@@ -739,7 +872,12 @@ bbteams  CREATE TABLE public.bbteams (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT bbteams_pkey PRIMARY KEY (rowid ASC),
            FAMILY fam_0_team_league_rowid (team, league, rowid)
-         )
+         );
+         ALTER TABLE public.bbteams ENABLE ROW LEVEL SECURITY;
+         CREATE POLICY restrict_select ON public.bbteams AS PERMISSIVE FOR SELECT TO buck, root USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
+         CREATE POLICY restrict_insert ON public.bbteams AS PERMISSIVE FOR INSERT TO buck USING (false);
+         CREATE POLICY restrict_update ON public.bbteams AS PERMISSIVE FOR UPDATE TO buck USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
+         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8)) WITH CHECK (true)
 
 statement ok
 set role root
