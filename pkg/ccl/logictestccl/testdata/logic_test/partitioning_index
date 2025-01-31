@@ -180,6 +180,49 @@ inverted  CREATE TABLE public.inverted (
 )
 -- Warning: Partitioned table with no zone configurations.
 
+# TODO(andyk): Add more partitioning tests once insertion is supported.
+subtest vector
+
+statement ok
+CREATE TABLE vector (
+    a INT PRIMARY KEY, b INT, v VECTOR(3),
+    VECTOR INDEX (b, v) PARTITION BY LIST (b) (
+        PARTITION p1 VALUES IN (1),
+        PARTITION pu VALUES IN (NULL)
+    ),
+    FAMILY "primary" (a, b, v)
+)
+
+statement ok
+CREATE VECTOR INDEX vector_idx ON vector (a, b, v) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN ((1, 1), (2, 2))
+)
+
+query TT
+SHOW CREATE TABLE vector
+----
+"vector"  CREATE TABLE public."vector" (
+            a INT8 NOT NULL,
+            b INT8 NULL,
+            v VECTOR(3) NULL,
+            CONSTRAINT vector_pkey PRIMARY KEY (a ASC),
+            VECTOR INDEX vector_b_v_idx (b ASC, v) PARTITION BY LIST (b) (
+              PARTITION p1 VALUES IN ((1)),
+              PARTITION pu VALUES IN ((NULL))
+            ),
+            VECTOR INDEX vector_idx (a ASC, b ASC, v) PARTITION BY LIST (a, b) (
+              PARTITION p1 VALUES IN ((1, 1), (2, 2))
+            )
+          )
+          -- Warning: Partitioned table with no zone configurations.
+
+# Partitioning by vector column is not supported b/c the data type does not have
+# a linear ordering.
+statement error partitioning by vector column \(v\) not supported
+CREATE VECTOR INDEX vector_idx2 ON vector (v) PARTITION BY LIST (v) (
+    PARTITION p1 VALUES IN ('[1,2,3]')
+)
+
 # Regression test for #60019. The index predicate should be formatted after the
 # PARTITION BY clause to match the syntax that is accepted.
 statement ok

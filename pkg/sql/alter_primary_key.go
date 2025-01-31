@@ -370,7 +370,8 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	// We have to rewrite all indexes that either:
-	// * depend on uniqueness from the old primary key (inverted, non-unique, or unique with nulls).
+	// * depend on uniqueness from the old primary key (inverted, vector,
+	//   non-unique, or unique with nulls).
 	// * don't store or index all columns in the new primary key.
 	// * is affected by a locality config swap.
 	shouldRewriteIndex := func(idx catalog.Index) (bool, error) {
@@ -434,7 +435,9 @@ func (p *planner) AlterPrimaryKey(
 			return true, nil
 		}
 
-		return !idx.IsUnique() || idx.GetType() == idxtype.INVERTED, nil
+		return !idx.IsUnique() ||
+			idx.GetType() == idxtype.INVERTED ||
+			idx.GetType() == idxtype.VECTOR, nil
 	}
 	var indexesToRewrite []catalog.Index
 	for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
@@ -811,6 +814,7 @@ func setKeySuffixAndStoredColumnIDsFromPrimary(
 	// which have not already been in the key columns in the secondary index.
 	toAdd.KeySuffixColumnIDs = nil
 	invIdx := toAdd.Type == idxtype.INVERTED
+	vecIdx := toAdd.Type == idxtype.VECTOR
 	for _, colID := range primary.KeyColumnIDs {
 		if !idxColIDs.Contains(colID) {
 			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
@@ -832,6 +836,10 @@ func setKeySuffixAndStoredColumnIDsFromPrimary(
 				"primary key column %s cannot be present in an inverted index",
 				col.GetName(),
 			)
+		} else if vecIdx && colID == toAdd.VectorColumnID() {
+			// VECTOR columns are not allowed in the primary key.
+			return errors.AssertionFailedf(
+				"indexed vector column cannot be part of the primary key")
 		}
 	}
 	// Finally, add all the stored columns if it is not already a key or key suffix column.
