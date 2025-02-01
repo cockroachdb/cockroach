@@ -843,9 +843,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453' -> <undecoded>
-fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453'/b -> '2015-08-25'
-fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453'/c -> '02:45:02.234'
+fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453':cf=0 -> <undecoded>
+fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453'/b:cf=1 -> '2015-08-25'
+fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453'/c:cf=2 -> '02:45:02.234'
 output row: ['2015-08-25 04:45:45.53453' '2015-08-25' '02:45:02.234']
 
 statement ok
