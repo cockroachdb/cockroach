@@ -565,7 +565,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		insertRow,
 		pm,
 		nil,   /* OriginTimestampCPutHelper */
-		true,  /* ignoreConflicts */
+		true,  /* overwrite */
 		false, /* traceKV */
 	); err != nil {
 		return errors.Wrap(err, "insert row")

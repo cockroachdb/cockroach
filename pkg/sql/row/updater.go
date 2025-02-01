@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -357,7 +356,7 @@ func (ru *Updater) UpdateRow(
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
-			ctx, putter, ru.newValues, pm, oth, false /* ignoreConflicts */, traceKV,
+			ctx, putter, ru.newValues, pm, oth, false /* overwrite */, traceKV,
 		); err != nil {
 			return nil, err
 		}
@@ -370,7 +369,7 @@ func (ru *Updater) UpdateRow(
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.UpdateColIDtoRowIndex,
-		&ru.key, &ru.value, ru.valueBuf, insertPutFn, oth, oldValues, true /* overwrite */, traceKV)
+		&ru.key, &ru.value, ru.valueBuf, oth, oldValues, true /* overwrite */, traceKV)
 	if err != nil {
 		return nil, err
 	}
@@ -422,24 +421,11 @@ func (ru *Updater) UpdateRow(
 						continue
 					}
 
-					if index.ForcePut() {
+					if index.ForcePut() || sameKey {
 						// See the comment on (catalog.Index).ForcePut() for more details.
-						insertPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV)
+						insertPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 					} else {
-						if traceKV {
-							k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-							v := newEntry.Value.PrettyPrint()
-							if sameKey {
-								log.VEventf(ctx, 2, "Put %s -> %v", k, v)
-							} else {
-								log.VEventf(ctx, 2, "CPut %s -> %v", k, v)
-							}
-						}
-						if sameKey {
-							batch.Put(newEntry.Key, &newEntry.Value)
-						} else {
-							batch.CPut(newEntry.Key, &newEntry.Value, nil /* expValue */)
-						}
+						insertCPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 					}
 					writtenIndexes.Add(i)
 				} else if oldEntry.Family < newEntry.Family {
@@ -465,17 +451,12 @@ func (ru *Updater) UpdateRow(
 
 					if index.ForcePut() {
 						// See the comment on (catalog.Index).ForcePut() for more details.
-						insertPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV)
+						insertPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 					} else {
 						// In this case, the index now has a k/v that did not exist in the
 						// old row, so we should expect to not see a value for the new key,
 						// and put the new key in place.
-						if traceKV {
-							k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-							v := newEntry.Value.PrettyPrint()
-							log.VEventf(ctx, 2, "CPut %s -> %v", k, v)
-						}
-						batch.CPut(newEntry.Key, &newEntry.Value, nil)
+						insertCPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 					}
 					writtenIndexes.Add(i)
 					newIdx++
@@ -502,14 +483,9 @@ func (ru *Updater) UpdateRow(
 				newEntry := &newEntries[newIdx]
 				if index.ForcePut() {
 					// See the comment on (catalog.Index).ForcePut() for more details.
-					insertPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV)
+					insertPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 				} else {
-					if traceKV {
-						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-						v := newEntry.Value.PrettyPrint()
-						log.VEventf(ctx, 2, "CPut %s -> %v", k, v)
-					}
-					batch.CPut(newEntry.Key, &newEntry.Value, nil)
+					insertCPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 				}
 				writtenIndexes.Add(i)
 				newIdx++
@@ -525,9 +501,9 @@ func (ru *Updater) UpdateRow(
 			for j := range ru.newIndexEntries[i] {
 				if index.ForcePut() {
 					// See the comment on (catalog.Index).ForcePut() for more details.
-					insertPutFn(ctx, putter, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+					insertPutFn(ctx, putter, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV, ru.Helper.secIndexValDirs[i])
 				} else {
-					insertInvertedPutFn(ctx, putter, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+					insertCPutFn(ctx, putter, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV, ru.Helper.secIndexValDirs[i])
 				}
 			}
 		}
