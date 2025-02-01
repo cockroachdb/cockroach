@@ -8,7 +8,6 @@
 // tag is reserved for the toplevel Makefile's linux-gnu build.
 
 //go:build gss_compose
-// +build gss_compose
 
 package gss
 

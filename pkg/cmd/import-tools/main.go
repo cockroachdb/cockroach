@@ -7,7 +7,6 @@
 // doesn't clean up needed dependencies when running `go install`.
 
 //go:build tools
-// +build tools
 
 package main
 
