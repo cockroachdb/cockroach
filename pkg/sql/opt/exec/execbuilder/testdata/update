@@ -20,14 +20,14 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv2/kv2_pkey/'a' -> <undecoded>
-fetched: /kv2/kv2_pkey/'a'/v -> 'b'
-fetched: /kv2/kv2_pkey/'c' -> <undecoded>
-fetched: /kv2/kv2_pkey/'c'/v -> 'd'
-fetched: /kv2/kv2_pkey/'e' -> <undecoded>
-fetched: /kv2/kv2_pkey/'e'/v -> 'f'
-fetched: /kv2/kv2_pkey/'f' -> <undecoded>
-fetched: /kv2/kv2_pkey/'f'/v -> 'g'
+fetched: /kv2/kv2_pkey/'a':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'a'/v:cf=1 -> 'b'
+fetched: /kv2/kv2_pkey/'c':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'c'/v:cf=1 -> 'd'
+fetched: /kv2/kv2_pkey/'e':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'e'/v:cf=1 -> 'f'
+fetched: /kv2/kv2_pkey/'f':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'f'/v:cf=1 -> 'g'
 output row: ['a' 'b']
 output row: ['c' 'd']
 output row: ['e' 'f']
@@ -61,14 +61,14 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv2/kv2_pkey/'a' -> <undecoded>
-fetched: /kv2/kv2_pkey/'a'/v -> 'b'
-fetched: /kv2/kv2_pkey/'c' -> <undecoded>
-fetched: /kv2/kv2_pkey/'c'/v -> 'd'
-fetched: /kv2/kv2_pkey/'e' -> <undecoded>
-fetched: /kv2/kv2_pkey/'e'/v -> 'f'
-fetched: /kv2/kv2_pkey/'f' -> <undecoded>
-fetched: /kv2/kv2_pkey/'f'/v -> 'g'
+fetched: /kv2/kv2_pkey/'a':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'a'/v:cf=1 -> 'b'
+fetched: /kv2/kv2_pkey/'c':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'c'/v:cf=1 -> 'd'
+fetched: /kv2/kv2_pkey/'e':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'e'/v:cf=1 -> 'f'
+fetched: /kv2/kv2_pkey/'f':cf=0 -> <undecoded>
+fetched: /kv2/kv2_pkey/'f'/v:cf=1 -> 'g'
 output row: ['a' 'b']
 output row: ['c' 'd']
 output row: ['e' 'f']
@@ -375,8 +375,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /pks/pks_pkey/2/2 -> <undecoded>
-fetched: /pks/pks_pkey/2/2/v -> 3
+fetched: /pks/pks_pkey/2/2:cf=0 -> <undecoded>
+fetched: /pks/pks_pkey/2/2/v:cf=1 -> 3
 output row: [2 2 3]
 
 # Check that UPDATE properly supports ORDER BY (MySQL extension)
@@ -883,9 +883,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
 Scan /Table/115/{1-2} lock Exclusive (Block, Unreplicated)
-fetched: /tu/tu_pkey/1 -> <undecoded>
-fetched: /tu/tu_pkey/1 -> <undecoded>
-fetched: /tu/tu_pkey/1/c/d -> /3/4
+fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>
+fetched: /tu/tu_pkey/1:cf=1 -> <undecoded>
+fetched: /tu/tu_pkey/1/c/d:cf=2 -> /3/4
 Put /Table/115/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
 fast path completed
 rows affected: 1
@@ -898,9 +898,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
 Scan /Table/115/{1-2} lock Exclusive (Block, Unreplicated)
-fetched: /tu/tu_pkey/1 -> <undecoded>
-fetched: /tu/tu_pkey/1/b -> 2
-fetched: /tu/tu_pkey/1/c/d -> /4/4
+fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>
+fetched: /tu/tu_pkey/1/b:cf=1 -> 2
+fetched: /tu/tu_pkey/1/c/d:cf=2 -> /4/4
 Del /Table/115/1/1/1/1
 Del /Table/115/1/1/2/1
 fast path completed
