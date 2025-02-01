@@ -614,8 +614,7 @@ func (db *DB) DelRange(
 }
 
 // DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
-// (exclusive) using an MVCC range tombstone. Callers must check the
-// MVCCRangeTombstones version gate before using this.
+// (exclusive) using an MVCC range tombstone.
 func (db *DB) DelRangeUsingTombstone(ctx context.Context, begin, end interface{}) error {
 	b := &Batch{}
 	b.DelRangeUsingTombstone(begin, end)
@@ -765,22 +764,18 @@ func (db *DB) AdminRelocateRange(
 }
 
 // AddSSTable links a file into the Pebble log-structured merge-tree.
-//
-// The disallowConflicts, disallowShadowingBelow parameters
-// require the MVCCAddSSTable version gate, as they are new in 22.1.
 func (db *DB) AddSSTable(
 	ctx context.Context,
 	begin, end interface{},
 	data []byte,
 	disallowConflicts bool,
-	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
 ) (roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
+	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowingBelow,
 		stats, ingestAsWrites, hlc.Timestamp{} /* sstTimestampToRequestTimestamp */)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
@@ -830,23 +825,18 @@ func (db *DB) LinkExternalSSTable(
 // merge-tree. All keys in the SST must have batchTs as their timestamp, but the
 // batch timestamp at which the sst is actually ingested -- and that those keys
 // end up with after it is ingested -- may be updated if the request is pushed.
-//
-// Should only be called after checking the MVCCAddSSTable version gate.
 func (db *DB) AddSSTableAtBatchTimestamp(
 	ctx context.Context,
 	begin, end interface{},
 	data []byte,
 	disallowConflicts bool,
-	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
 ) (hlc.Timestamp, roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data,
-		disallowConflicts, disallowShadowing, disallowShadowingBelow,
-		stats, ingestAsWrites, batchTs)
+	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowingBelow, stats, ingestAsWrites, batchTs)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
 		return hlc.Timestamp{}, roachpb.Span{}, 0, err

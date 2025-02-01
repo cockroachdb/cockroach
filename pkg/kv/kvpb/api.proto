@@ -461,10 +461,6 @@ message DeleteRangeRequest {
   // cheaper constant-time write operation (but still requires a scan to check
   // for conflicts and adjust MVCC stats). This option cannot be used in a
   // transaction, and it cannot be combined with Inline or ReturnKeys.
-  //
-  // The caller must check storage.CanUseMVCCRangeTombstones before using this
-  // parameter: it is new in 22.2, and controlled by the default-off cluster
-  // setting storage.mvcc.range_tombstones.enabled.
   bool use_range_tombstone = 5;
   // If enabled together with UseRangeTombstone, the MVCC range tombstone will
   // only be written if there exists point key/tombstones in the span that
@@ -2023,9 +2019,6 @@ message AdminVerifyProtectedTimestampResponse {
 // inline values). It cannot be used in a transaction, cannot be split across
 // ranges, and must be alone in a batch.
 //
-// MVCC range tombstones are supported in 22.2, but check the
-// MVCCRangeTombstones version gate before writing them.
-//
 // By default, AddSSTable will blindly write the SST contents into Pebble, with
 // fixed MVCC timestamps unaffected by pushes. This can violate many CRDB
 // guarantees, including ACID, serializability and single-key linearizability:
@@ -2041,9 +2034,9 @@ message AdminVerifyProtectedTimestampResponse {
 //   and closed timestamp, by rewriting SST timestamps to the request timestamp.
 //   Also emits the SST via the range feed.
 //
-// * DisallowConflicts, DisallowShadowing, or DisallowShadowingBelow: ensures
-//   compliance with MVCC, by checking for conflicting keys in existing data
-//   instead of writing blindly.
+// * DisallowConflicts, or DisallowShadowingBelow: ensures compliance with MVCC,
+//   by checking for conflicting keys in existing data instead of writing
+//   blindly.
 //
 // If the above parameters are not enabled, the caller must make sure these
 // guarantees are upheld via other mechanisms. These options are orthogonal,
@@ -2080,10 +2073,7 @@ message AddSSTableRequest {
   // Note that this alone is not sufficient to guarantee MVCC correctness, since
   // it can write below or replace existing committed versions (the tscache is
   // only bumped when the values are subsequently read). Use DisallowConflicts
-  // or DisallowShadowing in addition to guarantee MVCC correctness and
-  // serializability.
-  //
-  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
+  // in addition to guarantee MVCC correctness and serializability.
   util.hlc.Timestamp sst_timestamp_to_request_timestamp = 6 [
     (gogoproto.customname) = "SSTTimestampToRequestTimestamp", (gogoproto.nullable) = false];
 
@@ -2097,28 +2087,20 @@ message AddSSTableRequest {
   // reader has already observed, changing the value at that timestamp and above
   // it. Use with SSTTimestampToRequestTimestamp to guarantee serializability.
   //
-  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
-  //
   // TODO(erikgrinaker): It might be possible to avoid this parameter if we
   // could pick an MVCC timestamp that's guaranteed to not collide with
   // existing keys, see: https://github.com/cockroachdb/cockroach/issues/73047.
   // However, this would always lead to inaccurate MVCC stats.
   bool disallow_conflicts = 7;
 
-  // DisallowShadowing implies DisallowConflicts, and additionally rejects
-  // writing above keys that have an existing/visible value (but will write
-  // above tombstones).
-  //
-  // TODO(erikgrinaker): Consider removing this in 22.1 if all callers have
-  // been migrated to DisallowShadowingBelow.
-  bool disallow_shadowing = 3;
+  reserved 3;
 
   // DisallowShadowingBelow implies DisallowConflicts, and additionally rejects
   // writing above keys that have an existing/visible value (but will write
-  // above tombstones). Unlike DisallowShadowing, it allows shadowing keys
-  // that have a timestamp at or above the given timestamp as long as the
-  // value is identical to the existing value, and also allows idempotent writes
-  // (same key/timestamp/value) at or above the given timestamp.
+  // above tombstones). It allows shadowing keys that have a timestamp at or
+  // above the given timestamp as long as the value is identical to the existing
+  // value, and also allows idempotent writes (same key/timestamp/value) at or
+  // above the given timestamp.
   //
   // This is a specialized method for the IMPORT INTO use-case, where we do not
   // want to shadow existing keys (which could cause them to be GCed before the
@@ -2126,11 +2108,6 @@ message AddSSTableRequest {
   // keys that were previously written by the import itself in the case of a
   // resumption or retry. The equal value requirement is to avoid unique
   // constraint violations.
-  //
-  // If this parameter is used, the value of DisallowShadowing is ignored, so
-  // callers may pass both for forward and backwards compatibility.
-  //
-  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   util.hlc.Timestamp disallow_shadowing_below = 8 [(gogoproto.nullable) = false];
 
   // MVCCStats, if set, is the MVCCStats for the contents of this SSTable and is
