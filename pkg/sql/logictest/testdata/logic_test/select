@@ -756,6 +756,25 @@ SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_idx,NO_FULL_SCAN} WHERE b > 0
 statement ok
 SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE a > 0 AND b = 1
 
+# Now avoid full scans with a hint. A full scan should not cause an error.
+statement ok
+SELECT * FROM t_disallow_scans@{AVOID_FULL_SCAN}
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_idx,AVOID_FULL_SCAN}
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_partial,AVOID_FULL_SCAN} WHERE a > 0
+
+statement ok
+SELECT * FROM t_disallow_scans@{AVOID_FULL_SCAN} WHERE a > 0
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_idx,AVOID_FULL_SCAN} WHERE b > 0
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_partial,AVOID_FULL_SCAN} WHERE a > 0 AND b = 1
+
 # Now disable full scans with the session variable.
 statement ok
 SET disallow_full_table_scans = true;

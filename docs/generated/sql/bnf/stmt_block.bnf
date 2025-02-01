@@ -1057,6 +1057,7 @@ unreserved_keyword ::=
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
 	| 'AVAILABILITY'
+	| 'AVOID_FULL_SCAN'
 	| 'BACKUP'
 	| 'BACKUPS'
 	| 'BACKWARD'
@@ -3625,6 +3626,7 @@ bare_label_keywords ::=
 	| 'AUTHORIZATION'
 	| 'AUTOMATIC'
 	| 'AVAILABILITY'
+	| 'AVOID_FULL_SCAN'
 	| 'BACKUP'
 	| 'BACKUPS'
 	| 'BACKWARD'
@@ -4197,6 +4199,7 @@ index_flags_param ::=
 	| 'NO_INDEX_JOIN'
 	| 'NO_ZIGZAG_JOIN'
 	| 'NO_FULL_SCAN'
+	| 'AVOID_FULL_SCAN'
 	| 'FORCE_ZIGZAG'
 	| 'FORCE_ZIGZAG' '=' index_name
 
