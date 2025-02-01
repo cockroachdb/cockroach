@@ -14,8 +14,6 @@
 // will be detected and reported.
 //
 // To exclude this file except during fuzzing, tag it with:
-//
-//	// +build gofuzz
 package main
 
 import (
