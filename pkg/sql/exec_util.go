@@ -3841,6 +3841,14 @@ func (m *sessionDataMutator) SetLegacyVarcharTyping(val bool) {
 	m.data.LegacyVarcharTyping = val
 }
 
+func (m *sessionDataMutator) SetOptimizerPreferBoundedCardinality(b bool) {
+	m.data.OptimizerPreferBoundedCardinality = b
+}
+
+func (m *sessionDataMutator) SetOptimizerMinRowCount(val float64) {
+	m.data.OptimizerMinRowCount = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
