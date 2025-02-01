@@ -83,11 +83,6 @@ func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCI
 // timestamp is above the given timestamp and the values are equal. See comment
 // on AddSSTableRequest.DisallowShadowingBelow for details.
 //
-// If disallowShadowing is true, it also errors for any existing live key at the
-// SST key timestamp, and ignores entries that exactly match an existing entry
-// (key/value/timestamp), for backwards compatibility. If disallowShadowingBelow
-// is non-empty, disallowShadowing is ignored.
-//
 // sstTimestamp, if non-zero, represents the timestamp that all keys in the SST
 // are expected to be at. This method can make performance optimizations with
 // the expectation that no SST keys will be at any other timestamp. If the
@@ -107,7 +102,6 @@ func CheckSSTConflicts(
 	reader Reader,
 	start, end MVCCKey,
 	leftPeekBound, rightPeekBound roachpb.Key,
-	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	sstTimestamp hlc.Timestamp,
 	maxLockConflicts, targetLockConflictBytes int64,
@@ -115,9 +109,7 @@ func CheckSSTConflicts(
 ) (enginepb.MVCCStats, error) {
 
 	allowIdempotentHelper := func(_ hlc.Timestamp) bool { return false }
-	if disallowShadowingBelow.IsEmpty() && disallowShadowing {
-		allowIdempotentHelper = func(_ hlc.Timestamp) bool { return true }
-	} else if !disallowShadowingBelow.IsEmpty() {
+	if !disallowShadowingBelow.IsEmpty() {
 		allowIdempotentHelper = func(extTimestamp hlc.Timestamp) bool {
 			return disallowShadowingBelow.LessEq(extTimestamp)
 		}
@@ -293,10 +285,8 @@ func CheckSSTConflicts(
 
 		// Allow certain idempotent writes where key/timestamp/value all match:
 		//
-		// * disallowShadowing: any matching key.
 		// * disallowShadowingBelow: any matching key at or above the given timestamp.
-		allowIdempotent := (!disallowShadowingBelow.IsEmpty() && disallowShadowingBelow.LessEq(extKey.Timestamp)) ||
-			(disallowShadowingBelow.IsEmpty() && disallowShadowing)
+		allowIdempotent := !disallowShadowingBelow.IsEmpty() && disallowShadowingBelow.LessEq(extKey.Timestamp)
 		if allowIdempotent && sstKey.Timestamp.Equal(extKey.Timestamp) &&
 			bytes.Equal(extValueRaw, sstValueRaw) {
 			// This SST entry will effectively be a noop, but its stats have already
@@ -337,9 +327,8 @@ func CheckSSTConflicts(
 		// a WriteTooOldError -- that error implies that the client should
 		// retry at a higher timestamp, but we already know that such a retry
 		// would fail (because it will shadow an existing key).
-		if !extValueIsTombstone && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
-			allowShadow := !disallowShadowingBelow.IsEmpty() &&
-				disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValueRaw, sstValueRaw)
+		if !extValueIsTombstone && !disallowShadowingBelow.IsEmpty() {
+			allowShadow := disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValueRaw, sstValueRaw)
 			if !allowShadow {
 				return kvpb.NewKeyCollisionError(sstKey.Key, sstValueRaw)
 			}
@@ -535,7 +524,7 @@ func CheckSSTConflicts(
 				// Check if shadowing a live key is allowed. Deleting a live key counts
 				// as a shadow.
 				extValueDeleted := extHasRange && extRangeKeys.Covers(extKey)
-				if !extValueIsTombstone && !extValueDeleted && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
+				if !extValueIsTombstone && !extValueDeleted && !disallowShadowingBelow.IsEmpty() {
 					// Note that we don't check for value equality here, unlike in the
 					// point key shadow case. This is because a range key and a point key
 					// by definition have different values.

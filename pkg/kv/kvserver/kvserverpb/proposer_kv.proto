@@ -210,8 +210,7 @@ message ReplicatedEvalResult {
     uint32 crc32 = 2 [(gogoproto.customname) = "CRC32"];
     roachpb.Span span = 3 [(gogoproto.nullable) = false];
     // If true, all SST MVCC timestamps equal the WriteTimestamp. This is given
-    // by the SSTTimestampToRequestTimestamp request parameter, which was
-    // introduced in 22.1 and only used with the MVCCAddSSTable cluster version.
+    // by the SSTTimestampToRequestTimestamp request parameter.
     //
     // TODO(erikgrinaker): This field currently controls whether to emit an
     // AddSSTable event across the rangefeed. We could equivalently check

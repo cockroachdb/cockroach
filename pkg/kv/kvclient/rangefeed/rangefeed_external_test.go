@@ -619,7 +619,7 @@ func TestWithOnSSTable(t *testing.T) {
 		}
 		sst, sstStart, sstEnd := storageutils.MakeSST(t, tsrv.ClusterSettings(), sstKVs)
 		_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
-			false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{},
+			false /* disallowConflicts */, hlc.Timestamp{},
 			nil, /* stats */
 			false /* ingestAsWrites */, now)
 		require.Nil(t, pErr)
@@ -726,7 +726,7 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		expectKVs := kvs{pointKV("c", ts, "3"), pointKV("d", ts, "4")}
 		sst, sstStart, sstEnd := storageutils.MakeSST(t, srv.ClusterSettings(), sstKVs)
 		_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
-			false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{},
+			false /* disallowConflicts */, hlc.Timestamp{},
 			nil, /* stats */
 			false /* ingestAsWrites */, now)
 		require.Nil(t, pErr)

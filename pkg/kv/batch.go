@@ -870,8 +870,7 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 }
 
 // DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
-// (exclusive) using an MVCC range tombstone. Callers must check
-// storage.CanUseMVCCRangeTombstones before using this.
+// (exclusive) using an MVCC range tombstone.
 func (b *Batch) DelRangeUsingTombstone(s, e interface{}) {
 	start, err := marshalKey(s)
 	if err != nil {
@@ -1019,7 +1018,6 @@ func (b *Batch) addSSTable(
 	s, e interface{},
 	data []byte,
 	disallowConflicts bool,
-	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
@@ -1042,7 +1040,6 @@ func (b *Batch) addSSTable(
 		},
 		Data:                           data,
 		DisallowConflicts:              disallowConflicts,
-		DisallowShadowing:              disallowShadowing,
 		DisallowShadowingBelow:         disallowShadowingBelow,
 		MVCCStats:                      stats,
 		IngestAsWrites:                 ingestAsWrites,
