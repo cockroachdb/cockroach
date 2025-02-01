@@ -119,8 +119,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
           <TimezoneProvider>
             {/* Apply CRL theme twice, with ConfigProvider instance from Db Console and
              imported instance from Cluster UI as it applies theme imported components only. */}
-            <ClusterUIConfigProvider theme={crlTheme} prefixCls={"crl-ant"}>
-              <ConfigProvider theme={crlTheme} prefixCls={"crl-ant"}>
+            <ClusterUIConfigProvider theme={crlTheme} prefixCls={"crdb-ant"}>
+              <ConfigProvider theme={crlTheme} prefixCls={"crdb-ant"}>
                 <Switch>
                   {/* login */}
                   {createLoginRoute()}
