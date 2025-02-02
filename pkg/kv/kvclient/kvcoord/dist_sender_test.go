@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errutil"
 	"github.com/cockroachdb/redact"
@@ -728,6 +729,292 @@ func TestErrorWithCancellationExit(t *testing.T) {
 				require.NotNil(t, pErr)
 				require.True(t, testutils.IsPError(pErr, tc.expectedErr))
 			}
+		})
+	}
+}
+
+// TestSendToReplicasEagerlyBailOnLeaseholderNotFound tests that if the cluster
+// setting is enabled, the DistSender will eagerly bail out if sendToReplicas
+// can't find the leaseholder for sometime.
+func TestSendToReplicasEagerlyBailOnLeaseholderNotFound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// transportSendNextError is used to simulate both RPC errors, and batch
+	// response errors.
+	type transportSendNextError struct {
+		err                error
+		batchResponseError *kvpb.Error
+	}
+
+	// Prepare some errors that the transport will return.
+	notLeaseholderErr := transportSendNextError{
+		err: nil,
+		batchResponseError: kvpb.NewError(
+			&kvpb.NotLeaseHolderError{
+				Replica: testUserRangeDescriptor3Replicas.InternalReplicas[0],
+			}),
+	}
+
+	rangeNotFoundErr := transportSendNextError{
+		err: nil,
+		batchResponseError: kvpb.NewError(
+			&kvpb.RangeNotFoundError{
+				RangeID: testUserRangeDescriptor3Replicas.RangeID,
+				StoreID: testUserRangeDescriptor3Replicas.InternalReplicas[0].StoreID,
+			}),
+	}
+
+	rpcError := transportSendNextError{
+		err:                errors.Errorf("RPC error"),
+		batchResponseError: nil,
+	}
+
+	var initDescriptor = roachpb.RangeDescriptor{
+		Generation: 1,
+		RangeID:    1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
+			},
+			{
+				NodeID:    2,
+				StoreID:   2,
+				ReplicaID: 2,
+			},
+			{
+				NodeID:    3,
+				StoreID:   3,
+				ReplicaID: 3,
+			},
+		},
+	}
+	var initLease = roachpb.Lease{
+		Sequence: 1,
+		Replica: roachpb.ReplicaDescriptor{
+			NodeID: 1, StoreID: 1, ReplicaID: 1,
+		},
+	}
+
+	tests := []struct {
+		name                   string
+		errors                 []transportSendNextError
+		clusterSettingEnabled  bool
+		exceedBackoffThreshold bool
+		withCommit             bool
+		expectedErr            string
+	}{
+		{
+			name: "all errors are leaseholder and before backoff threshold",
+			errors: []transportSendNextError{
+				notLeaseholderErr,
+				notLeaseholderErr,
+				notLeaseholderErr,
+			},
+			clusterSettingEnabled:  true,
+			exceedBackoffThreshold: false,
+			withCommit:             false,
+			// We expect a send error to be returned since we haven't passed the
+			// backoff threshold.
+			expectedErr: "sending to all replicas failed",
+		},
+		{
+			name: "all errors are leaseholder and after backoff threshold",
+			errors: []transportSendNextError{
+				notLeaseholderErr,
+				notLeaseholderErr,
+				notLeaseholderErr,
+			},
+			clusterSettingEnabled:  true,
+			exceedBackoffThreshold: true,
+			withCommit:             false,
+			// Since we only have NLHE errors, and we have passed the backoff
+			// threshold, expect that a RUE is returned.
+			expectedErr: "replica unavailable",
+		},
+		{
+			name: "all errors are leaseholder and after backoff threshold with setting off",
+			errors: []transportSendNextError{
+				notLeaseholderErr,
+				notLeaseholderErr,
+				notLeaseholderErr,
+			},
+			clusterSettingEnabled:  false,
+			exceedBackoffThreshold: true,
+			withCommit:             false,
+			// We expect a send error to be returned since the setting is off.
+			expectedErr: "sending to all replicas failed",
+		},
+		{
+			name: "all errors are leaseholder & rpc before backoff threshold",
+			errors: []transportSendNextError{
+				notLeaseholderErr,
+				rpcError,
+				notLeaseholderErr,
+			},
+			clusterSettingEnabled:  true,
+			exceedBackoffThreshold: false,
+			withCommit:             false,
+			// We expect a send error to be returned since we haven't passed the
+			// backoff threshold.
+			expectedErr: "sending to all replicas failed",
+		},
+		{
+			name: "all errors are leaseholder & rpc after backoff threshold",
+			errors: []transportSendNextError{
+				notLeaseholderErr,
+				rpcError,
+				notLeaseholderErr,
+			},
+			clusterSettingEnabled:  true,
+			exceedBackoffThreshold: true,
+			withCommit:             false,
+			// Since we only have NLHE and RPC errors, and we have passed the backoff
+			// threshold, expect that a RUE is returned.
+			expectedErr: "replica unavailable",
+		},
+		{
+			name: "not leaseholder and range not found error before backoff threshold",
+			errors: []transportSendNextError{
+				notLeaseholderErr,
+				notLeaseholderErr,
+				rangeNotFoundErr,
+			},
+			clusterSettingEnabled:  true,
+			exceedBackoffThreshold: false,
+			withCommit:             false,
+			// We expect a send error to be returned since we haven't passed the
+			// backoff threshold.
+			expectedErr: "sending to all replicas failed",
+		},
+		{
+			name: "not leaseholder and range not found error after backoff threshold",
+			errors: []transportSendNextError{
+				notLeaseholderErr,
+				notLeaseholderErr,
+				rangeNotFoundErr,
+			},
+			clusterSettingEnabled:  true,
+			exceedBackoffThreshold: true,
+			withCommit:             false,
+			// We expect a send error to be returned despite exceeding the backoff
+			// threshold since there is other than NLHE.
+			expectedErr: "sending to all replicas failed",
+		},
+		{
+			name: "ambiguous errors are returned before backoff threshold",
+			errors: []transportSendNextError{
+				rpcError,
+				rpcError,
+				notLeaseholderErr,
+			},
+			clusterSettingEnabled:  true,
+			exceedBackoffThreshold: false,
+			withCommit:             true,
+			// If there is an ambiguous error, we expect it to be returned regardless
+			// of the backoff threshold.
+			expectedErr: "result is ambiguous",
+		},
+		{
+			name: "ambiguous errors are returned after backoff threshold",
+			errors: []transportSendNextError{
+				rpcError,
+				rpcError,
+				notLeaseholderErr,
+			},
+			clusterSettingEnabled:  true,
+			exceedBackoffThreshold: true,
+			withCommit:             true,
+			// If there is an ambiguous error, we expect it to be returned regardless
+			// of the backoff threshold.
+			expectedErr: "result is ambiguous",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+
+			// Set up the manual clock and the request start time.
+			manual := hlc.NewHybridManualClock()
+			clock := hlc.NewClockForTesting(manual)
+			startTime := manual.Now()
+
+			st := cluster.MakeTestingClusterSettings()
+			EagerlyBailOnLeaseholderNotFound.Override(ctx, &st.SV, tc.clusterSettingEnabled)
+
+			// Gossip the two nodes referred to in testUserRangeDescriptor3Replicas.
+			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+			g := makeGossip(t, stopper, rpcContext)
+			for i := 2; i <= 3; i++ {
+				nd := newNodeDesc(roachpb.NodeID(i))
+				if err :=
+					g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Prepare the range cache.
+			rc := rangecache.NewRangeCache(st, nil /* db */, func() int64 { return 100 }, stopper)
+			rc.Insert(ctx, roachpb.RangeInfo{
+				Desc:  initDescriptor,
+				Lease: initLease,
+			})
+
+			if tc.exceedBackoffThreshold {
+				manual.Increment(LeaseholderNotFoundBackoffThreshold.Get(&st.SV).Nanoseconds())
+			}
+
+			var count int
+			testFn := func(_ context.Context, args *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+				// Assert that we don't get more errors than we expect.
+				require.True(t, count < len(tc.errors))
+
+				var reply *kvpb.BatchResponse
+				var err error
+				if tc.errors[count].err != nil {
+					err = tc.errors[count].err
+				}
+				if tc.errors[count].batchResponseError != nil {
+					reply = &kvpb.BatchResponse{}
+					reply.Error = tc.errors[count].batchResponseError
+				}
+				count++
+				return reply, err
+			}
+
+			cfg := DistSenderConfig{
+				AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
+				Clock:             clock,
+				NodeDescs:         g,
+				Stopper:           stopper,
+				TransportFactory:  adaptSimpleTransport(testFn),
+				RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+				Settings:          st,
+			}
+			ds := NewDistSender(cfg)
+
+			// Call sendToReplicas and expect the expected error to be returned.
+			ba := &kvpb.BatchRequest{}
+			ba.Add(kvpb.NewGet(roachpb.Key("a")))
+			tok, err := rc.LookupWithEvictionToken(
+				ctx,
+				roachpb.RKeyMin,
+				rangecache.EvictionToken{},
+				false,
+			)
+			require.NoError(t, err)
+			_, err = ds.sendToReplicas(ctx, ba, tok, tc.withCommit, manual.Now().Sub(startTime))
+			pErr := kvpb.NewError(err)
+
+			require.NotNil(t, pErr)
+			require.True(t, testutils.IsPError(pErr, tc.expectedErr))
 		})
 	}
 }
@@ -3783,12 +4070,13 @@ func TestReplicaErrorsMerged(t *testing.T) {
 					Settings:         cluster.MakeTestingClusterSettings(),
 				}
 				ds := NewDistSender(cfg)
+				startTime := crtime.NowMono()
 
 				ba := &kvpb.BatchRequest{}
 				ba.Add(kvpb.NewGet(roachpb.Key("a")))
 				tok, err := rc.LookupWithEvictionToken(ctx, roachpb.RKeyMin, rangecache.EvictionToken{}, false)
 				require.NoError(t, err)
-				br, err := ds.sendToReplicas(ctx, ba, tok, tc.withCommit)
+				br, err := ds.sendToReplicas(ctx, ba, tok, tc.withCommit, startTime.Elapsed())
 				log.Infof(ctx, "Error is %v", err)
 				require.ErrorContains(t, err, tc.expErr)
 				require.Nil(t, br)
@@ -5534,12 +5822,13 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 				}
 
 				ds := NewDistSender(cfg)
+				startTime := crtime.NowMono()
 
 				ba := &kvpb.BatchRequest{}
 				get := &kvpb.GetRequest{}
 				get.Key = roachpb.Key("a")
 				ba.Add(get)
-				_, err = ds.sendToReplicas(ctx, ba, tok, false /* withCommit */)
+				_, err = ds.sendToReplicas(ctx, ba, tok, false /* withCommit */, startTime.Elapsed())
 				require.IsType(t, &sendError{}, err)
 				require.Regexp(t, "NotLeaseHolderError", err)
 				cached, err := rc.TestingGetCached(ctx, tc.initialDesc.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
