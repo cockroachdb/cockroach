@@ -480,8 +480,6 @@ export const getNodeStatus = (): INodeStatus => {
       "sql.misc.started.count.internal": 2,
       "sql.new_conns": 0,
       "sql.conn.latency": 0,
-      "sql.optimizer.fallback.count": 0,
-      "sql.optimizer.fallback.count.internal": 0,
       "sql.optimizer.plan_cache.hits": 0,
       "sql.optimizer.plan_cache.hits.internal": 1641,
       "sql.optimizer.plan_cache.misses": 0,
