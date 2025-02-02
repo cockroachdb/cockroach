@@ -1,0 +1,25 @@
+# ignore everything
+*
+
+# but don't ignore files ending with slash = directories
+!*/
+cockroach-*/
+debug*/
+artifacts/
+_bazel/
+c-deps/
+benchdiff/
+bin/
+
+!*.go
+!*.proto
+!*.tsx
+!*.ts
+!*.js
+!*.jsx
+!*.json
+!*.yaml
+!*.yml
+!*.md
+!*.txt
+!*.sh

@@ -258,6 +258,5 @@ func sendBatch(
 	})
 	routing, err := ds.getRoutingInfo(ctx, desc.StartKey, rangecache.EvictionToken{}, false /* useReverseScan */)
 	require.NoError(t, err)
-
-	return ds.sendToReplicas(ctx, &kvpb.BatchRequest{}, routing, false /* withCommit */)
+	return ds.sendToReplicas(ctx, &kvpb.BatchRequest{}, routing, false /* withCommit */, 0 /* curDuration */)
 }
