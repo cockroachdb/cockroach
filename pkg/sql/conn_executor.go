@@ -3924,6 +3924,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
 	p.storedProcTxnState = ex.getStoredProcTxnStateAccessor()
+	p.onRoutineStmt = ex.onRoutineStmt
 	p.createdSequences = ex.getCreatedSequencesAccessor()
 
 	p.queryCacheSession.Init()
@@ -4506,6 +4507,11 @@ func (ex *connExecutor) getStoredProcTxnStateAccessor() storedProcTxnStateAccess
 	return storedProcTxnStateAccessor{
 		ex: ex,
 	}
+}
+
+func (ex *connExecutor) onRoutineStmt(stmt tree.Statement) {
+	ex.incrementStartedStmtCounter(stmt)
+	ex.incrementExecutedStmtCounter(stmt)
 }
 
 func (ex *connExecutor) getCreatedSequencesAccessor() createdSequences {

@@ -32,7 +32,9 @@ type queryCounter struct {
 	selectExecutedCount             int64
 	distSQLSelectCount              int64
 	updateCount                     int64
+	updateExecutedCount             int64
 	insertCount                     int64
+	insertExecutedCount             int64
 	deleteCount                     int64
 	ddlCount                        int64
 	callSPCount                     int64
@@ -68,8 +70,27 @@ func TestQueryCounts(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
-	if _, err := sqlDB.Exec("CREATE PROCEDURE p_select() LANGUAGE SQL AS 'SELECT 1'"); err != nil {
-		t.Fatal(err)
+	for _, setup := range []string{
+		"CREATE PROCEDURE p_select() LANGUAGE SQL AS 'SELECT 1'",
+		"CREATE TABLE t ( k INT PRIMARY KEY, i INT, s STRING )",
+		`
+CREATE PROCEDURE my_upsert(arg_k INT, new_i INT, new_s STRING) AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    SELECT count(*) INTO c FROM t WHERE k = arg_k;
+    IF c > 0 THEN
+      UPDATE t SET i = new_i, s = new_s WHERE k = arg_k;
+    ELSE
+      INSERT INTO t VALUES (arg_k, new_i, new_s);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL
+`,
+	} {
+		if _, err := sqlDB.Exec(setup); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	var testcases = []queryCounter{
@@ -79,7 +100,7 @@ func TestQueryCounts(t *testing.T) {
 		{query: "SELECT 1", selectCount: 1, selectExecutedCount: 1, txnCommitCount: 1},
 		{query: "CREATE DATABASE mt", ddlCount: 1},
 		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
-		{query: "INSERT INTO mt.n VALUES (3)", insertCount: 1},
+		{query: "INSERT INTO mt.n VALUES (3)", insertCount: 1, insertExecutedCount: 1},
 		// Test failure (uniqueness violation).
 		{query: "INSERT INTO mt.n VALUES (3)", failureCount: 1, insertCount: 1, expectError: true},
 		// Test failure (planning error).
@@ -87,13 +108,13 @@ func TestQueryCounts(t *testing.T) {
 			query:        "INSERT INTO nonexistent VALUES (3)",
 			failureCount: 1, insertCount: 1, expectError: true,
 		},
-		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
+		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1, updateExecutedCount: 1},
 		{query: "DELETE FROM mt.n", deleteCount: 1},
 		{query: "ALTER TABLE mt.n ADD COLUMN num2 INTEGER", ddlCount: 1},
 		{query: "EXPLAIN SELECT * FROM mt.n", miscCount: 1, miscExecutedCount: 1},
 		{
 			query:         "BEGIN; UPDATE mt.n SET num = num + 1; END",
-			txnBeginCount: 1, updateCount: 1, txnCommitCount: 1,
+			txnBeginCount: 1, updateCount: 1, updateExecutedCount: 1, txnCommitCount: 1,
 		},
 		{
 			query:       "SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n",
@@ -109,7 +130,7 @@ func TestQueryCounts(t *testing.T) {
 		{query: "SET database = system", miscCount: 1, miscExecutedCount: 1},
 		{query: "SELECT 3", selectCount: 1, selectExecutedCount: 1},
 		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
-		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
+		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1, updateExecutedCount: 1},
 		{query: "COPY mt.n(num) FROM STDIN", copyCount: 1, expectError: true},
 		{
 			query:       "BEGIN; SET LOCAL statement_timeout = '10ms'; SELECT pg_sleep(10)",
@@ -124,6 +145,9 @@ func TestQueryCounts(t *testing.T) {
 			txnRollbackCount: 1, txnAbortCount: 1,
 		},
 		{query: "CALL p_select()", callSPCount: 1, callSPExecutedCount: 1},
+		{query: "CALL p_select()", callSPCount: 1, callSPExecutedCount: 1, selectCount: 1, selectExecutedCount: 1},
+		{query: "CALL my_upsert(1, 10, 'foo')", callSPCount: 1, callSPExecutedCount: 1, selectCount: 1, selectExecutedCount: 1, insertCount: 1, insertExecutedCount: 1},
+		{query: "CALL my_upsert(1, 100, 'baz')", callSPCount: 1, callSPExecutedCount: 1, selectCount: 1, selectExecutedCount: 1, updateCount: 1, updateExecutedCount: 1},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -168,7 +192,13 @@ func TestQueryCounts(t *testing.T) {
 			if accum.updateCount, err = checkCounterDelta(s, sql.MetaUpdateStarted, accum.updateCount, tc.updateCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
+			if accum.updateExecutedCount, err = checkCounterDelta(s, sql.MetaUpdateExecuted, accum.updateExecutedCount, tc.updateExecutedCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
 			if accum.insertCount, err = checkCounterDelta(s, sql.MetaInsertStarted, accum.insertCount, tc.insertCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.insertExecutedCount, err = checkCounterDelta(s, sql.MetaInsertExecuted, accum.insertExecutedCount, tc.insertExecutedCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.deleteCount, err = checkCounterDelta(s, sql.MetaDeleteStarted, accum.deleteCount, tc.deleteCount); err != nil {

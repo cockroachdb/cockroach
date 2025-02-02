@@ -378,6 +378,7 @@ func (b *Builder) buildRoutine(
 	var body []memo.RelExpr
 	var bodyProps []*physical.Required
 	var bodyStmts []string
+	var bodyASTs []tree.Statement
 	switch o.Language {
 	case tree.RoutineLangSQL:
 		// Parse the function body.
@@ -391,6 +392,7 @@ func (b *Builder) buildRoutine(
 		// not be executed.
 		// TODO(mgartner): This will add some planning overhead for every
 		// invocation of the function. Is there a more efficient way to do this?
+		var appendedValuesStmt bool
 		if f.ResolvedType().Family() == types.VoidFamily {
 			stmts = append(stmts, statements.Statement[tree.Statement]{
 				AST: &tree.Select{
@@ -399,9 +401,11 @@ func (b *Builder) buildRoutine(
 					},
 				},
 			})
+			appendedValuesStmt = true
 		}
 		body = make([]memo.RelExpr, len(stmts))
 		bodyProps = make([]*physical.Required, len(stmts))
+		bodyASTs = make([]tree.Statement, len(stmts))
 
 		for i := range stmts {
 			stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
@@ -416,6 +420,12 @@ func (b *Builder) buildRoutine(
 			}
 			body[i] = expr
 			bodyProps[i] = physProps
+			bodyASTs[i] = stmts[i].AST
+		}
+		if appendedValuesStmt {
+			// Ignore the appended VALUES (NULL) stmt for the observability
+			// purposes.
+			bodyASTs = bodyASTs[:len(bodyASTs)-1]
 		}
 
 		if b.verboseTracing {
@@ -456,6 +466,7 @@ func (b *Builder) buildRoutine(
 		)
 		body = []memo.RelExpr{expr}
 		bodyProps = []*physical.Required{physProps}
+		bodyASTs = []tree.Statement{nil}
 		if b.verboseTracing {
 			bodyStmts = []string{stmt.String()}
 		}
@@ -479,6 +490,7 @@ func (b *Builder) buildRoutine(
 				Body:               body,
 				BodyProps:          bodyProps,
 				BodyStmts:          bodyStmts,
+				BodyASTs:           bodyASTs,
 				Params:             params,
 			},
 		},
@@ -842,6 +854,7 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 				Body:        []memo.RelExpr{body},
 				BodyProps:   []*physical.Required{bodyProps},
 				BodyStmts:   bodyStmts,
+				BodyASTs:    []tree.Statement{nil},
 			},
 		},
 	)
