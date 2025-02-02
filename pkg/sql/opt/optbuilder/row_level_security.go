@@ -27,10 +27,11 @@ func (b *Builder) addRowLevelSecurityFilter(
 	}
 
 	// Admin users are exempt from any RLS filtering.
-	isAdmin, err := b.catalog.HasAdminRole(b.ctx)
+	isAdmin, err := b.catalog.UserHasAdminRole(b.ctx, b.checkPrivilegeUser)
 	if err != nil {
 		panic(err)
 	}
+	b.factory.Metadata().SetRLSEnabled(b.checkPrivilegeUser, isAdmin)
 	if isAdmin {
 		return
 	}

@@ -567,16 +567,15 @@ nationals NL
 statement ok
 set role buck
 
-# TODO(136717): Reusing the statement cache prevents recompiling a new plan,
-# which leads to incorrect results in this case.
+# Retry the same query issue before to ensure memo is properly invalidated.
 query TT
 select team, league from bbteams where team != 'cardinals' order by league, team;
 ----
 jays AL
 orioles AL
 tigers AL
-nationals NL
 
+# Try another query we know isn't in the statement cache.
 query TT
 select team, league from bbteams where team != 'astros' order by league, team;
 ----
@@ -595,14 +594,14 @@ statement ok
 set role buck;
 
 # This is the same query as before, but since admin changed, we will see all of the rows.
-# TODO(136717): We are mistakenly reusing the statement plan here. So we see the rows as if
-# the policies were applied.
 query TT
 select team, league from bbteams where team != 'astros' order by league, team;
 ----
 jays AL
 orioles AL
 tigers AL
+cardinals NL
+nationals NL
 
 # Retry with a query never tried before so we avoid the statement cache.
 query TT
@@ -619,6 +618,20 @@ set role root
 
 statement ok
 REVOKE admin FROM buck;
+
+statement ok
+set role buck
+
+# Retry same query we ran before to ensure it's properly invalidated in the statement cache.
+query TT
+select team, league from bbteams where team != 'mariners' order by league, team;
+----
+jays AL
+orioles AL
+tigers AL
+
+statement ok
+set role root
 
 # Add policies that apply to other commands. Only SELECT will return rows.
 statement ok
@@ -766,5 +779,180 @@ use defaultdb;
 
 statement ok
 drop database db2 cascade;
+
+# Ensure that functions defined with security behave as expected
+subtest function_security_definer
+
+statement ok
+CREATE USER sensitive_user;
+
+statement ok
+CREATE TABLE sensitive_data_table (C1 INT);
+
+statement ok
+INSERT INTO sensitive_data_table VALUES (0),(1),(2);
+
+statement ok
+ALTER TABLE sensitive_data_table ENABLE ROW LEVEL SECURITY;
+
+statement ok
+GRANT ALL ON sensitive_data_table TO sensitive_user;
+
+statement ok
+CREATE FUNCTION my_sec_definer_function() RETURNS TABLE(ID INT)
+LANGUAGE SQL AS
+$$
+ SELECT * FROM sensitive_data_table
+$$ SECURITY DEFINER;
+
+statement ok
+CREATE FUNCTION my_non_sec_definer_function() RETURNS TABLE(ID INT)
+LANGUAGE SQL AS
+$$
+ SELECT * FROM sensitive_data_table
+$$;
+
+statement ok
+SET ROLE sensitive_user;
+
+query I rowsort
+SELECT * FROM sensitive_data_table;
+----
+
+query I rowsort
+SELECT my_sec_definer_function();
+----
+0
+1
+2
+
+query I rowsort
+SELECT my_non_sec_definer_function();
+-----
+
+statement ok
+SET ROLE root
+
+statement ok
+CREATE POLICY p1 ON sensitive_data_table FOR SELECT TO sensitive_user USING (C1 != 0);
+
+statement ok
+SET ROLE sensitive_user;
+
+query I rowsort
+SELECT my_sec_definer_function();
+----
+0
+1
+2
+
+query I rowsort
+SELECT my_non_sec_definer_function()
+----
+1
+2
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP FUNCTION my_sec_definer_function;
+
+statement ok
+DROP FUNCTION my_non_sec_definer_function;
+
+statement ok
+DROP TABLE sensitive_data_table;
+
+subtest validate_statement_cache_after_rls_changes
+
+statement ok
+CREATE TABLE rls_cache_test (c1 TEXT);
+
+statement ok
+INSERT INTO rls_cache_test VALUES ('a'), ('b'), ('c');
+
+statement ok
+CREATE USER rls_cache_user;
+
+statement ok
+GRANT ALL ON rls_cache_test TO rls_cache_user;
+
+statement ok
+SET ROLE rls_cache_user;
+
+# Prime the cache
+query T
+SELECT * FROM rls_cache_test ORDER BY c1;
+----
+a
+b
+c
+
+statement ok
+SET ROLE root
+
+statement ok
+ALTER TABLE rls_cache_test ENABLE ROW LEVEL SECURITY;
+
+statement ok
+SET ROLE rls_cache_user;
+
+# The cache should be invalidated
+query T
+SELECT * FROM rls_cache_test ORDER BY c1;
+----
+
+statement ok
+SET ROLE root
+
+statement ok
+CREATE POLICY rls_cache_policy ON rls_cache_test FOR SELECT TO rls_cache_user USING (c1 != 'a');
+
+statement ok
+SET ROLE rls_cache_user;
+
+# The cache should be invalidated (again)
+query T
+SELECT * FROM rls_cache_test ORDER BY c1;
+----
+b
+c
+
+statement ok
+SET ROLE root
+
+statement ok
+ALTER TABLE rls_cache_test DISABLE ROW LEVEL SECURITY;
+
+statement ok
+SET ROLE rls_cache_user;
+
+# The cache should be invalidated (again)
+query T
+SELECT * FROM rls_cache_test ORDER BY c1;
+----
+a
+b
+c
+
+statement ok
+SET ROLE root
+
+# Ensure that the cache is invalidated when table is dropped
+statement ok
+DROP TABLE rls_cache_test;
+
+statement ok
+SET ROLE rls_cache_user;
+
+statement error pq: relation "rls_cache_test" does not exist
+SELECT * FROM rls_cache_test ORDER BY c1;
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP ROLE rls_cache_user;
 
 subtest end
