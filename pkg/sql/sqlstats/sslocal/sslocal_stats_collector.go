@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -362,12 +361,6 @@ func (s *StatsCollector) RecordTransaction(
 	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
 	return s.flushTarget.RecordTransaction(ctx, key, value)
-}
-
-func (s *StatsCollector) RecordStatementExecStats(
-	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
-) error {
-	return s.currentTransactionStatementStats.RecordStatementExecStats(key, stats)
 }
 
 func (s *StatsCollector) IterateStatementStats(

@@ -384,10 +384,7 @@ func (s *stmtStats) sizeUnsafeLocked() int64 {
 	return stmtStatsShallowSize + databaseNameSize + dataSize
 }
 
-func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *stmtStats) recordExecStatsLocked(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.Count++
 	count := s.mu.data.ExecStats.Count
 	s.mu.data.ExecStats.NetworkBytes.Record(count, float64(stats.NetworkBytesSent))
