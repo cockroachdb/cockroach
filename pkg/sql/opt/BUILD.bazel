@@ -12,6 +12,7 @@ go_library(
         "operator.go",
         "ordering.go",
         "panic_injection.go",
+        "row_level_security.go",
         "rule_name.go",
         "schema_dependencies.go",
         "table_meta.go",
@@ -25,6 +26,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
