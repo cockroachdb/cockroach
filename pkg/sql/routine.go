@@ -308,7 +308,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	var cursorHelper *plpgsqlCursorHelper
 	err = g.expr.ForEachPlan(ctx, ef, g.args, func(plan tree.RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error {
 		stmtIdx++
-		opName := "udf-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
+		opName := "routine-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 		ctx, sp := tracing.ChildSpan(ctx, opName)
 		defer sp.Finish()
 
