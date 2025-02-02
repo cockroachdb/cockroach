@@ -11,7 +11,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -26,11 +25,6 @@ var (
 	// ErrFingerprintLimitReached is returned from the Container when we have
 	// more fingerprints than the limit specified in the cluster setting.
 	ErrFingerprintLimitReached = errors.New("sql stats fingerprint limit reached")
-
-	// ErrExecStatsFingerprintFlushed is returned from the Container when the
-	// stats object for the fingerprint has been flushed to system table before
-	// the appstatspb.ExecStats can be recorded.
-	ErrExecStatsFingerprintFlushed = errors.New("stmtStats flushed before execution stats can be recorded")
 )
 
 var timestampSize = int64(unsafe.Sizeof(time.Time{}))
@@ -119,6 +113,7 @@ func (s *Container) RecordStatement(
 	if value.ExecStats != nil {
 		stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
 		stats.mu.data.UsedFollowerRead = stats.mu.data.UsedFollowerRead || value.ExecStats.UsedFollowerRead
+		stats.recordExecStatsLocked(*value.ExecStats)
 	}
 	stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, []string{value.PlanGist})
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
@@ -165,25 +160,6 @@ func (s *Container) RecordStatement(
 	}
 
 	return stats.ID, nil
-}
-
-func (s *Container) RecordStatementExecStats(
-	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
-) error {
-	stmtStats, _, _, _, _ :=
-		s.getStatsForStmt(
-			key.Query,
-			key.ImplicitTxn,
-			key.Database,
-			key.PlanHash,
-			key.TransactionFingerprintID,
-			false, /* createIfNotExists */
-		)
-	if stmtStats == nil {
-		return ErrExecStatsFingerprintFlushed
-	}
-	stmtStats.recordExecStats(stats)
-	return nil
 }
 
 // StatementSampled returns true if the statement with the given fingerprint
