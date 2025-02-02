@@ -459,7 +459,8 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 	statsCollector := sslocal.NewStatsCollector(
 		st,
 		appStats,
-		insightsProvider.Writer(),
+		nil,
+		nil, // TODO (xinhaoz)
 		sessionphase.NewTimes(),
 		sqlStats.GetCounters(),
 		false, /* underOuterTxn */
@@ -471,7 +472,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		txnFingerprintIDHash := util.MakeFNV64()
 		statsCollector.StartTransaction()
 		defer func() {
-			statsCollector.EndTransaction(ctx, txnFingerprintID)
 			require.NoError(t,
 				statsCollector.
 					RecordTransaction(ctx, txnFingerprintID, sqlstats.RecordedTxnStats{
@@ -487,11 +487,10 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		for _, fingerprint := range testCase.fingerprints {
 			stmtFingerprintID, err := statsCollector.RecordStatement(
 				ctx,
-				appstatspb.StatementStatisticsKey{
+				&sqlstats.RecordedStmtStats{
 					Query:       fingerprint,
 					ImplicitTxn: testCase.implicit,
 				},
-				sqlstats.RecordedStmtStats{},
 			)
 			require.NoError(t, err)
 			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
@@ -586,7 +585,8 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 		statsCollector := sslocal.NewStatsCollector(
 			st,
 			appStats,
-			insightsProvider.Writer(),
+			nil,
+			nil, // TODO (xinhaoz)
 			sessionphase.NewTimes(),
 			sqlStats.GetCounters(),
 			false, /* underOuterTxn */
@@ -601,15 +601,15 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			for _, fingerprint := range txn.stmtFingerprints {
 				stmtFingerprintID, err := statsCollector.RecordStatement(
 					ctx,
-					appstatspb.StatementStatisticsKey{Query: fingerprint},
-					sqlstats.RecordedStmtStats{},
+					&sqlstats.RecordedStmtStats{
+						Query: fingerprint,
+					},
 				)
 				require.NoError(t, err)
 				txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 			}
 
 			transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
-			statsCollector.EndTransaction(ctx, transactionFingerprintID)
 			err := statsCollector.RecordTransaction(ctx, transactionFingerprintID, sqlstats.RecordedTxnStats{
 				SessionData: &sessiondata.SessionData{
 					SessionData: sessiondatapb.SessionData{

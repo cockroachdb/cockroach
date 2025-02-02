@@ -39,7 +39,7 @@ type ConcurrentBufferIngester struct {
 	}
 
 	eventBufferCh chan eventBufChPayload
-	registry      *lockingRegistry
+	registry      *LockingRegistry
 	clearRegistry uint32
 
 	closeCh      chan struct{}
@@ -52,7 +52,7 @@ type eventBufChPayload struct {
 }
 
 // ConcurrentBufferIngester buffers the "events" it sees (via ObserveStatement
-// and ObserveTransaction) and passes them along to the underlying registry
+// and IngestTransaction) and passes them along to the underlying registry
 // once its buffer is full. (Or once a timeout has passed, for low-traffic
 // clusters and tests.)
 //
@@ -156,11 +156,11 @@ func (i *ConcurrentBufferIngester) ingest(events *eventBuffer) {
 			break
 		}
 		if e.statement != nil {
-			i.registry.ObserveStatement(e.sessionID, e.statement)
+			//i.registry.ObserveStatement(e.sessionID, e.statement)
 		} else if e.transaction != nil {
-			i.registry.ObserveTransaction(e.sessionID, e.transaction)
+			//i.registry.IngestTransaction(e.sessionID, e.transaction)
 		} else if e.sessionID != (clusterunique.ID{}) {
-			i.registry.clearSession(e.sessionID)
+			//i.registry.clearSession(e.sessionID)
 		}
 		events[idx] = event{}
 	}
@@ -216,7 +216,7 @@ func (i *ConcurrentBufferIngester) ClearSession(sessionID clusterunique.ID) {
 	})
 }
 
-func newConcurrentBufferIngester(registry *lockingRegistry) *ConcurrentBufferIngester {
+func newConcurrentBufferIngester(registry *LockingRegistry) *ConcurrentBufferIngester {
 	i := &ConcurrentBufferIngester{
 		// A channel size of 1 is sufficient to avoid unnecessarily
 		// synchronizing producer (our clients) and consumer (the underlying

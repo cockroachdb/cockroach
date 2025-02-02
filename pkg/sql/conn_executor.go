@@ -340,6 +340,8 @@ type Server struct {
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
 
+	sqlStatsIngester *sslocal.SQLConcurrentBufferIngester
+
 	// schemaTelemetryController is the control-plane interface for schema
 	// telemetry.
 	schemaTelemetryController *schematelemetrycontroller.Controller
@@ -436,12 +438,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */, &cfg.Settings.SV)
 	serverMetrics := makeServerMetrics(cfg)
 	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics, cfg.InsightsTestingKnobs)
-	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
-	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
-		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
-			insightsProvider.Writer().Clear()
-		}
-	})
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
@@ -510,6 +506,13 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
+	s.sqlStatsIngester = sslocal.NewSQLConcurrentBufferIngester(persistedSQLStats.SQLStats, insightsProvider.Registry())
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
+	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
+		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
+			s.sqlStatsIngester.Clear()
+		}
+	})
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
 	s.schemaTelemetryController = schematelemetrycontroller.NewController(
@@ -654,6 +657,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// should be accounted for in their costs.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 
+	s.sqlStatsIngester.Start(ctx, stopper)
 	s.insights.Start(ctx, stopper)
 	s.sqlStats.Start(ctx, stopper)
 
@@ -1203,14 +1207,11 @@ func (s *Server) newConnExecutor(
 	ex.applicationStats = applicationStats
 	// We ignore statements and transactions run by the internal executor by
 	// passing a nil writer.
-	var writer *insights.ConcurrentBufferIngester
-	if !ex.sessionData().Internal {
-		writer = ex.server.insights.Writer()
-	}
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
-		writer,
+		nil,
+		s.sqlStatsIngester,
 		ex.phaseTimes,
 		s.sqlStats.GetCounters(),
 		underOuterTxn,
@@ -4024,9 +4025,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
 				ex.extraTxnState.txnFinishClosure.implicit = false
-				if err = ex.statsCollector.UpgradeImplicitTxn(ex.Ctx()); err != nil {
-					return advanceInfo{}, err
-				}
 			}
 
 		}

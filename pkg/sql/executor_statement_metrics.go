@@ -145,16 +145,6 @@ func (ex *connExecutor) recordStatementSummary(
 	ex.recordStatementLatencyMetrics(stmt, flags, automaticRetryCount, runLatRaw, svcLatRaw)
 
 	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
-	recordedStmtStatsKey := appstatspb.StatementStatisticsKey{
-		Query:        stmt.StmtNoConstants,
-		QuerySummary: stmt.StmtSummary,
-		DistSQL:      flags.IsDistributed(),
-		Vec:          flags.IsSet(planFlagVectorized),
-		ImplicitTxn:  flags.IsSet(planFlagImplicitTxn),
-		FullScan:     fullScan,
-		Database:     planner.SessionData().Database,
-		PlanHash:     planner.instrumentation.planGist.Hash(),
-	}
 
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
@@ -170,7 +160,16 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	startTime := phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).ToUTC()
-	recordedStmtStats := sqlstats.RecordedStmtStats{
+	recordedStmtStats := sqlstats.NewStmtStats()
+	*recordedStmtStats = sqlstats.RecordedStmtStats{
+		Query:                stmt.StmtNoConstants,
+		QuerySummary:         stmt.StmtSummary,
+		DistSQL:              flags.IsDistributed(),
+		Vec:                  flags.IsSet(planFlagVectorized),
+		ImplicitTxn:          flags.IsSet(planFlagImplicitTxn),
+		FullScan:             fullScan,
+		Database:             planner.SessionData().Database,
+		PlanHash:             planner.instrumentation.planGist.Hash(),
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,
 		StatementID:          stmt.QueryID,
 		AutoRetryCount:       automaticRetryCount,
@@ -192,24 +191,16 @@ func (ex *connExecutor) recordStatementSummary(
 		PlanGist:             planner.instrumentation.planGist.String(),
 		StatementError:       stmtErr,
 		IndexRecommendations: idxRecommendations,
-		Query:                stmt.StmtNoConstants,
 		StartTime:            startTime,
 		EndTime:              startTime.Add(svcLatRaw),
-		FullScan:             fullScan,
 		ExecStats:            queryLevelStats,
 		// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 		// converting to strings.
-		Indexes:  planner.instrumentation.indexesUsed.Strings(),
-		Database: planner.SessionData().Database,
+		Indexes: planner.instrumentation.indexesUsed.Strings(),
 	}
 
 	stmtFingerprintID, err :=
-		ex.statsCollector.RecordStatement(ctx, recordedStmtStatsKey, recordedStmtStats)
-
-	// TODO(xinhaoz): This can be set directly within statsCollector once
-	// https://github.com/cockroachdb/cockroach/pull/123698 is merged.
-	ex.statsCollector.SetStatementFingerprintID(stmtFingerprintID)
-
+		ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
 	if err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "failed to record statement: %s", err)
@@ -237,15 +228,6 @@ func (ex *connExecutor) recordStatementSummary(
 			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.CumulativeContentionNanos.Inc(queryLevelStats.ContentionTime.Nanoseconds())
 		}
 
-		if err != nil {
-			if log.V(2 /* level */) {
-				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
-			}
-		}
-	}
-
-	if stmtFingerprintID != 0 {
-		ex.statsCollector.ObserveStatement(stmtFingerprintID, recordedStmtStats)
 	}
 
 	// Do some transaction level accounting for the transaction this statement is

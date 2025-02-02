@@ -67,8 +67,7 @@ func (s *StmtStatsIterator) Next() bool {
 
 	stmtKey := s.stmtKeys[s.idx]
 
-	statementStats, _, _ :=
-		s.container.getStatsForStmtWithKey(stmtKey, invalidStmtFingerprintID, false /* createIfNonexistent */)
+	statementStats := s.container.getStatsForStmtWithKey(stmtKey)
 
 	// If the key is not found (and we expected to find it), the table must
 	// have been cleared between now and the time we read all the keys. In

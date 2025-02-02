@@ -10,6 +10,7 @@ package sqlstats
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,7 +33,7 @@ type IteratorOptions struct {
 	// sorted when iterating through statistics.
 	SortedAppNames bool
 
-	// SortedKey determines whether the key of the statistics will be sorted
+	// SortedKey determines whether the Key of the statistics will be sorted
 	// when iterating through statistics;
 	SortedKey bool
 }
@@ -55,6 +56,19 @@ type AggregatedTransactionVisitor func(appName string, statistics *appstatspb.Tx
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.
 type RecordedStmtStats struct {
+	// Statement key metadata.
+	FingerprintID            appstatspb.StmtFingerprintID
+	Query                    string
+	App                      string
+	DistSQL                  bool
+	ImplicitTxn              bool
+	Vec                      bool
+	FullScan                 bool
+	Database                 string
+	PlanHash                 uint64
+	QuerySummary             string
+	TransactionFingerprintID appstatspb.TransactionFingerprintID
+
 	SessionID            clusterunique.ID
 	StatementID          clusterunique.ID
 	TransactionID        uuid.UUID
@@ -78,13 +92,11 @@ type RecordedStmtStats struct {
 	PlanGist             string
 	StatementError       error
 	IndexRecommendations []string
-	Query                string
 	StartTime            time.Time
 	EndTime              time.Time
-	FullScan             bool
 	ExecStats            *execstats.QueryLevelStats
 	Indexes              []string
-	Database             string
+	Application          string
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
@@ -112,4 +124,19 @@ type RecordedTxnStats struct {
 	Priority                roachpb.UserPriority
 	SessionData             *sessiondata.SessionData
 	TxnErr                  error
+}
+
+var stmtStatsPool = sync.Pool{
+	New: func() interface{} {
+		return &RecordedStmtStats{}
+	},
+}
+
+func NewStmtStats() *RecordedStmtStats {
+	return stmtStatsPool.Get().(*RecordedStmtStats)
+}
+
+func ReleaseStmtStats(s *RecordedStmtStats) {
+	*s = RecordedStmtStats{}
+	stmtStatsPool.Put(s)
 }
