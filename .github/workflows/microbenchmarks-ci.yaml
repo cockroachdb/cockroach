@@ -106,7 +106,7 @@ jobs:
   post:
     runs-on: [ self-hosted, basic_runner_group ]
     timeout-minutes: 30
-    needs: [ base, run-group-1, run-group-2 ]
+    needs: [ compare ]
     steps:
       - name: Checkout Head
         uses: actions/checkout@v4

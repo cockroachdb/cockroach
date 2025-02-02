@@ -7,6 +7,8 @@
 
 set -euxo pipefail
 
+storage_bucket="$BUCKET"
+
 # Build microbenchmark CI utility
 # This will build the repository's base version
 bazel build --config=crosslinux $(./build/github/engflow-args.sh) \
