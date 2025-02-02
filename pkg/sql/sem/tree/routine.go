@@ -31,7 +31,7 @@ type RoutinePlanGenerator func(
 // to specify the SQL stmt corresponding to the plan.
 // - isFinalPlan is true if no more plans will be generated after the current
 // plan.
-type RoutinePlanGeneratedFunc func(plan RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error
+type RoutinePlanGeneratedFunc func(plan RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool, stmtAST Statement) error
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
 // to exec.Plan. We use the empty interface here rather than exec.Plan to avoid
