@@ -26,12 +26,9 @@ type EngineMetrics struct {
 	// The subset of SELECTs that were executed by DistSQL with full or partial
 	// distribution.
 	DistSQLSelectDistributedCount *metric.Counter
-	// The subset of queries which we attempted and failed to plan with the
-	// cost-based optimizer.
-	SQLOptFallbackCount       *metric.Counter
-	SQLOptPlanCacheHits       *metric.Counter
-	SQLOptPlanCacheMisses     *metric.Counter
-	StatementFingerprintCount *metric.UniqueCounter
+	SQLOptPlanCacheHits           *metric.Counter
+	SQLOptPlanCacheMisses         *metric.Counter
+	StatementFingerprintCount     *metric.UniqueCounter
 
 	SQLExecLatencyDetail  *metric.HistogramVec
 	DistSQLExecLatency    metric.IHistogram
