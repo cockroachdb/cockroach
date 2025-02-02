@@ -31,7 +31,6 @@ type queryCounter struct {
 	selectCount                     int64
 	selectExecutedCount             int64
 	distSQLSelectCount              int64
-	fallbackCount                   int64
 	updateCount                     int64
 	insertCount                     int64
 	deleteCount                     int64
@@ -181,9 +180,6 @@ func TestQueryCounts(t *testing.T) {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {
-				t.Errorf("%q: %s", tc.query, err)
-			}
-			if accum.fallbackCount, err = checkCounterDelta(s, sql.MetaSQLOptFallback, accum.fallbackCount, tc.fallbackCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.statementTimeoutCount, err = checkCounterDelta(s, sql.MetaStatementTimeout, accum.statementTimeoutCount, tc.statementTimeoutCount); err != nil {

@@ -780,12 +780,6 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	MetaSQLOptFallback = metric.Metadata{
-		Name:        "sql.optimizer.fallback.count",
-		Help:        "Number of statements which the cost-based optimizer was unable to plan",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
 	MetaSQLOptPlanCacheHits = metric.Metadata{
 		Name:        "sql.optimizer.plan_cache.hits",
 		Help:        "Number of non-prepared statements for which a cached plan was used",
