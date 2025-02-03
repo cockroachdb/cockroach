@@ -11,63 +11,270 @@ CREATE TABLE t (
 )
 ----
 
+exec-ddl
+CREATE TABLE abc (
+  a STRING,
+  b STRING,
+  c STRING,
+  PRIMARY KEY (a, b)
+)
+----
+
+# --------------------------------------------------
+# GenerateParameterizedIndexJoin
+# --------------------------------------------------
+
+opt expect=GenerateParameterizedIndexJoin expect-not=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1
+----
+index-join t
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── values
+      ├── columns: k:1
+      ├── cardinality: [1 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1)
+      └── ($1,)
+
+opt expect=GenerateParameterizedIndexJoin expect-not=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1::INT
+----
+index-join t
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── values
+      ├── columns: k:1
+      ├── cardinality: [1 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1)
+      └── ($1,)
+
+opt expect=GenerateParameterizedIndexJoin expect-not=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = (SELECT i FROM t WHERE k = $1)
+----
+project
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (lookup t)
+      ├── columns: k:1!null i:2 s:3 b:4 t:5 k:8!null i:9!null
+      ├── key columns: [9] = [1]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-5,8,9), (1)==(9), (9)==(1)
+      ├── index-join t
+      │    ├── columns: k:8!null i:9
+      │    ├── cardinality: [0 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(8,9)
+      │    └── values
+      │         ├── columns: k:8
+      │         ├── cardinality: [1 - 1]
+      │         ├── has-placeholder
+      │         ├── key: ()
+      │         ├── fd: ()-->(8)
+      │         └── ($1,)
+      └── filters (true)
+
+# Locking is preserved.
+opt expect=GenerateParameterizedIndexJoin expect-not=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1 FOR UPDATE
+----
+index-join t
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── locking: for-update
+ ├── cardinality: [0 - 1]
+ ├── volatile, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── values
+      ├── columns: k:1
+      ├── cardinality: [1 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1)
+      └── ($1,)
+
+opt expect=GenerateParameterizedIndexJoin expect-not=GenerateParameterizedJoin
+SELECT * FROM abc WHERE a = $1 AND b = $2
+----
+index-join abc
+ ├── columns: a:1!null b:2!null c:3
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ └── values
+      ├── columns: a:1 b:2
+      ├── cardinality: [1 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      └── ($1, $2)
+
+opt expect=GenerateParameterizedIndexJoin expect-not=GenerateParameterizedJoin
+SELECT * FROM abc WHERE a = $1 AND b = $1
+----
+index-join abc
+ ├── columns: a:1!null b:2!null c:3
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ └── values
+      ├── columns: a:1 b:2
+      ├── cardinality: [1 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      └── ($1, $1)
+
+# It does not apply if not all PK columns are constrained.
+opt expect-not=GenerateParameterizedIndexJoin
+SELECT * FROM abc WHERE a = $1
+----
+project
+ ├── columns: a:1!null b:2!null c:3
+ ├── has-placeholder
+ ├── key: (2)
+ ├── fd: ()-->(1), (2)-->(3)
+ └── inner-join (lookup abc)
+      ├── columns: a:1!null b:2!null c:3 "$1":6!null
+      ├── flags: disallow merge join
+      ├── key columns: [6] = [1]
+      ├── has-placeholder
+      ├── key: (2)
+      ├── fd: ()-->(1,6), (2)-->(3), (1)==(6), (6)==(1)
+      ├── values
+      │    ├── columns: "$1":6
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6)
+      │    └── ($1,)
+      └── filters (true)
+
+# It does not apply if not all PK columns are constrained by equality.
+opt expect-not=GenerateParameterizedIndexJoin
+SELECT * FROM abc WHERE a = $1 AND b > $2
+----
+project
+ ├── columns: a:1!null b:2!null c:3
+ ├── has-placeholder
+ ├── key: (2)
+ ├── fd: ()-->(1), (2)-->(3)
+ └── inner-join (lookup abc)
+      ├── columns: a:1!null b:2!null c:3 "$1":6!null "$2":7!null
+      ├── flags: disallow merge join
+      ├── lookup expression
+      │    └── filters
+      │         ├── b:2 > "$2":7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      │         └── "$1":6 = a:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      ├── has-placeholder
+      ├── key: (2)
+      ├── fd: ()-->(1,6,7), (2)-->(3), (1)==(6), (6)==(1)
+      ├── values
+      │    ├── columns: "$1":6 "$2":7
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6,7)
+      │    └── ($1, $2)
+      └── filters (true)
+
+# It does not apply if a non-PK column is filtered.
+# TODO(mgartner): Lift this restriction.
+opt expect-not=GenerateParameterizedIndexJoin
+SELECT * FROM abc WHERE a = $1 AND b = $2 AND c = $3
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ └── inner-join (lookup abc)
+      ├── columns: a:1!null b:2!null c:3!null "$1":6!null "$2":7!null "$3":8!null
+      ├── flags: disallow merge join
+      ├── key columns: [6 7] = [1 2]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-3,6-8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+      ├── values
+      │    ├── columns: "$1":6 "$2":7 "$3":8
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    └── ($1, $2, $3)
+      └── filters
+           └── c:3 = "$3":8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+
+# It does not apply if a PK column is filtered by a non-placeholder expression.
+# TODO(mgartner): Lift this restriction.
+opt expect-not=GenerateParameterizedIndexJoin
+SELECT * FROM abc WHERE a = $1 AND b = current_user()
+----
+project
+ ├── columns: a:1!null b:2!null c:3
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ └── inner-join (lookup abc)
+      ├── columns: a:1!null b:2!null c:3 "$1":6!null
+      ├── flags: disallow merge join
+      ├── key columns: [6 7] = [1 2]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-3,6), (1)==(6), (6)==(1)
+      ├── values
+      │    ├── columns: "$1":6 "lookup_join_const_col_@2":7!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6,7)
+      │    └── ($1, 'opttester')
+      └── filters (true)
+
+# The rule does not match if generic optimizations are disabled.
+opt set=(plan_cache_mode=force_custom_plan) expect-not=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1
+----
+select
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan t
+ │    ├── columns: k:1!null i:2 s:3 b:4 t:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 = $1 [outer=(1), constraints=(/1: (/NULL - ]), fd=()-->(1)]
+
 # --------------------------------------------------
 # GenerateParameterizedJoin
 # --------------------------------------------------
-
-opt expect=GenerateParameterizedJoin
-SELECT * FROM t WHERE k = $1
-----
-project
- ├── columns: k:1!null i:2 s:3 b:4 t:5
- ├── cardinality: [0 - 1]
- ├── has-placeholder
- ├── key: ()
- ├── fd: ()-->(1-5)
- └── inner-join (lookup t)
-      ├── columns: k:1!null i:2 s:3 b:4 t:5 "$1":8!null
-      ├── flags: disallow merge join
-      ├── key columns: [8] = [1]
-      ├── lookup columns are key
-      ├── cardinality: [0 - 1]
-      ├── has-placeholder
-      ├── key: ()
-      ├── fd: ()-->(1-5,8), (1)==(8), (8)==(1)
-      ├── values
-      │    ├── columns: "$1":8
-      │    ├── cardinality: [1 - 1]
-      │    ├── has-placeholder
-      │    ├── key: ()
-      │    ├── fd: ()-->(8)
-      │    └── ($1,)
-      └── filters (true)
-
-opt expect=GenerateParameterizedJoin
-SELECT * FROM t WHERE k = $1::INT
-----
-project
- ├── columns: k:1!null i:2 s:3 b:4 t:5
- ├── cardinality: [0 - 1]
- ├── has-placeholder
- ├── key: ()
- ├── fd: ()-->(1-5)
- └── inner-join (lookup t)
-      ├── columns: k:1!null i:2 s:3 b:4 t:5 "$1":8!null
-      ├── flags: disallow merge join
-      ├── key columns: [8] = [1]
-      ├── lookup columns are key
-      ├── cardinality: [0 - 1]
-      ├── has-placeholder
-      ├── key: ()
-      ├── fd: ()-->(1-5,8), (1)==(8), (8)==(1)
-      ├── values
-      │    ├── columns: "$1":8
-      │    ├── cardinality: [1 - 1]
-      │    ├── has-placeholder
-      │    ├── key: ()
-      │    ├── fd: ()-->(8)
-      │    └── ($1,)
-      └── filters (true)
 
 opt expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND s = $2 AND b = $3
@@ -193,48 +400,6 @@ project
       │    │    ├── fd: ()-->(8)
       │    │    └── ($1,)
       │    └── filters (true)
-      └── filters (true)
-
-opt expect=GenerateParameterizedJoin
-SELECT * FROM t WHERE k = (SELECT i FROM t WHERE k = $1)
-----
-project
- ├── columns: k:1!null i:2 s:3 b:4 t:5
- ├── cardinality: [0 - 1]
- ├── has-placeholder
- ├── key: ()
- ├── fd: ()-->(1-5)
- └── inner-join (lookup t)
-      ├── columns: k:1!null i:2 s:3 b:4 t:5 k:8!null i:9!null
-      ├── key columns: [9] = [1]
-      ├── lookup columns are key
-      ├── cardinality: [0 - 1]
-      ├── has-placeholder
-      ├── key: ()
-      ├── fd: ()-->(1-5,8,9), (1)==(9), (9)==(1)
-      ├── project
-      │    ├── columns: k:8!null i:9
-      │    ├── cardinality: [0 - 1]
-      │    ├── has-placeholder
-      │    ├── key: ()
-      │    ├── fd: ()-->(8,9)
-      │    └── inner-join (lookup t)
-      │         ├── columns: k:8!null i:9 "$1":15!null
-      │         ├── flags: disallow merge join
-      │         ├── key columns: [15] = [8]
-      │         ├── lookup columns are key
-      │         ├── cardinality: [0 - 1]
-      │         ├── has-placeholder
-      │         ├── key: ()
-      │         ├── fd: ()-->(8,9,15), (8)==(15), (15)==(8)
-      │         ├── values
-      │         │    ├── columns: "$1":15
-      │         │    ├── cardinality: [1 - 1]
-      │         │    ├── has-placeholder
-      │         │    ├── key: ()
-      │         │    ├── fd: ()-->(15)
-      │         │    └── ($1,)
-      │         └── filters (true)
       └── filters (true)
 
 # TODO(mgartner): The rule doesn't apply because the filters do not reference

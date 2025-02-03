@@ -9,7 +9,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -22,10 +24,97 @@ func (c *CustomFuncs) GenericRulesEnabled() bool {
 	return c.e.evalCtx.SessionData().PlanCacheMode != sessiondatapb.PlanCacheModeForceCustom
 }
 
+// HasPlaceholders returns true if the given relational expression's subtree has
+// at least one placeholder.
+func (c *CustomFuncs) HasPlaceholders(e memo.RelExpr) bool {
+	return e.Relational().HasPlaceholder
+}
+
 // HasPlaceholdersOrStableExprs returns true if the given relational expression's subtree has
 // at least one placeholder.
 func (c *CustomFuncs) HasPlaceholdersOrStableExprs(e memo.RelExpr) bool {
 	return e.Relational().HasPlaceholder || e.Relational().VolatilitySet.HasStable()
+}
+
+// GeneratedParameterizedIndexJoin returns true if a parameterized index join
+// was not generated for the given expression's group by
+// GenerateParameterizedIndexJoin.
+func (c *CustomFuncs) GeneratedParameterizedIndexJoin(e memo.RelExpr) bool {
+	return e.Relational().IsAvailable(props.GeneratedParameterizedIndexJoin)
+}
+
+// GenerateParameterizedIndexJoin returns a single-row Values expression
+// containing placeholders and an IndexJoinPrivate to construct and IndexJoin.
+// The given filters must constrain all PK columns to placeholder values and must
+// not constrain any other columns.
+//
+// TODO(mgartner): Expand this rule to allow filters that constrain PK columns to
+// stable expressions and filters that constrain more than just the PK columns.
+// the given filters have no placeholders or stable expressions, ok=false is
+// returned.
+func (c *CustomFuncs) GenerateParameterizedIndexJoin(
+	grp memo.RelExpr, sp *memo.ScanPrivate, filters memo.FiltersExpr,
+) (values memo.RelExpr, private *memo.IndexJoinPrivate, ok bool) {
+	var pkCols opt.ColSet
+	tab := c.e.mem.Metadata().Table(sp.Table)
+	pkIndex := tab.Index(cat.PrimaryIndex)
+	for i, n := 0, pkIndex.KeyColumnCount(); i < n; i++ {
+		col := sp.Table.IndexColumnID(pkIndex, i)
+		pkCols.Add(col)
+	}
+
+	// Every filter must constrain a PK column to a placeholder.
+	var exprs memo.ScalarListExpr
+	var cols opt.ColList
+	var eqCols opt.ColSet
+	for i := range filters {
+		eq, ok := filters[i].Condition.(*memo.EqExpr)
+		if !ok {
+			return nil, nil, false
+		}
+		v, ok := eq.Left.(*memo.VariableExpr)
+		if !ok {
+			return nil, nil, false
+		}
+		if !pkCols.Contains(v.Col) {
+			return nil, nil, false
+		}
+		if _, ok = eq.Right.(*memo.PlaceholderExpr); !ok {
+			return nil, nil, false
+		}
+		eqCols.Add(v.Col)
+		cols = append(cols, v.Col)
+		exprs = append(exprs, eq.Right)
+	}
+
+	// Every PK column must be constrained.
+	if !eqCols.Equals(pkCols) {
+		return nil, nil, false
+	}
+
+	// Create the Values expression with one row and one column for each PK
+	// column.
+	typs := make([]*types.T, len(exprs))
+	for i, e := range exprs {
+		typs[i] = e.DataType()
+	}
+	tupleTyp := types.MakeTuple(typs)
+	rows := memo.ScalarListExpr{c.e.f.ConstructTuple(exprs, tupleTyp)}
+	values = c.e.f.ConstructValues(rows, &memo.ValuesPrivate{
+		Cols: cols,
+		ID:   c.e.f.Metadata().NextUniqueID(),
+	})
+
+	private = &memo.IndexJoinPrivate{
+		Table:   sp.Table,
+		Cols:    sp.Cols,
+		Locking: sp.Locking,
+	}
+
+	// Set a rule prop to prevent GenerateParameterizedJoin from firing.
+	grp.Relational().SetAvailable(props.GeneratedParameterizedIndexJoin)
+
+	return values, private, true
 }
 
 // GenerateParameterizedJoinValuesAndFilters returns a single-row Values

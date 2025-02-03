@@ -12,7 +12,7 @@ import (
 
 // AvailableRuleProps is a bit set that indicates when lazily-populated Rule
 // properties are initialized and ready for use.
-type AvailableRuleProps int8
+type AvailableRuleProps uint8
 
 const (
 	// PruneCols is set when the Relational.Rule.PruneCols field is populated.
@@ -40,6 +40,11 @@ const (
 
 	// WithUses is set when the Shared.Rule.WithUses field is populated.
 	WithUses
+
+	// GeneratedParameterizedIndexJoin is set when the
+	// GenerateParameterizedIndexJoin exploration rule has been applied to an
+	// expression in the group. If set, GenerateParameterizedJoin does not fire.
+	GeneratedParameterizedIndexJoin
 )
 
 // Shared are properties that are shared by both relational and scalar
