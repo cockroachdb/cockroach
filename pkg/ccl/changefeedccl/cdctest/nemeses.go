@@ -403,6 +403,9 @@ func RunNemesis(
 			// queries that could hang decreases.
 			sqlsmith.DisableCrossJoins(),
 			sqlsmith.SimpleDatums(),
+			// We rely on cluster_logical_timestamp() builtin which is only
+			// supported under the serializable isolation.
+			sqlsmith.DisableIsolationChange(),
 		)
 		defer queryGen.Close()
 		const numInserts = 100

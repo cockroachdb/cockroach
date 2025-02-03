@@ -1528,6 +1528,9 @@ func makeRollback(s *Smither) (tree.Statement, bool) {
 }
 
 func makeSetSessionCharacteristics(s *Smither) (tree.Statement, bool) {
+	if s.disableIsolationChange {
+		return nil, false
+	}
 	modes, _ := makeTransactionModes(s)
 	return &tree.SetSessionCharacteristics{Modes: modes}, true
 }
