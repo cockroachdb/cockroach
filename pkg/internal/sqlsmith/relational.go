@@ -1471,7 +1471,7 @@ func makeInsert(s *Smither) (tree.Statement, bool) {
 	return stmt, ok
 }
 
-func makeTransactionModes(s *Smither) (tree.TransactionModes, bool) {
+func makeTransactionModes(s *Smither) tree.TransactionModes {
 	levels := []tree.IsolationLevel{
 		tree.UnspecifiedIsolation,
 		tree.ReadUncommittedIsolation,
@@ -1480,12 +1480,11 @@ func makeTransactionModes(s *Smither) (tree.TransactionModes, bool) {
 		tree.SnapshotIsolation,
 		tree.SerializableIsolation,
 	}
-	modes := tree.TransactionModes{Isolation: levels[s.rnd.Intn(len(levels))]}
-	return modes, true
+	return tree.TransactionModes{Isolation: levels[s.rnd.Intn(len(levels))]}
 }
 
 func makeBegin(s *Smither) (tree.Statement, bool) {
-	modes, _ := makeTransactionModes(s)
+	modes := makeTransactionModes(s)
 	return &tree.BeginTransaction{Modes: modes}, true
 }
 
@@ -1528,7 +1527,14 @@ func makeRollback(s *Smither) (tree.Statement, bool) {
 }
 
 func makeSetSessionCharacteristics(s *Smither) (tree.Statement, bool) {
-	modes, _ := makeTransactionModes(s)
+	modes := makeTransactionModes(s)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	modes.Format(fmtCtx)
+	if fmtCtx.String() == "" {
+		// If no options are specified, then we would get an invalid SET SESSION
+		// CHARACTERISTICS statement.
+		return nil, false
+	}
 	return &tree.SetSessionCharacteristics{Modes: modes}, true
 }
 
