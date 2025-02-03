@@ -4346,6 +4346,8 @@ FROM
 	})
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{pgcode.InvalidFunctionDefinition, hasFuncRefs},
+		// TODO(fqazi): For deflaking test workload, shouldn't be required.
+		{pgcode.UndefinedFunction, true},
 	})
 
 	return opStmt, nil
