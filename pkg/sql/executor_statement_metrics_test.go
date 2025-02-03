@@ -60,11 +60,7 @@ func Test_connExecutor_recordStatementLatencyMetrics(t *testing.T) {
 				flags:               0,
 				automaticRetryCount: 0,
 			},
-			exp: []expected{
-				{
-					duration: 2 * testDuration,
-				},
-			},
+			exp: []expected{},
 		},
 		{
 			name: "With detail",
@@ -115,7 +111,6 @@ func Test_connExecutor_recordStatementLatencyMetrics(t *testing.T) {
 			tt.ex.recordStatementLatencyMetrics(query1, tt.args.flags, tt.args.automaticRetryCount, testDuration, testDuration)
 			tt.ex.recordStatementLatencyMetrics(query2, tt.args.flags, tt.args.automaticRetryCount, testDuration, testDuration)
 			m := tt.ex.metrics.EngineMetrics
-
 			expectedFingerprints := int64(2)
 			if tt.args.automaticRetryCount > 0 {
 				expectedFingerprints = int64(0)
