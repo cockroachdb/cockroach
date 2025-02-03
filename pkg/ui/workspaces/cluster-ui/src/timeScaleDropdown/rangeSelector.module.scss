@@ -182,17 +182,17 @@
       align-items: center;
     }
   }
-  .crl-ant-fullcalendar-calendar-body {
+  .crdb-ant-fullcalendar-calendar-body {
     padding: 8px 16px;
-    .crl-ant-fullcalendar-column-header {
+    .crdb-ant-fullcalendar-column-header {
       font-family: $font-family--bold;
       font-size: 12px;
       line-height: 2;
       letter-spacing: 0.1px;
     }
-    .crl-ant-fullcalendar-tbody {
-      .crl-ant-fullcalendar-cell {
-        .crl-ant-fullcalendar-value {
+    .crdb-ant-fullcalendar-tbody {
+      .crdb-ant-fullcalendar-cell {
+        .crdb-ant-fullcalendar-value {
           width: 24px;
           height: 24px;
           display: flex;
@@ -209,8 +209,8 @@
             background: $background-color;
           }
         }
-        &.crl-ant-fullcalendar-selected-day {
-          .crl-ant-fullcalendar-value {
+        &.crdb-ant-fullcalendar-selected-day {
+          .crdb-ant-fullcalendar-value {
             background: $colors--primary-blue-1;
             color: $colors--primary-blue-3;
             &:hover {
@@ -219,10 +219,10 @@
             }
           }
         }
-        &.crl-ant-fullcalendar-disabled-cell {
+        &.crdb-ant-fullcalendar-disabled-cell {
           background: $background-color;
           color: $colors--neutral-5;
-          .crl-ant-fullcalendar-value {
+          .crdb-ant-fullcalendar-value {
             background: $background-color;
             color: $colors--neutral-5;
           }
@@ -231,11 +231,11 @@
             color: $colors--neutral-5;
           }
         }
-        &.crl-ant-fullcalendar-today {
+        &.crdb-ant-fullcalendar-today {
           &:hover {
             background: transparent;
           }
-          .crl-ant-fullcalendar-value {
+          .crdb-ant-fullcalendar-value {
             width: 24px;
             height: 24px;
             box-shadow: none;
@@ -246,19 +246,19 @@
               background: $colors--primary-blue-1;
             }
           }
-          &.crl-ant-fullcalendar-selected-day {
-            .crl-ant-fullcalendar-value {
+          &.crdb-ant-fullcalendar-selected-day {
+            .crdb-ant-fullcalendar-value {
               background: $colors--primary-blue-1;
               &:hover {
                 background: #e0efff;
               }
             }
           }
-          &.crl-ant-fullcalendar-disabled-cell {
+          &.crdb-ant-fullcalendar-disabled-cell {
             &:hover {
               background: $background-color;
             }
-            .crl-ant-fullcalendar-value {
+            .crdb-ant-fullcalendar-value {
               font-family: $font-family--bold;
               color: $colors--neutral-5;
               background: $background-color;

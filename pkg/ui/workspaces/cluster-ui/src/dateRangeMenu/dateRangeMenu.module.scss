@@ -16,7 +16,7 @@
     padding-bottom: 10px;
 
     a {
-      // Matches the color of .crl-ant-dropdown, needed to override default anchor color. A cleaner way would be to install
+      // Matches the color of .crdb-ant-dropdown, needed to override default anchor color. A cleaner way would be to install
       // and set up antd-scss-theme-plugin, and use the antd text-color variable.
       color: rgba(0, 0, 0, 0.65);
     }
@@ -30,7 +30,7 @@
     height: 12px;
   }
 
-  :global(.crl-ant-picker) {
+  :global(.crdb-ant-picker) {
     margin-right: 14px;
   }
 }
