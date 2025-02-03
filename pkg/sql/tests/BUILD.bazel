@@ -55,6 +55,7 @@ go_test(
         "set_cluster_setting_interlock_test.go",
         "set_session_args_test.go",
         "show_commit_timestamp_test.go",
+        "sniff_args_test.go",
         "split_test.go",
         "sysbench_test.go",
         "system_table_test.go",
