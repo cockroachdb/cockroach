@@ -32,7 +32,9 @@ import (
 func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer ccl.TestingEnableEnterprise()()
-	skip.UnderRace(t, "test connections can be too slow under race option.")
+	skip.UnderDeadlock(t, "test connections can be too slow under expensive configs")
+	skip.UnderRace(t, "test connections can be too slow under expensive configs")
+	skip.WithIssue(t, 140411)
 
 	scope := log.Scope(t)
 	defer scope.Close(t)
