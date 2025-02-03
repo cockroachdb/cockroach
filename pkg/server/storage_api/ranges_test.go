@@ -141,23 +141,22 @@ func TestRangeResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var isSystemTenant bool = !srv.StartedDefaultTestTenant()
 	t.Run("access range endpoint within current tenant's scope", func(t *testing.T) {
 		var currentTenantRangeId int64
-		// create a new table from the current tenant
+		// Create a new table in the current tenant.
 		r := sqlutils.MakeSQLRunner(ts.SQLConn(t))
 		r.Exec(t, "CREATE TABLE t (x INT PRIMARY KEY, xsquared INT)")
 		for i := 0; i < 5; i++ {
 			r.Exec(t, fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES (%d)", 100*i/5))
 		}
-		// get some ranges from the given table
+		// Get some ranges from the given table
 		r.QueryRow(t, "SELECT range_id FROM [SHOW RANGES FROM TABLE t WITH DETAILS] LIMIT 1;").Scan(&currentTenantRangeId)
-		t.Logf("currentTenantRangeId : %v", currentTenantRangeId)
+		t.Logf("Table 't' range: %d", currentTenantRangeId)
 		require.NoError(t, validateRangeBelongsToTenant(ts, currentTenantRangeId))
 	})
 
 	t.Run("access range endpoint within system tenant's scope", func(t *testing.T) {
-		if isSystemTenant {
+		if !srv.StartedDefaultTestTenant() {
 			require.NoError(t, validateRangeBelongsToTenant(ts, 1))
 		} else {
 			expectedError := fmt.Errorf("got the wrong number of ranges in the response, expected %d, actual %d", 1, 0)
