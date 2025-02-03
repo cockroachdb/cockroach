@@ -131,6 +131,36 @@ project
       └── filters
            └── k:1 = i:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
 
+# Locking is preserved.
+opt expect=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1 AND i = $1 FOR UPDATE
+----
+project
+ ├── columns: k:1!null i:2!null s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── volatile, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (lookup t)
+      ├── columns: k:1!null i:2!null s:3 b:4 t:5 "$1":8!null
+      ├── flags: disallow merge join
+      ├── key columns: [8] = [1]
+      ├── lookup columns are key
+      ├── locking: for-update
+      ├── cardinality: [0 - 1]
+      ├── volatile, has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-5,8), (1)==(2,8), (2)==(1,8), (8)==(1,2)
+      ├── values
+      │    ├── columns: "$1":8
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(8)
+      │    └── ($1,)
+      └── filters
+           └── k:1 = i:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+
 # The generated join should not be reordered and merge joins should not be
 # explored on it.
 opt expect=GenerateParameterizedJoin expect-not=(ReorderJoins,GenerateMergeJoins)
