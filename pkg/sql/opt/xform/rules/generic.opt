@@ -32,27 +32,7 @@
     $scan:(Scan $scanPrivate:*) &
         (GenericRulesEnabled) &
         (IsCanonicalScan $scanPrivate)
-    $filters:* &
-        (HasPlaceholdersOrStableExprs (Root)) &
-        (Let
-            (
-                $values
-                $newFilters
-                $ok
-            ):(GenerateParameterizedJoinValuesAndFilters
-                $filters
-            )
-            $ok
-        )
+    $filters:* & (HasPlaceholdersOrStableExprs (Root))
 )
 =>
-(Project
-    (InnerJoin
-        $values
-        $scan
-        $newFilters
-        (ParameterizedJoinPrivate)
-    )
-    []
-    (OutputCols (Root))
-)
+(GenerateParameterizedJoin $scan $filters)
