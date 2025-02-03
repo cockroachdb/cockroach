@@ -38,6 +38,7 @@ func TestRecordStatement(t *testing.T) {
 			"test-app",
 			nil,
 		)
+		// Record a statement, ensure no insights are generated.
 		err := memContainer.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 			Query: "SELECT _",
 		})
@@ -63,7 +64,9 @@ func TestRecordTransaction(t *testing.T) {
 			nil,
 		)
 		// Record a transaction, ensure no insights are generated.
-		require.NoError(t, memContainer.RecordTransaction(ctx, appstatspb.TransactionFingerprintID(123), sqlstats.RecordedTxnStats{}))
+		require.NoError(t, memContainer.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
+			FingerprintID: appstatspb.TransactionFingerprintID(123),
+		}))
 	})
 }
 
@@ -120,6 +123,7 @@ func TestContainer_Add(t *testing.T) {
 		// Add some transaction stats to the source container
 		txnFingerprintID := appstatspb.TransactionFingerprintID(123)
 		txnStats := sqlstats.RecordedTxnStats{
+			FingerprintID:  txnFingerprintID,
 			RowsAffected:   10,
 			ServiceLatency: 1,
 			RetryLatency:   2,
@@ -130,7 +134,7 @@ func TestContainer_Add(t *testing.T) {
 			RowsWritten:    5,
 			BytesRead:      100,
 		}
-		require.NoError(t, src.RecordTransaction(ctx, txnFingerprintID, txnStats))
+		require.NoError(t, src.RecordTransaction(ctx, &txnStats))
 
 		// In the src destination, these 'reduced' entries will have
 		// 0 values.
@@ -155,8 +159,8 @@ func TestContainer_Add(t *testing.T) {
 			Failed:             true,
 			StatementError:     errors.New("test error"),
 		}
-		reducedTxnFingerprintID := appstatspb.TransactionFingerprintID(321)
-		reducedTxnStats := sqlstats.RecordedTxnStats{
+		reducedTxnStats := &sqlstats.RecordedTxnStats{
+			FingerprintID:  appstatspb.TransactionFingerprintID(321),
 			RowsAffected:   100,
 			ServiceLatency: 500 * time.Millisecond,
 			RetryLatency:   100 * time.Millisecond,
@@ -168,11 +172,11 @@ func TestContainer_Add(t *testing.T) {
 			BytesRead:      100,
 		}
 		require.NoError(t, dest.RecordStatement(ctx, reducedStmtStats))
-		require.NoError(t, dest.RecordTransaction(ctx, reducedTxnFingerprintID, reducedTxnStats))
+		require.NoError(t, dest.RecordTransaction(ctx, reducedTxnStats))
 		require.NoError(t, src.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 			FingerprintID: appstatspb.StmtFingerprintID(321),
 		}))
-		require.NoError(t, src.RecordTransaction(ctx, reducedTxnFingerprintID, sqlstats.RecordedTxnStats{}))
+		require.NoError(t, src.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{FingerprintID: reducedTxnStats.FingerprintID}))
 
 		for i := 0; i < 10; i++ {
 			require.NoError(t, dest.Add(ctx, src))
@@ -180,7 +184,7 @@ func TestContainer_Add(t *testing.T) {
 			verifyStmtStatsMultiple(t, i+1, stmtStats, dest.getStatsForStmtWithKey(mockedStmtKey))
 			verifyStmtStatsReduced(t, i+2, reducedStmtStats, dest.getStatsForStmtWithKey(emptyStmtStatsKey))
 			verifyTxnStatsMultiple(t, i+1, &txnStats, dest.getStatsForTxnWithKey(txnFingerprintID))
-			verifyTxnStatsReduced(t, i+2, &reducedTxnStats, dest.getStatsForTxnWithKey(reducedTxnFingerprintID))
+			verifyTxnStatsReduced(t, i+2, reducedTxnStats, dest.getStatsForTxnWithKey(reducedTxnStats.FingerprintID))
 		}
 	})
 }
