@@ -477,6 +477,9 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		ex.QualityOfService(),
 		isolation.Serializable,
 		txn.GetOmitInRangefeeds(),
+		// TODO(yuzefovich): re-evaluate whether we want to allow buffered
+		// writes for internal executor.
+		false, /* bufferedWritesEnabled */
 	)
 
 	// Modify the Collection to match the parent executor's Collection.

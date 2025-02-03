@@ -109,6 +109,7 @@ var (
 		{1, makeExport},
 		{1, makeImport},
 		{1, makeCreateStats},
+		{1, makeSetSessionCharacteristics},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
@@ -1470,8 +1471,22 @@ func makeInsert(s *Smither) (tree.Statement, bool) {
 	return stmt, ok
 }
 
+func makeTransactionModes(s *Smither) (tree.TransactionModes, bool) {
+	levels := []tree.IsolationLevel{
+		tree.UnspecifiedIsolation,
+		tree.ReadUncommittedIsolation,
+		tree.ReadCommittedIsolation,
+		tree.RepeatableReadIsolation,
+		tree.SnapshotIsolation,
+		tree.SerializableIsolation,
+	}
+	modes := tree.TransactionModes{Isolation: levels[s.rnd.Intn(len(levels))]}
+	return modes, true
+}
+
 func makeBegin(s *Smither) (tree.Statement, bool) {
-	return &tree.BeginTransaction{}, true
+	modes, _ := makeTransactionModes(s)
+	return &tree.BeginTransaction{Modes: modes}, true
 }
 
 const letters = "abcdefghijklmnopqrstuvwxyz"
@@ -1510,6 +1525,11 @@ func makeCommit(s *Smither) (tree.Statement, bool) {
 
 func makeRollback(s *Smither) (tree.Statement, bool) {
 	return &tree.RollbackTransaction{}, true
+}
+
+func makeSetSessionCharacteristics(s *Smither) (tree.Statement, bool) {
+	modes, _ := makeTransactionModes(s)
+	return &tree.SetSessionCharacteristics{Modes: modes}, true
 }
 
 // makeInsert has only one valid reference: its table source, which can be

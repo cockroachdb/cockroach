@@ -604,6 +604,11 @@ message LocalOnlySessionData {
   // count of zero can still be estimated for expressions with a cardinality of
   // zero, e.g., for a contradictory filter.
   double optimizer_min_row_count = 155;
+  // BufferedWritesEnabled controls whether the buffered writes KV transaction
+  // protocol is used for user queries on the current session. If this variable
+  // is modified in an explicit txn, then the change will be applied only to
+  // future txns on the session.
+  bool buffered_writes_enabled = 156;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

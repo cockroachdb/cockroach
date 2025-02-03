@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -1158,6 +1159,20 @@ func (s *Server) newConnExecutor(
 			mode = tree.ReadOnly
 		}
 		return ex.state.setReadOnlyMode(mode)
+	}
+	// kv_transaction_buffered_writes_enabled is special since it won't affect
+	// the current explicit txn, so we want to let the user know.
+	ex.dataMutatorIterator.setBufferedWritesEnabled = func(enabled bool) {
+		if ex.state.mu.txn.BufferedWritesEnabled() == enabled {
+			return
+		}
+		if !ex.implicitTxn() {
+			action := "enabling"
+			if !enabled {
+				action = "disabling"
+			}
+			ex.planner.BufferClientNotice(ctx, pgnotice.Newf("%s buffered writes will apply after the current txn commits", action))
+		}
 	}
 	ex.dataMutatorIterator.onTempSchemaCreation = func() {
 		ex.hasCreatedTemporarySchema = true
@@ -3743,6 +3758,13 @@ func (ex *connExecutor) omitInRangefeeds() bool {
 		return false
 	}
 	return ex.sessionData().DisableChangefeedReplication
+}
+
+func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
+	if ex.sessionData() == nil {
+		return false
+	}
+	return ex.sessionData().BufferedWritesEnabled && ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2)
 }
 
 // initEvalCtx initializes the fields of an extendedEvalContext that stay the
