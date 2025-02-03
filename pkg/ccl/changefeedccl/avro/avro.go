@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package changefeedccl
+package avro
 
 import (
 	"encoding/json"
@@ -55,41 +55,41 @@ import (
 // the SQL column type is embedded as metadata in the Avro field schema in a way
 // that Avro ignores it but passes it along.
 
-// avroSchemaType is one of the set of avro primitive types.
-type avroSchemaType interface{}
+// schemaType is one of the set of avro primitive types.
+type schemaType interface{}
 
 const (
-	avroSchemaArray   = `array`
-	avroSchemaBoolean = `boolean`
-	avroSchemaBytes   = `bytes`
-	avroSchemaDouble  = `double`
-	avroSchemaInt     = `int`
-	avroSchemaLong    = `long`
-	avroSchemaNull    = `null`
-	avroSchemaString  = `string`
+	schemaTypeArray   = `array`
+	schemaTypeBoolean = `boolean`
+	schemaTypeBytes   = `bytes`
+	schemaTypeDouble  = `double`
+	schemaTypeInt     = `int`
+	schemaTypeLong    = `long`
+	schemaTypeNull    = `null`
+	schemaTypeString  = `string`
 )
 
-type avroLogicalType struct {
-	SchemaType  avroSchemaType `json:"type"`
-	LogicalType string         `json:"logicalType"`
-	Precision   *int           `json:"precision,omitempty"`
-	Scale       *int           `json:"scale,omitempty"`
+type logicalType struct {
+	SchemaType  schemaType `json:"type"`
+	LogicalType string     `json:"logicalType"`
+	Precision   *int       `json:"precision,omitempty"`
+	Scale       *int       `json:"scale,omitempty"`
 }
 
-type avroArrayType struct {
-	SchemaType avroSchemaType `json:"type"`
-	Items      avroSchemaType `json:"items"`
+type arrayType struct {
+	SchemaType schemaType `json:"type"`
+	Items      schemaType `json:"items"`
 }
 
-func avroUnionKey(t avroSchemaType) string {
+func unionKey(t schemaType) string {
 	switch s := t.(type) {
 	case string:
 		return s
-	case avroLogicalType:
-		return avroUnionKey(s.SchemaType) + `.` + s.LogicalType
-	case avroArrayType:
-		return avroUnionKey(s.SchemaType)
-	case *avroRecord:
+	case logicalType:
+		return unionKey(s.SchemaType) + `.` + s.LogicalType
+	case arrayType:
+		return unionKey(s.SchemaType)
+	case *Record:
 		if s.Namespace == "" {
 			return s.Name
 		}
@@ -103,14 +103,14 @@ func avroUnionKey(t avroSchemaType) string {
 // that can be safely overwritten to save allocs.
 type datumToNativeFn func(datum tree.Datum, memo interface{}) (interface{}, error)
 
-// avroSchemaField is our representation of the schema of a field in an avro
+// schemaField is our representation of the schema of a field in an avro
 // record. Serializing it to JSON gives the standard schema representation.
-type avroSchemaField struct {
-	SchemaType avroSchemaType `json:"type"`
-	Name       string         `json:"name"`
-	Default    *string        `json:"default"`
-	Metadata   string         `json:"__crdb__,omitempty"`
-	Namespace  string         `json:"namespace,omitempty"`
+type schemaField struct {
+	SchemaType schemaType `json:"type"`
+	Name       string     `json:"name"`
+	Default    *string    `json:"default"`
+	Metadata   string     `json:"__crdb__,omitempty"`
+	Namespace  string     `json:"namespace,omitempty"`
 
 	typ *types.T
 
@@ -137,20 +137,26 @@ type avroSchemaField struct {
 	nativeEncodedSecondaryType map[string]interface{}
 }
 
-// avroRecord is our representation of the schema of an avro record. Serializing
+// Record is our representation of the schema of an avro record. Serializing
 // it to JSON gives the standard schema representation.
-type avroRecord struct {
-	SchemaType string             `json:"type"`
-	Name       string             `json:"name"`
-	Fields     []*avroSchemaField `json:"fields"`
-	Namespace  string             `json:"namespace,omitempty"`
+type Record struct {
+	SchemaType string         `json:"type"`
+	Name       string         `json:"name"`
+	Fields     []*schemaField `json:"fields"`
+	Namespace  string         `json:"namespace,omitempty"`
 	codec      *goavro.Codec
 }
 
-// avroDataRecord is an `avroRecord` that represents the schema of a SQL table
+// Schema returns the schema of the record as a JSON string, suitable for
+// passing to a schema registry.
+func (r *Record) Schema() string {
+	return r.codec.Schema()
+}
+
+// DataRecord is a `Record` that represents the schema of a SQL table
 // or index.
-type avroDataRecord struct {
-	avroRecord
+type DataRecord struct {
+	Record
 
 	colIdxByFieldIdx map[int]int
 	fieldIdxByName   map[string]int
@@ -159,28 +165,29 @@ type avroDataRecord struct {
 	native map[string]interface{}
 }
 
-// avroMetadata is the `avroEnvelopeRecord` metadata.
-type avroMetadata map[string]interface{}
+// Metadata is the `EnvelopeRecord` metadata.
+type Metadata map[string]interface{}
 
-// avroEnvelopeOpts controls which fields in avroEnvelopeRecord are set.
-type avroEnvelopeOpts struct {
-	beforeField, afterField, recordField bool
-	updatedField, resolvedField          bool
-	mvccTimestampField                   bool
+// EnvelopeOpts controls which fields in EnvelopeRecord are set.
+type EnvelopeOpts struct {
+	BeforeField, AfterField, RecordField bool
+	UpdatedField, ResolvedField          bool
+	MVCCTimestampField                   bool
 }
 
-// avroEnvelopeRecord is an `avroRecord` that wraps a changed SQL row and some
+// EnvelopeRecord is an `avroRecord` that wraps a changed SQL row and some
 // metadata.
-type avroEnvelopeRecord struct {
-	avroRecord
+type EnvelopeRecord struct {
+	Record
 
-	opts                  avroEnvelopeOpts
-	before, after, record *avroDataRecord
+	// TODO: opts should be private
+	Opts               EnvelopeOpts
+	Before, After, Rec *DataRecord
 }
 
-// typeToAvroSchema converts a database type to an avro field
-func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
-	schema := &avroSchemaField{
+// typeToSchema converts a database type to an avro field
+func typeToSchema(typ *types.T) (*schemaField, error) {
+	schema := &schemaField{
 		typ: typ,
 	}
 
@@ -190,14 +197,14 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 	// makes it much easier to work with long histories of table data afterward,
 	// especially for things like loading into analytics databases.
 	setNullable := func(
-		avroType avroSchemaType,
+		avroType schemaType,
 		encoder datumToNativeFn,
 		decoder func(interface{}) (tree.Datum, error),
 	) {
 		// The default for a union type is the default for the first element of
 		// the union.
-		schema.SchemaType = []avroSchemaType{avroSchemaNull, avroType}
-		unionKey := avroUnionKey(avroType)
+		schema.SchemaType = []schemaType{schemaTypeNull, avroType}
+		unionKey := unionKey(avroType)
 		schema.nativeEncoded = map[string]interface{}{unionKey: nil}
 		schema.encodeDatum = encoder
 
@@ -223,13 +230,13 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 	// Handles types that mostly encode to non-strings,
 	// but have special cases like Infinity that encode as strings.
 	setNullableWithStringFallback := func(
-		avroType avroSchemaType,
+		avroType schemaType,
 		encoder datumToNativeFn,
 		decoder func(interface{}) (tree.Datum, error),
 	) {
-		schema.SchemaType = []avroSchemaType{avroSchemaNull, avroType, avroSchemaString}
-		mainUnionKey := avroUnionKey(avroType)
-		stringUnionKey := avroUnionKey(avroSchemaString)
+		schema.SchemaType = []schemaType{schemaTypeNull, avroType, schemaTypeString}
+		mainUnionKey := unionKey(avroType)
+		stringUnionKey := unionKey(schemaTypeString)
 		schema.nativeEncoded = map[string]interface{}{mainUnionKey: nil}
 		schema.nativeEncodedSecondaryType = map[string]interface{}{stringUnionKey: nil}
 		schema.encodeDatum = encoder
@@ -261,7 +268,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 	switch typ.Family() {
 	case types.IntFamily:
 		setNullable(
-			avroSchemaLong,
+			schemaTypeLong,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return int64(*d.(*tree.DInt)), nil
 			},
@@ -271,7 +278,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.BoolFamily:
 		setNullable(
-			avroSchemaBoolean,
+			schemaTypeBoolean,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return bool(*d.(*tree.DBool)), nil
 			},
@@ -281,9 +288,9 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.BitFamily:
 		setNullable(
-			avroArrayType{
-				SchemaType: avroSchemaArray,
-				Items:      avroSchemaLong,
+			arrayType{
+				SchemaType: schemaTypeArray,
+				Items:      schemaTypeLong,
 			},
 			func(d tree.Datum, memo interface{}) (interface{}, error) {
 				uints, lastBitsUsed := d.(*tree.DBitArray).EncodingParts()
@@ -318,7 +325,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.FloatFamily:
 		setNullable(
-			avroSchemaDouble,
+			schemaTypeDouble,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return float64(*d.(*tree.DFloat)), nil
 			},
@@ -328,7 +335,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.PGLSNFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DPGLSN).LSN.String(), nil
 			},
@@ -338,7 +345,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.RefCursorFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return string(tree.MustBeDString(d)), nil
 			},
@@ -348,7 +355,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.Box2DFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DBox2D).CartesianBoundingBox.Repr(), nil
 			},
@@ -362,7 +369,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.GeographyFamily:
 		setNullable(
-			avroSchemaBytes,
+			schemaTypeBytes,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return []byte(d.(*tree.DGeography).EWKB()), nil
 			},
@@ -376,7 +383,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.GeometryFamily:
 		setNullable(
-			avroSchemaBytes,
+			schemaTypeBytes,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return []byte(d.(*tree.DGeometry).EWKB()), nil
 			},
@@ -390,7 +397,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.StringFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return string(*d.(*tree.DString)), nil
 			},
@@ -400,7 +407,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.CollatedStringFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DCollatedString).Contents, nil
 			},
@@ -410,7 +417,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.BytesFamily:
 		setNullable(
-			avroSchemaBytes,
+			schemaTypeBytes,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return []byte(*d.(*tree.DBytes)), nil
 			},
@@ -420,8 +427,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.DateFamily:
 		setNullable(
-			avroLogicalType{
-				SchemaType:  avroSchemaInt,
+			logicalType{
+				SchemaType:  schemaTypeInt,
 				LogicalType: `date`,
 			},
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -440,8 +447,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.TimeFamily:
 		setNullable(
-			avroLogicalType{
-				SchemaType:  avroSchemaLong,
+			logicalType{
+				SchemaType:  schemaTypeLong,
 				LogicalType: `time-micros`,
 			},
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -458,7 +465,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.TimeTZFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			// We cannot encode this as a long, as it does not encode
 			// timezone correctly.
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -471,8 +478,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.TimestampFamily:
 		setNullable(
-			avroLogicalType{
-				SchemaType:  avroSchemaLong,
+			logicalType{
+				SchemaType:  schemaTypeLong,
 				LogicalType: `timestamp-micros`,
 			},
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -484,8 +491,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.TimestampTZFamily:
 		setNullable(
-			avroLogicalType{
-				SchemaType:  avroSchemaLong,
+			logicalType{
+				SchemaType:  schemaTypeLong,
 				LogicalType: `timestamp-micros`,
 			},
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -507,7 +514,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 			// Using ISO 8601 format (https://en.wikipedia.org/wiki/ISO_8601#Durations)
 			// because it's the tersest of the input formats we support
 			// and isn't golang-specific.
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DInterval).ValueAsISO8601String(), nil
 			},
@@ -523,8 +530,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 
 		width := int(typ.Width())
 		prec := int(typ.Precision())
-		decimalType := avroLogicalType{
-			SchemaType:  avroSchemaBytes,
+		decimalType := logicalType{
+			SchemaType:  schemaTypeBytes,
 			LogicalType: `decimal`,
 			Precision:   &prec,
 			Scale:       &width,
@@ -562,18 +569,18 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 			},
 			func(x interface{}) (tree.Datum, error) {
 				unionMap := x.(map[string]interface{})
-				rat, ok := unionMap[avroUnionKey(decimalType)]
+				rat, ok := unionMap[unionKey(decimalType)]
 				if ok {
 					return &tree.DDecimal{Decimal: ratToDecimal(*rat.(*big.Rat), int32(width))}, nil
 				}
-				return tree.ParseDDecimal(unionMap[avroUnionKey(avroSchemaString)].(string))
+				return tree.ParseDDecimal(unionMap[unionKey(schemaTypeString)].(string))
 			},
 		)
 	case types.UuidFamily:
 		// Should be logical type of "uuid", but the avro library doesn't support
 		// that yet.
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DUuid).UUID.String(), nil
 			},
@@ -583,7 +590,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.INetFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DIPAddr).IPAddr.String(), nil
 			},
@@ -593,7 +600,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.JsonFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DJSON).JSON.String(), nil
 			},
@@ -603,7 +610,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.TSQueryFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DTSQuery).TSQuery.String(), nil
 			},
@@ -613,7 +620,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.TSVectorFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DTSVector).TSVector.String(), nil
 			},
@@ -629,7 +636,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 	// for now.
 	case types.EnumFamily:
 		setNullable(
-			avroSchemaString,
+			schemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DEnum).LogicalRep, nil
 			},
@@ -642,16 +649,16 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 			},
 		)
 	case types.ArrayFamily:
-		itemSchema, err := typeToAvroSchema(typ.ArrayContents())
+		itemSchema, err := typeToSchema(typ.ArrayContents())
 		if err != nil {
 			return nil, changefeedbase.WithTerminalError(
 				errors.Wrapf(err, `could not create item schema for %s`, typ))
 		}
-		itemUnionKey := avroUnionKey(itemSchema.SchemaType.([]avroSchemaType)[1])
+		itemUnionKey := unionKey(itemSchema.SchemaType.([]schemaType)[1])
 
 		setNullable(
-			avroArrayType{
-				SchemaType: avroSchemaArray,
+			arrayType{
+				SchemaType: schemaTypeArray,
 				Items:      itemSchema.SchemaType,
 			},
 			func(d tree.Datum, memo interface{}) (interface{}, error) {
@@ -734,26 +741,24 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 
 // columnToAvroSchema converts a column descriptor into its corresponding
 // avro field schema.
-func columnToAvroSchema(col cdcevent.ResultColumn) (*avroSchemaField, error) {
-	schema, err := typeToAvroSchema(col.Typ)
+func columnToAvroSchema(col cdcevent.ResultColumn) (*schemaField, error) {
+	schema, err := typeToSchema(col.Typ)
 	if err != nil {
 		return nil, changefeedbase.WithTerminalError(errors.Wrapf(err, "column %s", col.Name))
 	}
-	schema.Name = SQLNameToAvroName(col.Name)
+	schema.Name = changefeedbase.SQLNameToAvroName(col.Name)
 	schema.Metadata = col.SQLStringNotHumanReadable()
 	schema.Default = nil
 
 	return schema, nil
 }
 
-// newSchemaForRow constructs avro schema for the Row.
+// NewSchemaForRow constructs avro schema for the Row.
 // Only columns returned by Iterator as used to popoulate schema fields.
 // sqlName can be any string but should uniquely identify a schema.
-func newSchemaForRow(
-	it cdcevent.Iterator, sqlName string, namespace string,
-) (*avroDataRecord, error) {
-	schema := &avroDataRecord{
-		avroRecord: avroRecord{
+func NewSchemaForRow(it cdcevent.Iterator, sqlName string, namespace string) (*DataRecord, error) {
+	schema := &DataRecord{
+		Record: Record{
 			Name:       sqlName,
 			SchemaType: `record`,
 			Namespace:  namespace,
@@ -789,42 +794,40 @@ func newSchemaForRow(
 	return schema, nil
 }
 
-// primaryIndexToAvroSchema constructs schema for primary index.
-func primaryIndexToAvroSchema(
+// PrimaryIndexToAvroSchema constructs schema for primary index.
+func PrimaryIndexToAvroSchema(
 	row cdcevent.Row, sqlName string, namespace string,
-) (*avroDataRecord, error) {
-	return newSchemaForRow(row.ForEachKeyColumn(), SQLNameToAvroName(sqlName), namespace)
+) (*DataRecord, error) {
+	return NewSchemaForRow(row.ForEachKeyColumn(), changefeedbase.SQLNameToAvroName(sqlName), namespace)
 }
 
 const (
-	// avroSchemaNoSuffix can be passed to tableToAvroSchema to indicate that
+	// SchemaNoSuffix can be passed to TableToAvroSchema to indicate that
 	// no suffix should be appended to the avro record's name.
-	avroSchemaNoSuffix = ``
+	SchemaNoSuffix = ``
 )
 
-// tableToAvroSchema constructs avro schema for the event values.
+// TableToAvroSchema constructs avro schema for the event values.
 // If a name suffix is provided (as opposed to avroSchemaNoSuffix), it will be
 // appended to the end of the avro record's name.
-func tableToAvroSchema(
-	row cdcevent.Row, nameSuffix string, namespace string,
-) (*avroDataRecord, error) {
+func TableToAvroSchema(row cdcevent.Row, nameSuffix string, namespace string) (*DataRecord, error) {
 	var sqlName string
 	// Even though we now always specify a family,
 	// for backwards compatibility schemas for tables with only one family
 	// don't get family-specific names.
 	if row.HasOtherFamilies {
-		sqlName = SQLNameToAvroName(row.TableName + "." + row.FamilyName)
+		sqlName = changefeedbase.SQLNameToAvroName(row.TableName + "." + row.FamilyName)
 	} else {
-		sqlName = SQLNameToAvroName(row.TableName)
+		sqlName = changefeedbase.SQLNameToAvroName(row.TableName)
 	}
-	if nameSuffix != avroSchemaNoSuffix {
+	if nameSuffix != SchemaNoSuffix {
 		sqlName = sqlName + `_` + nameSuffix
 	}
-	return newSchemaForRow(row.ForEachColumn(), sqlName, namespace)
+	return NewSchemaForRow(row.ForEachColumn(), sqlName, namespace)
 }
 
 // BinaryFromRow encodes the given row data into avro's defined binary format.
-func (r *avroDataRecord) BinaryFromRow(buf []byte, it cdcevent.Iterator) ([]byte, error) {
+func (r *DataRecord) BinaryFromRow(buf []byte, it cdcevent.Iterator) ([]byte, error) {
 	native, err := r.nativeFromRow(it)
 	if err != nil {
 		return nil, err
@@ -833,7 +836,7 @@ func (r *avroDataRecord) BinaryFromRow(buf []byte, it cdcevent.Iterator) ([]byte
 }
 
 // rowFromTextual decodes the given row data from avro's defined JSON format.
-func (r *avroDataRecord) rowFromTextual(buf []byte) (rowenc.EncDatumRow, error) {
+func (r *DataRecord) rowFromTextual(buf []byte) (rowenc.EncDatumRow, error) {
 	native, newBuf, err := r.codec.NativeFromTextual(buf)
 	if err != nil {
 		return nil, err
@@ -845,7 +848,7 @@ func (r *avroDataRecord) rowFromTextual(buf []byte) (rowenc.EncDatumRow, error) 
 }
 
 // textualFromRow encodes the given row data into avro's defined JSON format.
-func (r *avroDataRecord) textualFromRow(row cdcevent.Row) ([]byte, error) {
+func (r *DataRecord) textualFromRow(row cdcevent.Row) ([]byte, error) {
 	native, err := r.nativeFromRow(row.ForEachColumn())
 	if err != nil {
 		return nil, err
@@ -854,7 +857,7 @@ func (r *avroDataRecord) textualFromRow(row cdcevent.Row) ([]byte, error) {
 }
 
 // RowFromBinary decodes the given row data from avro's defined binary format.
-func (r *avroDataRecord) RowFromBinary(buf []byte) (rowenc.EncDatumRow, error) {
+func (r *DataRecord) RowFromBinary(buf []byte) (rowenc.EncDatumRow, error) {
 	native, newBuf, err := r.codec.NativeFromBinary(buf)
 	if err != nil {
 		return nil, err
@@ -865,7 +868,7 @@ func (r *avroDataRecord) RowFromBinary(buf []byte) (rowenc.EncDatumRow, error) {
 	return r.rowFromNative(native)
 }
 
-func (r *avroDataRecord) nativeFromRow(it cdcevent.Iterator) (interface{}, error) {
+func (r *DataRecord) nativeFromRow(it cdcevent.Iterator) (interface{}, error) {
 	if r.native == nil {
 		// Note that it's safe to reuse r.native without clearing it because all records will
 		// contain the same complete set of fields.
@@ -887,7 +890,7 @@ func (r *avroDataRecord) nativeFromRow(it cdcevent.Iterator) (interface{}, error
 	return r.native, nil
 }
 
-func (r *avroDataRecord) rowFromNative(native interface{}) (rowenc.EncDatumRow, error) {
+func (r *DataRecord) rowFromNative(native interface{}) (rowenc.EncDatumRow, error) {
 	avroDatums, ok := native.(map[string]interface{})
 	if !ok {
 		return nil, changefeedbase.WithTerminalError(
@@ -911,68 +914,68 @@ func (r *avroDataRecord) rowFromNative(native interface{}) (rowenc.EncDatumRow, 
 	return row, nil
 }
 
-// envelopeToAvroSchema creates an avro record schema for an envelope containing
+// NewEnvelopeRecord creates an avro record schema for an envelope containing
 // before and after versions of a row change and metadata about that row change.
 // before is optional, and after can instead be record.
-func envelopeToAvroSchema(
-	topic string, opts avroEnvelopeOpts, before, after, record *avroDataRecord, namespace string,
-) (*avroEnvelopeRecord, error) {
-	schema := &avroEnvelopeRecord{
-		avroRecord: avroRecord{
-			Name:       SQLNameToAvroName(topic) + `_envelope`,
+func NewEnvelopeRecord(
+	topic string, opts EnvelopeOpts, before, after, record *DataRecord, namespace string,
+) (*EnvelopeRecord, error) {
+	schema := &EnvelopeRecord{
+		Record: Record{
+			Name:       changefeedbase.SQLNameToAvroName(topic) + `_envelope`,
 			SchemaType: `record`,
 			Namespace:  namespace,
 		},
-		opts: opts,
+		Opts: opts,
 	}
 
-	if opts.beforeField {
-		schema.before = before
-		beforeField := &avroSchemaField{
+	if opts.BeforeField {
+		schema.Before = before
+		beforeField := &schemaField{
 			Name:       `before`,
-			SchemaType: []avroSchemaType{avroSchemaNull, before},
+			SchemaType: []schemaType{schemaTypeNull, before},
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, beforeField)
 	}
-	if opts.afterField {
-		schema.after = after
-		afterField := &avroSchemaField{
+	if opts.AfterField {
+		schema.After = after
+		afterField := &schemaField{
 			Name:       `after`,
-			SchemaType: []avroSchemaType{avroSchemaNull, after},
+			SchemaType: []schemaType{schemaTypeNull, after},
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, afterField)
 	}
-	if opts.updatedField {
-		updatedField := &avroSchemaField{
-			SchemaType: []avroSchemaType{avroSchemaNull, avroSchemaString},
+	if opts.UpdatedField {
+		updatedField := &schemaField{
+			SchemaType: []schemaType{schemaTypeNull, schemaTypeString},
 			Name:       `updated`,
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, updatedField)
 	}
-	if opts.mvccTimestampField {
-		mvccTimestampField := &avroSchemaField{
-			SchemaType: []avroSchemaType{avroSchemaNull, avroSchemaString},
+	if opts.MVCCTimestampField {
+		mvccTimestampField := &schemaField{
+			SchemaType: []schemaType{schemaTypeNull, schemaTypeString},
 			Name:       `mvcc_timestamp`,
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, mvccTimestampField)
 	}
-	if opts.resolvedField {
-		resolvedField := &avroSchemaField{
-			SchemaType: []avroSchemaType{avroSchemaNull, avroSchemaString},
+	if opts.ResolvedField {
+		resolvedField := &schemaField{
+			SchemaType: []schemaType{schemaTypeNull, schemaTypeString},
 			Name:       `resolved`,
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, resolvedField)
 	}
-	if opts.recordField {
-		schema.record = record
-		recordField := &avroSchemaField{
+	if opts.RecordField {
+		schema.Rec = record
+		recordField := &schemaField{
 			Name:       `record`,
-			SchemaType: []avroSchemaType{avroSchemaNull, record},
+			SchemaType: []schemaType{schemaTypeNull, record},
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, recordField)
@@ -991,47 +994,47 @@ func envelopeToAvroSchema(
 
 // BinaryFromRow encodes the given metadata and row data into avro's defined
 // binary format.
-func (r *avroEnvelopeRecord) BinaryFromRow(
-	buf []byte, meta avroMetadata, beforeRow, afterRow, recordRow cdcevent.Row,
+func (r *EnvelopeRecord) BinaryFromRow(
+	buf []byte, meta Metadata, beforeRow, afterRow, recordRow cdcevent.Row,
 ) ([]byte, error) {
 	native := map[string]interface{}{}
-	if r.opts.beforeField {
+	if r.Opts.BeforeField {
 		if beforeRow.HasValues() && !beforeRow.IsDeleted() {
-			beforeNative, err := r.before.nativeFromRow(beforeRow.ForEachColumn())
+			beforeNative, err := r.Before.nativeFromRow(beforeRow.ForEachColumn())
 			if err != nil {
 				return nil, err
 			}
-			native[`before`] = goavro.Union(avroUnionKey(&r.before.avroRecord), beforeNative)
+			native[`before`] = goavro.Union(unionKey(&r.Before.Record), beforeNative)
 		} else {
 			native[`before`] = nil
 		}
 	}
 
-	if r.opts.afterField {
+	if r.Opts.AfterField {
 		if afterRow.HasValues() && !afterRow.IsDeleted() {
-			afterNative, err := r.after.nativeFromRow(afterRow.ForEachColumn())
+			afterNative, err := r.After.nativeFromRow(afterRow.ForEachColumn())
 			if err != nil {
 				return nil, err
 			}
-			native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
+			native[`after`] = goavro.Union(unionKey(&r.After.Record), afterNative)
 		} else {
 			native[`after`] = nil
 		}
 	}
 
-	if r.opts.recordField {
+	if r.Opts.RecordField {
 		if recordRow.HasValues() {
-			recordNative, err := r.record.nativeFromRow(recordRow.ForEachColumn())
+			recordNative, err := r.Rec.nativeFromRow(recordRow.ForEachColumn())
 			if err != nil {
 				return nil, err
 			}
-			native[`record`] = goavro.Union(avroUnionKey(&r.record.avroRecord), recordNative)
+			native[`record`] = goavro.Union(unionKey(&r.Rec.Record), recordNative)
 		} else {
 			native[`record`] = nil
 		}
 	}
 
-	if r.opts.updatedField {
+	if r.Opts.UpdatedField {
 		native[`updated`] = nil
 		if u, ok := meta[`updated`]; ok {
 			delete(meta, `updated`)
@@ -1040,11 +1043,11 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 				return nil, changefeedbase.WithTerminalError(
 					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
-			native[`updated`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
+			native[`updated`] = goavro.Union(unionKey(schemaTypeString), ts.AsOfSystemTime())
 		}
 	}
 
-	if r.opts.mvccTimestampField {
+	if r.Opts.MVCCTimestampField {
 		native[`mvcc_timestamp`] = nil
 		if u, ok := meta[`mvcc_timestamp`]; ok {
 			delete(meta, `mvcc_timestamp`)
@@ -1053,11 +1056,11 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 				return nil, changefeedbase.WithTerminalError(
 					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
-			native[`mvcc_timestamp`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
+			native[`mvcc_timestamp`] = goavro.Union(unionKey(schemaTypeString), ts.AsOfSystemTime())
 		}
 	}
 
-	if r.opts.resolvedField {
+	if r.Opts.ResolvedField {
 		native[`resolved`] = nil
 		if u, ok := meta[`resolved`]; ok {
 			delete(meta, `resolved`)
@@ -1066,7 +1069,7 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 				return nil, changefeedbase.WithTerminalError(
 					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
-			native[`resolved`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
+			native[`resolved`] = goavro.Union(unionKey(schemaTypeString), ts.AsOfSystemTime())
 		}
 	}
 	for k := range meta {
@@ -1077,7 +1080,7 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 
 // Refresh the metadata for user-defined types on a cached schema
 // The only user-defined type is enum, so this is usually a no-op.
-func (r *avroDataRecord) refreshTypeMetadata(row cdcevent.Row) error {
+func (r *DataRecord) RefreshTypeMetadata(row cdcevent.Row) error {
 	return row.ForEachUDTColumn().Col(func(col cdcevent.ResultColumn) error {
 		if fieldIdx, ok := r.fieldIdxByName[col.Name]; ok {
 			r.Fields[fieldIdx].typ = col.Typ
