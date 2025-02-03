@@ -33,6 +33,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/multiregion",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/partition",
         "//pkg/sql/pgwire/pgcode",

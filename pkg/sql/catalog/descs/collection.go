@@ -138,6 +138,11 @@ type Collection struct {
 	// It must be set in the multi-tenant environment for ephemeral
 	// SQL pods. It should not be set otherwise.
 	sqlLivenessSession sqlliveness.Session
+
+	// LeaseGeneration is the first generation value observed by this
+	// txn. This guarantees the generation for long-running transactions
+	// this value stays the same for the life of the transaction.
+	leaseGeneration int64
 }
 
 // FromTxn is a convenience function to extract a descs.Collection which is
@@ -199,6 +204,7 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 	tc.leased.releaseAll(ctx)
 	// Clear the associated sqlliveness.session
 	tc.sqlLivenessSession = nil
+	tc.leaseGeneration = 0
 }
 
 // ReleaseAll releases all state currently held by the Collection.
@@ -210,11 +216,27 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.skipValidationOnWrite = false
 }
 
+// ResetLeaseGeneration selects an initial value at the beginning of a txn
+// for lease generation.
+func (tc *Collection) ResetLeaseGeneration() {
+	// Note: If a collection doesn't have a lease manager assigned, then
+	// no generation will be selected. This can only happen with either
+	// bare-bones collections or test cases.
+	if tc.leased.lm != nil {
+		tc.leaseGeneration = tc.leased.lm.GetLeaseGeneration()
+	}
+}
+
 // GetLeaseGeneration provides an integer which will change whenever new
 // descriptor versions are available. This can be used for fast comparisons
 // to make sure previously looked up information is still valid.
 func (tc *Collection) GetLeaseGeneration() int64 {
-	return tc.leased.lm.GetLeaseGeneration()
+	// Sanity: Pick a lease generation if one hasn't been set.
+	if tc.leaseGeneration == 0 {
+		tc.ResetLeaseGeneration()
+	}
+	// Return the cached lease generation, one should have been set earlier.
+	return tc.leaseGeneration
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted

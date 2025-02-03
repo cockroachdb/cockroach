@@ -259,6 +259,10 @@ type Catalog interface {
 	// exactly the same.
 	GetDependencyDigest() DependencyDigest
 
+	// LeaseByStableID leases out a descriptor by the stable ID, which will block
+	// schema changes. The underlying schema object is not returned.
+	LeaseByStableID(ctx context.Context, id StableID) error
+
 	// GetRoutineOwner returns the username.SQLUsername of the routine's
 	// (specified by routineOid) owner.
 	GetRoutineOwner(ctx context.Context, routineOid oid.Oid) (username.SQLUsername, error)

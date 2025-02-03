@@ -517,6 +517,14 @@ func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
 	return oc.planner.User()
 }
 
+// LeaseByStableID is part of the cat.Catalog interface.
+func (oc *optCatalog) LeaseByStableID(ctx context.Context, stableID cat.StableID) error {
+	// Lease the descriptor, so that schema changes cannot move forward
+	// after the current version.
+	_, err := oc.planner.byIDGetterBuilder().WithoutNonPublic().Get().Desc(ctx, descpb.ID(stableID))
+	return err
+}
+
 // GetDependencyDigest is part of the cat.Catalog interface.
 func (oc *optCatalog) GetDependencyDigest() cat.DependencyDigest {
 	// The stats cache may not be setup in some tests like

@@ -486,6 +486,11 @@ func (tc *Catalog) GetDependencyDigest() cat.DependencyDigest {
 	}
 }
 
+// LeaseByStableID does not do anything since no leasing is used here.
+func (tc *Catalog) LeaseByStableID(_ context.Context, _ cat.StableID) error {
+	return nil
+}
+
 // ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
 // and applies each of them to the test catalog.
 func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
