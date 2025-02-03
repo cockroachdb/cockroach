@@ -3305,6 +3305,15 @@ func isValidAndPrintableRune(r rune) bool {
 	return r != utf8.RuneError && unicode.IsPrint(r)
 }
 
+// PrettyPrintJSONValueEncoded returns a string representation of the encoded
+// JSON object. It is injected from util/json to avoid an import cycle.
+var PrettyPrintJSONValueEncoded func([]byte) (string, error)
+
+// PrettyPrintArrayValueEncoded returns a string representation of the encoded
+// array object if possible. It is injected from rowenc/valueside to avoid an
+// import cycle.
+var PrettyPrintArrayValueEncoded func([]byte) (string, error)
+
 // PrettyPrintValueEncoded returns a string representation of the first
 // decodable value in the provided byte slice, along with the remaining byte
 // slice after decoding.
@@ -3400,6 +3409,32 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, ipAddr.String(), nil
+	case JSON:
+		b = b[dataOffset:]
+		var data []byte
+		b, data, err = DecodeUntaggedBytesValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		if PrettyPrintJSONValueEncoded == nil {
+			return b, "", errors.Errorf("PrettyPrintJSONValueEncoded is not injected")
+		}
+		var s string
+		s, err = PrettyPrintJSONValueEncoded(data)
+		return b, s, err
+	case Array:
+		b = b[dataOffset:]
+		var data []byte
+		b, data, err = DecodeUntaggedBytesValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		if PrettyPrintArrayValueEncoded == nil {
+			return b, "", errors.Errorf("PrettyPrintArrayValueEncoded is not injected")
+		}
+		var s string
+		s, err = PrettyPrintArrayValueEncoded(data)
+		return b, s, err
 	default:
 		return b, "", errors.Errorf("unknown type %s", typ)
 	}

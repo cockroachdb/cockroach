@@ -67,10 +67,17 @@ func decodeArray(a *tree.DatumAlloc, arrayType *types.T, b []byte) (tree.Datum, 
 		return nil, b, err
 	}
 	elementType := arrayType.ArrayContents()
+	return decodeArrayWithHeader(header, a, arrayType, elementType, b)
+}
+
+func decodeArrayWithHeader(
+	header arrayHeader, a *tree.DatumAlloc, arrayType, elementType *types.T, b []byte,
+) (tree.Datum, []byte, error) {
 	result := tree.DArray{
 		Array:    make(tree.Datums, header.length),
 		ParamTyp: elementType,
 	}
+	var err error
 	if err = result.MaybeSetCustomOid(arrayType); err != nil {
 		return nil, b, err
 	}
@@ -242,6 +249,68 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return 0, errors.AssertionFailedf("no known encoding type for %s", t.Family().Name())
 	}
 }
+
+func init() {
+	encoding.PrettyPrintArrayValueEncoded = func(b []byte) (string, error) {
+		header, b, err := decodeArrayHeader(b)
+		if err != nil {
+			return "", err
+		}
+		elementType, err := arrayElementEncodingTypeToDatumType(header.elementType)
+		if err != nil {
+			return "", err
+		}
+		arrayType := types.MakeArray(elementType)
+		d, rem, err := decodeArrayWithHeader(header, nil /* a */, arrayType, elementType, b)
+		if err != nil {
+			return "", err
+		}
+		if len(rem) != 0 {
+			return "", errors.Newf("unexpected remainder after decoding array: %v", rem)
+		}
+		return d.String(), nil
+	}
+}
+
+// arrayElementEncodingTypeToDatumType picks a datum type based on the encoding
+// type of the array element. It is a guess, so it could be incorrect (e.g.
+// strings and enums use encoding.Bytes, yet we'll unconditionally return
+// types.Bytes).
+func arrayElementEncodingTypeToDatumType(t encoding.Type) (*types.T, error) {
+	switch t {
+	case encoding.Int:
+		return types.Int, nil
+	case encoding.Float:
+		return types.Float, nil
+	case encoding.Decimal:
+		return types.Decimal, nil
+	case encoding.Bytes, encoding.BytesDesc:
+		return types.Bytes, nil
+	case encoding.Time:
+		return types.TimestampTZ, nil
+	case encoding.Duration:
+		return types.Interval, nil
+	case encoding.True, encoding.False:
+		return types.Bool, nil
+	case encoding.UUID:
+		return types.Uuid, nil
+	case encoding.IPAddr:
+		return types.INet, nil
+	case encoding.JSON:
+		return types.Jsonb, nil
+	case encoding.BitArray, encoding.BitArrayDesc:
+		return types.VarBitArray, nil
+	case encoding.TimeTZ:
+		return types.TimeTZ, nil
+	case encoding.Geo, encoding.GeoDesc:
+		return types.Geometry, nil
+	case encoding.Box2D:
+		return types.Box2D, nil
+	default:
+		return nil, errors.AssertionFailedf("no known datum type for encoding type %s", t)
+	}
+}
+
 func checkElementType(paramType *types.T, elemType *types.T) error {
 	if paramType.Family() != elemType.Family() {
 		return errors.Errorf("type of array contents %s doesn't match column type %s",
