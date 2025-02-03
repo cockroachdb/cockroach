@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/workload/querybench"
+	"gonum.org/v1/gonum/stat"
 )
 
 type tpchBenchSpec struct {
@@ -169,6 +171,42 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 		CompatibleClouds:           registry.Clouds(spec.GCE, spec.Local),
 		Suites:                     registry.Suites(registry.Nightly),
 		RequiresDeprecatedWorkload: true, // uses querybench
+		PostProcessPerfMetrics: func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+
+			// To calculate the total mean of the run, we store the sum of means and count of the means
+			totalMeanSum := 0.0
+			totalMeanCount := 0.0
+			finalP50Value := 0.0
+			for _, summary := range histograms.Summaries {
+
+				// Now since we have multiple p50(median) latencies for the run, we want to calculate a cumulative median value
+				// For this, we first store the medians in an array and then calculate the median of those values.
+				var p50Latencies []float64
+				for _, summaryMetric := range summary.Values {
+					p50Latencies = append(p50Latencies, float64(summaryMetric.P50))
+					totalMeanSum += float64(summaryMetric.Mean)
+				}
+				sort.Float64s(p50Latencies)
+				finalP50Value = stat.Quantile(0.5, stat.Empirical, p50Latencies, nil)
+				totalMeanCount++
+			}
+
+			aggregatedMetrics := roachtestutil.AggregatedPerfMetrics{
+				{
+					Name:           test + "_mean",
+					Value:          roachtestutil.MetricPoint(totalMeanSum / totalMeanCount),
+					Unit:           "ms",
+					IsHigherBetter: false,
+				},
+				{
+					Name:           test + "_p50_latency",
+					Value:          roachtestutil.MetricPoint(finalP50Value),
+					Unit:           "ms",
+					IsHigherBetter: false,
+				}}
+
+			return aggregatedMetrics, nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
