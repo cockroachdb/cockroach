@@ -167,13 +167,18 @@ func (ex *connExecutor) recordStatementSummary(
 	implicitTxn := flags.IsSet(planFlagImplicitTxn)
 	stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 		stmt.StmtNoConstants, implicitTxn, planner.SessionData().Database)
-	recordedStmtStats := sqlstats.RecordedStmtStats{
-		FingerprintID:        stmtFingerprintID,
-		QuerySummary:         stmt.StmtSummary,
-		DistSQL:              flags.ShouldBeDistributed(),
-		Vec:                  flags.IsSet(planFlagVectorized),
-		ImplicitTxn:          implicitTxn,
-		PlanHash:             planner.instrumentation.planGist.Hash(),
+	recordedStmtStats := &sqlstats.RecordedStmtStats{
+		FingerprintID: stmtFingerprintID,
+		Query:         stmt.StmtNoConstants,
+		QuerySummary:  stmt.StmtSummary,
+		DistSQL:       flags.ShouldBeDistributed(),
+		Vec:           flags.IsSet(planFlagVectorized),
+		ImplicitTxn:   implicitTxn,
+		FullScan:      fullScan,
+		Database:      planner.SessionData().Database,
+		PlanHash:      planner.instrumentation.planGist.Hash(),
+
+		// Per-execution metrics.
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,
 		StatementID:          stmt.QueryID,
 		AutoRetryCount:       automaticRetryCount,
@@ -195,18 +200,16 @@ func (ex *connExecutor) recordStatementSummary(
 		PlanGist:             planner.instrumentation.planGist.String(),
 		StatementError:       stmtErr,
 		IndexRecommendations: idxRecommendations,
-		Query:                stmt.StmtNoConstants,
 		StartTime:            startTime,
 		EndTime:              startTime.Add(svcLatRaw),
-		FullScan:             fullScan,
 		ExecStats:            queryLevelStats,
 		// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 		// converting to strings.
-		Indexes:  planner.instrumentation.indexesUsed.Strings(),
-		Database: planner.SessionData().Database,
+		Indexes: planner.instrumentation.indexesUsed.Strings(),
 	}
 
 	err := ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
+
 	if err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "failed to record statement: %s", err)

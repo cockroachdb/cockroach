@@ -4329,7 +4329,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
-	recordedTxnStats := sqlstats.RecordedTxnStats{
+	recordedTxnStats := &sqlstats.RecordedTxnStats{
 		FingerprintID:           transactionFingerprintID,
 		SessionID:               ex.planner.extendedEvalCtx.SessionID,
 		TransactionID:           ev.txnID,
@@ -4372,7 +4372,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		ex.planner.logTransaction(ctx,
 			int(ex.extraTxnState.txnCounter.Load()),
 			transactionFingerprintID,
-			&recordedTxnStats,
+			recordedTxnStats,
 			ex.extraTxnState.telemetrySkippedTxns,
 		)
 	}
