@@ -329,3 +329,41 @@ func (d *Decoder) Decode(a *tree.DatumAlloc, bytes []byte) (tree.Datums, error) 
 	}
 	return datums, nil
 }
+
+// encodingTypeToDatumType picks a datum type based on the encoding type. It is
+// a guess, so it could be incorrect (e.g. strings and enums use encoding.Bytes,
+// yet we'll unconditionally return types.Bytes).
+func encodingTypeToDatumType(t encoding.Type) (*types.T, error) {
+	switch t {
+	case encoding.Int:
+		return types.Int, nil
+	case encoding.Float:
+		return types.Float, nil
+	case encoding.Decimal:
+		return types.Decimal, nil
+	case encoding.Bytes, encoding.BytesDesc:
+		return types.Bytes, nil
+	case encoding.Time:
+		return types.TimestampTZ, nil
+	case encoding.Duration:
+		return types.Interval, nil
+	case encoding.True, encoding.False:
+		return types.Bool, nil
+	case encoding.UUID:
+		return types.Uuid, nil
+	case encoding.IPAddr:
+		return types.INet, nil
+	case encoding.JSON:
+		return types.Jsonb, nil
+	case encoding.BitArray, encoding.BitArrayDesc:
+		return types.VarBitArray, nil
+	case encoding.TimeTZ:
+		return types.TimeTZ, nil
+	case encoding.Geo, encoding.GeoDesc:
+		return types.Geometry, nil
+	case encoding.Box2D:
+		return types.Box2D, nil
+	default:
+		return nil, errors.Newf("no known datum type for encoding type %s", t)
+	}
+}
