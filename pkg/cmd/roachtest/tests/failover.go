@@ -35,6 +35,26 @@ var rangeLeaseRenewalDuration = func() time.Duration {
 	return raftCfg.RangeLeaseRenewalDuration()
 }()
 
+var failoverAggregateFunction = func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+	totalMax := roachtestutil.MetricPoint(0.0)
+	for _, summary := range histogram.Summaries {
+		for _, value := range summary.Values {
+			if value.Max > totalMax {
+				totalMax = value.Max
+			}
+		}
+	}
+
+	return roachtestutil.AggregatedPerfMetrics{
+		{
+			Name:           fmt.Sprintf("%s_max", test),
+			Value:          totalMax,
+			Unit:           "ms",
+			IsHigherBetter: false,
+		},
+	}, nil
+}
+
 // registerFailover registers a set of failover benchmarks. These tests
 // benchmark the maximum unavailability experienced by clients during various
 // node failures, and exports them for roachperf graphing. They do not make any
@@ -83,15 +103,16 @@ func registerFailover(r registry.Registry) {
 			}
 
 			r.Add(registry.TestSpec{
-				Name:                "failover/chaos" + readOnlyStr + leasesStr,
-				Owner:               registry.OwnerKV,
-				Benchmark:           true,
-				Timeout:             90 * time.Minute,
-				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2), spec.DisableLocalSSD(), spec.ReuseNone()), // uses disk stalls
-				CompatibleClouds:    registry.OnlyGCE,                                                                                                           // dmsetup only configured for gce
-				Suites:              registry.Suites(registry.Nightly),
-				Leases:              leases,
-				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
+				Name:                   "failover/chaos" + readOnlyStr + leasesStr,
+				Owner:                  registry.OwnerKV,
+				Benchmark:              true,
+				Timeout:                90 * time.Minute,
+				Cluster:                r.MakeClusterSpec(10, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2), spec.DisableLocalSSD(), spec.ReuseNone()), // uses disk stalls
+				CompatibleClouds:       registry.OnlyGCE,                                                                                                           // dmsetup only configured for gce
+				Suites:                 registry.Suites(registry.Nightly),
+				Leases:                 leases,
+				SkipPostValidations:    registry.PostValidationNoDeadNodes, // cleanup kills nodes
+				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverChaos(ctx, t, c, readOnly)
 				},
@@ -99,39 +120,42 @@ func registerFailover(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:             "failover/partial/lease-gateway" + leasesStr,
-			Owner:            registry.OwnerKV,
-			Benchmark:        true,
-			Timeout:          45 * time.Minute,
-			Cluster:          r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           leases,
-			Run:              runFailoverPartialLeaseGateway,
+			Name:                   "failover/partial/lease-gateway" + leasesStr,
+			Owner:                  registry.OwnerKV,
+			Benchmark:              true,
+			Timeout:                45 * time.Minute,
+			Cluster:                r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
+			CompatibleClouds:       registry.AllExceptAWS,
+			Suites:                 registry.Suites(registry.Nightly),
+			Leases:                 leases,
+			PostProcessPerfMetrics: failoverAggregateFunction,
+			Run:                    runFailoverPartialLeaseGateway,
 		})
 
 		r.Add(registry.TestSpec{
-			Name:             "failover/partial/lease-leader" + leasesStr,
-			Owner:            registry.OwnerKV,
-			Benchmark:        true,
-			Timeout:          45 * time.Minute,
-			Cluster:          r.MakeClusterSpec(7, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           leases,
-			Run:              runFailoverPartialLeaseLeader,
+			Name:                   "failover/partial/lease-leader" + leasesStr,
+			Owner:                  registry.OwnerKV,
+			Benchmark:              true,
+			Timeout:                45 * time.Minute,
+			Cluster:                r.MakeClusterSpec(7, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
+			CompatibleClouds:       registry.AllExceptAWS,
+			Suites:                 registry.Suites(registry.Nightly),
+			Leases:                 leases,
+			PostProcessPerfMetrics: failoverAggregateFunction,
+			Run:                    runFailoverPartialLeaseLeader,
 		})
 
 		r.Add(registry.TestSpec{
-			Name:             "failover/partial/lease-liveness" + leasesStr,
-			Owner:            registry.OwnerKV,
-			Benchmark:        true,
-			Timeout:          45 * time.Minute,
-			Cluster:          r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           leases,
-			Run:              runFailoverPartialLeaseLiveness,
+			Name:                   "failover/partial/lease-liveness" + leasesStr,
+			Owner:                  registry.OwnerKV,
+			Benchmark:              true,
+			Timeout:                45 * time.Minute,
+			Cluster:                r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
+			CompatibleClouds:       registry.AllExceptAWS,
+			Suites:                 registry.Suites(registry.Nightly),
+			Leases:                 leases,
+			PostProcessPerfMetrics: failoverAggregateFunction,
+			Run:                    runFailoverPartialLeaseLiveness,
 		})
 
 		for _, failureMode := range allFailureModes {
@@ -152,43 +176,46 @@ func registerFailover(r registry.Registry) {
 				clouds = registry.OnlyGCE
 			}
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/non-system/%s%s", failureMode, leasesStr),
-				Owner:               registry.OwnerKV,
-				Benchmark:           true,
-				Timeout:             45 * time.Minute,
-				SkipPostValidations: postValidation,
-				Cluster:             r.MakeClusterSpec(7, clusterOpts...),
-				CompatibleClouds:    clouds,
-				Suites:              registry.Suites(registry.Nightly),
-				Leases:              leases,
+				Name:                   fmt.Sprintf("failover/non-system/%s%s", failureMode, leasesStr),
+				Owner:                  registry.OwnerKV,
+				Benchmark:              true,
+				Timeout:                45 * time.Minute,
+				SkipPostValidations:    postValidation,
+				Cluster:                r.MakeClusterSpec(7, clusterOpts...),
+				CompatibleClouds:       clouds,
+				Suites:                 registry.Suites(registry.Nightly),
+				Leases:                 leases,
+				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode)
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, leasesStr),
-				Owner:               registry.OwnerKV,
-				CompatibleClouds:    registry.AllExceptAWS,
-				Suites:              registry.Suites(registry.Weekly),
-				Benchmark:           true,
-				Timeout:             45 * time.Minute,
-				SkipPostValidations: postValidation,
-				Cluster:             r.MakeClusterSpec(5, clusterOpts...),
-				Leases:              leases,
+				Name:                   fmt.Sprintf("failover/liveness/%s%s", failureMode, leasesStr),
+				Owner:                  registry.OwnerKV,
+				CompatibleClouds:       registry.AllExceptAWS,
+				Suites:                 registry.Suites(registry.Weekly),
+				Benchmark:              true,
+				Timeout:                45 * time.Minute,
+				SkipPostValidations:    postValidation,
+				Cluster:                r.MakeClusterSpec(5, clusterOpts...),
+				Leases:                 leases,
+				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverLiveness(ctx, t, c, failureMode)
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, leasesStr),
-				Owner:               registry.OwnerKV,
-				CompatibleClouds:    registry.AllExceptAWS,
-				Suites:              registry.Suites(registry.Weekly),
-				Benchmark:           true,
-				Timeout:             45 * time.Minute,
-				SkipPostValidations: postValidation,
-				Cluster:             r.MakeClusterSpec(7, clusterOpts...),
-				Leases:              leases,
+				Name:                   fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, leasesStr),
+				Owner:                  registry.OwnerKV,
+				CompatibleClouds:       registry.AllExceptAWS,
+				Suites:                 registry.Suites(registry.Weekly),
+				Benchmark:              true,
+				Timeout:                45 * time.Minute,
+				SkipPostValidations:    postValidation,
+				Cluster:                r.MakeClusterSpec(7, clusterOpts...),
+				Leases:                 leases,
+				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverSystemNonLiveness(ctx, t, c, failureMode)
 				},
