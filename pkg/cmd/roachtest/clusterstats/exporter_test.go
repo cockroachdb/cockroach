@@ -325,9 +325,9 @@ func TestExport(t *testing.T) {
 		mockTest.EXPECT().Name().Return("mock_name")
 		mockTest.EXPECT().GetRunId().Return("mock_id").AnyTimes()
 		mockCluster.EXPECT().Cloud().Times(1).Return(spec.GCE)
-		mockTest.EXPECT().Spec().Times(1).Return(&registry.TestSpec{
+		mockTest.EXPECT().Spec().Return(&registry.TestSpec{
 			Owner: "roachtest_mock", Suites: registry.Suites(registry.Nightly),
-		})
+		}).AnyTimes()
 		statsWriter = func(ctx context.Context, tt test.Test, c cluster.Cluster, buffer *bytes.Buffer, dest string) error {
 			require.Equal(t, mockTest, tt)
 			require.Equal(t, mockCluster, c)
@@ -425,6 +425,7 @@ func getMockTest(
 	tst.EXPECT().L().Return(l)
 	tst.EXPECT().ExportOpenmetrics().Times(1).Return(exportOpenmetrics)
 	tst.EXPECT().PerfArtifactsDir().Times(1).Return(dest)
+	tst.EXPECT().Owner().Return("roachtest_mock").AnyTimes()
 	return tst
 }
 
