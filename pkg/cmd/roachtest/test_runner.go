@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -109,6 +110,8 @@ var (
 	prng, _ = randutil.NewLockedPseudoRand()
 
 	runID string
+
+	defaultPerfMetricsNode = 1
 )
 
 // VmLabelTestName is the label used to identify the test name in the VM metadata
@@ -1409,6 +1412,13 @@ func (r *testRunner) runTest(
 		if err := r.postTestAssertions(ctx, t, c, 10*time.Minute); err != nil {
 			l.Printf("error during post test assertions: %v; see test-post-assertions.log for details", err)
 		}
+
+		if t.spec.Benchmark && t.ExportOpenmetrics() {
+			if err := r.postProcessPerfMetrics(ctx, t, c); err != nil {
+				l.Printf("error during post process benchmark stats: %v", err)
+			}
+		}
+
 	} else {
 		l.Printf("skipping post test assertions as test failed")
 	}
@@ -1982,6 +1992,50 @@ func (r *testRunner) maybeInitSideEyeClient(ctx context.Context, l *logger.Logge
 		r.sideEyeClient = client
 	}
 	return token
+}
+
+func (r *testRunner) postProcessPerfMetrics(
+	ctx context.Context, t *testImpl, c *clusterImpl,
+) error {
+	resultsDir, err := os.MkdirTemp("", "perf")
+	if err != nil {
+		t.Fatal(errors.Wrap(err, "failed to create temp dir"))
+	}
+	destPath := filepath.Join(resultsDir, roachtestutil.GetBenchmarkMetricsFileName(t))
+
+	if err = roachtestutil.GetPerfArtifacts(ctx, t, c, getPerfArtifactsNode(c), destPath, ""); err != nil {
+		return err
+	}
+	fileBytes, err := os.ReadFile(destPath)
+	if err != nil {
+		return err
+	}
+	perfBuf := bytes.NewBuffer(fileBytes)
+
+	aggregatedMetrics, labels, err := roachtestutil.PostProcessMetrics(t.Name(), perfBuf, t.spec.GetPostProcessWorkloadMetricsFunction())
+	if err != nil {
+		return err
+	}
+
+	finalMetricsBuffer := bytes.NewBuffer([]byte{})
+
+	if err = roachtestutil.GetAggregatedMetricBytes(aggregatedMetrics, labels, t.start, finalMetricsBuffer); err != nil {
+		return err
+	}
+
+	if err := roachtestutil.UploadPerfStats(ctx, t, c, finalMetricsBuffer, getPerfArtifactsNode(c), "aggregated_"); err != nil {
+		return errors.Wrapf(err, "failed to upload metrics")
+	}
+
+	return nil
+}
+
+func getPerfArtifactsNode(c cluster.Cluster) option.NodeListOption {
+	if c.Spec().WorkloadNode {
+		return c.WorkloadNode()
+	}
+
+	return c.Node(defaultPerfMetricsNode)
 }
 
 // completedTestInfo represents information on a completed test run.

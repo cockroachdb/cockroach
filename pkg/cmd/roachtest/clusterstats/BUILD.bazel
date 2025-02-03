@@ -51,7 +51,6 @@ go_test(
     embedsrcs = ["openmetrics_expected.txt"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
-        "//pkg/cmd/roachtest/registry",
         # Required for generated mocks
         "//pkg/cmd/roachtest/roachtestutil/task",  #keep
         "//pkg/cmd/roachtest/spec",
@@ -63,6 +62,7 @@ go_test(
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
         "@com_github_stretchr_testify//require",
+        "//pkg/cmd/roachtest/registry",
     ],
 )
 
