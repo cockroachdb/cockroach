@@ -967,6 +967,19 @@ func ParseJSON(s string, opts ...ParseOption) (JSON, error) {
 	return cfg.parseJSON(s)
 }
 
+func init() {
+	encoding.PrettyPrintJSONValueEncoded = func(b []byte) (string, error) {
+		rem, j, err := DecodeJSON(b)
+		if err != nil {
+			return "", err
+		}
+		if len(rem) != 0 {
+			return "", errors.Newf("unexpected remainder after decoding JSON: %v", rem)
+		}
+		return j.String(), nil
+	}
+}
+
 // EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
 // one per unique path through the receiver.
 func EncodeInvertedIndexKeys(b []byte, json JSON) ([][]byte, error) {

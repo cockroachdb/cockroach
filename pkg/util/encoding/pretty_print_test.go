@@ -6,14 +6,19 @@
 package encoding_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -32,6 +37,32 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		t.Fatalf("Bad test case. Attempted ipaddr.ParseINet(%q) got err: %d", ip, err)
 	}
 	ba := bitarray.MakeBitArrayFromInt64(6, 9, 5)
+	jString := `{"x": 1, "y": "one"}`
+	j, err := json.ParseJSON(jString)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jEnc, err := json.EncodeJSON(nil /* appendTo */, j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	arrString, arrExp := `{1,2,3}`, `ARRAY[1,2,3]`
+	arr, _, err := tree.ParseDArrayFromString(nil /* ctx */, arrString, types.Int)
+	if err != nil {
+		t.Fatal(err)
+	}
+	arrEnc, err := valueside.Encode(nil, valueside.NoColumnID, arr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tupTyp := types.MakeTuple([]*types.T{types.Int, types.Float, types.Json})
+	i, f := tree.DInt(1), tree.DFloat(2.3)
+	tup := tree.NewDTuple(tupTyp, &i, &f, tree.NewDJSON(j))
+	tupEnc, err := valueside.Encode(nil, valueside.NoColumnID, tup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tupExp := fmt.Sprintf(`(1, 2.3, '%s')`, jString)
 	tests := []struct {
 		buf      []byte
 		expected string
@@ -54,6 +85,9 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{encoding.EncodeIPAddrValue(nil, encoding.NoColumnID, ipAddr), ip},
 		{encoding.EncodeUUIDValue(nil, encoding.NoColumnID, u), uuidStr},
 		{encoding.EncodeBitArrayValue(nil, encoding.NoColumnID, ba), "B001001"},
+		{encoding.EncodeJSONValue(nil, encoding.NoColumnID, jEnc), jString},
+		{arrEnc, arrExp},
+		{tupEnc, tupExp},
 	}
 	for i, test := range tests {
 		remaining, str, err := encoding.PrettyPrintValueEncoded(test.buf)
