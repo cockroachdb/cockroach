@@ -114,19 +114,23 @@ CREATE TABLE telemetry (
   x INT PRIMARY KEY,
   y INT,
   z JSONB,
+  v VECTOR(3),
   INVERTED INDEX (z),
-  INDEX (y) USING HASH WITH (bucket_count=4)
+  INDEX (y) USING HASH WITH (bucket_count=4),
+  VECTOR INDEX (v)
 )
 
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage
 WHERE feature_name IN (
   'sql.schema.inverted_index',
-  'sql.schema.hash_sharded_index'
+  'sql.schema.hash_sharded_index',
+  'sql.schema.vector_index'
 )
 ----
 sql.schema.inverted_index
 sql.schema.hash_sharded_index
+sql.schema.vector_index
 
 subtest like_table
 
@@ -144,12 +148,14 @@ CREATE TABLE like_table (
   j JSON,
   k INT UNIQUE WITHOUT INDEX,
   t TIMESTAMPTZ DEFAULT current_timestamp() - '5s'::interval ON UPDATE current_timestamp(),
+  v VECTOR(3),
   PRIMARY KEY (a, b),
   UNIQUE INDEX foo (b DESC, c),
   INDEX (c) STORING (j),
   INVERTED INDEX (j),
   UNIQUE WITHOUT INDEX (h),
-  UNIQUE WITHOUT INDEX (h) WHERE h > 0
+  UNIQUE WITHOUT INDEX (h) WHERE h > 0,
+  VECTOR INDEX (v)
 )
 
 statement ok
@@ -166,6 +172,7 @@ like_none  CREATE TABLE public.like_none (
              j JSONB NULL,
              k INT8 NULL,
              t TIMESTAMPTZ NULL,
+             v VECTOR(3) NULL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT like_none_pkey PRIMARY KEY (rowid ASC)
            )
@@ -184,6 +191,7 @@ like_constraints  CREATE TABLE public.like_constraints (
                     j JSONB NULL,
                     k INT8 NULL,
                     t TIMESTAMPTZ NULL,
+                    v VECTOR(3) NULL,
                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                     CONSTRAINT like_constraints_pkey PRIMARY KEY (rowid ASC),
                     CONSTRAINT check_a CHECK (a > 3:::INT8),
@@ -206,10 +214,12 @@ like_indexes  CREATE TABLE public.like_indexes (
                 j JSONB NULL,
                 k INT8 NULL,
                 t TIMESTAMPTZ NULL,
+                v VECTOR(3) NULL,
                 CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
                 UNIQUE INDEX foo (b DESC, c ASC),
                 INDEX like_table_c_idx (c ASC) STORING (j),
-                INVERTED INDEX like_table_j_idx (j)
+                INVERTED INDEX like_table_j_idx (j),
+                VECTOR INDEX like_table_v_idx (v)
               )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
@@ -227,6 +237,7 @@ like_generated  CREATE TABLE public.like_generated (
                   j JSONB NULL,
                   k INT8 NULL,
                   t TIMESTAMPTZ NULL,
+                  v VECTOR(3) NULL,
                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                   CONSTRAINT like_generated_pkey PRIMARY KEY (rowid ASC)
                 )
@@ -245,6 +256,7 @@ like_defaults  CREATE TABLE public.like_defaults (
                  j JSONB NULL,
                  k INT8 NULL,
                  t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
+                 v VECTOR(3) NULL,
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT like_defaults_pkey PRIMARY KEY (rowid ASC)
                )
@@ -263,10 +275,12 @@ like_all  CREATE TABLE public.like_all (
             j JSONB NULL,
             k INT8 NULL,
             t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
+            v VECTOR(3) NULL,
             CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
             UNIQUE INDEX foo (b DESC, c ASC),
             INDEX like_table_c_idx (c ASC) STORING (j),
             INVERTED INDEX like_table_j_idx (j),
+            VECTOR INDEX like_table_v_idx (v),
             CONSTRAINT check_a CHECK (a > 3:::INT8),
             CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
             CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
@@ -289,10 +303,12 @@ like_mixed  CREATE TABLE public.like_mixed (
               j JSONB NULL,
               k INT8 NULL,
               t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
+              v VECTOR(3) NULL,
               CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
               UNIQUE INDEX foo (b DESC, c ASC),
               INDEX like_table_c_idx (c ASC) STORING (j),
-              INVERTED INDEX like_table_j_idx (j)
+              INVERTED INDEX like_table_j_idx (j),
+              VECTOR INDEX like_table_v_idx (v)
             )
 
 statement ok
@@ -335,6 +351,7 @@ like_more_specifiers  CREATE TABLE public.like_more_specifiers (
                         j JSONB NULL,
                         k INT8 NULL,
                         t TIMESTAMPTZ NULL,
+                        v VECTOR(3) NULL,
                         z DECIMAL NULL,
                         blah INT8 NULL,
                         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
@@ -1210,3 +1227,6 @@ CREATE TABLE create_table_index_elem_duplicate_storage_params_e (
 );
 
 subtest end
+
+statement error pq: unimplemented: column col2 has type refcursor, which is not indexable\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/35730/dev
+CREATE TABLE not_indexable (COL1 INT PRIMARY KEY, COL2 REFCURSOR, COL3 REFCURSOR, INDEX (COL2, COL3))

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
@@ -424,7 +425,7 @@ func populateInvertedIndexDescriptor(
 			return newUndefinedOpclassError(invCol.OpClass)
 		}
 	default:
-		return tabledesc.NewInvalidInvertedColumnError(column.GetName(), column.GetType().Name())
+		return sqlerrors.NewInvalidLastColumnError(column.GetName(), column.GetType().Name(), idxtype.INVERTED)
 	}
 	return nil
 }

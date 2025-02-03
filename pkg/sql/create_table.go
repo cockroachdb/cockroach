@@ -1887,9 +1887,6 @@ func NewTableDesc(
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
-			if d.Type == idxtype.VECTOR {
-				return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
-			}
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
@@ -1949,6 +1946,14 @@ func NewTableDesc(
 					ctx, evalCtx.Settings, column, &idx, columns[len(columns)-1]); err != nil {
 					return nil, err
 				}
+			}
+			if d.Type == idxtype.VECTOR {
+				column, err := catalog.MustFindColumnByName(&desc, idx.VectorColumnName())
+				if err != nil {
+					return nil, err
+				}
+				idx.VecConfig.Dims = column.GetType().Width()
+				idx.VecConfig.Seed = evalCtx.GetRNG().Int63()
 			}
 
 			var idxPartitionBy *tree.PartitionBy
@@ -2393,6 +2398,12 @@ func NewTableDesc(
 				telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
 			}
 		}
+		if idx.GetType() == idxtype.VECTOR {
+			telemetry.Inc(sqltelemetry.VectorIndexCounter)
+			if idx.NumKeyColumns() > 1 {
+				telemetry.Inc(sqltelemetry.MultiColumnVectorIndexCounter)
+			}
+		}
 		if idx.IsPartial() {
 			telemetry.Inc(sqltelemetry.PartialIndexCounter)
 		}
@@ -2809,8 +2820,8 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					indexDef.Columns = append(indexDef.Columns, elem)
 				}
 				// The last column of an inverted or vector index cannot have an
-				// explicit direction.
-				if !indexDef.Type.AllowExplicitDirection() {
+				// explicit direction, because it does not have a linear ordering.
+				if !indexDef.Type.HasLinearOrdering() {
 					indexDef.Columns[len(indexDef.Columns)-1].Direction = tree.DefaultDirection
 				}
 				for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {

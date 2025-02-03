@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -57,17 +58,19 @@ func TestIndexInterface(t *testing.T) {
 			c5 VARCHAR,
 			c6 JSONB,
 			c7 GEOGRAPHY(GEOMETRY,4326) NULL,
+			c8 VECTOR(3),
 			CONSTRAINT pk PRIMARY KEY (c1 ASC, c2 ASC, c3 ASC),
 			INDEX s1 (c4 DESC, c5 DESC),
 			INVERTED INDEX s2 (c6),
 			INDEX s3 (c2, c3) STORING (c5, c6),
 			INDEX s4 (c5) USING HASH WITH (bucket_count=8),
 			UNIQUE INDEX s5 (c1, c4) WHERE c4 = 'x',
-			INVERTED INDEX s6 (c7) WITH (s2_level_mod=2)
+			INVERTED INDEX s6 (c7) WITH (s2_level_mod=2),
+			VECTOR INDEX s7 (c8)
 		);
 	`)
 
-	indexNames := []string{"pk", "s1", "s2", "s3", "s4", "s5", "s6"}
+	indexNames := []string{"pk", "s1", "s2", "s3", "s4", "s5", "s6", "s7"}
 	indexColumns := [][]string{
 		{"c1", "c2", "c3"},
 		{"c4", "c5"},
@@ -76,6 +79,7 @@ func TestIndexInterface(t *testing.T) {
 		{"crdb_internal_c5_shard_8", "c5"},
 		{"c1", "c4"},
 		{"c7"},
+		{"c8"},
 	}
 	extraColumnsAsPkColOrdinals := [][]int{
 		{},
@@ -84,6 +88,7 @@ func TestIndexInterface(t *testing.T) {
 		{0},
 		{0, 1, 2},
 		{1, 2},
+		{0, 1, 2},
 		{0, 1, 2},
 	}
 
@@ -110,6 +115,7 @@ func TestIndexInterface(t *testing.T) {
 	s4 := indexes[4]
 	s5 := indexes[5]
 	s6 := indexes[6]
+	s7 := indexes[7]
 
 	// Check that GetPrimaryIndex returns the primary index.
 	require.Equal(t, pk, tableI.GetPrimaryIndex())
@@ -265,6 +271,7 @@ func TestIndexInterface(t *testing.T) {
 	require.Equal(t, "c4 = 'x':::STRING", s5.GetPredicate())
 	require.Equal(t, "crdb_internal_c5_shard_8", s4.GetShardColumnName())
 	require.Equal(t, int32(2), s6.GetGeoConfig().S2Geography.S2Config.LevelMod)
+	require.Equal(t, int32(3), s7.GetVecConfig().Dims)
 	for _, idx := range indexes {
 		require.Equalf(t, idx == s5, idx.IsPartial(),
 			errMsgFmt, "IsPartial", idx.GetName())
@@ -284,6 +291,9 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "GetSharded", idx.GetName())
 		require.Equalf(t, idx != s3, idx.NumSecondaryStoredColumns() == 0,
 			errMsgFmt, "NumSecondaryStoredColumns", idx.GetName())
+		vecConfig := idx.GetVecConfig()
+		require.Equal(t, idx == s7, !(&vecpb.Config{}).Equal(&vecConfig),
+			errMsgFmt, "GetVecConfig", idx.GetName())
 	}
 
 	// Check index columns.
@@ -326,6 +336,8 @@ func TestIndexInterface(t *testing.T) {
 	require.Equal(t, 2, s3.NumSecondaryStoredColumns())
 	require.Equal(t, "c5", s3.GetStoredColumnName(0))
 	require.Equal(t, "c6", s3.GetStoredColumnName(1))
+	require.Equal(t, s7.GetKeyColumnID(0), s7.VectorColumnID())
+	require.Equal(t, "c8", s7.VectorColumnName())
 }
 
 // TestIndexStrictColumnIDs tests that the index format version value

@@ -742,6 +742,17 @@ var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+var planCacheClusterMode = settings.RegisterEnumSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.plan_cache_mode",
+	"default value for plan_cache_mode session setting",
+	"auto",
+	map[sessiondatapb.PlanCacheMode]string{
+		sessiondatapb.PlanCacheModeForceCustom:  "force_custom_plan",
+		sessiondatapb.PlanCacheModeForceGeneric: "force_generic_plan",
+		sessiondatapb.PlanCacheModeAuto:         "auto",
+	})
+
 var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
 var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")
 
