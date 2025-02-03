@@ -589,22 +589,10 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, err
 	}
 
-	checkpointedSpanTs := ca.spec.Checkpoint.Timestamp
-
-	// Checkpoint records from 21.2 were used only for backfills and did not store
-	// the timestamp, since in a backfill it must either be the StatementTime for
-	// an initial backfill, or right after the high-water for schema backfills.
-	if checkpointedSpanTs.IsEmpty() {
-		if initialHighWater.IsEmpty() {
-			checkpointedSpanTs = ca.spec.Feed.StatementTime
-		} else {
-			checkpointedSpanTs = initialHighWater.Next()
-		}
-	}
 	// Checkpointed spans are spans that were above the highwater mark, and we
 	// must preserve that information in the frontier for future checkpointing.
 	for _, checkpointedSpan := range ca.spec.Checkpoint.Spans {
-		if _, err := ca.frontier.Forward(checkpointedSpan, checkpointedSpanTs); err != nil {
+		if _, err := ca.frontier.Forward(checkpointedSpan, ca.spec.Checkpoint.Timestamp); err != nil {
 			return nil, err
 		}
 	}
