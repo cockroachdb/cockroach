@@ -78,9 +78,9 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 			id := rn.Status().ID
 			// NB: we grab the messages just to see whether to print the header.
 			// DeliverMsgs will do it again.
-			if msgs, _ := splitMsgs(env.Messages, id, -1 /* typ */, false /* drop */); len(msgs) > 0 {
+			if msgs, _ := splitMsgs(env.Messages, id, -1 /* typ */, false /* drop */, 0); len(msgs) > 0 {
 				fmt.Fprintf(env.Output, "> %d receiving messages\n", id)
-				env.withIndent(func() { env.DeliverMsgs(-1 /* typ */, Recipient{ID: id}) })
+				env.withIndent(func() { env.DeliverMsgs(-1 /* typ */, 0, Recipient{ID: id}) })
 				done = false
 			}
 		}
@@ -116,13 +116,18 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 
 // splitMsgs extracts messages for the given recipient of the given type (-1 for
 // all types) from msgs, and returns them along with the remainder of msgs.
+// Use ct to specify the number of messages to extract,
+// ct = 0 for all msgs available
 func splitMsgs(
-	msgs []raftpb.Message, to raftpb.PeerID, typ raftpb.MessageType, drop bool,
+	msgs []raftpb.Message, to raftpb.PeerID, typ raftpb.MessageType, drop bool, ct int,
 ) (toMsgs []raftpb.Message, rmdr []raftpb.Message) {
 	// NB: this method does not reorder messages.
+	i := 0
+
 	for _, msg := range msgs {
-		if msg.To == to && !(drop && isLocalMsg(msg)) && (typ < 0 || msg.Type == typ) {
+		if msg.To == to && !(drop && isLocalMsg(msg)) && (typ < 0 || msg.Type == typ) && (i < ct || ct == 0) {
 			toMsgs = append(toMsgs, msg)
+			i++
 		} else {
 			rmdr = append(rmdr, msg)
 		}

@@ -62,10 +62,12 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		err = env.handleCompact(t, d)
 	case "deliver-msgs":
 		// Deliver the messages for a given recipient.
+		// Use count to specify total number of msgs to deliver.
+		// Not including count means to deliver all available msgs
 		//
 		// Example:
 		//
-		// deliver-msgs <idx> type=MsgApp drop=(2,3)
+		// deliver-msgs <idx> type=MsgApp count=1 drop=(2,3)
 		err = env.handleDeliverMsgs(t, d)
 	case "process-ready":
 		// Example:
