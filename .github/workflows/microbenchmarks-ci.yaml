@@ -93,7 +93,7 @@ jobs:
           HEAD_SHA: ${{ env.HEAD }}
   post:
     runs-on: [ self-hosted, basic_runner_group ]
-    if: false # TODO: enable this once results are confirmed to be stable on CI.
+    if: contains(github.event.pull_request.labels.*.name, 'T-microbench-post')
     timeout-minutes: 30
     permissions:
         contents: read
@@ -103,7 +103,7 @@ jobs:
       - name: Checkout Base
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ env.HEAD }}
       - name: Unique Build ID
         run: echo "BUILD_ID=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_ENV
       - name: Compare and Post

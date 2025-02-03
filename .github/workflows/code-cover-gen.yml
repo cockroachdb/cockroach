@@ -6,6 +6,7 @@ on:
 
 jobs:
   code-cover-gen:
+    if: false  # This will always skip this job
     runs-on: ubuntu-latest
     env:
       PR: ${{ github.event.pull_request.number }}
