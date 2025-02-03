@@ -1683,16 +1683,6 @@ func (t *logicTest) newCluster(
 		tenantID := serverutils.TestTenantID()
 		conn := t.cluster.SystemLayer(0).SQLConn(t.rootT)
 
-		// TODO(rafi): Remove this setting. We're adding it since the 3node-tenant
-		// config seem to be flaky with autcommit_before_ddl = true. Disable that
-		// setting for multitenant configs while the issue is being investigated.
-		if _, err := conn.Exec(
-			"ALTER TENANT [$1] SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = false",
-			tenantID.ToUint64(),
-		); err != nil {
-			t.Fatal(err)
-		}
-
 		clusterSettings := toa.clusterSettings
 		if len(clusterSettings) > 0 {
 			// We reduce the closed timestamp duration on the host tenant so that the
