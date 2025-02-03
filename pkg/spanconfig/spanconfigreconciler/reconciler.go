@@ -522,6 +522,17 @@ func (r *incrementalReconciler) reconcile(
 			) error {
 				var err error
 
+				// Using a fixed timestamp prevents this background job from contending
+				// with foreground schema change traffic. Schema changes modify system
+				// objects like system.descriptor, system.descriptor_id_seq, and
+				// system.span_count. The spanconfig reconciler needs to read these
+				// objects also. A fixed timestamp will avoid contention, and is also
+				// more correct since this job should read descriptors using the same
+				// timestamp at which the rangefeed was checkpointed.
+				err = txn.KV().SetFixedTimestamp(ctx, checkpoint)
+				if err != nil {
+					return err
+				}
 				// TODO(irfansharif): Instead of these filter methods for missing
 				// tables and system targets that live on the Reconciler, we could
 				// move this to the SQLTranslator instead, now that the SQLTranslator
