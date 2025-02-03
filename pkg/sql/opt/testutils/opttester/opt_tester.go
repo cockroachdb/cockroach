@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
@@ -300,6 +301,10 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 	ot.evalCtx.SessionData().UserProto = username.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
 	ot.evalCtx.SessionData().Database = "defaultdb"
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
+	// Manually set plan_cache_mode to auto. The default is currently
+	// "force_custom_plan", but will become "auto" soon. Running the optimizer
+	// tests as "auto" will make future backports less painful.
+	ot.evalCtx.SessionData().PlanCacheMode = sessiondatapb.PlanCacheModeAuto
 
 	return ot
 }

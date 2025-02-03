@@ -746,7 +746,7 @@ var planCacheClusterMode = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.plan_cache_mode",
 	"default value for plan_cache_mode session setting",
-	"auto",
+	"force_custom_plan",
 	map[sessiondatapb.PlanCacheMode]string{
 		sessiondatapb.PlanCacheModeForceCustom:  "force_custom_plan",
 		sessiondatapb.PlanCacheModeForceGeneric: "force_generic_plan",
