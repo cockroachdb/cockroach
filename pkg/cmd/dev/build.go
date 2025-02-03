@@ -92,6 +92,7 @@ var buildTargetMapping = map[string]string{
 	"geos":                 geosTarget,
 	"langgen":              "//pkg/sql/opt/optgen/cmd/langgen:langgen",
 	"libgeos":              geosTarget,
+	"microbench-ci":        "//pkg/cmd/microbench-ci:microbench-ci",
 	"optgen":               "//pkg/sql/opt/optgen/cmd/optgen:optgen",
 	"optfmt":               "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
 	"reduce":               "//pkg/cmd/reduce:reduce",
