@@ -3143,6 +3143,10 @@ type sessionDataMutatorCallbacks struct {
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	// It can be nil, in which case nothing triggers on execution.
 	setCurTxnReadOnly func(readOnly bool) error
+	// setBufferedWritesEnabled is called when we execute SET kv_transaction_buffered_writes_enabled = ...
+	// It can be nil, in which case nothing triggers on execution (apart from
+	// modification of the session data).
+	setBufferedWritesEnabled func(enabled bool)
 	// upgradedIsolationLevel is called whenever the transaction isolation
 	// session variable is configured and the isolation level is automatically
 	// upgraded to a stronger one. It's also used when the isolation level is
@@ -4010,6 +4014,13 @@ func (m *sessionDataMutator) SetOptimizerPreferBoundedCardinality(b bool) {
 
 func (m *sessionDataMutator) SetOptimizerMinRowCount(val float64) {
 	m.data.OptimizerMinRowCount = val
+}
+
+func (m *sessionDataMutator) SetBufferedWritesEnabled(b bool) {
+	m.data.BufferedWritesEnabled = b
+	if m.setBufferedWritesEnabled != nil {
+		m.setBufferedWritesEnabled(b)
+	}
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

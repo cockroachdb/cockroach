@@ -397,6 +397,24 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
+func (txn *Txn) SetBufferedWritesEnabled(enabled bool) {
+	if txn.typ != RootTxn {
+		panic(errors.AssertionFailedf("SetBufferedWritesEnabled() called on leaf txn"))
+	}
+
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
+	txn.mu.sender.SetBufferedWritesEnabled(enabled)
+}
+
+func (txn *Txn) BufferedWritesEnabled() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
+	return txn.mu.sender.BufferedWritesEnabled()
+}
+
 // String returns a string version of this transaction.
 func (txn *Txn) String() string {
 	txn.mu.Lock()
