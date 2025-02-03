@@ -118,7 +118,8 @@ type Smither struct {
 	// disableUDFCreation indicates whether we're not allowed to create UDFs.
 	// It follows that if we haven't created any UDFs, we have no UDFs to invoke
 	// too.
-	disableUDFCreation bool
+	disableUDFCreation     bool
+	disableIsolationChange bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -598,6 +599,12 @@ var DisableOIDs = simpleOption("disable OIDs", func(s *Smither) {
 // DisableUDFs causes the Smither to disable user-defined functions.
 var DisableUDFs = simpleOption("disable udfs", func(s *Smither) {
 	s.disableUDFCreation = true
+})
+
+// DisableIsolationChange causes the Smither to disable stmts that modify the
+// txn isolation level.
+var DisableIsolationChange = simpleOption("disable isolation change", func(s *Smither) {
+	s.disableIsolationChange = true
 })
 
 // CompareMode causes the Smither to generate statements that have

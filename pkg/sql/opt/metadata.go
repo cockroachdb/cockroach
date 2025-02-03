@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -383,6 +384,33 @@ func (md *Metadata) dependencyDigestEquals(currentDigest *cat.DependencyDigest) 
 	return currentDigest.Equal(&md.digest.depDigest)
 }
 
+// leaseObjectsInMetaData ensures that all references within this metadata
+// are leased to prevent schema changes from modifying the underlying objects
+// excessively.
+func (md *Metadata) leaseObjectsInMetaData(ctx context.Context, optCatalog cat.Catalog) error {
+	for id := range md.dataSourceDeps {
+		if err := optCatalog.LeaseByStableID(ctx, id); err != nil {
+			return err
+		}
+	}
+	for id := range md.routineDeps {
+		if err := optCatalog.LeaseByStableID(ctx, id); err != nil {
+			return err
+		}
+	}
+	for oid := range md.userDefinedTypes {
+		id := typedesc.UserDefinedTypeOIDToID(oid)
+		// Not a user defined type.
+		if id == catid.InvalidDescID {
+			continue
+		}
+		if err := optCatalog.LeaseByStableID(ctx, cat.StableID(id)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CheckDependencies resolves (again) each database object on which this
 // metadata depends, in order to check the following conditions:
 //  1. The object has not been modified.
@@ -409,7 +437,12 @@ func (md *Metadata) CheckDependencies(
 		evalCtx.AsOfSystemTime == nil &&
 		!evalCtx.Txn.ReadTimestampFixed() &&
 		md.dependencyDigestEquals(&currentDigest) {
-		return true, nil
+		// Lease the underlying descriptors for this metadata. If we fail to lease
+		// any descriptors attempt to resolve them by name through the more expensive
+		// code path below.
+		if err := md.leaseObjectsInMetaData(ctx, optCatalog); err == nil {
+			return true, nil
+		}
 	}
 
 	// Check that no referenced data sources have changed.
