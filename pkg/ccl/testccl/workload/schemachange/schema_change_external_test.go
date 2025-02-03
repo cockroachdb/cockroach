@@ -34,7 +34,6 @@ func TestWorkload(t *testing.T) {
 	defer ccl.TestingEnableEnterprise()()
 	skip.UnderDeadlock(t, "test connections can be too slow under expensive configs")
 	skip.UnderRace(t, "test connections can be too slow under expensive configs")
-	skip.WithIssue(t, 140411)
 
 	scope := log.Scope(t)
 	defer scope.Close(t)
