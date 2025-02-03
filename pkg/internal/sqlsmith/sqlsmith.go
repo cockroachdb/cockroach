@@ -361,6 +361,7 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 		{5, makeUpdate},
 		{1, makeDelete},
 		{1, makeCreateStats},
+		{1, makeSetSessionCharacteristics},
 		// If we don't have any DDL's, allow for use of savepoints and transactions.
 		{2, makeBegin},
 		{2, makeSavepoint},
@@ -373,7 +374,8 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 })
 
 // OnlySingleDMLs causes the Smither to only emit single-statement DML (SELECT,
-// INSERT, UPDATE, DELETE) and CREATE STATISTICS statements.
+// INSERT, UPDATE, DELETE), CREATE STATISTICS, and SET SESSION CHARACTERISTICS
+// statements.
 var OnlySingleDMLs = simpleOption("only single DMLs", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
 		{20, makeSelect},
@@ -381,6 +383,7 @@ var OnlySingleDMLs = simpleOption("only single DMLs", func(s *Smither) {
 		{5, makeUpdate},
 		{1, makeDelete},
 		{1, makeCreateStats},
+		{1, makeSetSessionCharacteristics},
 	}
 })
 
@@ -443,24 +446,26 @@ var SimpleNames = simpleOption("simple names", func(s *Smither) {
 	s.simpleNames = true
 })
 
-// MutationsOnly causes the Smither to emit 70% INSERT, 10% UPDATE, 10% DELETE,
-// and 10% CREATE STATISTICS statements.
+// MutationsOnly causes the Smither to emit 60% INSERT, 10% UPDATE, 10% DELETE,
+// 10% CREATE STATISTICS, and 10% SET SESSION CHARACTERISTICS statements.
 var MutationsOnly = simpleOption("mutations only", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
-		{7, makeInsert},
+		{6, makeInsert},
 		{1, makeUpdate},
 		{1, makeDelete},
 		{1, makeCreateStats},
+		{1, makeSetSessionCharacteristics},
 	}
 })
 
-// InsUpdOnly causes the Smither to emit 80% INSERT, 10% UPDATE, and 10% CREATE
-// STATISTICS statements.
+// InsUpdOnly causes the Smither to emit 70% INSERT, 10% UPDATE, 10% CREATE
+// STATISTICS, and 10% SET SESSION CHARACTERISTICS statements.
 var InsUpdOnly = simpleOption("inserts and updates only", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
-		{8, makeInsert},
+		{7, makeInsert},
 		{1, makeUpdate},
 		{1, makeCreateStats},
+		{1, makeSetSessionCharacteristics},
 	}
 })
 
