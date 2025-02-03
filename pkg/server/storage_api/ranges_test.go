@@ -159,7 +159,6 @@ func TestRangeResponse(t *testing.T) {
 	t.Run("access range endpoint within system tenant's scope", func(t *testing.T) {
 		if isSystemTenant {
 			require.NoError(t, validateRangeBelongsToTenant(ts, 1))
-			t.Logf("Executing the test case 2 for range/1")
 		} else {
 			expectedError := fmt.Errorf("got the wrong number of ranges in the response, expected %d, actual %d", 1, 0)
 			actualError := validateRangeBelongsToTenant(ts, 1)
