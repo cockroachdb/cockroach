@@ -319,9 +319,14 @@ func (tc *Catalog) CheckExecutionPrivilege(
 
 // HasAdminRole is part of the cat.Catalog interface.
 func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
-	roleMembership, found := tc.users[tc.currentUser]
+	return tc.UserHasAdminRole(ctx, tc.currentUser)
+}
+
+// UserHasAdminRole is part of the cat.Catalog interface.
+func (tc *Catalog) UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error) {
+	roleMembership, found := tc.users[user]
 	if !found {
-		return false, errors.AssertionFailedf("user %q not found", tc.currentUser)
+		return false, errors.AssertionFailedf("user %q not found", user)
 	}
 	return roleMembership.isMemberOfAdminRole, nil
 }
@@ -477,6 +482,7 @@ func (tc *Catalog) GetDependencyDigest() cat.DependencyDigest {
 	tc.dependencyDigest++
 	return cat.DependencyDigest{
 		LeaseGeneration: tc.dependencyDigest,
+		CurrentUser:     tc.currentUser,
 	}
 }
 

@@ -438,6 +438,13 @@ func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return oc.planner.HasAdminRole(ctx)
 }
 
+// UserHasAdminRole is part of the cat.Catalog interface.
+func (oc *optCatalog) UserHasAdminRole(
+	ctx context.Context, user username.SQLUsername,
+) (bool, error) {
+	return oc.planner.UserHasAdminRole(ctx, user)
+}
+
 // HasRoleOption is part of the cat.Catalog interface.
 func (oc *optCatalog) HasRoleOption(
 	ctx context.Context, roleOption roleoption.Option,
