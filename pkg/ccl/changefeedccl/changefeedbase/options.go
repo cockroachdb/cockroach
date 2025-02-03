@@ -149,6 +149,7 @@ const (
 	OptEnvelopeDeprecatedRow EnvelopeType = `deprecated_row`
 	OptEnvelopeWrapped       EnvelopeType = `wrapped`
 	OptEnvelopeBare          EnvelopeType = `bare`
+	OptEnvelopeEnriched      EnvelopeType = `enriched`
 
 	OptFormatJSON    FormatType = `json`
 	OptFormatAvro    FormatType = `avro`
@@ -342,7 +343,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptCursor:                             timestampOption,
 	OptCustomKeyColumn:                    stringOption,
 	OptEndTime:                            timestampOption,
-	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare"),
+	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare", "enriched"),
 	OptFormat:                             enum("json", "avro", "csv", "experimental_avro", "parquet"),
 	OptFullTableName:                      flagOption,
 	OptKeyInValue:                         flagOption,
@@ -848,6 +849,10 @@ func (e EncodingOptions) Validate() error {
 	if e.Format != OptFormatJSON && e.EncodeJSONValueNullAsObject {
 		return errors.Errorf(`%s is only usable with %s=%s`, OptEncodeJSONValueNullAsObject, OptFormat, OptFormatJSON)
 	}
+	if e.Envelope == OptEnvelopeEnriched && !(e.Format == OptFormatJSON || e.Format == OptFormatAvro) {
+		return errors.Errorf(`%s=%s is only usable with %s=%s/%s`, OptEnvelope, OptEnvelopeEnriched, OptFormat, OptFormatJSON, OptFormatAvro)
+	}
+
 	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
 		requiresWrap := []struct {
 			k string
