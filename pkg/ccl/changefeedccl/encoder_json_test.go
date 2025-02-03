@@ -13,13 +13,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/importer"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -301,4 +311,42 @@ func mkTargets(tableDesc catalog.TableDescriptor) changefeedbase.Targets {
 		StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 	})
 	return targets
+}
+
+var testTypes = make(map[string]*types.T)
+var testTypeResolver = tree.MakeTestingMapTypeResolver(testTypes)
+
+const primary = descpb.FamilyID(0)
+
+func makeTestSemaCtx() tree.SemaContext {
+	return tree.MakeSemaContext(testTypeResolver)
+}
+
+func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
+	ctx := context.Background()
+	stmt, err := parser.ParseOne(createTableStmt)
+	if err != nil {
+		return nil, errors.Wrapf(err, `parsing %s`, createTableStmt)
+	}
+	createTable, ok := stmt.AST.(*tree.CreateTable)
+	if !ok {
+		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
+	}
+	st := cluster.MakeTestingClusterSettings()
+	parentID := descpb.ID(bootstrap.TestingUserDescID(0))
+	tableID := descpb.ID(bootstrap.TestingUserDescID(1))
+	semaCtx := makeTestSemaCtx()
+	mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
+		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, timeutil.Now().UnixNano())
+	if err != nil {
+		return nil, err
+	}
+	columnNames := make([]string, len(mutDesc.PublicColumns()))
+	for i, col := range mutDesc.PublicColumns() {
+		columnNames[i] = col.GetName()
+	}
+	mutDesc.Families = []descpb.ColumnFamilyDescriptor{
+		{ID: primary, Name: "primary", ColumnIDs: mutDesc.PublicColumnIDs(), ColumnNames: columnNames},
+	}
+	return mutDesc, desctestutils.TestingValidateSelf(mutDesc)
 }

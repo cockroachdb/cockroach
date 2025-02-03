@@ -22,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1311,4 +1314,35 @@ func TestAvroWithRegionalTable(t *testing.T) {
 			})
 		})
 	}
+}
+
+// Create a thin, in-memory user-defined enum type
+func createEnum(enumLabels tree.EnumValueList, typeName tree.TypeName) *types.T {
+
+	members := make([]descpb.TypeDescriptor_EnumMember, len(enumLabels))
+	physReps := enum.GenerateNEvenlySpacedBytes(len(enumLabels))
+	for i := range enumLabels {
+		members[i] = descpb.TypeDescriptor_EnumMember{
+			LogicalRepresentation:  string(enumLabels[i]),
+			PhysicalRepresentation: physReps[i],
+			Capability:             descpb.TypeDescriptor_EnumMember_ALL,
+		}
+	}
+
+	enumKind := descpb.TypeDescriptor_ENUM
+
+	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+		Name:        typeName.Type(),
+		ID:          0,
+		Kind:        enumKind,
+		EnumMembers: members,
+		Version:     1,
+	}).BuildCreatedMutableType()
+
+	typ, _ := typedesc.HydratedTFromDesc(context.Background(), &typeName, typeDesc, nil /* res */)
+
+	testTypes[typeName.SQLString()] = typ
+
+	return typ
+
 }
