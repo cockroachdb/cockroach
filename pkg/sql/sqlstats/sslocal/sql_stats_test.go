@@ -475,7 +475,8 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 			statsCollector.EndTransaction(ctx, txnFingerprintID, testCase.implicit /* implicit */)
 			require.NoError(t,
 				statsCollector.
-					RecordTransaction(ctx, txnFingerprintID, sqlstats.RecordedTxnStats{
+					RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
+						FingerprintID: txnFingerprintID,
 						SessionData: &sessiondata.SessionData{
 							SessionData: sessiondatapb.SessionData{
 								UserProto:       username.RootUserName().EncodeProto(),
@@ -487,13 +488,11 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		}()
 		for _, fingerprint := range testCase.fingerprints {
 			stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, testCase.implicit, "defaultdb")
-			err := statsCollector.RecordStatement(
-				ctx, &sqlstats.RecordedStmtStats{
-					FingerprintID: stmtFingerprintID,
-					Query:         fingerprint,
-					ImplicitTxn:   testCase.implicit,
-				},
-			)
+			err := statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+				FingerprintID: stmtFingerprintID,
+				Query:         fingerprint,
+				ImplicitTxn:   testCase.implicit,
+			})
 			require.NoError(t, err)
 			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 		}
@@ -598,16 +597,17 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			txnFingerprintIDHash := util.MakeFNV64()
 			for _, fingerprint := range txn.stmtFingerprints {
 				stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, false, "defaultdb")
-				err := statsCollector.RecordStatement(
-					ctx, &sqlstats.RecordedStmtStats{FingerprintID: stmtFingerprintID, Query: fingerprint},
-				)
+				err := statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+					FingerprintID: stmtFingerprintID,
+					Query:         fingerprint,
+				})
 				require.NoError(t, err)
 				txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 			}
 
 			transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
 			statsCollector.EndTransaction(ctx, transactionFingerprintID, false /* implicit */)
-			err := statsCollector.RecordTransaction(ctx, transactionFingerprintID, sqlstats.RecordedTxnStats{
+			err := statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 				SessionData: &sessiondata.SessionData{
 					SessionData: sessiondatapb.SessionData{
 						UserProto:       username.RootUserName().EncodeProto(),
@@ -737,7 +737,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 				finishedExecute.Store(true)
 			}
 		},
-		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, _ sqlstats.RecordedTxnStats) {
+		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, _ *sqlstats.RecordedTxnStats) {
 			tc.Lock()
 			defer tc.Unlock()
 			if !isInternal && tc.query == stmt && finishedExecute.Load() {
