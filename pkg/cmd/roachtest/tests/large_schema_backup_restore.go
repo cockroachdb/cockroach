@@ -56,6 +56,9 @@ func largeSchemaBackupRestore(r registry.Registry, numTables int) {
 			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
+			_, err := conn.ExecContext(ctx, "SET autocommit_before_ddl = false")
+			require.NoError(t, err)
+
 			t.L().Printf("Creating tables")
 			tx, err := conn.BeginTx(ctx, nil)
 			require.NoError(t, err)
