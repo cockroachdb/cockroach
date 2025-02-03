@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -1299,7 +1300,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
-			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false, changefeedbase.OptEnvelopeWrapped)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				// Skip errors that may come up during SQL execution. If the SQL query
@@ -3845,6 +3846,51 @@ func TestChangefeedBareAvro(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func TestChangefeedEnriched(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope=enriched`)
+		defer closeFeed(t, foo)
+		// TODO(#139660): the webhook sink forces topic_in_value, but
+		// this is not supported by the enriched envelope type. We should adapt
+		// the test framework to account for this.
+		topic := "foo"
+		if _, ok := foo.(*webhookFeed); ok {
+			topic = ""
+		}
+		assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{
+			fmt.Sprintf(`%s: [0]->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic),
+		})
+	}
+	supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
+	for _, sink := range supportedSinks {
+		cdcTest(t, testFn, feedTestForceSink(sink))
+	}
+}
+
+func TestChangefeedEnrichedAvro(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='localhost:90909'`)
+		// The feed should allow this configuration.
+		defer closeFeed(t, foo)
+		// TODO(#139660): assert messages once this envelope type is integrated into the test suite.
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
 func TestChangefeedExpressionUsesSerializedSessionData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5927,6 +5973,46 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
 		`kafka://nope`)
+
+	sqlDB.ExpectErrWithTimeout(
+		t, `envelope enriched is incompatible with SELECT statement`,
+		`CREATE CHANGEFEED INTO 'null://' WITH envelope=enriched AS SELECT * from foo`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `envelope=enriched is only usable with format=json/avro`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH envelope=enriched, format=csv, initial_scan='only'`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		// I also would have accepted "this sink is incompatible with envelope=enriched".
+		t, `envelope=enriched is only usable with format=json/avro`,
+		`CREATE CHANGEFEED FOR foo INTO 'nodelocal://.' WITH envelope=enriched, format=parquet`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `this sink is incompatible with envelope=enriched`,
+		`CREATE CHANGEFEED FOR foo INTO 'nodelocal://.' WITH envelope=enriched`,
+	)
+
+	t.Run("sinkless enriched non-json", func(t *testing.T) {
+		skip.WithIssue(t, 130949, "sinkless feed validations are subpar")
+		sqlDB.ExpectErrWithTimeout(
+			t, `some error`,
+			`CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='http://localhost:8888'`,
+		)
+	})
+
+	t.Run("enriched alters", func(t *testing.T) {
+		res := sqlDB.QueryStr(t, `CREATE CHANGEFEED FOR FOO INTO 'null://' WITH envelope=enriched`)
+		jobIDStr := res[0][0]
+		jobID, err := strconv.Atoi(jobIDStr)
+		require.NoError(t, err)
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		waitForJobStatus(sqlDB, t, catpb.JobID(jobID), jobs.StatusPaused)
+		sqlDB.ExpectErrWithTimeout(
+			t, `envelope=enriched is only usable with format=json/avro`,
+			`ALTER CHANGEFEED $1 SET format=parquet`, jobIDStr,
+		)
+	})
+
 }
 
 func TestChangefeedDescription(t *testing.T) {
@@ -8997,7 +9083,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 					nada, expectTimeout,
 					func(ctx context.Context) error {
 						return assertPayloadsBaseErr(
-							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false)
+							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false, changefeedbase.OptEnvelopeWrapped)
 					})
 				return nil
 			}, 20*expectTimeout))
