@@ -145,16 +145,6 @@ func (ex *connExecutor) recordStatementSummary(
 	ex.recordStatementLatencyMetrics(stmt, flags, automaticRetryCount, runLatRaw, svcLatRaw)
 
 	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
-	recordedStmtStatsKey := appstatspb.StatementStatisticsKey{
-		Query:        stmt.StmtNoConstants,
-		QuerySummary: stmt.StmtSummary,
-		DistSQL:      flags.IsDistributed(),
-		Vec:          flags.IsSet(planFlagVectorized),
-		ImplicitTxn:  flags.IsSet(planFlagImplicitTxn),
-		FullScan:     fullScan,
-		Database:     planner.SessionData().Database,
-		PlanHash:     planner.instrumentation.planGist.Hash(),
-	}
 
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
@@ -170,7 +160,18 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	startTime := phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).ToUTC()
-	recordedStmtStats := sqlstats.RecordedStmtStats{
+	recordedStmtStats := &sqlstats.RecordedStmtStats{
+		// Metadata fields.
+		Query:        stmt.StmtNoConstants,
+		QuerySummary: stmt.StmtSummary,
+		DistSQL:      flags.IsDistributed(),
+		Vec:          flags.IsSet(planFlagVectorized),
+		ImplicitTxn:  flags.IsSet(planFlagImplicitTxn),
+		FullScan:     fullScan,
+		Database:     planner.SessionData().Database,
+		PlanHash:     planner.instrumentation.planGist.Hash(),
+
+		// Per-execution metrics.
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,
 		StatementID:          stmt.QueryID,
 		AutoRetryCount:       automaticRetryCount,
@@ -192,19 +193,17 @@ func (ex *connExecutor) recordStatementSummary(
 		PlanGist:             planner.instrumentation.planGist.String(),
 		StatementError:       stmtErr,
 		IndexRecommendations: idxRecommendations,
-		Query:                stmt.StmtNoConstants,
 		StartTime:            startTime,
 		EndTime:              startTime.Add(svcLatRaw),
-		FullScan:             fullScan,
 		ExecStats:            queryLevelStats,
 		// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 		// converting to strings.
-		Indexes:  planner.instrumentation.indexesUsed.Strings(),
-		Database: planner.SessionData().Database,
+		Indexes: planner.instrumentation.indexesUsed.Strings(),
 	}
 
 	stmtFingerprintID, err :=
-		ex.statsCollector.RecordStatement(ctx, recordedStmtStatsKey, recordedStmtStats)
+		ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
+
 	if err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "failed to record statement: %s", err)

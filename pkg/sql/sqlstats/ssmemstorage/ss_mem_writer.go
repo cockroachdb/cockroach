@@ -38,9 +38,10 @@ var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 // Note: This error is only related to the operation of recording the statement
 // statistics into in-memory structs. It is unrelated to the stmtErr in the
 // arguments.
-func (s *Container) RecordStatement(
-	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
-) error {
+func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.RecordedStmtStats) error {
+	// If the statement is below the latency threshold, or stats aren't being
+	// recorded we don't need to create an entry in the stmts map for it. We do
+	// still need stmtFingerprintID for transaction level metrics tracking.
 	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.StmtStatsEnable.Get(&s.st.SV) || (t > 0 && t.Seconds() >= value.ServiceLatencySec) {
@@ -49,15 +50,15 @@ func (s *Container) RecordStatement(
 
 	statementKey := stmtKey{
 		fingerprintID:            value.FingerprintID,
-		planHash:                 key.PlanHash,
-		transactionFingerprintID: key.TransactionFingerprintID,
+		planHash:                 value.PlanHash,
+		transactionFingerprintID: value.TransactionFingerprintID,
 	}
 
 	// Get the statistics object.
 	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, sampledPlanKey{
-		stmtNoConstants: key.Query,
-		implicitTxn:     key.ImplicitTxn,
-		database:        key.Database,
+		stmtNoConstants: value.Query,
+		implicitTxn:     value.ImplicitTxn,
+		database:        value.Database,
 	})
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
@@ -119,10 +120,10 @@ func (s *Container) RecordStatement(
 	// on-demand.
 	// TODO(asubiotto): Record the aforementioned fields here when always-on
 	//  tracing is a thing.
-	stats.mu.vectorized = key.Vec
-	stats.mu.distSQLUsed = key.DistSQL
+	stats.mu.vectorized = value.Vec
+	stats.mu.distSQLUsed = value.DistSQL
 	stats.mu.fullScan = value.FullScan
-	stats.mu.querySummary = key.QuerySummary
+	stats.mu.querySummary = value.QuerySummary
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey
@@ -186,13 +187,11 @@ func (s *Container) TrySetStatementSampled(
 }
 
 // RecordTransaction saves per-transaction statistics.
-func (s *Container) RecordTransaction(
-	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
-) error {
+func (s *Container) RecordTransaction(ctx context.Context, value *sqlstats.RecordedTxnStats) error {
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
 
 	// Get the statistics object.
-	stats, created, throttled := s.tryCreateStatsForTxnWithKey(key, value.StatementFingerprintIDs)
+	stats, created, throttled := s.tryCreateStatsForTxnWithKey(value.FingerprintID, value.StatementFingerprintIDs)
 
 	if throttled {
 		return ErrFingerprintLimitReached
@@ -209,14 +208,14 @@ func (s *Container) RecordTransaction(
 	// fingerprints for this app. We also abort the operation and return an error.
 	if created {
 		estimatedMemAllocBytes :=
-			stats.sizeUnsafeLocked() + key.Size() + 8 /* hash of transaction key */
+			stats.sizeUnsafeLocked() + value.FingerprintID.Size() + 8 /* hash of transaction key */
 		if err := func() error {
 			// If the monitor is nil, we do not track memory usage.
 			if s.acc != nil {
 				if err := s.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
 					s.mu.Lock()
 					defer s.mu.Unlock()
-					delete(s.mu.txns, key)
+					delete(s.mu.txns, value.FingerprintID)
 					return ErrMemoryPressure
 				}
 			}
