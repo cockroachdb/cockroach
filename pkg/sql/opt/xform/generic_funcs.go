@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -28,15 +29,12 @@ func (c *CustomFuncs) HasPlaceholdersOrStableExprs(e memo.RelExpr) bool {
 	return e.Relational().HasPlaceholder || e.Relational().VolatilitySet.HasStable()
 }
 
-// GenerateParameterizedJoinValuesAndFilters returns a single-row Values
-// expression containing placeholders and stable expressions in the given
-// filters. It also returns a new set of filters where the placeholders and
-// stable expressions have been replaced with variables referencing the columns
-// produced by the returned Values expression. If the given filters have no
-// placeholders or stable expressions, ok=false is returned.
-func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
-	filters memo.FiltersExpr,
-) (values memo.RelExpr, newFilters memo.FiltersExpr, ok bool) {
+// GenerateParameterizedJoin generates joins to optimize generic query plans
+// with unknown placeholder values. See the GenerateParameterizedJoin
+// exploration rule description for more details.
+func (c *CustomFuncs) GenerateParameterizedJoin(
+	grp memo.RelExpr, required *physical.Required, scan *memo.ScanExpr, filters memo.FiltersExpr,
+) {
 	var exprs memo.ScalarListExpr
 	var cols opt.ColList
 	placeholderCols := make(map[tree.PlaceholderIdx]opt.ColumnID)
@@ -78,6 +76,7 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	}
 
 	// Replace placeholders and stable expressions in each filter.
+	var newFilters memo.FiltersExpr
 	for i := range filters {
 		cond := filters[i].Condition
 		if newCond := replace(cond).(opt.ScalarExpr); newCond != cond {
@@ -97,7 +96,7 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	// If no placeholders or stable expressions were replaced, there is nothing
 	// to do.
 	if len(exprs) == 0 {
-		return nil, nil, false
+		return
 	}
 
 	// Create the Values expression with one row and one column for each
@@ -108,19 +107,18 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	}
 	tupleTyp := types.MakeTuple(typs)
 	rows := memo.ScalarListExpr{c.e.f.ConstructTuple(exprs, tupleTyp)}
-	values = c.e.f.ConstructValues(rows, &memo.ValuesPrivate{
+	values := c.e.f.ConstructValues(rows, &memo.ValuesPrivate{
 		Cols: cols,
 		ID:   c.e.f.Metadata().NextUniqueID(),
 	})
 
-	return values, newFilters, true
-}
-
-// ParameterizedJoinPrivate returns JoinPrivate that disabled join reordering and
-// merge join exploration.
-func (c *CustomFuncs) ParameterizedJoinPrivate() *memo.JoinPrivate {
-	return &memo.JoinPrivate{
+	// Join the Values expression with the input scan and project away unneeded
+	// columns.
+	var project memo.ProjectExpr
+	project.Input = c.e.f.ConstructInnerJoin(values, scan, newFilters, &memo.JoinPrivate{
 		Flags:            memo.DisallowMergeJoin,
 		SkipReorderJoins: true,
-	}
+	})
+	project.Passthrough = grp.Relational().OutputCols
+	c.e.mem.AddProjectToGroup(&project, grp)
 }
