@@ -10,6 +10,7 @@ go_library(
         "httpclient.go",
         "jaeger.go",
         "load_group.go",
+        "metric_utils.go",
         "profile.go",
         "replication.go",
         "utils.go",
@@ -18,9 +19,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-microbench/util",
         "//pkg/cmd/roachtest/cluster",
-        "//pkg/cmd/roachtest/clusterstats",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/roachtestflags",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
         "//pkg/kv/kvpb",
@@ -40,6 +42,7 @@ go_library(
         "//pkg/workload/histogram/exporter",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//maps",
     ],
 )
 

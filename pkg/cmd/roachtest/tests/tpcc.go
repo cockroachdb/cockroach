@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -305,7 +304,7 @@ func runTPCC(
 				Flag("warehouses", opts.Warehouses).
 				MaybeFlag(!opts.DisableHistogram, "histograms", histogramsPath).
 				MaybeFlag(!opts.DisableHistogram && t.ExportOpenmetrics(), "histogram-export-format", "openmetrics").
-				MaybeFlag(!opts.DisableHistogram && t.ExportOpenmetrics(), "openmetrics-labels", clusterstats.GetOpenmetricsLabelString(t, c, labelsMap)).
+				MaybeFlag(!opts.DisableHistogram && t.ExportOpenmetrics(), "openmetrics-labels", roachtestutil.GetOpenmetricsLabelString(t, c, labelsMap)).
 				Flag("ramp", rampDur).
 				Flag("duration", opts.Duration).
 				Flag("prometheus-port", workloadInstances[i].prometheusPort).
@@ -510,7 +509,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 			Flag("warehouses", headroomWarehouses).
 			Flag("histograms", histogramsPath).
 			MaybeFlag(t.ExportOpenmetrics(), "histogram-export-format", "openmetrics").
-			MaybeFlag(t.ExportOpenmetrics(), "openmetrics-labels", clusterstats.GetOpenmetricsLabelString(t, c, labelsMap)).
+			MaybeFlag(t.ExportOpenmetrics(), "openmetrics-labels", roachtestutil.GetOpenmetricsLabelString(t, c, labelsMap)).
 			Flag("ramp", rampDur).
 			Flag("prometheus-port", 2112).
 			Flag("pprofport", workloadPProfStartPort).
