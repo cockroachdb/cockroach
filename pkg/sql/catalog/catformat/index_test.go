@@ -112,6 +112,12 @@ func TestIndexForDisplay(t *testing.T) {
 		ColumnNames:  []string{"a"},
 	}
 
+	// VECTOR INDEX baz (a)
+	vectorIndex := baseIndex
+	vectorIndex.Type = idxtype.VECTOR
+	vectorIndex.KeyColumnNames = []string{"a"}
+	vectorIndex.KeyColumnIDs = descpb.ColumnIDs{1}
+
 	testData := []struct {
 		index       descpb.IndexDescriptor
 		tableName   tree.TableName
@@ -265,6 +271,22 @@ func TestIndexForDisplay(t *testing.T) {
 			displayMode: IndexDisplayShowCreate,
 			expected:    "CREATE INDEX baz ON foo.public.bar (a DESC) USING HASH WITH (bucket_count=8)",
 			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a DESC) USING HASH WITH (bucket_count=8)",
+		},
+		{
+			index:       vectorIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "VECTOR INDEX baz (a)",
+			pgExpected:  "INDEX baz USING cspann (a)",
+		},
+		{
+			index:       vectorIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE VECTOR INDEX baz ON foo.public.bar (a)",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING cspann (a)",
 		},
 	}
 

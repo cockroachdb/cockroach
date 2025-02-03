@@ -2006,7 +2006,7 @@ CREATE TABLE tab_122871 (
   PRIMARY KEY (col0_18 DESC)
 );
 
-statement error column col0_4 is of type tsvector and thus is not indexable
+statement error column col0_4 has type tsvector, which is not indexable
 ALTER TABLE tab_122871 ALTER PRIMARY KEY USING COLUMNS (col0_4);
 
 subtest end

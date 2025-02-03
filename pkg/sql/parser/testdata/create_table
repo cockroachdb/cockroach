@@ -1377,6 +1377,23 @@ CREATE TABLE a (b INT8, VECTOR INDEX (b)) -- fully parenthesized
 CREATE TABLE a (b INT8, VECTOR INDEX (b)) -- literals removed
 CREATE TABLE _ (_ INT8, VECTOR INDEX (_)) -- identifiers removed
 
+# Explicitly name the index.
+parse
+CREATE TABLE a (b INT8, INVERTED INDEX i (b))
+----
+CREATE TABLE a (b INT8, INVERTED INDEX i (b))
+CREATE TABLE a (b INT8, INVERTED INDEX i (b)) -- fully parenthesized
+CREATE TABLE a (b INT8, INVERTED INDEX i (b)) -- literals removed
+CREATE TABLE _ (_ INT8, INVERTED INDEX _ (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, VECTOR INDEX i (b))
+----
+CREATE TABLE a (b INT8, VECTOR INDEX i (b))
+CREATE TABLE a (b INT8, VECTOR INDEX i (b)) -- fully parenthesized
+CREATE TABLE a (b INT8, VECTOR INDEX i (b)) -- literals removed
+CREATE TABLE _ (_ INT8, VECTOR INDEX _ (_)) -- identifiers removed
+
 parse
 CREATE TABLE a (b INT8, c INT8 REFERENCES foo)
 ----

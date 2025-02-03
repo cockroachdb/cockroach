@@ -9,10 +9,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -172,6 +175,12 @@ func ColumnTypeIsOnlyInvertedIndexable(t *types.T) bool {
 	return true
 }
 
+// ColumnTypeIsVectorIndexable returns true if the type t can be indexed using a
+// vector index.
+func ColumnTypeIsVectorIndexable(t *types.T) bool {
+	return t.Family() == types.PGVectorFamily
+}
+
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType *types.T) bool {
@@ -191,4 +200,73 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		return true
 	}
 	return false
+}
+
+// ValidateColumnForIndex checks that the given column type is allowed in the
+// given index. If "isLastCol" is true, then it is the last column in the index.
+// "colDesc" can either be a column name or an expression in the form (a + b).
+func ValidateColumnForIndex(
+	indexType idxtype.T, colDesc string, colType *types.T, isLastCol bool,
+) error {
+	// Inverted and vector indexes only allow certain types for the last column.
+	if isLastCol {
+		switch indexType {
+		case idxtype.INVERTED:
+			if !ColumnTypeIsInvertedIndexable(colType) {
+				return sqlerrors.NewInvalidLastColumnError(colDesc, colType.Name(), indexType)
+			}
+			return nil
+
+		case idxtype.VECTOR:
+			if !ColumnTypeIsVectorIndexable(colType) {
+				return sqlerrors.NewInvalidLastColumnError(colDesc, colType.Name(), indexType)
+			} else if colType.Width() <= 0 {
+				return errors.WithDetail(
+					pgerror.Newf(
+						pgcode.FeatureNotSupported,
+						"%s column %s does not have a fixed number of dimensions, so it cannot be indexed",
+						colType.Name(), colDesc,
+					),
+					"specify the number of dimensions in the type, like VECTOR(128) for 128 dimensions",
+				)
+			}
+			return nil
+		}
+	}
+
+	if !ColumnTypeIsIndexable(colType) {
+		// If the column is indexable as the last column in the right kind of
+		// index, then use a more descriptive error message.
+		if ColumnTypeIsInvertedIndexable(colType) {
+			if indexType == idxtype.INVERTED {
+				// Column type is allowed, but only as the last column.
+				return sqlerrors.NewColumnOnlyIndexableError(colDesc, colType.Name(), idxtype.INVERTED)
+			}
+
+			// Column type is allowed in an inverted index.
+			return errors.WithHint(pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"column %s has type %s, which is not indexable in a non-inverted index",
+				colDesc, colType),
+				"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"))
+		}
+
+		if ColumnTypeIsVectorIndexable(colType) {
+			if indexType == idxtype.VECTOR {
+				// Column type is allowed, but only as the last column.
+				return sqlerrors.NewColumnOnlyIndexableError(colDesc, colType.Name(), idxtype.VECTOR)
+			}
+
+			// Column type is allowed in a vector index.
+			return errors.WithHint(pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"column %s has type %s, which is not indexable in a non-vector index",
+				colDesc, colType),
+				"you may want to create a vector index instead")
+		}
+
+		return sqlerrors.NewColumnNotIndexableError(colDesc, colType.Name(), colType.DebugString())
+	}
+
+	return nil
 }

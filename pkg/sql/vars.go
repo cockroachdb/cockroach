@@ -3615,7 +3615,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData().PlanCacheMode.String(), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondatapb.PlanCacheModeAuto.String()
+			return planCacheClusterMode.String(sv)
 		},
 	},
 

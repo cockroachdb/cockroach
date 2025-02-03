@@ -573,29 +573,29 @@ statement ok
 CREATE TABLE t112099_no_index (x INT NOT NULL, y TEXT NOT NULL, r REFCURSOR NOT NULL);
 
 # REFCURSOR is not allowed in a primary key.
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
 CREATE TABLE t112099 (r REFCURSOR PRIMARY KEY);
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
 CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, PRIMARY KEY (x, r, y));
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
 ALTER TABLE t112099_no_index ADD PRIMARY KEY (r);
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
 ALTER TABLE t112099_no_index ADD PRIMARY KEY (x, r, y);
 
 # REFCURSOR is not allowed in a secondary index.
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
 CREATE TABLE t112099 (r REFCURSOR, INDEX (r));
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
 CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, INDEX (x, r, y));
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
 CREATE INDEX ON t112099_no_index (r);
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
 CREATE INDEX ON t112099_no_index (x, r, y);
 
 # Regression test for #115701 - REFCURSOR[] is not a valid index column.
@@ -605,40 +605,35 @@ statement ok
 CREATE TABLE t115701_no_index (x INT NOT NULL, y TEXT NOT NULL, r REFCURSOR[] NOT NULL);
 
 # REFCURSOR[] is not allowed in a primary key.
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
 CREATE TABLE t115701 (r REFCURSOR[] PRIMARY KEY);
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
 CREATE TABLE t115701 (x INT, y TEXT, r REFCURSOR[], PRIMARY KEY (x, r, y));
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
 ALTER TABLE t115701_no_index ADD PRIMARY KEY (r);
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
 ALTER TABLE t115701_no_index ADD PRIMARY KEY (x, r, y);
 
 # REFCURSOR[] is not allowed in a secondary index.
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
 CREATE TABLE t115701 (r REFCURSOR[], INDEX (r));
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
 CREATE TABLE t115701 (x INT, y TEXT, r REFCURSOR[], INDEX (x, r, y));
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
 CREATE INDEX ON t115701_no_index (r);
 
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
 CREATE INDEX ON t115701_no_index (x, r, y);
 
-statement error pgcode 0A000 pq: column r of type refcursor\[\] is not allowed as the last column in an inverted index
+statement error pgcode 0A000 pq: column r has type refcursor\[\], which is not allowed as the last column in an inverted index
 CREATE INDEX ON t115701_no_index USING GIN (r)
 
-skipif config local-legacy-schema-changer
-statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
-CREATE INDEX ON t115701_no_index USING GIN (x, r, y gin_trgm_ops)
-
-onlyif config local-legacy-schema-changer
-statement error pgcode 0A000  pq: column r of type refcursor\[\] is only allowed as the last column in an inverted index
+statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
 CREATE INDEX ON t115701_no_index USING GIN (x, r, y gin_trgm_ops)
 
 # REFCURSOR is allowed as a STORING column.
