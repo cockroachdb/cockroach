@@ -544,6 +544,9 @@ func TestLeaseQueueRaceReplicateQueue(t *testing.T) {
 func TestLeaseQueueShedsOnIOOverload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 139324)
+
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
