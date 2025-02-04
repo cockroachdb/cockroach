@@ -144,10 +144,11 @@ func (q *RaBitQuantizer) QuantizeInSet(
 
 // NewQuantizedVectorSet implements the Quantizer interface
 func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
-	dataBuffer := make([]uint64, 0, capacity*RaBitQCodeSetWidth(q.GetRandomDims()))
+	width := RaBitQCodeSetWidth(q.GetRandomDims())
+	dataBuffer := make([]uint64, 0, capacity*width)
 	raBitQuantizedVectorSet := &RaBitQuantizedVectorSet{
 		Centroid:          centroid,
-		Codes:             MakeRaBitQCodeSetFromRawData(dataBuffer, q.GetRandomDims()),
+		Codes:             MakeRaBitQCodeSetFromRawData(dataBuffer, width),
 		CodeCounts:        make([]uint32, 0, capacity),
 		CentroidDistances: make([]float32, 0, capacity),
 		DotProducts:       make([]float32, 0, capacity),

@@ -76,6 +76,23 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 		require.Equal(t, vector.T{0, 0}, quantizedSet.GetCentroid())
 		require.Nil(t, quantizedSet.GetCentroidDistances())
 	})
+
+	t.Run("empty quantized set with capacity", func(t *testing.T) {
+		quantizer := NewRaBitQuantizer(65, 42)
+		centroid := make([]float32, 65)
+		for i := range centroid {
+			centroid[i] = float32(i)
+		}
+		quantizedSet := quantizer.NewQuantizedVectorSet(
+			5, centroid).(*RaBitQuantizedVectorSet)
+		require.Equal(t, centroid, quantizedSet.Centroid)
+		require.Equal(t, 0, quantizedSet.Codes.Count)
+		require.Equal(t, 2, quantizedSet.Codes.Width)
+		require.Equal(t, 10, cap(quantizedSet.Codes.Data))
+		require.Equal(t, 5, cap(quantizedSet.CodeCounts))
+		require.Equal(t, 5, cap(quantizedSet.CentroidDistances))
+		require.Equal(t, 5, cap(quantizedSet.DotProducts))
+	})
 }
 
 // Edge cases.
