@@ -161,10 +161,11 @@ func MaxOpenFiles(count int) ConfigOption {
 
 }
 
-// CacheSize configures the size of the block cache.
+// CacheSize configures the size of the block cache. Note that this option is
+// ignored if Caches() is also used.
 func CacheSize(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.cacheSize = &size
+		cfg.opts.CacheSize = size
 		return nil
 	}
 }
@@ -536,10 +537,6 @@ func Open(
 			}
 			return nil, err
 		}
-	}
-	if cfg.cacheSize != nil && cfg.opts.Cache == nil {
-		cfg.opts.Cache = pebble.NewCache(*cfg.cacheSize)
-		defer cfg.opts.Cache.Unref()
 	}
 	p, err := newPebble(ctx, cfg)
 	if err != nil {
