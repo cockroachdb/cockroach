@@ -77,7 +77,7 @@ func (r saslMechanismRegistry) pick(u *changefeedbase.SinkURL) (_ SASLMechanism,
 	}
 
 	// Return slightly nicer errors for this common case.
-	if b.name() != sarama.SASLTypeOAuth {
+	if b.name() != sarama.SASLTypeOAuth && b.name() != proprietaryOAuthName {
 		if err := validateNoOAuthOnlyParams(u); err != nil {
 			return nil, false, err
 		}
