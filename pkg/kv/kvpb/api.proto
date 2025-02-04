@@ -3698,10 +3698,25 @@ service Internal {
   // setting overrides.
   rpc TenantSettings (TenantSettingsRequest) returns (stream TenantSettingsEvent) {}
 
+  // TenantInfo is used to obtain tenant information using its name.
+  rpc TenantInfo (TenantInfoRequest) returns (TenantInfoResponse) {}
+
   // GetRangeDescriptors is used by tenants to get range descriptors for their
   // own ranges.
  rpc GetRangeDescriptors (GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
 }
+
+// TenantInfoRequest is used to fetch tenant information.
+message TenantInfoRequest {
+  string tenant_name = 1;
+}
+
+// TenantInfoResponse contains information of a tenant
+message TenantInfoResponse {
+  TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
+  string tenant_name = 2;
+}
+
 
 // GetRangeDescriptorsRequest is used to fetch range descriptors.
 message GetRangeDescriptorsRequest {
