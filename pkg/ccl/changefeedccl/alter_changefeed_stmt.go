@@ -749,7 +749,7 @@ func validateNewTargets(
 // with each target we are adding/removing (i.e. with initial_scan or
 // no_initial_scan), and the current status of the job. If the progress does not
 // need to be updated, we will simply return the previous progress and statement
-// time that is passed into the function.
+// time that is passed into the function. TODO(#140509)
 func generateNewProgress(
 	prevProgress jobspb.Progress,
 	prevStatementTime hlc.Timestamp,
