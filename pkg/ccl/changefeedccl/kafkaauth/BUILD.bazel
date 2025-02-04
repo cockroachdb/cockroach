@@ -36,6 +36,7 @@ go_test(
     srcs = ["sasl_proprietary_oauth_test.go"],
     embed = [":kafkaauth"],
     deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_stretchr_testify//assert",
