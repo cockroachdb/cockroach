@@ -6,13 +6,16 @@
 package roachpb_test
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
 	// Hook up the pretty printer.
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
@@ -58,10 +61,14 @@ func TestKeyString(t *testing.T) {
 }
 
 func TestRangeDescriptorStringRedact(t *testing.T) {
+	sysCodec := keys.SystemSQLCodec
+	tableKey1 := makeKey(sysCodec.TablePrefix(61), encoding.EncodeStringAscending(nil, "val1"))
+	tableKey2 := makeKey(sysCodec.TablePrefix(61), encoding.EncodeStringAscending(nil, "val2"))
+
 	desc := roachpb.RangeDescriptor{
 		RangeID:  1,
-		StartKey: roachpb.RKey("c"),
-		EndKey:   roachpb.RKey("g"),
+		StartKey: roachpb.RKey(tableKey1),
+		EndKey:   roachpb.RKey(tableKey2),
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
@@ -70,8 +77,12 @@ func TestRangeDescriptorStringRedact(t *testing.T) {
 	}
 
 	require.EqualValues(t,
-		`r1:‹{c-g}› [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`,
-		redact.Sprint(desc),
+		`r1:/Table/61/‹"val›{‹1"›-‹2"›} [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`,
+		string(redact.Sprint(desc)),
+	)
+	require.EqualValues(t,
+		`r1:/Table/61/‹×›{‹×›-‹×›} [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`,
+		string(redact.Sprint(desc).Redact()),
 	)
 }
 
@@ -146,4 +157,8 @@ func TestSpansBoundedString(t *testing.T) {
 	} {
 		require.Equal(t, tc.expected, tc.spans.BoundedString(tc.bytesHint))
 	}
+}
+
+func makeKey(keys ...[]byte) []byte {
+	return bytes.Join(keys, nil)
 }

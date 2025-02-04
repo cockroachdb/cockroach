@@ -125,8 +125,8 @@ func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.Rang
 			w.SafeString("{-}")
 		} else {
 			const maxRangeChars = 30
-			rngStr := keys.PrettyPrintRange(roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey), maxRangeChars, false)
-			w.UnsafeString(rngStr)
+			rngStr := keys.PrettyPrintRange(roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey), maxRangeChars)
+			w.Print(rngStr)
 		}
 	})
 
