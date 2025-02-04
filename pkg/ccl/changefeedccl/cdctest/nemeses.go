@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -409,8 +410,14 @@ func RunNemesis(
 		)
 		defer queryGen.Close()
 		const numInserts = 100
+		time := timeutil.Now()
 		for i := 0; i < numInserts; i++ {
 			query := queryGen.Generate()
+			log.Infof(ctx, "Executing query: %s", query)
+			if i != 0 {
+				log.Infof(ctx, "Time taken to execute last query: %s", timeutil.Since(time))
+				time = timeutil.Now()
+			}
 			if _, err := db.Exec(query); err != nil {
 				log.Infof(ctx, "Skipping query %s because error %s", query, err)
 				continue
