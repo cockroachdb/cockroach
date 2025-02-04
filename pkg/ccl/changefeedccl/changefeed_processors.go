@@ -559,6 +559,37 @@ func makeKVFeedMonitoringCfg(
 	}, nil
 }
 
+// getInitialHighWaterAndSpans returns the initial highwater and spans the
+// aggregator is responsible for watching based on ca.spec. InitialHighWater is
+// the minimal resolved timestamps of all InitialResolved timestamps.
+func (ca *changeAggregator) getInitialHighWaterAndSpans() (hlc.Timestamp, []roachpb.Span) {
+	if ca.spec.InitialHighWater != nil {
+		spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+		for _, watch := range ca.spec.Watches {
+			spans = append(spans, watch.Span)
+		}
+		return *ca.spec.InitialHighWater, spans
+	} else {
+		// Keep initialHighWater as the minimum of all InitialResolved timestamps.
+		// If there are any zero InitialResolved timestamps, initial scan is
+		// ongoing. If there are no zero InitialResolved timestamps, initial scan
+		// is not required.
+		var initialHighWater hlc.Timestamp
+		spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+		for i, watch := range ca.spec.Watches {
+			spans = append(spans, watch.Span)
+			if i == 0 {
+				initialHighWater = watch.InitialResolved
+				continue
+			}
+			if watch.InitialResolved.Less(initialHighWater) {
+				initialHighWater = watch.InitialResolved
+			}
+		}
+		return initialHighWater, spans
+	}
+}
+
 // setupSpans is called on start to extract the spans for this changefeed as a
 // slice and creates a span frontier with the initial resolved timestamps. This
 // SpanFrontier only tracks the spans being watched on this node. There is a
@@ -566,24 +597,7 @@ func makeKVFeedMonitoringCfg(
 // used to filter out some previously emitted rows, and by the cloudStorageSink
 // to name its output files in lexicographically monotonic fashion.
 func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err error) {
-	var initialHighWater hlc.Timestamp
-	spans = make([]roachpb.Span, 0, len(ca.spec.Watches))
-
-	// Keep initialHighWater as the minimum of all InitialResolved timestamps.
-	// If there are any zero InitialResolved timestamps, initial scan is
-	// ongoing. If there are no zero InitialResolved timestamps, initial scan
-	// is not required.
-	for i, watch := range ca.spec.Watches {
-		spans = append(spans, watch.Span)
-		if i == 0 {
-			initialHighWater = watch.InitialResolved
-			continue
-		}
-		if watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
-	}
-
+	initialHighWater, spans := ca.getInitialHighWaterAndSpans()
 	ca.frontier, err = resolvedspan.NewAggregatorFrontier(ca.spec.Feed.StatementTime, initialHighWater, spans...)
 	if err != nil {
 		return nil, err
