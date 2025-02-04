@@ -40,10 +40,10 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 		vecDatum := randgen.RandDatum(rnd, types.MakePGVector(int32(dims)), false /* nullOk */)
 		copy(set.At(i), vecDatum.(*tree.DPGVector).T)
 	}
-	testEncodeDecodeRoundTripImpl(t, rnd, &set)
+	testEncodeDecodeRoundTripImpl(t, rnd, set)
 }
 
-func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set *vector.Set) {
+func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set) {
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 	for _, quantizer := range []quantize.Quantizer{
 		quantize.NewUnQuantizer(set.Dims),

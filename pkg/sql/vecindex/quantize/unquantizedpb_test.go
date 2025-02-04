@@ -20,12 +20,12 @@ func TestUnQuantizedVectorSet(t *testing.T) {
 
 	// Add vectors.
 	vectors := vector.MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
-	quantizedSet.AddSet(&vectors)
+	quantizedSet.AddSet(vectors)
 	require.Equal(t, 3, quantizedSet.GetCount())
 	require.Equal(t, vector.T{4, 2}, quantizedSet.GetCentroid())
 
 	vectors = vector.MakeSetFromRawData([]float32{7, 8, 9, 10}, 2)
-	quantizedSet.AddSet(&vectors)
+	quantizedSet.AddSet(vectors)
 	require.Equal(t, 5, quantizedSet.GetCount())
 	distances := roundFloats(quantizedSet.GetCentroidDistances(), 4)
 	require.Equal(t, []float32{3, 2.2361, 4.1231, 6.7082, 9.434}, distances)

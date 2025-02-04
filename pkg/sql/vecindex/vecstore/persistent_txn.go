@@ -95,7 +95,7 @@ func (psc *persistentStoreCodec) encodeVector(
 ) ([]byte, error) {
 	psc.clear(1, centroid)
 	input := v.AsSet()
-	psc.quantizer.QuantizeInSet(ctx, psc.tmpVectorSet, &input)
+	psc.quantizer.QuantizeInSet(ctx, psc.tmpVectorSet, input)
 	return psc.encodeVectorFromSet(psc.tmpVectorSet, 0 /* idx */)
 }
 
