@@ -72,6 +72,9 @@ type Connector interface {
 	// an update channel to track changes
 	TenantInfo() (tenantcapabilities.Entry, <-chan struct{})
 
+	// TenantNameResolver resolves tenant name to tenant ID
+	TenantNameResolver
+
 	// ReadFromTenantInfoAccessor allows retrieving the other tenant, if any, from
 	// which the calling tenant should configure itself to read, along with the
 	// latest timestamp at which it should perform such reads at this time.
@@ -147,6 +150,12 @@ type TokenBucketProvider interface {
 	TokenBucket(
 		ctx context.Context, in *kvpb.TokenBucketRequest,
 	) (*kvpb.TokenBucketResponse, error)
+}
+
+// TenantNameResolver is used to resolve tenantName to tenant ID
+// TODO(chandrat) name must match the name on cert
+type TenantNameResolver interface {
+	Resolve(ctx context.Context, tenantName string) (roachpb.TenantID, error)
 }
 
 // connector mediates the communication of cluster-wide state to sandboxed
@@ -528,6 +537,32 @@ func (c *connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescr
 		return nil, kvpb.NewNodeDescNotFoundError(nodeID)
 	}
 	return desc, nil
+}
+
+func (c *connector) Resolve(ctx context.Context, tenantName string) (roachpb.TenantID, error) {
+	ctx = c.AnnotateCtx(ctx)
+	for ctx.Err() == nil {
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		resp, err := client.TenantInfo(ctx, &kvpb.TenantInfoRequest{
+			TenantName: tenantName,
+		})
+		if err != nil {
+			log.Warningf(ctx, "error resolving tenant name [%s] to ID", tenantName)
+			if grpcutil.IsAuthError(err) {
+				return roachpb.TenantID{}, err
+			}
+
+			// Soft RPC error. Drop client and retry.
+			c.tryForgetClient(ctx, client)
+			continue
+		}
+
+		return resp.TenantID, nil
+	}
+	return roachpb.TenantID{}, errors.Wrap(ctx.Err(), "tenant name resolution")
 }
 
 // GetNodeDescriptorCount implements the kvclient.NodeDescStore interface.

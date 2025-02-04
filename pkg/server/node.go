@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -2983,7 +2984,26 @@ func (n *Node) GetRangeDescriptors(
 func (n *Node) TenantInfo(
 	ctx context.Context, req *kvpb.TenantInfoRequest,
 ) (*kvpb.TenantInfoResponse, error) {
+	ex := n.execCfg.InternalDB.Executor()
+	query := fmt.Sprintf("SELECT id FROM system.tenants WHERE name = '%s'", req.TenantName)
+	log.Ops.Infof(ctx, "(chandrat) query: %s", query)
+	row, err := ex.QueryRow(ctx, redact.Sprint(req.TenantName), nil, query)
+	if err != nil {
+		return nil, err
+	}
+	if len(row) == 0 {
+		log.Ops.Warningf(ctx, "tenant ID for tenant name [%s] not found", req.TenantName)
+		return &kvpb.TenantInfoResponse{
+			TenantID: roachpb.TenantID{},
+		}, nil
+	}
+
+	tenantID, ok := tree.AsDInt(row[0])
+	if !ok {
+		return nil, errors.AssertionFailedf("expected tenant ID to be an int, got %T", row[0])
+	}
+
 	return &kvpb.TenantInfoResponse{
-		TenantID: roachpb.MaxTenantID,
+		TenantID: roachpb.TenantID{InternalValue: uint64(tenantID)},
 	}, nil
 }

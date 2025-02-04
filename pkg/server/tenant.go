@@ -1184,6 +1184,15 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
+
+	// TODO(chandrat) Resolve tenant name to ID
+	tenantID, err := tenantConnect.Resolve(startupCtx, "test")
+	if err != nil || !tenantID.IsSet() {
+		return sqlServerArgs{}, errors.New("failed to resolve tenant name")
+	} else {
+		log.Ops.Infof(startupCtx, "(chandrat) [tenant name: %s -> tenant ID: %s]", "test", tenantID)
+	}
+
 	// TODO(baptist): This call does not take into account locality addresses.
 	resolver := kvtenant.AddressResolver(tenantConnect)
 	kvNodeDialer := nodedialer.New(rpcContext, resolver)
