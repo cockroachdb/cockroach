@@ -23,11 +23,13 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const proprietaryOAuthName = "PROPRIETARY_OAUTH"
+
 type saslProprietaryOAuthBuilder struct{}
 
 // name implements authMechanismBuilder.
 func (s saslProprietaryOAuthBuilder) name() string {
-	return "PROPRIETARY_OAUTH"
+	return proprietaryOAuthName
 }
 
 // validateParams implements authMechanismBuilder.
