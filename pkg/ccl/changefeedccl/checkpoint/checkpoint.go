@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // SpanIter is an iterator over a collection of spans.
@@ -70,4 +71,46 @@ func Make(
 	}
 
 	return cp
+}
+
+// SpanForwarder is an interface for forwarding spans to a changefeed.
+type SpanForwarder interface {
+	Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error)
+}
+
+// Restore restores the checkpointed spans progress to the given SpanForwarder.
+// If checkpoint is nil, it uses the oldCheckpointSpans and oldCheckpointTs to
+// restore changefeed progress. Otherwise, it uses the given checkpoint. Returns
+// error if something unexpected happens.
+func Restore(
+	sf SpanForwarder,
+	oldCheckpointSpans []roachpb.Span,
+	oldCheckpointTs hlc.Timestamp,
+	checkpoint *jobspb.TimestampSpansMap,
+) error {
+	if checkpoint == nil {
+		ts := oldCheckpointTs
+		if ts.IsEmpty() {
+			return errors.New("checkpoint timestamp is empty")
+		}
+		for _, checkpointedSp := range oldCheckpointSpans {
+			if _, err := sf.Forward(checkpointedSp, ts); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	for _, entry := range checkpoint.Entries {
+		ts := entry.Timestamp
+		if ts.IsEmpty() {
+			return errors.New("checkpoint timestamp is empty")
+		}
+		for _, checkpointedSp := range entry.Spans {
+			if _, err := sf.Forward(checkpointedSp, ts); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
