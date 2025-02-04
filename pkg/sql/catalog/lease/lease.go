@@ -1285,6 +1285,7 @@ func NewLeaseManager(
 		sem:              quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
 		refreshAllLeases: make(chan struct{}),
 	}
+	lm.leaseGeneration.Swap(1) // Start off with 1 as the initial value.
 	lm.storage.regionPrefix = &atomic.Value{}
 	lm.storage.regionPrefix.Store(enum.One)
 	lm.storage.sessionBasedLeasingMode = lm

@@ -337,7 +337,6 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 ) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	defer sc.generation.Add(1)
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
 		if e.isStale(forecast, udtCols) {
