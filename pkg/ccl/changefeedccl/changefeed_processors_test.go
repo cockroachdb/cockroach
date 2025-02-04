@@ -23,6 +23,7 @@ func TestSetupSpansAndFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	statementTime := hlc.Timestamp{WallTime: 10}
 	for _, tc := range []struct {
 		name             string
 		expectedFrontier hlc.Timestamp
@@ -125,6 +126,7 @@ func TestSetupSpansAndFrontier(t *testing.T) {
 					Watches: tc.watches,
 				},
 			}
+			ca.spec.Feed.StatementTime = statementTime
 			_, err := ca.setupSpansAndFrontier()
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedFrontier, ca.frontier.Frontier())
