@@ -599,11 +599,6 @@ type engineConfig struct {
 	// ballastSize is the amount reserved by a ballast file for manual
 	// out-of-disk recovery.
 	ballastSize int64
-	// cacheSize is stored separately so that we can avoid constructing the
-	// PebbleConfig.Opts.Cache until the call to Open. A Cache is created with
-	// a ref count of 1, so creating the Cache during execution of
-	// ConfigOption makes it too easy to leak a cache.
-	cacheSize *int64
 	// env holds the initialized virtual filesystem that the Engine should use.
 	env *fs.Env
 	// maxSize is used for calculating free space and making rebalancing
