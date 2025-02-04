@@ -867,12 +867,6 @@ func buildDialConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, error) {
 	return dialConfig, nil
 }
 
-// newMissingParameterError returns an error message for missing parameters in
-// sinkURL.
-func newMissingParameterError(scheme string, param string) error {
-	return errors.Newf("scheme %s requires parameter %s", scheme, param)
-}
-
 // newInvalidParameterError returns an error message for invalid parameters in
 // sinkURL.
 func newInvalidParameterError(scheme string, invalidParams string) error {

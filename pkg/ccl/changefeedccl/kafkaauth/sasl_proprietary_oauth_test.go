@@ -15,8 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +27,7 @@ func TestProprietaryTokenSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	start := time.Now()
+	start := timeutil.Now()
 
 	tokResp := proprietaryOAuthResp{
 		AccessToken: "MY TOKEN",
@@ -81,4 +83,25 @@ func TestProprietaryTokenSource(t *testing.T) {
 	assert.Equal(t, tokResp.TokenType, tok.TokenType)
 	assert.Equal(t, tokResp.AccessToken, tok.AccessToken)
 	assert.WithinRange(t, tok.Expiry, start.Add(3600*time.Second), start.Add(3700*time.Second))
+}
+
+func TestProprietaryOAuthRegistration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	u, err := url.Parse(`kafka://idk?sasl_enabled=true&sasl_mechanism=PROPRIETARY_OAUTH&sasl_client_id=cl&sasl_token_url=localhost&sasl_proprietary_resource=r&sasl_proprietary_client_assertion_type=at&sasl_proprietary_client_assertion=as`)
+	require.NoError(t, err)
+	su := &changefeedbase.SinkURL{URL: u}
+	mech, ok, err := Pick(su)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NotNil(t, mech)
+	om, ok := mech.(*saslProprietaryOAuth)
+	require.True(t, ok)
+	require.Empty(t, su.RemainingQueryParams())
+	require.Equal(t, "cl", om.clientID)
+	require.Equal(t, "localhost", om.tokenURL)
+	require.Equal(t, "r", om.resource)
+	require.Equal(t, "at", om.clientAssertionType)
+	require.Equal(t, "as", om.clientAssertion)
 }
