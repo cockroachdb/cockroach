@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -160,6 +162,166 @@ func TestCheckpointMake(t *testing.T) {
 				require.True(t, math.IsNaN(aggMetrics.TotalBytes.CumulativeSnapshot().Mean()))
 				require.True(t, math.IsNaN(aggMetrics.SpanCount.CumulativeSnapshot().Mean()))
 			}
+		})
+	}
+}
+
+func TestCheckpointRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(wt int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: wt}
+	}
+
+	for name, tc := range map[string]struct {
+		initialHighWater       hlc.Timestamp
+		oldCheckpointTs        hlc.Timestamp
+		oldCheckpointSpans     []roachpb.Span
+		newCheckpoint          jobspb.TimestampSpansMap
+		expectedError          error
+		expectedFrontierForOld checkpointSpans
+		expectedFrontierForNew checkpointSpans
+	}{
+		"old checkpoint ts is empty": {
+			initialHighWater: ts(0),
+			oldCheckpointTs:  ts(0),
+			oldCheckpointSpans: []roachpb.Span{
+				{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+			},
+			newCheckpoint: jobspb.TimestampSpansMap{
+				Entries: []jobspb.TimestampSpansMap_Entry{
+					{
+						Timestamp: ts(2),
+						Spans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+					},
+				},
+			},
+			expectedError: errors.New("checkpoint timestamp is empty"),
+		},
+		"new checkpoint ts is empty": {
+			initialHighWater: ts(0),
+			oldCheckpointTs:  ts(2),
+			oldCheckpointSpans: []roachpb.Span{
+				{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+			},
+			newCheckpoint: jobspb.TimestampSpansMap{
+				Entries: []jobspb.TimestampSpansMap_Entry{
+					{
+						Timestamp: ts(2),
+						Spans:     []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
+					},
+					{
+						Timestamp: ts(0),
+						Spans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+					},
+				},
+			},
+			expectedError: errors.New("checkpoint timestamp is empty"),
+		},
+		"same checkpoint over ts": {
+			initialHighWater: ts(0),
+			oldCheckpointTs:  ts(1),
+			oldCheckpointSpans: []roachpb.Span{
+				{Key: roachpb.Key("a"), EndKey: roachpb.Key("e")},
+			},
+			newCheckpoint: jobspb.TimestampSpansMap{
+				Entries: []jobspb.TimestampSpansMap_Entry{
+					{
+						Timestamp: ts(2),
+						Spans: []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+							{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+					},
+					{
+						Timestamp: ts(1),
+						Spans:     []roachpb.Span{{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}},
+					},
+				},
+			},
+			expectedFrontierForOld: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("e")}, ts: ts(1)},
+			},
+			expectedFrontierForNew: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(2)},
+				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(2)},
+				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(1)},
+			},
+			expectedError: nil,
+		},
+		"same checkpoint over ts with non-zero initial highwater": {
+			initialHighWater: ts(1),
+			oldCheckpointTs:  ts(4),
+			oldCheckpointSpans: []roachpb.Span{
+				{Key: roachpb.Key("a"), EndKey: roachpb.Key("e")},
+			},
+			newCheckpoint: jobspb.TimestampSpansMap{
+				Entries: []jobspb.TimestampSpansMap_Entry{
+					{
+						Timestamp: ts(2),
+						Spans: []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+							{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+					},
+					{
+						Timestamp: ts(3),
+						Spans:     []roachpb.Span{{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}},
+					},
+				},
+			},
+			expectedFrontierForOld: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("e")}, ts: ts(4)},
+			},
+			expectedFrontierForNew: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(2)},
+				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(2)},
+				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(3)},
+			},
+			expectedError: nil,
+		},
+	} {
+		testutils.RunTrueAndFalse(t, name, func(t *testing.T, useNewCheckpoint bool) {
+			f, err := span.MakeFrontierAt(tc.initialHighWater, []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}}...)
+			require.NoError(t, err)
+			actualFrontier := span.MakeConcurrentFrontier(f)
+			var checkpointedSpanTs checkpointSpans
+			if useNewCheckpoint {
+				if tc.expectedError != nil {
+					require.Error(t, tc.expectedError, checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, &tc.newCheckpoint))
+				} else {
+					require.NoError(t, checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, &tc.newCheckpoint))
+				}
+				checkpointedSpanTs = tc.expectedFrontierForNew
+			} else {
+				if tc.expectedError != nil {
+					require.Error(t, tc.expectedError,
+						checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, nil))
+				} else {
+					require.NoError(t, checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, nil))
+				}
+				checkpointedSpanTs = tc.expectedFrontierForOld
+			}
+			if tc.expectedError != nil {
+				return
+			}
+
+			actualFrontierSpansTs := checkpointSpans{}
+			actualFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+				actualFrontierSpansTs = append(actualFrontierSpansTs, checkpointSpan{span: sp, ts: ts})
+				return span.ContinueMatch
+			})
+
+			expectedFrontierSpansTs := checkpointSpans{}
+			f, err = span.MakeFrontierAt(tc.initialHighWater, []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}}...)
+			require.NoError(t, err)
+			expectedFrontier := span.MakeConcurrentFrontier(f)
+			for _, s := range checkpointedSpanTs {
+				_, err = expectedFrontier.Forward(s.span, s.ts)
+				require.NoError(t, err)
+			}
+			expectedFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+				expectedFrontierSpansTs = append(expectedFrontierSpansTs, checkpointSpan{span: sp, ts: ts})
+				return span.ContinueMatch
+			})
+			require.Equal(t, expectedFrontierSpansTs, actualFrontierSpansTs)
 		})
 	}
 }
