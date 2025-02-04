@@ -472,10 +472,6 @@ func (t *tokenAllocationTicker) adjustmentStart(loaded bool) {
 	t.adjustmentIntervalStartTime = timeutil.Now()
 }
 
-func (t *tokenAllocationTicker) tick() {
-	<-t.ticker.C
-}
-
 // remainingTicks will return the remaining ticks before the next adjustment
 // interval is reached while assuming that all future ticks will have a duration of
 // expectedTickDuration. A return value of 0 indicates that adjustmentStart must
