@@ -119,7 +119,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -413,7 +413,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer mutations.ResetMaxBatchSizeForTests()
 	numRows := smallerKvBatchSize + smallerInsertBatchSize + 10
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Insecure = true
 	params.Knobs.DistSQL = &execinfra.TestingKnobs{
 		TableReaderBatchBytesLimit: 10,
@@ -484,7 +484,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Insecure = true
 
 	s := serverutils.StartServerOnly(t, params)
