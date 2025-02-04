@@ -1219,7 +1219,7 @@ func reformatJSON(j interface{}) ([]byte, error) {
 }
 
 func extractFieldFromJSONValue(
-	fieldName string, isBare bool, wrapped []byte,
+	fieldName string, envelopeType changefeedbase.EnvelopeType, wrapped []byte,
 ) (field gojson.RawMessage, value []byte, err error) {
 	parsed := make(map[string]gojson.RawMessage)
 
@@ -1227,7 +1227,8 @@ func extractFieldFromJSONValue(
 		return nil, nil, errors.Wrapf(err, "unmarshalling json '%s'", wrapped)
 	}
 
-	if isBare {
+	switch envelopeType {
+	case changefeedbase.OptEnvelopeBare:
 		meta := make(map[string]gojson.RawMessage)
 		if metaVal, haveMeta := parsed[metaSentinel]; haveMeta {
 			if err := gojson.Unmarshal(metaVal, &meta); err != nil {
@@ -1244,9 +1245,23 @@ func extractFieldFromJSONValue(
 				parsed[metaSentinel] = metaVal
 			}
 		}
-	} else {
+	case changefeedbase.OptEnvelopeWrapped:
 		field = parsed[fieldName]
 		delete(parsed, fieldName)
+	case changefeedbase.OptEnvelopeEnriched:
+		var payload map[string]gojson.RawMessage
+		if err := gojson.Unmarshal(parsed["payload"], &payload); err != nil {
+			return nil, nil, errors.Wrapf(err, "unmarshalling json %v", parsed["payload"])
+		}
+		field = payload[fieldName]
+		delete(payload, fieldName)
+		payloadVal, err := reformatJSON(payload)
+		if err != nil {
+			return nil, nil, err
+		}
+		parsed["payload"] = payloadVal
+	default:
+		return nil, nil, errors.AssertionFailedf("unknown envelope type %s", envelopeType)
 	}
 
 	if value, err = reformatJSON(parsed); err != nil {
@@ -1257,9 +1272,11 @@ func extractFieldFromJSONValue(
 
 // extractKeyFromJSONValue extracts the `WITH key_in_value` key from a `WITH
 // format=json, envelope=wrapped` value.
-func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []byte, err error) {
+func extractKeyFromJSONValue(
+	envelopeType changefeedbase.EnvelopeType, wrapped []byte,
+) (key []byte, value []byte, err error) {
 	var keyParsed gojson.RawMessage
-	keyParsed, value, err = extractFieldFromJSONValue("key", isBare, wrapped)
+	keyParsed, value, err = extractFieldFromJSONValue("key", envelopeType, wrapped)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "extracting key from json payload %s", wrapped)
 	}
@@ -1604,7 +1621,11 @@ func (c *cloudFeed) walkDir(path string, d fs.DirEntry, err error) error {
 			//
 			// TODO(dan): Leave the key in the value if the TestFeed user
 			// specifically requested it.
-			if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
+			envelopeType := changefeedbase.OptEnvelopeWrapped
+			if c.isBare {
+				envelopeType = changefeedbase.OptEnvelopeBare
+			}
+			if m.Key, m.Value, err = extractKeyFromJSONValue(envelopeType, m.Value); err != nil {
 				return err
 			}
 			if isNew := c.markSeen(m); !isNew {
@@ -2187,10 +2208,18 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 		return &notifyFlushSink{Sink: s, sync: ss}
 	}
 
-	explicitEnvelope := false
+	envelopeType := changefeedbase.OptEnvelopeWrapped
+	if createStmt.Select != nil {
+		envelopeType = changefeedbase.OptEnvelopeBare
+	}
+
 	for _, opt := range createStmt.Options {
 		if string(opt.Key) == changefeedbase.OptEnvelope {
-			explicitEnvelope = true
+			envelopeTypeStr, err := exprAsString(opt.Value)
+			if err != nil {
+				return nil, err
+			}
+			envelopeType = changefeedbase.EnvelopeType(envelopeTypeStr)
 		}
 	}
 
@@ -2198,7 +2227,7 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 		jobFeed:        newJobFeed(f.jobsTableConn(), wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
-		isBare:         createStmt.Select != nil && !explicitEnvelope,
+		envelopeType:   envelopeType,
 		mockSink:       sinkDest,
 	}
 	if err := f.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
@@ -2215,9 +2244,9 @@ func (f *webhookFeedFactory) Server() serverutils.ApplicationLayerInterface {
 type webhookFeed struct {
 	*jobFeed
 	seenTrackerMap
-	ss       *sinkSynchronizer
-	isBare   bool
-	mockSink *cdctest.MockWebhookSink
+	ss           *sinkSynchronizer
+	envelopeType changefeedbase.EnvelopeType
+	mockSink     *cdctest.MockWebhookSink
 }
 
 var _ cdctest.TestFeed = (*webhookFeed)(nil)
@@ -2240,12 +2269,16 @@ func isResolvedTimestamp(message []byte) (bool, error) {
 // extractTopicFromJSONValue extracts the `WITH topic_in_value` topic from a `WITH
 // format=json, envelope=wrapped` value.
 func extractTopicFromJSONValue(
-	isBare bool, wrapped []byte,
+	envelopeType changefeedbase.EnvelopeType, wrapped []byte,
 ) (topic string, value []byte, err error) {
 	var topicRaw gojson.RawMessage
-	topicRaw, value, err = extractFieldFromJSONValue("topic", isBare, wrapped)
+	topicRaw, value, err = extractFieldFromJSONValue("topic", envelopeType, wrapped)
 	if err != nil {
 		return "", nil, err
+	}
+	// TODO: this, or skip this method for enriched
+	if topicRaw == nil {
+		return "", value, nil
 	}
 	if err := gojson.Unmarshal(topicRaw, &topic); err != nil {
 		return "", nil, err
@@ -2306,10 +2339,10 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 						if err != nil {
 							return nil, err
 						}
-						if m.Key, m.Value, err = extractKeyFromJSONValue(f.isBare, wrappedValue); err != nil {
+						if m.Key, m.Value, err = extractKeyFromJSONValue(f.envelopeType, wrappedValue); err != nil {
 							return nil, err
 						}
-						if m.Topic, m.Value, err = extractTopicFromJSONValue(f.isBare, m.Value); err != nil {
+						if m.Topic, m.Value, err = extractTopicFromJSONValue(f.envelopeType, m.Value); err != nil {
 							return nil, err
 						}
 						if isNew := f.markSeen(m); !isNew {
