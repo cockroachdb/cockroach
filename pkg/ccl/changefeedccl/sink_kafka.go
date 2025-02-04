@@ -867,18 +867,6 @@ func buildDialConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, error) {
 	return dialConfig, nil
 }
 
-// newMissingParameterError returns an error message for missing parameters in
-// sinkURL.
-func newMissingParameterError(scheme string, param string) error {
-	return errors.Newf("scheme %s requires parameter %s", scheme, param)
-}
-
-// newInvalidParameterError returns an error message for invalid parameters in
-// sinkURL.
-func newInvalidParameterError(scheme string, invalidParams string) error {
-	return errors.Newf("invalid query parameters %s for scheme %s", invalidParams, scheme)
-}
-
 // newUnsupportedValueForParameterError returns an error message for using
 // unsupported values for parameters in sinkURL.
 func newUnsupportedValueForParameterError(
@@ -999,9 +987,10 @@ func buildConfluentKafkaConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, erro
 
 	remaining := u.RemainingQueryParams()
 	if len(remaining) > 0 {
-		return kafkaDialConfig{}, newInvalidParameterError(u.Scheme, /*scheme*/
-			fmt.Sprintf("%v", remaining) /*invalidParams*/)
+		return kafkaDialConfig{}, errors.Newf("invalid query parameters for scheme %s", remaining, changefeedbase.SinkParamConfluentAPISecret)
 	}
+
+	// Ignore all other configurations.
 	return dialConfig, nil
 }
 

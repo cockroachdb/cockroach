@@ -36,6 +36,7 @@ go_test(
     embed = [":kafkaauth"],
     tags = ["ccl_test"],
     deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_stretchr_testify//assert",
