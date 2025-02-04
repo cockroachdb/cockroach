@@ -174,7 +174,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 
 	// Insert new partition with lower level and check stats.
 	vectors := vector.MakeSetFromRawData([]float32{5, 6}, 2)
-	quantizedSet := quantizer.Quantize(ctx, &vectors)
+	quantizedSet := quantizer.Quantize(ctx, vectors)
 	partition := NewPartition(quantizer, quantizedSet, []ChildKey{childKey30}, 2)
 	partitionKey, err := txn.InsertPartition(ctx, partition)
 	require.NoError(t, err)

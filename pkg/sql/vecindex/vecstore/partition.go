@@ -161,7 +161,7 @@ func (p *Partition) Add(ctx context.Context, vector vector.T, childKey ChildKey)
 	}
 
 	vectorSet := vector.AsSet()
-	p.quantizer.QuantizeInSet(ctx, p.quantizedSet, &vectorSet)
+	p.quantizer.QuantizeInSet(ctx, p.quantizedSet, vectorSet)
 	p.childKeys = append(p.childKeys, childKey)
 
 	return offset == -1

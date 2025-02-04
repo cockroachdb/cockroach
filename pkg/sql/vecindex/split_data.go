@@ -39,7 +39,7 @@ func (s *splitData) Init(
 ) {
 	s.Vectors = vectors
 	s.OldCentroidDistances = oldCentroidDistances
-	quantizedSet := quantizer.Quantize(ctx, &s.Vectors)
+	quantizedSet := quantizer.Quantize(ctx, s.Vectors)
 	s.Partition = vecstore.NewPartition(quantizer, quantizedSet, childKeys, level)
 }
 

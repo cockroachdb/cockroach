@@ -40,10 +40,10 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 		vecDatum := randgen.RandDatum(rnd, types.MakePGVector(int32(dims)), false /* nullOk */)
 		copy(set.At(i), vecDatum.(*tree.DPGVector).T)
 	}
-	testEncodeDecodeRoundTripImpl(t, rnd, &set)
+	testEncodeDecodeRoundTripImpl(t, rnd, set)
 }
 
-func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set *vector.Set) {
+func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set) {
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 	for _, quantizer := range []quantize.Quantizer{
 		quantize.NewUnQuantizer(set.Dims),
@@ -94,10 +94,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set *vector.Set
 					var decodedSet quantize.QuantizedVectorSet
 					switch quantizedSet.(type) {
 					case *quantize.UnQuantizedVectorSet:
-						decodedSet = &quantize.UnQuantizedVectorSet{
-							Centroid: decodedCentroid,
-							Vectors:  vector.MakeSet(set.Dims),
-						}
+						decodedSet = quantizer.NewQuantizedVectorSet(len(encVectors), decodedCentroid)
 						for i := range encVectors {
 							err = DecodeUnquantizedVectorToSet(
 								encVectors[i], decodedSet.(*quantize.UnQuantizedVectorSet),
@@ -105,10 +102,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set *vector.Set
 							require.NoError(t, err)
 						}
 					case *quantize.RaBitQuantizedVectorSet:
-						decodedSet = &quantize.RaBitQuantizedVectorSet{
-							Centroid: decodedCentroid,
-							Codes:    quantize.MakeRaBitQCodeSet(set.Dims),
-						}
+						decodedSet = quantizer.NewQuantizedVectorSet(len(encVectors), decodedCentroid)
 						for i := range encVectors {
 							err = DecodeRaBitQVectorToSet(
 								encVectors[i], decodedSet.(*quantize.RaBitQuantizedVectorSet),
