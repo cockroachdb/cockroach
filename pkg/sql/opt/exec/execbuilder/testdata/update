@@ -1019,7 +1019,7 @@ quality of service: regular
 │
 └── • render
     │
-    └── • lookup join
+    └── • index join
         │ sql nodes: <hidden>
         │ kv nodes: <hidden>
         │ regions: <hidden>
@@ -1030,10 +1030,8 @@ quality of service: regular
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
         │ estimated max memory allocated: 0 B
+        │ estimated max sql temp disk usage: 0 B
         │ table: t137352@t137352_pkey
-        │ equality: ($1) = (k)
-        │ equality cols are key
-        │ locking strength: for update
         │
         └── • values
               sql nodes: <hidden>
@@ -1239,7 +1237,7 @@ quality of service: regular
                 │ equality: (k) = (a)
                 │ pred: a = 1
                 │
-                └── • lookup join
+                └── • index join
                     │ sql nodes: <hidden>
                     │ kv nodes: <hidden>
                     │ regions: <hidden>
@@ -1250,10 +1248,9 @@ quality of service: regular
                     │ KV bytes read: 0 B
                     │ KV gRPC calls: 0
                     │ estimated max memory allocated: 0 B
+                    │ estimated max sql temp disk usage: 0 B
                     │ estimated row count: 1
                     │ table: t137352@t137352_pkey
-                    │ equality: ($1) = (k)
-                    │ equality cols are key
                     │
                     └── • values
                           sql nodes: <hidden>
