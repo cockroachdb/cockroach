@@ -95,7 +95,7 @@ var (
 	// PrettyPrintRange prints a key range in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
 	// package circle import.
-	PrettyPrintRange func(start, end Key, maxChars int, redact bool) string
+	PrettyPrintRange func(start, end Key, maxChars int) redact.RedactableString
 )
 
 // RKey denotes a Key whose local addressing has been accounted for.
@@ -2581,7 +2581,12 @@ func (s Span) AsRange() interval.Range {
 
 func (s Span) String() string {
 	const maxChars = math.MaxInt32
-	return PrettyPrintRange(s.Key, s.EndKey, maxChars, false)
+	return PrettyPrintRange(s.Key, s.EndKey, maxChars).StripMarkers()
+}
+
+func (s Span) SafeFormat(w redact.SafePrinter, _ rune) {
+	const maxChars = math.MaxInt32
+	w.Print(PrettyPrintRange(s.Key, s.EndKey, maxChars))
 }
 
 // SplitOnKey returns two spans where the left span has EndKey and right span
@@ -2778,12 +2783,12 @@ func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
 
 func (rs RSpan) SafeFormat(w redact.SafePrinter, r rune) {
 	const maxChars = math.MaxInt32
-	w.Print(redact.SafeString(PrettyPrintRange(Key(rs.Key), Key(rs.EndKey), maxChars, true)))
+	w.Print(PrettyPrintRange(Key(rs.Key), Key(rs.EndKey), maxChars))
 }
 
 func (rs RSpan) String() string {
 	const maxChars = math.MaxInt32
-	return PrettyPrintRange(Key(rs.Key), Key(rs.EndKey), maxChars, false)
+	return PrettyPrintRange(Key(rs.Key), Key(rs.EndKey), maxChars).StripMarkers()
 }
 
 // Intersect returns the intersection of the current span and the
