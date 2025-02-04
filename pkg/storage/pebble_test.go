@@ -1664,11 +1664,8 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 		dFS := delayFS{FS: memFS}
 		e, err := fs.InitEnv(context.Background(), dFS, "" /* dir */, fs.EnvConfig{}, nil /* statsCollector */)
 		require.NoError(t, err)
-		// No block cache, so all reads go to FS.
-		db, err := Open(ctx, e, cluster.MakeClusterSettings(), func(cfg *engineConfig) error {
-			cfg.cacheSize = nil
-			return nil
-		})
+		// Tiny block cache, so all reads go to FS.
+		db, err := Open(ctx, e, cluster.MakeClusterSettings(), CacheSize(1024))
 		require.NoError(t, err)
 		defer db.Close()
 		// Write some data and flush to disk.
