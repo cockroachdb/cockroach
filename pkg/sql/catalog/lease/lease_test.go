@@ -283,6 +283,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		)
 		ctx := logtags.AddTag(context.Background(), "leasemgr", nodeID)
 		mgr.RunBackgroundLeasingTask(ctx)
+		mgr.TestingMarkInit()
 		t.nodes[nodeID] = mgr
 	}
 	return mgr
