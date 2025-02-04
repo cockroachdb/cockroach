@@ -39,10 +39,10 @@ message RaBitQuantizedVectorSet {
   repeated uint32 code_counts = 3;
   // CentroidDistances is a slice of the exact distances of the original
   // full-size vectors from the centroid.
-  repeated float centroidDistances = 4;
+  repeated float centroid_distances = 4;
   // DotProducts is a slice of the exact inner products between the original
   // full-size vectors and their corresponding quantized vectors.
-  repeated float dotProducts = 5;
+  repeated float dot_products = 5;
 }
 
 // UnQuantizedVectorSet trivially implements the QuantizedVectorSet interface,
@@ -55,7 +55,7 @@ message UnQuantizedVectorSet {
   repeated float centroid = 1;
   // CentroidDistances is a slice of the exact distances of the vectors in the
   // set from the centroid.
-  repeated float centroidDistances = 2;
+  repeated float centroid_distances = 2;
   // Vectors is the set of original full-size vectors.
   cockroach.util.vector.Set vectors = 3 [(gogoproto.nullable) = false];
 }

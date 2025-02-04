@@ -29,7 +29,7 @@ func TestVectorSet(t *testing.T) {
 		require.Equal(t, 3, vs.Count)
 		require.Equal(t, []float32{1, 2, 5, 3, 6, 6}, vs.Data)
 
-		vs.AddSet(&vs)
+		vs.AddSet(vs)
 		require.Equal(t, 6, vs.Count)
 		require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6}, vs.Data)
 
@@ -41,7 +41,7 @@ func TestVectorSet(t *testing.T) {
 		require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6, 3, 1, 4, 4}, vs.Data)
 
 		vs2 := MakeSetFromRawData([]float32{0, 1, -1, 3}, 2)
-		vs2.AddSet(&vs)
+		vs2.AddSet(vs)
 		require.Equal(t, 10, vs2.Count)
 		require.Equal(t, []float32{0, 1, -1, 3, 1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6, 3, 1, 4, 4}, vs2.Data)
 	})
@@ -125,7 +125,7 @@ func TestVectorSet(t *testing.T) {
 		vs.Add(T{0, 1})
 		vs.ReplaceWithLast(1)
 		add := MakeSetFromRawData([]float32{7, 8, 9, 10}, 2)
-		vs2.AddSet(&add)
+		vs2.AddSet(add)
 		vs2.ReplaceWithLast(0)
 
 		// Ensure that changes to each did not impact the other.
@@ -161,7 +161,6 @@ func TestVectorSet(t *testing.T) {
 		require.Panics(t, func() { vs.At(-1) })
 		require.Panics(t, func() { vs.SplitAt(-1) })
 		require.Panics(t, func() { vs.AddUndefined(-1) })
-		require.Panics(t, func() { vs.AddSet(nil) })
 		require.Panics(t, func() { vs.ReplaceWithLast(-1) })
 		require.Panics(t, func() { vs.Centroid([]float32{0, 0, 0}) })
 

@@ -34,7 +34,7 @@ func TestPartition(t *testing.T) {
 	// Create new partition and add 4 vectors.
 	quantizer := quantize.NewUnQuantizer(2)
 	vectors := vector.MakeSetFromRawData([]float32{1, 2, 5, 2, 6, 6}, 2)
-	quantizedSet := quantizer.Quantize(ctx, &vectors)
+	quantizedSet := quantizer.Quantize(ctx, vectors)
 	childKeys := []ChildKey{childKey10, childKey20, childKey30}
 	partition := NewPartition(quantizer, quantizedSet, childKeys, 1)
 	require.True(t, partition.Add(ctx, vector.T{4, 3}, childKey40))
