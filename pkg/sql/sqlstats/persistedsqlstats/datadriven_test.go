@@ -144,7 +144,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			// them.
 			fingerprint = strings.Replace(fingerprint, "%", " ", -1)
 
-			previouslySampled := appStats.ShouldSample(
+			previouslySampled := appStats.StatementSampled(
 				fingerprint,
 				implicitTxn,
 				dbName,

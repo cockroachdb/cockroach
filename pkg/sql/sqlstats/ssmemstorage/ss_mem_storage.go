@@ -80,12 +80,11 @@ type Container struct {
 		stmts map[stmtKey]*stmtStats
 		txns  map[appstatspb.TransactionFingerprintID]*txnStats
 
-		// sampledPlanMetadataCache records when was the last time the plan was
-		// sampled. This data structure uses a subset of stmtKey as the key into
-		// in-memory dictionary in order to allow lookup for whether a plan has been
-		// sampled for a statement without needing to know the statement's
-		// transaction fingerprintID.
-		sampledPlanMetadataCache map[sampledPlanKey]time.Time
+		// sampledStatementCache records if the statement has been sampled via
+		// tracing. sampledPlanKey is used as the key to the map as it does not
+		// use transactionFingerprintID which is not available at the time of
+		// sampling decision.
+		sampledStatementCache map[sampledPlanKey]struct{}
 	}
 
 	txnCounts transactionCounts
@@ -119,7 +118,7 @@ func New(
 
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
 	s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats)
-	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time)
+	s.mu.sampledStatementCache = make(map[sampledPlanKey]struct{})
 
 	return s
 }
@@ -385,10 +384,7 @@ func (s *stmtStats) sizeUnsafeLocked() int64 {
 	return stmtStatsShallowSize + databaseNameSize + dataSize
 }
 
-func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *stmtStats) recordExecStatsLocked(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.Count++
 	count := s.mu.data.ExecStats.Count
 	s.mu.data.ExecStats.NetworkBytes.Record(count, float64(stats.NetworkBytesSent))
@@ -501,7 +497,7 @@ func (s *Container) getStatsForStmtWithKeyLocked(
 		stats = &stmtStats{}
 		stats.ID = stmtFingerprintID
 		s.mu.stmts[key] = stats
-		s.mu.sampledPlanMetadataCache[key.sampledPlanKey] = s.getTimeNow()
+		s.mu.sampledStatementCache[key.sampledPlanKey] = struct{}{}
 
 		return stats, true /* created */, false /* throttled */
 	}
@@ -652,7 +648,7 @@ func (s *Container) clearLocked(ctx context.Context) {
 	// large for the likely future workload.
 	s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
 	s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
-	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
+	s.mu.sampledStatementCache = make(map[sampledPlanKey]struct{}, len(s.mu.sampledStatementCache)/2)
 	if s.knobs != nil && s.knobs.OnAfterClear != nil {
 		s.knobs.OnAfterClear()
 	}
@@ -898,15 +894,6 @@ func (s *transactionCounts) recordTransactionCounts(
 	if implicit {
 		s.mu.ImplicitCount++
 	}
-}
-
-func (s *Container) getLogicalPlanLastSampled(
-	key sampledPlanKey,
-) (lastSampled time.Time, found bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	lastSampled, found = s.mu.sampledPlanMetadataCache[key]
-	return lastSampled, found
 }
 
 type transactionCounts struct {

@@ -237,7 +237,6 @@ func (ex *connExecutor) recordStatementSummary(
 			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.CumulativeContentionNanos.Inc(queryLevelStats.ContentionTime.Nanoseconds())
 		}
 
-		err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, *queryLevelStats)
 		if err != nil {
 			if log.V(2 /* level */) {
 				log.Warningf(ctx, "unable to record statement exec stats: %s", err)

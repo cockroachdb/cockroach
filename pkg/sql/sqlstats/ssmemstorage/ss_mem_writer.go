@@ -11,7 +11,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -26,11 +25,6 @@ var (
 	// ErrFingerprintLimitReached is returned from the Container when we have
 	// more fingerprints than the limit specified in the cluster setting.
 	ErrFingerprintLimitReached = errors.New("sql stats fingerprint limit reached")
-
-	// ErrExecStatsFingerprintFlushed is returned from the Container when the
-	// stats object for the fingerprint has been flushed to system table before
-	// the appstatspb.ExecStats can be recorded.
-	ErrExecStatsFingerprintFlushed = errors.New("stmtStats flushed before execution stats can be recorded")
 )
 
 var timestampSize = int64(unsafe.Sizeof(time.Time{}))
@@ -119,6 +113,7 @@ func (s *Container) RecordStatement(
 	if value.ExecStats != nil {
 		stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
 		stats.mu.data.UsedFollowerRead = stats.mu.data.UsedFollowerRead || value.ExecStats.UsedFollowerRead
+		stats.recordExecStatsLocked(*value.ExecStats)
 	}
 	stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, []string{value.PlanGist})
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
@@ -145,7 +140,7 @@ func (s *Container) RecordStatement(
 		// stats size + stmtKey size + hash of the statementKey
 		estimatedMemoryAllocBytes := stats.sizeUnsafeLocked() + statementKey.size() + 8
 
-		// We also account for the memory used for s.sampledPlanMetadataCache.
+		// We also account for the memory used for s.sampledStatementCache.
 		// timestamp size + key size + hash.
 		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
 		s.mu.Lock()
@@ -167,33 +162,37 @@ func (s *Container) RecordStatement(
 	return stats.ID, nil
 }
 
-func (s *Container) RecordStatementExecStats(
-	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
-) error {
-	stmtStats, _, _, _, _ :=
-		s.getStatsForStmt(
-			key.Query,
-			key.ImplicitTxn,
-			key.Database,
-			key.PlanHash,
-			key.TransactionFingerprintID,
-			false, /* createIfNotExists */
-		)
-	if stmtStats == nil {
-		return ErrExecStatsFingerprintFlushed
-	}
-	stmtStats.recordExecStats(stats)
-	return nil
-}
-
-// ShouldSample implements sqlstats.Writer interface.
-func (s *Container) ShouldSample(fingerprint string, implicitTxn bool, database string) bool {
-	_, previouslySampled := s.getLogicalPlanLastSampled(sampledPlanKey{
+// StatementSampled returns true if the statement with the given fingerprint
+// exists in the sampled statement cache.
+func (s *Container) StatementSampled(fingerprint string, implicitTxn bool, database string) bool {
+	key := sampledPlanKey{
 		stmtNoConstants: fingerprint,
 		implicitTxn:     implicitTxn,
 		database:        database,
-	})
-	return previouslySampled
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.mu.sampledStatementCache[key]
+	return ok
+}
+
+// TrySetStatementSampled attempts to add the statement to the sampled
+// statement cache. If the statement is already in the cache, it returns false.
+func (s *Container) TrySetStatementSampled(
+	fingerprint string, implicitTxn bool, database string,
+) bool {
+	key := sampledPlanKey{
+		stmtNoConstants: fingerprint,
+		implicitTxn:     implicitTxn,
+		database:        database,
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.mu.sampledStatementCache[key]; ok {
+		return false
+	}
+	s.mu.sampledStatementCache[key] = struct{}{}
+	return true
 }
 
 // RecordTransaction saves per-transaction statistics.
