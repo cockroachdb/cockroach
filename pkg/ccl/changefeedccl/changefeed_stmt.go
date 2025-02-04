@@ -1474,7 +1474,7 @@ func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfi
 }
 
 // reconcileJobStateWithLocalState ensures that the job progress information
-// is consistent with the state present in the local state.
+// is consistent with the state present in the local state. TODO(#137692).
 func reconcileJobStateWithLocalState(
 	ctx context.Context, jobID jobspb.JobID, localState *cachedState, execCfg *sql.ExecutorConfig,
 ) error {
