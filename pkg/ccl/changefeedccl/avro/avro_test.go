@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package changefeedccl
+package avro
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -44,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/text/collate"
 )
 
 var testTypes = make(map[string]*types.T)
@@ -124,8 +125,8 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 	return rows, nil
 }
 
-func parseAvroSchema(t *testing.T, evalCtx *eval.Context, j string) (*avroDataRecord, error) {
-	var s avroDataRecord
+func parseAvroSchema(t *testing.T, evalCtx *eval.Context, j string) (*DataRecord, error) {
+	var s DataRecord
 	if err := json.Unmarshal([]byte(j), &s); err != nil {
 		return nil, err
 	}
@@ -133,7 +134,7 @@ func parseAvroSchema(t *testing.T, evalCtx *eval.Context, j string) (*avroDataRe
 	// serde. Instead of duplicating the logic, fake out a TableDescriptor, so
 	// we can reuse tableToAvroSchema and get them for free.
 	tableDesc := descpb.TableDescriptor{
-		Name: AvroNameToSQLName(s.Name),
+		Name: changefeedbase.AvroNameToSQLName(s.Name),
 	}
 	for i, f := range s.Fields {
 		// s.Fields[idx] has `Name` and `SchemaType` set but nothing else.
@@ -156,7 +157,7 @@ func parseAvroSchema(t *testing.T, evalCtx *eval.Context, j string) (*avroDataRe
 	tableDesc.Families = []descpb.ColumnFamilyDescriptor{
 		{ID: primary, Name: "primary", ColumnIDs: columnIDs, ColumnNames: columnNames},
 	}
-	return tableToAvroSchema(
+	return TableToAvroSchema(
 		cdcevent.TestingMakeEventRow(
 			tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), 0, nil, false,
 		), "", "")
@@ -340,9 +341,9 @@ func TestAvroSchema(t *testing.T) {
 		typesToTest = append(typesToTest, typ)
 		switch typ.Family() {
 		case types.StringFamily:
-			collationTags := collate.Supported()
+			collationTags := collatedstring.Supported()
 			randCollationTag := collationTags[rand.Intn(len(collationTags))]
-			collatedType := types.MakeCollatedString(typ, randCollationTag.String())
+			collatedType := types.MakeCollatedString(typ, randCollationTag)
 			typesToTest = append(typesToTest, collatedType)
 		}
 	}
@@ -389,9 +390,9 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.schema))
 			require.NoError(t, err)
-			origSchema, err := tableToAvroSchema(
+			origSchema, err := TableToAvroSchema(
 				cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false),
-				avroSchemaNoSuffix, "")
+				SchemaNoSuffix, "")
 			require.NoError(t, err)
 			jsonSchema := origSchema.codec.Schema()
 			roundtrippedSchema, err := parseAvroSchema(t, evalCtx, jsonSchema)
@@ -430,15 +431,15 @@ func TestAvroSchema(t *testing.T) {
 	t.Run("escaping", func(t *testing.T) {
 		tableDesc, err := parseTableDesc(`CREATE TABLE "☃" (🍦 INT PRIMARY KEY)`)
 		require.NoError(t, err)
-		tableSchema, err := tableToAvroSchema(
-			cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false), avroSchemaNoSuffix, "")
+		tableSchema, err := TableToAvroSchema(
+			cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false), SchemaNoSuffix, "")
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
 				`{"type":["null","long"],"name":"_u0001f366_","default":null,`+
 				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			tableSchema.codec.Schema())
-		indexSchema, err := primaryIndexToAvroSchema(
+		indexSchema, err := PrimaryIndexToAvroSchema(
 			cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false), tableDesc.GetName(), "")
 		require.NoError(t, err)
 		require.Equal(t,
@@ -674,8 +675,8 @@ func TestAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			row := cdcevent.TestingMakeEventRow(tableDesc, 0, encDatums[0], false)
-			schema, err := tableToAvroSchema(
-				row, avroSchemaNoSuffix, "")
+			schema, err := TableToAvroSchema(
+				row, SchemaNoSuffix, "")
 			require.NoError(t, err)
 			if test.numRawBytes > 0 {
 				overhead := 4
@@ -732,7 +733,7 @@ func TestAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			row := cdcevent.TestingMakeEventRow(tableDesc, 0, encDatums[0], false)
-			schema, err := tableToAvroSchema(row, avroSchemaNoSuffix, "")
+			schema, err := TableToAvroSchema(row, SchemaNoSuffix, "")
 			require.NoError(t, err)
 			textual, err := schema.textualFromRow(row)
 			require.NoError(t, err)
@@ -750,18 +751,18 @@ func TestAvroSchema(t *testing.T) {
 	})
 }
 
-func (f *avroSchemaField) defaultValueNative() (interface{}, bool) {
-	schemaType := f.SchemaType
-	if union, ok := schemaType.([]avroSchemaType); ok {
+func (f *schemaField) defaultValueNative() (interface{}, bool) {
+	schType := f.SchemaType
+	if union, ok := schType.([]schemaType); ok {
 		// "Default values for union fields correspond to the first schema in
 		// the union."
-		schemaType = union[0]
+		schType = union[0]
 	}
-	switch schemaType {
-	case avroSchemaNull:
+	switch schType {
+	case schemaTypeNull:
 		return nil, true
 	}
-	panic(errors.Errorf(`unimplemented %T: %v`, schemaType, schemaType))
+	panic(errors.Errorf(`unimplemented %T: %v`, schType, schType))
 }
 
 // rowFromBinaryEvolved decodes `buf` using writerSchema but evolves/resolves it
@@ -771,7 +772,7 @@ func (f *avroSchemaField) defaultValueNative() (interface{}, bool) {
 // It'd be nice if our avro library handled this for us, but neither of the
 // popular golang once seem to have it implemented.
 func rowFromBinaryEvolved(
-	buf []byte, writerSchema, readerSchema *avroDataRecord,
+	buf []byte, writerSchema, readerSchema *DataRecord,
 ) (rowenc.EncDatumRow, error) {
 	native, newBuf, err := writerSchema.codec.NativeFromBinary(buf)
 	if err != nil {
@@ -788,7 +789,7 @@ func rowFromBinaryEvolved(
 	return readerSchema.rowFromNative(nativeMap)
 }
 
-func adjustNative(native map[string]interface{}, writerSchema, readerSchema *avroDataRecord) {
+func adjustNative(native map[string]interface{}, writerSchema, readerSchema *DataRecord) {
 	for _, writerField := range writerSchema.Fields {
 		if _, inReader := readerSchema.fieldIdxByName[writerField.Name]; !inReader {
 			// "If the writer's record contains a field with a name not present
@@ -835,14 +836,14 @@ func TestAvroMigration(t *testing.T) {
 			writerDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.writerSchema))
 			require.NoError(t, err)
-			writerSchema, err := tableToAvroSchema(
-				cdcevent.TestingMakeEventRow(writerDesc, 0, nil, false), avroSchemaNoSuffix, "")
+			writerSchema, err := TableToAvroSchema(
+				cdcevent.TestingMakeEventRow(writerDesc, 0, nil, false), SchemaNoSuffix, "")
 			require.NoError(t, err)
 			readerDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.readerSchema))
 			require.NoError(t, err)
-			readerSchema, err := tableToAvroSchema(
-				cdcevent.TestingMakeEventRow(readerDesc, 0, nil, false), avroSchemaNoSuffix, "")
+			readerSchema, err := TableToAvroSchema(
+				cdcevent.TestingMakeEventRow(readerDesc, 0, nil, false), SchemaNoSuffix, "")
 			require.NoError(t, err)
 
 			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
@@ -920,7 +921,7 @@ func benchmarkEncodeType(b *testing.B, typ *types.T, encRow rowenc.EncDatumRow) 
 		fmt.Sprintf(`CREATE TABLE bench_table (bench_field %s)`, typ.SQLString()))
 	require.NoError(b, err)
 	row := cdcevent.TestingMakeEventRow(tableDesc, 0, encRow, false)
-	schema, err := tableToAvroSchema(row, "suffix", "namespace")
+	schema, err := TableToAvroSchema(row, "suffix", "namespace")
 	require.NoError(b, err)
 
 	b.ReportAllocs()
