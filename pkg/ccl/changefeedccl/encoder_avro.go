@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -53,12 +54,12 @@ type tableIDAndVersion struct {
 type tableIDAndVersionPair [2]tableIDAndVersion // [before, after]
 
 type confluentRegisteredKeySchema struct {
-	schema     *avroDataRecord
+	schema     *avro.DataRecord
 	registryID int32
 }
 
 type confluentRegisteredEnvelopeSchema struct {
-	schema     *avroEnvelopeRecord
+	schema     *avro.EnvelopeRecord
 	registryID int32
 }
 
@@ -146,7 +147,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 	v, ok := e.keyCache.Get(cacheKey)
 	if ok {
 		registered = v.(confluentRegisteredKeySchema)
-		if err := registered.schema.refreshTypeMetadata(row); err != nil {
+		if err := registered.schema.RefreshTypeMetadata(row); err != nil {
 			return nil, err
 		}
 	} else {
@@ -156,7 +157,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 			return nil, err
 		}
 		if e.customKeyColumn == "" {
-			registered.schema, err = primaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
+			registered.schema, err = avro.PrimaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -165,7 +166,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 			if err != nil {
 				return nil, err
 			}
-			registered.schema, err = newSchemaForRow(it, SQLNameToAvroName(tableName), e.schemaPrefix)
+			registered.schema, err = avro.NewSchemaForRow(it, changefeedbase.SQLNameToAvroName(tableName), e.schemaPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -173,8 +174,8 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := SQLNameToKafkaName(tableName) + confluentSubjectSuffixKey
-		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
+		subject := changefeedbase.SQLNameToKafkaName(tableName) + confluentSubjectSuffixKey
+		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
 		if err != nil {
 			return nil, err
 		}
@@ -219,47 +220,47 @@ func (e *confluentAvroEncoder) EncodeValue(
 	v, ok := e.valueCache.Get(cacheKey)
 	if ok {
 		registered = v.(confluentRegisteredEnvelopeSchema)
-		if prevRow.IsInitialized() && registered.schema.before != nil {
-			if err := registered.schema.before.refreshTypeMetadata(prevRow); err != nil {
+		if prevRow.IsInitialized() && registered.schema.Before != nil {
+			if err := registered.schema.Before.RefreshTypeMetadata(prevRow); err != nil {
 				return nil, err
 			}
 		}
-		if registered.schema.after != nil {
-			if err := registered.schema.after.refreshTypeMetadata(updatedRow); err != nil {
+		if registered.schema.After != nil {
+			if err := registered.schema.After.RefreshTypeMetadata(updatedRow); err != nil {
 				return nil, err
 			}
 		}
-		if registered.schema.record != nil {
-			if err := registered.schema.record.refreshTypeMetadata(updatedRow); err != nil {
+		if registered.schema.Rec != nil {
+			if err := registered.schema.Rec.RefreshTypeMetadata(updatedRow); err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		var beforeDataSchema, afterDataSchema, recordDataSchema *avroDataRecord
+		var beforeDataSchema, afterDataSchema, recordDataSchema *avro.DataRecord
 		if e.beforeField && prevRow.IsInitialized() {
 			var err error
-			beforeDataSchema, err = tableToAvroSchema(prevRow, `before`, e.schemaPrefix)
+			beforeDataSchema, err = avro.TableToAvroSchema(prevRow, `before`, e.schemaPrefix)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		currentSchema, err := tableToAvroSchema(updatedRow, avroSchemaNoSuffix, e.schemaPrefix)
+		currentSchema, err := avro.TableToAvroSchema(updatedRow, avro.SchemaNoSuffix, e.schemaPrefix)
 		if err != nil {
 			return nil, err
 		}
 
-		var opts avroEnvelopeOpts
+		var opts avro.EnvelopeOpts
 
 		// In the wrapped envelope, row data goes in the "after" field. In the raw envelope,
 		// it goes in the "record" field. In the "key_only" envelope it's omitted.
 		// This means metadata can safely go at the top level as there are never arbitrary column names
 		// for it to conflict with.
 		if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
-			opts = avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField, mvccTimestampField: e.mvccTimestampField}
+			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, UpdatedField: e.updatedField, MVCCTimestampField: e.mvccTimestampField}
 			afterDataSchema = currentSchema
 		} else {
-			opts = avroEnvelopeOpts{recordField: true, updatedField: e.updatedField, mvccTimestampField: e.mvccTimestampField}
+			opts = avro.EnvelopeOpts{RecordField: true, UpdatedField: e.updatedField, MVCCTimestampField: e.mvccTimestampField}
 			recordDataSchema = currentSchema
 		}
 
@@ -267,7 +268,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 		if err != nil {
 			return nil, err
 		}
-		registered.schema, err = envelopeToAvroSchema(name, opts, beforeDataSchema, afterDataSchema, recordDataSchema, e.schemaPrefix)
+		registered.schema, err = avro.NewEnvelopeRecord(name, opts, beforeDataSchema, afterDataSchema, recordDataSchema, e.schemaPrefix)
 
 		if err != nil {
 			return nil, err
@@ -275,19 +276,19 @@ func (e *confluentAvroEncoder) EncodeValue(
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := SQLNameToKafkaName(name) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
+		subject := changefeedbase.SQLNameToKafkaName(name) + confluentSubjectSuffixValue
+		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
 		if err != nil {
 			return nil, err
 		}
 		e.valueCache.Add(cacheKey, registered)
 	}
 
-	meta := avroMetadata{}
-	if registered.schema.opts.updatedField {
+	meta := avro.Metadata{}
+	if registered.schema.Opts.UpdatedField {
 		meta[`updated`] = evCtx.updated
 	}
-	if registered.schema.opts.mvccTimestampField {
+	if registered.schema.Opts.MVCCTimestampField {
 		meta[`mvcc_timestamp`] = evCtx.mvcc
 	}
 
@@ -306,25 +307,25 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 ) ([]byte, error) {
 	registered, ok := e.resolvedCache[topic]
 	if !ok {
-		opts := avroEnvelopeOpts{resolvedField: true}
+		opts := avro.EnvelopeOpts{ResolvedField: true}
 		var err error
-		registered.schema, err = envelopeToAvroSchema(topic, opts, nil /* before */, nil /* after */, nil /* record */, e.schemaPrefix /* namespace */)
+		registered.schema, err = avro.NewEnvelopeRecord(topic, opts, nil /* before */, nil /* after */, nil /* record */, e.schemaPrefix /* namespace */)
 		if err != nil {
 			return nil, err
 		}
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
+		subject := changefeedbase.SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
+		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
 		if err != nil {
 			return nil, err
 		}
 
 		e.resolvedCache[topic] = registered
 	}
-	var meta avroMetadata
-	if registered.schema.opts.resolvedField {
+	var meta avro.Metadata
+	if registered.schema.Opts.ResolvedField {
 		meta = map[string]interface{}{
 			`resolved`: resolved,
 		}
@@ -340,7 +341,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 }
 
 func (e *confluentAvroEncoder) register(
-	ctx context.Context, schema *avroRecord, subject string,
+	ctx context.Context, schema *avro.Record, subject string,
 ) (int32, error) {
-	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.codec.Schema())
+	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.Schema())
 }

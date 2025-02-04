@@ -261,7 +261,7 @@ func makeTestKafkaSink(
 ) (s *kafkaSink, cleanup func()) {
 	targets := makeChangefeedTargets(targetNames...)
 	topics, err := MakeTopicNamer(targets,
-		WithPrefix(topicPrefix), WithSingleName(topicNameOverride), WithSanitizeFn(SQLNameToKafkaName))
+		WithPrefix(topicPrefix), WithSingleName(topicNameOverride), WithSanitizeFn(changefeedbase.SQLNameToKafkaName))
 	require.NoError(t, err)
 
 	s = &kafkaSink{
