@@ -51,7 +51,7 @@ func TestIndexBackfiller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 
 	moveToTDelete := make(chan bool)
 	moveToTWrite := make(chan bool)

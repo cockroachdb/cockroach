@@ -265,7 +265,7 @@ CREATE INDEX foo ON t.test (v)
 	}
 
 	// Ensure that the indexes have been created.
-	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mTest := makeMutationTest(t, kvDB, sqlDB, s.Codec(), tableDesc)
 	indexQuery := `SELECT v FROM t.test@foo`
 	mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 
