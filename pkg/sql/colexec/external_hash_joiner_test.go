@@ -217,7 +217,9 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
-	defer monitorRegistry.Close(ctx)
+	afterEachRun := func() {
+		monitorRegistry.BenchmarkReset(ctx)
+	}
 
 	nCols := 4
 	for _, typ := range []*types.T{types.Int, types.Bytes} {
@@ -270,6 +272,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 							hj.Init(ctx)
 							for b := hj.Next(); b.Length() > 0; b = hj.Next() {
 							}
+							afterEachRun()
 						}
 					})
 				}

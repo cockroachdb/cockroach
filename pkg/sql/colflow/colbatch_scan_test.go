@@ -158,7 +158,9 @@ func BenchmarkColBatchScan(b *testing.B) {
 			evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
 			var monitorRegistry colexecargs.MonitorRegistry
-			defer monitorRegistry.Close(ctx)
+			afterEachRun := func() {
+				monitorRegistry.BenchmarkReset(ctx)
+			}
 
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
@@ -195,6 +197,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 				}
 				b.StopTimer()
 				res.TestCleanupNoError(b)
+				afterEachRun()
 			}
 		})
 	}
