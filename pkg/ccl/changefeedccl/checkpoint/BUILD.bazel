@@ -17,6 +17,7 @@ go_library(
         "//pkg/util/metric/aggmetric",
         "//pkg/util/span",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -29,6 +30,7 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvserver/rangefeed",
         "//pkg/roachpb",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
@@ -36,6 +38,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/shuffle",
         "//pkg/util/span",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
