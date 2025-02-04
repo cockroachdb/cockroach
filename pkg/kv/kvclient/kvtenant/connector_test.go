@@ -48,6 +48,7 @@ type mockServer struct {
 	rangeLookupFn    func(context.Context, *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error)
 	gossipSubFn      func(*kvpb.GossipSubscriptionRequest, kvpb.Internal_GossipSubscriptionServer) error
 	tenantSettingsFn func(request *kvpb.TenantSettingsRequest, server kvpb.Internal_TenantSettingsServer) error
+	tenantInfoFn     func(*kvpb.TenantInfoRequest, kvpb.Internal_TenantSettingsServer) error
 
 	emulateOldVersionSettingServer bool
 }
@@ -109,6 +110,12 @@ func (m *mockServer) TenantSettings(
 		return nil
 	}
 	return m.tenantSettingsFn(req, stream)
+}
+
+func (*mockServer) TenantInfo(
+	context.Context, *kvpb.TenantInfoRequest,
+) (*kvpb.TenantInfoResponse, error) {
+	panic("unimplemented")
 }
 
 func (*mockServer) ResetQuorum(

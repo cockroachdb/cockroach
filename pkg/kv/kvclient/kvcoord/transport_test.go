@@ -323,6 +323,12 @@ func (m *mockInternalClient) TenantSettings(
 	return nil, fmt.Errorf("unsupported TenantSettings call")
 }
 
+func (m *mockInternalClient) TenantInfo(
+	context.Context, *kvpb.TenantInfoRequest, ...grpc.CallOption,
+) (*kvpb.TenantInfoResponse, error) {
+	return nil, fmt.Errorf("unsupported TenantInfo call")
+}
+
 func (n *mockInternalClient) GetRangeDescriptors(
 	context.Context, *kvpb.GetRangeDescriptorsRequest, ...grpc.CallOption,
 ) (kvpb.Internal_GetRangeDescriptorsClient, error) {

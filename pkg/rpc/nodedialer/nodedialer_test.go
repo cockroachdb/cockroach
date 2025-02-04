@@ -483,6 +483,12 @@ func (*internalServer) TenantSettings(
 	panic("unimplemented")
 }
 
+func (*internalServer) TenantInfo(
+	context.Context, *kvpb.TenantInfoRequest,
+) (*kvpb.TenantInfoResponse, error) {
+	panic("unimplemented")
+}
+
 func (*internalServer) GetRangeDescriptors(
 	*kvpb.GetRangeDescriptorsRequest, kvpb.Internal_GetRangeDescriptorsServer,
 ) error {

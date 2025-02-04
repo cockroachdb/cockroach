@@ -258,6 +258,26 @@ func (mr *MockInternalClientMockRecorder) SpanConfigConformance(arg0, arg1 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SpanConfigConformance", reflect.TypeOf((*MockInternalClient)(nil).SpanConfigConformance), varargs...)
 }
 
+// TenantInfo mocks base method.
+func (m *MockInternalClient) TenantInfo(arg0 context.Context, arg1 *kvpb.TenantInfoRequest, arg2 ...grpc.CallOption) (*kvpb.TenantInfoResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "TenantInfo", varargs...)
+	ret0, _ := ret[0].(*kvpb.TenantInfoResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TenantInfo indicates an expected call of TenantInfo.
+func (mr *MockInternalClientMockRecorder) TenantInfo(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TenantInfo", reflect.TypeOf((*MockInternalClient)(nil).TenantInfo), varargs...)
+}
+
 // TenantSettings mocks base method.
 func (m *MockInternalClient) TenantSettings(arg0 context.Context, arg1 *kvpb.TenantSettingsRequest, arg2 ...grpc.CallOption) (kvpb.Internal_TenantSettingsClient, error) {
 	m.ctrl.T.Helper()
