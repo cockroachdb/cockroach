@@ -2459,29 +2459,19 @@ project
       │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    ├── key: ()
       │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,20)
-      │    │    │    │    │    ├── project
+      │    │    │    │    │    ├── index-join flavors
       │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
       │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15)
-      │    │    │    │    │    │    └── inner-join (lookup flavors)
-      │    │    │    │    │    │         ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 "$2":37!null
-      │    │    │    │    │    │         ├── flags: disallow merge join
-      │    │    │    │    │    │         ├── key columns: [37] = [1]
-      │    │    │    │    │    │         ├── lookup columns are key
-      │    │    │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    └── values
+      │    │    │    │    │    │         ├── columns: flavors.id:1
+      │    │    │    │    │    │         ├── cardinality: [1 - 1]
       │    │    │    │    │    │         ├── has-placeholder
       │    │    │    │    │    │         ├── key: ()
-      │    │    │    │    │    │         ├── fd: ()-->(1-12,14,15,37), (1)==(37), (37)==(1)
-      │    │    │    │    │    │         ├── values
-      │    │    │    │    │    │         │    ├── columns: "$2":37
-      │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
-      │    │    │    │    │    │         │    ├── has-placeholder
-      │    │    │    │    │    │         │    ├── key: ()
-      │    │    │    │    │    │         │    ├── fd: ()-->(37)
-      │    │    │    │    │    │         │    └── ($2,)
-      │    │    │    │    │    │         └── filters (true)
+      │    │    │    │    │    │         ├── fd: ()-->(1)
+      │    │    │    │    │    │         └── ($2,)
       │    │    │    │    │    ├── project
       │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:19!null project_id:20!null
       │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -2489,20 +2479,20 @@ project
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(19,20)
       │    │    │    │    │    │    └── inner-join (lookup flavor_projects@flavor_projects_flavor_id_project_id_key)
-      │    │    │    │    │    │         ├── columns: flavor_projects.flavor_id:19!null project_id:20!null "$1":38!null "$2":39!null
+      │    │    │    │    │    │         ├── columns: flavor_projects.flavor_id:19!null project_id:20!null "$1":37!null "$2":38!null
       │    │    │    │    │    │         ├── flags: disallow merge join
-      │    │    │    │    │    │         ├── key columns: [39 38] = [19 20]
+      │    │    │    │    │    │         ├── key columns: [38 37] = [19 20]
       │    │    │    │    │    │         ├── lookup columns are key
       │    │    │    │    │    │         ├── cardinality: [0 - 1]
       │    │    │    │    │    │         ├── has-placeholder
       │    │    │    │    │    │         ├── key: ()
-      │    │    │    │    │    │         ├── fd: ()-->(19,20,38,39), (20)==(38), (38)==(20), (19)==(39), (39)==(19)
+      │    │    │    │    │    │         ├── fd: ()-->(19,20,37,38), (20)==(37), (37)==(20), (19)==(38), (38)==(19)
       │    │    │    │    │    │         ├── values
-      │    │    │    │    │    │         │    ├── columns: "$1":38 "$2":39
+      │    │    │    │    │    │         │    ├── columns: "$1":37 "$2":38
       │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
       │    │    │    │    │    │         │    ├── has-placeholder
       │    │    │    │    │    │         │    ├── key: ()
-      │    │    │    │    │    │         │    ├── fd: ()-->(38,39)
+      │    │    │    │    │    │         │    ├── fd: ()-->(37,38)
       │    │    │    │    │    │         │    └── ($1, $2)
       │    │    │    │    │    │         └── filters (true)
       │    │    │    │    │    └── filters (true)
