@@ -73,32 +73,10 @@ type raftLog struct {
 	applied uint64
 
 	logger raftlogger.Logger
-
-	// maxApplyingEntsSize limits the outstanding byte size of the messages
-	// returned from calls to nextCommittedEnts that have not been acknowledged
-	// by a call to appliedTo.
-	maxApplyingEntsSize entryEncodingSize
-	// applyingEntsSize is the current outstanding byte size of the messages
-	// returned from calls to nextCommittedEnts that have not been acknowledged
-	// by a call to appliedTo.
-	applyingEntsSize entryEncodingSize
-	// applyingEntsPaused is true when entry application has been paused until
-	// enough progress is acknowledged.
-	applyingEntsPaused bool
 }
 
-// newLog returns log using the given storage and default options. It
-// recovers the log to the state that it just commits and applies the
-// latest snapshot.
+// newLog returns a raft log initialized to the state in the given storage.
 func newLog(storage Storage, logger raftlogger.Logger) *raftLog {
-	return newLogWithSize(storage, logger, noLimit)
-}
-
-// newLogWithSize returns a log using the given storage and max
-// message size.
-func newLogWithSize(
-	storage Storage, logger raftlogger.Logger, maxApplyingEntsSize entryEncodingSize,
-) *raftLog {
 	firstIndex, lastIndex := storage.FirstIndex(), storage.LastIndex()
 	lastTerm, err := storage.Term(lastIndex)
 	if err != nil {
@@ -106,11 +84,16 @@ func newLogWithSize(
 	}
 	last := entryID{term: lastTerm, index: lastIndex}
 	return &raftLog{
-		storage:             storage,
-		unstable:            newUnstable(last, logger),
-		maxApplyingEntsSize: maxApplyingEntsSize,
+		storage:  storage,
+		unstable: newUnstable(last, logger),
 
-		// Initialize our committed and applied pointers to the time of the last compaction.
+		// Initialize our committed and applied pointers to the time of the last
+		// compaction.
+		// TODO(pav-kv): this is insufficient, and the caller (newRaft) additionally
+		// moves the committed and applied indices forward, based on the loaded
+		// HardState and Config.Applied. We should consolidate initialization. All
+		// the related initial state can be read in one place, and passed in to
+		// newRaft/newLog instead of being read in 3 different places.
 		committed: firstIndex - 1,
 		applying:  firstIndex - 1,
 		applied:   firstIndex - 1,
@@ -263,14 +246,21 @@ func (l *raftLog) hasNextUnstableEnts() bool {
 	return len(l.nextUnstableEnts()) > 0
 }
 
-// nextCommittedEnts returns all the available entries for execution.
+func (l *raftLog) applyingEntsPaused() bool {
+	return l.applying > l.applied
+}
+
+// nextCommittedEnts returns a batch of committed entries to be applied to the
+// state machine next. The total size of the returned entries does not exceed
+// maxSize, except when the first entry is larger than this limit.
+//
 // Entries can be committed even when the local raft instance has not durably
 // appended them to the local raft log yet. If allowUnstable is true, committed
 // entries from the unstable log may be returned; otherwise, only entries known
 // to reside locally on stable storage will be returned.
-func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
-	if l.applyingEntsPaused {
-		// Entry application outstanding size limit reached.
+func (l *raftLog) nextCommittedEnts(maxSize entryEncodingSize, allowUnstable bool) []pb.Entry {
+	if l.applyingEntsPaused() {
+		// Some entries are still being applied.
 		return nil
 	}
 	if l.hasNextOrInProgressSnapshot() {
@@ -282,11 +272,6 @@ func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
 		// Nothing to apply.
 		return nil
 	}
-	maxSize := l.maxApplyingEntsSize - l.applyingEntsSize
-	if maxSize <= 0 {
-		l.logger.Panicf("applying entry size (%d-%d)=%d not positive",
-			l.maxApplyingEntsSize, l.applyingEntsSize, maxSize)
-	}
 	ents, err := l.slice(lo, hi, maxSize)
 	if err != nil {
 		l.logger.Panicf("unexpected error when getting unapplied entries (%v)", err)
@@ -297,8 +282,8 @@ func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
 // hasNextCommittedEnts returns if there is any available entries for execution.
 // This is a fast check without heavy raftLog.slice() in nextCommittedEnts().
 func (l *raftLog) hasNextCommittedEnts(allowUnstable bool) bool {
-	if l.applyingEntsPaused {
-		// Entry application outstanding size limit reached.
+	if l.applyingEntsPaused() {
+		// Some entries are still being applied.
 		return false
 	}
 	if l.hasNextOrInProgressSnapshot() {
@@ -377,39 +362,19 @@ func (l *raftLog) commitTo(mark LogMark) {
 	}
 }
 
-func (l *raftLog) appliedTo(i uint64, size entryEncodingSize) {
+func (l *raftLog) appliedTo(i uint64) {
 	if l.committed < i || i < l.applied {
 		l.logger.Panicf("applied(%d) is out of range [prevApplied(%d), committed(%d)]", i, l.applied, l.committed)
 	}
 	l.applied = i
 	l.applying = max(l.applying, i)
-	if l.applyingEntsSize > size {
-		l.applyingEntsSize -= size
-	} else {
-		// Defense against underflow.
-		l.applyingEntsSize = 0
-	}
-	l.applyingEntsPaused = l.applyingEntsSize >= l.maxApplyingEntsSize
 }
 
-func (l *raftLog) acceptApplying(i uint64, size entryEncodingSize, allowUnstable bool) {
+func (l *raftLog) acceptApplying(i uint64) {
 	if l.committed < i {
 		l.logger.Panicf("applying(%d) is out of range [prevApplying(%d), committed(%d)]", i, l.applying, l.committed)
 	}
 	l.applying = i
-	l.applyingEntsSize += size
-	// Determine whether to pause entry application until some progress is
-	// acknowledged. We pause in two cases:
-	// 1. the outstanding entry size equals or exceeds the maximum size.
-	// 2. the outstanding entry size does not equal or exceed the maximum size,
-	//    but we determine that the next entry in the log will push us over the
-	//    limit. We determine this by comparing the last entry returned from
-	//    raftLog.nextCommittedEnts to the maximum entry that the method was
-	//    allowed to return had there been no size limit. If these indexes are
-	//    not equal, then the returned entries slice must have been truncated to
-	//    adhere to the memory limit.
-	l.applyingEntsPaused = l.applyingEntsSize >= l.maxApplyingEntsSize ||
-		i < l.maxAppliableIndex(allowUnstable)
 }
 
 func (l *raftLog) stableTo(mark LogMark) { l.unstable.stableTo(mark) }
