@@ -836,6 +836,8 @@ func generateNewProgress(
 				//lint:ignore SA1019 deprecated usage
 				Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
 					Spans: mergedSpanGroup.Slice(),
+					// TODO(reason through this)
+					Timestamp: changefeedProgress.Checkpoint.Timestamp,
 				},
 				ProtectedTimestampRecord: ptsRecord,
 			},
