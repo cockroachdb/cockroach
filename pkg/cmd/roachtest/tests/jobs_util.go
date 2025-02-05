@@ -180,7 +180,7 @@ func WaitForStatus(
 	maxWait time.Duration,
 ) error {
 	startTime := timeutil.Now()
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(time.Microsecond)
 	defer ticker.Stop()
 	var status string
 	for {
@@ -200,6 +200,7 @@ func WaitForStatus(
 			if timeutil.Since(startTime) > maxWait {
 				return errors.Newf("job %d did not reach status %s after %s", jobID, status, maxWait)
 			}
+			ticker.Reset(5 * time.Second)
 		case <-ctx.Done():
 			return errors.Wrapf(ctx.Err(), "context canceled while waiting for job to reach status %s", status)
 		}
