@@ -16,6 +16,7 @@ go_library(
         "encoder_avro.go",
         "encoder_csv.go",
         "encoder_json.go",
+        "enriched_source_provider.go",
         "event_processing.go",
         "fetch_table_bytes.go",
         "metrics.go",
