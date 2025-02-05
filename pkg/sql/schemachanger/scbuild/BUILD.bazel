@@ -104,6 +104,5 @@ go_test(
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
-        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
