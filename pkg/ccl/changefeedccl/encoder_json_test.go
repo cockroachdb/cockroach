@@ -156,7 +156,7 @@ func TestJSONEncoderJSONNullAsObject(t *testing.T) {
 		// NOTE: This is no longer required in go 1.22+, but bazel still requires it. See https://github.com/bazelbuild/rules_go/issues/3924
 		c := c
 		t.Run(c.name, func(t *testing.T) {
-			e, err := getEncoder(ctx, opts, targets, false, nil, nil)
+			e, err := getEncoder(ctx, opts, targets, false, nil, nil, enrichedEnvelopeSourceProviderOpts{})
 			require.NoError(t, err)
 
 			row := cdcevent.TestingMakeEventRow(tableDesc, 0, c.row, false)
@@ -200,7 +200,7 @@ func TestJSONEncoderJSONNullAsObjectEdgeCases(t *testing.T) {
 			rowenc.EncDatum{Datum: tree.DBoolTrue},
 			rowenc.EncDatum{Datum: tree.NewDJSON(json.NullJSONValue)},
 		}
-		e, err := getEncoder(ctx, opts, targets, false, nil, nil)
+		e, err := getEncoder(ctx, opts, targets, false, nil, nil, enrichedEnvelopeSourceProviderOpts{})
 		require.NoError(t, err)
 
 		row := cdcevent.TestingMakeEventRow(tableDesc, 0, eRow, false)
@@ -223,7 +223,7 @@ func TestJSONEncoderJSONNullAsObjectEdgeCases(t *testing.T) {
 			rowenc.EncDatum{Datum: tree.NewDJSON(json.NullJSONValue)},
 			rowenc.EncDatum{Datum: tree.DNull},
 		}
-		e, err := getEncoder(ctx, opts, twoJSONsTargets, false, nil, nil)
+		e, err := getEncoder(ctx, opts, twoJSONsTargets, false, nil, nil, enrichedEnvelopeSourceProviderOpts{})
 		require.NoError(t, err)
 
 		row := cdcevent.TestingMakeEventRow(twoJSONsTableDesc, 0, eRow, false)
@@ -240,7 +240,7 @@ func TestJSONEncoderJSONNullAsObjectEdgeCases(t *testing.T) {
 			rowenc.EncDatum{Datum: tree.NewDJSON(json.NullJSONValue)},
 			rowenc.EncDatum{Datum: tree.NewDJSON(json.NullJSONValue)},
 		}
-		e, err := getEncoder(ctx, opts, twoJSONsTargets, false, nil, nil)
+		e, err := getEncoder(ctx, opts, twoJSONsTargets, false, nil, nil, enrichedEnvelopeSourceProviderOpts{})
 		require.NoError(t, err)
 
 		row := cdcevent.TestingMakeEventRow(twoJSONsTableDesc, 0, eRow, false)
@@ -261,7 +261,7 @@ func TestJSONEncoderJSONNullAsObjectEdgeCases(t *testing.T) {
 			rowenc.EncDatum{Datum: tree.NewDJSON(json.NullJSONValue)},
 			rowenc.EncDatum{Datum: tree.DNull},
 		}
-		e, err := getEncoder(ctx, disabledOpts, twoJSONsTargets, false, nil, nil)
+		e, err := getEncoder(ctx, disabledOpts, twoJSONsTargets, false, nil, nil, enrichedEnvelopeSourceProviderOpts{})
 		require.NoError(t, err)
 
 		row := cdcevent.TestingMakeEventRow(twoJSONsTableDesc, 0, eRow, false)
@@ -282,7 +282,7 @@ func TestJSONEncoderJSONNullAsObjectEdgeCases(t *testing.T) {
 			rowenc.EncDatum{Datum: tree.NewDJSON(json.NullJSONValue)},
 			rowenc.EncDatum{Datum: tree.NewDJSON(obj)},
 		}
-		e, err := getEncoder(ctx, opts, twoJSONsTargets, false, nil, nil)
+		e, err := getEncoder(ctx, opts, twoJSONsTargets, false, nil, nil, enrichedEnvelopeSourceProviderOpts{})
 		require.NoError(t, err)
 
 		row := cdcevent.TestingMakeEventRow(twoJSONsTableDesc, 0, eRow, false)

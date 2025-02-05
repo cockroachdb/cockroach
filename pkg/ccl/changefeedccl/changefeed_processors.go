@@ -1230,6 +1230,12 @@ func newChangeFrontierProcessor(
 	if cf.encoder, err = getEncoder(
 		ctx, encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
 		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMetrics,
+		enrichedEnvelopeSourceProviderOpts{
+			diff:              encodingOpts.Diff,
+			updated:           encodingOpts.UpdatedTimestamps,
+			mvccTimestamp:     encodingOpts.MVCCTimestamps,
+			sourceClusterName: flowCtx.Cfg.ClusterName,
+		},
 	); err != nil {
 		return nil, err
 	}

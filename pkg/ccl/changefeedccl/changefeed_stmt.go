@@ -604,7 +604,12 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 	if _, err := getEncoder(ctx, encodingOpts, AllTargets(details), details.Select != "",
-		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil); err != nil {
+		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil, enrichedEnvelopeSourceProviderOpts{
+			diff:          encodingOpts.Diff,
+			updated:       encodingOpts.UpdatedTimestamps,
+			mvccTimestamp: encodingOpts.MVCCTimestamps,
+			/* sourceClusterName: N/A */
+		}); err != nil {
 		return nil, err
 	}
 

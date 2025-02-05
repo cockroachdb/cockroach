@@ -53,7 +53,9 @@ func init() {
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, keyInValue, topicInValue bool
-	envelopeType                                                            changefeedbase.EnvelopeType
+
+	envelopeType                   changefeedbase.EnvelopeType
+	enrichedEnvelopeSourceProvider *enrichedEnvelopeSourceProvider
 
 	buf             bytes.Buffer
 	versionEncoder  func(ed *cdcevent.EventDescriptor, isPrev bool) *versionEncoder
@@ -91,7 +93,9 @@ type jsonEncoderOptions struct {
 	encodeForQuery bool
 }
 
-func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder, error) {
+func makeJSONEncoder(
+	ctx context.Context, opts jsonEncoderOptions, sourceOpts enrichedEnvelopeSourceProviderOpts,
+) (*jsonEncoder, error) {
 	versionCache := cache.NewUnorderedCache(cdcevent.DefaultCacheConfig)
 	e := &jsonEncoder{
 		envelopeType:       opts.Envelope,
@@ -119,6 +123,7 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 				return &versionEncoder{encodeJSONValueNullAsObject: opts.EncodeJSONValueNullAsObject}
 			}).(*versionEncoder)
 		},
+		enrichedEnvelopeSourceProvider: newEnrichedEnvelopeSourceProvider(sourceOpts),
 	}
 
 	if !canJSONEncodeMetadata(e.envelopeType) {
@@ -471,7 +476,7 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 		return err
 	}
 
-	payloadKeys := []string{"after", "op", "ts_ns"}
+	payloadKeys := []string{"after", "op", "ts_ns", "source"}
 	if e.keyInValue {
 		payloadKeys = append(payloadKeys, "key")
 	}
@@ -495,6 +500,9 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 			return nil, err
 		}
 		if err := payloadBuilder.Set("op", json.FromString(string(deduceOp(updated, prev)))); err != nil {
+			return nil, err
+		}
+		if err := payloadBuilder.Set("source", e.enrichedEnvelopeSourceProvider.GetJSON(updated)); err != nil {
 			return nil, err
 		}
 
@@ -581,7 +589,12 @@ func EncodeAsJSONChangefeedWithFlags(
 	// If this function ends up needing to be optimized, cache or pool these.
 	// Nontrivial to do as an encoder generally isn't safe to call on different
 	// rows in parallel.
-	e, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts})
+	e, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts}, enrichedEnvelopeSourceProviderOpts{
+		diff:          opts.Diff,
+		updated:       opts.UpdatedTimestamps,
+		mvccTimestamp: opts.MVCCTimestamps,
+		/* sourceClusterName: N/A */
+	})
 	if err != nil {
 		return nil, err
 	}

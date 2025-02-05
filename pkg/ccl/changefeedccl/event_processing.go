@@ -101,7 +101,12 @@ func newEventConsumer(
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error
 		encoder, err := getEncoder(ctx, encodingOpts, feed.Targets, spec.Select.Expr != "",
-			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics)
+			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics, enrichedEnvelopeSourceProviderOpts{
+				diff:              encodingOpts.Diff,
+				updated:           encodingOpts.UpdatedTimestamps,
+				mvccTimestamp:     encodingOpts.MVCCTimestamps,
+				sourceClusterName: cfg.ClusterName,
+			})
 		if err != nil {
 			return nil, err
 		}
