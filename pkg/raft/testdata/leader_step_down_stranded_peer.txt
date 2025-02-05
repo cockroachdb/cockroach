@@ -344,7 +344,7 @@ stabilize
   3->1 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
   3->1 MsgAppResp Term:4 Log:1/11 Rejected (Hint: 10) Commit:10
   DEBUG 1 received MsgAppResp(rejected, hint: (index 10, term 1)) from 3 for index 11
-  DEBUG 1 decreased progress of 3 to [StateProbe match=0 next=11 sentCommit=10 matchCommit=10]
+  DEBUG 1 decreased progress of 3 to [StateReplicate match=0 next=11 sentCommit=10 matchCommit=10]
 > 1 handling Ready
   Ready MustSync=true:
   HardState Term:4 Vote:1 Commit:12 Lead:1 LeadEpoch:1
@@ -393,6 +393,25 @@ stabilize
   2->1 MsgAppResp Term:4 Log:0/12 Commit:12
   3->1 MsgAppResp Term:4 Log:1/11 Rejected (Hint: 10) Commit:10
   DEBUG 1 received MsgAppResp(rejected, hint: (index 10, term 1)) from 3 for index 11
+  DEBUG 1 decreased progress of 3 to [StateProbe match=0 next=11 sentCommit=0 matchCommit=10]
+  3->1 MsgAppResp Term:4 Log:0/12 Commit:12
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->3 MsgApp Term:4 Log:1/10 Commit:12 Entries:[
+    1/11 EntryNormal ""
+    4/12 EntryNormal ""
+  ]
+> 3 receiving messages
+  1->3 MsgApp Term:4 Log:1/10 Commit:12 Entries:[
+    1/11 EntryNormal ""
+    4/12 EntryNormal ""
+  ]
+> 3 handling Ready
+  Ready MustSync=false:
+  Messages:
+  3->1 MsgAppResp Term:4 Log:0/12 Commit:12
+> 1 receiving messages
   3->1 MsgAppResp Term:4 Log:0/12 Commit:12
 
 raft-state
