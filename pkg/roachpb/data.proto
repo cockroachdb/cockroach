@@ -33,22 +33,18 @@ message Span {
 }
 
 // ValueType defines a set of type constants placed in the "tag" field of Value
-// messages. These are defined as a protocol buffer enumeration so that they
-// can be used portably between our Go and C code. The tags are used by the
-// RocksDB Merge Operator to perform specialized merges.
+// messages. These are defined as a protocol buffer enumeration for historical
+// reasons.
 enum ValueType {
   // This is a subset of the SQL column type values, representing the underlying
-  // storage for various types. The DELIMITED_foo entries each represent a foo
-  // variant that self-delimits length.
+  // storage for various types.
   UNKNOWN = 0;
-  reserved 7;
+  reserved 7, 8, 9;
   INT = 1;
   FLOAT = 2;
   BYTES = 3;
-  DELIMITED_BYTES = 8;
   TIME = 4;
   DECIMAL = 5;
-  DELIMITED_DECIMAL = 9;
   DURATION = 6;
   TIMETZ = 12;
   GEO = 13;
