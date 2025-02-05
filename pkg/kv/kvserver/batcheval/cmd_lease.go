@@ -55,6 +55,7 @@ func evalNewLease(
 
 	// Construct the prior read summary if the lease sequence is changing.
 	var priorReadSum *rspb.ReadSummary
+	var locksWritten int
 	if prevLease.Sequence != lease.Sequence {
 		// If the new lease is not equivalent to the old lease, construct a read
 		// summary to instruct the new leaseholder on how to update its timestamp
@@ -76,6 +77,7 @@ func evalNewLease(
 					return newFailedLeaseTrigger(isTransfer), err
 				}
 			}
+			locksWritten = len(acquisitions)
 		} else {
 			// If the new lease is not equivalent to the old lease (i.e. either the
 			// lease is changing hands or the leaseholder restarted), construct a
@@ -114,6 +116,7 @@ func evalNewLease(
 	}
 
 	pd.Local.Metrics = new(result.Metrics)
+	pd.Local.Metrics.LeaseTransferLocksWritten = locksWritten
 	if isTransfer {
 		pd.Local.Metrics.LeaseTransferSuccess = 1
 	} else {
