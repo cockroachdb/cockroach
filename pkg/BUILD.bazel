@@ -1226,6 +1226,8 @@ GO_TARGETS = [
     "//pkg/cmd/roachtest/clusterstats:clusterstats_test",
     "//pkg/cmd/roachtest/grafana:grafana",
     "//pkg/cmd/roachtest/operation:operation",
+    "//pkg/cmd/roachtest/operations/changefeeds:changefeeds",
+    "//pkg/cmd/roachtest/operations/helpers:helpers",
     "//pkg/cmd/roachtest/operations:operations",
     "//pkg/cmd/roachtest/operations:operations_test",
     "//pkg/cmd/roachtest/option:option",
