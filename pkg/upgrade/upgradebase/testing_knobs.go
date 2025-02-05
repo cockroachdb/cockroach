@@ -27,9 +27,9 @@ const (
 // are useful for testing.
 type TestingKnobs struct {
 
-	// ListBetweenOverride injects an override for `clusterversion.ListBetween()
-	// in order to run upgrades corresponding to versions which do not
-	// actually exist.
+	// ListBetweenOverride injects an override for clusterversion.ListBetween() in
+	// order to run upgrades corresponding to versions which do not actually
+	// exist. This function has to return versions in the range (from, to].
 	ListBetweenOverride func(from, to roachpb.Version) []roachpb.Version
 
 	// RegistryOverride is used to inject upgrades for specific cluster versions.

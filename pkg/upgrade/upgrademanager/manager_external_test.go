@@ -100,7 +100,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
-						return []roachpb.Version{from, to}
+						return []roachpb.Version{to}
 					},
 					RegistryOverride: func(v roachpb.Version) (upgradebase.Upgrade, bool) {
 						if v != endCV.Version() {
@@ -399,7 +399,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
-						return []roachpb.Version{from, to}
+						return []roachpb.Version{to}
 					},
 					RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 						if cv != endCV {
@@ -504,7 +504,13 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
-						return versions
+						var res []roachpb.Version
+						for _, v := range versions {
+							if from.Less(v) && v.LessEq(to) {
+								res = append(res, v)
+							}
+						}
+						return res
 					},
 					RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 						return upgrade.NewSystemUpgrade("test", cv, func(
@@ -556,7 +562,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 	for k, c := range migrationRunCounts {
 		require.Equalf(t, 1, c, "version: %v", k)
 	}
-	require.Len(t, migrationRunCounts, len(versions))
+	require.Len(t, migrationRunCounts, len(versions)-1)
 }
 
 // TestPauseMigration ensures that upgrades can indeed be paused and that
@@ -592,7 +598,13 @@ func TestPauseMigration(t *testing.T) {
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
-						return []roachpb.Version{from, to}
+						// We expect calls to ListBetween to be made for (0.0, startCV] and (startCV, endCV].
+						if to != startCV.Version() {
+							if from != startCV.Version() || to != endCV.Version() {
+								panic(fmt.Sprintf("unexpected versions %v, %v\n", from, to))
+							}
+						}
+						return []roachpb.Version{to}
 					},
 					RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 						if cv != endCV.Version() {
