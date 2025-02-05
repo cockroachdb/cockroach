@@ -293,10 +293,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /abc/abc_pkey/1/2/3 -> <undecoded>
-fetched: /abc/abc_pkey/1/2/3/d -> 'one'
-fetched: /abc/abc_pkey/4/5/6 -> <undecoded>
-fetched: /abc/abc_pkey/4/5/6/d -> 'Two'
+fetched: /abc/abc_pkey/1/2/3:cf=0 -> <undecoded>
+fetched: /abc/abc_pkey/1/2/3/d:cf=1 -> 'one'
+fetched: /abc/abc_pkey/4/5/6:cf=0 -> <undecoded>
+fetched: /abc/abc_pkey/4/5/6/d:cf=1 -> 'Two'
 output row: [1 2 3 'one']
 output row: [4 5 6 'Two']
 
@@ -480,10 +480,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /abc/abc_pkey/4/?/? -> <undecoded>
-fetched: /abc/abc_pkey/4/?/? -> <undecoded>
-fetched: /abc/abc_pkey/1/?/? -> <undecoded>
-fetched: /abc/abc_pkey/1/?/? -> <undecoded>
+fetched: /abc/abc_pkey/4/?/?:cf=1 -> <undecoded>
+fetched: /abc/abc_pkey/4/?/?:cf=0 -> <undecoded>
+fetched: /abc/abc_pkey/1/?/?:cf=1 -> <undecoded>
+fetched: /abc/abc_pkey/1/?/?:cf=0 -> <undecoded>
 output row: [4]
 output row: [1]
 
