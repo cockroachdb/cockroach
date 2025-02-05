@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
 func TestBuildDataDriven(t *testing.T) {
@@ -108,7 +107,7 @@ func TestBuildDataDriven(t *testing.T) {
 							// to mimic the ID generator and optimizer (resolve all
 							// dependencies in functions and views). So we need these pieces
 							// to be similar as sql dependencies.
-							sctestdeps.WithIDGenerator(s),
+							sctestdeps.WithIDTransactionalGenerator(s),
 							sctestdeps.WithReferenceProviderFactory(refFactory),
 						),
 					)
