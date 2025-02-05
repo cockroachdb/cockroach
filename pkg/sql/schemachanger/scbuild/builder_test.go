@@ -108,7 +108,7 @@ func TestBuildDataDriven(t *testing.T) {
 							// to mimic the ID generator and optimizer (resolve all
 							// dependencies in functions and views). So we need these pieces
 							// to be similar as sql dependencies.
-							sctestdeps.WithIDGenerator(s),
+							sctestdeps.WithTransactionalIDGenerator(s),
 							sctestdeps.WithReferenceProviderFactory(refFactory),
 						),
 					)
