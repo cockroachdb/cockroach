@@ -393,6 +393,25 @@ stabilize
   2->1 MsgAppResp Term:4 Log:0/12 Commit:12
   3->1 MsgAppResp Term:4 Log:1/11 Rejected (Hint: 10) Commit:10
   DEBUG 1 received MsgAppResp(rejected, hint: (index 10, term 1)) from 3 for index 11
+  DEBUG 1 decreased progress of 3 to [StateReplicate match=0 next=1 sentCommit=0 matchCommit=10 inflight=1]
+  DEBUG 1 [firstindex: 11, commit: 12] sent snapshot[index: 12, term: 4] to 3 [StateProbe match=0 next=1 sentCommit=0 matchCommit=10]
+  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=13 sentCommit=12 matchCommit=10 paused pendingSnap=12]
+  3->1 MsgAppResp Term:4 Log:0/12 Commit:12
+  DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=12 next=13 sentCommit=12 matchCommit=12 paused pendingSnap=12]
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->3 MsgSnap Term:4 Log:0/0
+    Snapshot: Index:12 Term:4 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+> 3 receiving messages
+  1->3 MsgSnap Term:4 Log:0/0
+    Snapshot: Index:12 Term:4 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  INFO 3 [commit: 12] ignored snapshot [index: 12, term: 4]
+> 3 handling Ready
+  Ready MustSync=false:
+  Messages:
+  3->1 MsgAppResp Term:4 Log:0/12 Commit:12
+> 1 receiving messages
   3->1 MsgAppResp Term:4 Log:0/12 Commit:12
 
 raft-state

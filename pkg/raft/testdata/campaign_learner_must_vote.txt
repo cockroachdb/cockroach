@@ -155,15 +155,24 @@ stabilize 2 3
 > 2 receiving messages
   3->2 MsgAppResp Term:2 Log:1/4 Rejected (Hint: 3) Commit:3
   DEBUG 2 received MsgAppResp(rejected, hint: (index 3, term 1)) from 3 for index 4
+  DEBUG 2 decreased progress of 3 to [StateReplicate match=0 next=1 sentCommit=0 matchCommit=3 inflight=1]
+  DEBUG 2 [firstindex: 3, commit: 4] sent snapshot[index: 4, term: 1] to 3 [StateProbe match=0 next=1 sentCommit=0 matchCommit=3]
+  DEBUG 2 paused sending replication messages to 3 [StateSnapshot match=0 next=5 sentCommit=4 matchCommit=3 paused pendingSnap=4]
   3->2 MsgAppResp Term:2 Log:0/5 Commit:4
+  DEBUG 2 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=5 next=6 sentCommit=4 matchCommit=4 paused pendingSnap=4]
 > 2 handling Ready
   Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:5 Lead:2 LeadEpoch:1
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
+  2->3 MsgSnap Term:2 Log:0/0
+    Snapshot: Index:4 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   2->3 MsgApp Term:2 Log:2/5 Commit:5
 > 3 receiving messages
+  2->3 MsgSnap Term:2 Log:0/0
+    Snapshot: Index:4 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  INFO 3 [commit: 4] ignored snapshot [index: 4, term: 1]
   2->3 MsgApp Term:2 Log:2/5 Commit:5
 > 3 handling Ready
   Ready MustSync=true:
@@ -171,6 +180,8 @@ stabilize 2 3
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
+  3->2 MsgAppResp Term:2 Log:0/4 Commit:4
   3->2 MsgAppResp Term:2 Log:0/5 Commit:5
 > 2 receiving messages
+  3->2 MsgAppResp Term:2 Log:0/4 Commit:4
   3->2 MsgAppResp Term:2 Log:0/5 Commit:5

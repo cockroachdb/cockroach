@@ -2059,6 +2059,11 @@ func stepLeader(r *raft, m pb.Message) error {
 				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
 				if pr.State == tracker.StateReplicate {
 					r.becomeProbe(pr)
+				} else if pr.State == tracker.StateProbe {
+					if r.raftLog.matchTerm(entryID{m.LogTerm, nextProbeIdx}) {
+						r.becomeReplicate(pr)
+						pr.Next = max(nextProbeIdx+1, pr.Match+1)
+					}
 				}
 				r.maybeSendAppend(m.From)
 			}

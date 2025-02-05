@@ -203,7 +203,26 @@ stabilize 1 4
 > 1 receiving messages
   4->1 MsgAppResp Term:1 Log:1/3 Rejected (Hint: 2) Commit:2
   DEBUG 1 received MsgAppResp(rejected, hint: (index 2, term 1)) from 4 for index 3
+  DEBUG 1 decreased progress of 4 to [StateReplicate match=0 next=1 sentCommit=0 matchCommit=2 inflight=1]
+  DEBUG 1 [firstindex: 3, commit: 4] sent snapshot[index: 4, term: 1] to 4 [StateProbe match=0 next=1 sentCommit=0 matchCommit=2]
+  DEBUG 1 paused sending replication messages to 4 [StateSnapshot match=0 next=5 sentCommit=4 matchCommit=2 paused pendingSnap=4]
   4->1 MsgAppResp Term:1 Log:0/5 Commit:4
+  DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 4 [StateSnapshot match=5 next=6 sentCommit=4 matchCommit=4 paused pendingSnap=4]
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->4 MsgSnap Term:1 Log:0/0
+    Snapshot: Index:4 Term:1 ConfState:Voters:[1 2 3 4] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+> 4 receiving messages
+  1->4 MsgSnap Term:1 Log:0/0
+    Snapshot: Index:4 Term:1 ConfState:Voters:[1 2 3 4] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  INFO 4 [commit: 4] ignored snapshot [index: 4, term: 1]
+> 4 handling Ready
+  Ready MustSync=false:
+  Messages:
+  4->1 MsgAppResp Term:1 Log:0/4 Commit:4
+> 1 receiving messages
+  4->1 MsgAppResp Term:1 Log:0/4 Commit:4
 
 store-liveness
 ----
