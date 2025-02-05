@@ -356,7 +356,7 @@ func encodingTypeToDatumType(t encoding.Type) (*types.T, error) {
 	case encoding.JSON:
 		return types.Jsonb, nil
 	case encoding.BitArray, encoding.BitArrayDesc:
-		return types.VarBitArray, nil
+		return types.VarBit, nil
 	case encoding.TimeTZ:
 		return types.TimeTZ, nil
 	case encoding.Geo, encoding.GeoDesc:
