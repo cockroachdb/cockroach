@@ -603,8 +603,9 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, err
 	}
+	sourceProvider := newEnrichedSourceProvider(encodingOpts, enrichedSourceData{jobId: jobID.String()})
 	if _, err := getEncoder(ctx, encodingOpts, AllTargets(details), details.Select != "",
-		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil); err != nil {
+		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil, sourceProvider); err != nil {
 		return nil, err
 	}
 
