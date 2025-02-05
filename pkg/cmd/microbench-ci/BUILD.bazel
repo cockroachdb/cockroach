@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "microbench-ci_lib",
@@ -32,4 +32,16 @@ go_binary(
     name = "microbench-ci",
     embed = [":microbench-ci_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "microbench-ci_test",
+    srcs = ["compare_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":microbench-ci_lib"],
+    deps = [
+        "//pkg/testutils/datapathutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
 )
