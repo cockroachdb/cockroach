@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func newFailedLeaseTrigger(isTransfer bool) result.Result {
@@ -71,6 +72,7 @@ func evalNewLease(
 			// If this is a lease transfer, we write out all unreplicated leases to
 			// storage, so that any waiters will discover them on the new leaseholder.
 			acquisitions := rec.GetConcurrencyManager().OnRangeLeaseTransferEval()
+			log.VEventf(ctx, 2, "upgrading durability of %d locks", len(acquisitions))
 			for _, acq := range acquisitions {
 				if err := storage.MVCCAcquireLock(ctx, readWriter,
 					&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, ms, 0, 0); err != nil {

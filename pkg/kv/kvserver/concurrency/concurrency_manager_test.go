@@ -542,6 +542,15 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				})
 				return c.waitAndCollect(t, mon)
 
+			case "on-lease-transfer-eval":
+				mon.runSync("eval transfer lease", func(ctx context.Context) {
+					locksToWrite := m.OnRangeLeaseTransferEval()
+					if len(locksToWrite) > 0 {
+						log.Eventf(ctx, "locks to propose as replicated: %d", len(locksToWrite))
+					}
+				})
+				return c.waitAndCollect(t, mon)
+
 			case "on-lease-updated":
 				var isLeaseholder bool
 				d.ScanArgs(t, "leaseholder", &isLeaseholder)
@@ -722,6 +731,7 @@ func newClusterWithSettings(st *clustersettings.Settings) *cluster {
 	// Set the latch manager's long latch threshold to infinity to disable
 	// logging, which could cause a test to erroneously fail.
 	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	concurrency.UnreplicatedLockReliabilityUpgrade.Override(context.Background(), &st.SV, true)
 	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
