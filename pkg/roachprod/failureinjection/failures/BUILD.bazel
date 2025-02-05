@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "failure.go",
         "network_partition.go",
+        "registry.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures",
     visibility = ["//visibility:public"],
