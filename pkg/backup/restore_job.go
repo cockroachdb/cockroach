@@ -1325,6 +1325,7 @@ func createImportingDescriptors(
 			if err := ingesting.WriteDescriptors(
 				ctx, txn.KV(), p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes, writtenFunctions,
 				details.DescriptorCoverage, nil /* extra */, restoreTempSystemDB, includePublicSchemaCreatePriv,
+				true, /* deprecatedAllowCrossDatabaseRefs */
 			); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 			}
