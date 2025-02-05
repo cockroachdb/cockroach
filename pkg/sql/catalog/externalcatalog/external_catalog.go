@@ -160,6 +160,7 @@ func IngestExternalCatalog(
 	return ingestedCatalog, ingesting.WriteDescriptors(
 		ctx, txn.KV(), user, descsCol, nil, nil, tablesToWrite, nil, nil,
 		tree.RequestedDescriptors, nil /* extra */, "", true,
+		false, /*allowCrossDatabaseRefs*/
 	)
 }
 

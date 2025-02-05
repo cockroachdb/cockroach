@@ -638,6 +638,7 @@ func prepareNewTablesForIngestion(
 		ctx, txn, p.User(), descsCol, nil /* databases */, nil /* schemas */, tableDescs,
 		nil /* types */, nil /* functions */, tree.RequestedDescriptors, seqValKVs,
 		"" /* inheritParentName */, includePublicSchemaCreatePriv,
+		true, /* allowCrossDatabaseRefs */
 	); err != nil {
 		return nil, errors.Wrapf(err, "creating importTables")
 	}
