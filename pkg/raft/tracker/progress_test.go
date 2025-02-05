@@ -181,8 +181,8 @@ func TestProgressMaybeDecr(t *testing.T) {
 		},
 		{
 			// state replicate and rejected is greater than match
-			// directly decrease to match+1
-			StateReplicate, 5, 10, 9, 9, true, 6,
+			// directly decrease to max(matchHint, match) + 1
+			StateReplicate, 5, 10, 9, 9, true, 10,
 		},
 		{
 			// next-1 != rejected is always false

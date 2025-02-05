@@ -152,7 +152,7 @@ stabilize 1
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:1/14 Rejected (Hint: 11) Commit:11
   DEBUG 1 received MsgAppResp(rejected, hint: (index 11, term 1)) from 3 for index 14
-  DEBUG 1 decreased progress of 3 to [StateReplicate match=11 next=12 sentCommit=11 matchCommit=11 paused inflight=3[full]]
+  DEBUG 1 decreased progress of 3 to [StateProbe match=11 next=12 sentCommit=11 matchCommit=11]
 > 1 handling Ready
   Ready MustSync=false:
   Messages:

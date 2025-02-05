@@ -2591,7 +2591,7 @@ func TestLeaderAppResp(t *testing.T) {
 		// denied resp; leader does not commit; decrease next and send probing msg
 		// An additional term storage access is involved for an entry
 		// that's already persisted since we are probing backwards.
-		{3, true, 0, 3, 1, 2, 0, 2},
+		{3, true, 0, 4, 1, 3, 0, 1},
 
 		// Follower 2 responds to leader, indicating log index 2 is replicated.
 		// Leader tries to commit, but commit index doesn't advance since the index
@@ -4935,8 +4935,8 @@ func TestFastLogRejection(t *testing.T) {
 			followerCompact: 5, // entries <= index 5 are compacted
 			rejectHintTerm:  0,
 			rejectHintIndex: 3,
-			nextAppendTerm:  1,
-			nextAppendIndex: 2,
+			nextAppendTerm:  3,
+			nextAppendIndex: 3,
 		},
 	}
 
