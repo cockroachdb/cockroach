@@ -86,13 +86,19 @@ var DefaultTenantStreamingClustersArgs = TenantStreamingClustersArgs{
 	SrcTenantName: roachpb.TenantName("source"),
 	SrcTenantID:   roachpb.MustMakeTenantID(10),
 	SrcInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		// Disable autocommit_before_ddl in order to reduce the amount of overhead
+		// during the setup. We've seen that this step can flake under race builds
+		// due to overload.
 		tenantSQL.Exec(t, `
+	BEGIN;
+	SET LOCAL autocommit_before_ddl = false;
 	CREATE DATABASE d;
 	CREATE TABLE d.t1(i int primary key, a string, b string);
 	CREATE TABLE d.t2(i int primary key);
 	INSERT INTO d.t1 (i) VALUES (42);
 	INSERT INTO d.t2 VALUES (2);
 	UPDATE d.t1 SET b = 'world' WHERE i = 42;
+	COMMIT;
 	`)
 	},
 	SrcNumNodes:         1,
