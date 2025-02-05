@@ -1,6 +1,6 @@
 name: Microbenchmarks CI
 on:
-  pull_request_target:
+  pull_request: # TODO: change this to `pull_request_target` once posting is enabled (see post job below).
     types: [ opened, reopened, synchronize ]
     branches: [ master ]
 concurrency:
@@ -93,6 +93,7 @@ jobs:
           HEAD_SHA: ${{ env.HEAD }}
   post:
     runs-on: [ self-hosted, basic_runner_group ]
+    if: false # TODO: enable this once results are confirmed to be stable on CI.
     timeout-minutes: 30
     permissions:
         contents: read
