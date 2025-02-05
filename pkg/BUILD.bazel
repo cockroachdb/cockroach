@@ -1622,6 +1622,7 @@ GO_TARGETS = [
     "//pkg/roachprod/config:config",
     "//pkg/roachprod/config:config_test",
     "//pkg/roachprod/errors:errors",
+    "//pkg/roachprod/failureinjection/failures:failures",
     "//pkg/roachprod/fluentbit:fluentbit",
     "//pkg/roachprod/install:install",
     "//pkg/roachprod/install:install_test",
