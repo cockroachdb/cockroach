@@ -55,6 +55,15 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	bitArrString, bitArrExp := `{001,010,100}`, `ARRAY[B'001',B'010',B'100']`
+	bitArr, _, err := tree.ParseDArrayFromString(nil /* ctx */, bitArrString, types.VarBit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bitArrEnc, err := valueside.Encode(nil, valueside.NoColumnID, bitArr)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tupTyp := types.MakeTuple([]*types.T{types.Int, types.Float, types.Json})
 	i, f := tree.DInt(1), tree.DFloat(2.3)
 	tup := tree.NewDTuple(tupTyp, &i, &f, tree.NewDJSON(j))
@@ -87,6 +96,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{encoding.EncodeBitArrayValue(nil, encoding.NoColumnID, ba), "B001001"},
 		{encoding.EncodeJSONValue(nil, encoding.NoColumnID, jEnc), jString},
 		{arrEnc, arrExp},
+		{bitArrEnc, bitArrExp},
 		{tupEnc, tupExp},
 	}
 	for i, test := range tests {
