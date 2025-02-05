@@ -760,9 +760,11 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			return err
 		}
 	}
+	replicatedTime := rh.frontier.Frontier()
+	alwaysPersist := rh.replicatedTimeAtStart.Less(replicatedTime) && rh.replicatedTimeAtStart.IsEmpty()
 
 	updateFreq := jobCheckpointFrequency.Get(rh.settings)
-	if updateFreq == 0 || timeutil.Since(rh.lastPartitionUpdate) < updateFreq {
+	if !alwaysPersist && (updateFreq == 0 || timeutil.Since(rh.lastPartitionUpdate) < updateFreq) {
 		return nil
 	}
 
@@ -771,7 +773,6 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 		frontierResolvedSpans = append(frontierResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
 		return span.ContinueMatch
 	})
-	replicatedTime := rh.frontier.Frontier()
 
 	rh.lastPartitionUpdate = timeutil.Now()
 	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())
