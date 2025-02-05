@@ -109,6 +109,11 @@ rm /tmp/otelcol-contrib.deb;
 sudo apt-get update;
 sudo apt-get install -y bzip2;
 `,
+
+	"nmap": `
+sudo apt-get update;
+sudo apt-get install -y nmap;
+`,
 }
 
 // installLocalCmds is a map from software name to a map of strings that
