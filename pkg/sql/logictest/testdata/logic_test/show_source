@@ -33,7 +33,7 @@ alter_primary_region_super_region_override                 off
 always_distribute_full_scans                               off
 application_name                                           ·
 authentication_method                                      cert-password
-autocommit_before_ddl                                      off
+autocommit_before_ddl                                      on
 avoid_buffering                                            off
 avoid_full_table_scans_in_mutations                        on
 backslash_quote                                            safe_encoding

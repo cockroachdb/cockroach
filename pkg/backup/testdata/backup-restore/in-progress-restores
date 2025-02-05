@@ -30,6 +30,11 @@ INSERT INTO me.baz VALUES (1,'howdy'), (2,'hello'), (3,'heyyy');
 CREATE DATABASE d;
 USE d;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 
 # Run a backup to then restore from and test that future backups capture the
@@ -173,6 +178,7 @@ exec-sql
 USE d;
 DROP SCHEMA IF EXISTS me CASCADE;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 
 exec-sql
@@ -284,6 +290,10 @@ CREATE DATABASE d_with_schema;
 CREATE SCHEMA d_with_schema.me;
 CREATE TABLE d_with_schema.me.bar (x INT);
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 
 exec-sql
@@ -372,6 +382,10 @@ DROP SCHEMA d.me CASCADE;
 CREATE DATABASE d_aost;
 CREATE DATABASE d_latest;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 
 exec-sql

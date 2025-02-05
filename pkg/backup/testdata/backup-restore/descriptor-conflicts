@@ -21,6 +21,13 @@ COMMENT ON TABLE foo.bar.bat IS 'should survive';
 CREATE ROLE hamburger;
 ALTER ROLE hamburger IN DATABASE foo SET application_name='helper';
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP INTO 'nodelocal://1/conflicting-descriptors';

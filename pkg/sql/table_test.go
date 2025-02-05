@@ -662,6 +662,7 @@ func TestJobsCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := conn.ExecContext(ctx, `BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t1 ADD COLUMN x INT;
 `); err != nil {
 		t.Fatal(err)

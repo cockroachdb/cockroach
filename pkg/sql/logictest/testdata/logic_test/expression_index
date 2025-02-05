@@ -756,6 +756,9 @@ statement ok
 CREATE TABLE bf (a INT)
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 BEGIN
 
 statement ok
@@ -766,6 +769,9 @@ CREATE INDEX a_plus_b ON bf ((a + b))
 
 statement ok
 ABORT
+
+statement ok
+RESET autocommit_before_ddl
 
 statement ok
 DROP TABLE bf

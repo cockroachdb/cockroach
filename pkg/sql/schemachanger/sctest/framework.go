@@ -883,6 +883,10 @@ func executeSchemaChangeTxn(
 			if err != nil {
 				return err
 			}
+			_, err = tx.ExecContext(ctx, "SET LOCAL autocommit_before_ddl = false")
+			if err != nil {
+				return err
+			}
 			defer func() {
 				if err != nil {
 					err = errors.WithSecondaryError(err, tx.Rollback())

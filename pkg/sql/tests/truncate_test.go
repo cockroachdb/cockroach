@@ -121,6 +121,11 @@ SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 			if err != nil {
 				return err
 			}
+			_, err = tx.Exec("SET LOCAL autocommit_before_ddl = false")
+			if err != nil {
+				_ = tx.Rollback()
+				return err
+			}
 			for _, stmt := range testC.stmts {
 				_, err = tx.Exec(stmt)
 				if err != nil {

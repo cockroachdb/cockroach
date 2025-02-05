@@ -1643,6 +1643,8 @@ func TestTxnAutoRetryReasonAvailable(t *testing.T) {
 	r.Exec(t, `
 CREATE DATABASE t;
 CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+`)
+	r.Exec(t, `
 INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 SELECT * from t.test WHERE k = 'test_key';
 `)

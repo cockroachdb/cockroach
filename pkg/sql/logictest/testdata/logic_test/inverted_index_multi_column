@@ -248,6 +248,9 @@ SELECT * FROM backfill_a@idx WHERE i IN (3, 4) AND s = 'baz' AND j @> '{"a": "b"
 # Backfill a partial index when a new table is created in the same transaction.
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 BEGIN
 
 statement ok
@@ -264,6 +267,9 @@ CREATE INVERTED INDEX idx ON backfill_b (i, s, j)
 
 statement ok
 COMMIT
+
+statement ok
+RESET autocommit_before_ddl
 
 query ITT
 SELECT * FROM backfill_b@idx WHERE i IN (1, 2, 3, 4) AND s = 'bar' AND j @> '7'::JSON

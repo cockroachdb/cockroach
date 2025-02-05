@@ -853,6 +853,8 @@ SELECT * FROM f();
 
 statement ok
 DROP FUNCTION f;
+
+statement ok
 CREATE FUNCTION f() RETURNS two_typ LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
 
 query T

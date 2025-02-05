@@ -167,6 +167,9 @@ SELECT * FROM myschema3.tb2
 # The names should be drained after executing, so we should be able
 # to make another schema with the old name.
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE SCHEMA myschema2
 
 statement ok
@@ -180,6 +183,9 @@ ALTER SCHEMA another_schema RENAME TO another_one
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
 
 # We should be able to drop an empty schema without CASCADE.
 statement ok
@@ -301,9 +307,17 @@ subtest drop_schemas_with_database_prefixes
 # Test that empty schemas from different databases can be dropped
 statement ok
 CREATE DATABASE scdrop4_db;
+
+statement ok
 CREATE DATABASE scdrop6_db;
+
+statement ok
 CREATE SCHEMA scdrop4_db.scdrop4;
+
+statement ok
 CREATE SCHEMA scdrop5;
+
+statement ok
 CREATE SCHEMA scdrop6_db.scdrop6;
 
 statement ok

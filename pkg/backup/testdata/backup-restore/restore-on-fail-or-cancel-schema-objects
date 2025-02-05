@@ -16,12 +16,14 @@ exec-sql
 CREATE DATABASE restore;
 CREATE TYPE data.myenum AS ENUM ('hello');
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Do the same with a user defined schema.
 exec-sql
 USE data;
 CREATE SCHEMA myschema;
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP DATABASE data INTO 'nodelocal://1/foo';
@@ -102,6 +104,8 @@ CREATE TYPE d.ty AS ENUM ('hello');
 CREATE TABLE d.tb (x d.ty);
 INSERT INTO d.tb VALUES ('hello'), ('hello');
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP TABLE d.tb INTO 'nodelocal://1/bar';
@@ -142,6 +146,8 @@ CREATE TYPE d2.ty AS ENUM ('hello');
 CREATE TABLE d2.tb (x d2.ty);
 INSERT INTO d2.tb VALUES ('hello'), ('hello');
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster';

@@ -635,6 +635,13 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var logErr error
 	defer func() {
+		// Do not log if this is an eventTxnCommittedDueToDDL event. In that case,
+		// the transaction is committed, and the current statement is executed
+		// again.
+		if _, ok := retEv.(eventTxnCommittedDueToDDL); ok {
+			return
+		}
+
 		// If we did not dispatch to the execution engine, we need to initialize
 		// the plan here.
 		if !dispatchToExecEngine {
@@ -1620,6 +1627,13 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	dispatchToExecEngine := false
 
 	defer processCleanupFunc(func() {
+		// Do not log if this is an eventTxnCommittedDueToDDL event. In that case,
+		// the transaction is committed, and the current statement is executed
+		// again.
+		if _, ok := retEv.(eventTxnCommittedDueToDDL); ok {
+			return
+		}
+
 		// If we did not dispatch to the execution engine, we need to initialize
 		// the plan here.
 		if !dispatchToExecEngine {

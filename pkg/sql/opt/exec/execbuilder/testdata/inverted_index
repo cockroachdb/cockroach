@@ -3223,6 +3223,9 @@ vectorized: true
               table: e@bidx
               spans: /0-/2
 
+statement ok
+SET autocommit_before_ddl = false
+
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.
 statement ok

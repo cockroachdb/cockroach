@@ -10,6 +10,7 @@ exec-sql
 CREATE DATABASE d;
 CREATE TABLE d.tb (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes');
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP DATABASE d INTO 'userfile:///foo'
@@ -47,6 +48,7 @@ exec-sql
 CREATE DATABASE d;
 CREATE TABLE d.tb (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes');
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP DATABASE d INTO 'userfile:///foo'

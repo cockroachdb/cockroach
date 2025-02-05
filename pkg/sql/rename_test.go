@@ -281,6 +281,9 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := txn.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := txn.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
 		t.Fatal(err)
 	}

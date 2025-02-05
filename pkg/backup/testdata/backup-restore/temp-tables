@@ -12,6 +12,10 @@ CREATE TEMP TABLE temp_table (id int primary key);
 CREATE TEMP SEQUENCE temp_seq;
 CREATE TABLE perm_table (id int primary key)
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
@@ -57,6 +61,7 @@ exec-sql
 USE defaultdb;
 DROP DATABASE d1
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://1/d1_backup/'
@@ -86,6 +91,7 @@ exec-sql
 USE defaultdb;
 DROP DATABASE d1
 ----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://1/d1_star_backup/'

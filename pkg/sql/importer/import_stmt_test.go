@@ -6127,8 +6127,10 @@ func TestImportPgDumpGeo(t *testing.T) {
 		tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
+		conn.SetMaxOpenConns(1)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
+		sqlDB.Exec(t, "SET autocommit_before_ddl = false")
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
 		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://1/geo_shp2pgsql.sql' WITH ignore_unsupported_statements")
 
@@ -6170,8 +6172,10 @@ func TestImportPgDumpGeo(t *testing.T) {
 		tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
+		conn.SetMaxOpenConns(1)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
+		sqlDB.Exec(t, "SET autocommit_before_ddl = false")
 		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
 		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://1/geo_ogr2ogr.sql' WITH ignore_unsupported_statements")
 

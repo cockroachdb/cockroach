@@ -669,6 +669,9 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
+SET LOCAL autocommit_before_ddl = false;
+
+statement ok
 ALTER TABLE add_default ADD fee FLOAT NOT NULL DEFAULT 2.99
 
 statement ok
@@ -1127,13 +1130,15 @@ statement ok
 CREATE TABLE t1(x INT, y INT);
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t1 ALTER COLUMN x SET NOT NULL;
 ALTER TABLE t1 ALTER COLUMN y SET NOT NULL;
 COMMIT
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t1 ALTER COLUMN x DROP NOT NULL;
 ALTER TABLE t1 ALTER COLUMN y DROP NOT NULL;
 COMMIT
@@ -1179,6 +1184,9 @@ DROP TABLE telemetry_test
 # Disable stats injection in explicit transactions.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 CREATE TABLE inject_stats (k CHAR PRIMARY KEY, v TIMESTAMPTZ)
@@ -1264,6 +1272,7 @@ CREATE TABLE t2 (x INT, y INT, INDEX i (x))
 
 statement error pq: column \"x\" does not exist
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t2 DROP COLUMN x;
 ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1(x);
 
@@ -1302,6 +1311,7 @@ DROP TABLE t1, t2 CASCADE
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT);
 ALTER TABLE t2 ADD COLUMN x INT REFERENCES t1 (x);
@@ -1324,6 +1334,7 @@ DROP TABLE t1, t2 CASCADE
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT);
 ALTER TABLE t2 ADD COLUMN x INT;
@@ -1347,6 +1358,7 @@ DROP TABLE t1, t2 CASCADE
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE t1 (x INT PRIMARY KEY);
 INSERT INTO t1 VALUES (1);
 CREATE TABLE t2 (y INT);
@@ -1378,6 +1390,7 @@ CREATE TABLE t2 (y INT)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t2 ADD COLUMN x INT;
 CREATE INDEX ON t2 (x);
 ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
@@ -1405,6 +1418,7 @@ CREATE TABLE t2 (x INT)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE INDEX ON t2 (x);
 ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x);
 COMMIT
@@ -1625,7 +1639,7 @@ skipif config #110873 weak-iso-level-configs
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;
-ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_without_index_c_key
+ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_c;
 
 statement ok
 CREATE TABLE unique_without_index_partial (
@@ -1819,6 +1833,7 @@ subtest regression_45985
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE t45985 (a INT);
 ALTER TABLE t45985 ADD COLUMN b INT;
 COMMIT;
@@ -1841,6 +1856,7 @@ CREATE TABLE t_col_drop (a INT);
 
 statement error pgcode 0A000 constraint "a_auto_not_null" in the middle of being added, try again later
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t_col_drop ALTER COLUMN a SET NOT NULL;
 ALTER TABLE t_col_drop DROP COLUMN a;
 
@@ -1852,6 +1868,7 @@ DROP TABLE t_col_drop
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE t_col_drop (a INT);
 ALTER TABLE t_col_drop ALTER COLUMN a SET NOT NULL;
 ALTER TABLE t_col_drop DROP COLUMN a;
@@ -1901,6 +1918,7 @@ CREATE TABLE t60786(i INT PRIMARY KEY);
 
 statement error pgcode 0A000 constraint "fk" in the middle of being added, try again later
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE child_60786(i INT PRIMARY KEY);
 ALTER TABLE t60786 ADD CONSTRAINT fk FOREIGN KEY (i) REFERENCES child_60786(i) NOT VALID;
 ALTER TABLE t60786 DROP CONSTRAINT fk CASCADE
@@ -1910,6 +1928,7 @@ ROLLBACK
 
 statement error pgcode 0A000 constraint "ck" in the middle of being added, try again later
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t60786 ADD CONSTRAINT ck CHECK(i > 0) NOT VALID;
 ALTER TABLE t60786 DROP CONSTRAINT ck CASCADE
 
@@ -1918,6 +1937,7 @@ ROLLBACK
 
 statement error pgcode 0A000 constraint "uq" in the middle of being added, try again later
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t60786 ADD CONSTRAINT uq UNIQUE WITHOUT INDEX(i) NOT VALID;
 ALTER TABLE t60786 DROP CONSTRAINT uq CASCADE
 
@@ -2312,7 +2332,8 @@ INSERT INTO multipleinstmt (key, value) VALUES ('c', 'c');
 
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS a BOOL DEFAULT false;
 ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS b STRING;
 COMMIT;
@@ -2347,6 +2368,7 @@ SET use_declarative_schema_changer = 'off';
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE tb AS SELECT 123::INT AS k FROM generate_series(1, 10);
 SET tracing = on,kv;
 ALTER TABLE tb ADD COLUMN v STRING NOT NULL DEFAULT ('abc'::STRING);
@@ -2372,6 +2394,7 @@ SET CLUSTER SETTING bulkio.column_backfill.update_chunk_size_threshold_bytes = 1
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE tb AS SELECT 123::INT AS k FROM generate_series(1, 10);
 SET tracing = on,kv;
 ALTER TABLE tb ADD COLUMN v STRING NOT NULL DEFAULT ('abc'::STRING);
@@ -2439,6 +2462,7 @@ subtest drop-and-add-constraint-primary-index
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 create table const_tbl (a int, b int, constraint "bob" primary key (a, b));
 alter table const_tbl drop constraint "bob";
 alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
@@ -2446,6 +2470,7 @@ COMMIT;
 
 statement error relation \"const_tbl\" \(\d+\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction.*
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 alter table const_tbl drop constraint "bob";
 alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
 alter table const_tbl drop constraint "bob";
@@ -2453,6 +2478,7 @@ COMMIT;
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 alter table const_tbl drop constraint "bob";
 -- Note: Primary key must be restored first before any other command will
 -- be allowed.
@@ -2469,6 +2495,7 @@ alter table const_tbl add constraint "steve" CHECK (a > 100);
 
 statement error  pq: duplicate constraint name: "steve"
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 alter table const_tbl drop constraint "steve";
 alter table const_tbl add constraint "steve" CHECK (a > 100);
 COMMIT;
@@ -2568,6 +2595,7 @@ CREATE TABLE pk_fk_ref(a_id int8 references pk_fk_src (id));
 
 statement error "pk_fk_src_pkey" is referenced by foreign key from table "pk_fk_ref"
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE pk_fk_src DROP CONSTRAINT "pk_fk_src_pkey";
 ALTER TABLE pk_fk_src ADD CONSTRAINT "pk_fk_src_pkey" PRIMARY KEY (legacy_id);
 COMMIT;
@@ -2577,6 +2605,7 @@ ROLLBACK;
 
 statement error "pk_fk_src_pkey" is referenced by foreign key from table "pk_fk_ref"
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE pk_fk_src DROP CONSTRAINT "pk_fk_src_pkey";
 ALTER TABLE pk_fk_src ADD CONSTRAINT "pk_fk_src_pkey_new" PRIMARY KEY (legacy_id);
 COMMIT;
@@ -4194,7 +4223,8 @@ statement ok
 create table t_droppedcol (dropme int);
 
 statement ok
-begin;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 alter table t_droppedcol drop column dropme;
@@ -4211,7 +4241,8 @@ statement ok
 rollback;
 
 statement ok
-begin;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 alter table t_droppedcol drop column dropme;
@@ -4249,7 +4280,8 @@ subtest end
 subtest validate_not_null_during_sc
 
 statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(n IS NOT NULL\)
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 create table t1_135692(n int);
 alter table t1_135692 alter column n set not null;
 insert into t1_135692 values (null);
@@ -4303,7 +4335,8 @@ SET serial_normalization = sql_sequence;
 skipif config local-read-committed
 skipif config local-repeatable-read
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE SEQUENCE t1_serial_columns_z_seq;
 alter table t1_serial_columns add column z serial;
 alter table t1_serial_columns add column l serial;
@@ -4372,7 +4405,8 @@ statement ok
 set use_declarative_schema_changer = 'unsafe_always';
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t1_add DROP COLUMN c1;
 ALTER TABLE t1_add ADD COLUMN IF NOT EXISTS c1 date DEFAULT '2024-08-31';
 COMMIT;
