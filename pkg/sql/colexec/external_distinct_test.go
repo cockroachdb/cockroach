@@ -274,9 +274,11 @@ func BenchmarkExternalDistinct(b *testing.B) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
-	defer monitorRegistry.Close(ctx)
 	var closerRegistry colexecargs.CloserRegistry
-	defer closerRegistry.Close(ctx)
+	afterEachRun := func() {
+		closerRegistry.BenchmarkReset(ctx)
+		monitorRegistry.BenchmarkReset(ctx)
+	}
 
 	for _, spillForced := range []bool{false, true} {
 		for _, maintainOrdering := range []bool{false, true} {
@@ -305,6 +307,7 @@ func BenchmarkExternalDistinct(b *testing.B) {
 						&monitorRegistry, &closerRegistry,
 					)
 				},
+				afterEachRun,
 				func(nCols int) int {
 					return 0
 				},
