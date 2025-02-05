@@ -1085,6 +1085,11 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 	if cf.traceKV {
 		defer func() {
 			if err == nil {
+				if cf.table.spec.MaxKeysPerRow > 1 {
+					// If the index has more than one column family, then
+					// include the column family ID.
+					prettyKey = fmt.Sprintf("%s:cf=%d", prettyKey, familyID)
+				}
 				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyValue)
 			}
 		}()
