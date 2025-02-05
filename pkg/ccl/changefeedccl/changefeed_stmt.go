@@ -604,7 +604,9 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 	if _, err := getEncoder(ctx, encodingOpts, AllTargets(details), details.Select != "",
-		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil); err != nil {
+		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil, enrichedEnvelopeSourceDataSource{
+			jobId: jobID.String(),
+		}); err != nil {
 		return nil, err
 	}
 

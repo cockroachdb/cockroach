@@ -1244,6 +1244,7 @@ func newChangeFrontierProcessor(
 	if cf.encoder, err = getEncoder(
 		ctx, encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
 		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMetrics,
+		enrichedEnvelopeSourceDataSource{jobId: cf.spec.JobID.String()},
 	); err != nil {
 		return nil, err
 	}

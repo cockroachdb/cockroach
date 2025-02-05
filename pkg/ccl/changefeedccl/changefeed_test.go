@@ -3862,14 +3862,20 @@ func TestChangefeedEnriched(t *testing.T) {
 		// this is not supported by the enriched envelope type. We should adapt
 		// the test framework to account for this.
 		topic := "foo"
+
+		// Fetching the jobId this way is not supported by the sinkless sink, so
+		// we leave it out of the supported sinks for this test.
+		var jobID string
+		sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
+
 		if _, ok := foo.(*webhookFeed); ok {
 			topic = ""
 		}
 		assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{
-			fmt.Sprintf(`%s: [0]->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic),
+			fmt.Sprintf(`%s: [0]->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c", "source": {"jobId": "%s"}}}`, topic, jobID),
 		})
 	}
-	supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
+	supportedSinks := []string{"kafka", "pubsub", "webhook"}
 	for _, sink := range supportedSinks {
 		cdcTest(t, testFn, feedTestForceSink(sink))
 	}
