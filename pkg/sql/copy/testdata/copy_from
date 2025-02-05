@@ -659,7 +659,7 @@ copy-from-kvtrace
 COPY tcomp FROM STDIN
 1	(1, 2)
 ----
-CPut /Table/<>/1/1/0 -> /TUPLE/
+CPut /Table/<>/1/1/0 -> /TUPLE/2:2:Tuple/(1, 2)
 
 # Regression test for #103220
 exec-ddl

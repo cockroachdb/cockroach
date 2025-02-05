@@ -53,3 +53,28 @@ func decodeTuple(a *tree.DatumAlloc, tupTyp *types.T, b []byte) (tree.Datum, []b
 	}
 	return a.NewDTuple(result), b, nil
 }
+
+func init() {
+	encoding.PrettyPrintTupleValueEncoded = func(b []byte) ([]byte, string, error) {
+		b, _, l, err := encoding.DecodeNonsortingUvarint(b)
+		if err != nil {
+			return b, "", err
+		}
+		result := &tree.DTuple{D: make([]tree.Datum, l)}
+		for i := range result.D {
+			_, _, _, encType, err := encoding.DecodeValueTag(b)
+			if err != nil {
+				return b, "", err
+			}
+			t, err := encodingTypeToDatumType(encType)
+			if err != nil {
+				return b, "", err
+			}
+			result.D[i], b, err = Decode(nil /* a */, t, b)
+			if err != nil {
+				return b, "", err
+			}
+		}
+		return b, result.String(), nil
+	}
+}
