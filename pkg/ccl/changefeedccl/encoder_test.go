@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
+	gojson "encoding/json"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -765,6 +766,41 @@ func TestAvroSchemaNamespace(t *testing.T) {
 
 		require.Contains(t, foo.registry.SchemaForSubject(`superdrivers-key`), `"namespace":"super"`)
 		require.Contains(t, foo.registry.SchemaForSubject(`superdrivers-value`), `"namespace":"super"`)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
+}
+
+func TestAvroSchemaHasExpectedTopLevelFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE movr`)
+		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
+		sqlDB.Exec(t,
+			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
+		)
+
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s`, changefeedbase.OptFormatAvro))
+		defer closeFeed(t, foo)
+
+		assertPayloads(t, foo, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		reg := foo.(*kafkaFeed).registry
+
+		schemaJSON := reg.SchemaForSubject(`drivers-value`)
+		var schema map[string]any
+		require.NoError(t, gojson.Unmarshal([]byte(schemaJSON), &schema))
+		var keys []string
+		for k := range schema {
+			keys = append(keys, k)
+		}
+		require.ElementsMatch(t, keys, []string{"type", "name", "fields"})
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)

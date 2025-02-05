@@ -180,9 +180,10 @@ type EnvelopeOpts struct {
 type EnvelopeRecord struct {
 	Record
 
-	// TODO: opts should be private
-	Opts               EnvelopeOpts
-	Before, After, Rec *DataRecord
+	// NOTE: this struct gets serialized to json, but we still need to be able
+	// to access these fields outside this package, so we hide them.
+	Opts               EnvelopeOpts `json:"-"`
+	Before, After, Rec *DataRecord  `json:"-"`
 }
 
 // typeToSchema converts a database type to an avro field
