@@ -929,6 +929,9 @@ func registerTPCC(r registry.Registry) {
 						},
 						SetupType:         usingInit,
 						WorkloadInstances: tc.workloadInstances,
+						// Increase the log verbosity to help debug future failures.
+						ExtraStartArgs: []string{
+							"--vmodule=store=2,store_rebalancer=2,liveness=2,raft_log_queue=3,replica_range_lease=3,raft=3"},
 					})
 				},
 			})
@@ -963,7 +966,9 @@ func registerTPCC(r registry.Registry) {
 					}
 				},
 				SetupType: usingImport,
-			})
+				// Increase the log verbosity to help debug future failures.
+				ExtraStartArgs: []string{
+					"--vmodule=store=2,store_rebalancer=2,liveness=2,raft_log_queue=3,replica_range_lease=3,raft=3"}})
 		},
 	})
 

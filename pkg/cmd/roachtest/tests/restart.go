@@ -25,7 +25,9 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 
 	t.Status("installing cockroach")
 	startOpts := option.DefaultStartOpts()
-	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=raft_log_queue=3")
+	// Increase the log verbosity to help debug future failures.
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+		"--vmodule=store=2,store_rebalancer=2,liveness=2,raft_log_queue=3,replica_range_lease=3,raft=3")
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
 
 	// We don't really need tpcc, we just need a good amount of traffic and a good
