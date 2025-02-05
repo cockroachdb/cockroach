@@ -35,7 +35,7 @@ var RaftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
 		"roll out Leader leases across the ranges in a cluster.",
 	metamorphic.ConstantWithTestChoice("kv.raft.leader_fortification.fraction_enabled",
 		0.0, /* defaultValue */
-		1.0 /* otherValues */),
+		0.0 /* otherValues */),
 	settings.FloatInRange(0.0, 1.0),
 	settings.WithPublic,
 )
