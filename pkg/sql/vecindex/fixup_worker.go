@@ -103,6 +103,9 @@ func (fw *fixupWorker) splitOrMergePartition(
 	defer func() {
 		if err == nil {
 			err = fw.index.store.Commit(ctx, txn)
+			if err != nil {
+				err = errors.CombineErrors(err, fw.index.store.Abort(ctx, txn))
+			}
 		} else {
 			err = errors.CombineErrors(err, fw.index.store.Abort(ctx, txn))
 		}
