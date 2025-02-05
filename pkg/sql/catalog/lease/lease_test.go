@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1758,6 +1760,71 @@ INSERT INTO t.kv VALUES ('c', 'd');
 	require.NoError(t, err)
 }
 
+func TestDeleteOrphanedLeasesBySession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}},
+		},
+	})
+	defer s.Stop(ctx)
+	idb := s.InternalDB().(*sql.InternalDB)
+	ie := idb.Executor()
+	// Validate only one session exists.
+	rows, err := ie.QueryBuffered(ctx,
+		"detect-existing-leases",
+		nil,
+		"SELECT DISTINCT(session_id) FROM system.lease")
+	require.NoError(t, err)
+	require.Lenf(t, rows, 1, "extra sessions were detected: %v", rows)
+	// Insert fake leases with dead sessions IDs.
+	for i := 0; i < 52; i++ {
+		fakeSessionID, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+		require.NoError(t, err)
+		_, err = ie.Exec(ctx, "insert-fake-lease", nil,
+			"INSERT INTO system.lease(desc_id, version, sql_instance_id, session_id, crdb_region) VALUES ($1, $2, $3, $4, $5)",
+			keys.SystemDatabaseID, 1, 32, fakeSessionID.UnsafeBytes(), enum.One)
+		require.NoError(t, err)
+	}
+	// Mock a fake lease with multiple leases to test that our DELETE batching
+	// works.
+	fakeSessionID, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+	require.NoError(t, err)
+	for i := 0; i < 52; i++ {
+		_, err = ie.Exec(ctx, "insert-fake-lease", nil,
+			"INSERT INTO system.lease(desc_id, version, sql_instance_id, session_id, crdb_region) VALUES ($1, $2, $3, $4, $5)",
+			i, 1, 32, fakeSessionID.UnsafeBytes(), enum.One)
+		require.NoError(t, err)
+	}
+	lm := s.LeaseManager().(*lease.Manager)
+	now := timeutil.Now().UnixNano()
+	db := sqlutils.MakeSQLRunner(conn)
+	// Insert a new lease for a valid session, since we are deleting
+	// before the current timestamp.
+	db.Exec(t, "CREATE TABLE t1(n int)")
+	db.Exec(t, "SELECT * FROM t1")
+	lm.DeleteOrphanedLeases(ctx, now, s.Locality())
+
+	// Confirm our leases from dead sessions are gone.
+	testutils.SucceedsSoon(t, func() error {
+		rows, err := ie.QueryBuffered(ctx,
+			"detect-existing-leases",
+			nil,
+			"SELECT DISTINCT(session_id) FROM system.lease")
+		if err != nil {
+			return err
+		}
+		if len(rows) != 1 {
+			return errors.AssertionFailedf("extra sessions were detected: %v", rows)
+		}
+		return nil
+	})
+
+}
+
 // Tests that DeleteOrphanedLeases() deletes only orphaned leases.
 func TestDeleteOrphanedLeases(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
@@ -1819,7 +1886,7 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 	t.expectLeases(afterDesc.GetID(), "/1/1")
 
 	// Call DeleteOrphanedLeases() with the server startup time.
-	t.node(1).DeleteOrphanedLeases(ctx, now)
+	t.node(1).DeleteOrphanedLeases(ctx, now, t.server.Locality())
 	// Orphaned lease is gone.
 	t.expectLeases(beforeDesc.GetID(), "")
 	t.expectLeases(afterDesc.GetID(), "/1/1")
