@@ -31,11 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2065,7 +2067,9 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, includeAll bool) {
 // DeleteOrphanedLeases releases all orphaned leases created by a prior
 // instance of this node. timeThreshold is a walltime lower than the
 // lowest hlc timestamp that the current instance of the node can use.
-func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64) {
+func (m *Manager) DeleteOrphanedLeases(
+	ctx context.Context, timeThreshold int64, locality roachpb.Locality,
+) {
 	if m.testingKnobs.DisableDeleteOrphanedLeases {
 		return
 	}
@@ -2081,6 +2085,7 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 	// filled by AnnotateCtx.
 	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
 	_ = m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
+		m.deleteOrphanedLeasesFromStaleSession(ctx, timeThreshold, locality)
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
 
@@ -2331,4 +2336,86 @@ func (m *Manager) TestingMarkInit() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	close(m.waitForInit)
+}
+
+// deleteOrphanedLeasesFromStaleSession deletes leases from sessions that are
+// no longer alive.
+func (m *Manager) deleteOrphanedLeasesFromStaleSession(
+	ctx context.Context, initialTimestamp int64, locality roachpb.Locality,
+) {
+	ex := m.storage.db.Executor()
+	row, err := ex.QueryRowEx(ctx, "check-system-db-multi-region", nil,
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT EXISTS (SELECT * FROM [SHOW REGIONS FROM DATABASE system])")
+	if err != nil {
+		log.Warningf(ctx, "unable to query if system database is multi-region: %v", err)
+		return
+	}
+	// For multi-region system databases, only focus on our own region; there is
+	// no need to incur cross-region hops.
+	region := string(enum.One)
+	multiRegionSystemDb := tree.MustBeDBool(row[0])
+	if !locality.Empty() && bool(multiRegionSystemDb) {
+		region = locality.Tiers[0].Value
+	}
+
+	var distinctSessions []tree.Datums
+	const retryLimit = 10
+	retryCount := 0
+	aostTime := hlc.Timestamp{WallTime: initialTimestamp}
+	distinctSessionQuery := `SELECT DISTINCT(session_id) FROM system.lease AS OF SYSTEM TIME %s WHERE crdb_region=$1 AND NOT crdb_internal.sync_sql_liveness_is_alive(session_id) LIMIT $2`
+	syntheticDescriptors := catalog.Descriptors{systemschema.LeaseTable()}
+	limit := 50
+	// Get a list of distinct, dead session IDs that exist in the system.lease
+	// table.
+	for {
+		err = ex.WithSyntheticDescriptors(syntheticDescriptors, func() error {
+			distinctSessions, err = ex.QueryBufferedEx(ctx,
+				"query-lease-table-dead-sessions",
+				nil,
+				sessiondata.NodeUserSessionDataOverride,
+				fmt.Sprintf(distinctSessionQuery, aostTime.AsOfSystemTime()),
+				region,
+				limit,
+			)
+			return err
+		})
+		if err != nil {
+			retryCount++
+			log.Warningf(ctx, "unable to read session IDs for orphaned leases: %v", err)
+			if retryCount >= retryLimit {
+				log.Warningf(ctx, "cleanup for leases with orphaned sessions hit retry limit of %d", retryLimit)
+				return
+			}
+			continue
+		}
+
+		// No more dead sessions to clean up.
+		if len(distinctSessions) == 0 {
+			return
+		}
+
+		// Delete rows in our lease table with orphaned sessions.
+		deleteOrphanedQuery := `DELETE FROM system.lease WHERE session_id=$1 AND crdb_region=$2`
+		for _, sessionRow := range distinctSessions {
+			sessionID := sqlliveness.SessionID(tree.MustBeDBytes(sessionRow[0]))
+			if err := ex.WithSyntheticDescriptors(syntheticDescriptors, func() error {
+				var err error
+				_, err = ex.ExecEx(ctx, "delete-orphaned-leases-by-session", nil,
+					sessiondata.NodeUserSessionDataOverride,
+					deleteOrphanedQuery,
+					sessionID.UnsafeBytes(),
+					region)
+				return err
+			}); err != nil {
+				retryCount++
+				log.Warningf(ctx, "failed to delete leases for expired sessions: %v", err)
+				if retryCount >= retryLimit {
+					log.Warningf(ctx, "cleanup for leases with orphaned sessions hit retry limit of %d", retryLimit)
+					return
+				}
+				continue
+			}
+		}
+	}
 }
