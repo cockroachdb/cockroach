@@ -78,7 +78,6 @@ go_test(
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
-        "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/isql",
@@ -109,6 +108,7 @@ go_test(
         "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//require",
         "//pkg/sql/sem/idxtype",
+        "//pkg/sql/catalog/lease",
     ],
 )
 
