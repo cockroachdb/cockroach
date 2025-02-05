@@ -65,6 +65,10 @@ func MakeIPTablesPartitionNode(
 
 const IPTablesNetworkPartitionName = "iptables-network-partition"
 
+func registerIPTablesPartitionNode(r *FailureRegistry) {
+	r.add(IPTablesNetworkPartitionName, NetworkPartitionArgs{}, MakeIPTablesPartitionNode)
+}
+
 func (f *IPTablesPartitionNode) Description() string {
 	return IPTablesNetworkPartitionName
 }
