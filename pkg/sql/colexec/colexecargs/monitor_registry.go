@@ -272,3 +272,11 @@ func (r *MonitorRegistry) Reset() {
 	r.accounts = r.accounts[:0]
 	r.monitors = r.monitors[:0]
 }
+
+// BenchmarkReset should only be called from benchmarks in order to prepare the
+// registry for the new iteration. This should be used whenever a single
+// registry is utilized for the whole benchmark loop.
+func (r *MonitorRegistry) BenchmarkReset(ctx context.Context) {
+	r.Close(ctx)
+	r.Reset()
+}
