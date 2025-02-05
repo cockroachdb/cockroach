@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -33,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
@@ -2091,6 +2094,22 @@ func TestValuePrettyPrint(t *testing.T) {
 	errTagValue.SetInt(7)
 	errTagValue.setTag(ValueType(99))
 
+	var timeTZValue Value
+	timeTZValue.SetTimeTZ(timetz.MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0))
+
+	g, err := geo.ParseGeometry(`{ "type": "Point", "coordinates": [1.0, 1.0] }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var geoValue Value
+	err = geoValue.SetGeo(g.SpatialObject())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var bbValue Value
+	bbValue.SetBox2D(g.CartesianBoundingBox().BoundingBox)
+
 	tests := []struct {
 		v        Value
 		expected string
@@ -2109,6 +2128,9 @@ func TestValuePrettyPrint(t *testing.T) {
 		{bitArrayValue, "/BITARRAY/B00111010"},
 		{errValue, "/<err: float64 value should be exactly 8 bytes: 1>"},
 		{errTagValue, "/<err: unknown tag: 99>"},
+		{timeTZValue, "/TIMETZ/01:02:03+00:00:00"},
+		{geoValue, `/GEO/type:GeometryType ewkb:"\001\001\000\000\000\000\000\000\000\000\000\360?\000\000\000\000\000\000\360?" shape_type:Point bounding_box:<lo_x:1 hi_x:1 lo_y:1 hi_y:1 > `},
+		{bbValue, "/BOX2D/lo_x:1 hi_x:1 lo_y:1 hi_y:1 "},
 	}
 
 	for i, test := range tests {
@@ -2117,6 +2139,7 @@ func TestValuePrettyPrint(t *testing.T) {
 		}
 	}
 }
+
 func TestUpdateObservedTimestamps(t *testing.T) {
 	f := func(nodeID NodeID, walltime int64) ObservedTimestamp {
 		return ObservedTimestamp{
