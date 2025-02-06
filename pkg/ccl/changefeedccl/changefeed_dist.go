@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -469,25 +470,45 @@ func makePlan(
 				log.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
 			}
 			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
+
+			var initialHighWaterPtr *hlc.Timestamp
 			for watchIdx, nodeSpan := range sp.Spans {
-				initialResolved := initialHighWater
-				if checkpointSpanGroup.Encloses(nodeSpan) {
-					initialResolved = checkpoint.Timestamp
-				}
-				watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
-					Span:            nodeSpan,
-					InitialResolved: initialResolved,
+				if evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+					// If the cluster has been fully upgraded to v25.2, we should populate
+					// the initial highwater of ChangeAggregatorSpec_Watch and leave the
+					// initial resolved of each span empty. We rely on the aggregators to
+					// forward the checkpointed timestamp for every span based on
+					// aggregatorCheckpoint.
+					watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
+						Span: nodeSpan,
+					}
+					initialHighWaterPtr = &initialHighWater
+				} else {
+					// If the cluster has not been fully upgraded to v25.2, we should
+					// leave the initial highwater of ChangeAggregatorSpec_Watch as nil.
+					// We rely on this to tell the aggregators to the initial resolved
+					// timestamp for each span to infer the initial highwater. Read more
+					// from changeAggregator.getInitialHighWaterAndSpans.
+					initialResolved := initialHighWater
+					if checkpointSpanGroup.Encloses(nodeSpan) {
+						initialResolved = checkpoint.Timestamp
+					}
+					watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
+						Span:            nodeSpan,
+						InitialResolved: initialResolved,
+					}
 				}
 			}
 
 			aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
-				Watches:     watches,
-				Checkpoint:  aggregatorCheckpoint,
-				Feed:        details,
-				UserProto:   execCtx.User().EncodeProto(),
-				JobID:       jobID,
-				Select:      execinfrapb.Expression{Expr: details.Select},
-				Description: description,
+				InitialHighWater: initialHighWaterPtr,
+				Watches:          watches,
+				Checkpoint:       aggregatorCheckpoint,
+				Feed:             details,
+				UserProto:        execCtx.User().EncodeProto(),
+				JobID:            jobID,
+				Select:           execinfrapb.Expression{Expr: details.Select},
+				Description:      description,
 			}
 		}
 
