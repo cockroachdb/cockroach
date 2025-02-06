@@ -881,45 +881,46 @@ func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 						b.Log("skipping benchmark on initial run; benchtime specifies an iteration count")
 						return
 					}
-
-					ctx := context.Background()
-					sys, cleanup := driver.constructorFn(ctx, b)
+					sys, cleanup := driver.constructorFn(context.Background(), b)
 					defer cleanup()
-
-					sys.prep(rand.New(rand.NewSource(0)))
-
-					defer startAllocsProfile(b).Stop(b)
-					defer b.StopTimer()
-					b.ResetTimer()
-
-					var id atomic.Int64
-					var errs atomic.Int64
-					if parallel {
-						b.RunParallel(func(pb *testing.PB) {
-							seed := id.Add(1) - 1
-							s := sys.newClient()
-							defer func() { _ = s.Rollback() }()
-
-							runSysbench(b, workload.opFn, s, &errs, pb.Next, seed)
-						})
-					} else {
-						s := sys.newClient()
-						defer func() { _ = s.Rollback() }()
-
-						var i int
-						runSysbench(b, workload.opFn, s, nil /* errors are fatal */, func() bool {
-							i++
-							return i <= b.N
-						}, 0)
-					}
-					b.ReportMetric(float64(errs.Load())/float64(b.N), "errs/op")
+					runSysbenchOuter(b, sys, workload.opFn, parallel)
 				})
 			}
 		})
 	}
 }
 
-func runSysbench(
+func runSysbenchOuter(b *testing.B, sys sysbenchDriver, opFn sysbenchWorkload, parallel bool) {
+	sys.prep(rand.New(rand.NewSource(0)))
+
+	defer startAllocsProfile(b).Stop(b)
+	defer b.StopTimer()
+	b.ResetTimer()
+
+	var id atomic.Int64
+	var errs atomic.Int64
+	if parallel {
+		b.RunParallel(func(pb *testing.PB) {
+			seed := id.Add(1) - 1
+			s := sys.newClient()
+			defer func() { _ = s.Rollback() }()
+
+			runSysbenchInner(b, opFn, s, &errs, pb.Next, seed)
+		})
+	} else {
+		s := sys.newClient()
+		defer func() { _ = s.Rollback() }()
+
+		var i int
+		runSysbenchInner(b, opFn, s, nil /* errors are fatal */, func() bool {
+			i++
+			return i <= b.N
+		}, 0)
+	}
+	b.ReportMetric(float64(errs.Load())/float64(b.N), "errs/op")
+}
+
+func runSysbenchInner(
 	b testing.TB,
 	opFn sysbenchWorkload,
 	s sysbenchClient,
