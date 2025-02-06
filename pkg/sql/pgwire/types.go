@@ -73,7 +73,7 @@ func writeTextBool(b *writeBuffer, v bool) {
 
 func writeTextInt64(b *writeBuffer, v int64) {
 	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-	s := strconv.AppendInt(b.putbuf[4:4], v, 10)
+	s := strconv.AppendInt(b.putbuf[4:], v, 10)
 	b.putInt32(int32(len(s)))
 	b.write(s)
 }
@@ -82,7 +82,7 @@ func writeTextFloat(
 	b *writeBuffer, fl float64, conv sessiondatapb.DataConversionConfig, typ *types.T,
 ) {
 	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-	s := tree.PgwireFormatFloat(b.putbuf[4:4], fl, conv, typ)
+	s := tree.PgwireFormatFloat(b.putbuf[4:], fl, conv, typ)
 	b.putInt32(int32(len(s)))
 	b.write(s)
 }
@@ -95,7 +95,7 @@ func writeTextBytes(b *writeBuffer, v string, conv sessiondatapb.DataConversionC
 
 func writeTextUUID(b *writeBuffer, v uuid.UUID) {
 	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-	s := b.putbuf[4 : 4+36]
+	s := b.putbuf[4 : 4+uuid.RFC4122StrSize]
 	v.StringBytes(s)
 	b.putInt32(int32(len(s)))
 	b.write(s)
@@ -116,14 +116,14 @@ func writeTextString(b *writeBuffer, s string, t *types.T) {
 
 func writeTextTimestamp(b *writeBuffer, v time.Time) {
 	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-	s := tree.PGWireFormatTimestamp(v, nil, b.putbuf[4:4])
+	s := tree.PGWireFormatTimestamp(v, nil, b.putbuf[4:])
 	b.putInt32(int32(len(s)))
 	b.write(s)
 }
 
 func writeTextTimestampTZ(b *writeBuffer, v time.Time, sessionLoc *time.Location) {
 	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-	s := tree.PGWireFormatTimestamp(v, sessionLoc, b.putbuf[4:4])
+	s := tree.PGWireFormatTimestamp(v, sessionLoc, b.putbuf[4:])
 	b.putInt32(int32(len(s)))
 	b.write(s)
 }
@@ -206,13 +206,13 @@ func writeTextDatumNotNull(
 
 	case *tree.DTime:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := tree.PGWireFormatTime(timeofday.TimeOfDay(*v), b.putbuf[4:4])
+		s := tree.PGWireFormatTime(timeofday.TimeOfDay(*v), b.putbuf[4:])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
 	case *tree.DTimeTZ:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := tree.PGWireFormatTimeTZ(v.TimeTZ, b.putbuf[4:4])
+		s := tree.PGWireFormatTimeTZ(v.TimeTZ, b.putbuf[4:])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
