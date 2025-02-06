@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -265,6 +267,22 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
+	// zoneCfgRangeFeedStarted is used to signal that the zone config range feed
+	// started. This is used to avoid a race where we update `system.zones` before
+	// the full reconciliation of zone configs has started. The full
+	// reconciliation ignores dropped databases, and if we write to
+	// `system.zones` before that, our write will not be reconciled. By delaying
+	// the test until the zone config range feed starts, we ensure that the full
+	// reconciliation has finished, and the range feed is ready to stream our
+	// changes.
+	var zoneCfgRangeFeedStarted sync.WaitGroup
+	zoneCfgRangeFeedStarted.Add(1)
+	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{
+		OnWatchForZoneConfigUpdatesEstablished: func() {
+			zoneCfgRangeFeedStarted.Done()
+		},
+	}
+
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -273,11 +291,23 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	systemDB := srv.SystemLayer().SQLConn(t)
 	_, err := systemDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
 	require.NoError(t, err)
-
 	// Refresh protected timestamp cache immediately to make MVCC GC queue to
 	// process GC immediately.
 	_, err = systemDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
 	require.NoError(t, err)
+
+	// Turn off storage_coalesce_adjacent to avoid a race between the GC and the
+	// split queues where a range might get GCed before splitting. This is
+	// more likely to happen in this test since increase the GC queue scan rate.
+	// If we don't turn the setting off, setting the TTL to table 1 might cause
+	// table 2 to also get purged.
+	_, err = systemDB.Exec(`SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = 'false';`)
+	require.NoError(t, err)
+	_, err = systemDB.Exec(`SET CLUSTER SETTING spanconfig.tenant_coalesce_adjacent.enabled = 'false';`)
+	require.NoError(t, err)
+
+	// Wait for the zone config range feed to start.
+	zoneCfgRangeFeedStarted.Wait()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
