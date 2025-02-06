@@ -532,15 +532,7 @@ func TestNameCacheContainsLatestLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	removalTracker := NewLeaseRemovalTracker()
-	testingKnobs := base.TestingKnobs{
-		SQLLeaseManager: &ManagerTestingKnobs{
-			LeaseStoreTestingKnobs: StorageTestingKnobs{
-				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
-			},
-		},
-	}
-	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
@@ -573,8 +565,6 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
 	expiration := lease.Expiration(context.Background())
-	tracker := removalTracker.TrackRemoval(lease.Descriptor)
-
 	// Acquire another lease.
 	if _, err := acquireNodeLease(
 		context.Background(), leaseManager, tableDesc.GetID(), AcquireBlock,
@@ -587,18 +577,13 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
-	if newLease.Expiration(context.Background()) == expiration {
-		t.Fatalf("same lease %s %s", expiration.GoTime(), newLease.Expiration(context.Background()).GoTime())
+
+	if newLease.Expiration(context.Background()).Less(expiration) {
+		t.Fatalf("unexpected lease extension %s %s", expiration.GoTime(), newLease.Expiration(context.Background()).GoTime())
 	}
 
 	// TODO(ajwerner): does this matter?
 	lease.Release(context.Background())
-
-	// The first lease acquisition was released.
-	if err := tracker.WaitForRemoval(); err != nil {
-		t.Fatal(err)
-	}
-
 	newLease.Release(context.Background())
 }
 
@@ -1573,108 +1558,6 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, descs, 3)
 	require.Equal(t, numRequests, 1)
-}
-
-// TestSessionLeasingClusterSetting sanity testing for the new
-// experimental_use_session_based_leasing cluster setting and interfaces used
-// to consume it.
-func TestSessionLeasingClusterSetting(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(ctx)
-
-	// Validate all settings can be set and the provider works correctly.
-	for setting, sessionMode := range SessionBasedLeasingModeByName {
-		// Automatic mode is based off the version number so the tests below do
-		// not apply.
-		if sessionMode == SessionBasedLeasingAuto {
-			continue
-		}
-		_, err := sqlDB.Exec("SET CLUSTER SETTING sql.catalog.experimental_use_session_based_leasing=$1::STRING", setting)
-		require.NoError(t, err)
-		lm := srv.LeaseManager().(*Manager)
-
-		// Validate that the mode we just set is active and the provider handles
-		// it properly.
-		require.True(t, lm.sessionBasedLeasingModeAtLeast(ctx, sessionMode))
-		require.Equal(t, lm.getSessionBasedLeasingMode(ctx), sessionMode)
-		// Validate that the previous minimums are active and forwards ones are not.
-		for mode := SessionBasedLeasingOff; mode <= sessionMode; mode++ {
-			require.True(t, lm.sessionBasedLeasingModeAtLeast(ctx, mode))
-		}
-		for mode := sessionMode + 1; mode <= SessionBasedOnly; mode++ {
-			require.False(t, lm.sessionBasedLeasingModeAtLeast(ctx, mode))
-		}
-	}
-}
-
-// TestLeaseCountDetailCrossNode will test out the extra debugging info that is
-// emitted from countLeasesWithDetail. This version tests leases that are spread
-// across multiple nodes.
-func TestLeaseCountDetailCrossNode(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	// We are going to disable session based leasing as its easier to add a lot of
-	// fake leases into system.leases.
-	LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, SessionBasedLeasingOff)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		Settings:          st,
-		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
-		Knobs:             base.TestingKnobs{},
-	})
-	defer srv.Stopper().Stop(ctx)
-
-	s := srv.ApplicationLayer()
-	idb := srv.InternalDB().(isql.DB)
-	executor := idb.Executor()
-
-	// Do cross node lease testing. It is easy to mock this if we use the old
-	// version of the lease table, which lets you insert your own expiration
-	// times.
-	descID := 10 // Descriptor ID that we will insert and query in this test
-	// Insert using a synthetic descriptor.
-	err := executor.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V23_2()}, func() error {
-		nodeIDs := []string{"2", "2", "8", "3", "2"}
-		for i, nodeID := range nodeIDs {
-			version := i + 1
-			expiration := "2124-06-12-10:10:10" // Choose a long expiration, so they are unexpired when we count
-			region := enum.One
-			_, err := executor.Exec(ctx, "add-rows-for-test", nil,
-				fmt.Sprintf("INSERT INTO system.lease VALUES (%d, %d, %s, '%s', '\\x%x')",
-					descID, version, nodeID, expiration, region))
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	require.NoError(t, err)
-
-	codec := s.Codec()
-	now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-
-	// Count leases for any version
-	detail, err := countLeasesWithDetail(ctx, idb, codec, nil, st,
-		[]IDVersion{{ID: descpb.ID(descID), Version: 1}}, now, true)
-	require.NoError(t, err)
-	require.Equal(t, 5, detail.count)
-	require.Equal(t, 3, detail.numSQLInstances)
-	require.Equal(t, 2, detail.sampleSQLInstanceID)
-
-	// Count leases only for a specific version
-	detail, err = countLeasesWithDetail(ctx, idb, codec, nil, st,
-		[]IDVersion{{ID: descpb.ID(descID), Version: 3}}, now, false)
-	require.NoError(t, err)
-	// We should see the fake leases we added plus the one added by the system.
-	require.Equal(t, 1, detail.count)
-	require.Equal(t, 1, detail.numSQLInstances)
-	require.Equal(t, 8, detail.sampleSQLInstanceID)
 }
 
 // TestLeaseCountDetailSessionBased will test out the extra debugging info that

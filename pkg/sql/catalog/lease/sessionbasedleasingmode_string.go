@@ -13,23 +13,11 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[SessionBasedLeasingAuto-0]
-	_ = x[SessionBasedLeasingOff-1]
-	_ = x[SessionBasedDualWrite-2]
-	_ = x[SessionBasedDrain-3]
-	_ = x[SessionBasedOnly-4]
+	_ = x[SessionBasedOnly-0]
 }
 
 func (i SessionBasedLeasingMode) String() string {
 	switch i {
-	case SessionBasedLeasingAuto:
-		return "SessionBasedLeasingAuto"
-	case SessionBasedLeasingOff:
-		return "SessionBasedLeasingOff"
-	case SessionBasedDualWrite:
-		return "SessionBasedDualWrite"
-	case SessionBasedDrain:
-		return "SessionBasedDrain"
 	case SessionBasedOnly:
 		return "SessionBasedOnly"
 	default:
