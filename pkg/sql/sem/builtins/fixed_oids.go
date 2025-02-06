@@ -822,7 +822,7 @@ var builtinOidsArray = []string{
 	846:  `substring(input: bytes, start_pos: int) -> bytes`,
 	847:  `substring(input: bytes, start_pos: int, length: int) -> bytes`,
 	848:  `concat(anyelement...) -> string`,
-	849:  `concat_ws(string...) -> string`,
+	849:  `concat_ws(string, anyelement...) -> string`,
 	850:  `convert_from(str: bytes, enc: string) -> string`,
 	851:  `convert_to(str: string, enc: string) -> bytes`,
 	852:  `get_bit(bit_string: varbit, index: int) -> int`,

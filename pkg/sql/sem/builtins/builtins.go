@@ -426,7 +426,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat_ws": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.String},
+			Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
@@ -436,24 +436,29 @@ var regularBuiltins = map[string]builtinDefinition{
 					return tree.DNull, nil
 				}
 				sep := string(tree.MustBeDString(args[0]))
-				var buf bytes.Buffer
+				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
 				prefix := ""
-				length := 0
+
 				for _, d := range args[1:] {
 					if d == tree.DNull {
 						continue
 					}
-					length += len(prefix) + len(string(tree.MustBeDString(d)))
-					if length > builtinconstants.MaxAllocatedStringSize {
+
+					// This is more lenient than we want and may lead to serious
+					// over-allocation for some data types (e.g. printing large arrays of
+					// integers). A proper solution would add a lot of complexity
+					// here, with attendant performance penalties. The right answer is
+					// probably to push this functionality into the Formatter.
+					if ctx.Buffer.Len()+int(d.Size())+len(prefix) > builtinconstants.MaxAllocatedStringSize {
 						return nil, errStringTooLarge
 					}
-					// Note: we can't use the range index here because that
-					// would break when the 2nd argument is NULL.
-					buf.WriteString(prefix)
+
+					ctx.WriteString(prefix)
+					d.Format(ctx)
+
 					prefix = sep
-					buf.WriteString(string(tree.MustBeDString(d)))
 				}
-				return tree.NewDString(buf.String()), nil
+				return tree.NewDString(ctx.CloseAndGetString()), nil
 			},
 			Info: "Uses the first argument as a separator between the concatenation of the " +
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
