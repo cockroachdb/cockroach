@@ -103,7 +103,7 @@ func (vs *Set) Add(v T) {
 }
 
 // AddSet appends all vectors from the given set to this set.
-func (vs *Set) AddSet(vectors *Set) {
+func (vs *Set) AddSet(vectors Set) {
 	if vs.Dims != vectors.Dims {
 		panic(errors.AssertionFailedf(
 			"cannot add vector set with %d dimensions to a set with %d dimensions",

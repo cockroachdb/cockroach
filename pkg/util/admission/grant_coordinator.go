@@ -94,18 +94,18 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	ctx := sgc.ambientCtx.AnnotateCtx(context.Background())
 
 	go func() {
-		ticker := tokenAllocationTicker{}
+		t := tokenAllocationTicker{}
 		done := false
 		// The first adjustment interval is unloaded. We start as unloaded mainly
 		// for tests, and do a one-way transition to do 1ms ticks once we encounter
 		// load in the system.
 		var systemLoaded bool
-		ticker.adjustmentStart(false /* loaded */)
+		t.adjustmentStart(false /* loaded */)
+		var remainingTicks uint64
 		for !done {
-			ticker.tick()
-			remainingTicks := ticker.remainingTicks()
 			select {
-			default:
+			case <-t.ticker.C:
+				remainingTicks = t.remainingTicks()
 				// We do error accounting for disk reads and writes. This is important
 				// since disk token accounting is based on estimates over adjustment
 				// intervals. Like any model, these linear models have error terms, and
@@ -116,7 +116,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				// NB: We always do error calculation prior to making adjustments to
 				// make sure we account for errors prior to starting a new adjustment
 				// interval.
-				if ticker.shouldAdjustForError(remainingTicks, systemLoaded) {
+				if t.shouldAdjustForError(remainingTicks, systemLoaded) {
 					metrics = pebbleMetricsProvider.GetPebbleMetrics()
 					for _, m := range metrics {
 						if gc, ok := sgc.gcMap.Load(m.StoreID); ok {
@@ -149,8 +149,8 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					// Start a new adjustment interval since there are no ticks remaining
 					// in the current adjustment interval. Note that the next call to
 					// allocateIOTokensTick will belong to the new adjustment interval.
-					ticker.adjustmentStart(systemLoaded)
-					remainingTicks = ticker.remainingTicks()
+					t.adjustmentStart(systemLoaded)
+					remainingTicks = t.remainingTicks()
 				}
 
 				// Allocate tokens to the store grant coordinator.
@@ -165,7 +165,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				pebbleMetricsProvider.Close()
 			}
 		}
-		ticker.stop()
+		t.stop()
 	}()
 }
 

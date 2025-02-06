@@ -142,7 +142,7 @@ func NewInMemoryStore(dims int, seed int64) *InMemoryStore {
 	// Create empty root partition.
 	var empty vector.Set
 	quantizer := quantize.NewUnQuantizer(dims)
-	quantizedSet := quantizer.Quantize(context.Background(), &empty)
+	quantizedSet := quantizer.Quantize(context.Background(), empty)
 	inMemPartition := &inMemoryPartition{
 		key: RootKey,
 	}

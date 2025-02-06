@@ -76,7 +76,7 @@ func TestPersistentStore(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
 		defer commitTransaction(ctx, t, store, txn)
 
-		emptyRoot := NewPartition(quantizer, quantizer.Quantize(ctx, &vector.Set{}), []ChildKey{}, LeafLevel)
+		emptyRoot := NewPartition(quantizer, quantizer.Quantize(ctx, vector.Set{}), []ChildKey{}, LeafLevel)
 		require.NoError(t, txn.SetRootPartition(ctx, emptyRoot))
 	})
 
@@ -87,7 +87,7 @@ func TestPersistentStore(t *testing.T) {
 		defer commitTransaction(ctx, t, store, txn)
 
 		vectors := vector.T{4, 3}.AsSet()
-		quantizedSet := quantizer.Quantize(ctx, &vectors)
+		quantizedSet := quantizer.Quantize(ctx, vectors)
 		root := NewPartition(quantizer, quantizedSet, []ChildKey{childKey2}, Level(2))
 		require.NoError(t, txn.SetRootPartition(ctx, root))
 		readRoot, err := txn.GetPartition(ctx, RootKey)
@@ -96,7 +96,7 @@ func TestPersistentStore(t *testing.T) {
 
 		vectors = vector.T{4, 3}.AsSet()
 		vectors.Add(vector.T{2, 1})
-		quantizedSet = quantizer.Quantize(ctx, &vectors)
+		quantizedSet = quantizer.Quantize(ctx, vectors)
 		root = NewPartition(quantizer, quantizedSet, []ChildKey{childKey10, childKey20}, Level(2))
 		require.NoError(t, txn.SetRootPartition(ctx, root))
 		readRoot, err = txn.GetPartition(ctx, RootKey)
@@ -106,7 +106,7 @@ func TestPersistentStore(t *testing.T) {
 		vectors = vector.T{4, 3}.AsSet()
 		vectors.Add(vector.T{2, 1})
 		vectors.Add(vector.T{5, 6})
-		quantizedSet = quantizer.Quantize(ctx, &vectors)
+		quantizedSet = quantizer.Quantize(ctx, vectors)
 		root = NewPartition(quantizer, quantizedSet, []ChildKey{primaryKey200, primaryKey300, primaryKey400}, LeafLevel)
 		require.NoError(t, txn.SetRootPartition(ctx, root))
 		readRoot, err = txn.GetPartition(ctx, RootKey)
@@ -119,7 +119,7 @@ func TestPersistentStore(t *testing.T) {
 		defer commitTransaction(ctx, t, store, txn)
 
 		vectors := vector.T{4, 3}.AsSet()
-		quantizedSet := quantizer.Quantize(ctx, &vectors)
+		quantizedSet := quantizer.Quantize(ctx, vectors)
 		testPartition := NewPartition(quantizer, quantizedSet, []ChildKey{childKey2}, Level(2))
 		partitionKey, err := txn.InsertPartition(ctx, testPartition)
 		require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestPersistentStore(t *testing.T) {
 		defer commitTransaction(ctx, t, store, txn)
 
 		emptySet := vector.MakeSet(2)
-		root := NewPartition(quantizer, quantizer.Quantize(ctx, &emptySet), []ChildKey{}, Level(2))
+		root := NewPartition(quantizer, quantizer.Quantize(ctx, emptySet), []ChildKey{}, Level(2))
 		err := txn.SetRootPartition(ctx, root)
 		require.NoError(t, err)
 
