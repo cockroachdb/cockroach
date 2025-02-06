@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // SpanIter is an iterator over a collection of spans.
@@ -74,8 +73,15 @@ func Make(
 }
 
 // SpanForwarder is an interface for forwarding spans to a changefeed.
+// Implemented by span.Frontier.
 type SpanForwarder interface {
+	// Forward advances the timestamp for a span. Any part of the span that doesn't
+	// overlap the tracked span set will be ignored. True is returned if the
+	// frontier advanced as a result.
 	Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error)
+
+	// Frontier returns the minimum timestamp being tracked.
+	Frontier() hlc.Timestamp
 }
 
 // Restore restores the checkpointed spans progress to the given SpanForwarder.
@@ -88,27 +94,35 @@ func Restore(
 	oldCheckpointTs hlc.Timestamp,
 	checkpoint *jobspb.TimestampSpansMap,
 ) error {
+	currHighWater := sf.Frontier()
 	if checkpoint == nil {
-		ts := oldCheckpointTs
-		if ts.IsEmpty() {
-			return errors.New("checkpoint timestamp is empty")
-		}
 		for _, checkpointedSp := range oldCheckpointSpans {
-			if _, err := sf.Forward(checkpointedSp, ts); err != nil {
-				return err
+			if currHighWater.Less(oldCheckpointTs) {
+				// (TODO:#140509) In ALTER CHANGEFEED and some testing scenarios,
+				// changefeed only saves the checkpointed spans but not checkpointed
+				// timestamps. In these cases, we want to avoid forwarding the spans to
+				// its checkpointed timestamps (which will be 0). So we make sure not to
+				// regress here.
+				if _, err := sf.Forward(checkpointedSp, oldCheckpointTs); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
 	}
 
 	for _, entry := range checkpoint.Entries {
-		ts := entry.Timestamp
-		if ts.IsEmpty() {
-			return errors.New("checkpoint timestamp is empty")
-		}
+		checkpointedTs := entry.Timestamp
 		for _, checkpointedSp := range entry.Spans {
-			if _, err := sf.Forward(checkpointedSp, ts); err != nil {
-				return err
+			if currHighWater.Less(checkpointedTs) {
+				// Theoretically, this should not be possible since changefeed only
+				// checkpoint spans that are above the high-water mark. But in some
+				// testing scenarios, changefeed only saves checkpointed spans but not
+				// checkpointed timestamps to indicate that they should be filtered out
+				// during backfills. So we make sure not to regress here.
+				if _, err := sf.Forward(checkpointedSp, checkpointedTs); err != nil {
+					return err
+				}
 			}
 		}
 	}

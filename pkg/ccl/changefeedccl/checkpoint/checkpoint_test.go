@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -179,7 +178,6 @@ func TestCheckpointRestore(t *testing.T) {
 		oldCheckpointTs        hlc.Timestamp
 		oldCheckpointSpans     []roachpb.Span
 		newCheckpoint          *jobspb.TimestampSpansMap
-		expectedError          error
 		expectedFrontierForOld checkpointSpans
 		expectedFrontierForNew checkpointSpans
 	}{
@@ -190,9 +188,14 @@ func TestCheckpointRestore(t *testing.T) {
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 			},
 			newCheckpoint: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
-				ts(2): {{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+				ts(2): {{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
 			}),
-			expectedError: errors.New("checkpoint timestamp is empty"),
+			expectedFrontierForOld: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(0)},
+			},
+			expectedFrontierForNew: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(2)},
+			},
 		},
 		"new checkpoint ts is empty": {
 			initialHighWater: ts(0),
@@ -204,7 +207,13 @@ func TestCheckpointRestore(t *testing.T) {
 				ts(2): {{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
 				ts(0): {{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
 			}),
-			expectedError: errors.New("checkpoint timestamp is empty"),
+			expectedFrontierForOld: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(2)},
+			},
+			expectedFrontierForNew: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(2)},
+				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(0)},
+			},
 		},
 		"fine grained checkpoint has some spans with progress above the old checkpointed timestamp": {
 			initialHighWater: ts(0),
@@ -225,7 +234,6 @@ func TestCheckpointRestore(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(2)},
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(1)},
 			},
-			expectedError: nil,
 		},
 		"fine grained checkpoint has some spans with progress above the old checkpointed timestamp " +
 			"with non-zero initial highwater": {
@@ -247,7 +255,24 @@ func TestCheckpointRestore(t *testing.T) {
 				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(2)},
 				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(3)},
 			},
-			expectedError: nil,
+		},
+		"no regression should happen if checkpointed timestamp is lower than initial highwater": {
+			initialHighWater: ts(2),
+			oldCheckpointTs:  ts(0),
+			oldCheckpointSpans: []roachpb.Span{
+				{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+			},
+			newCheckpoint: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+				ts(0): {{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
+				ts(3): {{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+			}),
+			expectedFrontierForOld: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(2)},
+			},
+			expectedFrontierForNew: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(2)},
+				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(3)},
+			},
 		},
 	} {
 		testutils.RunTrueAndFalse(t, name, func(t *testing.T, useNewCheckpoint bool) {
@@ -256,23 +281,11 @@ func TestCheckpointRestore(t *testing.T) {
 			actualFrontier := span.MakeConcurrentFrontier(f)
 			var checkpointedSpans checkpointSpans
 			if useNewCheckpoint {
-				if tc.expectedError != nil {
-					require.Error(t, tc.expectedError, checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, tc.newCheckpoint))
-				} else {
-					require.NoError(t, checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, tc.newCheckpoint))
-				}
+				require.NoError(t, checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, tc.newCheckpoint))
 				checkpointedSpans = tc.expectedFrontierForNew
 			} else {
-				if tc.expectedError != nil {
-					require.Error(t, tc.expectedError,
-						checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, nil))
-				} else {
-					require.NoError(t, checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, nil))
-				}
+				require.NoError(t, checkpoint.Restore(actualFrontier, tc.oldCheckpointSpans, tc.oldCheckpointTs, nil))
 				checkpointedSpans = tc.expectedFrontierForOld
-			}
-			if tc.expectedError != nil {
-				return
 			}
 
 			actualFrontierSpans := checkpointSpans{}
