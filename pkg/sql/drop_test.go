@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -265,6 +267,21 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
+	// zoneCfgRangeFeedStarted is used to signal that the zone config range feed
+	// started. This is used to avoid a race where we update `system.zones` before
+	// the full reconciliation of zone configs has started. The full
+	// reconciliation ignores dropped databases, and if we write to
+	// `system.zones` before that, our write might not be reconciled. By delaying
+	// the test until the zone config range feed starts, we ensure that the full
+	// reconciliation has finished, and the range feed is ready to stream our
+	// changes.
+	zoneCfgRangeFeedStarted := atomic.Bool{}
+	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{
+		OnWatchForZoneConfigUpdatesEstablished: func() {
+			zoneCfgRangeFeedStarted.Store(true)
+		},
+	}
+
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -278,6 +295,14 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	// process GC immediately.
 	_, err = systemDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
 	require.NoError(t, err)
+
+	// Wait for the zone config range feed to start.
+	testutils.SucceedsSoon(t, func() error {
+		if x := zoneCfgRangeFeedStarted.Load(); !x {
+			return errors.Errorf("zone config range feed hasn't not started yet")
+		}
+		return nil
+	})
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -348,49 +373,56 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	// Table 1 data is deleted.
 	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), tableSpan, 0)
-	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), table2Span, 6)
 
-	def := zonepb.DefaultZoneConfig()
-	if err := zoneExists(sqlDB, &def, dbDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
-			Username:    username.NodeUserName(),
-			Description: "GC for DROP DATABASE t CASCADE",
-			DescriptorIDs: descpb.IDs{
-				tbDesc.GetID(), tb2Desc.GetID(), dbDesc.GetID(),
-			},
-		})
-	})
-
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tb2Desc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, dbDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		if err := descExists(sqlDB, false, tb2Desc.GetID()); err != nil {
-			return err
+	// Table 2 data should not be deleted. However, there is a race between the
+	// splits and GC queue where range might get GCed before splitting. This is
+	// more likely to happen in this test since increase the GC queue scan rate.
+	if err := tests.CheckKeyCountIncludingTombstonedE(t, srv.StorageLayer(), table2Span, 0); err != nil {
+		tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), table2Span, 6)
+		def := zonepb.DefaultZoneConfig()
+		if err := zoneExists(sqlDB, &def, dbDesc.GetID()); err != nil {
+			t.Fatal(err)
 		}
 
-		return zoneExists(sqlDB, nil, tb2Desc.GetID())
-	})
+		testutils.SucceedsSoon(t, func() error {
+			return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning,
+				jobs.Record{
+					Username:    username.NodeUserName(),
+					Description: "GC for DROP DATABASE t CASCADE",
+					DescriptorIDs: descpb.IDs{
+						tbDesc.GetID(), tb2Desc.GetID(), dbDesc.GetID(),
+					},
+				})
+		})
 
-	// Table 2 data is deleted.
-	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), table2Span, 0)
+		if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tb2Desc.GetID()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, dbDesc.GetID()); err != nil {
+			t.Fatal(err)
+		}
+
+		testutils.SucceedsSoon(t, func() error {
+			if err := descExists(sqlDB, false, tb2Desc.GetID()); err != nil {
+				return err
+			}
+
+			return zoneExists(sqlDB, nil, tb2Desc.GetID())
+		})
+
+		// Table 2 data is deleted.
+		tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), table2Span, 0)
+	}
 
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
-			Username:    username.NodeUserName(),
-			Description: "GC for DROP DATABASE t CASCADE",
-			DescriptorIDs: descpb.IDs{
-				tbDesc.GetID(), tb2Desc.GetID(), dbDesc.GetID(),
-			},
-		})
+		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded,
+			jobs.Record{
+				Username:    username.NodeUserName(),
+				Description: "GC for DROP DATABASE t CASCADE",
+				DescriptorIDs: descpb.IDs{
+					tbDesc.GetID(), tb2Desc.GetID(), dbDesc.GetID(),
+				},
+			})
 	})
 
 	// Database zone config is removed once all table data and zone configs are removed.
