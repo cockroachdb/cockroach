@@ -112,7 +112,7 @@ type sysbenchClient interface {
 	NonIndexUpdate(tableNum, rowID, cValue) error
 	DeleteInsert(tableNum, rowID, kValue, cValue, padValue) error
 
-	Close() error // destroys client, releasing any open txn
+	Rollback() error // releases any open txn
 }
 
 // sysbenchDriver is capable of running sysbench.
@@ -240,7 +240,7 @@ type sysbenchSQLClient struct {
 	}
 }
 
-func (s *sysbenchSQLClient) Close() error {
+func (s *sysbenchSQLClient) Rollback() error {
 	if s.open {
 		if _, err := s.conn.Exec(s.ctx, s.stmt.rollback); err != nil {
 			return err
@@ -251,7 +251,7 @@ func (s *sysbenchSQLClient) Close() error {
 }
 
 func (s *sysbenchSQLClient) Begin() error {
-	if err := s.Close(); err != nil {
+	if err := s.Rollback(); err != nil {
 		return err
 	}
 	_, err := s.conn.Exec(s.ctx, s.stmt.begin)
@@ -409,7 +409,7 @@ type sysbenchKVClient struct {
 	txn *kv.Txn
 }
 
-func (s *sysbenchKVClient) Close() error {
+func (s *sysbenchKVClient) Rollback() error {
 	if s.txn != nil {
 		return s.txn.Rollback(s.ctx)
 	}
@@ -417,7 +417,7 @@ func (s *sysbenchKVClient) Close() error {
 }
 
 func (s *sysbenchKVClient) Begin() error {
-	if err := s.Close(); err != nil {
+	if err := s.Rollback(); err != nil {
 		return err
 	}
 	s.txn = s.db.NewTxn(s.ctx, "sysbench")
@@ -898,13 +898,13 @@ func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 						b.RunParallel(func(pb *testing.PB) {
 							seed := id.Add(1) - 1
 							s := sys.newClient()
-							defer func() { _ = s.Close() }()
+							defer func() { _ = s.Rollback() }()
 
 							runSysbench(b, workload.opFn, s, &errs, pb.Next, seed)
 						})
 					} else {
 						s := sys.newClient()
-						defer func() { _ = s.Close() }()
+						defer func() { _ = s.Rollback() }()
 
 						var i int
 						runSysbench(b, workload.opFn, s, nil /* errors are fatal */, func() bool {
@@ -937,7 +937,7 @@ func runSysbench(
 			}
 			errs.Add(1)
 			b.Logf("goro%d: op: %v", goro, err)
-			if err := s.Close(); err != nil {
+			if err := s.Rollback(); err != nil {
 				b.Errorf("goro%d: closing: %v", goro, err)
 			}
 		}
