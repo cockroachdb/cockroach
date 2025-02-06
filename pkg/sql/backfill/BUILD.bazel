@@ -57,6 +57,7 @@ go_test(
     ],
     embed = [":backfill"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/sql/catalog",
