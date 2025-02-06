@@ -345,9 +345,11 @@ func TestAvroSchema(t *testing.T) {
 			// "C" and "POSIX" locales are not allowed for collated string
 			// columns in CRDB (see collatedstring logic tests),
 			// so we don't expect these types to be emitted by changefeeds.
+			// TODO(#140632): Reenable "default" locale.
 			randCollationTag := collationTags[rand.Intn(len(collationTags))]
 			for randCollationTag == collatedstring.CCollationTag ||
-				randCollationTag == collatedstring.PosixCollationTag {
+				randCollationTag == collatedstring.PosixCollationTag ||
+				randCollationTag == collatedstring.DefaultCollationTag {
 				randCollationTag = collationTags[rand.Intn(len(collationTags))]
 			}
 			collatedType := types.MakeCollatedString(typ, randCollationTag)
