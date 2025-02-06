@@ -518,6 +518,8 @@ var (
 		types.FloatArray,
 		types.DecimalArray,
 		types.BoolArray,
+		// We don't fully support arrays of Box2D, Geography, and Geometry
+		// types. (Is there such a thing?)
 		types.Box2D,
 		types.Geography,
 		types.Geometry,
@@ -535,6 +537,7 @@ var (
 		types.IntervalArray,
 		types.UUIDArray,
 		types.INet,
+		// We don't fully support arrays of JSONB (#23468).
 		types.Jsonb,
 		types.PGLSN,
 		types.PGLSNArray,
@@ -542,6 +545,7 @@ var (
 		types.PGVectorArray,
 		types.RefCursor,
 		types.RefCursorArray,
+		// We don't support arrays of TSQuery and TSVector (#90886).
 		types.TSQuery,
 		types.TSVector,
 		types.VarBit,
