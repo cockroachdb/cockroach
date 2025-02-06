@@ -6841,7 +6841,8 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	defer log.Scope(t).Close(t)
 
 	// Add verbose logging to help debug future failures.
-	require.NoError(t, log.SetVModule("changefeed_processors=1"))
+	require.NoError(t, log.SetVModule("changefeed_processors=1,replica_rangefeed=2,"+
+		"replica_range_lease=3,raft=3"))
 
 	// This test requires many range splits, which can be slow under certain test
 	// conditions. Skip potentially slow tests.
