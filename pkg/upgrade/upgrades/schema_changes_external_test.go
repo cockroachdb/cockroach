@@ -351,9 +351,7 @@ func testMigrationWithFailures(
 						},
 						UpgradeManager: &upgradebase.TestingKnobs{
 							ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
-								return []roachpb.Version{
-									endCV,
-								}
+								return []roachpb.Version{to}
 							},
 							RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 								if cv.Equal(endCV) {
@@ -364,7 +362,7 @@ func testMigrationWithFailures(
 										upgrade.RestoreActionNotRequired("test"),
 									), true
 								}
-								panic("unexpected version")
+								return nil, false
 							}},
 					},
 				},

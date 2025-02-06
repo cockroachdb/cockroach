@@ -828,7 +828,14 @@ func (m *Manager) getRunningMigrationJob(
 
 func (m *Manager) listBetween(from roachpb.Version, to roachpb.Version) []roachpb.Version {
 	if m.knobs.ListBetweenOverride != nil {
-		return m.knobs.ListBetweenOverride(from, to)
+		result := m.knobs.ListBetweenOverride(from, to)
+		// Sanity check result to catch invalid overrides.
+		for _, v := range result {
+			if v.LessEq(from) || to.Less(v) {
+				panic(fmt.Sprintf("ListBetweenOverride(%s, %s) returned invalid version %s", from, to, v))
+			}
+		}
+		return result
 	}
 	return clusterversion.ListBetween(from, to)
 }
