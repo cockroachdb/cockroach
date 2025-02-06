@@ -66,11 +66,14 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 		for _, rn := range nodes {
 			if rn.HasReady() {
 				idx := int(rn.Status().ID - 1)
-				fmt.Fprintf(env.Output, "> %d handling Ready\n", idx+1)
-				var err error
-				env.withIndent(func() { err = env.ProcessReady(idx) })
-				if err != nil {
-					return err
+				n := &env.Nodes[idx]
+				if rd := n.Ready(); !isEmptyReady(rd) {
+					fmt.Fprintf(env.Output, "> %d handling Ready\n", idx+1)
+					var err error
+					env.withIndent(func() { err = env.ProcessReady(n, rd) })
+					if err != nil {
+						return err
+					}
 				}
 				done = false
 			}

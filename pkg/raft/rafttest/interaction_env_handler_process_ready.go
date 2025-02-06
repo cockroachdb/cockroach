@@ -19,6 +19,7 @@ package rafttest
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -29,12 +30,14 @@ import (
 func (env *InteractionEnv) handleProcessReady(t *testing.T, d datadriven.TestData) error {
 	idxs := nodeIdxs(t, d)
 	for _, idx := range idxs {
+		n := &env.Nodes[idx]
+		rd := n.Ready()
 		var err error
 		if len(idxs) > 1 {
 			fmt.Fprintf(env.Output, "> %d handling Ready\n", idx+1)
-			env.withIndent(func() { err = env.ProcessReady(idx) })
+			env.withIndent(func() { err = env.ProcessReady(n, rd) })
 		} else {
-			err = env.ProcessReady(idx)
+			err = env.ProcessReady(n, rd)
 		}
 		if err != nil {
 			return err
@@ -43,11 +46,9 @@ func (env *InteractionEnv) handleProcessReady(t *testing.T, d datadriven.TestDat
 	return nil
 }
 
-// ProcessReady runs Ready handling on the node with the given index.
-func (env *InteractionEnv) ProcessReady(idx int) error {
+// ProcessReady runs Ready handling on the given node.
+func (env *InteractionEnv) ProcessReady(n *Node, rd raft.Ready) error {
 	// TODO(tbg): Allow simulating crashes here.
-	n := &env.Nodes[idx]
-	rd := n.Ready()
 	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
 
 	if !n.Config.AsyncStorageWrites {
@@ -81,4 +82,9 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 		n.Advance(rd)
 	}
 	return nil
+}
+
+// isEmptyReady returns true if the given Ready struct is empty.
+func isEmptyReady(r raft.Ready) bool {
+	return reflect.DeepEqual(r, raft.Ready{})
 }

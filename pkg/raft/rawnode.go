@@ -222,6 +222,7 @@ func (rn *RawNode) Ready() Ready {
 
 	var rd Ready
 	rd.Messages, r.msgs = r.msgs, nil
+	r.stateChanged = false
 
 	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {
 		// Allocate only when SoftState changes.
@@ -493,7 +494,16 @@ func (rn *RawNode) applyUnstableEntries() bool {
 	return !rn.asyncStorageWrites
 }
 
-// HasReady called when RawNode user need to check if any Ready pending.
+// HasReady returns true if there is any pending work for the application to do
+// on behalf of this RawNode, such as writing updates to storage or sending
+// messages. If returns true, the caller should subsequently call Ready and
+// process the returned updates.
+//
+// HasReady can return true even if there is no pending work to do, to signal
+// that there is some internal state change that the application might be
+// interested in, such as a leader->follower flow state transition to/from
+// StateReplicate. The application can then inspect the changes through other
+// accessors such as RawNode.Status().
 func (rn *RawNode) HasReady() bool {
 	// TODO(nvanbenschoten): order these cases in terms of cost and frequency.
 	r := rn.raft
@@ -512,7 +522,7 @@ func (rn *RawNode) HasReady() bool {
 	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
 		return true
 	}
-	return false
+	return rn.raft.stateChanged
 }
 
 // Advance notifies the RawNode that the application has applied all the updates
