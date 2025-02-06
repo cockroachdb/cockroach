@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -830,7 +829,15 @@ func sysbenchOltpBeginCommit(s sysbenchClient, _ *rand.Rand) error {
 
 func BenchmarkSysbench(b *testing.B) {
 	defer log.Scope(b).Close(b)
+	benchmarkSysbenchImpl(b, false /* parallel */)
+}
 
+func BenchmarkParallelSysbench(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	benchmarkSysbenchImpl(b, true /* parallel */)
+}
+
+func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 	drivers := []struct {
 		name          string
 		constructorFn sysbenchDriverConstructor
@@ -852,66 +859,64 @@ func BenchmarkSysbench(b *testing.B) {
 		{"oltp_point_select", sysbenchOltpPointSelect},
 		{"oltp_begin_commit", sysbenchOltpBeginCommit},
 	}
-	testutils.RunTrueAndFalse(b, "parallel", func(b *testing.B, parallel bool) {
-		for _, driver := range drivers {
-			b.Run(driver.name, func(b *testing.B) {
-				for _, workload := range workloads {
-					b.Run(workload.name, func(b *testing.B) {
-						defer func() {
-							if r := recover(); r != nil {
-								b.Fatalf("%+v", r)
-							}
-						}()
-
-						var benchtime string
-						require.NoError(b, sniffArgs(os.Args[1:], "test.benchtime", &benchtime))
-						if strings.HasSuffix(benchtime, "x") && b.N == 1 && benchtime != "1x" {
-							// The Go benchmark harness invokes tests first with b.N == 1 which
-							// helps it adjust the number of iterations to run to the benchtime.
-							// But if we specify the number of iterations, there's no point in
-							// it doing that, so we no-op on the first run.
-							// This speeds up benchmarking (by several seconds per subtest!)
-							// since it avoids setting up an extra test cluster.
-							b.Log("skipping benchmark on initial run; benchtime specifies an iteration count")
-							return
+	for _, driver := range drivers {
+		b.Run(driver.name, func(b *testing.B) {
+			for _, workload := range workloads {
+				b.Run(workload.name, func(b *testing.B) {
+					defer func() {
+						if r := recover(); r != nil {
+							b.Fatalf("%+v", r)
 						}
+					}()
 
-						ctx := context.Background()
-						sys, cleanup := driver.constructorFn(ctx, b)
-						defer cleanup()
+					var benchtime string
+					require.NoError(b, sniffArgs(os.Args[1:], "test.benchtime", &benchtime))
+					if strings.HasSuffix(benchtime, "x") && b.N == 1 && benchtime != "1x" {
+						// The Go benchmark harness invokes tests first with b.N == 1 which
+						// helps it adjust the number of iterations to run to the benchtime.
+						// But if we specify the number of iterations, there's no point in
+						// it doing that, so we no-op on the first run.
+						// This speeds up benchmarking (by several seconds per subtest!)
+						// since it avoids setting up an extra test cluster.
+						b.Log("skipping benchmark on initial run; benchtime specifies an iteration count")
+						return
+					}
 
-						sys.prep(rand.New(rand.NewSource(0)))
+					ctx := context.Background()
+					sys, cleanup := driver.constructorFn(ctx, b)
+					defer cleanup()
 
-						defer startAllocsProfile(b).Stop(b)
-						defer b.StopTimer()
-						b.ResetTimer()
+					sys.prep(rand.New(rand.NewSource(0)))
 
-						var id atomic.Int64
-						var errs atomic.Int64
-						if parallel {
-							b.RunParallel(func(pb *testing.PB) {
-								seed := id.Add(1) - 1
-								s := sys.newClient()
-								defer func() { _ = s.Close() }()
+					defer startAllocsProfile(b).Stop(b)
+					defer b.StopTimer()
+					b.ResetTimer()
 
-								runSysbench(b, workload.opFn, s, &errs, pb.Next, seed)
-							})
-						} else {
+					var id atomic.Int64
+					var errs atomic.Int64
+					if parallel {
+						b.RunParallel(func(pb *testing.PB) {
+							seed := id.Add(1) - 1
 							s := sys.newClient()
 							defer func() { _ = s.Close() }()
 
-							var i int
-							runSysbench(b, workload.opFn, s, nil /* errors are fatal */, func() bool {
-								i++
-								return i <= b.N
-							}, 0)
-						}
-						b.ReportMetric(float64(errs.Load())/float64(b.N), "errs/op")
-					})
-				}
-			})
-		}
-	})
+							runSysbench(b, workload.opFn, s, &errs, pb.Next, seed)
+						})
+					} else {
+						s := sys.newClient()
+						defer func() { _ = s.Close() }()
+
+						var i int
+						runSysbench(b, workload.opFn, s, nil /* errors are fatal */, func() bool {
+							i++
+							return i <= b.N
+						}, 0)
+					}
+					b.ReportMetric(float64(errs.Load())/float64(b.N), "errs/op")
+				})
+			}
+		})
+	}
 }
 
 func runSysbench(
