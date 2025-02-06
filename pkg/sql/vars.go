@@ -3761,6 +3761,7 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// CockroachDB extension.
 	`optimizer_min_row_count`: {
 		GetStringVal: makeFloatGetStringValFn(`optimizer_min_row_count`),
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
@@ -3774,9 +3775,6 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			// Note that we permit fractions above 1.0 to allow for giving
-			// head-of-the-line batch more memory that is available - this will
-			// put the budget in debt.
 			if f < 0 {
 				return pgerror.New(pgcode.InvalidParameterValue, "optimizer_min_row_count must be non-negative")
 			}
