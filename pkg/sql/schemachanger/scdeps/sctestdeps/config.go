@@ -160,6 +160,12 @@ func WithIDGenerator(s serverutils.ApplicationLayerInterface) Option {
 	})
 }
 
+func WithTransactionalIDGenerator(s serverutils.ApplicationLayerInterface) Option {
+	return optionFunc(func(state *TestState) {
+		state.evalCtx.DescIDGenerator = descidgen.NewTransactionalGenerator(s.ClusterSettings(), s.Codec(), state.evalCtx.Txn)
+	})
+}
+
 func WithReferenceProviderFactory(f scbuild.ReferenceProviderFactory) Option {
 	return optionFunc(func(state *TestState) {
 		state.refProviderFactory = f
