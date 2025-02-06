@@ -111,7 +111,6 @@ func newLeaseTest(tb testing.TB, params base.TestClusterArgs) *leaseTest {
 	if params.ServerArgs.Settings == nil {
 		params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	}
-	lease.LeaseEnableSessionBasedLeasing.Override(context.Background(), &params.ServerArgs.Settings.SV, lease.SessionBasedDualWrite)
 	c := serverutils.StartCluster(tb, 3, params)
 	s := c.Server(0).ApplicationLayer()
 	lt := &leaseTest{
@@ -398,60 +397,6 @@ func (t *leaseTest) makeTableForTest() descpb.ID {
 	var descID descpb.ID
 	tdb.QueryRow(t, "SELECT 'foo'::regclass::int").Scan(&descID)
 	return descID
-}
-
-func TestLeaseManagerReacquire(testingT *testing.T) {
-	defer leaktest.AfterTest(testingT)()
-	defer log.Scope(testingT).Close(testingT)
-
-	ctx := context.Background()
-	var params base.TestClusterArgs
-	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
-		base.TestTenantProbabilistic, 112957,
-	)
-	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
-	// Set the lease duration such that the next lease acquisition will
-	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(ctx, &params.ServerArgs.Settings.SV, 0)
-
-	removalTracker := lease.NewLeaseRemovalTracker()
-	params.ServerArgs.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &lease.ManagerTestingKnobs{
-			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
-				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
-			},
-		},
-	}
-
-	t := newLeaseTest(testingT, params)
-	defer t.cleanup()
-
-	descID := t.makeTableForTest()
-
-	l1 := t.mustAcquire(1, descID)
-	t.expectLeases(descID, "/1/1")
-	e1 := l1.Expiration(ctx)
-
-	// Another lease acquisition from the same node will result in a new lease.
-	rt := removalTracker.TrackRemoval(l1.Underlying())
-	l3 := t.mustAcquire(1, descID)
-	e3 := l3.Expiration(ctx)
-	if l1.Underlying().GetID() == l3.Underlying().GetID() && e3.WallTime == e1.WallTime {
-		t.Fatalf("expected different leases, but found %v", l1)
-	}
-	if e3.WallTime < e1.WallTime {
-		t.Fatalf("expected new lease expiration (%s) to be after old lease expiration (%s)",
-			e3, e1)
-	}
-	// In acquiring the new lease the older lease is released.
-	if err := rt.WaitForRemoval(); err != nil {
-		t.Fatal(err)
-	}
-	// Only one actual lease.
-	t.expectLeases(descID, "/1/1")
-
-	t.mustRelease(1, l1, nil)
-	t.mustRelease(1, l3, nil)
 }
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
@@ -1270,193 +1215,6 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	b.StopTimer()
 }
 
-// This test makes sure leases get renewed automatically in the
-// background if the lease is about to expire, without blocking. We
-// first acquire a lease, then continue to re-acquire it until another
-// lease is renewed.
-func TestLeaseRenewedAutomatically(testingT *testing.T) {
-	defer leaktest.AfterTest(testingT)()
-	defer log.Scope(testingT).Close(testingT)
-
-	ctx := context.Background()
-
-	var testAcquiredCount int32
-	var testAcquisitionBlockCount int32
-	// Descriptor IDs for the two tables under test
-	var test1ID atomic.Int32
-	var test2ID atomic.Int32
-	var minimumDescID descpb.ID
-	var params base.TestClusterArgs
-	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
-		base.TestTenantProbabilistic, 112957,
-	)
-	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
-	// The lease jitter is set to ensure newer leases have higher
-	// expiration timestamps.
-	lease.LeaseJitterFraction.Override(ctx, &params.ServerArgs.Settings.SV, 0)
-	// The renewal timeout is set to be the duration, so background
-	// renewal should begin immediately after accessing a lease.
-	lease.LeaseRenewalDuration.Override(ctx, &params.ServerArgs.Settings.SV,
-		lease.LeaseDuration.Get(&params.ServerArgs.Settings.SV))
-
-	t := newLeaseTest(testingT, params)
-	// These knobs will only be used when a lease manager is created by the test,
-	// specifically when the leaseTest.node is invoked. Previously, we would inject
-	// them in the servers lease manager leading to noise because of background
-	// work.
-	t.leaseManagerTestingKnobs = lease.ManagerTestingKnobs{
-		LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
-			// We want to track when leases get acquired and when they are renewed.
-			// We also want to know when acquiring blocks to test lease renewal.
-			LeaseAcquiredEvent: func(desc catalog.Descriptor, err error) {
-				if err != nil {
-					return
-				}
-				if _, isTable := desc.(catalog.TableDescriptor); isTable && !catalog.IsSystemDescriptor(desc) {
-					atomic.AddInt32(&testAcquiredCount, 1)
-				}
-			},
-			LeaseAcquireResultBlockEvent: func(typ lease.AcquireType, id descpb.ID) {
-				// Only track events from descriptors that were created by us below.
-				if id < minimumDescID || typ == lease.AcquireBackground {
-					return
-				}
-				if int32(id) != test1ID.Load() && int32(id) != test2ID.Load() {
-					return
-				}
-				atomic.AddInt32(&testAcquisitionBlockCount, 1)
-				// The test sets the IDs of the two tables only when we shouldn't  block. So if we
-				// see a block event dump a stack to aid in debugging.
-				log.Infof(ctx,
-					"Lease acquisition of ID %d resulted in a block event. Stack trace to follow:\n%s",
-					id, debugutil.Stack())
-			},
-		},
-	}
-	defer t.cleanup()
-
-	if _, err := t.db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test1 (k CHAR PRIMARY KEY, v CHAR);
-CREATE TABLE t.test2 ();
-`); err != nil {
-		t.Fatal(err)
-	}
-	// Disable the automatic stats collection, which could interfere with
-	// the lease acquisition counts in this test.
-	if _, err := t.db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false"); err != nil {
-		t.Fatal(err)
-	}
-
-	test1Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, t.server.Codec(), "t", "test1")
-	test2Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, t.server.Codec(), "t", "test2")
-	dbID := test2Desc.GetParentID()
-	minimumDescID = dbID
-	// Acquire a lease on test1 by name.
-	ts1, err := t.node(1).AcquireByName(
-		ctx,
-		t.server.Clock().Now(),
-		dbID,
-		test1Desc.GetParentSchemaID(),
-		"test1",
-	)
-	eo1 := ts1.Expiration(ctx)
-	if err != nil {
-		t.Fatal(err)
-	} else if err := t.release(1, ts1); err != nil {
-		t.Fatal(err)
-	} else if count := atomic.LoadInt32(&testAcquiredCount); count != 1 {
-		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
-			count)
-	}
-
-	// Acquire a lease on test2 by ID.
-	ts2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.GetID())
-	if err != nil {
-		t.Fatal(err)
-	} else if err := t.release(1, ts2); err != nil {
-		t.Fatal(err)
-	} else if count := atomic.LoadInt32(&testAcquiredCount); count != 2 {
-		t.Fatalf("expected 2 leases to be acquired, but acquired %d times",
-			count)
-	}
-	eo2 := ts2.Expiration(ctx)
-
-	// Save off the IDs of the two tables so that we increment testAcquisitionBlockCount
-	// if we ever block waiting for those leases to expire.
-	test1ID.Store(int32(test1Desc.GetID()))
-	test2ID.Store(int32(test2Desc.GetID()))
-
-	testutils.SucceedsSoon(t, func() error {
-		// Acquire another lease by name on test1. At first this will be the
-		// same lease, but eventually we will asynchronously renew a lease and
-		// our acquire will get a newer lease.
-		ts1, err := t.node(1).AcquireByName(
-			ctx,
-			t.server.Clock().Now(),
-			dbID,
-			test1Desc.GetParentSchemaID(),
-			"test1",
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		en1 := ts1.Expiration(ctx)
-		defer func() {
-			if err := t.release(1, ts1); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
-		// We check for the new expiry time because if our past acquire triggered
-		// the background renewal, the next lease we get will be the result of the
-		// background renewal.
-		if en1.WallTime <= eo1.WallTime {
-			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
-				en1, eo1)
-		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 2 {
-			// acquireCount is 2 or 3: initial acquire on t1 (done), initial acquire
-			// on t2 (done), asyn renew on t1 (maybe done)
-			return errors.Errorf("expected at least 2 leases to be acquired, but acquired %d times",
-				count)
-		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
-			t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
-		}
-
-		// Acquire another lease by ID on test2. At first this will be the same
-		// lease, but eventually we will asynchronously renew a lease and our
-		// acquire will get a newer lease.
-		ts2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.GetID())
-		if err != nil {
-			t.Fatal(err)
-		}
-		en2 := ts2.Expiration(ctx)
-		defer func() {
-			if err := t.release(1, ts2); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
-		// We check for the new expiry time because if our past acquire triggered
-		// the background renewal, the next lease we get will be the result of the
-		// background renewal.
-		if en2.WallTime <= eo2.WallTime {
-			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
-				en2, eo2)
-		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 2 {
-			// acquireCount is 2 or 3 or 4: initial acquire on t1 (done), initial
-			// acquire on t2 (done), asyn renew on t1 (maybe done), asyn renew on t2
-			// (maybe done)
-			return errors.Errorf("expected at least 2 leases to be acquired, but acquired %d times",
-				count)
-		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
-			t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
-		}
-
-		return nil
-	})
-}
-
 // Check that the table version is incremented with every schema change.
 // The test also verifies that when a lease is in use, the first schema
 // change can proceed, but the next one will wait until the lease is
@@ -1888,154 +1646,6 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 	wg.Wait()
 }
 
-// This test makes sure leases get renewed periodically.
-// TODO(vivek): remove once epoch based leases is implemented.
-func TestLeaseRenewedPeriodically(testingT *testing.T) {
-	defer leaktest.AfterTest(testingT)()
-	defer log.Scope(testingT).Close(testingT)
-
-	skip.UnderRace(testingT)
-
-	ctx := context.Background()
-
-	var mu syncutil.Mutex
-	releasedIDs := catalog.DescriptorIDSet{}
-	var testAcquiredCount int32
-	var testAcquisitionBlockCount int32
-	var expected catalog.DescriptorIDSet
-
-	var params base.TestClusterArgs
-	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
-		base.TestTenantProbabilistic, 112957,
-	)
-	params.ServerArgs.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &lease.ManagerTestingKnobs{
-			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
-				// We want to track when leases get acquired and when they are renewed.
-				// We also want to know when acquiring blocks to test lease renewal.
-				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
-					if !catalog.IsSystemDescriptor(desc) {
-						atomic.AddInt32(&testAcquiredCount, 1)
-					}
-				},
-				LeaseReleasedEvent: func(id descpb.ID, v descpb.DescriptorVersion, err error) {
-					mu.Lock()
-					defer mu.Unlock()
-					if !expected.Contains(id) {
-						return
-					}
-					releasedIDs.Add(id)
-				},
-				LeaseAcquireResultBlockEvent: func(typ lease.AcquireType, id descpb.ID) {
-					mu.Lock()
-					defer mu.Unlock()
-					if !expected.Contains(id) || typ == lease.AcquireBackground {
-						return
-					}
-					atomic.AddInt32(&testAcquisitionBlockCount, 1)
-				},
-			},
-			TestingDescriptorUpdateEvent: func(_ *descpb.Descriptor) error {
-				return errors.Errorf("ignore gossip update")
-			},
-		},
-	}
-	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
-
-	// The lease jitter is set to ensure newer leases have higher
-	// expiration timestamps.
-	lease.LeaseJitterFraction.Override(ctx, &params.ServerArgs.Settings.SV, 0)
-	// Lease duration to something small.
-	lease.LeaseDuration.Override(ctx, &params.ServerArgs.Settings.SV, 50*time.Millisecond)
-	// Renewal timeout to 0 saying that the lease will get renewed only
-	// after the lease expires when a request requests the descriptor.
-	lease.LeaseRenewalDuration.Override(ctx, &params.ServerArgs.Settings.SV, 0)
-
-	t := newLeaseTest(testingT, params)
-	defer t.cleanup()
-
-	if _, err := t.db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test1 (k CHAR PRIMARY KEY, v CHAR);
-CREATE TABLE t.test2 ();
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	test1Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, t.server.Codec(), "t", "test1")
-	test2Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, t.server.Codec(), "t", "test2")
-	dbID := test2Desc.GetParentID()
-	func() {
-		mu.Lock()
-		defer mu.Unlock()
-		expected = catalog.MakeDescriptorIDSet(test1Desc.GetID(), test2Desc.GetID())
-		atomic.StoreInt32(&testAcquisitionBlockCount, 0)
-	}()
-
-	releasedLeases := func() catalog.DescriptorIDSet {
-		mu.Lock()
-		defer mu.Unlock()
-		return catalog.MakeDescriptorIDSet(releasedIDs.Ordered()...)
-	}
-	if released := releasedLeases(); released.Len() != 0 {
-		t.Fatalf("expected no leases to be released, released %v", released.Ordered())
-	}
-
-	// Acquire a lease on test1 by name.
-	ts1, err := t.node(1).AcquireByName(
-		ctx,
-		t.server.Clock().Now(),
-		dbID,
-		test1Desc.GetParentSchemaID(),
-		"test1",
-	)
-	if err != nil {
-		t.Fatal(err)
-	} else if err := t.release(1, ts1); err != nil {
-		t.Fatal(err)
-	} else if count := atomic.LoadInt32(&testAcquisitionBlockCount); count != 1 {
-		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
-			count)
-	}
-
-	// Acquire a lease on test2 by ID.
-	ts2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.GetID())
-	if err != nil {
-		t.Fatal(err)
-	} else if err := t.release(1, ts2); err != nil {
-		t.Fatal(err)
-	} else if count := atomic.LoadInt32(&testAcquisitionBlockCount); count != 2 {
-		t.Fatalf("expected 2 leases to be acquired, but acquired %d times",
-			count)
-	}
-
-	// From now on henceforth do not acquire a lease, so any renewals can only
-	// happen through the periodic lease renewal mechanism.
-
-	// Reset testAcquisitionBlockCount as the first acqusitions will always block.
-	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
-
-	// Check that lease acquisition happens independent of lease being requested.
-	testutils.SucceedsSoon(t, func() error {
-		if count := atomic.LoadInt32(&testAcquiredCount); count < 4 {
-			// Wait for the background renew goroutine to renew t1 and t2 at least
-			// once, making AcquireCount at least 4: initial acquire on t1, initial
-			// acquire on t2, renew on t1, renew on t2.
-			return errors.Errorf("expected at least 4 leases to be acquired, but acquired %d times", count)
-		}
-		released := releasedLeases()
-		if notYetReleased := expected.Difference(released); notYetReleased.Len() != 0 {
-			return errors.Errorf("expected %v to be released, released %v", expected.Ordered(), released.Ordered())
-		}
-		return nil
-	})
-
-	// No blocked acquisitions.
-	if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
-		t.Fatalf("expected lease acquisition to not block, but blockCount is: %d", blockCount)
-	}
-}
-
 // TestReadBeforeDrop tests that a read over a table from a transaction
 // initiated before the table is dropped succeeds.
 func TestReadBeforeDrop(t *testing.T) {
@@ -2159,9 +1769,6 @@ func TestDeleteOrphanedLeases(testingT *testing.T) {
 
 	ctx := context.Background()
 	t := newLeaseTest(testingT, params)
-	// Force dual writing, so that entries exist within both versions of the
-	// leasing table to clean up.
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &t.server.ClusterSettings().SV, lease.SessionBasedDualWrite)
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`
@@ -3035,205 +2642,6 @@ CREATE TABLE d1.t2 (name int);
 }
 
 // Validates that the transaction deadline can be extended
-// past the original lease duration. Previously, we had a
-// a limitation if the transaction took longer then the
-// the lease, the transaction would fail because of the
-// deadline.
-func TestLeaseTxnDeadlineExtension(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	filterMu := syncutil.Mutex{}
-	blockTxn := make(chan struct{})
-	blockedOnce := false
-	var txnID string
-
-	var params base.TestServerArgs
-	// Disable tenants for this test since on-going upgrades will interfere
-	// with the knobs used.
-	params.DefaultTestTenant = base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs
-	params.Settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.MinSupported.Version(),
-		clusterversion.MinSupported.Version(),
-		false)
-	// Set the lease duration such that the next lease acquisition will
-	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(ctx, &params.Settings.SV, 0)
-	// Leasing setting used above conflicts with disabling replication when
-	// starting the single server, so skip those.
-	params.PartOfCluster = true
-	// Disable session based leasing, since a zero duration only
-	// applies to the expiry, and not the acquisition length.
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.Settings.SV, lease.SessionBasedLeasingOff)
-	params.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
-			filterMu.Lock()
-			// Wait for a commit with the txnID, and only allows
-			// it to resume when the channel gets unblocked.
-			if req.Txn != nil && req.Txn.ID.String() == txnID {
-				filterMu.Unlock()
-				// There will only be a single EndTxn request in
-				// flight due to the transaction ID filter and
-				// blocked once flag, so no mutex is needed here.
-				if req.IsSingleEndTxnRequest() && !blockedOnce {
-					<-blockTxn
-					blockedOnce = true
-				}
-			} else {
-				filterMu.Unlock()
-			}
-			return nil
-		},
-	}
-	params.Knobs.Server = &server.TestingKnobs{
-		ClusterVersionOverride:         clusterversion.MinSupported.Version(),
-		DisableAutomaticVersionUpgrade: make(chan struct{}),
-	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-	// Setup tables for the test.
-	_, err := sqlDB.Exec(`
-CREATE TABLE t1(val int);
-	`)
-	require.NoError(t, err)
-	// Validates that transaction deadlines can move forward into
-	// the future after lease expiry.
-	t.Run("validate-lease-txn-deadline-ext", func(t *testing.T) {
-		conn, err := sqlDB.Conn(ctx)
-		require.NoError(t, err)
-		descModConn := sqlutils.MakeSQLRunner(sqlDB)
-		waitChan := make(chan error)
-		resumeChan := make(chan struct{})
-		go func() {
-			ctx = context.Background()
-			// Start a transaction that will lease out a table,
-			// and let the lease duration expire.
-			_, err := conn.ExecContext(ctx, `
-BEGIN;
-SELECT * FROM t1;
-	`)
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			// Fetch the transaction ID, so that we can delay the commit
-			txnIDResult := conn.QueryRowContext(ctx, `SELECT id FROM crdb_internal.node_transactions WHERE session_id IN (SELECT * FROM [SHOW session_id]);`)
-			if txnIDResult.Err() != nil {
-				waitChan <- txnIDResult.Err()
-				return
-			}
-			filterMu.Lock()
-			err = txnIDResult.Scan(&txnID)
-			blockedOnce = false
-			filterMu.Unlock()
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			// Inform the main routine that it can cause an operation
-			// to block us.
-			waitChan <- nil
-			<-resumeChan
-			// Execute an insert once the other transaction
-			// gets a lease. The lease renewal should adjust
-			// our deadline.
-			_, err = conn.ExecContext(ctx, `
-INSERT INTO t1 VALUES (1);
-COMMIT;`,
-			)
-			waitChan <- err
-		}()
-
-		// Wait for the TXN ID and hook to be setup.
-		err = <-waitChan
-		require.NoError(t, err)
-		// Issue a select from a different connection that will
-		// need a lease.
-		descModConn.Exec(t, `
-SELECT * FROM T1;`)
-		resumeChan <- struct{}{}
-		blockTxn <- struct{}{}
-		err = <-waitChan
-		require.NoError(t, err)
-	})
-
-	// Validates that the transaction deadline extension can be blocked,
-	// if the lease can't be renewed, for example if the descriptor gets
-	// modified.
-	t.Run("validate-lease-txn-deadline-ext-blocked", func(t *testing.T) {
-		conn, err := sqlDB.Conn(ctx)
-		require.NoError(t, err)
-		descModConn := sqlutils.MakeSQLRunner(sqlDB)
-		waitChan := make(chan error)
-		resumeChan := make(chan struct{})
-		go func() {
-			ctx = context.Background()
-			// Start a transaction that will lease out a table,
-			// and let the lease duration expire.
-			_, err := conn.ExecContext(ctx, `
-BEGIN;
-SELECT * FROM t1;
-	`)
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			// Fetch the transaction ID, so that we can delay the commit
-			txnIDResult := conn.QueryRowContext(ctx, `SELECT id FROM crdb_internal.node_transactions WHERE session_id IN (SELECT * FROM [SHOW session_id]);`)
-			if txnIDResult.Err() != nil {
-				waitChan <- txnIDResult.Err()
-				return
-			}
-			filterMu.Lock()
-			err = txnIDResult.Scan(&txnID)
-			blockedOnce = false
-			filterMu.Unlock()
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			// Inform the main routine that it can cause an operation
-			// to block us.
-			waitChan <- nil
-			<-resumeChan
-			// Execute an insert on the same connection and attempt
-			// to commit, this operation will fail.
-			_, err = conn.ExecContext(ctx, `
-INSERT INTO t1 VALUES (1);`,
-			)
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			_, err = conn.ExecContext(ctx, `
-COMMIT;`,
-			)
-			if err == nil {
-				err = errors.New("Failing did not get expected error")
-			} else if !testutils.IsError(err, "pq: restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \\(RETRY_COMMIT_DEADLINE_EXCEEDED -.*") {
-				err = errors.Wrap(err, "Failed unexpected error")
-			} else {
-				err = nil
-			}
-			waitChan <- err
-		}()
-
-		// Wait for the TXN ID and hook to be setup.
-		err = <-waitChan
-		require.NoError(t, err)
-		// Issue an alter column on a different connection, which
-		// will require a lease.
-		descModConn.Exec(t, `
-ALTER TABLE T1 ALTER COLUMN VAL SET DEFAULT 5;
-SELECT * FROM T1`)
-		resumeChan <- struct{}{}
-		blockTxn <- struct{}{}
-		err = <-waitChan
-		require.NoError(t, err)
-	})
-}
-
-// Validates that the transaction deadline can be extended
 // past the original lease duration, for session based leases
 // this would mean past the TTL we started with. We also additionally
 // confirm that transaction deadlines and the leases they depend on will
@@ -3267,9 +2675,6 @@ func TestLeaseTxnDeadlineExtensionWithSession(t *testing.T) {
 	// Leasing setting used above conflicts with disabling replication when
 	// starting the single server, so skip those.
 	params.PartOfCluster = true
-	// Disable session based leasing, since a zero duration only
-	// applies to the expiry, and not the acquisition length.
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.Settings.SV, lease.SessionBasedOnly)
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			filterMu.Lock()
@@ -3625,11 +3030,11 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, lease.SessionBasedLeasingOff)
 	codec := s.Codec()
 
-	sqlutils.MakeSQLRunner(sqlDB).Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
-	sqlutils.MakeSQLRunner(sqlDB).Exec(t, "CREATE TABLE foo ()")
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	runner.Exec(t, "CREATE TABLE foo ()")
 
 	tableID := sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "foo")
 
@@ -3682,16 +3087,19 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	selectErr := make(chan error)
 	go func() {
 		_, err := sqlDB.Exec("SELECT * FROM foo")
+		fmt.Printf("%v\n", err)
 		selectErr <- err
 	}()
 	unblock := <-errorsAfterEndTxn
 	unblock <- kvpb.NewError(kvpb.NewAmbiguousResultError(errors.New("boom")))
-	// Make sure we see a retry, then let it succeed.
-	close(<-errorsAfterEndTxn)
 	// Allow anything further to proceed.
 	cancel()
 	// Ensure that the query completed successfully.
 	require.NoError(t, <-selectErr)
+	// Validate a row exists in the system.lease table.
+	runner.CheckQueryResults(t,
+		fmt.Sprintf("SELECT count(*) FROM system.lease WHERE desc_id=%d", tableID),
+		[][]string{{"1"}})
 }
 
 func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
@@ -3909,91 +3317,6 @@ func TestLeaseTableWriteFailure(t *testing.T) {
 	require.Truef(t, firstBlock, "did not block any lease writes")
 }
 
-// TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails makes sure that, during a lease
-// periodical refresh, if the descriptor, whose lease we intend to refresh, does not exist anymore, we delete
-// this descriptor from "cache" (i.e. manager.mu.descriptor).
-func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	// typeDescID will be set to id of the created type `typ` later.
-	mu := syncutil.Mutex{}
-	typeDescID := descpb.InvalidID
-	typeDescName := ""
-	var tdb *sqlutils.SQLRunner
-	dropCompleted := make(chan bool)
-
-	// The overall testing strategy is
-	// 1. Add a testing knob immediately before the acquire a node lease inside refreshSomeLeases;
-	// 2. Create a new type `typ` and acquire a lease of it;
-	// 3. When the lease manager attempts to refresh the lease on `typ`, the testing knob is trigger which removes
-	//    `typ` from storage;
-	// 4. This allows refreshSomeLeases fail with a DescriptorNotFound error and trigger the logic that removes this
-	//    descriptor entry from the lease manager's cache (namely, manager.mu.descriptor).
-	// 5. Finally, we assert that the entry for `typ` is no longer in the cache.
-	var params base.TestServerArgs
-	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &lease.ManagerTestingKnobs{
-			TestingBeforeAcquireLeaseDuringRefresh: func(id descpb.ID) error {
-				mu.Lock()
-				defer mu.Unlock()
-				if typeDescID != descpb.InvalidID && id == typeDescID {
-					// Drop this type to trigger the logic that remove unfound descriptor from lease manager cache.
-					tdb.Exec(t, fmt.Sprintf("DROP TYPE %v", typeDescName))
-					dropCompleted <- true
-				}
-				return nil
-			},
-		},
-	}
-	params.Settings = cluster.MakeTestingClusterSettings()
-
-	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(ctx)
-	s := srv.ApplicationLayer()
-	// Set lease duration to something small so that the periodical lease refresh is kicked off often where the testing
-	// knob will be invoked, and eventually the logic to remove unfound descriptor from cache will be triggered.
-	lease.LeaseDuration.Override(ctx, &s.ClusterSettings().SV, time.Second)
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, lease.SessionBasedLeasingOff)
-	tdb = sqlutils.MakeSQLRunner(sqlDB)
-
-	sql := `
-					CREATE DATABASE test;
-					USE test;
-					CREATE TYPE typ as enum ('a', 'b');
-					`
-	tdb.Exec(t, sql)
-
-	// Ensure `typ` is present in the lease manger by acquiring a lease on it.
-	typeDesc := desctestutils.TestingGetPublicTypeDescriptor(kvDB, s.Codec(), "test", "typ")
-	lm := s.LeaseManager().(*lease.Manager)
-	_, err := lm.Acquire(ctx, s.Clock().Now(), typeDesc.GetID())
-	require.NoError(t, err)
-
-	// Set typeDescID such that the next periodical lease refresh will trigger the testing knob that drops `typ`.
-	mu.Lock()
-	typeDescID = typeDesc.GetID()
-	typeDescName = typeDesc.GetName()
-	mu.Unlock()
-
-	// Wait until the testing knob drops `typ`
-	<-dropCompleted
-
-	// Assert that soon (when the next periodical lease refresh happens) the testing knob will drop `typ`,
-	// and consequently trigger the logic to remove the descriptor from lease manager due to a failure
-	// to acquire a lease on this descriptor.
-	testutils.SucceedsSoon(t, func() error {
-		if lm.TestingDescriptorStateIsNil(typeDesc.GetID()) {
-			return nil
-		}
-
-		return errors.Errorf("descriptor %v(#%v) is still there. Expected: descriptor removed from cache.",
-			typeDesc.GetName(), typeDesc.GetID())
-	})
-}
-
 // TestLongLeaseWaitMetrics validates metrics that can be used to detect if
 // the lease manager is stuck waiting for old versions to expire. These are added
 // to help us diagnose if the session based leasing migration runs into issues.
@@ -4005,8 +3328,6 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.MinSupported.Version(), false)
-	// Force dual writes and instantly expire any leases.
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, lease.SessionBasedDualWrite)
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings:          st,
 		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
