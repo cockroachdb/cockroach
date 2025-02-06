@@ -869,6 +869,10 @@ func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 						}
 					}()
 
+					// NB: this can be removed once this test is refactored to use `b.Loop`
+					// available starting in go1.24[1]
+					//
+					// [1]: https://tip.golang.org/doc/go1.24#new-benchmark-function
 					var benchtime string
 					require.NoError(b, sniffArgs(os.Args[1:], "test.benchtime", &benchtime))
 					if strings.HasSuffix(benchtime, "x") && b.N == 1 && benchtime != "1x" {
