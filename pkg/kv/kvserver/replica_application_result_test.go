@@ -57,7 +57,7 @@ func makeProposalData() *ProposalData {
 		seedProposal:            nil,
 		lastReproposal:          nil,
 	}
-	ctx := context.WithValue(context.Background(), struct{}{}, "nonempty-ctx")
+	ctx := context.WithValue(context.Background(), &contextKeyPtr, "nonempty-ctx")
 	prop.ctx.Store(&ctx)
 	return &prop
 }
@@ -121,3 +121,7 @@ func TestReplicaMakeReproposalChaininig(t *testing.T) {
 	_, _ = reproposal, onSuccess // No onSuccess call, assume the proposal failed.
 	verify()
 }
+
+type contextKey struct{}
+
+var contextKeyPtr contextKey
