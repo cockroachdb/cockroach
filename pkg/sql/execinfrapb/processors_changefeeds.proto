@@ -24,7 +24,7 @@ import "gogoproto/gogo.proto";
 // changes in a set of spans. Each span may cross multiple ranges.
 message ChangeAggregatorSpec {
   message Watch {
-    optional util.hlc.Timestamp initial_resolved = 1 [(gogoproto.nullable) = false];
+    optional util.hlc.Timestamp initial_resolved = 1 [(gogoproto.nullable) = false, deprecated=true];
     optional roachpb.Span span = 2 [(gogoproto.nullable) = false];
   }
   repeated Watch watches = 1 [(gogoproto.nullable) = false];
@@ -57,6 +57,11 @@ message ChangeAggregatorSpec {
 
   // Description is the description of the changefeed. Used for structured logging.
   optional string description = 7 [(gogoproto.nullable) = false];
+
+  // InitialHighWater represents a point in time where all data is known to have
+  // been seen for this changefeed job. It is safe to initialize frontier spans
+  // at this timestamp upon resuming.
+  optional util.hlc.Timestamp initial_high_water = 8;
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
