@@ -220,7 +220,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 
 	// Test for null raw sql config column in crdb_internal.zones,
 	// see: https://github.com/cockroachdb/cockroach/issues/140044
-	//sqlDB.Exec(t, `-- ALTER TABLE roachblog.posts CONFIGURE ZONE = ''`)
+	sqlDB.Exec(t, `ALTER TABLE roachblog.posts CONFIGURE ZONE = ''`)
 
 	sqlDB.Exec(t, `CREATE SCHEMA roachblog."foo bar"`)
 	sqlDB.Exec(t, `CREATE TABLE roachblog."foo bar".other_stuff(id INT PRIMARY KEY, body TEXT)`)
@@ -281,7 +281,6 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	delete(resp.DatabaseInfo, "system") // delete results for system database.
 	if !reflect.DeepEqual(resp.DatabaseInfo, expectedDatabaseInfo) {
 		t.Fatal("unexpected data distribution response", resp.DatabaseInfo)
-		//return fmt.Errorf("expected %v; got %v", expectedDatabaseInfo, resp.DatabaseInfo)
 	}
 
 	// Don't test anything about the zone configs for now; just verify that something is there.
@@ -297,7 +296,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	}
 
 	if resp.DatabaseInfo["roachblog"].TableInfo["public.comments"].DroppedAt == nil {
-		t.Fatal("expected roachblog.comments to have dropped_at set but it's nil")
+		t.Fatalf("expected %v; got %v", expectedDatabaseInfo, resp.DatabaseInfo)
 	}
 
 	// Verify that the request still works after a database has been dropped.
