@@ -222,9 +222,9 @@ func (s *sysbenchSQL) newClient() sysbenchClient {
 type sysbenchSQLClient struct {
 	*sysbenchSQL
 
-	conn *pgx.Conn
-	open bool
-	stmt struct {
+	conn    *pgx.Conn
+	txnOpen bool
+	stmt    struct {
 		begin          string
 		commit         string
 		rollback       string
@@ -241,11 +241,11 @@ type sysbenchSQLClient struct {
 }
 
 func (s *sysbenchSQLClient) Rollback() error {
-	if s.open {
+	if s.txnOpen {
 		if _, err := s.conn.Exec(s.ctx, s.stmt.rollback); err != nil {
 			return err
 		}
-		s.open = false
+		s.txnOpen = false
 	}
 	return nil
 }
@@ -255,13 +255,13 @@ func (s *sysbenchSQLClient) Begin() error {
 		return err
 	}
 	_, err := s.conn.Exec(s.ctx, s.stmt.begin)
-	s.open = err == nil
+	s.txnOpen = err == nil
 	return err
 }
 
 func (s *sysbenchSQLClient) Commit() error {
 	_, err := s.conn.Exec(s.ctx, s.stmt.commit)
-	s.open = err != nil
+	s.txnOpen = err != nil
 	return err
 }
 
