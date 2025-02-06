@@ -13,7 +13,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -494,7 +493,7 @@ func (s *Container) getOrCreateStatsForStmtWithKey(
 	key stmtKey, stmtFingerprintID appstatspb.StmtFingerprintID,
 ) (stats *stmtStats, created, throttled bool) {
 	limit := s.uniqueServerCount.UniqueStmtFingerprintLimit.Get(&s.st.SV)
-	if s.uniqueServerCount != nil && atomic.LoadInt64(&s.uniqueServerCount.uniqueStmtFingerprintCount) >= limit {
+	if s.uniqueServerCount != nil && s.uniqueServerCount.uniqueStmtFingerprintCount.Load() >= limit {
 		return nil, false /* created */, true /* throttled */
 	}
 	s.mu.Lock()
