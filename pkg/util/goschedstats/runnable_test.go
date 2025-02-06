@@ -2,6 +2,8 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
+//
+//go:build bazel || untested_go_version || (gc && go1.19 && !go1.23)
 
 package goschedstats
 

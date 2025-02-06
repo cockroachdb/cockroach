@@ -426,7 +426,7 @@ func (sb *schemaBuilder) addTypeAttrMapping(
 			} else if !f.isSlice() {
 				compType := getComparableType(typ)
 				if f.isPtr() && f.isScalar() {
-					compType = reflect.PtrTo(compType)
+					compType = reflect.PointerTo(compType)
 				}
 				vg := makeValueGetter(compType, offset)
 				if f.isPtr() && f.isScalar() {
@@ -521,5 +521,5 @@ func makeSliceMemberType(srcType, sliceType reflect.Type, valueFieldName string)
 			Name: valueFieldName, Type: sliceType.Elem(),
 		},
 	}
-	return reflect.PtrTo(reflect.StructOf(fields[:]))
+	return reflect.PointerTo(reflect.StructOf(fields[:]))
 }

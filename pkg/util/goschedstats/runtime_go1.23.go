@@ -15,7 +15,14 @@
 //
 // The untested_go_version flag enables building on any go version, intended to
 // ease testing against Go at tip.
-//go:build (gc && go1.23 && !go1.24) || untested_go_version
+//
+// This code will not build with the upstream Go version as we need to use `go:linkname`
+// on internal runtime symbols, which as of Go 1.23 is forbidden [2].
+// We use build tags to only use this logic if we are using our forked Go runtime.
+//
+// [2] https://tip.golang.org/doc/go1.23#linker
+//
+//go:build (bazel && gc && go1.23 && !go1.24) || untested_go_version
 
 package goschedstats
 
@@ -160,6 +167,14 @@ type schedt struct {
 	// The rest of the fields aren't important.
 }
 
+type m struct{}
+
+//go:linkname acquirem runtime.acquirem
+func acquirem() *m
+
+//go:linkname releasem runtime.releasem
+func releasem(*m)
+
 //go:linkname allp runtime.allp
 var allp []*p
 
@@ -173,6 +188,8 @@ func lock(l *mutex)
 func unlock(l *mutex)
 
 func numRunnableGoroutines() (numRunnable int, numProcs int) {
+	// Disable preemption.
+	mp := acquirem()
 	lock(&sched.lock)
 	numRunnable = int(sched.runqsize)
 	numProcs = len(allp)
@@ -198,5 +215,6 @@ func numRunnableGoroutines() (numRunnable int, numProcs int) {
 		}
 	}
 	unlock(&sched.lock)
+	releasem(mp)
 	return numRunnable, numProcs
 }
