@@ -2979,11 +2979,3 @@ func (n *Node) GetRangeDescriptors(
 		RangeDescriptors: rangeDescriptors,
 	})
 }
-
-func (n *Node) TenantInfo(
-	ctx context.Context, req *kvpb.TenantInfoRequest,
-) (*kvpb.TenantInfoResponse, error) {
-	return &kvpb.TenantInfoResponse{
-		TenantID: roachpb.MaxTenantID,
-	}, nil
-}
