@@ -306,8 +306,8 @@ func getSortedColumnIDsInIndex(
 	return ret
 }
 
-// indexColumnIDs return an index's key column IDs, key suffix column IDs,
-// and storing column IDs, in sorted order.
+// getSortedColumnIDsInIndexByKind return an index's key column IDs, key suffix
+// column IDs, and storing column IDs, in sorted order.
 func getSortedColumnIDsInIndexByKind(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
 ) (
@@ -317,14 +317,13 @@ func getSortedColumnIDsInIndexByKind(
 ) {
 	// Retrieve all columns of this index.
 	allColumns := make([]*scpb.IndexColumn, 0)
-	scpb.ForEachIndexColumn(b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)), func(
-		current scpb.Status, target scpb.TargetStatus, ice *scpb.IndexColumn,
-	) {
-		if ice.TableID != tableID || ice.IndexID != indexID {
-			return
-		}
-		allColumns = append(allColumns, ice)
-	})
+	b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)).FilterIndexColumn().
+		ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
+			if e.IndexID != indexID {
+				return
+			}
+			allColumns = append(allColumns, e)
+		})
 
 	// Sort all columns by their (Kind, OrdinalInKind).
 	sort.Slice(allColumns, func(i, j int) bool {
@@ -349,6 +348,50 @@ func getSortedColumnIDsInIndexByKind(
 		}
 	}
 	return keyColumnIDs, keySuffixColumnIDs, storingColumnIDs
+}
+
+// getSortedColumnNamesInIndexByKind return an index's key column IDs, key
+// suffix column IDs, and storing column IDs, in sorted order.
+func getSortedColumnNamesInIndexByKind(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) (keyColumnNames []string, keySuffixColumnNames []string, storingColumnNames []string) {
+	// Retrieve all columns of this index.
+	allColumns := make([]*scpb.IndexColumn, 0)
+	b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)).FilterIndexColumn().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) {
+			if e.IndexID != indexID {
+				return
+			}
+			allColumns = append(allColumns, e)
+		})
+
+	// Sort all columns by their (Kind, OrdinalInKind).
+	sort.Slice(allColumns, func(i, j int) bool {
+		return (allColumns[i].Kind < allColumns[j].Kind) ||
+			(allColumns[i].Kind == allColumns[j].Kind && allColumns[i].OrdinalInKind < allColumns[j].OrdinalInKind)
+	})
+
+	// Populate results.
+	keyColumnNames = make([]string, 0)
+	keySuffixColumnNames = make([]string, 0)
+	storingColumnNames = make([]string, 0)
+	for _, ice := range allColumns {
+		colName := b.QueryByID(tableID).FilterColumnName().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) bool {
+				return e.ColumnID == ice.ColumnID
+			}).MustGetOneElement().Name
+		switch ice.Kind {
+		case scpb.IndexColumn_KEY:
+			keyColumnNames = append(keyColumnNames, colName)
+		case scpb.IndexColumn_KEY_SUFFIX:
+			keySuffixColumnNames = append(keySuffixColumnNames, colName)
+		case scpb.IndexColumn_STORED:
+			storingColumnNames = append(storingColumnNames, colName)
+		default:
+			panic(fmt.Sprintf("Unknown index column element kind %v", ice.Kind))
+		}
+	}
+	return keyColumnNames, keySuffixColumnNames, storingColumnNames
 }
 
 // getNonDropColumnIDs returns all non-drop columns in a table.
