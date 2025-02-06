@@ -534,26 +534,26 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 // inBetweenFilters returns a set of filters that are required to cover all the
 // in-between spans given a set of partition values. This is required for
 // correctness reasons; although values are unlikely to exist between defined
-// partitions, they may exist and so the constraints of the scan must incorporate
-// these spans.
+// partitions, they may exist and so the constraints of the scan must
+// incorporate these spans.
 //
 // For example, if we have:
 //
-//	PARTITION BY LIST (a, b) (
-//	  PARTITION a VALUES IN ((1, 10)),
-//	  PARTITION b VALUES IN ((2, 20)),
-//	)
+// `  PARTITION BY LIST (a, b) (
+// `    PARTITION a VALUES IN ((1, 10)),
+// `    PARTITION b VALUES IN ((2, 20)),
+// `  )
 //
 // The in-between filters are:
 //
-//	(a, b) < (1, 10) OR
-//	((a, b) > (1, 10) AND (a, b) < (2, 20)) OR
-//	(a, b) > (2, 20)
+// (a, b) < (1, 10) OR
+// ((a, b) > (1, 10) AND (a, b) < (2, 20)) OR
+// (a, b) > (2, 20)
 //
 // When passed as optional filters to index constrains, these filters generate
 // the desired spans:
 //
-//	[ - /1/10), (/1/10 - /2/20), (2/20 - ].
+// [ - /1/10), (/1/10 - /2/20), (2/20 - ]
 //
 // TODO(radu,mgartner): technically these filters are not correct with respect
 // to NULL values - we would want the tuple comparisons to treat NULLs as the
@@ -760,25 +760,26 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 //
 // For example consider the following table and partitioned index:
 //
-// CREATE TABLE orders (
+// ` CREATE TABLE orders (
+// `   region STRING NOT NULL,
+// `   id INT8 NOT NULL,
+// `   total DECIMAL NOT NULL,
+// `   seq_num INT NOT NULL,
+// `   PRIMARY KEY (region, id)
+// ` )
 //
-//	region STRING NOT NULL, id INT8 NOT NULL, total DECIMAL NOT NULL, seq_num INT NOT NULL,
-//	PRIMARY KEY (region, id)
-//
-// )
-//
-// CREATE INDEX orders_by_seq_num
-//
-//	ON orders (region, seq_num, id)
-//	STORING (total)
-//	PARTITION BY LIST (region)
-//	    (
-//	        PARTITION us_east1 VALUES IN ('us-east1'),
-//	        PARTITION us_west1 VALUES IN ('us-west1'),
-//	        PARTITION europe_west2 VALUES IN ('europe-west2')
-//	    )
+// ` CREATE INDEX orders_by_seq_num
+// `   ON orders (region, seq_num, id)
+// `   STORING (total)
+// `   PARTITION BY LIST (region)
+// `     (
+// `       PARTITION us_east1 VALUES IN ('us-east1'),
+// `       PARTITION us_west1 VALUES IN ('us-west1'),
+// `       PARTITION europe_west2 VALUES IN ('eu-west2')
+// `     )
 //
 // Now consider the following query:
+//
 // SELECT sum(total) FROM orders WHERE seq_num >= 100 AND seq_num < 200
 //
 // Normally, the index would not be utilized but because we know what the
@@ -788,20 +789,20 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 // By doing so, we get the following plan:
 // scalar-group-by
 //
-//	├── select
-//	│    ├── scan orders@orders_by_seq_num
-//	│    │    └── constraint: /1/4/2: [ - /'europe-west2')
-//	│    │                            [/'europe-west2'/100 - /'europe-west2'/199]
-//	│    │                            [/e'europe-west2\x00'/100 - /'us-east1')
-//	│    │                            [/'us-east1'/100 - /'us-east1'/199]
-//	│    │                            [/e'us-east1\x00'/100 - /'us-west1')
-//	│    │                            [/'us-west1'/100 - /'us-west1'/199]
-//	│    │                            [/e'us-west1\x00'/100 - ]
-//	│    └── filters
-//	│         └── (seq_num >= 100) AND (seq_num < 200)
-//	└── aggregations
-//	     └── sum
-//	          └── variable: total
+// `  ├── select
+// `  │    ├── scan orders@orders_by_seq_num
+// `  │    │    └── constraint: /1/4/2: [ - /'eu-west2')
+// `  │    │                            [/'eu-west2'/100 - /'eu-west2'/199]
+// `  │    │                            [/e'eu-west2\x00'/100 - /'us-east1')
+// `  │    │                            [/'us-east1'/100 - /'us-east1'/199]
+// `  │    │                            [/e'us-east1\x00'/100 - /'us-west1')
+// `  │    │                            [/'us-west1'/100 - /'us-west1'/199]
+// `  │    │                            [/e'us-west1\x00'/100 - ]
+// `  │    └── filters
+// `  │         └── (seq_num >= 100) AND (seq_num < 200)
+// `  └── aggregations
+// `       └── sum
+// `            └── variable: total
 func (c *CustomFuncs) partitionValuesFilters(
 	tabID opt.TableID, index cat.Index,
 ) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
