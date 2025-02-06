@@ -149,17 +149,15 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 			case tree.Cascade:
 				// Try the fast builder first; if it cannot be used, use the regular builder.
 				var ok bool
-				builder, ok = tryNewOnDeleteFastCascadeBuilder(
-					mb.b.ctx, mb.md, mb.b.catalog, h.fk, i, mb.tab, h.otherTab, mb.outScope,
-				)
+				builder, ok = mb.tryNewOnDeleteFastCascadeBuilder(h.fk, i, h.otherTab)
 				if !ok {
 					mb.ensureWithID()
-					builder = newOnDeleteCascadeBuilder(mb.tab, i, h.otherTab, cols)
+					builder = mb.newOnDeleteCascadeBuilder(i, h.otherTab, cols)
 				}
 				triggerEventType = tree.TriggerEventDelete
 			case tree.SetNull, tree.SetDefault:
 				mb.ensureWithID()
-				builder = newOnDeleteSetBuilder(mb.tab, i, h.otherTab, a, cols)
+				builder = mb.newOnDeleteSetBuilder(i, h.otherTab, a, cols)
 				triggerEventType = tree.TriggerEventUpdate
 			default:
 				panic(errors.AssertionFailedf("unhandled action type %s", a))
@@ -313,7 +311,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 			hasBeforeTriggers := cat.HasRowLevelTriggers(
 				h.otherTab, tree.TriggerActionTimeBefore, tree.TriggerEventUpdate,
 			)
-			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a, oldCols, newCols)
+			builder := mb.newOnUpdateCascadeBuilder(i, h.otherTab, a, oldCols, newCols)
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKConstraint:      h.fk,
 				HasBeforeTriggers: hasBeforeTriggers,
@@ -435,7 +433,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 			hasBeforeTriggers := cat.HasRowLevelTriggers(
 				h.otherTab, tree.TriggerActionTimeBefore, tree.TriggerEventUpdate,
 			)
-			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a, oldCols, newCols)
+			builder := mb.newOnUpdateCascadeBuilder(i, h.otherTab, a, oldCols, newCols)
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKConstraint:      h.fk,
 				HasBeforeTriggers: hasBeforeTriggers,

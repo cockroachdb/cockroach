@@ -447,8 +447,8 @@ func (mb *mutationBuilder) buildRowLevelAfterTriggers(mutation opt.Operator) {
 	}
 	mb.afterTriggers = &memo.AfterTriggers{
 		Triggers: triggers,
-		Builder: newRowLevelAfterTriggerBuilder(
-			mutation, mb.tab, triggers, fetchCols, updateCols, insertCols, mb.canaryColID,
+		Builder: mb.newRowLevelAfterTriggerBuilder(
+			mutation, triggers, fetchCols, updateCols, insertCols,
 		),
 		WithID: mb.withID,
 	}
@@ -490,6 +490,10 @@ type rowLevelAfterTriggerBuilder struct {
 	mutatedTable cat.Table
 	triggers     []cat.Trigger
 
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
+
 	// The following fields contain the columns from the mutation input needed to
 	// build the triggers. The columns must be remapped to the new memo when the
 	// triggers are built. If fetchCols, updateCols, or insertCols is set, then
@@ -511,21 +515,18 @@ type rowLevelAfterTriggerBuilder struct {
 
 var _ memo.PostQueryBuilder = &rowLevelAfterTriggerBuilder{}
 
-func newRowLevelAfterTriggerBuilder(
-	mutation opt.Operator,
-	mutatedTable cat.Table,
-	triggers []cat.Trigger,
-	fetchCols, updateCols, insertCols opt.ColList,
-	canaryCol opt.ColumnID,
+func (mb *mutationBuilder) newRowLevelAfterTriggerBuilder(
+	mutation opt.Operator, triggers []cat.Trigger, fetchCols, updateCols, insertCols opt.ColList,
 ) *rowLevelAfterTriggerBuilder {
 	return &rowLevelAfterTriggerBuilder{
-		mutation:     mutation,
-		mutatedTable: mutatedTable,
-		triggers:     triggers,
-		fetchCols:    fetchCols,
-		updateCols:   updateCols,
-		insertCols:   insertCols,
-		canaryCol:    canaryCol,
+		mutation:       mutation,
+		mutatedTable:   mb.tab,
+		triggers:       triggers,
+		stmtTreeInitFn: mb.b.stmtTree.GetInitFnForPostQuery(),
+		fetchCols:      fetchCols,
+		updateCols:     updateCols,
+		insertCols:     insertCols,
+		canaryCol:      mb.canaryColID,
 	}
 }
 
@@ -540,221 +541,222 @@ func (tb *rowLevelAfterTriggerBuilder) Build(
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
-		f := b.factory
-		md := f.Metadata()
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, tb.stmtTreeInitFn,
+		func(b *Builder) memo.RelExpr {
+			f := b.factory
+			md := f.Metadata()
 
-		typeID := typedesc.TableIDToImplicitTypeOID(descpb.ID(tb.mutatedTable.ID()))
-		tableTyp, err := semaCtx.TypeResolver.ResolveTypeByOID(ctx, typeID)
-		if err != nil {
-			panic(err)
-		}
-
-		// Map the columns from the original memo to the new one using colMap.
-		inFetchCols := tb.fetchCols.RemapColumns(colMap)
-		inUpdateCols := tb.updateCols.RemapColumns(colMap)
-		inInsertCols := tb.insertCols.RemapColumns(colMap)
-		colCount := len(inFetchCols) + len(inUpdateCols) + len(inInsertCols)
-		if tb.canaryCol != 0 {
-			// Make space for the canary column.
-			colCount++
-		}
-		inCols := make(opt.ColList, 0, colCount)
-		outCols := make(opt.ColList, 0, colCount)
-
-		// Allocate a new scope to build the expression that will call the trigger
-		// functions for each row scanned from the buffer.
-		triggerScope := b.allocScope()
-		var inCanaryCol, outCanaryCol opt.ColumnID
-		if tb.canaryCol != 0 {
-			inCanaryColID, ok := colMap.Get(int(tb.canaryCol))
-			if !ok {
-				panic(errors.AssertionFailedf("column %d not in mapping %s\n",
-					tb.canaryCol, colMap.String()))
-			}
-			inCanaryCol = opt.ColumnID(inCanaryColID)
-			colType := md.ColumnMeta(inCanaryCol).Type
-			colName := scopeColName("").WithMetadataName("canary")
-			col := b.synthesizeColumn(triggerScope, colName, colType, nil /* expr */, nil /* scalar */)
-			outCanaryCol = col.id
-			inCols = append(inCols, inCanaryCol)
-			outCols = append(outCols, outCanaryCol)
-		}
-		addCols := func(cols opt.ColList, suffix string) opt.ColList {
-			startIdx := len(outCols)
-			for _, col := range cols {
-				colMeta := md.ColumnMeta(col)
-				name := scopeColName("").WithMetadataName(fmt.Sprintf("%s_%s", colMeta.Alias, suffix))
-				outCol := b.synthesizeColumn(
-					triggerScope, name, colMeta.Type, nil /* expr */, nil, /* scalar */
-				)
-				inCols = append(inCols, col)
-				outCols = append(outCols, outCol.id)
-			}
-			return outCols[startIdx:len(outCols):len(outCols)]
-		}
-		outFetchCols := addCols(inFetchCols, "old")
-		outUpdateCols := addCols(inUpdateCols, "new")
-		outInsertCols := addCols(inInsertCols, "new")
-		md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
-			Props: bindingProps,
-		}))
-		triggerScope.expr = f.ConstructWithScan(&memo.WithScanPrivate{
-			With:    binding,
-			InCols:  inCols,
-			OutCols: outCols,
-			ID:      md.NextUniqueID(),
-		})
-
-		// Project the old and new values into tuples. These will become the OLD and
-		// NEW arguments to the trigger functions.
-		makeTuple := func(cols opt.ColList) opt.ScalarExpr {
-			elems := make([]opt.ScalarExpr, len(cols))
-			for i, col := range cols {
-				elems[i] = f.ConstructVariable(col)
-			}
-			return f.ConstructTuple(elems, tableTyp)
-		}
-		var canaryCheck opt.ScalarExpr
-		if tb.canaryCol != 0 {
-			canaryCheck = f.ConstructIs(f.ConstructVariable(outCanaryCol), memo.NullSingleton)
-		}
-
-		// Build an expression for the old values of each row.
-		oldScalar := opt.ScalarExpr(memo.NullSingleton)
-		if len(outFetchCols) > 0 {
-			oldScalar = makeTuple(outFetchCols)
-			if outCanaryCol != 0 {
-				// For an UPSERT/ON CONFLICT, the OLD column is non-null only for the
-				// conflicting rows, which are identified by the canary column.
-				oldScalar = f.ConstructCase(
-					memo.TrueSingleton,
-					memo.ScalarListExpr{f.ConstructWhen(canaryCheck, f.ConstructNull(tableTyp))},
-					oldScalar,
-				)
-			}
-		}
-		// Build an expression for the new values of each row.
-		newScalar := opt.ScalarExpr(memo.NullSingleton)
-		if outCanaryCol != 0 {
-			// For an UPSERT/ON CONFLICT, the NEW column contains either inserted or
-			// updated values, depending on the canary column.
-			newScalar = f.ConstructCase(
-				memo.TrueSingleton,
-				memo.ScalarListExpr{f.ConstructWhen(canaryCheck, makeTuple(outInsertCols))},
-				makeTuple(outUpdateCols),
-			)
-		} else if len(outUpdateCols) > 0 {
-			newScalar = makeTuple(outUpdateCols)
-		} else if len(outInsertCols) > 0 {
-			newScalar = makeTuple(outInsertCols)
-		}
-		oldColID := b.projectColWithMetadataName(triggerScope, triggerColOld, tableTyp, oldScalar)
-		newColID := b.projectColWithMetadataName(triggerScope, triggerColNew, tableTyp, newScalar)
-		tgWhen := tree.NewDString("AFTER")
-		tgLevel := tree.NewDString("ROW")
-		tgRelID := tree.NewDOid(oid.Oid(tb.mutatedTable.ID()))
-		tgTableName := tree.NewDString(string(tb.mutatedTable.Name()))
-		fqName, err := b.catalog.FullyQualifiedName(ctx, tb.mutatedTable)
-		if err != nil {
-			panic(err)
-		}
-		tgTableSchema := tree.NewDString(fqName.Schema())
-		var tgOp opt.ScalarExpr
-		switch tb.mutation {
-		case opt.InsertOp:
-			tgOp = f.ConstructConstVal(tree.NewDString("INSERT"), types.String)
-			if outCanaryCol != 0 {
-				tgOp = f.ConstructCase(
-					memo.TrueSingleton,
-					memo.ScalarListExpr{f.ConstructWhen(canaryCheck, tgOp)},
-					f.ConstructConstVal(tree.NewDString("UPDATE"), types.String),
-				)
-			}
-		case opt.UpdateOp:
-			tgOp = f.ConstructConstVal(tree.NewDString("UPDATE"), types.String)
-		case opt.DeleteOp:
-			tgOp = f.ConstructConstVal(tree.NewDString("DELETE"), types.String)
-		default:
-			panic(errors.AssertionFailedf("unexpected mutation type: %v", tb.mutation))
-		}
-
-		for i, trigger := range tb.triggers {
-			if i > 0 {
-				// No need to place a barrier below the first trigger.
-				triggerScope.expr = f.ConstructBarrier(triggerScope.expr)
+			typeID := typedesc.TableIDToImplicitTypeOID(descpb.ID(tb.mutatedTable.ID()))
+			tableTyp, err := semaCtx.TypeResolver.ResolveTypeByOID(ctx, typeID)
+			if err != nil {
+				panic(err)
 			}
 
-			tgName := tree.NewDName(string(trigger.Name()))
-			tgNumArgs := tree.NewDInt(tree.DInt(len(trigger.FuncArgs())))
-			tgArgV := tree.NewDArray(types.String)
-			for _, arg := range trigger.FuncArgs() {
-				err = tgArgV.Append(arg)
-				if err != nil {
-					panic(err)
+			// Map the columns from the original memo to the new one using colMap.
+			inFetchCols := tb.fetchCols.RemapColumns(colMap)
+			inUpdateCols := tb.updateCols.RemapColumns(colMap)
+			inInsertCols := tb.insertCols.RemapColumns(colMap)
+			colCount := len(inFetchCols) + len(inUpdateCols) + len(inInsertCols)
+			if tb.canaryCol != 0 {
+				// Make space for the canary column.
+				colCount++
+			}
+			inCols := make(opt.ColList, 0, colCount)
+			outCols := make(opt.ColList, 0, colCount)
+
+			// Allocate a new scope to build the expression that will call the trigger
+			// functions for each row scanned from the buffer.
+			triggerScope := b.allocScope()
+			var inCanaryCol, outCanaryCol opt.ColumnID
+			if tb.canaryCol != 0 {
+				inCanaryColID, ok := colMap.Get(int(tb.canaryCol))
+				if !ok {
+					panic(errors.AssertionFailedf("column %d not in mapping %s\n",
+						tb.canaryCol, colMap.String()))
 				}
+				inCanaryCol = opt.ColumnID(inCanaryColID)
+				colType := md.ColumnMeta(inCanaryCol).Type
+				colName := scopeColName("").WithMetadataName("canary")
+				col := b.synthesizeColumn(triggerScope, colName, colType, nil /* expr */, nil /* scalar */)
+				outCanaryCol = col.id
+				inCols = append(inCols, inCanaryCol)
+				outCols = append(outCols, outCanaryCol)
 			}
-			args := memo.ScalarListExpr{
-				f.ConstructVariable(newColID),              // NEW
-				f.ConstructVariable(oldColID),              // OLD
-				f.ConstructConstVal(tgName, types.Name),    // TG_NAME
-				f.ConstructConstVal(tgWhen, types.String),  // TG_WHEN
-				f.ConstructConstVal(tgLevel, types.String), // TG_LEVEL
-				tgOp,                                    // TG_OP
-				f.ConstructConstVal(tgRelID, types.Oid), // TG_RELIID
-				f.ConstructConstVal(tgTableName, types.String),   // TG_RELNAME
-				f.ConstructConstVal(tgTableName, types.String),   // TG_TABLE_NAME
-				f.ConstructConstVal(tgTableSchema, types.String), // TG_TABLE_SCHEMA
-				f.ConstructConstVal(tgNumArgs, types.Int),        // TG_NARGS
-				f.ConstructConstVal(tgArgV, types.StringArray),   // TG_ARGV
-			}
-
-			// Resolve the trigger function and build the invocation.
-			triggerFn, def := b.buildTriggerFunction(trigger, tb.mutatedTable.ID(), tableTyp, args)
-
-			// If there is a WHEN condition, wrap the trigger function invocation in a
-			// CASE WHEN statement that checks the WHEN condition.
-			if trigger.WhenExpr() != "" {
-				triggerFn = b.buildTriggerWhen(
-					trigger, triggerScope, oldColID, newColID, triggerFn, f.ConstructNull(tableTyp),
-				)
-			}
-
-			// For UPSERT and INSERT ON CONFLICT, UPDATE triggers should only fire for
-			// the conflicting rows, which are identified by the canary column. INSERT
-			// triggers should only fire for non-conflicting rows. A trigger that
-			// matches both operations can fire unconditionally.
-			if outCanaryCol != 0 {
-				var hasInsert, hasUpdate bool
-				for j := 0; j < trigger.EventCount(); j++ {
-					if trigger.Event(j).EventType == tree.TriggerEventInsert {
-						hasInsert = true
-					} else if trigger.Event(j).EventType == tree.TriggerEventUpdate {
-						hasUpdate = true
-					}
-				}
-				if hasInsert && !hasUpdate {
-					triggerFn = f.ConstructCase(
-						memo.TrueSingleton,
-						memo.ScalarListExpr{f.ConstructWhen(canaryCheck, triggerFn)},
-						f.ConstructNull(tableTyp),
+			addCols := func(cols opt.ColList, suffix string) opt.ColList {
+				startIdx := len(outCols)
+				for _, col := range cols {
+					colMeta := md.ColumnMeta(col)
+					name := scopeColName("").WithMetadataName(fmt.Sprintf("%s_%s", colMeta.Alias, suffix))
+					outCol := b.synthesizeColumn(
+						triggerScope, name, colMeta.Type, nil /* expr */, nil, /* scalar */
 					)
-				} else if hasUpdate && !hasInsert {
-					triggerFn = f.ConstructCase(
+					inCols = append(inCols, col)
+					outCols = append(outCols, outCol.id)
+				}
+				return outCols[startIdx:len(outCols):len(outCols)]
+			}
+			outFetchCols := addCols(inFetchCols, "old")
+			outUpdateCols := addCols(inUpdateCols, "new")
+			outInsertCols := addCols(inInsertCols, "new")
+			md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
+				Props: bindingProps,
+			}))
+			triggerScope.expr = f.ConstructWithScan(&memo.WithScanPrivate{
+				With:    binding,
+				InCols:  inCols,
+				OutCols: outCols,
+				ID:      md.NextUniqueID(),
+			})
+
+			// Project the old and new values into tuples. These will become the OLD and
+			// NEW arguments to the trigger functions.
+			makeTuple := func(cols opt.ColList) opt.ScalarExpr {
+				elems := make([]opt.ScalarExpr, len(cols))
+				for i, col := range cols {
+					elems[i] = f.ConstructVariable(col)
+				}
+				return f.ConstructTuple(elems, tableTyp)
+			}
+			var canaryCheck opt.ScalarExpr
+			if tb.canaryCol != 0 {
+				canaryCheck = f.ConstructIs(f.ConstructVariable(outCanaryCol), memo.NullSingleton)
+			}
+
+			// Build an expression for the old values of each row.
+			oldScalar := opt.ScalarExpr(memo.NullSingleton)
+			if len(outFetchCols) > 0 {
+				oldScalar = makeTuple(outFetchCols)
+				if outCanaryCol != 0 {
+					// For an UPSERT/ON CONFLICT, the OLD column is non-null only for the
+					// conflicting rows, which are identified by the canary column.
+					oldScalar = f.ConstructCase(
 						memo.TrueSingleton,
 						memo.ScalarListExpr{f.ConstructWhen(canaryCheck, f.ConstructNull(tableTyp))},
-						triggerFn,
+						oldScalar,
 					)
 				}
 			}
+			// Build an expression for the new values of each row.
+			newScalar := opt.ScalarExpr(memo.NullSingleton)
+			if outCanaryCol != 0 {
+				// For an UPSERT/ON CONFLICT, the NEW column contains either inserted or
+				// updated values, depending on the canary column.
+				newScalar = f.ConstructCase(
+					memo.TrueSingleton,
+					memo.ScalarListExpr{f.ConstructWhen(canaryCheck, makeTuple(outInsertCols))},
+					makeTuple(outUpdateCols),
+				)
+			} else if len(outUpdateCols) > 0 {
+				newScalar = makeTuple(outUpdateCols)
+			} else if len(outInsertCols) > 0 {
+				newScalar = makeTuple(outInsertCols)
+			}
+			oldColID := b.projectColWithMetadataName(triggerScope, triggerColOld, tableTyp, oldScalar)
+			newColID := b.projectColWithMetadataName(triggerScope, triggerColNew, tableTyp, newScalar)
+			tgWhen := tree.NewDString("AFTER")
+			tgLevel := tree.NewDString("ROW")
+			tgRelID := tree.NewDOid(oid.Oid(tb.mutatedTable.ID()))
+			tgTableName := tree.NewDString(string(tb.mutatedTable.Name()))
+			fqName, err := b.catalog.FullyQualifiedName(ctx, tb.mutatedTable)
+			if err != nil {
+				panic(err)
+			}
+			tgTableSchema := tree.NewDString(fqName.Schema())
+			var tgOp opt.ScalarExpr
+			switch tb.mutation {
+			case opt.InsertOp:
+				tgOp = f.ConstructConstVal(tree.NewDString("INSERT"), types.String)
+				if outCanaryCol != 0 {
+					tgOp = f.ConstructCase(
+						memo.TrueSingleton,
+						memo.ScalarListExpr{f.ConstructWhen(canaryCheck, tgOp)},
+						f.ConstructConstVal(tree.NewDString("UPDATE"), types.String),
+					)
+				}
+			case opt.UpdateOp:
+				tgOp = f.ConstructConstVal(tree.NewDString("UPDATE"), types.String)
+			case opt.DeleteOp:
+				tgOp = f.ConstructConstVal(tree.NewDString("DELETE"), types.String)
+			default:
+				panic(errors.AssertionFailedf("unexpected mutation type: %v", tb.mutation))
+			}
 
-			// Finally, project a column that invokes the trigger function.
-			b.projectColWithMetadataName(triggerScope, def.Name, tableTyp, triggerFn)
-		}
-		// Always wrap the expression in a barrier, or else the projections will be
-		// pruned and the triggers will not be executed.
-		return f.ConstructBarrier(triggerScope.expr)
-	})
+			for i, trigger := range tb.triggers {
+				if i > 0 {
+					// No need to place a barrier below the first trigger.
+					triggerScope.expr = f.ConstructBarrier(triggerScope.expr)
+				}
+
+				tgName := tree.NewDName(string(trigger.Name()))
+				tgNumArgs := tree.NewDInt(tree.DInt(len(trigger.FuncArgs())))
+				tgArgV := tree.NewDArray(types.String)
+				for _, arg := range trigger.FuncArgs() {
+					err = tgArgV.Append(arg)
+					if err != nil {
+						panic(err)
+					}
+				}
+				args := memo.ScalarListExpr{
+					f.ConstructVariable(newColID),              // NEW
+					f.ConstructVariable(oldColID),              // OLD
+					f.ConstructConstVal(tgName, types.Name),    // TG_NAME
+					f.ConstructConstVal(tgWhen, types.String),  // TG_WHEN
+					f.ConstructConstVal(tgLevel, types.String), // TG_LEVEL
+					tgOp,                                    // TG_OP
+					f.ConstructConstVal(tgRelID, types.Oid), // TG_RELIID
+					f.ConstructConstVal(tgTableName, types.String),   // TG_RELNAME
+					f.ConstructConstVal(tgTableName, types.String),   // TG_TABLE_NAME
+					f.ConstructConstVal(tgTableSchema, types.String), // TG_TABLE_SCHEMA
+					f.ConstructConstVal(tgNumArgs, types.Int),        // TG_NARGS
+					f.ConstructConstVal(tgArgV, types.StringArray),   // TG_ARGV
+				}
+
+				// Resolve the trigger function and build the invocation.
+				triggerFn, def := b.buildTriggerFunction(trigger, tb.mutatedTable.ID(), tableTyp, args)
+
+				// If there is a WHEN condition, wrap the trigger function invocation in a
+				// CASE WHEN statement that checks the WHEN condition.
+				if trigger.WhenExpr() != "" {
+					triggerFn = b.buildTriggerWhen(
+						trigger, triggerScope, oldColID, newColID, triggerFn, f.ConstructNull(tableTyp),
+					)
+				}
+
+				// For UPSERT and INSERT ON CONFLICT, UPDATE triggers should only fire for
+				// the conflicting rows, which are identified by the canary column. INSERT
+				// triggers should only fire for non-conflicting rows. A trigger that
+				// matches both operations can fire unconditionally.
+				if outCanaryCol != 0 {
+					var hasInsert, hasUpdate bool
+					for j := 0; j < trigger.EventCount(); j++ {
+						if trigger.Event(j).EventType == tree.TriggerEventInsert {
+							hasInsert = true
+						} else if trigger.Event(j).EventType == tree.TriggerEventUpdate {
+							hasUpdate = true
+						}
+					}
+					if hasInsert && !hasUpdate {
+						triggerFn = f.ConstructCase(
+							memo.TrueSingleton,
+							memo.ScalarListExpr{f.ConstructWhen(canaryCheck, triggerFn)},
+							f.ConstructNull(tableTyp),
+						)
+					} else if hasUpdate && !hasInsert {
+						triggerFn = f.ConstructCase(
+							memo.TrueSingleton,
+							memo.ScalarListExpr{f.ConstructWhen(canaryCheck, f.ConstructNull(tableTyp))},
+							triggerFn,
+						)
+					}
+				}
+
+				// Finally, project a column that invokes the trigger function.
+				b.projectColWithMetadataName(triggerScope, def.Name, tableTyp, triggerFn)
+			}
+			// Always wrap the expression in a barrier, or else the projections will be
+			// pruned and the triggers will not be executed.
+			return f.ConstructBarrier(triggerScope.expr)
+		})
 }
 
 // ============================================================================
