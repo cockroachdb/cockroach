@@ -342,7 +342,14 @@ func TestAvroSchema(t *testing.T) {
 		switch typ.Family() {
 		case types.StringFamily:
 			collationTags := collatedstring.Supported()
+			// "C" and "POSIX" locales are not allowed for collated string
+			// columns in CRDB (see collatedstring logic tests),
+			// so we don't expect these types to be emitted by changefeeds.
 			randCollationTag := collationTags[rand.Intn(len(collationTags))]
+			for randCollationTag == collatedstring.CCollationTag ||
+				randCollationTag == collatedstring.PosixCollationTag {
+				randCollationTag = collationTags[rand.Intn(len(collationTags))]
+			}
 			collatedType := types.MakeCollatedString(typ, randCollationTag)
 			typesToTest = append(typesToTest, collatedType)
 		}
