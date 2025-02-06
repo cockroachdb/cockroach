@@ -267,17 +267,26 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
+	// fullReconcilierStarted is used to block the full reconciliation from
+	// starting before we drop the database. This is used to avoid a race
+	// condition where the full reconciliation starts after we drop the database,
+	// it will ignore the dropped database. Then, there is a race between the
+	// SQLWatcher and the GC job where the SQLWatcher might write a zone config
+	// of table1 before table2, while the GC queue might not know that this range
+	// needs to be split because it has different span config.
+	//
 	// zoneCfgRangeFeedStarted is used to signal that the zone config range feed
-	// started. This is used to avoid a race where we update `system.zones` before
-	// the full reconciliation of zone configs has started. The full
-	// reconciliation ignores dropped databases, and if we write to
-	// `system.zones` before that, our write will not be reconciled. By delaying
-	// the test until the zone config range feed starts, we ensure that the full
-	// reconciliation has finished, and the range feed is ready to stream our
-	// changes.
-	var zoneCfgRangeFeedStarted sync.WaitGroup
+	// started and that the full reconciliation has finished. This is used to
+	// avoid a race where we update `system.zones` before the full reconciliation
+	// of zone configs has finished. If we write to `system.zones` before that,
+	// our write will not be reconciled.
+	var fullReconcilierStarted, zoneCfgRangeFeedStarted sync.WaitGroup
+	fullReconcilierStarted.Add(1)
 	zoneCfgRangeFeedStarted.Add(1)
 	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{
+		OnFullReconcilerStart: func() {
+			fullReconcilierStarted.Wait()
+		},
 		OnWatchForZoneConfigUpdatesEstablished: func() {
 			zoneCfgRangeFeedStarted.Done()
 		},
@@ -305,9 +314,6 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	require.NoError(t, err)
 	_, err = systemDB.Exec(`SET CLUSTER SETTING spanconfig.tenant_coalesce_adjacent.enabled = 'false';`)
 	require.NoError(t, err)
-
-	// Wait for the zone config range feed to start.
-	zoneCfgRangeFeedStarted.Wait()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -346,6 +352,12 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		`database "t" is not empty`) {
 		t.Fatal(err)
 	}
+
+	// Unblock the full reconciliation.
+	fullReconcilierStarted.Done()
+
+	// Wait for the zone config range feed to start.
+	zoneCfgRangeFeedStarted.Wait()
 
 	if _, err := sqlDB.Exec(`DROP DATABASE t CASCADE`); err != nil {
 		t.Fatal(err)
