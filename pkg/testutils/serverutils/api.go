@@ -74,10 +74,10 @@ type TestServerInterface interface {
 	// the .TenantController() method.
 	TenantControlInterface
 
-	// ApplicationLayer returns the interface to the application layer that is
-	// exercised by the test. Depending on how the test server is started
-	// and (optionally) randomization, this can be either the SQL layer
-	// of a virtual cluster or that of the system interface.
+	// ApplicationLayer returns the interface to the application layer used
+	// in testing. If the server starts with tenancy enabled under the default
+	// tenant option, this refers to the SQL layer of the virtual cluster.
+	// Otherwise, in single-tenant mode, it refers to the system layer.
 	ApplicationLayer() ApplicationLayerInterface
 
 	// SystemLayer returns the interface to the application layer
