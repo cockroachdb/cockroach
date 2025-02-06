@@ -7,7 +7,6 @@ package rowexec
 
 import (
 	"context"
-	"encoding/binary"
 	"math/rand"
 	"time"
 
@@ -514,71 +513,57 @@ func (s *sketchInfo) addRow(
 	var err error
 	s.numRows++
 
-	var col uint32
-	var useFastPath bool
-	if len(s.spec.Columns) == 1 {
-		col = s.spec.Columns[0]
-		if row[col].IsUnset() {
-			return errors.AssertionFailedf("unset datum: col=%d row=%s", col, row.String(typs))
+	containsCollatedString := func(t *types.T) bool {
+		if t.Family() == types.CollatedStringFamily {
+			return true
 		}
-		isNull := row[col].IsNull()
-		useFastPath = typs[col].Family() == types.IntFamily && !isNull
+		if t.Family() == types.ArrayFamily {
+			return t.ArrayContents().Family() == types.CollatedStringFamily
+		}
+		return false
 	}
 
-	if useFastPath {
-		// Fast path for integers.
-		// TODO(radu): make this more general.
-		val, err := row[col].GetInt()
-		if err != nil {
-			return err
-		}
-
-		if cap(*buf) < 8 {
-			*buf = make([]byte, 8)
-		} else {
-			*buf = (*buf)[:8]
-		}
-
-		s.size += int64(row[col].DiskSize())
-
-		// Note: this encoding is not identical with the one in the general path
-		// below, but it achieves the same thing (we want equal integers to
-		// encode to equal []bytes). The only caveat is that all samplers must
-		// use the same encodings, so changes will require a new SketchType to
-		// avoid problems during upgrade.
-		//
-		// We could use a more efficient hash function and use InsertHash, but
-		// it must be a very good hash function (HLL expects the hash values to
-		// be uniformly distributed in the 2^64 range). Experiments (on tpcc
-		// order_line) with simplistic functions yielded bad results.
-		binary.LittleEndian.PutUint64(*buf, uint64(val))
-		if s.sketchNew != nil {
-			s.sketchNew.Insert(*buf)
-		} else {
-			s.sketchOld.Insert(*buf)
-		}
-		return nil
-	}
 	isNull := true
 	*buf = (*buf)[:0]
 	for _, col := range s.spec.Columns {
-		// We pass nil DatumAlloc so that each datum allocation was independent
-		// (to prevent bounded memory leaks like we've seen in #136394).
-		// TODO(yuzefovich): the problem in that issue was that the same backing
-		// slice of datums was shared across rows, so if a single row was kept
-		// as a sample, it could keep many garbage alive. To go around that we
-		// simply disabled the batching. We could improve that behavior by using
-		// a DatumAlloc in which we set typeAllocSizes in such a way that all
-		// columns of the same type in a single row would be backed by a single
-		// slice allocation.
-		//
-		// We choose to not perform the memory accounting for possibly decoded
-		// tree.Datum because we will lose the references to row very soon.
-		*buf, err = row[col].Fingerprint(ctx, typs[col], nil /* da */, *buf, nil /* acc */)
-		if err != nil {
-			return err
+		if b := row[col].EncodedBytes(); b != nil && !containsCollatedString(typs[col]) {
+			// If the datum is already encoded and does not contain a collated
+			// string, we can insert the encoded bytes directly into the sketch.
+			// The encoded bytes contain the column ID and type, but this should
+			// have no effect on the uniqueness of values because the respective
+			// columns in each row come from the same table, i.e., equal datums
+			// will have equal encoded bytes.
+			//
+			// TODO(mgartner): We should probably truncate b to some max size to
+			// prevent a really wide value from growing buf. Since the distinct
+			// count is an estimate anyway, truncating the value shouldn't have
+			// any real impact.
+			*buf = append(*buf, b...)
+		} else {
+			// If the columns is a type containing a collated string, we
+			// fallback to using the Fingerprint method to generate bytes to
+			// insert into the sketch.
+			//
+			// We pass nil DatumAlloc so that each datum allocation was
+			// independent (to prevent bounded memory leaks like we've seen in
+			// #136394).
+			// TODO(yuzefovich): the problem in that issue was that the same
+			// backing slice of datums was shared across rows, so if a single
+			// row was kept as a sample, it could keep many garbage alive. To go
+			// around that we simply disabled the batching.
+			//
+			// We choose to not perform the memory accounting for possibly
+			// decoded tree.Datum because we will lose the references to row
+			// very soon.
+			*buf, err = row[col].Fingerprint(ctx, typs[col], nil /* da */, *buf, nil /* acc */)
+			if err != nil {
+				return err
+			}
 		}
 		if isNull {
+			// Avoid calling IsNull() if the datum is unset because it will
+			// panic. Instead return an assertion error that might help in
+			// debugging.
 			if row[col].IsUnset() {
 				return errors.AssertionFailedf("unset datum: col=%d row=%s", col, row.String(typs))
 			}
@@ -586,6 +571,7 @@ func (s *sketchInfo) addRow(
 		}
 		s.size += int64(row[col].DiskSize())
 	}
+
 	if isNull {
 		s.numNulls++
 	}
