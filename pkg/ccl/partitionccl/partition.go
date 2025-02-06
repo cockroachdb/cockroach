@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -98,7 +99,8 @@ func valueEncodePartitionTuple(
 		}
 
 		var semaCtx tree.SemaContext
-		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(ctx, expr, cols[i].GetType(), "partition",
+		colTyp := cols[i].GetType()
+		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(ctx, expr, colTyp, "partition",
 			&semaCtx,
 			volatility.Immutable,
 			false, /*allowAssignmentCast*/
@@ -114,7 +116,8 @@ func valueEncodePartitionTuple(
 		if err != nil {
 			return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 		}
-		if err := colinfo.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType()); err != nil {
+		err = colinfo.CheckDatumTypeFitsColumnType(cols[i].GetName(), colTyp, datum.ResolvedType())
+		if err != nil {
 			return nil, err
 		}
 		value, scratch, err = valueside.EncodeWithScratch(value, valueside.NoColumnID, datum, scratch[:0])
@@ -125,27 +128,7 @@ func valueEncodePartitionTuple(
 	return value, nil
 }
 
-// replaceMinMaxValVisitor replaces occurrences of the unqualified
-// identifiers "minvalue" and "maxvalue" in the partitioning
-// (sub-)exprs by the symbolic values tree.PartitionMinVal and
-// tree.PartitionMaxVal.
-type replaceMinMaxValVisitor struct{}
-
-// VisitPre satisfies the tree.Visitor interface.
-func (v replaceMinMaxValVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
-	if t, ok := expr.(*tree.UnresolvedName); ok && t.NumParts == 1 {
-		switch t.Parts[0] {
-		case "minvalue":
-			return false, tree.PartitionMinVal{}
-		case "maxvalue":
-			return false, tree.PartitionMaxVal{}
-		}
-	}
-	return true, expr
-}
-
-// VisitPost satisfies the Visitor interface.
-func (replaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+type replaceMinMaxValVisitor = zonepb.ReplaceMinMaxValVisitor
 
 func createPartitioningImpl(
 	ctx context.Context,
