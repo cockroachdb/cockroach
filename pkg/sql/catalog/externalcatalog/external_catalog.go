@@ -256,6 +256,9 @@ func DropIngestedExternalCatalog(
 		if err := descsCol.WriteDescToBatch(ctx, kvTrace, t, b); err != nil {
 			return errors.Wrap(err, "writing dropping table to batch")
 		}
+		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, t, b); err != nil {
+			return errors.Wrap(err, "writing namespace delete to batch")
+		}
 	}
 	return txn.KV().Run(ctx, b)
 }
