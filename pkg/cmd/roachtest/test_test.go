@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"io"
 	"math/rand"
 	"path/filepath"
@@ -767,4 +768,41 @@ func TestVMPreemptionPolling(t *testing.T) {
 		// be treated as a flake instead of a failed test.
 		require.NoError(t, err)
 	})
+}
+
+// This tests that replacing the test logger for post test artifacts
+// collection or assertion checks is atomic and doesn't race with
+// the logger potentially still being used by the test.
+func TestRunnerLoggerReplacementRace(t *testing.T) {
+	if !util.RaceEnabled {
+		t.Skip("test is checking for race condition")
+	}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cr := newClusterRegistry()
+	runner := newUnitTestRunner(cr, stopper)
+
+	var buf syncedBuffer
+	copt := defaultClusterOpt()
+	lopt := defaultLoggingOpt(&buf)
+	test := registry.TestSpec{
+		Name:             `timeout`,
+		Owner:            OwnerUnitTest,
+		Timeout:          1 * time.Millisecond,
+		Cluster:          spec.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  registry.StandardCockroach,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// Infinitely log to prevent the test from finishing.
+			// The test should time out, and the post test checks should
+			// replace the logger while the test is still using it.
+			for {
+				t.L().Printf("test running")
+			}
+		},
+	}
+	_ = runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
+		defaultParallelism, copt, testOpts{}, lopt)
 }
