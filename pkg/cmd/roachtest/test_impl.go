@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -77,7 +78,11 @@ type testImpl struct {
 	buildVersion *version.Version
 
 	// l is the logger that the test will use for its output.
-	l *logger.Logger
+	//
+	// N.B. We need to use an atomic pointer here since the test
+	// runner can swap the logger out when running post test assertions
+	// and artifacts collection.
+	l atomic.Pointer[logger.Logger]
 
 	// taskManager manages tasks (goroutines) for tests.
 	taskManager task.Manager
@@ -172,7 +177,7 @@ func (t *testImpl) Cockroach() string {
 			// If the test is a benchmark test, we don't want to enable assertions
 			// as it will slow down performance.
 			if t.spec.Benchmark {
-				t.l.Printf("Benchmark test, running with standard cockroach")
+				t.L().Printf("Benchmark test, running with standard cockroach")
 				t.randomizedCockroach = t.StandardCockroach()
 				return
 			}
@@ -181,20 +186,20 @@ func (t *testImpl) Cockroach() string {
 				// The build with runtime assertions should exist in every nightly
 				// CI build, but we can't assume it exists in every roachtest call.
 				if path := t.RuntimeAssertionsCockroach(); path != "" {
-					t.l.Printf("Runtime assertions enabled")
+					t.L().Printf("Runtime assertions enabled")
 					t.randomizedCockroach = path
 					return
 				} else {
-					t.l.Printf("WARNING: running without runtime assertions since the corresponding binary was not specified")
+					t.L().Printf("WARNING: running without runtime assertions since the corresponding binary was not specified")
 				}
 			}
-			t.l.Printf("Runtime assertions disabled")
+			t.L().Printf("Runtime assertions disabled")
 			t.randomizedCockroach = t.StandardCockroach()
 		case registry.StandardCockroach:
-			t.l.Printf("Runtime assertions disabled: registry.StandardCockroach set")
+			t.L().Printf("Runtime assertions disabled: registry.StandardCockroach set")
 			t.randomizedCockroach = t.StandardCockroach()
 		case registry.RuntimeAssertionsCockroach:
-			t.l.Printf("Runtime assertions enabled: registry.RuntimeAssertionsCockroach set")
+			t.L().Printf("Runtime assertions enabled: registry.RuntimeAssertionsCockroach set")
 			t.randomizedCockroach = t.RuntimeAssertionsCockroach()
 		default:
 			t.Fatal("Specified cockroach binary does not exist.")
@@ -259,13 +264,12 @@ func (t *testImpl) SnapshotPrefix() string {
 
 // L returns the test's logger.
 func (t *testImpl) L() *logger.Logger {
-	return t.l
+	return t.l.Load()
 }
 
 // ReplaceL replaces the test's logger.
 func (t *testImpl) ReplaceL(l *logger.Logger) {
-	// TODO(tbg): get rid of this, this is racy & hacky.
-	t.l = l
+	t.l.Store(l)
 }
 
 func (t *testImpl) status(ctx context.Context, id int64, args ...interface{}) {
