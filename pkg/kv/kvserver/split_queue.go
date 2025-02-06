@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -16,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -146,7 +146,8 @@ func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 func shouldSplitRange(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	ms enginepb.MVCCStats,
+	diskTotalBytes int64,
+	logicalTotalBytes int64,
 	maxBytes int64,
 	shouldBackpressureWrites bool,
 	confReader spanconfig.StoreReader,
@@ -164,7 +165,13 @@ func shouldSplitRange(
 
 	// Add priority based on the size of range compared to the max
 	// size for the zone it's in.
-	if ratio := float64(ms.Total()) / float64(maxBytes); ratio > 1 {
+	//
+	// Only split if both the logical and approximate on-disk bytes are
+	// above treshold. This prevents oversplitting, which can reduce
+	// performance[1].
+	//
+	// [1]: https://github.com/cockroachdb/cockroach/issues/136366
+	if ratio := math.Min(float64(logicalTotalBytes), float64(diskTotalBytes)) / float64(maxBytes); ratio > 1 {
 		priority += ratio
 		shouldQ = true
 	}
@@ -188,6 +195,14 @@ func shouldSplitRange(
 	return shouldQ, priority
 }
 
+func (r *Replica) diskUsageTotal(desc *roachpb.RangeDescriptor) int64 {
+	total, _, _, err := r.store.StateEngine().ApproximateDiskBytes(desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+	if err != nil {
+		panic(err)
+	}
+	return int64(total)
+}
+
 // shouldQueue determines whether a range should be queued for
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone,
@@ -195,8 +210,12 @@ func shouldSplitRange(
 func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQ bool, priority float64) {
-	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
-		repl.GetMaxBytes(ctx), repl.shouldBackpressureWrites(), confReader)
+
+	desc := repl.Desc()
+	shouldQ, priority = shouldSplitRange(
+		ctx, desc, repl.diskUsageTotal(desc), repl.GetMVCCStats().Total(),
+		repl.GetMaxBytes(ctx), repl.shouldBackpressureWrites(), confReader,
+	)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
 		if splitKey := repl.loadSplitKey(ctx, repl.Clock().PhysicalTime()); splitKey != nil {

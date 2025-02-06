@@ -290,7 +290,7 @@ func (mq *mergeQueue) process(
 		}
 	}
 
-	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, mergedStats,
+	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, lhsRepl.diskUsageTotal(mergedDesc), mergedStats.Total(),
 		lhsRepl.GetMaxBytes(ctx), lhsRepl.shouldBackpressureWrites(), confReader)
 	if shouldSplit {
 		log.VEventf(ctx, 2,
