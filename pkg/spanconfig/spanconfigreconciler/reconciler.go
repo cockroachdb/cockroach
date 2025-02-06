@@ -217,6 +217,10 @@ type fullReconciler struct {
 func (f *fullReconciler) reconcile(
 	ctx context.Context,
 ) (storeWithLatestSpanConfigs *spanconfigstore.Store, _ hlc.Timestamp, _ error) {
+	if f.knobs != nil && f.knobs.OnFullReconcilerStart != nil {
+		f.knobs.OnFullReconcilerStart()
+	}
+
 	storeWithExistingSpanConfigs, err := f.fetchExistingSpanConfigs(ctx)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err

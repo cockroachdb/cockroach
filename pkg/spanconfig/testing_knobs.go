@@ -127,6 +127,9 @@ type TestingKnobs struct {
 	// fallback config that will be applied to the span.
 	OverrideFallbackConf func(roachpb.SpanConfig) roachpb.SpanConfig
 
+	// OnFullReconcilerStart is invoked when full reconciliation starts.
+	OnFullReconcilerStart func()
+
 	// OnWatchForZoneConfigUpdatesEstablished is invoked when the RangeFeed over
 	// system.zones starts.
 	OnWatchForZoneConfigUpdatesEstablished func()
