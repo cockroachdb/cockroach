@@ -90,13 +90,9 @@ func TestMonitorTracer(t *testing.T) {
 			}
 			return ""
 		case "latest":
-			event, err := tracer.Latest()
+			event := tracer.Latest()
 			buf.Reset()
-			if err != nil {
-				fmt.Fprint(&buf, err.Error())
-			} else {
-				fmt.Fprintf(&buf, "%q", event)
-			}
+			fmt.Fprintf(&buf, "%q", event)
 			return buf.String()
 		case "trace":
 			buf.Reset()
