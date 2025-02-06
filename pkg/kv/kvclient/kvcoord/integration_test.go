@@ -62,7 +62,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	txnUpdate := make(chan roachpb.TransactionStatus, 20)
 
 	illegalLeaseIndex := true
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -133,6 +133,16 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
+
+	// Disable parallel commits protocol. In some rare cases, we see two different
+	// command ids for the committing this transaction. The first one could be the
+	// one through parallel commits protocol and the second is using the normal
+	// commit protocol. There is a test race where TestingProposalFilter changes
+	// the commit command id from the first one (parallel commit) to the second
+	// one (normal commit). This causes the test to inject the error on the wrong
+	// command id. Disabling parallel commits avoids this test race.
+	_, err := sqlDB.Exec("SET CLUSTER SETTING kv.transaction.parallel_commits_enabled = 'false'")
+	require.NoError(t, err)
 
 	if _, _, err := s.SplitRange(roachpb.Key("b")); err != nil {
 		t.Fatal(err)
