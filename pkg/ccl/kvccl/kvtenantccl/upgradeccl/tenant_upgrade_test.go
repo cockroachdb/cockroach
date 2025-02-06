@@ -355,7 +355,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			break
 		}
 	}
-	if v1 == (roachpb.Version{}) {
+	if v1 == (roachpb.Version{}) || v1 == v2 {
 		// There is no in-between version supported; skip this test.
 		skip.IgnoreLint(t, "test can only run when we support two previous releases")
 	}

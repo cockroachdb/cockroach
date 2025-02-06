@@ -220,6 +220,9 @@ const (
 	// V25_1_JobsBackfill backfills the new jobs tables and columns.
 	V25_1_JobsBackfill
 
+	// V25_1 is CockroachDB v25.1. It's used for all v25.1.x patch releases.
+	V25_1
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -268,6 +271,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_1_JobsWritesFence:           {Major: 24, Minor: 3, Internal: 16},
 	V25_1_JobsBackfill:              {Major: 24, Minor: 3, Internal: 18},
 
+	V25_1: {Major: 25, Minor: 1, Internal: 0},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -284,14 +289,6 @@ const MinSupported Key = V24_3
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).
 const PreviousRelease Key = V24_3
-
-// V25_1 is a placeholder that will eventually be replaced by the actual 25.1
-// version Key, but in the meantime it points to the latest Key. The placeholder
-// is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 24.3 and has completed all associated migrations; most
-// version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 25.1.
-const V25_1 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
@@ -310,7 +307,7 @@ const DevelopmentBranch = false
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
 // Setting it has the effect of ensuring no versions are subsequently added (see
 // TestFinalVersion).
-const finalVersion Key = -1
+const finalVersion Key = V25_1
 
 // TestingExtraVersions may be set to true by packages of tests which will
 // intentionally use Keys greater than Latest, which otherwise would crash
