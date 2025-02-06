@@ -3939,6 +3939,53 @@ func (s *adminServer) SetTraceRecordingType(
 	return &serverpb.SetTraceRecordingTypeResponse{}, nil
 }
 
+func (s *adminServer) GetTenantInfo(
+	ctx context.Context, req *serverpb.GetTenantInfoRequest,
+) (*serverpb.GetTenantInfoResponse, error) {
+	// TODO(chandrat) check for the right permission
+	ctx = s.AnnotateCtx(ctx)
+	err := s.privilegeChecker.RequireViewDebugPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	getTenantInfoQuery := `SELECT id, name
+    FROM system.tenants
+    WHERE name = $1
+    AND data_state = $2`
+
+	row, err := s.internalExecutor.QueryRow(ctx, "get-tenant-info",
+		nil /* txn */, getTenantInfoQuery, req.TenantName, mtinfopb.DataStateReady)
+	if err != nil {
+		return nil, err
+	}
+	if len(row) == 0 {
+		return &serverpb.GetTenantInfoResponse{
+			Tenant: &serverpb.Tenant{
+				TenantId: &roachpb.TenantID{},
+			},
+		}, nil
+	}
+
+	tenantID, ok := tree.AsDInt(row[0])
+	if !ok {
+		return nil, errors.AssertionFailedf("expected tenant ID to be an int, got %T", row[0])
+	}
+	tenantName, ok := tree.AsDString(row[1])
+	if !ok {
+		return nil, errors.AssertionFailedf("expected tenant name to be a string, got %T", row[1])
+	}
+
+	return &serverpb.GetTenantInfoResponse{
+		Tenant: &serverpb.Tenant{
+			TenantId: &roachpb.TenantID{
+				InternalValue: uint64(tenantID),
+			},
+			TenantName: string(tenantName),
+		},
+	}, nil
+}
+
 // ListTenants returns a list of tenants that are served
 // by shared-process services in this server.
 func (s *systemAdminServer) ListTenants(

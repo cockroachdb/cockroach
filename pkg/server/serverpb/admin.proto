@@ -1309,9 +1309,20 @@ service Admin {
     };
   }
 
+  // GetTenantInfo returns tenant information of an active tenant
+  rpc GetTenantInfo(GetTenantInfoRequest) returns (GetTenantInfoResponse) {}
+
   // ReadFromTenantInfo returns the tenant from which the requesting tenant
   // should read, if any.
   rpc ReadFromTenantInfo(ReadFromTenantInfoRequest) returns (ReadFromTenantInfoResponse) {}
+}
+
+message GetTenantInfoRequest {
+  string tenant_name = 1;
+}
+
+message GetTenantInfoResponse {
+  Tenant tenant = 1;
 }
 
 message ListTenantsRequest{}
