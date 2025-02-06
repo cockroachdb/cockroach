@@ -48,6 +48,16 @@ type RaBitQuantizer struct {
 	unbias []float32
 }
 
+// raBitQuantizedVector adds extra storage space for the special case where the
+// vector set has at most one vector. In that case, the vector set slices point
+// to the statically-allocated arrays in this struct.
+type raBitQuantizedVector struct {
+	RaBitQuantizedVectorSet
+	codeCountStorage        [1]uint32
+	centroidDistanceStorage [1]float32
+	dotProductStorage       [1]float32
+}
+
 var _ Quantizer = (*RaBitQuantizer)(nil)
 
 // NewRaBitQuantizer returns a new RaBitQ quantizer that quantizes vectors with
@@ -125,35 +135,50 @@ func (q *RaBitQuantizer) RandomizeVector(
 }
 
 // Quantize implements the Quantizer interface.
-func (q *RaBitQuantizer) Quantize(ctx context.Context, vectors *vector.Set) QuantizedVectorSet {
-	// Allocate slice for the centroid.
-	quantizedSet := &RaBitQuantizedVectorSet{
-		Centroid: vectors.Centroid(make(vector.T, vectors.Dims)),
-		Codes:    MakeRaBitQCodeSet(vectors.Dims),
+func (q *RaBitQuantizer) Quantize(ctx context.Context, vectors vector.Set) QuantizedVectorSet {
+	var centroid vector.T
+	if vectors.Count == 1 {
+		// If quantizing a single vector, it is the centroid of the set.
+		centroid = vectors.At(0)
+	} else {
+		// Compute the centroid.
+		centroid = vectors.Centroid(make(vector.T, vectors.Dims))
 	}
-	q.quantizeHelper(ctx, quantizedSet, vectors)
+
+	quantizedSet := q.NewQuantizedVectorSet(vectors.Count, centroid)
+	q.quantizeHelper(ctx, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 	return quantizedSet
 }
 
 // QuantizeInSet implements the Quantizer interface.
 func (q *RaBitQuantizer) QuantizeInSet(
-	ctx context.Context, quantizedSet QuantizedVectorSet, vectors *vector.Set,
+	ctx context.Context, quantizedSet QuantizedVectorSet, vectors vector.Set,
 ) {
 	q.quantizeHelper(ctx, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 }
 
 // NewQuantizedVectorSet implements the Quantizer interface
 func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
-	width := RaBitQCodeSetWidth(q.GetRandomDims())
-	dataBuffer := make([]uint64, 0, capacity*width)
-	raBitQuantizedVectorSet := &RaBitQuantizedVectorSet{
+	codeWidth := RaBitQCodeSetWidth(q.GetRandomDims())
+	dataBuffer := make([]uint64, 0, capacity*codeWidth)
+	if capacity <= 1 {
+		// Special case capacity of zero or one by using in-line storage.
+		var quantized raBitQuantizedVector
+		quantized.Centroid = centroid
+		quantized.Codes = MakeRaBitQCodeSetFromRawData(dataBuffer, codeWidth)
+		quantized.CodeCounts = quantized.codeCountStorage[:0]
+		quantized.CentroidDistances = quantized.centroidDistanceStorage[:0]
+		quantized.DotProducts = quantized.dotProductStorage[:0]
+		return &quantized.RaBitQuantizedVectorSet
+	}
+
+	return &RaBitQuantizedVectorSet{
 		Centroid:          centroid,
-		Codes:             MakeRaBitQCodeSetFromRawData(dataBuffer, width),
+		Codes:             MakeRaBitQCodeSetFromRawData(dataBuffer, codeWidth),
 		CodeCounts:        make([]uint32, 0, capacity),
 		CentroidDistances: make([]float32, 0, capacity),
 		DotProducts:       make([]float32, 0, capacity),
 	}
-	return raBitQuantizedVectorSet
 }
 
 // EstimateSquaredDistances implements the Quantizer interface.
@@ -300,7 +325,7 @@ func (q *RaBitQuantizer) EstimateSquaredDistances(
 // quantizeHelper quantizes the given set of vectors and adds the quantization
 // information to the provided quantized vector set.
 func (q *RaBitQuantizer) quantizeHelper(
-	ctx context.Context, qs *RaBitQuantizedVectorSet, vectors *vector.Set,
+	ctx context.Context, qs *RaBitQuantizedVectorSet, vectors vector.Set,
 ) {
 	// Extend any existing slices in the vector set.
 	count := vectors.Count

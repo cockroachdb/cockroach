@@ -43,7 +43,7 @@ func TestSplitPartitionData(t *testing.T) {
 		5, 5,
 		6, 6,
 	}, 2)
-	quantizedSet := quantizer.Quantize(ctx, &vectors)
+	quantizedSet := quantizer.Quantize(ctx, vectors)
 
 	splitPartition := vecstore.NewPartition(
 		quantizer,
@@ -137,7 +137,7 @@ func TestSplitPartitionData(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			tempVectors := vector.MakeSet(2)
-			tempVectors.AddSet(&vectors)
+			tempVectors.AddSet(vectors)
 			leftSplit, rightSplit := worker.splitPartitionData(
 				ctx, splitPartition, tempVectors, tc.leftOffsets, tc.rightOffsets)
 

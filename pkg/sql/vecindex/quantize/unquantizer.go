@@ -55,7 +55,7 @@ func (q *UnQuantizer) RandomizeVector(
 }
 
 // Quantize implements the Quantizer interface.
-func (q *UnQuantizer) Quantize(ctx context.Context, vectors *vector.Set) QuantizedVectorSet {
+func (q *UnQuantizer) Quantize(ctx context.Context, vectors vector.Set) QuantizedVectorSet {
 	unquantizedSet := &UnQuantizedVectorSet{
 		Centroid: make(vector.T, q.dims),
 		Vectors:  vector.MakeSet(q.dims),
@@ -69,7 +69,7 @@ func (q *UnQuantizer) Quantize(ctx context.Context, vectors *vector.Set) Quantiz
 
 // QuantizeInSet implements the Quantizer interface.
 func (q *UnQuantizer) QuantizeInSet(
-	ctx context.Context, quantizedSet QuantizedVectorSet, vectors *vector.Set,
+	ctx context.Context, quantizedSet QuantizedVectorSet, vectors vector.Set,
 ) {
 	unquantizedSet := quantizedSet.(*UnQuantizedVectorSet)
 	unquantizedSet.AddSet(vectors)

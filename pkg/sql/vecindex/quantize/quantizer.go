@@ -52,17 +52,19 @@ type Quantizer interface {
 
 	// Quantize quantizes a set of input vectors and returns their compressed
 	// form as a quantized vector set. Input vectors should already have been
-	// randomized.
+	// randomized. The set's centroid is calculated from the input vectors.
 	//
 	// NOTE: The caller must ensure that a Workspace is attached to the context.
-	Quantize(ctx context.Context, vectors *vector.Set) QuantizedVectorSet
+	Quantize(ctx context.Context, vectors vector.Set) QuantizedVectorSet
 
 	// QuantizeInSet quantizes a set of input vectors and adds their compressed
 	// form to an existing quantized vector set. Input vectors should already
 	// have been randomized.
 	//
+	// NOTE: The set's centroid is not recalculated to reflect the newly added
+	//       vectors.
 	// NOTE: The caller must ensure that a Workspace is attached to the context.
-	QuantizeInSet(ctx context.Context, quantizedSet QuantizedVectorSet, vectors *vector.Set)
+	QuantizeInSet(ctx context.Context, quantizedSet QuantizedVectorSet, vectors vector.Set)
 
 	// NewQuantizedVectorSet returns a new empty vector set preallocated to the
 	// number of vectors specified.
@@ -115,7 +117,7 @@ type QuantizedVectorSet interface {
 	// the original or clone will not affect the other.
 	Clone() QuantizedVectorSet
 
-	// Clear removes all the elements of the vector set so that it may be reused. The
-	// new centroid is copied over the existing centroid.
+	// Clear removes all the elements of the vector set so that it may be reused.
+	// The new centroid is copied over the existing centroid.
 	Clear(centroid vector.T)
 }

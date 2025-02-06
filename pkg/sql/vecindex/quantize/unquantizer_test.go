@@ -23,19 +23,19 @@ func TestUnQuantizerSimple(t *testing.T) {
 
 	// Quantize empty set.
 	vectors := vector.MakeSet(2)
-	quantizedSet := quantizer.Quantize(ctx, &vectors)
+	quantizedSet := quantizer.Quantize(ctx, vectors)
 	require.Equal(t, vector.T{0, 0}, quantizedSet.GetCentroid())
 	require.Equal(t, []float32{}, roundFloats(quantizedSet.GetCentroidDistances(), 2))
 
 	// Add 3 vectors and verify centroid and centroid distances.
 	vectors = vector.MakeSetFromRawData([]float32{5, 2, 1, 2, 6, 5}, 2)
-	quantizedSet = quantizer.Quantize(ctx, &vectors)
+	quantizedSet = quantizer.Quantize(ctx, vectors)
 	require.Equal(t, vector.T{4, 3}, quantizedSet.GetCentroid())
 	require.Equal(t, []float32{1.41, 3.16, 2.83}, roundFloats(quantizedSet.GetCentroidDistances(), 2))
 
 	// Add 2 more vectors to existing set.
 	vectors = vector.MakeSetFromRawData([]float32{4, 3, 6, 5}, 2)
-	quantizer.QuantizeInSet(ctx, quantizedSet, &vectors)
+	quantizer.QuantizeInSet(ctx, quantizedSet, vectors)
 	require.Equal(t, 5, quantizedSet.GetCount())
 	require.Equal(t, []float32{1.41, 3.16, 2.83, 0, 2.83}, roundFloats(quantizedSet.GetCentroidDistances(), 2))
 
@@ -83,13 +83,13 @@ func TestUnQuantizerSimple(t *testing.T) {
 
 	// Empty quantized set.
 	vectors = vector.MakeSet(2)
-	quantizedSet = quantizer.Quantize(ctx, &vectors)
+	quantizedSet = quantizer.Quantize(ctx, vectors)
 	require.Equal(t, vector.T{0, 0}, quantizedSet.GetCentroid())
 	require.Equal(t, []float32(nil), quantizedSet.GetCentroidDistances())
 
 	// Add single vector to quantized set.
 	vectors = vector.T{4, 4}.AsSet()
-	quantizer.QuantizeInSet(ctx, quantizedSet, &vectors)
+	quantizer.QuantizeInSet(ctx, quantizedSet, vectors)
 	require.Equal(t, 1, quantizedSet.GetCount())
 	require.Equal(t, []float32{5.66}, roundFloats(quantizedSet.GetCentroidDistances(), 2))
 	distances = distances[:1]

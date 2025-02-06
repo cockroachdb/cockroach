@@ -58,7 +58,7 @@ func (vs *UnQuantizedVectorSet) ComputeSquaredDistances(
 }
 
 // AddSet adds the given set of vectors to this set.
-func (vs *UnQuantizedVectorSet) AddSet(vectors *vector.Set) {
+func (vs *UnQuantizedVectorSet) AddSet(vectors vector.Set) {
 	vs.Vectors.AddSet(vectors)
 
 	// Compute the distance of each new vector to the set's centroid.
