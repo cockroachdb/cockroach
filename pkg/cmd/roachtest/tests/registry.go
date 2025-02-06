@@ -86,6 +86,7 @@ func RegisterTests(r registry.Registry) {
 	registerKVScalability(r)
 	registerKVSplits(r)
 	registerKVRestartImpact(r)
+	registerKVStopAndCopy(r)
 	registerKnex(r)
 	registerLOQRecovery(r)
 	registerLargeRange(r)
