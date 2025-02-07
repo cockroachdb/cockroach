@@ -1579,23 +1579,6 @@ func NewStore(
 		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
 		cfg.RaftElectionTimeoutTicks)
 
-	// kvflowRangeControllerFactory depends on the raft scheduler, so it must be
-	// created per-store rather than per-node like other replication admission
-	// control (flow control) v2 components.
-	s.kvflowRangeControllerFactory = replica_rac2.NewRangeControllerFactoryImpl(
-		s.Clock(),
-		s.cfg.KVFlowEvalWaitMetrics,
-		s.cfg.KVFlowRangeControllerMetrics,
-		s.cfg.KVFlowStreamTokenProvider,
-		replica_rac2.NewStreamCloseScheduler(
-			s.stopper, timeutil.DefaultTimeSource{}, s.scheduler),
-		(*racV2Scheduler)(s.scheduler),
-		s.cfg.KVFlowSendTokenWatcher,
-		s.cfg.KVFlowWaitForEvalConfig,
-		s.cfg.RaftMaxInflightBytes,
-		s.TestingKnobs().FlowControlTestingKnobs,
-	)
-
 	// Run a log SyncWaiter loop for every 32 raft scheduler goroutines.
 	// Experiments on c5d.12xlarge instances (48 vCPUs, the largest single-socket
 	// instance AWS offers) show that with fewer SyncWaiters, raft log callback
@@ -2273,6 +2256,28 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			return errors.New("missing KVFlowSendTokenWatcher")
 		}
 	}
+
+	scs := replica_rac2.NewStreamCloseScheduler(timeutil.DefaultTimeSource{}, s.scheduler)
+	if err := scs.Start(ctx, stopper); err != nil {
+		return err
+	}
+	// kvflowRangeControllerFactory depends on the raft scheduler, so it must be
+	// created per-store rather than per-node like other replication admission
+	// control (flow control) v2 components.
+	// NB: this factory is used in the Replica initialization flow (below), so we
+	// must create it no later than here.
+	s.kvflowRangeControllerFactory = replica_rac2.NewRangeControllerFactoryImpl(
+		s.Clock(),
+		s.cfg.KVFlowEvalWaitMetrics,
+		s.cfg.KVFlowRangeControllerMetrics,
+		s.cfg.KVFlowStreamTokenProvider,
+		scs,
+		(*racV2Scheduler)(s.scheduler),
+		s.cfg.KVFlowSendTokenWatcher,
+		s.cfg.KVFlowWaitForEvalConfig,
+		s.cfg.RaftMaxInflightBytes,
+		s.TestingKnobs().FlowControlTestingKnobs,
+	)
 
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
