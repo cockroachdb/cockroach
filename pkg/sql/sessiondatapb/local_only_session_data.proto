@@ -577,6 +577,10 @@ message LocalOnlySessionData {
   // count of zero can still be estimated for expressions with a cardinality of
   // zero, e.g., for a contradictory filter.
   double optimizer_min_row_count = 155;
+  // OptFKUniqCheckLowerBoundEnabled controls whether the row count estimate for
+  // WithScans that are leaf expressions of FK and uniqueness checks is always
+  // bumped to at least 1.
+  bool opt_fk_uniq_check_lower_bound_enabled = 157  [(gogoproto.customname) = "OptFKUniqCheckLowerBoundEnabled"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
