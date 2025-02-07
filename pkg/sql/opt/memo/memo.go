@@ -201,6 +201,7 @@ type Memo struct {
 	unsafeAllowTriggersModifyingCascades       bool
 	legacyVarcharTyping                        bool
 	preferBoundedCardinality                   bool
+	useFKUniqCheckLowerBoundOne                bool
 	minRowCount                                float64
 	internal                                   bool
 
@@ -296,6 +297,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		unsafeAllowTriggersModifyingCascades:       evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades,
 		legacyVarcharTyping:                        evalCtx.SessionData().LegacyVarcharTyping,
 		preferBoundedCardinality:                   evalCtx.SessionData().OptimizerPreferBoundedCardinality,
+		useFKUniqCheckLowerBoundOne:                evalCtx.SessionData().OptFKUniqCheckLowerBoundEnabled,
 		minRowCount:                                evalCtx.SessionData().OptimizerMinRowCount,
 		internal:                                   evalCtx.SessionData().Internal,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
@@ -468,6 +470,7 @@ func (m *Memo) IsStale(
 		m.unsafeAllowTriggersModifyingCascades != evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades ||
 		m.legacyVarcharTyping != evalCtx.SessionData().LegacyVarcharTyping ||
 		m.preferBoundedCardinality != evalCtx.SessionData().OptimizerPreferBoundedCardinality ||
+		m.useFKUniqCheckLowerBoundOne != evalCtx.SessionData().OptFKUniqCheckLowerBoundEnabled ||
 		m.minRowCount != evalCtx.SessionData().OptimizerMinRowCount ||
 		m.internal != evalCtx.SessionData().Internal ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {

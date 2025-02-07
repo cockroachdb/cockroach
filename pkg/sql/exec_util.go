@@ -4036,6 +4036,10 @@ func (m *sessionDataMutator) SetBufferedWritesEnabled(b bool) {
 	}
 }
 
+func (m *sessionDataMutator) SetOptFKUniqCheckLowerBoundEnabled(val bool) {
+	m.data.OptFKUniqCheckLowerBoundEnabled = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
