@@ -1649,6 +1649,19 @@ func NewPutInline(key roachpb.Key, value roachpb.Value) Request {
 	}
 }
 
+// NewPutMustAcquireExclusiveLock returns a Request initialized to put the value
+// at key. It also sets the MustAcquireExclusiveLock flag.
+func NewPutMustAcquireExclusiveLock(key roachpb.Key, value roachpb.Value) Request {
+	value.InitChecksum(key)
+	return &PutRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
+		},
+		Value:                    value,
+		MustAcquireExclusiveLock: true,
+	}
+}
+
 // NewConditionalPut returns a Request initialized to put value at key if the
 // existing value at key equals expValue.
 //
