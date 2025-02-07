@@ -805,6 +805,8 @@ func generateNewProgress(
 					//lint:ignore SA1019 deprecated usage
 					Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
 						Spans: existingTargetSpans,
+						// TODO(#140509): ALTER CHANGEFED should handle fine grained
+						// progress and checkpointed timestamp properly.
 					},
 					ProtectedTimestampRecord: ptsRecord,
 				},

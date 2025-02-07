@@ -62,6 +62,11 @@ message ChangeAggregatorSpec {
   // been seen for this changefeed job. It is safe to initialize frontier spans
   // at this timestamp upon resuming.
   optional util.hlc.Timestamp initial_high_water = 8;
+
+  // SpanLevelCheckpoint is a map from timestamps to lists of spans. These spans
+  // have been resolved to the given timestamp, so it is safe to forward these
+  // spans to its corresponding timestamps upon resuming.
+  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 9;
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
