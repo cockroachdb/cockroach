@@ -1587,8 +1587,7 @@ func NewStore(
 		s.cfg.KVFlowEvalWaitMetrics,
 		s.cfg.KVFlowRangeControllerMetrics,
 		s.cfg.KVFlowStreamTokenProvider,
-		replica_rac2.NewStreamCloseScheduler(
-			s.stopper, timeutil.DefaultTimeSource{}, s.scheduler),
+		replica_rac2.NewStreamCloseScheduler(timeutil.DefaultTimeSource{}, s.scheduler),
 		(*racV2Scheduler)(s.scheduler),
 		s.cfg.KVFlowSendTokenWatcher,
 		s.cfg.KVFlowWaitForEvalConfig,
@@ -2412,6 +2411,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	}
 
+	// Start the KV flow control factory.
+	if err := s.kvflowRangeControllerFactory.Start(ctx, stopper); err != nil {
+		return err
+	}
 	// Start Raft processing goroutines.
 	s.cfg.Transport.ListenIncomingRaftMessages(s.StoreID(), s)
 	s.cfg.Transport.ListenOutgoingMessage(s.StoreID(), s)

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -517,6 +518,8 @@ func (rs ReplicaSet) String() string {
 // ProbeToCloseTimerScheduler is an interface for scheduling the closing of a
 // replica send stream.
 type ProbeToCloseTimerScheduler interface {
+	// Start kicks off the scheduler job.
+	Start(context.Context, *stop.Stopper) error
 	// ScheduleSendStreamCloseRaftMuLocked schedules a callback with a raft event
 	// after the given delay. This function may be used to handle send stream
 	// state transition, usually to close a send stream after the given delay.

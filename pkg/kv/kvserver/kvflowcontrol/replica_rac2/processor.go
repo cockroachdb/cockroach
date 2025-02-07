@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -132,8 +133,10 @@ type rangeControllerInitState struct {
 
 // RangeControllerFactory abstracts RangeController creation for testing.
 type RangeControllerFactory interface {
+	// Start kicks off the factory.
+	Start(context.Context, *stop.Stopper) error
 	// New creates a new RangeController.
-	New(ctx context.Context, state rangeControllerInitState) rac2.RangeController
+	New(context.Context, rangeControllerInitState) rac2.RangeController
 }
 
 // ProcessorOptions are specified when creating a new Processor.
@@ -1257,6 +1260,11 @@ func NewRangeControllerFactoryImpl(
 		raftMaxInflightBytes:       raftMaxInflightBytes,
 		knobs:                      knobs,
 	}
+}
+
+// Start kicks off the factory.
+func (f RangeControllerFactoryImpl) Start(ctx context.Context, stopper *stop.Stopper) error {
+	return f.closeTimerScheduler.Start(ctx, stopper)
 }
 
 // New creates a new RangeController.
