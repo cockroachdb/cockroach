@@ -202,20 +202,27 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			return errors.Newf("sysbench prepare failed with FATAL error")
 		}
 
+		t.Status("warming up via oltp_read_only")
+		{
+			opts := opts
+			opts.workload = oltpReadOnly
+			opts.duration = 3 * time.Minute
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()),
+				opts.cmd(useHAProxy)+" run")
+
+			if msg := detectSysbenchCrash(result); msg != "" {
+				t.L().Printf("%s; proceeding to main workload anyway", msg)
+				err = nil
+			}
+			require.NoError(t, err)
+		}
+
 		t.Status("running workload")
 		start = timeutil.Now()
 		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" run")
 
-		// Sysbench occasionally segfaults. When that happens, don't fail the
-		// test.
-		if result.RemoteExitStatus == roachprodErrors.SegmentationFaultExitCode {
-			t.L().Printf("sysbench segfaulted; passing test anyway")
-			return nil
-		} else if result.RemoteExitStatus == roachprodErrors.IllegalInstructionExitCode {
-			t.L().Printf("sysbench crashed with illegal instruction; passing test anyway")
-			return nil
-		} else if result.RemoteExitStatus == roachprodErrors.AssertionFailureExitCode {
-			t.L().Printf("sysbench crashed with an assertion failure; passing test anyway")
+		if msg := detectSysbenchCrash(result); msg != "" {
+			t.L().Printf("%s; passing test anyway", msg)
 			return nil
 		}
 
@@ -486,4 +493,17 @@ func getOpenmetricsBytes(openmetricsMap map[string][]openmetricsValues, labelStr
 	// Add # EOF at the end for openmetrics
 	metricsBuf.WriteString("# EOF\n")
 	return metricsBuf.Bytes()
+}
+
+func detectSysbenchCrash(result install.RunResultDetails) string {
+	// Sysbench occasionally segfaults. When that happens, don't fail the
+	// test.
+	if result.RemoteExitStatus == roachprodErrors.SegmentationFaultExitCode {
+		return "sysbench segfaulted"
+	} else if result.RemoteExitStatus == roachprodErrors.IllegalInstructionExitCode {
+		return "sysbench crashed with illegal instruction"
+	} else if result.RemoteExitStatus == roachprodErrors.AssertionFailureExitCode {
+		return "sysbench crashed with an assertion failure"
+	}
+	return ""
 }
