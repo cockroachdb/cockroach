@@ -10,6 +10,7 @@ go_library(
         "admission_control.go",
         "admission_control_database_drop.go",
         "admission_control_disk_bandwidth_overload.go",
+        "admission_control_disk_iops_overload.go",
         "admission_control_elastic_backup.go",
         "admission_control_elastic_cdc.go",
         "admission_control_elastic_io.go",
