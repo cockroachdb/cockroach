@@ -430,7 +430,7 @@ func (b *Batch) GetForShare(key interface{}, dur kvpb.KeyLockingDurabilityType) 
 	b.get(key, kvpb.ForShare, dur)
 }
 
-func (b *Batch) put(key, value interface{}, inline bool) {
+func (b *Batch) put(key, value interface{}, inline bool, lockExclusive bool) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -443,6 +443,8 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 	}
 	if inline {
 		b.appendReqs(kvpb.NewPutInline(k, v))
+	} else if lockExclusive {
+		b.appendReqs(kvpb.NewPutLockExclusive(k, v))
 	} else {
 		b.appendReqs(kvpb.NewPut(k, v))
 	}
@@ -463,7 +465,20 @@ func (b *Batch) Put(key, value interface{}) {
 		// value. If the intention was indeed to delete the key, use Del() instead.
 		panic("can't Put an empty Value; did you mean to Del() instead?")
 	}
-	b.put(key, value, false)
+	b.put(key, value, false /* inline */, false /* lockExclusive */)
+}
+
+// PutLockExclusive is the same as Put but guarantees that a lock with the
+// strength no lower than "exclusive" will be acquired on the key, even if it
+// doesn't exist (in order to prevent concurrent requests from writing at this
+// key).
+func (b *Batch) PutLockExclusive(key, value interface{}) {
+	if value == nil {
+		// Empty values are used as deletion tombstones, so one can't write an empty
+		// value. If the intention was indeed to delete the key, use Del() instead.
+		panic("can't Put an empty Value; did you mean to Del() instead?")
+	}
+	b.put(key, value, false /* inline */, true /* lockExclusive */)
 }
 
 // PutBytes allows an arbitrary number of PutRequests to be added to the batch.
@@ -525,7 +540,7 @@ func (b *Batch) PutTuples(bs BulkSource[[]byte]) {
 // A nil value can be used to delete the respective key, since there is no
 // DelInline(). This is different from Put().
 func (b *Batch) PutInline(key, value interface{}) {
-	b.put(key, value, true)
+	b.put(key, value, true /* inline */, false /* lockExclusive */)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal to

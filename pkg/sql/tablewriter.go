@@ -86,6 +86,9 @@ type tableWriterBase struct {
 	// originally written with before being replicated via Logical Data
 	// Replication.
 	originTimestamp hlc.Timestamp
+	// bufferedWritesEnabled indicates whether the buffered writes are enabled
+	// on the txn.
+	bufferedWritesEnabled bool
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -122,6 +125,7 @@ func (tb *tableWriterBase) init(
 	}
 	tb.maxBatchByteSize = mutations.MaxBatchByteSize(batchMaxBytes, tb.forceProductionBatchSizes)
 	tb.initNewBatch()
+	tb.bufferedWritesEnabled = txn.BufferedWritesEnabled()
 	return nil
 }
 

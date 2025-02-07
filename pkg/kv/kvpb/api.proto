@@ -284,6 +284,10 @@ message PutRequest {
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
   bool blind = 4;
+  // LockExclusive, if set, indicates that a lock with the strength no lower
+  // than "exclusive" needs to be acquired on the key, even if it doesn't exist.
+  // At the moment, this is fully handled by the KV client.
+  bool lock_exclusive = 5;
 }
 
 // A PutResponse is the return value from the Put() method.

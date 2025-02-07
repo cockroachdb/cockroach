@@ -106,6 +106,22 @@ func insertPutFn(
 	b.Put(key, value)
 }
 
+// insertPutLockingFn is used by insertRow when conflicts should be ignored
+// while ensuring that an exclusive lock is acquired on the key.
+func insertPutLockingFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
+) {
+	if traceKV {
+		log.VEventfDepth(ctx, 1, 2, "Put (locking) %s -> %s", keys.PrettyPrint(keyEncodingDirs, *key), value.PrettyPrint())
+	}
+	b.PutLockExclusive(key, value)
+}
+
 // insertDelFn is used by insertRow to delete existing rows.
 func insertDelFn(ctx context.Context, b Putter, key *roachpb.Key, traceKV bool) {
 	if traceKV {
@@ -137,6 +153,16 @@ func writeTombstones(
 	return nil
 }
 
+// KVInsertOp prescribes which KV operation should be used when inserting a SQL
+// row.
+type KVInsertOp byte
+
+const (
+	CPutOp KVInsertOp = iota
+	PutOp
+	PutLockingOp
+)
+
 // InsertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
 func (ri *Inserter) InsertRow(
@@ -145,7 +171,7 @@ func (ri *Inserter) InsertRow(
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
 	oth *OriginTimestampCPutHelper,
-	overwrite bool,
+	kvOp KVInsertOp,
 	traceKV bool,
 ) error {
 	if len(values) != len(ri.InsertCols) {
@@ -176,7 +202,7 @@ func (ri *Inserter) InsertRow(
 		&ri.Helper, primaryIndexKey, ri.InsertCols,
 		values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex,
-		&ri.key, &ri.value, ri.valueBuf, oth, nil /* oldValues */, overwrite, traceKV)
+		&ri.key, &ri.value, ri.valueBuf, oth, nil /* oldValues */, kvOp, traceKV)
 	if err != nil {
 		return err
 	}
