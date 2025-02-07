@@ -13,8 +13,6 @@ CREATE SCHEMA d.schema;
 CREATE TABLE d.schema.foo (id INT PRIMARY KEY);
 INSERT INTO d.schema.foo VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Cluster backup.
 exec-sql

@@ -11,10 +11,6 @@ CREATE TABLE restore.myschema.table1 (pk int primary key);
 INSERT INTO restore.myschema.table1 VALUES (1);
 CREATE TYPE data.myenum AS ENUM ('hello');
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster_backup';

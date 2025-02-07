@@ -10,8 +10,6 @@ CREATE TABLE testdb.t (a int primary key, b int);
 CREATE MATERIALIZED VIEW testdb.mv AS SELECT a, b FROM testdb.t;
 INSERT INTO testdb.t (a, b) VALUES (1, 2);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 REFRESH MATERIALIZED VIEW mv;
