@@ -228,20 +228,22 @@ const (
 //
 // See props/statistics.go for more details.
 type statisticsBuilder struct {
-	ctx         context.Context
-	evalCtx     *eval.Context
-	md          *opt.Metadata
-	minRowCount float64
+	ctx                         context.Context
+	evalCtx                     *eval.Context
+	md                          *opt.Metadata
+	useFKUniqCheckLowerBoundOne bool
+	minRowCount                 float64
 }
 
 func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, md *opt.Metadata) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*sb = statisticsBuilder{
-		ctx:         ctx,
-		evalCtx:     evalCtx,
-		md:          md,
-		minRowCount: evalCtx.SessionData().OptimizerMinRowCount,
+		ctx:                         ctx,
+		evalCtx:                     evalCtx,
+		md:                          md,
+		useFKUniqCheckLowerBoundOne: evalCtx.SessionData().OptFKUniqCheckLowerBoundEnabled,
+		minRowCount:                 evalCtx.SessionData().OptimizerMinRowCount,
 	}
 }
 
@@ -2737,6 +2739,12 @@ func (sb *statisticsBuilder) buildWithScan(
 
 	s.Available = bindingProps.Statistics().Available
 	s.RowCount = bindingProps.Statistics().RowCount
+	if withScan.FKUniqCheckInput && sb.useFKUniqCheckLowerBoundOne {
+		// Assume that WithScans that are leaf expressions of FK and uniqueness
+		// checks produce at least one row. If there are no rows to check, then
+		// the plan should still be efficient.
+		s.RowCount = max(s.RowCount, 1)
+	}
 
 	// TODO(michae2): Set operations and with-scans currently act as barriers for
 	// VirtualCols, due to the column ID translation. To fix this we would need to

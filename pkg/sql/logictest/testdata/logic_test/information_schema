@@ -6167,6 +6167,7 @@ max_retries_for_read_committed                             10
 node_id                                                    1
 null_ordered_last                                          off
 on_update_rehome_row_enabled                               on
+opt_fk_uniq_check_lower_bound_enabled                      off
 opt_split_scan_limit                                       2048
 optimizer                                                  on
 optimizer_always_use_histograms                            on

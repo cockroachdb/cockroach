@@ -512,6 +512,11 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerPreferBoundedCardinality = false
 	notStale()
 
+	evalCtx.SessionData().OptFKUniqCheckLowerBoundEnabled = true
+	stale()
+	evalCtx.SessionData().OptFKUniqCheckLowerBoundEnabled = false
+	notStale()
+
 	evalCtx.SessionData().OptimizerMinRowCount = 1.0
 	stale()
 	evalCtx.SessionData().OptimizerMinRowCount = 0
