@@ -202,6 +202,7 @@ type Memo struct {
 	legacyVarcharTyping                        bool
 	preferBoundedCardinality                   bool
 	minRowCount                                float64
+	checkInputMinRowCount                      float64
 	internal                                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
@@ -297,6 +298,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		legacyVarcharTyping:                        evalCtx.SessionData().LegacyVarcharTyping,
 		preferBoundedCardinality:                   evalCtx.SessionData().OptimizerPreferBoundedCardinality,
 		minRowCount:                                evalCtx.SessionData().OptimizerMinRowCount,
+		checkInputMinRowCount:                      evalCtx.SessionData().OptimizerCheckInputMinRowCount,
 		internal:                                   evalCtx.SessionData().Internal,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
@@ -469,6 +471,7 @@ func (m *Memo) IsStale(
 		m.legacyVarcharTyping != evalCtx.SessionData().LegacyVarcharTyping ||
 		m.preferBoundedCardinality != evalCtx.SessionData().OptimizerPreferBoundedCardinality ||
 		m.minRowCount != evalCtx.SessionData().OptimizerMinRowCount ||
+		m.checkInputMinRowCount != evalCtx.SessionData().OptimizerCheckInputMinRowCount ||
 		m.internal != evalCtx.SessionData().Internal ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
