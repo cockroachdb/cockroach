@@ -1766,10 +1766,11 @@ func (mb *mutationBuilder) buildCheckInputScan(
 
 	mb.ensureWithID()
 	outScope.expr = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
-		With:    mb.withID,
-		InCols:  inputCols,
-		OutCols: outScope.colList(),
-		ID:      mb.b.factory.Metadata().NextUniqueID(),
+		With:         mb.withID,
+		InCols:       inputCols,
+		OutCols:      outScope.colList(),
+		ID:           mb.b.factory.Metadata().NextUniqueID(),
+		FKCheckInput: true,
 	})
 
 	return outScope, notNullOutCols

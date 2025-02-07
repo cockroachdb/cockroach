@@ -2748,6 +2748,12 @@ func (sb *statisticsBuilder) buildWithScan(
 
 	s.Available = bindingProps.Statistics().Available
 	s.RowCount = bindingProps.Statistics().RowCount
+	if withScan.FKCheckInput {
+		// Assume that WithScans that are leaf expressions of FK checks produce
+		// at least one row. If there are no rows to check, then the plan should
+		// still be efficient.
+		s.RowCount = max(s.RowCount, 1)
+	}
 
 	// TODO(michae2): Set operations and with-scans currently act as barriers for
 	// VirtualCols, due to the column ID translation. To fix this we would need to
