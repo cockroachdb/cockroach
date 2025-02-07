@@ -1,2 +1,0 @@
-do_stmt ::=
-	'DO' do_stmt_opt_list
