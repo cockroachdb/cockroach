@@ -54,7 +54,7 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 
 	// Resolve the trigger function and check its privileges.
 	funcExpr := tree.FuncExpr{Func: tree.ResolvableFunctionReference{FunctionReference: ct.FuncName}}
-	typedExpr := inScope.resolveType(&funcExpr, types.Any)
+	typedExpr := inScope.resolveType(&funcExpr, types.AnyElement)
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
 		panic(errors.AssertionFailedf("%s is not a function", funcExpr.Func.String()))

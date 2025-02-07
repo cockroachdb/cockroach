@@ -102,7 +102,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		if err != nil {
 			panic(err)
 		}
-		texpr := inScope.resolveType(expr, types.Any)
+		texpr := inScope.resolveType(expr, types.AnyElement)
 
 		var def *tree.ResolvedFunctionDefinition
 		funcExpr, ok := texpr.(*tree.FuncExpr)

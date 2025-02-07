@@ -65,7 +65,7 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
-	types.Any.Oid():         {},
+	types.AnyElement.Oid():  {},
 	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
 	types.Time.Oid():        {},
@@ -297,11 +297,11 @@ func makeTypeIOBuiltins(builtinPrefix string, typ *types.T) map[string]builtinDe
 		// Note: PG takes type 2281 "internal" for these builtins, which we don't
 		// provide. We won't implement these functions anyway, so it shouldn't
 		// matter.
-		builtinPrefix + "recv": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.Any}}, typ),
+		builtinPrefix + "recv": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.AnyElement}}, typ),
 		// Note: PG returns 'cstring' for these builtins, but we don't support that.
 		builtinPrefix + "out": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
 		// Note: PG takes 'cstring' for these builtins, but we don't support that.
-		builtinPrefix + "in": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.Any}}, typ),
+		builtinPrefix + "in": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.AnyElement}}, typ),
 	}
 }
 
@@ -979,7 +979,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
 	"pg_typeof": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(args[0].ResolvedType().SQLStandardName()), nil
@@ -994,7 +994,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_collation_for": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "str", Typ: types.Any}},
+			Types:      tree.ParamTypes{{Name: "str", Typ: types.AnyElement}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var collation string
@@ -2038,7 +2038,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_column_size": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.Any,
+				VarType: types.AnyElement,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {

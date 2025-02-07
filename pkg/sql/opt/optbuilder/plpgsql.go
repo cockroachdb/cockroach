@@ -2615,7 +2615,7 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, re
 			return t, false
 		}
 	case *ast.Return:
-		desired := types.Any
+		desired := types.AnyElement
 		if r.typ != nil && r.typ.Family() != types.UnknownFamily {
 			desired = r.typ
 		}

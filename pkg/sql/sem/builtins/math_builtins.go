@@ -593,7 +593,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "operand", Typ: types.Any}, {Name: "thresholds", Typ: types.AnyArray}},
+			Types:      tree.ParamTypes{{Name: "operand", Typ: types.AnyElement}, {Name: "thresholds", Typ: types.AnyArray}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				operand := args[0]

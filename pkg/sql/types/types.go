@@ -582,19 +582,19 @@ var (
 		VarBit,
 	}
 
-	// Any is a special type used only during static analysis as a wildcard type
+	// AnyElement is a special type used only during static analysis as a wildcard type
 	// that matches any other type, including scalar, array, and tuple types.
 	// Execution-time values should never have this type. As an example of its
 	// use, many SQL builtin functions allow an input value to be of any type,
 	// and so use this type in their static definitions.
-	Any = &T{InternalType: InternalType{
+	AnyElement = &T{InternalType: InternalType{
 		Family: AnyFamily, Oid: oid.T_anyelement, Locale: &emptyLocale}}
 
 	// AnyArray is a special type used only during static analysis as a wildcard
 	// type that matches an array having elements of any (uniform) type (including
 	// nested array types). Execution-time values should never have this type.
 	AnyArray = &T{InternalType: InternalType{
-		Family: ArrayFamily, ArrayContents: Any, Oid: oid.T_anyarray, Locale: &emptyLocale}}
+		Family: ArrayFamily, ArrayContents: AnyElement, Oid: oid.T_anyarray, Locale: &emptyLocale}}
 
 	// AnyEnum is a special type only used during static analysis as a wildcard
 	// type that matches an possible enum value. Execution-time values should
@@ -606,7 +606,7 @@ var (
 	// type that matches a tuple with any number of fields of any type (including
 	// tuple types). Execution-time values should never have this type.
 	AnyTuple = &T{InternalType: InternalType{
-		Family: TupleFamily, TupleContents: []*T{Any}, Oid: oid.T_record, Locale: &emptyLocale}}
+		Family: TupleFamily, TupleContents: []*T{AnyElement}, Oid: oid.T_record, Locale: &emptyLocale}}
 
 	// AnyTupleArray is a special type used only during static analysis as a wildcard
 	// type that matches an array of tuples with any number of fields of any type (including
@@ -2160,7 +2160,7 @@ func fallbackFormatTypeName(UserDefinedTypeName, bool) string {
 // other attributes of equivalent types, such as width, precision, and oid, can
 // be different.
 //
-// Wildcard types (e.g. Any, AnyArray, AnyTuple, etc) have special equivalence
+// Wildcard types (e.g. AnyElement, AnyArray, AnyTuple, etc) have special equivalence
 // behavior. AnyFamily types match any other type, including other AnyFamily
 // types. And a wildcard collation (empty string) matches any other collation.
 func (t *T) Equivalent(other *T) bool {
@@ -2274,7 +2274,7 @@ func (t *T) Equal(other *T) bool {
 // static analysis, and cannot be used during execution.
 func (t *T) IsWildcardType() bool {
 	for _, wildcard := range []*T{
-		Any, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray,
+		AnyElement, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray,
 	} {
 		// Note that pointer comparison is insufficient since we might have
 		// deserialized t from disk.
@@ -2289,7 +2289,7 @@ func (t *T) IsWildcardType() bool {
 // return-type of a polymorphic function. Note that this does not include RECORD
 // (AnyTuple) or RECORD[].
 func (t *T) IsPolymorphicType() bool {
-	for _, poly := range []*T{Any, AnyArray, AnyEnum, AnyEnumArray} {
+	for _, poly := range []*T{AnyElement, AnyArray, AnyEnum, AnyEnumArray} {
 		if t.Identical(poly) {
 			return true
 		}
