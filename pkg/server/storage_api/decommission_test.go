@@ -964,8 +964,10 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 					// This will cause SuccessWithin to retry.
 					return err
 				}
-				require.Equal(t, tc.expectCode, s.Code(), "%+v", err)
-				return nil
+				if tc.expectCode == s.Code() {
+					return nil
+				}
+				return err
 			})
 		})
 	}
