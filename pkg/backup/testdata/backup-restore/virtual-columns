@@ -16,7 +16,6 @@ CREATE TABLE tab (
 );
 INSERT INTO tab VALUES (1,1,1), (2,2,2), (3,3,3)
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP INTO 'nodelocal://1/test/'

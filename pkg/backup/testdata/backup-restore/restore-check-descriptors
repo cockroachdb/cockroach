@@ -13,8 +13,6 @@ CREATE TABLE testdb.parent (k INT PRIMARY KEY, v STRING);
 INSERT INTO testdb.parent (k, v) VALUES (1, 'a');
 CREATE TABLE testdb.child (k INT NOT NULL, FOREIGN KEY (k) REFERENCES testdb.parent (k))
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP INTO 'nodelocal://1/full_cluster_backup/';

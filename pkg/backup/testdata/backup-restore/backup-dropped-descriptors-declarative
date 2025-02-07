@@ -18,8 +18,6 @@ CREATE DATABASE dd;
 CREATE TABLE dd.foo (id INT);
 CREATE SCHEMA dd.s;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 let $dd_id
 SELECT id FROM system.namespace WHERE name = 'dd' AND "parentID" = 0;
@@ -80,8 +78,6 @@ CREATE TYPE d2.typ AS ENUM ('hello');
 CREATE SCHEMA d2.s;
 CREATE TABLE d2.s.t (id INT);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 let $d2_id
 SELECT id FROM system.namespace WHERE name = 'd2' AND "parentID" = 0;

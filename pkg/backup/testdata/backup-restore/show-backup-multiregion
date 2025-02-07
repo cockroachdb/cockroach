@@ -8,14 +8,12 @@ CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1"
 CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 CREATE DATABASE foo;
 CREATE TABLE foo.t (x INT);
 INSERT INTO foo.t VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP DATABASE d, foo INTO 'nodelocal://1/database_backup/';
@@ -34,10 +32,6 @@ DROP DATABASE d CASCADE;
 CREATE DATABASE d;
 ALTER DATABASE d SET PRIMARY REGION "us-east-1"; ALTER DATABASE d ADD REGION "eu-central-1"; ALTER DATABASE d ADD REGION "us-west-1";
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SELECT * FROM [SHOW REGIONS FROM DATABASE d] ORDER BY region;

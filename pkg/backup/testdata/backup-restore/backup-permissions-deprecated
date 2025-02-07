@@ -8,8 +8,6 @@ REVOKE CONNECT ON DATABASE d FROM public;
 CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # BACKUP is not allowed in a batch-statement.
 exec-sql
@@ -28,7 +26,6 @@ exec-sql
 CREATE USER testuser;
 GRANT ADMIN TO testuser;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql user=testuser
 BACKUP INTO 'nodelocal://1/test-nonroot-cluster';
@@ -55,8 +52,6 @@ REVOKE CONNECT ON DATABASE d2 FROM public;
 CREATE TABLE d2.t (x INT);
 INSERT INTO d2.t VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 CREATE USER testuser
@@ -113,7 +108,6 @@ exec-sql
 CREATE TYPE d2.greeting AS ENUM ('hello', 'hiya');
 REVOKE USAGE ON TYPE d2.greeting FROM public;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Type backup as a non-admin user should have USAGE privileges.
 exec-sql user=testuser
