@@ -231,6 +231,11 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 
 		t.Status("exporting results")
+		idx := strings.Index(result.Stdout, "SQL statistics:")
+		if idx < 0 {
+			return errors.Errorf("no SQL statistics found in sysbench output:\n%s", result.Stdout)
+		}
+		t.L().Printf("sysbench results:\n%s", result.Stdout[idx:])
 		return exportSysbenchResults(t, c, result.Stdout, start, opts)
 	}
 	if opts.usePostgres {
