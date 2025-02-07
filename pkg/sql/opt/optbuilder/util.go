@@ -59,7 +59,7 @@ func (b *Builder) expandStar(
 ) (aliases []string, exprs []tree.TypedExpr) {
 	switch t := expr.(type) {
 	case *tree.TupleStar:
-		texpr := inScope.resolveType(t.Expr, types.Any)
+		texpr := inScope.resolveType(t.Expr, types.AnyElement)
 		typ := texpr.ResolvedType()
 		if typ.Family() != types.TupleFamily {
 			panic(tree.NewTypeIsNotCompositeError(typ))
@@ -171,7 +171,7 @@ func (b *Builder) expandStarAndResolveType(
 		return b.expandStarAndResolveType(vn, inScope)
 
 	default:
-		texpr := inScope.resolveType(t, types.Any)
+		texpr := inScope.resolveType(t, types.AnyElement)
 		exprs = []tree.TypedExpr{texpr}
 	}
 

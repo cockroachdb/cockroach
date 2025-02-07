@@ -65,7 +65,7 @@ func Set(
 		semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
 
 		// Convert the expressions to a datum.
-		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
+		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
 		if err != nil {
 			return err
 		}

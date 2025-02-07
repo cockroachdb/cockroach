@@ -29,8 +29,8 @@ import (
 // ValidateComputedColumnExpression verifies that an expression is a valid
 // computed column expression. It returns the serialized expression and its type
 // if valid, and an error otherwise. The returned type is only useful if d has
-// type Any which indicates the expression's type is unknown and does not have
-// to match a specific type.
+// type AnyElement which indicates the expression's type is unknown and does not
+// have to match a specific type.
 //
 // A computed column expression is valid if all of the following are true:
 //

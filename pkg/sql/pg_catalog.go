@@ -497,7 +497,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		// Add a dropped entry for any attribute numbers in the middle that are
 		// missing, assuming there are any numeric gaps in the number of columns
 		// observed.
-		missingColumnType := types.Any
+		missingColumnType := types.AnyElement
 		if populatedColumns.Len() != maxPGAttributeNum {
 			for colOrdinal := 1; colOrdinal <= maxPGAttributeNum; colOrdinal++ {
 				if populatedColumns.Contains(colOrdinal) {
@@ -2613,7 +2613,7 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 			variadicType = tree.NewDOid(v.VarType.Oid())
 		case tree.HomogeneousType:
 			argmodes = getVariadicStringArray()
-			variadicType = tree.NewDOid(types.Any.Oid())
+			variadicType = tree.NewDOid(types.AnyElement.Oid())
 		default:
 			argmodes = tree.DNull
 			variadicType = oidZero
