@@ -1886,6 +1886,8 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer log.Scope(testingT).Close(testingT)
 
+	skip.UnderRace(testingT)
+
 	ctx := context.Background()
 
 	var mu syncutil.Mutex
