@@ -201,9 +201,15 @@ func createPartitioningImpl(
 				"declared partition columns (%s) do not match first %d columns in index being partitioned (%s)",
 				partitioningString(), n, strings.Join(newIdxColumnNames[:n], ", "))
 		}
-		if col.GetType().Family() == types.ArrayFamily {
-			return partDesc, unimplemented.NewWithIssuef(91766, "partitioning by array column (%s) not supported",
-				col.GetName())
+		switch col.GetType().Family() {
+		case types.ArrayFamily:
+			return partDesc, unimplemented.NewWithIssuef(91766,
+				"partitioning by array column (%s) not supported", col.GetName())
+
+		case types.PGVectorFamily:
+			// Can't partition by a column that does not have linear ordering.
+			return partDesc, pgerror.Newf(pgcode.FeatureNotSupported,
+				"partitioning by vector column (%s) not supported", col.GetName())
 		}
 	}
 

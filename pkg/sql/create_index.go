@@ -7,11 +7,11 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -146,9 +146,6 @@ func makeIndexDescriptor(
 			`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
 		)
 	}
-	if n.Type == idxtype.VECTOR {
-		return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
-	}
 
 	// Since we mutate the columns below, we make copies of them
 	// here so that on retry we do not attempt to validate the
@@ -240,6 +237,16 @@ func makeIndexDescriptor(
 		}
 	}
 
+	if n.Type == idxtype.VECTOR {
+		vecCol := columns[len(columns)-1]
+		column, err := catalog.MustFindColumnByTreeName(tableDesc, vecCol.Column)
+		if err != nil {
+			return nil, err
+		}
+		indexDesc.VecConfig.Dims = column.GetType().Width()
+		indexDesc.VecConfig.Seed = params.extendedEvalCtx.GetRNG().Int63()
+	}
+
 	if n.Sharded != nil {
 		if n.PartitionByIndex.ContainsPartitions() {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support explicit partitioning")
@@ -308,6 +315,15 @@ func makeIndexDescriptor(
 		}
 		if len(indexDesc.KeyColumnNames) > 1 {
 			telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
+		}
+	}
+	if indexDesc.Type == idxtype.VECTOR {
+		telemetry.Inc(sqltelemetry.VectorIndexCounter)
+		if indexDesc.IsPartial() {
+			telemetry.Inc(sqltelemetry.PartialVectorIndexCounter)
+		}
+		if len(indexDesc.KeyColumnNames) > 1 {
+			telemetry.Inc(sqltelemetry.MultiColumnVectorIndexCounter)
 		}
 	}
 	if indexDesc.IsSharded() {
@@ -425,7 +441,8 @@ func populateInvertedIndexDescriptor(
 			return newUndefinedOpclassError(invCol.OpClass)
 		}
 	default:
-		return sqlerrors.NewInvalidLastColumnError(column.GetName(), column.GetType().Name(), idxtype.INVERTED)
+		return sqlerrors.NewInvalidLastColumnError(
+			column.GetName(), column.GetType().Name(), idxtype.INVERTED)
 	}
 	return nil
 }
@@ -550,49 +567,10 @@ func replaceExpressionElemsWithVirtualCols(
 				)
 			}
 
-			if indexType != idxtype.INVERTED && !colinfo.ColumnTypeIsIndexable(typ) {
-				if colinfo.ColumnTypeIsInvertedIndexable(typ) {
-					return errors.WithHint(
-						pgerror.Newf(
-							pgcode.InvalidTableDefinition,
-							"index element %s of type %s is not indexable in a non-inverted index",
-							elem.Expr.String(),
-							typ.Name(),
-						),
-						"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
-					)
-				}
-				return pgerror.Newf(
-					pgcode.InvalidTableDefinition,
-					"index element %s of type %s is not indexable",
-					elem.Expr.String(),
-					typ.Name(),
-				)
-			}
-
-			if indexType == idxtype.INVERTED {
-				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
-					return errors.WithHint(
-						pgerror.Newf(
-							pgcode.InvalidTableDefinition,
-							"index element %s of type %s is not allowed as a prefix column in an inverted index",
-							elem.Expr.String(),
-							typ.Name(),
-						),
-						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
-					)
-				}
-				if i == lastColumnIdx && !colinfo.ColumnTypeIsInvertedIndexable(typ) {
-					return errors.WithHint(
-						pgerror.Newf(
-							pgcode.InvalidTableDefinition,
-							"index element %s of type %s is not allowed as the last column in an inverted index",
-							elem.Expr.String(),
-							typ.Name(),
-						),
-						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
-					)
-				}
+			colDesc := fmt.Sprintf("(%v)", elem.Expr)
+			isLastCol := i == lastColumnIdx
+			if err = colinfo.ValidateColumnForIndex(indexType, colDesc, typ, isLastCol); err != nil {
+				return err
 			}
 
 			// Create a new virtual column and add it to the table descriptor.
@@ -791,8 +769,12 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 
-	if indexDesc.Type == idxtype.INVERTED && indexDesc.Partitioning.NumColumns != 0 {
-		telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+	if indexDesc.Partitioning.NumColumns != 0 {
+		if indexDesc.Type == idxtype.INVERTED {
+			telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+		} else if indexDesc.Type == idxtype.VECTOR {
+			telemetry.Inc(sqltelemetry.PartitionedVectorIndexCounter)
+		}
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
