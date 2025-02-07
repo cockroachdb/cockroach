@@ -6,7 +6,6 @@ CREATE DATABASE d;
 CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # BACKUP is not allowed in a batch-statement.
 exec-sql
@@ -26,7 +25,6 @@ exec-sql
 CREATE USER testuser;
 GRANT ADMIN TO testuser;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql user=testuser
 BACKUP INTO 'userfile:///test-nonroot-cluster';
@@ -101,7 +99,6 @@ exec-sql
 CREATE SCHEMA d.foo;
 CREATE TYPE d.foo.type1 AS ENUM()
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Backup should succeed!
 exec-sql user=testuser
@@ -121,7 +118,6 @@ exec-sql
 USE d;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT BACKUP ON TABLES TO testuser;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 CREATE TABLE d.t2 (id INT)
@@ -147,8 +143,6 @@ REVOKE BACKUP ON DATABASE d FROM testuser;
 REVOKE BACKUP ON TABLE d.t2 FROM testuser;
 REVOKE BACKUP ON TABLE d.t3 FROM testuser;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 subtest end
 
@@ -264,7 +258,6 @@ USE d_test_fn;
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 USE d;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Cluster backup should succeed as a root user.
 exec-sql

@@ -25,11 +25,6 @@ INSERT INTO foofoo VALUES (10, 'x0');
 CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
 INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
@@ -227,10 +222,6 @@ CREATE INDEX foo2_to_drop_idx ON foo2 (s);
 CREATE TABLE foofoo2 (i INT PRIMARY KEY, s STRING);
 INSERT INTO foofoo2 VALUES (10, 'x0');
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
@@ -400,7 +391,6 @@ USE re_restore_test;
 CREATE TABLE tab1 (i INT PRIMARY KEY, s STRING);
 INSERT INTO tab1 VALUES (42, 'pre-import');
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SELECT * FROM re_restore_test.tab1;

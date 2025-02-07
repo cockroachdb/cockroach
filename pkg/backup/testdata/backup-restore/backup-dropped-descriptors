@@ -17,7 +17,6 @@ exec-sql
 CREATE DATABASE d;
 CREATE TABLE d.foo (id INT);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 let $d_id
 SELECT id FROM system.namespace WHERE name = 'd' AND "parentID" = 0;
@@ -60,7 +59,6 @@ exec-sql
 CREATE DATABASE d;
 CREATE TABLE d.bar (id INT);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # A database backup should succeed since we have a public database descriptor that matches the
 # target.
@@ -127,8 +125,6 @@ CREATE TYPE d2.typ AS ENUM ('hello');
 CREATE SCHEMA d2.s;
 CREATE TABLE d2.s.t (id INT);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 let $d2_id
 SELECT id FROM system.namespace WHERE name = 'd2' AND "parentID" = 0;

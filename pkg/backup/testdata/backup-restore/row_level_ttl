@@ -6,7 +6,6 @@ CREATE DATABASE d;
 USE d;
 CREATE TABLE t (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes')
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP DATABASE d INTO 'nodelocal://1/database_backup/'
