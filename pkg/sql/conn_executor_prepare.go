@@ -225,10 +225,9 @@ func (ex *connExecutor) prepare(
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
 		}
 
-		if err := ex.maybeUpgradeToSerializable(ctx, stmt); err != nil {
+		if err := ex.maybeAdjustTxnForDDL(ctx, stmt); err != nil {
 			return err
 		}
-		// TODO(yuzefovich): consider disabling buffered writes on a DDL.
 
 		if placeholderHints == nil {
 			placeholderHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
