@@ -8,7 +8,6 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
-	"database/sql/driver"
 	"fmt"
 	"net/url"
 	"strings"
@@ -119,7 +118,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -149,36 +148,43 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	for _, state := range tests {
 		t.Run(state, func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
-			pgURL, cleanupDB := sqlutils.PGUrl(
+			pgURL, cleanup := sqlutils.PGUrl(
 				t, s.AdvSQLAddr(), state, url.User(username.RootUser))
-			defer cleanupDB()
-			c, err := pq.Open(pgURL.String())
-			if err != nil {
-				t.Fatal(err)
+			defer cleanup()
+			cfg, err := pgx.ParseConfig(pgURL.String())
+
+			require.NoError(t, err)
+			if s.DeploymentMode() == serverutils.SharedProcess {
+				// In shared-process mode, specifying the virtual cluster is
+				// required since `default_target_cluster` defaults to `system`.
+				// In external-process mode, this isn't needed (and neither
+				// allowed) because it has a separate SQL address.
+				cfg.RuntimeParams["options"] = fmt.Sprintf(
+					"-ccluster=%s", serverutils.DefaultTestTenantName)
 			}
+			ctx := context.Background()
+
+			conn, err := pgx.ConnectConfig(ctx, cfg)
+			require.NoError(t, err)
+
 			connClosed := false
 			defer func() {
 				if connClosed {
 					return
 				}
-				if err := c.Close(); err != nil {
+				if err := conn.Close(ctx); err != nil {
 					t.Fatal(err)
 				}
 			}()
 
-			ctx := context.Background()
-			conn := c.(driver.ConnBeginTx)
-			txn, err := conn.BeginTx(ctx, driver.TxOptions{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			tx := txn.(driver.ExecerContext)
-			if _, err := tx.ExecContext(ctx, "SET TRANSACTION PRIORITY NORMAL", nil); err != nil {
+			tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+			require.NoError(t, err)
+			if _, err := tx.Exec(ctx, "SET TRANSACTION PRIORITY NORMAL"); err != nil {
 				t.Fatal(err)
 			}
 
 			if state == "CommitWait" {
-				if _, err := tx.ExecContext(ctx, "SAVEPOINT cockroach_restart", nil); err != nil {
+				if _, err := tx.Exec(ctx, "SAVEPOINT cockroach_restart"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -191,7 +197,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 					t.Fatal(err)
 				}
 			}
-			if _, err := tx.ExecContext(ctx, insertStmt, nil); err != nil {
+			if _, err := tx.Exec(ctx, insertStmt); err != nil {
 				t.Fatal(err)
 			}
 
@@ -200,7 +206,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			}
 
 			if state == "CommitWait" {
-				_, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT cockroach_restart", nil)
+				_, err := tx.Exec(ctx, "RELEASE SAVEPOINT cockroach_restart")
 				if state == "CommitWait" {
 					if err != nil {
 						t.Fatal(err)
@@ -212,7 +218,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 			// Abruptly close the connection.
 			connClosed = true
-			if err := c.Close(); err != nil {
+			if err := conn.Close(ctx); err != nil {
 				t.Fatal(err)
 			}
 

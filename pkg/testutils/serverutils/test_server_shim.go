@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const defaultTestTenantName = roachpb.TenantName("test-tenant")
+const DefaultTestTenantName = roachpb.TenantName("test-tenant")
 
 // defaultTestTenantMessage is a message that is printed when a test is run
 // under cluster virtualization. This is useful for debugging test failures.
@@ -322,7 +322,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	}
 
 	if params.DefaultTenantName == "" {
-		params.DefaultTenantName = defaultTestTenantName
+		params.DefaultTenantName = DefaultTestTenantName
 	}
 
 	srv, err := srvFactoryImpl.New(params)
