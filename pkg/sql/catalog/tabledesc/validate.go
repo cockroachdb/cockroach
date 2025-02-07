@@ -276,6 +276,22 @@ func (desc *wrapper) ValidateForwardReferences(
 func (desc *wrapper) ValidateBackReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
+	// Check that all expression strings can be parsed.
+	// NOTE: This could be performed in ValidateSelf, but we want to avoid that
+	// since parsing all the expressions is a relatively expensive thing to do.
+	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) (err error) {
+		switch typ {
+		case catalog.SQLExpr:
+			_, err = parser.ParseExpr(*expr)
+		case catalog.SQLStmt:
+			_, err = parser.Parse(*expr)
+		case catalog.PLpgSQLStmt:
+			_, err = plpgsqlparser.Parse(*expr)
+		}
+		vea.Report(err)
+		return nil
+	})
+
 	// Check that outbound foreign keys have matching back-references.
 	for i := range desc.OutboundFKs {
 		vea.Report(desc.validateOutboundFKBackReference(&desc.OutboundFKs[i], vdg))
@@ -1047,20 +1063,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			"invalid concurrent declarative schema change job %d and legacy schema change jobs %v",
 			dscs.JobID, desc.MutationJobs))
 	}
-
-	// Check that all expression strings can be parsed.
-	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) (err error) {
-		switch typ {
-		case catalog.SQLExpr:
-			_, err = parser.ParseExpr(*expr)
-		case catalog.SQLStmt:
-			_, err = parser.Parse(*expr)
-		case catalog.PLpgSQLStmt:
-			_, err = plpgsqlparser.Parse(*expr)
-		}
-		vea.Report(err)
-		return nil
-	})
 
 	vea.Report(ValidateRowLevelTTL(desc.GetRowLevelTTL()))
 	// The remaining validation is called separately from ValidateRowLevelTTL
