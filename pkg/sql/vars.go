@@ -3801,6 +3801,23 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(kvcoord.BufferedWritesEnabled.Get(sv))
 		},
 	},
+
+	// CockroachDB extension.
+	`opt_fk_uniq_check_lower_bound_enabled`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptFKUniqCheckLowerBoundEnabled), nil
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("opt_fk_uniq_check_lower_bound_enabled"),
+		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`opt_fk_uniq_check_lower_bound_enabled`, s)
+			if err != nil {
+				return err
+			}
+			m.SetOptFKUniqCheckLowerBoundEnabled(b)
+			return nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
