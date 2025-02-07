@@ -66,9 +66,10 @@ const (
 // aggType is a helper struct that allows tests to test both the ordered and
 // hash aggregators at the same time.
 type aggType struct {
-	new   func(context.Context, *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator
-	name  string
-	order ordering
+	new          func(context.Context, *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator
+	afterEachRun func() // if set, will be called at the end of each benchmark iteration
+	name         string
+	order        ordering
 }
 
 var aggTypesWithPartial = []aggType{
@@ -1188,6 +1189,9 @@ func benchmarkAggregateFunction(
 				}
 				if err = a.(colexecop.Closer).Close(ctx); err != nil {
 					b.Fatal(err)
+				}
+				if agg.afterEachRun != nil {
+					agg.afterEachRun()
 				}
 				source.Reset(ctx)
 			}
