@@ -29,7 +29,7 @@ Query {"String": "CREATE TABLE t1 (a int)"}
 until
 ReadyForQuery
 ----
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeUpgradeToSerializable","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAdjustTxnForDDL","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
@@ -43,7 +43,7 @@ Sync
 until
 ReadyForQuery
 ----
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeUpgradeToSerializable","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAdjustTxnForDDL","UnknownFields":null}
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
@@ -58,7 +58,7 @@ Query {"String": "CREATE TABLE t3 (a int); CREATE TABLE t4 (a int);"}
 until
 ReadyForQuery
 ----
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeUpgradeToSerializable","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAdjustTxnForDDL","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -76,7 +76,7 @@ Sync
 until
 ReadyForQuery
 ----
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeUpgradeToSerializable","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAdjustTxnForDDL","UnknownFields":null}
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
