@@ -799,11 +799,10 @@ func generateSubzoneSpans(
 				})
 			}
 			var emptyPrefix []tree.Datum
-			index := mustRetrieveIndexColumnElements(b, tableID, e.IndexID)
 			partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, e.IndexID)
 			var indexPartitionCoverings []covering.Covering
 			indexPartitionCoverings, err = indexCoveringsForPartitioning(
-				b, a, tableID, e.IndexID, index, partitioning, subzoneIndexByPartition, emptyPrefix)
+				b, a, tableID, e.IndexID, partitioning, subzoneIndexByPartition, emptyPrefix)
 			if err != nil {
 				return
 			}
@@ -860,7 +859,6 @@ func indexCoveringsForPartitioning(
 	a *tree.DatumAlloc,
 	tableID catid.DescID,
 	indexID catid.IndexID,
-	index []*scpb.IndexColumn,
 	part catalog.Partitioning,
 	relevantPartitions map[partitionKey]int32,
 	prefixDatums []tree.Datum,
@@ -883,8 +881,7 @@ func indexCoveringsForPartitioning(
 		listCoverings := make([]covering.Covering, part.NumColumns()+1)
 		err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
 			for _, valueEncBuf := range values {
-				t, keyPrefix, err := decodePartitionTuple(
-					b, a, tableID, indexID, index, part, valueEncBuf, prefixDatums)
+				t, keyPrefix, err := decodePartitionTuple(b, a, tableID, indexID, part, valueEncBuf, prefixDatums)
 				if err != nil {
 					return err
 				}
@@ -897,7 +894,7 @@ func indexCoveringsForPartitioning(
 				}
 				newPrefixDatums := append(prefixDatums, t.Datums...)
 				subpartitionCoverings, err := indexCoveringsForPartitioning(
-					b, a, tableID, indexID, index, subPartitioning, relevantPartitions, newPrefixDatums)
+					b, a, tableID, indexID, subPartitioning, relevantPartitions, newPrefixDatums)
 				if err != nil {
 					return err
 				}
@@ -921,13 +918,11 @@ func indexCoveringsForPartitioning(
 			if _, ok := relevantPartitions[partKey]; !ok {
 				return nil
 			}
-			_, fromKey, err := decodePartitionTuple(
-				b, a, tableID, indexID, index, part, from, prefixDatums)
+			_, fromKey, err := decodePartitionTuple(b, a, tableID, indexID, part, from, prefixDatums)
 			if err != nil {
 				return err
 			}
-			_, toKey, err := decodePartitionTuple(
-				b, a, tableID, indexID, index, part, to, prefixDatums)
+			_, toKey, err := decodePartitionTuple(b, a, tableID, indexID, part, to, prefixDatums)
 			if err != nil {
 				return err
 			}
@@ -982,7 +977,6 @@ func decodePartitionTuple(
 	a *tree.DatumAlloc,
 	tableID catid.DescID,
 	indexID catid.IndexID,
-	index []*scpb.IndexColumn,
 	part catalog.Partitioning,
 	valueEncBuf []byte,
 	prefixDatums tree.Datums,
@@ -1047,6 +1041,7 @@ func decodePartitionTuple(
 		colMap.Set(col.ColumnID, i)
 	}
 
+	index := mustRetrieveIndexColumnElements(b, tableID, indexID)
 	indexKeyPrefix := rowenc.MakeIndexKeyPrefix(b.Codec(), tableID, index[0].IndexID)
 	var keyAndSuffixCols []fetchpb.IndexFetchSpec_KeyColumn
 	for _, i := range index {
