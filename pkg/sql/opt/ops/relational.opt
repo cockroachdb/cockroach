@@ -1372,6 +1372,10 @@ define WithScanPrivate {
     # Mtr is the materialization behavior of the CTE referenced by the WithScan.
     # It matches the Mtr field of the WithPrivate with a matching WithID.
     Mtr CTEMaterializeClause
+
+    # FKUniqCheckInput is true if the WithScan is an input to a foreign key or a
+    # uniqueness check.
+    FKUniqCheckInput bool
 }
 
 # RecursiveCTE implements the logic of a recursive CTE:
