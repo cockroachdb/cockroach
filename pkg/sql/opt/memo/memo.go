@@ -197,6 +197,7 @@ type Memo struct {
 	pushLimitIntoProjectFilteredScan           bool
 	legacyVarcharTyping                        bool
 	preferBoundedCardinality                   bool
+	useFKUniqCheckLowerBoundOne                bool
 	minRowCount                                float64
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
@@ -286,6 +287,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		pushLimitIntoProjectFilteredScan:           evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan,
 		legacyVarcharTyping:                        evalCtx.SessionData().LegacyVarcharTyping,
 		preferBoundedCardinality:                   evalCtx.SessionData().OptimizerPreferBoundedCardinality,
+		useFKUniqCheckLowerBoundOne:                evalCtx.SessionData().OptFKUniqCheckLowerBoundEnabled,
 		minRowCount:                                evalCtx.SessionData().OptimizerMinRowCount,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
@@ -453,6 +455,7 @@ func (m *Memo) IsStale(
 		m.pushLimitIntoProjectFilteredScan != evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan ||
 		m.legacyVarcharTyping != evalCtx.SessionData().LegacyVarcharTyping ||
 		m.preferBoundedCardinality != evalCtx.SessionData().OptimizerPreferBoundedCardinality ||
+		m.useFKUniqCheckLowerBoundOne != evalCtx.SessionData().OptFKUniqCheckLowerBoundEnabled ||
 		m.minRowCount != evalCtx.SessionData().OptimizerMinRowCount ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
