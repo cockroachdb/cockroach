@@ -3210,6 +3210,10 @@ func (ex *connExecutor) execCopyIn(
 
 	// The connExecutor state machine has already set us up with a txn at this
 	// point.
+	//
+	// Disable the buffered writes for COPY since there is no benefit in this
+	// ability here.
+	ex.state.mu.txn.SetBufferedWritesEnabled(false /* enabled */)
 	txnOpt := copyTxnOpt{
 		txn:           ex.state.mu.txn,
 		txnTimestamp:  ex.state.sqlTimestamp,
