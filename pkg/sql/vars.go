@@ -3624,6 +3624,28 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
+
+	// CockroachDB extension.
+	`optimizer_check_input_min_row_count`: {
+		GetStringVal: makeFloatGetStringValFn(`optimizer_check_input_min_row_count`),
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().OptimizerCheckInputMinRowCount), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0"
+		},
+		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 {
+				return pgerror.New(pgcode.InvalidParameterValue, "optimizer_check_input_min_row_count must be non-negative")
+			}
+			m.SetOptimizerCheckInputMinRowCount(f)
+			return nil
+		},
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
