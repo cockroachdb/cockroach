@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
@@ -520,6 +521,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Spans:                spans,
 		CheckpointSpans:      ca.spec.Checkpoint.Spans,
 		CheckpointTimestamp:  ca.spec.Checkpoint.Timestamp,
+		SpanLevelCheckpoint:  ca.spec.SpanLevelCheckpoint,
 		Targets:              AllTargets(ca.spec.Feed),
 		Metrics:              &ca.metrics.KVFeedMetrics,
 		MM:                   memMon,
@@ -617,10 +619,8 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 	}
 	// Checkpointed spans are spans that were above the highwater mark, and we
 	// must preserve that information in the frontier for future checkpointing.
-	for _, checkpointedSpan := range ca.spec.Checkpoint.Spans {
-		if _, err := ca.frontier.Forward(checkpointedSpan, checkpointedSpanTs); err != nil {
-			return nil, err
-		}
+	if err := checkpoint.Restore(ca.frontier, ca.spec.Checkpoint.Spans, checkpointedSpanTs, ca.spec.SpanLevelCheckpoint); err != nil {
+		return nil, err
 	}
 	return spans, nil
 }
@@ -1777,6 +1777,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 	}
 
 	cf.localState.SetHighwater(frontier)
+	// TODO(#137692): SetCheckpoint should take in old and new checkpoints proto.
 	cf.localState.SetCheckpoint(checkpoint)
 
 	return true, nil

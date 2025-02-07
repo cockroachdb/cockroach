@@ -12,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/ccl/changefeedccl/checkpoint",
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/schemafeed",
         "//pkg/ccl/changefeedccl/timers",
@@ -74,6 +75,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
