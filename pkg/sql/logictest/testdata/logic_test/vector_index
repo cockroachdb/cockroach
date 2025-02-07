@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------------
-# CREATE TABLE tests.
+# CREATE TABLE/INDEX tests.
 # ------------------------------------------------------------------------------
 
 # Simple vector index.
@@ -11,6 +11,13 @@ CREATE TABLE simple (
   FAMILY (a, vec1)
 )
 
+statement ok
+CREATE VECTOR INDEX ON simple (vec1)
+
+# Alternate syntax.
+statement ok
+CREATE INDEX ON simple USING cspann (vec1 ASC);
+
 query TT
 SHOW CREATE TABLE simple
 ----
@@ -19,20 +26,34 @@ simple  CREATE TABLE public.simple (
           vec1 VECTOR(3) NULL,
           CONSTRAINT simple_pkey PRIMARY KEY (a ASC),
           VECTOR INDEX simple_vec1_idx (vec1),
+          VECTOR INDEX simple_vec1_idx1 (vec1),
+          VECTOR INDEX simple_vec1_idx2 (vec1),
           FAMILY fam_0_a_vec1 (a, vec1)
         )
 
 statement ok
 SHOW INDEX FROM simple
 
+statement ok
+DROP INDEX simple@simple_vec1_idx
+
+statement ok
+DROP INDEX simple_vec1_idx2
+
+statement ok
+DROP TABLE simple
+
 # Specify name for index.
 statement ok
 CREATE TABLE alt_syntax (
   a INT PRIMARY KEY,
   vec1 VECTOR(3),
-  VECTOR INDEX vec_idx (vec1),
+  VECTOR INDEX vec_idx (vec1 ASC),
   FAMILY (a, vec1)
 )
+
+statement ok
+CREATE VECTOR INDEX another_index ON alt_syntax (vec1)
 
 query TT
 SHOW CREATE TABLE alt_syntax
@@ -42,10 +63,14 @@ alt_syntax  CREATE TABLE public.alt_syntax (
               vec1 VECTOR(3) NULL,
               CONSTRAINT alt_syntax_pkey PRIMARY KEY (a ASC),
               VECTOR INDEX vec_idx (vec1),
+              VECTOR INDEX another_index (vec1),
               FAMILY fam_0_a_vec1 (a, vec1)
             )
 
-# Multiple vector indexes on same table.
+statement ok
+DROP TABLE alt_syntax
+
+# Multiple vector indexes declared on same table.
 statement ok
 CREATE TABLE multiple_indexes (
   a INT PRIMARY KEY,
@@ -69,6 +94,15 @@ multiple_indexes  CREATE TABLE public.multiple_indexes (
                     FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
                   )
 
+statement ok
+DROP INDEX multiple_indexes_vec1_idx;
+
+statement ok
+DROP INDEX multiple_indexes_vec2_idx;
+
+statement ok
+DROP TABLE multiple_indexes
+
 # Use prefix columns in the vector index.
 statement ok
 CREATE TABLE prefix_cols (
@@ -80,6 +114,9 @@ CREATE TABLE prefix_cols (
   FAMILY (a, b, c, vec1)
 )
 
+statement ok
+CREATE VECTOR INDEX another_index ON prefix_cols (b, c DESC, vec1)
+
 query TT
 SHOW CREATE TABLE prefix_cols
 ----
@@ -90,8 +127,12 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                vec1 VECTOR(3) NULL,
                CONSTRAINT prefix_cols_pkey PRIMARY KEY (a ASC),
                VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1),
+               VECTOR INDEX another_index (b ASC, c DESC, vec1),
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
              )
+
+statement ok
+DROP TABLE prefix_cols
 
 # Use mixed-case column for vector index.
 statement ok
@@ -100,6 +141,14 @@ CREATE TABLE mixed_case (
   qUuX VECTOR(3),
   VECTOR INDEX (qUuX)
 )
+
+statement ok
+CREATE VECTOR INDEX ON mixed_case (qUuX)
+
+statement ok
+DROP TABLE mixed_case
+
+# ----- CREATE TABLE errors -----
 
 # Try to use vector in primary key.
 statement error column a has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
@@ -122,8 +171,92 @@ statement error vector column b does not have a fixed number of dimensions, so i
 CREATE TABLE t (a INT PRIMARY KEY, b VECTOR, VECTOR INDEX (b))
 
 # Try to use vector type in forward index.
-statement error pq: column c has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
+statement error column c has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), INDEX (b, c))
+
+# ----- CREATE INDEX errors -----
+statement ok
+CREATE TABLE vec_errors (
+  a INT PRIMARY KEY,
+  b INT,
+  c TSVECTOR,
+  d VECTOR,
+  vec1 VECTOR(3),
+  FAMILY (a, b, vec1)
+)
+
+statement error column b has type int, which is not allowed as the last column in a vector index
+CREATE VECTOR INDEX ON vec_errors (a, b)
+
+statement error column vec1 has type vector, which is only allowed as the last column in a vector index
+CREATE VECTOR INDEX ON vec_errors (vec1, b)
+
+# Try to use inverted indexable type in vector index.
+statement error column c has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+CREATE VECTOR INDEX ON vec_errors (c, vec1)
+
+statement error the last column in a vector index cannot have the DESC option
+CREATE VECTOR INDEX ON vec_errors (b, vec1 DESC)
+
+statement error vector column d does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
+CREATE VECTOR INDEX ON vec_errors (d)
+
+# Try to use vector type in forward index.
+statement error pq: column vec1 has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
+CREATE INDEX ON vec_errors (b, vec1)
+
+statement error vector indexes can't be unique
+CREATE UNIQUE VECTOR INDEX ON vec_errors (vec1)
+
+statement error vector indexes don't support stored columns
+CREATE INDEX on vec_errors USING cspann (vec1) STORING (b);
+
+statement error vector indexes don't support stored columns
+CREATE VECTOR INDEX on vec_errors (vec1) STORING (b);
+
+# Try to use unsupported vector index type.
+statement error at or near "hnsw": syntax error: unrecognized access method: hnsw
+CREATE INDEX ON vec_errors USING hnsw (vec1)
+
+# Operator classes are not (yet) supported.
+statement error operator classes are only allowed for the last column of an inverted index
+CREATE INDEX ON vec_errors USING cspann (vec1 vector_l2_ops)
+
+statement ok
+DROP TABLE vec_errors
+
+# ------------------------------------------------------------------------------
+# ALTER TABLE tests.
+# TODO(andyk): Move these tests to alter_primary_key when insertion is possible.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE alter_test (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  vec1 VECTOR(3),
+  VECTOR INDEX (vec1),
+  FAMILY (a, b, vec1)
+)
+
+statement ok
+ALTER TABLE alter_test ALTER PRIMARY KEY USING COLUMNS (b)
+
+query TT
+SHOW CREATE TABLE alter_test
+----
+alter_test  CREATE TABLE public.alter_test (
+              a INT8 NOT NULL,
+              b INT8 NOT NULL,
+              vec1 VECTOR(3) NULL,
+              CONSTRAINT alter_test_pkey PRIMARY KEY (b ASC),
+              VECTOR INDEX alter_test_vec1_idx (vec1),
+              UNIQUE INDEX alter_test_a_key (a ASC),
+              FAMILY fam_0_a_b_vec1 (a, b, vec1)
+            )
+
+statement ok
+DROP TABLE alter_test
 
 # ------------------------------------------------------------------------------
 # Execution tests.
@@ -137,4 +270,7 @@ CREATE TABLE exec_test (
 )
 
 statement error unimplemented: execution planning for vector index search is not yet implemented
-INSERT INTO exec_test (a, vec1) values (1, '[1, 2, 3]');
+INSERT INTO exec_test (a, vec1) values (1, '[1, 2, 3]')
+
+statement ok
+DROP TABLE exec_test

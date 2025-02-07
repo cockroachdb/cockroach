@@ -125,7 +125,8 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 	return nil
 }
 
-// ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
+// ColumnTypeIsIndexable returns whether the type t is valid as an indexed
+// column in a regular FORWARD index.
 func ColumnTypeIsIndexable(t *types.T) bool {
 	// NB: .IsAmbiguous checks the content type of array types.
 	if t.IsAmbiguous() || t.Family() == types.TupleFamily || t.Family() == types.RefCursorFamily {
