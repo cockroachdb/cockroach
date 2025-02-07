@@ -2355,6 +2355,12 @@ func (ex *connExecutor) resetTransactionOnSchemaChangeRetry(ctx context.Context)
 	if omitInRangefeeds {
 		newTxn.SetOmitInRangefeeds()
 	}
+	if buildutil.CrdbTestBuild {
+		// For now we explicitly disable buffered writes before executing DDLs.
+		if ex.state.mu.txn.BufferedWritesEnabled() {
+			return errors.AssertionFailedf("buffered writes should have been disabled on a DDL")
+		}
+	}
 	ex.state.mu.txn = newTxn
 	return nil
 }
@@ -3174,10 +3180,9 @@ var txnSchemaChangeErr = pgerror.Newf(
 func (ex *connExecutor) makeExecPlan(
 	ctx context.Context, planner *planner,
 ) (context.Context, error) {
-	if err := ex.maybeUpgradeToSerializable(ctx, planner.stmt); err != nil {
+	if err := ex.maybeAdjustTxnForDDL(ctx, planner.stmt); err != nil {
 		return ctx, err
 	}
-	// TODO(yuzefovich): consider disabling buffered writes on a DDL.
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
