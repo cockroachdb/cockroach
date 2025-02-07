@@ -721,7 +721,7 @@ func (b *Builder) buildAggregateFunction(
 	if f.OrderBy != nil {
 		for _, o := range f.OrderBy {
 			// ORDER BY (a, b) => ORDER BY a, b.
-			te := fromScope.resolveType(o.Expr, types.Any)
+			te := fromScope.resolveType(o.Expr, types.AnyElement)
 			cols := flattenTuples([]tree.TypedExpr{te})
 
 			nullsDefaultOrder := b.hasDefaultNullsOrder(o)

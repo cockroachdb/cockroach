@@ -264,7 +264,7 @@ func (i *immediateVisitor) RemoveDroppedColumnType(
 		return err
 	}
 	col := mut.AsColumn().ColumnDesc()
-	col.Type = types.Any
+	col.Type = types.AnyElement
 	if col.IsComputed() {
 		clearComputedExpr(col)
 	}

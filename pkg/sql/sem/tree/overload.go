@@ -323,7 +323,7 @@ func (b Overload) defaultExprs() Exprs {
 	return b.DefaultExprs
 }
 
-// FixedReturnType returns a fixed type that the function returns, returning Any
+// FixedReturnType returns a fixed type that the function returns, returning AnyElement
 // if the return type is based on the function's arguments.
 func (b Overload) FixedReturnType() *types.T {
 	if b.ReturnType == nil {
@@ -491,7 +491,7 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 	// The parameterized types for Tuples are checked in the type checking
 	// routines before getting here, so we only need to check if the parameter
 	// type is p types.TUPLE below. This allows us to avoid defining overloads
-	// for types.Tuple{}, types.Tuple{types.Any}, types.Tuple{types.Any, types.Any},
+	// for types.Tuple{}, types.Tuple{types.AnyElement}, types.Tuple{types.AnyElement, types.AnyElement},
 	// etc. for Tuple operators.
 	if typ.Family() == types.TupleFamily {
 		typ = types.AnyTuple
@@ -601,7 +601,7 @@ func (HomogeneousType) MatchLen(l int) bool {
 
 // GetAt is part of the TypeList interface.
 func (HomogeneousType) GetAt(i int) *types.T {
-	return types.Any
+	return types.AnyElement
 }
 
 // Length is part of the TypeList interface.
@@ -611,7 +611,7 @@ func (HomogeneousType) Length() int {
 
 // Types is part of the TypeList interface.
 func (HomogeneousType) Types() []*types.T {
-	return []*types.T{types.Any}
+	return []*types.T{types.AnyElement}
 }
 
 func (HomogeneousType) String() string {
@@ -764,7 +764,7 @@ func returnTypeToFixedType(s ReturnTyper, inputTyps []TypedExpr) *types.T {
 	if t := s(inputTyps); t != UnknownReturnType {
 		return t
 	}
-	return types.Any
+	return types.AnyElement
 }
 
 type overloadTypeChecker struct {
@@ -924,7 +924,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	// If no overloads are provided, just type check parameters and return.
 	if numOverloads == 0 {
 		for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
-			typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
+			typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.AnyElement)
 			if err != nil {
 				return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 					"error type checking resolved expression:")
@@ -1028,7 +1028,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		}
 	}
 	for i, ok := typeableIdxs.Next(0); ok; i, ok = typeableIdxs.Next(i + 1) {
-		paramDesired := types.Any
+		paramDesired := types.AnyElement
 
 		// If all remaining candidates require the same type for this parameter,
 		// begin desiring that type for the corresponding argument expression.
@@ -1095,7 +1095,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		argTypes := make([]*types.T, 0, len(params))
 		outArgTypes := make([]*types.T, 0, len(outParams))
 		for i := range s.exprs {
-			typedExpr, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
+			typedExpr, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.AnyElement)
 			if err != nil {
 				panic(errors.HandleAsAssertionFailure(err))
 			}
@@ -1500,14 +1500,14 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			var err error
 			left := s.typedExprs[0]
 			if left == nil {
-				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.Any)
+				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.AnyElement)
 				if err != nil {
 					return
 				}
 			}
 			right := s.typedExprs[1]
 			if right == nil {
-				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.Any)
+				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.AnyElement)
 				if err != nil {
 					return
 				}
@@ -1543,14 +1543,14 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			var err error
 			left := s.typedExprs[0]
 			if left == nil {
-				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.Any)
+				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.AnyElement)
 				if err != nil {
 					return
 				}
 			}
 			right := s.typedExprs[1]
 			if right == nil {
-				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.Any)
+				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.AnyElement)
 				if err != nil {
 					return
 				}
@@ -1639,7 +1639,7 @@ func defaultTypeCheck(
 	ctx context.Context, semaCtx *SemaContext, s *overloadTypeChecker, errorOnPlaceholders bool,
 ) error {
 	for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-		typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
+		typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.AnyElement)
 		if err != nil {
 			return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 				"error type checking constant value")
@@ -1648,7 +1648,7 @@ func defaultTypeCheck(
 	}
 	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
 		if errorOnPlaceholders {
-			if _, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any); err != nil {
+			if _, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.AnyElement); err != nil {
 				return err
 			}
 		}

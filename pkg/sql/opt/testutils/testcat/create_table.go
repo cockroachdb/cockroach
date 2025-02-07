@@ -1391,7 +1391,7 @@ func (ti *Index) partitionByListExprToDatums(
 	d := make(tree.Datums, len(vals))
 	for i := range vals {
 		c := tree.CastExpr{Expr: vals[i], Type: ti.Columns[i].DatumType()}
-		cTyped, err := c.TypeCheck(ctx, semaCtx, types.Any)
+		cTyped, err := c.TypeCheck(ctx, semaCtx, types.AnyElement)
 		if err != nil {
 			panic(err)
 		}
