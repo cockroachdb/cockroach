@@ -1310,7 +1310,7 @@ vectorized: true
                     │
                     └── • scan buffer
                           columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-                          estimated row count: 0 (missing stats)
+                          estimated row count: 1 (missing stats)
                           label: buffer 1
 
 query T
