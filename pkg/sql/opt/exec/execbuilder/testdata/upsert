@@ -1048,7 +1048,7 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-Put /Table/117/1/1/0 -> /TUPLE/
+Put (locking) /Table/117/1/1/0 -> /TUPLE/
 Del /Table/117/1/1/1/1
 Del /Table/117/1/1/2/1
 fast path completed

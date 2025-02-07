@@ -67,6 +67,7 @@ func (i KVInserter) Put(key, value interface{}) {
 	})
 }
 
+func (c KVInserter) PutMustAcquireExclusiveLock(key, value interface{}) {}
 func (c KVInserter) CPutWithOriginTimestamp(
 	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
 ) {
@@ -564,8 +565,8 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		c.kvInserter,
 		insertRow,
 		pm,
-		nil,   /* OriginTimestampCPutHelper */
-		true,  /* overwrite */
+		nil, /* OriginTimestampCPutHelper */
+		PutOp,
 		false, /* traceKV */
 	); err != nil {
 		return errors.Wrap(err, "insert row")
