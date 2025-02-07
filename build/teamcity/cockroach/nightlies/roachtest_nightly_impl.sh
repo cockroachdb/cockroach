@@ -51,7 +51,7 @@ elif [[ "${TC_BUILD_BRANCH}" =~ ${release_branch_regex}\.[0-9]{1,2}-rc$ ]]; then
   # NOTE: in the future, instead of choosing the tests randomly as we
   # do here, we plan to utilize a smarter test selection strategy (see
   # #119630).
-  select_probability="--select_probability=0.4"
+  select_probability="--select-probability=0.4"
 elif [[ "${TC_BUILD_BRANCH}" =~ ^release- && "${ROACHTEST_FORCE_RUN_INVALID_RELEASE_BRANCH}" != "true" ]]; then
   # The only valid release branches are the ones handled above. That
   # said, from time to time we might have cases where a branch with
