@@ -140,7 +140,7 @@ func TestExplainGist(t *testing.T) {
 
 	// Use the release-build panic-catching behavior instead of the
 	// crdb_test-build behavior. This is needed so that some known bugs like
-	// #117101 don't result in a test failure.
+	// #119045 and #133129 don't result in a test failure.
 	defer colexecerror.ProductionBehaviorForTests()()
 
 	ctx := context.Background()
@@ -195,7 +195,6 @@ func TestExplainGist(t *testing.T) {
 			if err != nil && strings.Contains(err.Error(), "internal error") {
 				// Ignore all errors except the internal ones.
 				for _, knownErr := range []string{
-					"invalid datum type given: RECORD, expected RECORD", // #117101
 					"expected equivalence dependants to be its closure", // #119045
 					"not in index", // #133129
 				} {
