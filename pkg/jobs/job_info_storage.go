@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -31,6 +33,104 @@ var (
 	retainedMessageHistory = settings.RegisterIntSetting(
 		settings.ApplicationLevel, "jobs.retained_messages", "number of historical messages of each kind to retain per job", 100,
 	)
+)
+
+// Parse all job storage SQL statements at init time to avoid parsing them on
+// every execution.
+func mustParseOne(s string) statements.Statement[tree.Statement] {
+	stmt, err := parser.ParseOne(s)
+	if err != nil {
+		panic(err)
+	}
+	return stmt
+}
+
+var (
+	deleteJobProgressStmt = mustParseOne(
+		`DELETE FROM system.job_progress WHERE job_id = $1`,
+	)
+	insertJobProgressStmt = mustParseOne(
+		`INSERT INTO system.job_progress (job_id, written, fraction, resolved) VALUES ($1, now(), $2, $3)`,
+	)
+	getJobProgressQuery = mustParseOne(
+		"SELECT written, fraction, resolved FROM system.job_progress WHERE job_id = $1",
+	)
+
+	insertJobProgressHistoryStmt = mustParseOne(
+		`UPSERT INTO system.job_progress_history (job_id, written, fraction, resolved) VALUES ($1, now(), $2, $3)`,
+	)
+	pruneJobProgressHistoryStmt = mustParseOne(
+		`DELETE FROM system.job_progress_history WHERE job_id = $1 AND written IN 
+			(SELECT written FROM system.job_progress_history WHERE job_id = $1 ORDER BY written DESC OFFSET $2)`,
+	)
+
+	getJobInfoQuery = mustParseOne(
+		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key::string = $2 ORDER BY written DESC LIMIT 1",
+	)
+	getJobInfoCountQuery = mustParseOne(
+		"SELECT count(*) FROM system.job_info WHERE job_id = $1 AND info_key >= $2 AND info_key < $3",
+	)
+	deleteJobInfoStmt = mustParseOne(
+		`DELETE FROM system.job_info WHERE job_id = $1 AND info_key::string = $2`,
+	)
+	deleteJobInfoRangeLimitStmt = mustParseOne(
+		`DELETE FROM system.job_info WHERE job_id = $1 AND info_key >= $2 AND info_key < $3
+			ORDER BY info_key ASC LIMIT $4`,
+	)
+	deleteJobInfoRangeStmt = mustParseOne(
+		"DELETE FROM system.job_info WHERE job_id = $1 AND info_key >= $2 AND info_key < $3",
+	)
+	insertJobInfoStmt = mustParseOne(
+		`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
+	)
+
+	upsertJobMessageStmt = mustParseOne(
+		`UPSERT INTO system.job_message (job_id, written, kind, message) VALUES ($1, now(),$2, $3)`,
+	)
+	pruneJobMessageStmt = mustParseOne(
+		`DELETE FROM system.job_message WHERE job_id = $1 AND kind = $2 AND written IN (
+			SELECT written FROM system.job_message WHERE job_id = $1 AND kind = $2 ORDER BY written DESC OFFSET $3
+		)`,
+	)
+
+	getJobStatusQuery = mustParseOne(
+		"SELECT written, status FROM system.job_status WHERE job_id = $1",
+	)
+	updateJobStatusStmt = mustParseOne(
+		`UPDATE system.jobs SET status = $1 WHERE id = $2`,
+	)
+	deleteJobStatusStmt = mustParseOne(
+		`DELETE FROM system.job_status WHERE job_id = $1`,
+	)
+	insertJobStatusStmt = mustParseOne(
+		`INSERT INTO system.job_status (job_id, written, status) VALUES ($1, now(), $2)`,
+	)
+
+	checkClaimSessionQuery = mustParseOne(
+		`SELECT claim_session_id FROM system.jobs WHERE id = $1`,
+	)
+
+	loadJobQuery = mustParseOne(`
+WITH
+  latestpayload AS (
+    SELECT job_id, value
+    FROM system.job_info AS payload
+    WHERE info_key = 'legacy_payload' AND job_id = $1
+    ORDER BY written DESC LIMIT 1
+  ),
+  latestprogress AS (
+    SELECT job_id, value
+    FROM system.job_info AS progress
+    WHERE info_key = 'legacy_progress' AND job_id = $1
+    ORDER BY written DESC LIMIT 1
+  )
+SELECT status, payload.value AS payload, progress.value AS progress,
+       claim_session_id, COALESCE(last_run, created), COALESCE(num_runs, 0)
+FROM system.jobs AS j
+INNER JOIN latestpayload AS payload ON j.id = payload.job_id
+LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+WHERE id = $1
+`)
 )
 
 // ProgressStorage reads and writes progress rows.
@@ -50,10 +150,10 @@ func (i ProgressStorage) Get(
 	ctx, sp := tracing.ChildSpan(ctx, "get-job-progress")
 	defer sp.Finish()
 
-	row, err := txn.QueryRowEx(
+	row, err := txn.QueryRowExParsed(
 		ctx, "job-progress-get", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		"SELECT written, fraction, resolved FROM system.job_progress WHERE job_id = $1", i,
+		getJobProgressQuery, i,
 	)
 
 	if err != nil || row == nil {
@@ -99,9 +199,9 @@ func (i ProgressStorage) Set(
 	ctx, sp := tracing.ChildSpan(ctx, "write-job-progress")
 	defer sp.Finish()
 
-	if _, err := txn.ExecEx(
+	if _, err := txn.ExecParsed(
 		ctx, "write-job-progress-delete", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`DELETE FROM system.job_progress WHERE job_id = $1`, i,
+		deleteJobProgressStmt, i,
 	); err != nil {
 		return err
 	}
@@ -114,26 +214,25 @@ func (i ProgressStorage) Set(
 		ts = resolved.AsOfSystemTime()
 	}
 
-	if _, err := txn.ExecEx(
+	if _, err := txn.ExecParsed(
 		ctx, "write-job-progress-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.job_progress (job_id, written, fraction, resolved) VALUES ($1, now(), $2, $3)`,
+		insertJobProgressStmt,
 		i, frac, ts,
 	); err != nil {
 		return err
 	}
 
-	if _, err := txn.ExecEx(
+	if _, err := txn.ExecParsed(
 		ctx, "write-job-progress-history-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`UPSERT INTO system.job_progress_history (job_id, written, fraction, resolved) VALUES ($1, now(), $2, $3)`,
+		insertJobProgressHistoryStmt,
 		i, frac, ts,
 	); err != nil {
 		return err
 	}
 
-	if _, err := txn.ExecEx(
+	if _, err := txn.ExecParsed(
 		ctx, "write-job-progress-history-prune", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`DELETE FROM system.job_progress_history WHERE job_id = $1 AND written IN 
-			(SELECT written FROM system.job_progress_history WHERE job_id = $1 ORDER BY written DESC OFFSET $2)`,
+		pruneJobProgressHistoryStmt,
 		i, retainedProgressHistory.Get(txn.KV().DB().SettingsValues()),
 	); err != nil {
 		return err
@@ -167,9 +266,9 @@ func (j *Job) StatusStorage() StatusStorage {
 
 // Clear clears the status message row for the job, if it exists.
 func (i StatusStorage) Clear(ctx context.Context, txn isql.Txn) error {
-	_, err := txn.ExecEx(
+	_, err := txn.ExecParsed(
 		ctx, "clear-job-status-delete", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`DELETE FROM system.job_status WHERE job_id = $1`, i,
+		deleteJobStatusStmt, i,
 	)
 	return err
 }
@@ -186,9 +285,9 @@ func (i StatusStorage) Set(ctx context.Context, txn isql.Txn, status string) err
 		return err
 	}
 
-	if _, err := txn.ExecEx(
+	if _, err := txn.ExecParsed(
 		ctx, "write-job-status-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.job_status (job_id, written, status) VALUES ($1, now(), $2)`,
+		insertJobStatusStmt,
 		i, status,
 	); err != nil {
 		return err
@@ -206,9 +305,9 @@ func (i StatusStorage) Get(ctx context.Context, txn isql.Txn) (string, time.Time
 	ctx, sp := tracing.ChildSpan(ctx, "get-job-status")
 	defer sp.Finish()
 
-	row, err := txn.QueryRowEx(
+	row, err := txn.QueryRowExParsed(
 		ctx, "job-status-get", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		"SELECT written, status FROM system.job_status WHERE job_id = $1",
+		getJobStatusQuery,
 		i,
 	)
 
@@ -257,20 +356,18 @@ func (i MessageStorage) Record(ctx context.Context, txn isql.Txn, kind, message 
 	defer sp.Finish()
 
 	// Insert the new message.
-	if _, err := txn.ExecEx(
+	if _, err := txn.ExecParsed(
 		ctx, "write-job-message-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`UPSERT INTO system.job_message (job_id, written, kind, message) VALUES ($1, now(),$2, $3)`,
+		upsertJobMessageStmt,
 		i, kind, message,
 	); err != nil {
 		return err
 	}
 
 	// Prune old messages of the same kind to bound historical data.
-	if _, err := txn.ExecEx(
+	if _, err := txn.ExecParsed(
 		ctx, "write-job-message-prune", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`DELETE FROM system.job_message WHERE job_id = $1 AND kind = $2 AND written IN (
-			SELECT written FROM system.job_message WHERE job_id = $1 AND kind = $2 ORDER BY written DESC OFFSET $3
-		)`,
+		pruneJobMessageStmt,
 		i, kind, retainedMessageHistory.Get(txn.KV().DB().SettingsValues()),
 	); err != nil {
 		return err
@@ -357,9 +454,9 @@ func (i *InfoStorage) checkClaimSession(ctx context.Context) error {
 		return nil
 	}
 
-	row, err := i.txn.QueryRowEx(ctx, "check-claim-session", i.txn.KV(),
+	row, err := i.txn.QueryRowExParsed(ctx, "check-claim-session", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		`SELECT claim_session_id FROM system.jobs WHERE id = $1`, i.j.ID())
+		checkClaimSessionQuery, i.j.ID())
 	if err != nil {
 		return err
 	}
@@ -392,10 +489,10 @@ func (i InfoStorage) get(ctx context.Context, opName, infoKey string) ([]byte, b
 	// We expect there to be only a single row for a given <job_id, info_key>.
 	// This is because all older revisions are deleted before a new one is
 	// inserted in `InfoStorage.Write`.
-	row, err := i.txn.QueryRowEx(
+	row, err := i.txn.QueryRowExParsed(
 		ctx, "job-info-get", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key::string = $2 ORDER BY written DESC LIMIT 1",
+		getJobInfoQuery,
 		j.ID(), infoKey,
 	)
 
@@ -418,10 +515,10 @@ func (i InfoStorage) get(ctx context.Context, opName, infoKey string) ([]byte, b
 func (i InfoStorage) write(ctx context.Context, infoKey string, value []byte) error {
 	return i.doWrite(ctx, func(ctx context.Context, j *Job, txn isql.Txn) error {
 		// First clear out any older revisions of this info.
-		_, err := txn.ExecEx(
+		_, err := txn.ExecParsed(
 			ctx, "write-job-info-delete", txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
-			"DELETE FROM system.job_info WHERE job_id = $1 AND info_key::string = $2",
+			deleteJobInfoStmt,
 			j.ID(), infoKey,
 		)
 		if err != nil {
@@ -433,10 +530,10 @@ func (i InfoStorage) write(ctx context.Context, infoKey string, value []byte) er
 			return nil
 		}
 		// Write the new info, using the same transaction.
-		_, err = txn.ExecEx(
+		_, err = txn.ExecParsed(
 			ctx, "write-job-info-insert", txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
-			`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
+			insertJobInfoStmt,
 			j.ID(), infoKey, value,
 		)
 		return err
@@ -563,19 +660,18 @@ func (i InfoStorage) DeleteRange(
 ) error {
 	return i.doWrite(ctx, func(ctx context.Context, j *Job, txn isql.Txn) error {
 		if limit > 0 {
-			_, err := txn.ExecEx(
-				ctx, "write-job-info-delete", txn.KV(),
+			_, err := txn.ExecParsed(
+				ctx, "write-job-info-delete-limit", txn.KV(),
 				sessiondata.NodeUserSessionDataOverride,
-				"DELETE FROM system.job_info WHERE job_id = $1 AND info_key >= $2 AND info_key < $3 "+
-					"ORDER BY info_key ASC LIMIT $4",
+				deleteJobInfoRangeLimitStmt,
 				j.ID(), startInfoKey, endInfoKey, limit,
 			)
 			return err
 		} else {
-			_, err := txn.ExecEx(
+			_, err := txn.ExecParsed(
 				ctx, "write-job-info-delete", txn.KV(),
 				sessiondata.NodeUserSessionDataOverride,
-				"DELETE FROM system.job_info WHERE job_id = $1 AND info_key >= $2 AND info_key < $3",
+				deleteJobInfoRangeStmt,
 				j.ID(), startInfoKey, endInfoKey,
 			)
 			return err
@@ -592,10 +688,10 @@ func (i InfoStorage) Count(ctx context.Context, startInfoKey, endInfoKey string)
 	ctx, sp := tracing.ChildSpan(ctx, "count-job-info")
 	defer sp.Finish()
 
-	row, err := i.txn.QueryRowEx(
+	row, err := i.txn.QueryRowExParsed(
 		ctx, "job-info-count", i.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		"SELECT count(*) FROM system.job_info WHERE job_id = $1 AND info_key >= $2 AND info_key < $3",
+		getJobInfoCountQuery,
 		i.j.ID(), startInfoKey, endInfoKey,
 	)
 
