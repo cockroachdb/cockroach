@@ -10,7 +10,6 @@ CREATE DATABASE d;
 CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Test running backup when BACKUP feature flag is disabled.
 exec-sql

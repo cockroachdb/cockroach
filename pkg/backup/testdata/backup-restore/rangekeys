@@ -17,8 +17,6 @@ INSERT INTO foo VALUES (1, 'x'),(2,'y');
 CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
 INSERT INTO baz VALUES (11, 'xx'),(22,'yy');
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Ensure a full backup properly captures range keys
 # - with foo, delete then insert, and ensure no original data surfaces in restore

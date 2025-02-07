@@ -16,11 +16,6 @@ CREATE TABLE nostats (i INT PRIMARY KEY, s STRING);
 ALTER TABLE stats SET (sql_stats_automatic_collection_enabled = true);
 ALTER TABLE nostats SET (sql_stats_automatic_collection_enabled = false);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster/';
