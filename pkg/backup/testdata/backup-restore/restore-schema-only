@@ -12,10 +12,6 @@ CREATE TABLE d.t2 (x d.greeting);
 INSERT INTO d.t2 VALUES ('hello'), ('howdy');
 COMMENT ON TABLE d.t1 IS 'This comment better get restored from the backed up system table!';
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SHOW CREATE TABLE d.t1;
@@ -38,7 +34,6 @@ exec-sql
 DROP DATABASE defaultdb;
 CREATE DATABASE defaultdb;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SELECT count(*) FROM system.namespace WHERE name = 'defaultdb' AND id > $d_id

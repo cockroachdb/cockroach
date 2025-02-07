@@ -8,9 +8,6 @@ CREATE TYPE d.ds.typ AS ENUM ('hello', 'hi');
 CREATE TABLE d.ds.t (x INT PRIMARY KEY, y d.ds.typ);
 INSERT INTO d.ds.t VALUES (1, 'hi'), (2, 'hello'), (3, 'hi');
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Take a cluster backup that can be used to test cluster, database and tables
 # restores.
@@ -37,7 +34,6 @@ exec-sql
 CREATE USER testuser;
 GRANT ADMIN TO testuser;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql user=testuser
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup_nonroot;

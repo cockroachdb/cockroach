@@ -73,7 +73,6 @@ exec-sql
 CREATE DATABASE failsdb;
 GRANT CREATE ON DATABASE failsdb TO testuser;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql user=testuser
 RESTORE TABLE foo FROM LATEST IN 'external://testuser-ec' WITH into_db=failsdb;

@@ -454,7 +454,7 @@ func TestNewHistogramRotate(t *testing.T) {
 			h.RecordValue(12345)
 			f := float64(12345) + sum
 			_, wSum := h.WindowedSnapshot().Total()
-			require.Equal(t, wSum, f)
+			require.Equal(t, f, wSum)
 		}
 		// Tick. This rotates the histogram.
 		now = now.Add(time.Duration(i+1) * 10 * time.Second)
