@@ -2700,8 +2700,6 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 				defer cleanupFn()
 
 				// Create a database with a type.
-				sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = false")
-				sqlDB.Exec(t, "SET autocommit_before_ddl = false")
 				sqlDB.Exec(t, `
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
