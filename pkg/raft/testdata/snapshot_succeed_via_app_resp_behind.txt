@@ -123,6 +123,8 @@ stabilize 1
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5) Commit:5
   DEBUG 1 received MsgAppResp(rejected, hint: (index 5, term 1)) from 3 for index 10
+  DEBUG 1 progress before for 3 was [StateProbe match=0 next=6 sentCommit=5 matchCommit=5]
+  DEBUG nextTerm: 0, logTerm: 1
   DEBUG 1 decreased progress of 3 to [StateProbe match=0 next=6 sentCommit=5 matchCommit=5]
   DEBUG 1 [firstindex: 11, commit: 12] sent snapshot[index: 12, term: 1] to 3 [StateProbe match=0 next=6 sentCommit=5 matchCommit=5]
   DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=13 sentCommit=12 matchCommit=5 paused pendingSnap=12]

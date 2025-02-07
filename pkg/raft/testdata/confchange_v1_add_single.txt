@@ -77,6 +77,8 @@ stabilize
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
   DEBUG 1 received MsgAppResp(rejected, hint: (index 0, term 0)) from 2 for index 3
+  DEBUG 1 progress before for 2 was [StateProbe match=0 next=1 sentCommit=0 matchCommit=0]
+  DEBUG nextTerm: 0, logTerm: 0
   DEBUG 1 decreased progress of 2 to [StateProbe match=0 next=1 sentCommit=0 matchCommit=0]
   DEBUG 1 [firstindex: 3, commit: 4] sent snapshot[index: 4, term: 1] to 2 [StateProbe match=0 next=1 sentCommit=0 matchCommit=0]
   DEBUG 1 paused sending replication messages to 2 [StateSnapshot match=0 next=5 sentCommit=4 matchCommit=0 paused pendingSnap=4]

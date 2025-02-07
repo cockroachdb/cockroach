@@ -2056,15 +2056,25 @@ func stepLeader(r *raft, m pb.Message) error {
 				//    log.
 				nextProbeIdx, nextTerm = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
 			}
-			if pr.MaybeDecrTo(m.Index, nextProbeIdx) {
-				match := r.raftLog.matchTerm(entryID{nextTerm, nextProbeIdx})
-				if pr.State == tracker.StateReplicate {
+			if m.LogTerm != 0 && nextTerm == m.LogTerm && pr.State == tracker.StateReplicate {
+				// try m.Index
+			} else if pr.MaybeDecrTo(m.Index, nextProbeIdx) {
+				// match := r.raftLog.matchTerm(entryID{nextTerm, nextProbeIdx})
+				r.logger.Debugf("%x progress before for %x was [%s]", r.id, m.From, pr)
+				r.logger.Debugf("nextTerm: %d, logTerm: %d", nextTerm, m.LogTerm)
+				if m.LogTerm != 0 && nextTerm == m.LogTerm {
+					r.logger.Debugf("state: %v", pr.State)
+					r.logger.Debugf("nextProbeIdx=%d, match=%d", nextProbeIdx, pr.Match)
+					r.logger.Debugf("hint: index %d, term %d", m.RejectHint, m.LogTerm)
+					if pr.State == tracker.StateProbe {
+						r.logger.Debugf("becomeReplicate")
+						r.becomeReplicate(pr)
+						pr.Next = max(nextProbeIdx+1, pr.Match+1)
+					}
+				} else if pr.State == tracker.StateReplicate {
+					r.logger.Debugf("becomeProbe")
 					r.becomeProbe(pr)
-				} else if pr.State == tracker.StateProbe && match {
-					r.becomeReplicate(pr)
 				}
-
-				pr.Next = max(nextProbeIdx+1, pr.Match+1)
 				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
 
 				r.maybeSendAppend(m.From)
