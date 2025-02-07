@@ -3174,10 +3174,9 @@ var txnSchemaChangeErr = pgerror.Newf(
 func (ex *connExecutor) makeExecPlan(
 	ctx context.Context, planner *planner,
 ) (context.Context, error) {
-	if err := ex.maybeUpgradeToSerializable(ctx, planner.stmt); err != nil {
+	if err := ex.maybeAdjustTxnForDDL(ctx, planner.stmt); err != nil {
 		return ctx, err
 	}
-	// TODO(yuzefovich): consider disabling buffered writes on a DDL.
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
