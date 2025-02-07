@@ -8,8 +8,6 @@ CREATE DATABASE db1;
 DROP DATABASE db1;
 CREATE DATABASE db1;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP INTO 'nodelocal://1/doubleDB' WITH revision_history;

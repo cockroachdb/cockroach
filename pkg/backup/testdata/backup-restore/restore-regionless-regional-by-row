@@ -10,7 +10,6 @@ CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1"
 CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;

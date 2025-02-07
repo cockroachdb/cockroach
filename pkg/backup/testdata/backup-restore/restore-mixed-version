@@ -7,7 +7,6 @@ USE d;
 CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
 INSERT INTO foo VALUES (1, 'x'),(2,'y');
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP INTO 'nodelocal://1/full_cluster_backup/';

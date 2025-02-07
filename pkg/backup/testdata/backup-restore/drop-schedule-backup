@@ -9,7 +9,6 @@ CREATE DATABASE foo;
 CREATE TABLE foo.t (x INT);
 INSERT INTO foo.t VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 CREATE SCHEDULE 'hello' FOR BACKUP DATABASE foo INTO 'userfile:///newbackup' WITH revision_history RECURRING '@daily';

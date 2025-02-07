@@ -20,7 +20,6 @@ USE db1;
 CREATE TABLE tab (a INT PRIMARY KEY, b INT);
 INSERT INTO tab VALUES (1, 1), (2, 2), (100, 100);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # We create 3 statistics manually which is the minimum needed to
 # create a forecast and a partial statistic on column A so that a
@@ -34,12 +33,6 @@ CREATE STATISTICS __auto__ ON a FROM tab;
 CREATE STATISTICS __auto__ ON b FROM tab;
 CREATE STATISTICS partial  ON a FROM tab USING EXTREMES;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 query-sql
 SELECT count(1) FROM [ SHOW STATISTICS FOR TABLE tab ]
