@@ -197,7 +197,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 
 	firstServer := tc.Server(0).ApplicationLayer()
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB := sqlutils.MakeSQLRunner(firstServer.SQLConn(t))
 
 	{
 		// TODO(irfansharif): The data-distribution page and underyling APIs don't
@@ -217,6 +217,11 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		post_id INT REFERENCES roachblog.posts,
 		body text
 	)`)
+
+	// Test for null raw sql config column in crdb_internal.zones,
+	// see: https://github.com/cockroachdb/cockroach/issues/140044
+	sqlDB.Exec(t, `ALTER TABLE roachblog.posts CONFIGURE ZONE = ''`)
+
 	sqlDB.Exec(t, `CREATE SCHEMA roachblog."foo bar"`)
 	sqlDB.Exec(t, `CREATE TABLE roachblog."foo bar".other_stuff(id INT PRIMARY KEY, body TEXT)`)
 	// Test special characters in DB and table names.
@@ -265,31 +270,27 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		},
 	}
 
+	require.NoError(t, tc.WaitForFullReplication())
+
 	// Wait for the new tables' ranges to be created and replicated.
-	testutils.SucceedsSoon(t, func() error {
-		var resp serverpb.DataDistributionResponse
-		if err := srvtestutils.GetAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
-			t.Fatal(err)
-		}
+	var resp serverpb.DataDistributionResponse
+	if err := srvtestutils.GetAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
+		t.Fatal(err)
+	}
 
-		delete(resp.DatabaseInfo, "system") // delete results for system database.
-		if !reflect.DeepEqual(resp.DatabaseInfo, expectedDatabaseInfo) {
-			return fmt.Errorf("expected %v; got %v", expectedDatabaseInfo, resp.DatabaseInfo)
-		}
+	delete(resp.DatabaseInfo, "system") // delete results for system database.
+	if !reflect.DeepEqual(resp.DatabaseInfo, expectedDatabaseInfo) {
+		t.Fatalf("expected %v; got %v", expectedDatabaseInfo, resp.DatabaseInfo)
+	}
 
-		// Don't test anything about the zone configs for now; just verify that something is there.
-		if len(resp.ZoneConfigs) == 0 {
-			return fmt.Errorf("no zone configs returned")
-		}
-
-		return nil
-	})
+	// Don't test anything about the zone configs for now; just verify that something is there.
+	require.NotEmpty(t, resp.ZoneConfigs)
 
 	// Verify that the request still works after a table has been dropped,
 	// and that dropped_at is set on the dropped table.
 	sqlDB.Exec(t, `DROP TABLE roachblog.comments`)
 
-	var resp serverpb.DataDistributionResponse
+	//var resp serverpb.DataDistributionResponse
 	if err := srvtestutils.GetAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 		t.Fatal(err)
 	}
