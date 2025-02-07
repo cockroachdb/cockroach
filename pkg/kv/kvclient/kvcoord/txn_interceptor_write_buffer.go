@@ -269,6 +269,11 @@ func (twb *txnWriteBuffer) applyTransformations(
 		case *kvpb.PutRequest:
 			var ru kvpb.ResponseUnion
 			ru.MustSetInner(&kvpb.PutResponse{})
+			// TODO(yuzefovich): if MustAcquireExclusiveLock flag is set on the
+			// Put, then we need to add a locking Get to the BatchRequest,
+			// including if the key doesn't exist (#139232).
+			// TODO(yuzefovich): ensure that we elide the lock acquisition
+			// whenever possible (e.g. blind UPSERT in an implicit txn).
 			ts = append(ts, transformation{
 				stripped: true,
 				index:    i,

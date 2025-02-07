@@ -482,7 +482,7 @@ func (p *kvTableWriter) insertRow(ctx context.Context, b *kv.Batch, after cdceve
 		// and destination clusters.
 		// ShouldWinTie: true,
 	}
-	return p.ri.InsertRow(ctx, &row.KVBatchAdapter{Batch: b}, p.newVals, ph, oth, false /* overwrite */, false /* traceKV */)
+	return p.ri.InsertRow(ctx, &row.KVBatchAdapter{Batch: b}, p.newVals, ph, oth, row.CPutOp, false /* traceKV */)
 }
 
 func (p *kvTableWriter) updateRow(

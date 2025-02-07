@@ -42,7 +42,7 @@ func (ti *tableInserter) row(
 	ctx context.Context, values tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
 ) error {
 	ti.currentBatchSize++
-	return ti.ri.InsertRow(ctx, &ti.putter, values, pm, nil, false /* overwrite */, traceKV)
+	return ti.ri.InsertRow(ctx, &ti.putter, values, pm, nil, row.CPutOp, traceKV)
 }
 
 // tableDesc returns the TableDescriptor for the table that the tableInserter
