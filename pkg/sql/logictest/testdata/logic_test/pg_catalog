@@ -2930,6 +2930,7 @@ on_update_rehome_row_enabled                               on                  N
 opt_split_scan_limit                                       2048                NULL      NULL        NULL        string
 optimizer_always_use_histograms                            on                  NULL      NULL        NULL        string
 optimizer_apply_full_scan_penalty_to_virtual_tables        off                 NULL      NULL        NULL        string
+optimizer_check_input_min_row_count                        0                   NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
 optimizer_min_row_count                                    0                   NULL      NULL        NULL        string
@@ -3122,6 +3123,7 @@ on_update_rehome_row_enabled                               on                  N
 opt_split_scan_limit                                       2048                NULL  user     NULL      2048                2048
 optimizer_always_use_histograms                            on                  NULL  user     NULL      on                  on
 optimizer_apply_full_scan_penalty_to_virtual_tables        off                 NULL  user     NULL      off                 off
+optimizer_check_input_min_row_count                        0                   NULL  user     NULL      0                   0
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
 optimizer_min_row_count                                    0                   NULL  user     NULL      0                   0
@@ -3313,6 +3315,7 @@ opt_split_scan_limit                                       NULL    NULL     NULL
 optimizer                                                  NULL    NULL     NULL     NULL        NULL
 optimizer_always_use_histograms                            NULL    NULL     NULL     NULL        NULL
 optimizer_apply_full_scan_penalty_to_virtual_tables        NULL    NULL     NULL     NULL        NULL
+optimizer_check_input_min_row_count                        NULL    NULL     NULL     NULL        NULL
 optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
 optimizer_min_row_count                                    NULL    NULL     NULL     NULL        NULL
