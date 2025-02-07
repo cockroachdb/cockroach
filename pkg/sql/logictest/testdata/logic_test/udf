@@ -926,4 +926,49 @@ SELECT f('0');
 statement ok
 DROP FUNCTION f;
 
+# Regression test for #117101 - update the resolved type of a VALUES row with a
+# UDF after the UDF is built.
+subtest regression_117101
+
+statement ok
+CREATE FUNCTION f117101() RETURNS RECORD CALLED ON NULL INPUT AS $funcbody$
+  SELECT ((42)::INT8, (43)::INT8)
+$funcbody$ LANGUAGE SQL;
+
+statement error pgcode 42804 pq: VALUES types tuple{int, int} and tuple{tuple{string, int}, unknown} cannot be matched
+SELECT
+  *
+FROM
+(
+  VALUES
+    (
+     (('aloha'::TEXT,
+     (44)::INT8), NULL)
+    ),
+    (COALESCE(f117101(), NULL))
+);
+
+subtest end
+
+# Regression test for #137968 - do not incorrectly modify the resolved type of
+# an expression that already found a non-wildcard type.
+subtest regression_137968
+
+statement ok
+SELECT
+	tab_18298.col_30903
+FROM
+	(
+		VALUES
+			(
+				('-26 years -422 days -21:13:57.660026':::INTERVAL::INTERVAL + now():::TIMESTAMP::TIMESTAMP::TIMESTAMP)::TIMESTAMP
+			),
+			(NULL)
+	)
+		AS tab_18298 (col_30903)
+ORDER BY
+	tab_18298.col_30903 ASC
+LIMIT
+	3:::INT8;
+
 subtest end
