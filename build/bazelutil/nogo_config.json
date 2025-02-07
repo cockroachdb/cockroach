@@ -146,6 +146,7 @@
             "pkg/sql/sqlstats/ssmemstorage/ss_mem_iterator.go": "flagged by linter, should be evaluated",
             "pkg/sql/stats/stats_cache.go": "flagged by linter, should be evaluated",
             "pkg/sql/stmtdiagnostics/statement_diagnostics.go": "flagged by linter, should be evaluated",
+            "pkg/sql/vecindex/manager.go": "flagged by linter, should be evaluated",
             "pkg/storage/metamorphic/deck.go": "flagged by linter, should be evaluated",
             "pkg/storage/pebble.go": "flagged by linter, should be evaluated",
             "pkg/util/admission/work_queue.go": "flagged by linter, should be evaluated",

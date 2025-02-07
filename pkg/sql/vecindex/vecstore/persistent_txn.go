@@ -277,7 +277,7 @@ func (psTxn *persistentStoreTxn) SetRootPartition(ctx context.Context, partition
 func (psTxn *persistentStoreTxn) InsertPartition(
 	ctx context.Context, partition *Partition,
 ) (PartitionKey, error) {
-	instanceID := psTxn.store.db.Context().NodeID.SQLInstanceID()
+	instanceID := psTxn.store.db.KV().Context().NodeID.SQLInstanceID()
 	partitionID := PartitionKey(unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID)))
 	return partitionID, psTxn.insertPartition(ctx, partitionID, partition)
 }

@@ -535,6 +535,7 @@ go_library(
         "//pkg/sql/tablemetadatacache/util",
         "//pkg/sql/ttl/ttlbase",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex",
         "//pkg/sql/vtable",
         "//pkg/storage",
         "//pkg/storage/enginepb",
