@@ -85,7 +85,7 @@ const (
 	tableTag    = "table"
 
 	// datadog endpoint URLs
-	datadogProfileUploadURLTmpl = "https://intake.profile.%s/v1/input"
+	datadogProfileUploadURLTmpl = "https://intake.profile.%s/api/v2/profile"
 	datadogCreateArchiveURLTmpl = "https://api.%s/api/v2/logs/config/archives"
 	datadogLogIntakeURLTmpl     = "https://http-intake.logs.%s/api/v2/logs"
 
@@ -130,10 +130,7 @@ var debugZipUploadOpts = struct {
 
 // This is the list of all supported artifact types. The "possible values" part
 // in the help text is generated from this list. So, make sure to keep this updated
-// var zipArtifactTypes = []string{"profiles", "logs"}
-// TODO(arjunmahishi): Removing the profiles upload for now. It has started
-// failing for some reason. Will fix this later
-var zipArtifactTypes = []string{"logs", "tables", "misc"}
+var zipArtifactTypes = []string{"logs", "tables", "misc", "profiles"}
 
 // uploadZipArtifactFuncs is a registry of handler functions for each artifact type.
 // While adding/removing functions from here, make sure to update
@@ -335,7 +332,9 @@ func uploadZipProfiles(ctx context.Context, uploadID string, debugDirPath string
 
 		fmt.Fprintf(os.Stderr, "Uploaded profiles of node %s to datadog (%s)\n", nodeID, strings.Join(paths, ", "))
 		fmt.Fprintf(os.Stderr, "Explore the profiles on datadog: "+
-			"https://{{ datadog domain }}/profiling/explorer?query=%s:%s\n", uploadIDTag, uploadID)
+			"https://%s/profiling/explorer?query=%s:%s\n", ddSiteToHostMap[debugZipUploadOpts.ddSite],
+			uploadIDTag, uploadID,
+		)
 	}
 
 	return nil
