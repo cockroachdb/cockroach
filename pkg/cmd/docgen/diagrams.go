@@ -665,6 +665,16 @@ var specs = []stmtSpec{
 		inline: []string{"col_qual_list"},
 	},
 	{
+		name:   "do",
+		stmt:   "do_stmt",
+		inline: []string{"do_stmt_opt_list", "do_stmt_opt_item"},
+		replace: map[string]string{
+			"'SCONST'":                    "",
+			"non_reserved_word_or_sconst": "( 'PLPGSQL' ) routine_body_str",
+		},
+		unlink: []string{"routine_body_str"},
+	},
+	{
 		name:   "for_locking",
 		stmt:   "for_locking_item",
 		inline: []string{"for_locking_strength", "opt_locked_rels", "opt_nowait_or_skip"},
