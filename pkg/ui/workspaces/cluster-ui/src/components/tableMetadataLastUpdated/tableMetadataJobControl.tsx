@@ -56,11 +56,6 @@ export const TableMetadataJobControl: React.FC<
 
   useEffect(() => {
     triggerUpdateTableMetaJob();
-    const nextUpdated = setInterval(() => {
-      triggerUpdateTableMetaJob();
-    }, 10000);
-
-    return () => clearTimeout(nextUpdated);
   }, [triggerUpdateTableMetaJob]);
 
   useEffect(() => {
