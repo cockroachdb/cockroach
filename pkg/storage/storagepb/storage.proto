@@ -8,7 +8,6 @@ package cockroach.storage.storagepb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/storage/storagepb";
 
 import "gogoproto/gogo.proto";
-import "roachpb/metadata.proto";
 
 enum EncryptionKeySource {
   // Plain key files.
