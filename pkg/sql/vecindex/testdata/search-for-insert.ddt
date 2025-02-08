@@ -1,0 +1,107 @@
+# ----------
+# Search tree with only root-level vectors.
+# ----------
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+----
+• 1 (0, 0)
+│
+├───• vec1 (1, 2)
+├───• vec2 (7, 4)
+└───• vec3 (4, 3)
+
+# Search for insertion into root partition.
+# NOTE: Distance is always set to 0 for the root partition, and the centroid is
+# always the zero vector.
+search-for-insert
+(5, 5)
+----
+partition 1, centroid=(0, 0), sqdist=0
+
+# ----------
+# Search tree with multiple partitions.
+# ----------
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (5, 5)
+vec5: (8, 11)
+vec6: (14, 1)
+vec7: (0, 0)
+vec8: (0, 4)
+vec9: (-2, 8)
+----
+• 1 (7.625, 4.75)
+│
+├───• 2 (11, 6)
+│   │
+│   ├───• vec6 (14, 1)
+│   └───• vec5 (8, 11)
+│
+├───• 4 (5.3333, 4)
+│   │
+│   ├───• vec3 (4, 3)
+│   ├───• vec4 (5, 5)
+│   └───• vec2 (7, 4)
+│
+└───• 5 (0.3333, 2)
+    │
+    ├───• vec1 (1, 2)
+    ├───• vec7 (0, 0)
+    ├───• vec8 (0, 4)
+    └───• vec9 (-2, 8)
+
+# Test exact match.
+search-for-insert
+(5, 5)
+----
+partition 4, centroid=(5.3333, 4), sqdist=1.1111
+
+# Test non-exact match.
+search-for-insert
+(1, 1)
+----
+partition 5, centroid=(0.3333, 2), sqdist=1.4444
+
+# ----------
+# Search tree with one over-sized partition.
+# ----------
+new-index min-partition-size=1 max-partition-size=4 beam-size=2 no-fixups
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (5, 5)
+vec5: (8, 11)
+----
+• 1 (0, 0)
+│
+├───• vec1 (1, 2)
+├───• vec2 (7, 4)
+├───• vec3 (4, 3)
+├───• vec4 (5, 5)
+└───• vec5 (8, 11)
+
+# Ensure that search for insert triggers a split.
+search-for-insert
+(3, 8)
+----
+partition 1, centroid=(0, 0), sqdist=0
+
+# Root partition should now be split.
+format-tree
+----
+• 1 (4.5833, 4.5833)
+│
+├───• 2 (2.5, 2.5)
+│   │
+│   ├───• vec1 (1, 2)
+│   └───• vec3 (4, 3)
+│
+└───• 3 (6.6667, 6.6667)
+    │
+    ├───• vec2 (7, 4)
+    ├───• vec4 (5, 5)
+    └───• vec5 (8, 11)

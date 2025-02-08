@@ -364,6 +364,67 @@ func (vi *VectorIndex) Search(
 	return vi.searchHelper(&searchCtx, searchSet)
 }
 
+// SearchForInsert finds the best partition in which to insert the given vector.
+// It always returns a single search result containing the key of that
+// partition, as well as the centroid of the partition (in the Vector field).
+func (vi *VectorIndex) SearchForInsert(
+	ctx context.Context,
+	txn vecstore.Txn,
+	vector vector.T,
+) (*vecstore.SearchResult, error) {
+	// Potentially throttle operation if background work is falling behind.
+	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
+		return nil, err
+	}
+
+	// Search for the best partition with the closest centroid to the query
+	// vector. The partition in which to insert the vector is at the parent of
+	// of the leaf level. Perform the search using quantized vectors rather than
+	// full vectors (i.e. skip reranking).
+	searchCtx := searchContext{
+		Txn:      txn,
+		Original: vector,
+		Level:    vecstore.SecondLevel,
+		Options: SearchOptions{
+			BaseBeamSize: vi.options.BaseBeamSize,
+			SkipRerank:   true,
+			UpdateStats:  true,
+		},
+	}
+	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
+
+	// Randomize the vector if required by the quantizer.
+	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetRandomDims())
+	defer searchCtx.Workspace.FreeVector(tempRandomized)
+	vi.quantizer.RandomizeVector(ctx, vector, tempRandomized, false /* invert */)
+	searchCtx.Randomized = tempRandomized
+
+	searchSet := vecstore.SearchSet{MaxResults: 1}
+	err := vi.searchHelper(&searchCtx, &searchSet)
+	if err != nil {
+		return nil, err
+	}
+	results := searchSet.PopUnsortedResults()
+	if len(results) != 1 {
+		return nil, errors.AssertionFailedf(
+			"SearchForInsert should return exactly one result, got %d", len(results))
+	}
+
+	// Now fetch the centroid of the insert partition. This has the side effect
+	// of checking the size of the partition, in case it's over-sized.
+	partitionKey := results[0].ChildKey.PartitionKey
+	metadata, err := txn.GetPartitionMetadata(ctx, partitionKey, true /* forUpdate */)
+	if err != nil {
+		return nil, err
+	}
+	if metadata.Count > vi.options.MaxPartitionSize {
+		vi.fixups.AddSplit(ctx, results[0].ParentPartitionKey, partitionKey)
+	}
+
+	results[0].Vector = metadata.Centroid
+	return &results[0], nil
+}
+
 // SuspendFixups suspends background fixup processing until ProcessFixups is
 // explicitly called. It is used for testing.
 func (vi *VectorIndex) SuspendFixups() {
@@ -406,7 +467,7 @@ func (vi *VectorIndex) insertHelper(
 	results := searchSet.PopUnsortedResults()
 	parentPartitionKey := results[0].ParentPartitionKey
 	partitionKey := results[0].ChildKey.PartitionKey
-	_, err = vi.addToPartition(parentSearchCtx.Ctx, parentSearchCtx.Txn, parentPartitionKey,
+	err = vi.addToPartition(parentSearchCtx.Ctx, parentSearchCtx.Txn, parentPartitionKey,
 		partitionKey, parentSearchCtx.Randomized, childKey)
 	if errors.Is(err, vecstore.ErrRestartOperation) {
 		return vi.insertHelper(parentSearchCtx, childKey)
@@ -427,17 +488,15 @@ func (vi *VectorIndex) addToPartition(
 	partitionKey vecstore.PartitionKey,
 	vector vector.T,
 	childKey vecstore.ChildKey,
-) (int, error) {
-	count, err := txn.AddToPartition(ctx, partitionKey, vector, childKey)
+) error {
+	metadata, err := txn.AddToPartition(ctx, partitionKey, vector, childKey)
 	if err != nil {
-		return 0, errors.Wrapf(err, "adding vector to partition %d", partitionKey)
+		return errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
-	if count > vi.options.MaxPartitionSize {
+	if metadata.Count > vi.options.MaxPartitionSize {
 		vi.fixups.AddSplit(ctx, parentPartitionKey, partitionKey)
 	}
-
-	err = vi.stats.OnAddOrRemoveVector(ctx)
-	return count, err
+	return vi.stats.OnAddOrRemoveVector(ctx)
 }
 
 // removeFromPartition calls the store to remove a vector, by its key, from an
@@ -447,14 +506,16 @@ func (vi *VectorIndex) removeFromPartition(
 	txn vecstore.Txn,
 	partitionKey vecstore.PartitionKey,
 	childKey vecstore.ChildKey,
-) (int, error) {
-	count, err := txn.RemoveFromPartition(ctx, partitionKey, childKey)
+) (metadata vecstore.PartitionMetadata, err error) {
+	metadata, err = txn.RemoveFromPartition(ctx, partitionKey, childKey)
 	if err != nil {
-		return 0, errors.Wrapf(err, "removing vector from partition %d", partitionKey)
+		return vecstore.PartitionMetadata{},
+			errors.Wrapf(err, "removing vector from partition %d", partitionKey)
 	}
-
-	err = vi.stats.OnAddOrRemoveVector(ctx)
-	return count, err
+	if err := vi.stats.OnAddOrRemoveVector(ctx); err != nil {
+		return vecstore.PartitionMetadata{}, err
+	}
+	return metadata, nil
 }
 
 // searchHelper contains the core search logic for the K-means tree. It begins
@@ -524,6 +585,7 @@ func (vi *VectorIndex) searchHelper(searchCtx *searchContext, searchSet *vecstor
 		}
 
 		if searchLevel <= searchCtx.Level {
+			// We've reached the end of the search.
 			if searchLevel != searchCtx.Level {
 				// This indicates index corruption, since each lower level should
 				// be one less than its parent level.
@@ -788,44 +850,6 @@ func (vi *VectorIndex) Format(
 	// Write formatted bytes to this buffer.
 	var buf bytes.Buffer
 
-	// Format each number to 4 decimal places, removing unnecessary trailing
-	// zeros. Don't print negative zero, since this causes diffs when running on
-	// Linux vs. Mac.
-	formatFloat := func(value float32) string {
-		s := strconv.FormatFloat(float64(value), 'f', 4, 32)
-		if strings.Contains(s, ".") {
-			s = strings.TrimRight(s, "0")
-			s = strings.TrimRight(s, ".")
-		}
-		if s == "-0" {
-			return "0"
-		}
-		return s
-	}
-
-	writeVector := func(vector vector.T) {
-		buf.WriteByte('(')
-		if len(vector) > 4 {
-			// Show first 2 numbers, '...', and last 2 numbers.
-			buf.WriteString(formatFloat(vector[0]))
-			buf.WriteString(", ")
-			buf.WriteString(formatFloat(vector[1]))
-			buf.WriteString(", ..., ")
-			buf.WriteString(formatFloat(vector[len(vector)-2]))
-			buf.WriteString(", ")
-			buf.WriteString(formatFloat(vector[len(vector)-1]))
-		} else {
-			// Show all numbers if there are 4 or fewer.
-			for i, val := range vector {
-				if i != 0 {
-					buf.WriteString(", ")
-				}
-				buf.WriteString(formatFloat(val))
-			}
-		}
-		buf.WriteByte(')')
-	}
-
 	writePrimaryKey := func(key vecstore.PrimaryKey) {
 		if options.PrimaryKeyStrings {
 			buf.WriteString(string(key))
@@ -854,7 +878,7 @@ func (vi *VectorIndex) Format(
 		buf.WriteString("• ")
 		buf.WriteString(strconv.FormatInt(int64(partitionKey), 10))
 		buf.WriteByte(' ')
-		writeVector(original)
+		writeVector(&buf, original, 4)
 		buf.WriteByte('\n')
 
 		if partition.Count() == 0 {
@@ -882,7 +906,7 @@ func (vi *VectorIndex) Format(
 				writePrimaryKey(childKey.PrimaryKey)
 				if refs[0].Vector != nil {
 					buf.WriteByte(' ')
-					writeVector(refs[0].Vector)
+					writeVector(&buf, refs[0].Vector, 4)
 				} else {
 					buf.WriteString(" (MISSING)")
 				}
@@ -912,6 +936,46 @@ func (vi *VectorIndex) Format(
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// formatFloat formats each number to the specified number of decimal places,
+// removing unnecessary zeros. Don't print negative zero, since this causes
+// diffs when running on Linux vs. Mac.
+func formatFloat(value float32, prec int) string {
+	s := strconv.FormatFloat(float64(value), 'f', prec, 32)
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimRight(s, ".")
+	}
+	if s == "-0" {
+		return "0"
+	}
+	return s
+}
+
+// writeVector formats the given vector like "(1, 2, ..., 9, 10)" and writes it
+// to the given buffer, using the specified precision.
+func writeVector(buf *bytes.Buffer, vector vector.T, prec int) {
+	buf.WriteString("(")
+	if len(vector) > 4 {
+		// Show first 2 numbers, '...', and last 2 numbers.
+		buf.WriteString(formatFloat(vector[0], prec))
+		buf.WriteString(", ")
+		buf.WriteString(formatFloat(vector[1], prec))
+		buf.WriteString(", ..., ")
+		buf.WriteString(formatFloat(vector[len(vector)-2], prec))
+		buf.WriteString(", ")
+		buf.WriteString(formatFloat(vector[len(vector)-1], prec))
+	} else {
+		// Show all numbers if there are 4 or fewer.
+		for i, val := range vector {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(formatFloat(val, prec))
+		}
+	}
+	buf.WriteString(")")
 }
 
 // ensureSliceLen returns a slice of the given length and generic type. If the

@@ -60,6 +60,9 @@ func TestVectorIndex(t *testing.T) {
 			case "search":
 				return state.Search(d)
 
+			case "search-for-insert":
+				return state.SearchForInsert(d)
+
 			case "insert":
 				return state.Insert(d)
 
@@ -208,6 +211,51 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%d vectors, ", searchSet.Stats.QuantizedVectorCount))
 	buf.WriteString(fmt.Sprintf("%d full vectors, ", searchSet.Stats.FullVectorCount))
 	buf.WriteString(fmt.Sprintf("%d partitions", searchSet.Stats.PartitionCount))
+
+	// Handle any fixups triggered by the search.
+	s.Index.ProcessFixups()
+
+	return buf.String()
+}
+
+func (s *testState) SearchForInsert(d *datadriven.TestData) string {
+	var vec vector.T
+
+	var err error
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "use-feature":
+			require.Len(s.T, arg.Vals, 1)
+			offset, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+			vec = s.Features.At(offset)
+		}
+	}
+
+	if vec == nil {
+		// Parse input as the vector to search for.
+		vec = s.parseVector(d.Input)
+	}
+
+	// Search the index within a transaction.
+	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+	result, err := s.Index.SearchForInsert(s.Ctx, txn, vec)
+	require.NoError(s.T, err)
+	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "partition %d, centroid=", result.ChildKey.PartitionKey)
+
+	// Un-randomize the centroid and write it to buffer.
+	original := make(vector.T, len(result.Vector))
+	s.Quantizer.RandomizeVector(s.Ctx, result.Vector, original, true /* invert */)
+	writeVector(&buf, original, 4)
+
+	fmt.Fprintf(&buf, ", sqdist=%s", formatFloat(result.QuerySquaredDistance, 4))
+	if result.ErrorBound != 0 {
+		fmt.Fprintf(&buf, "±%s", formatFloat(result.ErrorBound, 2))
+	}
+	buf.WriteByte('\n')
 
 	// Handle any fixups triggered by the search.
 	s.Index.ProcessFixups()
@@ -548,15 +596,6 @@ func (s *testState) parseVector(str string) vector.T {
 	}
 
 	return vector
-}
-
-func formatFloat(value float32, prec int) string {
-	s := strconv.FormatFloat(float64(value), 'f', prec, 32)
-	if strings.Contains(s, ".") {
-		s = strings.TrimRight(s, "0")
-		s = strings.TrimRight(s, ".")
-	}
-	return s
 }
 
 func beginTransaction(ctx context.Context, t *testing.T, store vecstore.Store) vecstore.Txn {
