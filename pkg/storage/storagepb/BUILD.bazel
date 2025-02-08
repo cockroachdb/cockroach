@@ -7,10 +7,7 @@ proto_library(
     srcs = ["storage.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/roachpb:roachpb_proto",
-        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-    ],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )
 
 go_proto_library(
@@ -19,10 +16,7 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/storagepb",
     proto = ":storagepb_proto",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/roachpb",
-        "@com_github_gogo_protobuf//gogoproto",
-    ],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
 
 go_library(
