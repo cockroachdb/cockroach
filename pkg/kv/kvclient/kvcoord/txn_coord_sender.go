@@ -1165,6 +1165,8 @@ func (tc *TxnCoordSender) SetBufferedWritesEnabled(enabled bool) {
 		panic("cannot enable buffered writes on a running transaction")
 	}
 	tc.interceptorAlloc.txnWriteBuffer.enabled = enabled
+	// TODO(yuzefovich): flush the buffer when going from "enabled" to
+	// "disabled".
 }
 
 // BufferedWritesEnabled is part of the kv.TxnSender interface.
