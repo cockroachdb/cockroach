@@ -46,7 +46,8 @@ type SearchResult struct {
 	// partition, or the key of its partition if it's in a root/branch partition.
 	ChildKey ChildKey
 	// Vector is the original, full-size data vector. This is nil by default,
-	// and is only set after an optional reranking step.
+	// and is only set when SearchOptions.SkipRerank is false or
+	// SearchOptions.ReturnVectors is true.
 	Vector vector.T
 }
 
@@ -160,13 +161,16 @@ func (ss *SearchStats) Add(other *SearchStats) {
 // vector. Candidates are repeatedly added via the Add methods and the Pop
 // methods return a sorted list of the best candidates.
 type SearchSet struct {
-	// MaxResults is the maximum number of candidates that will be returned by
-	// PopResults.
+	// MaxResults specifies the max number of search results to return. Although
+	// these are the best results, the search process may retrieve additional
+	// candidates for reranking and statistics (up to MaxExtraResults) that are
+	// within the error threshold of being among the best results.
 	MaxResults int
 
-	// MaxExtraResults is the maximum number of candidates that will be returned
-	// by PopExtraResults. These results are within the error threshold of being
-	// among the best results.
+	// MaxExtraResults is the maximum number of additional candidates (beyond
+	// MaxResults) that will be returned by the search process for reranking and
+	// statistics. These results are within the error threshold of being among the
+	// the best results.
 	MaxExtraResults int
 
 	// MatchKey, if non-nil, filters out all search candidates that do not have

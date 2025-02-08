@@ -202,13 +202,13 @@ func (fw *fixupWorker) splitPartition(
 				partitionKey, parentPartitionKey)
 		}
 
-		count, err := fw.index.removeFromPartition(ctx, txn, parentPartitionKey, childKey)
+		metadata, err := fw.index.removeFromPartition(ctx, txn, parentPartitionKey, childKey)
 		if err != nil {
 			return errors.Wrapf(err, "removing splitting partition %d from its parent %d",
 				partitionKey, parentPartitionKey)
 		}
 
-		if count != 0 {
+		if metadata.Count != 0 {
 			// Move any vectors to sibling partitions that have closer centroids.
 			// Lazily get parent vectors only if they're actually needed.
 			var parentVectors vector.Set
@@ -446,7 +446,8 @@ func (fw *fixupWorker) moveVectorsToSiblings(
 		// Found a sibling child partition that's closer, so insert the vector
 		// there instead.
 		childKey := split.Partition.ChildKeys()[i]
-		_, err = fw.index.addToPartition(ctx, txn, parentPartitionKey, siblingPartitionKey, vector, childKey)
+		err = fw.index.addToPartition(
+			ctx, txn, parentPartitionKey, siblingPartitionKey, vector, childKey)
 		if err != nil {
 			return errors.Wrapf(err, "moving vector to partition %d", siblingPartitionKey)
 		}
@@ -515,11 +516,12 @@ func (fw *fixupWorker) linkNearbyVectors(
 		}
 
 		// Remove the vector from the other partition.
-		count, err := fw.index.removeFromPartition(ctx, txn, result.ParentPartitionKey, result.ChildKey)
+		metadata, err := fw.index.removeFromPartition(
+			ctx, txn, result.ParentPartitionKey, result.ChildKey)
 		if err != nil {
 			return err
 		}
-		if count == 0 && partition.Level() > vecstore.LeafLevel {
+		if metadata.Count == 0 && partition.Level() > vecstore.LeafLevel {
 			// Removing the vector will result in an empty non-leaf partition, which
 			// is not allowed, as the K-means tree would not be fully balanced. Add
 			// the vector back to the partition. This is a very rare case and that

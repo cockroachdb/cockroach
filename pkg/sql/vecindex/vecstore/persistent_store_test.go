@@ -155,20 +155,20 @@ func TestPersistentStore(t *testing.T) {
 		require.NoError(t, err)
 
 		// Add to root partition.
-		count, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, childKey10)
+		metadata, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, childKey10)
 		require.NoError(t, err)
-		require.Equal(t, 1, count)
-		count, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, childKey20)
+		checkPartitionMetadata(t, metadata, Level(2), vector.T{0, 0}, 1)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, childKey20)
 		require.NoError(t, err)
-		require.Equal(t, 2, count)
-		count, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, childKey30)
+		checkPartitionMetadata(t, metadata, Level(2), vector.T{0, 0}, 2)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, childKey30)
 		require.NoError(t, err)
-		require.Equal(t, 3, count)
+		checkPartitionMetadata(t, metadata, Level(2), vector.T{0, 0}, 3)
 
 		// Add duplicate and expect value to be overwritten
-		count, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, childKey30)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, childKey30)
 		require.NoError(t, err)
-		require.Equal(t, 3, count)
+		checkPartitionMetadata(t, metadata, Level(2), vector.T{0, 0}, 3)
 
 		// Search root partition.
 		searchSet := SearchSet{MaxResults: 2}

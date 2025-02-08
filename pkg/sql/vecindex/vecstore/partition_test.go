@@ -36,7 +36,7 @@ func TestPartition(t *testing.T) {
 	vectors := vector.MakeSetFromRawData([]float32{1, 2, 5, 2, 6, 6}, 2)
 	quantizedSet := quantizer.Quantize(ctx, vectors)
 	childKeys := []ChildKey{childKey10, childKey20, childKey30}
-	partition := NewPartition(quantizer, quantizedSet, childKeys, 1)
+	partition := NewPartition(quantizer, quantizedSet, childKeys, Level(1))
 	require.True(t, partition.Add(ctx, vector.T{4, 3}, childKey40))
 
 	// Add vector and expect its value to be updated.
@@ -45,6 +45,7 @@ func TestPartition(t *testing.T) {
 	require.Equal(t, 4, partition.Count())
 	require.Equal(t, []ChildKey{childKey10, childKey40, childKey30, childKey20}, partition.ChildKeys())
 	require.Equal(t, []float32{4, 3.33}, roundFloats(partition.Centroid(), 2))
+	checkPartitionMetadata(t, partition.Metadata(), Level(1), vector.T{4, 3.33}, 4)
 
 	// Ensure that cloning does not disturb anything.
 	cloned := partition.Clone()
@@ -86,6 +87,7 @@ func TestPartition(t *testing.T) {
 	errorBounds := []float32{0, 0, 0, 0, 0}
 	cloned.Quantizer().EstimateSquaredDistances(ctx, cloned.QuantizedSet(), vector.T{3, 4}, squaredDistances, errorBounds)
 	require.Equal(t, []float32{8, 2, 13, 85, 34}, squaredDistances)
+	checkPartitionMetadata(t, cloned.Metadata(), Level(1), vector.T{4, 3.33}, 5)
 }
 
 func roundResults(results SearchResults, prec int) SearchResults {
@@ -107,4 +109,12 @@ func roundFloats(s []float32, prec int) []float32 {
 	copy(t, s)
 	num32.Round(t, prec)
 	return t
+}
+
+func checkPartitionMetadata(
+	t *testing.T, metadata PartitionMetadata, level Level, centroid vector.T, count int,
+) {
+	require.Equal(t, level, metadata.Level)
+	require.Equal(t, []float32(centroid), roundFloats(metadata.Centroid, 2))
+	require.Equal(t, count, metadata.Count)
 }
