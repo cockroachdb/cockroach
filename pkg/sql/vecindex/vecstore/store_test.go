@@ -81,27 +81,37 @@ func commonStoreTests(
 		require.Equal(t, LeafLevel, level)
 		require.Nil(t, searchSet.PopResults())
 		require.Equal(t, 0, partitionCounts[0])
+
+		// Get partition metadata.
+		metadata, err := txn.GetPartitionMetadata(ctx, RootKey, false /* forUpdate */)
+		require.NoError(t, err)
+		checkPartitionMetadata(t, metadata, Level(1), vector.T{0, 0}, 0)
 	})
 
 	t.Run("add to root partition", func(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
 		defer commitTransaction(ctx, t, store, txn)
 
+		// Get partition metadata with forUpdate = true before updates.
+		metadata, err := txn.GetPartitionMetadata(ctx, RootKey, true /* forUpdate */)
+		require.NoError(t, err)
+		checkPartitionMetadata(t, metadata, Level(1), vector.T{0, 0}, 0)
+
 		// Add to root partition.
-		count, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, primaryKey100)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, primaryKey100)
 		require.NoError(t, err)
-		require.Equal(t, 1, count)
-		count, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, primaryKey200)
+		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 1)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, primaryKey200)
 		require.NoError(t, err)
-		require.Equal(t, 2, count)
-		count, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, primaryKey300)
+		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 2)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, primaryKey300)
 		require.NoError(t, err)
-		require.Equal(t, 3, count)
+		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 3)
 
 		// Add duplicate and expect value to be overwritten
-		count, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, primaryKey300)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, primaryKey300)
 		require.NoError(t, err)
-		require.Equal(t, 3, count)
+		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 3)
 
 		// Search root partition.
 		searchSet := SearchSet{MaxResults: 2}
@@ -116,6 +126,11 @@ func commonStoreTests(
 		roundResults(results, 4)
 		require.Equal(t, SearchResults{result1, result2}, results)
 		require.Equal(t, 3, partitionCounts[0])
+
+		// Ensure partition metadata is updated.
+		metadata, err = txn.GetPartitionMetadata(ctx, RootKey, true /* forUpdate */)
+		require.NoError(t, err)
+		checkPartitionMetadata(t, metadata, Level(1), vector.T{0, 0}, 3)
 	})
 
 	var root *Partition
@@ -142,6 +157,11 @@ func commonStoreTests(
 		require.Equal(t, vector.T{0, 0}, results[0].Vector)
 		require.Equal(t, testVectors[0], results[1].Vector)
 		require.Nil(t, results[2].Vector)
+
+		// Get partition metadata.
+		metadata, err := txn.GetPartitionMetadata(ctx, RootKey, false /* forUpdate */)
+		require.NoError(t, err)
+		checkPartitionMetadata(t, metadata, Level(1), vector.T{0, 0}, 3)
 	})
 
 	t.Run("replace root partition", func(t *testing.T) {
@@ -153,7 +173,7 @@ func commonStoreTests(
 		require.NoError(t, err)
 		vectors := vector.T{4, 3}.AsSet()
 		quantizedSet := quantizer.Quantize(ctx, vectors)
-		newRoot := NewPartition(quantizer, quantizedSet, []ChildKey{childKey2}, 2)
+		newRoot := NewPartition(quantizer, quantizedSet, []ChildKey{childKey2}, Level(2))
 		require.NoError(t, txn.SetRootPartition(ctx, newRoot))
 		newRoot, err = txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
@@ -169,6 +189,11 @@ func commonStoreTests(
 		result3 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 0, ParentPartitionKey: 1, ChildKey: childKey2}
 		require.Equal(t, SearchResults{result3}, searchSet.PopResults())
 		require.Equal(t, 1, partitionCounts[0])
+
+		// Get partition metadata.
+		metadata, err := txn.GetPartitionMetadata(ctx, RootKey, false /* forUpdate */)
+		require.NoError(t, err)
+		checkPartitionMetadata(t, metadata, Level(2), vector.T{4, 3}, 1)
 	})
 
 	var partitionKey1 PartitionKey
@@ -180,22 +205,22 @@ func commonStoreTests(
 		require.NoError(t, err)
 		partitionKey1, err = txn.InsertPartition(ctx, root)
 		require.NoError(t, err)
-		count, err := txn.RemoveFromPartition(ctx, partitionKey1, primaryKey200)
+		metadata, err := txn.RemoveFromPartition(ctx, partitionKey1, primaryKey200)
 		require.NoError(t, err)
-		require.Equal(t, 2, count)
+		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 2)
 
 		// Try to remove the same key again.
-		count, err = txn.RemoveFromPartition(ctx, partitionKey1, primaryKey200)
+		metadata, err = txn.RemoveFromPartition(ctx, partitionKey1, primaryKey200)
 		require.NoError(t, err)
-		require.Equal(t, 2, count)
+		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 2)
 
 		// Add an alternate element and add duplicate, expecting value to be overwritten.
-		count, err = txn.AddToPartition(ctx, partitionKey1, vector.T{-1, 0}, primaryKey400)
+		metadata, err = txn.AddToPartition(ctx, partitionKey1, vector.T{-1, 0}, primaryKey400)
 		require.NoError(t, err)
-		require.Equal(t, 3, count)
-		count, err = txn.AddToPartition(ctx, partitionKey1, vector.T{1, 1}, primaryKey400)
+		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 3)
+		metadata, err = txn.AddToPartition(ctx, partitionKey1, vector.T{1, 1}, primaryKey400)
 		require.NoError(t, err)
-		require.Equal(t, 3, count)
+		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 3)
 
 		searchSet := SearchSet{MaxResults: 2}
 		partitionCounts := []int{0}
