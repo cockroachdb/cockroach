@@ -286,7 +286,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	require.Equal(t, uint64(1), store2.mu.partitions[10].lock.created)
 	require.Equal(t, Level(1), store2.mu.partitions[10].lock.partition.level)
 	require.Equal(t, 3, store2.mu.partitions[10].lock.partition.quantizedSet.GetCount())
-	require.Equal(t, 2, store2.mu.partitions[20].lock.partition.quantizer.GetOriginalDims())
+	require.Equal(t, 2, store2.mu.partitions[20].lock.partition.quantizer.GetDims())
 	require.Len(t, store2.mu.partitions[20].lock.partition.childKeys, 3)
 	require.Equal(t, PartitionKey(100), store2.mu.nextKey)
 	require.Len(t, store2.mu.vectors, 2)

@@ -27,10 +27,10 @@ func TestSplitPartitionData(t *testing.T) {
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 	quantizer := quantize.NewRaBitQuantizer(2, 42)
 	store := vecstore.NewInMemoryStore(2, 42)
-	options := VectorIndexOptions{Seed: 42}
+	options := VectorIndexOptions{IsDeterministic: true}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	index, err := NewVectorIndex(ctx, store, quantizer, &options, stopper)
+	index, err := NewVectorIndex(ctx, store, quantizer, 42, &options, stopper)
 	require.NoError(t, err)
 	worker := NewFixupWorker(&index.fixups)
 
