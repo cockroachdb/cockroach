@@ -206,6 +206,11 @@ type ServerConfig struct {
 	// RootSQLMemoryPoolSize is the size in bytes of the root SQL memory
 	// monitor.
 	RootSQLMemoryPoolSize int64
+
+	// VecIndexManager allows SQL processors to access the vecindex.VectorIndex
+	// for operations on a vector index. It's stored as an `interface{}` due to
+	// package dependency cycles
+	VecIndexManager interface{}
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
