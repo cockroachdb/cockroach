@@ -40,9 +40,6 @@ type RaBitQuantizer struct {
 	sqrtDims float32
 	// sqrtDimsInv precomputes "1 / sqrtDims".
 	sqrtDimsInv float32
-	// rot is a square dims x dims matrix that performs random orthogonal
-	// transformations on input vectors, in order to distribute skew more evenly.
-	rot num32.Matrix
 	// unbias is a precomputed slice of "dims" random values in the [0, 1)
 	// interval that's used to remove bias when quantizing query vectors.
 	unbias []float32
@@ -72,30 +69,6 @@ func NewRaBitQuantizer(dims int, seed int64) Quantizer {
 
 	rng := rand.New(rand.NewSource(seed))
 
-	// Generate dims x dims random orthogonal matrix to mitigate the impact of
-	// skewed input data distributions:
-	//
-	//   1. Set skew: some dimensions can have higher variance than others. For
-	//      example, perhaps all vectors in a set have similar values for one
-	//      dimension but widely differing values in another dimension.
-	//   2. Vector skew: Individual vectors can have internal skew, such that
-	//      values higher than the mean are more spread out than values lower
-	//      than the mean.
-	//
-	// Multiplying vectors by this matrix helps with both forms of skew. While
-	// total skew does not change, the skew is more evenly distributed across
-	// the dimensions. Now quantizing the vector will have more uniform
-	// information loss across dimensions. Critically, none of this impacts
-	// distance calculations, as orthogonal transformations do not change
-	// distances or angles between vectors.
-	//
-	// Ultimately, performing a random orthogonal transformation (ROT) means that
-	// the index will work more consistently across a diversity of input data
-	// sets, even those with skewed data distributions. In addition, the RaBitQ
-	// algorithm depends on the statistical properties that are granted by the
-	// ROT.
-	rot := num32.MakeRandomOrthoMatrix(rng, dims)
-
 	// Create random offsets in range [0, 1) to remove bias when quantizing
 	// query vectors.
 	unbias := make([]float32, dims)
@@ -108,30 +81,13 @@ func NewRaBitQuantizer(dims int, seed int64) Quantizer {
 		dims:        dims,
 		sqrtDims:    sqrtDims,
 		sqrtDimsInv: 1.0 / sqrtDims,
-		rot:         rot,
 		unbias:      unbias,
 	}
 }
 
 // GetOriginalDims implements the Quantizer interface.
-func (q *RaBitQuantizer) GetOriginalDims() int {
+func (q *RaBitQuantizer) GetDims() int {
 	return q.dims
-}
-
-// GetRandomDims implements the Quantizer interface.
-func (q *RaBitQuantizer) GetRandomDims() int {
-	return q.dims
-}
-
-// RandomizeVector implements the Quantizer interface.
-func (q *RaBitQuantizer) RandomizeVector(
-	ctx context.Context, input vector.T, output vector.T, invert bool,
-) {
-	if !invert {
-		num32.MulMatrixByVector(&q.rot, input, output, num32.NoTranspose)
-	} else {
-		num32.MulMatrixByVector(&q.rot, input, output, num32.Transpose)
-	}
 }
 
 // Quantize implements the Quantizer interface.
@@ -159,7 +115,7 @@ func (q *RaBitQuantizer) QuantizeInSet(
 
 // NewQuantizedVectorSet implements the Quantizer interface
 func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
-	codeWidth := RaBitQCodeSetWidth(q.GetRandomDims())
+	codeWidth := RaBitQCodeSetWidth(q.GetDims())
 	dataBuffer := make([]uint64, 0, capacity*codeWidth)
 	if capacity <= 1 {
 		// Special case capacity of zero or one by using in-line storage.

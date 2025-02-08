@@ -127,7 +127,7 @@ func (m *Manager) Get(
 		// Use the stored context so that the VectorIndex can outlive the context of the
 		// Get call. The fixup process gets a child context from the context passed to
 		// NewVectorIndex, and we don't want that to be the context of the Get call.
-		return NewVectorIndex(m.ctx, store, quantizer, &VectorIndexOptions{}, m.stopper)
+		return NewVectorIndex(m.ctx, store, quantizer, config.Seed, &VectorIndexOptions{}, m.stopper)
 	}()
 	e.mustWait = false
 	e.idx, e.err = idx, err

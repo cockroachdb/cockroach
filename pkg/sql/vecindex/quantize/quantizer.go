@@ -18,48 +18,22 @@ import (
 // used to estimate the distance between the original vector and a user-provided
 // query vector.
 //
-// Original, full-size vectors should first be randomized via a call to
-// RandomizeVector and then quantized via a call to Quantize or QuantizeInSet.
-//
 // Quantizer implementations must be thread-safe. There should typically be only
 // one Quantizer instance in the process for each index.
 type Quantizer interface {
-	// GetOriginalDims specifies the number of dimensions of the original
-	// full-size vectors that will be quantized.
-	GetOriginalDims() int
-
-	// GetRandomDims specifies the number of dimensions of the randomized
-	// vectors produced by RandomizeVector. This may be different from what
-	// GetOriginalDims returns.
-	GetRandomDims() int
-
-	// RandomizeVector optionally performs a random orthogonal transformation
-	// (ROT) on the input vector and writes it to the output vector. The caller
-	// is responsible for allocating the output vector with length equal to
-	// GetRandomDims(). If invert is true, then a previous ROT is reversed in
-	// order to recover the original vector. The caller is responsible for
-	// allocating the output vector with length equal to GetOriginalDims().
-	//
-	// Randomizing vectors distributes skew more evenly across dimensions and
-	// across vectors in a set. Distance and angle between any two vectors
-	// remains unchanged, as long as the same ROT is applied to both. Note that
-	// the randomized vector may have a different number of dimensions than the
-	// original vector.
-	//
-	// NOTE: This step may be a no-op for some quantization algorithms, which
-	// may simply copy the original slice to the randomized slice, unchanged.
-	RandomizeVector(ctx context.Context, input vector.T, output vector.T, invert bool)
+	// GetDims specifies the number of dimensions of the vectors that will be
+	// quantized.
+	GetDims() int
 
 	// Quantize quantizes a set of input vectors and returns their compressed
-	// form as a quantized vector set. Input vectors should already have been
-	// randomized. The set's centroid is calculated from the input vectors.
+	// form as a quantized vector set. The set's centroid is calculated from the
+	// input vectors.
 	//
 	// NOTE: The caller must ensure that a Workspace is attached to the context.
 	Quantize(ctx context.Context, vectors vector.Set) QuantizedVectorSet
 
 	// QuantizeInSet quantizes a set of input vectors and adds their compressed
-	// form to an existing quantized vector set. Input vectors should already
-	// have been randomized.
+	// form to an existing quantized vector set.
 	//
 	// NOTE: The set's centroid is not recalculated to reflect the newly added
 	//       vectors.
@@ -97,8 +71,7 @@ type QuantizedVectorSet interface {
 	GetCount() int
 
 	// GetCentroid returns the full-size centroid vector for the set. The
-	// centroid is the average of the randomized full-size vectors, across all
-	// dimensions.
+	// centroid is the average of the vectors across all dimensions.
 	// NOTE: This centroid is calculated once, when the set is first created. It
 	// is not updated when quantized vectors are added to or removed from the set.
 	// Since it is immutable, this method is thread-safe.

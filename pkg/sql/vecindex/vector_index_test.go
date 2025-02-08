@@ -10,6 +10,8 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"regexp"
 	"runtime"
 	"sort"
@@ -96,9 +98,7 @@ type testState struct {
 func (s *testState) NewIndex(d *datadriven.TestData) string {
 	var err error
 	dims := 2
-	// Set seed and allow at most one background worker to run so vector index
-	// operations can be deterministic.
-	s.Options = VectorIndexOptions{Seed: 42, MaxWorkers: 1}
+	s.Options = VectorIndexOptions{IsDeterministic: true}
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "min-partition-size":
@@ -130,7 +130,7 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 
 	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
 	s.InMemStore = vecstore.NewInMemoryStore(dims, 42)
-	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, &s.Options, s.Stopper)
+	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, 42, &s.Options, s.Stopper)
 	require.NoError(s.T, err)
 
 	// Suspend background fixups until ProcessFixups is explicitly called, so
@@ -237,7 +237,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		}
 	}
 
-	vectors := vector.MakeSet(s.Quantizer.GetRandomDims())
+	vectors := vector.MakeSet(s.Quantizer.GetDims())
 	childKeys := make([]vecstore.ChildKey, 0, count)
 	if count != 0 {
 		// Load features.
@@ -385,6 +385,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	options := SearchOptions{}
 	numSamples := 50
 	var samples []int
+	seed := 42
 	var err error
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
@@ -401,6 +402,11 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 			numSamples, err = strconv.Atoi(arg.Vals[0])
 			require.NoError(s.T, err)
 
+		case "seed":
+			require.Len(s.T, arg.Vals, 1)
+			seed, err = strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+
 		case "topk":
 			require.Len(s.T, arg.Vals, 1)
 			searchSet.MaxResults, err = strconv.Atoi(arg.Vals[0])
@@ -413,12 +419,23 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		}
 	}
 
+	data := s.InMemStore.GetAllVectors()
+
 	// Construct list of feature offsets.
 	if samples == nil {
-		samples = make([]int, numSamples)
-		for i := range samples {
-			samples[i] = s.Features.Count - numSamples + i
+		// Shuffle the remaining features.
+		rng := rand.New(rand.NewSource(int64(seed)))
+		remaining := make([]int, s.Features.Count-len(data))
+		for i := range remaining {
+			remaining[i] = i
 		}
+		rng.Shuffle(len(remaining), func(i, j int) {
+			remaining[i], remaining[j] = remaining[j], remaining[i]
+		})
+
+		// Pick numSamples randomly from the remaining set
+		samples = make([]int, numSamples)
+		copy(samples, remaining[:numSamples])
 	}
 
 	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
@@ -446,8 +463,6 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		}
 		return truth
 	}
-
-	data := s.InMemStore.GetAllVectors()
 
 	// Search for sampled features.
 	var sumMAP float64
@@ -594,6 +609,61 @@ func findMAP(prediction, truth []vecstore.PrimaryKey) float64 {
 	return intersect / float64(len(truth))
 }
 
+func TestRandomizeVector(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create index.
+	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	const dims = 97
+	const count = 5
+	quantizer := quantize.NewRaBitQuantizer(dims, 46)
+	inMemStore := vecstore.NewInMemoryStore(dims, 42)
+	index, err := NewVectorIndex(ctx, inMemStore, quantizer, 42, &VectorIndexOptions{}, stopper)
+	require.NoError(t, err)
+
+	// Generate random vectors with exponentially increasing norms, in order
+	// make distances more distinct.
+	rng := rand.New(rand.NewSource(42))
+	data := make([]float32, dims*count)
+	for i := range data {
+		vecIdx := float64(i / dims)
+		data[i] = float32(rng.NormFloat64() * math.Pow(1.5, vecIdx))
+	}
+
+	original := vector.MakeSetFromRawData(data, dims)
+	randomized := vector.MakeSet(dims)
+	randomized.AddUndefined(count)
+	for i := range original.Count {
+		index.randomizeVector(original.At(i), randomized.At(i))
+
+		// Ensure that calling unRandomizeVector recovers original vector.
+		randomizedInv := make([]float32, dims)
+		index.unRandomizeVector(randomized.At(i), randomizedInv)
+		for j, val := range original.At(i) {
+			require.InDelta(t, val, randomizedInv[j], 0.00001)
+		}
+	}
+
+	// Ensure that distances are similar, whether using the original vectors or
+	// the randomized vectors.
+	originalSet := quantizer.Quantize(ctx, original).(*quantize.RaBitQuantizedVectorSet)
+	randomizedSet := quantizer.Quantize(ctx, randomized).(*quantize.RaBitQuantizedVectorSet)
+
+	distances := make([]float32, count)
+	errorBounds := make([]float32, count)
+	quantizer.EstimateSquaredDistances(ctx, originalSet, original.At(0), distances, errorBounds)
+	require.Equal(t, []float32{0, 272.75, 550.86, 950.93, 2421.41}, testutils.RoundFloats(distances, 2))
+	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
+
+	quantizer.EstimateSquaredDistances(ctx, randomizedSet, randomized.At(0), distances, errorBounds)
+	require.Equal(t, []float32{5.1, 292.72, 454.95, 1011.85, 2475.87}, testutils.RoundFloats(distances, 2))
+	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
+}
+
 // TestVectorIndexConcurrency builds an index on multiple goroutines, with
 // background splits and merges enabled.
 func TestVectorIndexConcurrency(t *testing.T) {
@@ -619,11 +689,11 @@ func TestVectorIndexConcurrency(t *testing.T) {
 			MaxPartitionSize: 8,
 			BaseBeamSize:     2,
 			QualitySamples:   4,
-			Seed:             42,
 		}
-		store := vecstore.NewInMemoryStore(vectors.Dims, options.Seed)
-		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, options.Seed)
-		index, err := NewVectorIndex(ctx, store, quantizer, &options, stopper)
+		seed := int64(i)
+		store := vecstore.NewInMemoryStore(vectors.Dims, seed)
+		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)
+		index, err := NewVectorIndex(ctx, store, quantizer, seed, &options, stopper)
 		require.NoError(t, err)
 
 		buildIndex(ctx, t, store, index, vectors, primaryKeys)

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"math/rand"
 	"runtime"
 	"strconv"
 	"strings"
@@ -58,10 +59,11 @@ type VectorIndexOptions struct {
 	// limit the number of results that need to be reranked. This is useful for
 	// testing and benchmarking.
 	DisableErrorBounds bool
-	// Seed is used to initialize a deterministic random number generator for
-	// testing purposes. If this is zero, then the global random number generator
-	// is used instead.
-	Seed int64
+	// IsDeterministic instructs the vector index to use a deterministic random
+	// number generator for performing operations and fixups. As long as the
+	// index is initialized with the same seed and fixups happen serially, the
+	// index will behave deterministically. This is useful for testing.
+	IsDeterministic bool
 	// MaxWorkers specifies the maximum number of background workers that can be
 	// created to process fixups for this vector index instance.
 	MaxWorkers int
@@ -144,10 +146,17 @@ type VectorIndex struct {
 	// stats maintains locally-cached statistics about the vector index that are
 	// used by adaptive search to improve search accuracy.
 	stats statsManager
+	// rot is a square dims x dims matrix that performs random orthogonal
+	// transformations on input vectors, in order to distribute skew more evenly.
+	rot num32.Matrix
 }
 
 // NewVectorIndex constructs a new vector index instance. Typically, only one
 // VectorIndex instance should be created for each index in the process.
+//
+// NOTE: It's important that the index is always initialized with the same seed,
+// first at the time of creation and then every time it's used.
+//
 // NOTE: If "stopper" is not nil, then the vector index will start a background
 // goroutine to process index fixups. When the index is no longer needed, the
 // caller must call Close to shut down the background goroutine.
@@ -155,13 +164,14 @@ func NewVectorIndex(
 	ctx context.Context,
 	store vecstore.Store,
 	quantizer quantize.Quantizer,
+	seed int64,
 	options *VectorIndexOptions,
 	stopper *stop.Stopper,
 ) (*VectorIndex, error) {
 	vi := &VectorIndex{
 		options:       *options,
 		store:         store,
-		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetRandomDims()),
+		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims()),
 		quantizer:     quantizer,
 	}
 	if vi.options.MinPartitionSize == 0 {
@@ -184,12 +194,49 @@ func NewVectorIndex(
 		return nil, errors.Errorf(
 			"QualitySamples option %d exceeds max allowed value", vi.options.QualitySamples)
 	}
+
+	rng := rand.New(rand.NewSource(seed))
+
+	// Generate dims x dims random orthogonal matrix to mitigate the impact of
+	// skewed input data distributions:
+	//
+	//   1. Set skew: some dimensions can have higher variance than others. For
+	//      example, perhaps all vectors in a set have similar values for one
+	//      dimension but widely differing values in another dimension.
+	//   2. Vector skew: Individual vectors can have internal skew, such that
+	//      values higher than the mean are more spread out than values lower
+	//      than the mean.
+	//
+	// Multiplying vectors by this matrix helps with both forms of skew. While
+	// total skew does not change, the skew is more evenly distributed across
+	// the dimensions. Now quantizing the vector will have more uniform
+	// information loss across dimensions. Critically, none of this impacts
+	// distance calculations, as orthogonal transformations do not change
+	// distances or angles between vectors.
+	//
+	// Ultimately, performing a random orthogonal transformation (ROT) means that
+	// the index will work more consistently across a diversity of input data
+	// sets, even those with skewed data distributions. In addition, the RaBitQ
+	// algorithm depends on the statistical properties that are granted by the
+	// ROT.
+	vi.rot = num32.MakeRandomOrthoMatrix(rng, quantizer.GetDims())
+
+	// Initialize fixup processor.
+	var fixupSeed int64
+	if options.IsDeterministic {
+		// Fixups need to be deterministic, so set the seed and worker count.
+		fixupSeed = seed
+		if vi.options.MaxWorkers > 1 {
+			return nil, errors.AssertionFailedf(
+				"multiple asynchronous workers cannot be used with the IsDeterministic option")
+		}
+		vi.options.MaxWorkers = 1
+	}
 	if vi.options.MaxWorkers == 0 {
 		// Default to a max of one worker per processor.
 		vi.options.MaxWorkers = runtime.GOMAXPROCS(-1)
 	}
-
-	vi.fixups.Init(ctx, stopper, vi, options.Seed)
+	vi.fixups.Init(ctx, stopper, vi, fixupSeed)
 
 	if err := vi.stats.Init(ctx, store); err != nil {
 		return nil, err
@@ -257,11 +304,10 @@ func (vi *VectorIndex) Insert(
 	}
 	parentSearchCtx.Ctx = internal.WithWorkspace(ctx, &parentSearchCtx.Workspace)
 
-	// Randomize the vector if required by the quantizer.
-	tempRandomized := parentSearchCtx.Workspace.AllocVector(vi.quantizer.GetRandomDims())
+	// Randomize the vector.
+	tempRandomized := parentSearchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
 	defer parentSearchCtx.Workspace.FreeVector(tempRandomized)
-	vi.quantizer.RandomizeVector(ctx, vector, tempRandomized, false /* invert */)
-	parentSearchCtx.Randomized = tempRandomized
+	parentSearchCtx.Randomized = vi.randomizeVector(vector, tempRandomized)
 
 	// Insert the vector into the secondary index.
 	childKey := vecstore.ChildKey{PrimaryKey: key}
@@ -296,11 +342,10 @@ func (vi *VectorIndex) Delete(
 	}
 	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
 
-	// Randomize the vector if required by the quantizer.
-	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetRandomDims())
+	// Randomize the vector.
+	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
 	defer searchCtx.Workspace.FreeVector(tempRandomized)
-	vi.quantizer.RandomizeVector(ctx, vector, tempRandomized, false /* invert */)
-	searchCtx.Randomized = tempRandomized
+	searchCtx.Randomized = vi.randomizeVector(vector, tempRandomized)
 
 	searchSet := vecstore.SearchSet{MaxResults: 1, MatchKey: key}
 
@@ -355,11 +400,10 @@ func (vi *VectorIndex) Search(
 	}
 	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
 
-	// Randomize the vector if required by the quantizer.
-	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetRandomDims())
+	// Randomize the vector.
+	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
 	defer searchCtx.Workspace.FreeVector(tempRandomized)
-	vi.quantizer.RandomizeVector(ctx, queryVector, tempRandomized, false /* invert */)
-	searchCtx.Randomized = tempRandomized
+	searchCtx.Randomized = vi.randomizeVector(queryVector, tempRandomized)
 
 	return vi.searchHelper(&searchCtx, searchSet)
 }
@@ -704,10 +748,9 @@ func (vi *VectorIndex) rerankSearchResults(
 		if searchCtx.Original != nil {
 			queryVector = searchCtx.Original
 		} else {
-			queryVector = searchCtx.Workspace.AllocVector(vi.quantizer.GetOriginalDims())
+			queryVector = searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
 			defer searchCtx.Workspace.FreeVector(queryVector)
-			vi.quantizer.RandomizeVector(
-				searchCtx.Ctx, searchCtx.Randomized, queryVector, true /* invert */)
+			vi.unRandomizeVector(searchCtx.Randomized, queryVector)
 		}
 	}
 
@@ -759,6 +802,26 @@ func (vi *VectorIndex) getRerankVectors(
 	}
 
 	return candidates, nil
+}
+
+// randomizeVector performs a random orthogonal transformation (ROT) on the
+// "original" vector and writes it to the "randomized" vector. The caller is
+// responsible for allocating the randomized vector with length equal to the
+// index's dimensions.
+//
+// Randomizing vectors distributes skew more evenly across dimensions and
+// across vectors in a set. Distance and angle between any two vectors
+// remains unchanged, as long as the same ROT is applied to both.
+func (vi *VectorIndex) randomizeVector(original vector.T, randomized vector.T) vector.T {
+	return num32.MulMatrixByVector(&vi.rot, original, randomized, num32.NoTranspose)
+}
+
+// unRandomizeVector inverts the random orthogonal transformation performed by
+// randomizeVector, in order to recover the original vector from its randomized
+// form. The caller is responsible for allocating the original vector with
+// length equal to the index's dimensions.
+func (vi *VectorIndex) unRandomizeVector(randomized vector.T, original vector.T) vector.T {
+	return num32.MulMatrixByVector(&vi.rot, randomized, original, num32.Transpose)
 }
 
 // FormatOptions modifies the behavior of the Format method.
@@ -849,7 +912,7 @@ func (vi *VectorIndex) Format(
 		// the original vector.
 		random := partition.Centroid()
 		original := make(vector.T, len(random))
-		vi.quantizer.RandomizeVector(ctx, random, original, true /* invert */)
+		vi.unRandomizeVector(random, original)
 		buf.WriteString(parentPrefix)
 		buf.WriteString("• ")
 		buf.WriteString(strconv.FormatInt(int64(partitionKey), 10))

@@ -502,9 +502,8 @@ func createIndex(
 		MinPartitionSize: minPartitionSize,
 		MaxPartitionSize: maxPartitionSize,
 		BaseBeamSize:     *flagBeamSize,
-		Seed:             seed,
 	}
-	index, err := vecindex.NewVectorIndex(ctx, store, quantizer, &options, stopper)
+	index, err := vecindex.NewVectorIndex(ctx, store, quantizer, seed, &options, stopper)
 	if err != nil {
 		panic(err)
 	}
