@@ -137,6 +137,8 @@ func NewPersistentStore(
 
 	vectorColumnID := index.VectorColumnID()
 
+	// TODO(drewk): for an index with ExternalRowData, we should use that index's
+	// codec, and avoid starting the fixup processor.
 	return NewPersistentStoreWithColumnID(ctx, db, quantizer, codec, tableDesc, indexID, vectorColumnID)
 }
 
