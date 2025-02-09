@@ -197,7 +197,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 
 	firstServer := tc.Server(0).ApplicationLayer()
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB := sqlutils.MakeSQLRunner(firstServer.SQLConn(t))
 
 	{
 		// TODO(irfansharif): The data-distribution page and underyling APIs don't
@@ -217,6 +217,11 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		post_id INT REFERENCES roachblog.posts,
 		body text
 	)`)
+
+	// Test for null raw sql config column in crdb_internal.zones,
+	// see: https://github.com/cockroachdb/cockroach/issues/140044
+	sqlDB.Exec(t, `ALTER TABLE roachblog.posts CONFIGURE ZONE = ''`)
+
 	sqlDB.Exec(t, `CREATE SCHEMA roachblog."foo bar"`)
 	sqlDB.Exec(t, `CREATE TABLE roachblog."foo bar".other_stuff(id INT PRIMARY KEY, body TEXT)`)
 	// Test special characters in DB and table names.
@@ -293,7 +298,6 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	if err := srvtestutils.GetAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 		t.Fatal(err)
 	}
-
 	if resp.DatabaseInfo["roachblog"].TableInfo["public.comments"].DroppedAt == nil {
 		t.Fatal("expected roachblog.comments to have dropped_at set but it's nil")
 	}
