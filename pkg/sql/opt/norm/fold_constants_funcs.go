@@ -671,7 +671,7 @@ func (c *CustomFuncs) FoldFunction(
 			context.Background(), tree.MakeUnresolvedFunctionName(&unresolved),
 			&c.f.evalCtx.SessionData().SearchPath)
 		if err != nil {
-			panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(private.Name)))
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "function %s() not defined", redact.Safe(private.Name)))
 		}
 		funcRef = tree.ResolvableFunctionReference{FunctionReference: def}
 	} else {
