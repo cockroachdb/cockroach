@@ -58,6 +58,7 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/intsets",
         "//pkg/util/json",
+        "//pkg/util/log",
         "//pkg/util/sentryutil",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
