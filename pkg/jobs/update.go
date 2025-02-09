@@ -53,33 +53,6 @@ func (j *Job) WithTxn(txn isql.Txn) Updater {
 	return Updater{j: j, txn: txn}
 }
 
-var (
-	updateJobStatusStmt = mustParseOne(
-		`UPDATE system.jobs SET status = $1 WHERE id = $2`,
-	)
-	loadJobQuery = mustParseOne(`
-WITH
-  latestpayload AS (
-    SELECT job_id, value
-    FROM system.job_info AS payload
-    WHERE info_key = 'legacy_payload' AND job_id = $1
-    ORDER BY written DESC LIMIT 1
-  ),
-  latestprogress AS (
-    SELECT job_id, value
-    FROM system.job_info AS progress
-    WHERE info_key = 'legacy_progress' AND job_id = $1
-    ORDER BY written DESC LIMIT 1
-  )
-SELECT status, payload.value AS payload, progress.value AS progress,
-       claim_session_id, COALESCE(last_run, created), COALESCE(num_runs, 0)
-FROM system.jobs AS j
-INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
-WHERE id = $1
-`)
-)
-
 func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 	if u.txn == nil {
 		return u.j.registry.db.Txn(ctx, func(
@@ -117,7 +90,28 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		}
 	}()
 
-	row, err := u.txn.QueryRowExParsed(
+	const loadJobQuery = `
+WITH
+  latestpayload AS (
+    SELECT job_id, value
+    FROM system.job_info AS payload
+    WHERE info_key = 'legacy_payload' AND job_id = $1
+    ORDER BY written DESC LIMIT 1
+  ),
+  latestprogress AS (
+    SELECT job_id, value
+    FROM system.job_info AS progress
+    WHERE info_key = 'legacy_progress' AND job_id = $1
+    ORDER BY written DESC LIMIT 1
+  )
+SELECT status, payload.value AS payload, progress.value AS progress,
+       claim_session_id, COALESCE(last_run, created), COALESCE(num_runs, 0)
+FROM system.jobs AS j
+INNER JOIN latestpayload AS payload ON j.id = payload.job_id
+LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+WHERE id = $1
+`
+	row, err := u.txn.QueryRowEx(
 		ctx, "select-job", u.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		loadJobQuery, j.ID(),
@@ -210,6 +204,28 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		return nil
 	}
 
+	// Build a statement of the following form, depending on which properties
+	// need updating:
+	//
+	//   UPDATE system.jobs
+	//   SET
+	//     [status = $2,]
+	//     [payload = $y,]
+	//     [progress = $z]
+	//   WHERE
+	//     id = $1
+
+	var setters []string
+	params := []interface{}{j.ID()} // $1 is always the job ID.
+	addSetter := func(column string, value interface{}) {
+		params = append(params, value)
+		setters = append(setters, fmt.Sprintf("%s = $%d", column, len(params)))
+	}
+
+	if ju.md.Status != "" {
+		addSetter("status", ju.md.Status)
+	}
+
 	var payloadBytes []byte
 	if ju.md.Payload != nil {
 		payload = ju.md.Payload
@@ -231,11 +247,15 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		}
 	}
 
-	if ju.md.Status != "" {
-		n, err := u.txn.ExecParsed(
+	if len(setters) != 0 {
+		updateStmt := fmt.Sprintf(
+			"UPDATE system.jobs SET %s WHERE id = $1",
+			strings.Join(setters, ", "),
+		)
+		n, err := u.txn.ExecEx(
 			ctx, "job-update", u.txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
-			updateJobStatusStmt, ju.md.Status, j.ID(),
+			updateStmt, params...,
 		)
 		if err != nil {
 			return err
@@ -329,8 +349,6 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 
 		}
 		if len(vals) > 1 {
-			// TODO(rafi): Can we use ExecParsed here to avoid parsing the
-			//  statement every time?
 			stmt := fmt.Sprintf("UPDATE system.jobs SET %s WHERE id = $1", update.String())
 			if _, err := u.txn.ExecEx(
 				ctx, "job-update-row", u.txn.KV(),
