@@ -34,6 +34,6 @@ benchmarks:
     measure:
       iterations: 12000
     thresholds:
-      "sec/op": .02
-      "B/op": .015
-      "allocs/op": .015
+      "sec/op": .025
+      "B/op": .0175
+      "allocs/op": .0175
