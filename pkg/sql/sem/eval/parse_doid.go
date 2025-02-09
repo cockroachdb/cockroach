@@ -82,6 +82,9 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
 				"more than one function named '%s'", funcDef.Name)
 		}
+		if funcDef.UnsupportedWithIssue != 0 {
+			return nil, funcDef.MakeUnsupportedError()
+		}
 		overload := funcDef.Overloads[0]
 		return tree.NewDOidWithTypeAndName(overload.Oid, t, funcDef.Name), nil
 	case oid.T_regprocedure:
