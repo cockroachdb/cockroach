@@ -30,9 +30,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(annie): This is unused for now.
-var _ = configureIndexDescForNewIndexPartitioning
-
 // configureIndexDescForNewIndexPartitioning returns a new copy of an index
 // descriptor containing modifications needed if partitioning is configured.
 func configureIndexDescForNewIndexPartitioning(
@@ -112,7 +109,6 @@ func updateIndexPartitioning(
 	if isNoOp {
 		return false
 	}
-	idx.KeyColumnIDs = append(newColumnIDs, idx.KeyColumnIDs[oldNumImplicitCols:]...)
 	idx.KeyColumnNames = append(newColumnNames, idx.KeyColumnNames[oldNumImplicitCols:]...)
 	idx.KeyColumnDirections = append(newColumnDirections, idx.KeyColumnDirections[oldNumImplicitCols:]...)
 	idx.Partitioning = newPartitioning
