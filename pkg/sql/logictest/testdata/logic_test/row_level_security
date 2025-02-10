@@ -47,6 +47,12 @@ CREATE TABLE sanity1();
 statement ok
 CREATE POLICY p1 on sanity1 USING (true);
 
+# Verify we log to the event log.
+query T
+select "eventType" from system.eventlog order by timestamp desc limit 1;
+----
+create_policy
+
 statement error pq: policy with name "p1" already exists on table "sanity1"
 CREATE POLICY p1 on sanity1 WITH CHECK (true);
 
@@ -64,6 +70,12 @@ DROP POLICY notthere on sanity1;
 
 statement ok
 DROP POLICY p1 on sanity1;
+
+# Verify we log to the event log.
+query T
+select "eventType" from system.eventlog order by timestamp desc limit 1;
+----
+drop_policy
 
 statement ok
 DROP POLICY p2 on sanity1;

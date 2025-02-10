@@ -16,6 +16,14 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP POLICY
 increment telemetry for sql.schema.drop_policy
+write *eventpb.DropPolicy to event log:
+  policyName: policy 2
+  sql:
+    descriptorId: 104
+    statement: DROP POLICY ‹"policy 2"› ON ‹t1›
+    tag: DROP POLICY
+    user: root
+  tableName: defaultdb.public.t1
 ## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
   ...
