@@ -120,6 +120,7 @@ require (
 	github.com/axiomhq/hyperloglog v0.2.0
 	github.com/axiomhq/hyperloglog/000 v0.0.0-20181223111420-4b99d0c2c99e
 	github.com/bazelbuild/rules_go v0.26.0
+	github.com/binxio/gcloudconfig v0.1.5
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
 	github.com/blevesearch/snowballstem v0.9.0
 	github.com/buchgr/bazel-remote v1.3.3
