@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/linkedin/goavro/v2"
 )
 
 const (
@@ -237,6 +239,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 		}
 	} else {
 		var beforeDataSchema, afterDataSchema, recordDataSchema *avro.DataRecord
+		var sourceDataSchema *avro.FunctionalRecord
 		if e.beforeField && prevRow.IsInitialized() {
 			var err error
 			beforeDataSchema, err = avro.TableToAvroSchema(prevRow, `before`, e.schemaPrefix)
@@ -256,19 +259,42 @@ func (e *confluentAvroEncoder) EncodeValue(
 		// it goes in the "record" field. In the "key_only" envelope it's omitted.
 		// This means metadata can safely go at the top level as there are never arbitrary column names
 		// for it to conflict with.
-		if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
+		switch e.envelopeType {
+
+		case changefeedbase.OptEnvelopeWrapped:
 			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, UpdatedField: e.updatedField, MVCCTimestampField: e.mvccTimestampField}
 			afterDataSchema = currentSchema
-		} else {
+		case changefeedbase.OptEnvelopeBare:
 			opts = avro.EnvelopeOpts{RecordField: true, UpdatedField: e.updatedField, MVCCTimestampField: e.mvccTimestampField}
 			recordDataSchema = currentSchema
+		case changefeedbase.OptEnvelopeEnriched:
+			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, MVCCTimestampField: e.mvccTimestampField, UpdatedField: e.updatedField,
+				OpField: true, TsField: true, SourceField: true}
+			afterDataSchema = currentSchema
+
+			// TODO(#139689): This will be implemented by the source provider.
+			fields := []*avro.SchemaField{
+				{Name: "changefeed_sink", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
+			}
+			sourceFn := func(row cdcevent.Row) (map[string]any, error) {
+				return map[string]any{
+					"changefeed_sink": goavro.Union(avro.SchemaTypeString, "kafka"),
+				}, nil
+
+			}
+			if sourceDataSchema, err = avro.NewFunctionalRecord("source", e.schemaPrefix, fields, sourceFn); err != nil {
+				return nil, err
+			}
+		// key_only handled above, and row is not supported in avro
+		default:
+			return nil, errors.AssertionFailedf(`unknown envelope type: %s`, e.envelopeType)
 		}
 
 		name, err := e.rawTableName(updatedRow.Metadata)
 		if err != nil {
 			return nil, err
 		}
-		registered.schema, err = avro.NewEnvelopeRecord(name, opts, beforeDataSchema, afterDataSchema, recordDataSchema, e.schemaPrefix)
+		registered.schema, err = avro.NewEnvelopeRecord(name, opts, beforeDataSchema, afterDataSchema, recordDataSchema, sourceDataSchema, e.schemaPrefix)
 
 		if err != nil {
 			return nil, err
@@ -291,6 +317,12 @@ func (e *confluentAvroEncoder) EncodeValue(
 	if registered.schema.Opts.MVCCTimestampField {
 		meta[`mvcc_timestamp`] = evCtx.mvcc
 	}
+	if registered.schema.Opts.OpField {
+		meta[`op`] = string(deduceOp(updatedRow, prevRow))
+	}
+	if registered.schema.Opts.TsField {
+		meta[`ts_ns`] = timeutil.Now().UnixNano()
+	}
 
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
@@ -309,7 +341,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	if !ok {
 		opts := avro.EnvelopeOpts{ResolvedField: true}
 		var err error
-		registered.schema, err = avro.NewEnvelopeRecord(topic, opts, nil /* before */, nil /* after */, nil /* record */, e.schemaPrefix /* namespace */)
+		registered.schema, err = avro.NewEnvelopeRecord(topic, opts, nil /* before */, nil /* after */, nil /* record */, nil /* source */, e.schemaPrefix /* namespace */)
 		if err != nil {
 			return nil, err
 		}
