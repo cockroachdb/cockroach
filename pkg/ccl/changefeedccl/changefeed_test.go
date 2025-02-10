@@ -3885,9 +3885,11 @@ func TestChangefeedEnrichedAvro(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='localhost:90909'`)
-		// The feed should allow this configuration.
 		defer closeFeed(t, foo)
-		// TODO(#139660): assert messages once this envelope type is integrated into the test suite.
+
+		assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{
+			`foo: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}, "op": {"string": "c"}, "source": {"source": {"changefeed_sink": {"string": "kafka"}}}}`,
+		})
 	}
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
