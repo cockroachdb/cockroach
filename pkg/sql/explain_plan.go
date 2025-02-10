@@ -88,7 +88,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			// cause an error or panic, so swallow the error. See #40677 for example.
 			finalizePlanWithRowCount(params.ctx, planCtx, physicalPlan, plan.mainRowCount)
 			ob.AddDistribution(physicalPlan.Distribution.String())
-			flows := physicalPlan.GenerateFlowSpecs()
+			flows, flowsCleanup := physicalPlan.GenerateFlowSpecs()
+			defer flowsCleanup(flows)
 
 			ctxSessionData := planCtx.EvalContext().SessionData()
 			var willVectorize bool

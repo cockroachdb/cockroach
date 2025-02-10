@@ -56,7 +56,8 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 
 	finalizePlanWithRowCount(params.ctx, planCtx, physPlan, n.plan.mainRowCount)
-	flows := physPlan.GenerateFlowSpecs()
+	flows, flowsCleanup := physPlan.GenerateFlowSpecs()
+	defer flowsCleanup(flows)
 	flowCtx := newFlowCtxForExplainPurposes(params.ctx, params.p)
 
 	// We want to get the vectorized plan which would be executed with the
