@@ -11,18 +11,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/maps"
 )
 
 // ClusterStat represents a filtered query by the given LabelName. For example,
@@ -130,7 +128,7 @@ func (r *ClusterStatRun) serializeOpenmetricsOutRun(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) error {
 
-	labelString := GetOpenmetricsLabelString(t, c, nil)
+	labelString := roachtestutil.GetOpenmetricsLabelString(t, c, nil)
 	report, err := serializeOpenmetricsReport(*r, &labelString)
 	if err != nil {
 		return errors.Wrap(err, "failed to serialize perf artifacts")
@@ -144,13 +142,13 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 
 	// Emit summary metrics from Total
 	for metricName, value := range r.Total {
-		buffer.WriteString(GetOpenmetricsGaugeType(metricName))
+		buffer.WriteString(roachtestutil.GetOpenmetricsGaugeType(metricName))
 		buffer.WriteString(fmt.Sprintf("%s{%s} %f %d\n", util.SanitizeMetricName(metricName), *labelString, value, timeutil.Now().UTC().Unix()))
 	}
 
 	// Emit histogram metrics from Stats
 	for _, stat := range r.Stats {
-		buffer.WriteString(GetOpenmetricsGaugeType(stat.Tag))
+		buffer.WriteString(roachtestutil.GetOpenmetricsGaugeType(stat.Tag))
 		for i, timestamp := range stat.Time {
 			t := timeutil.Unix(0, timestamp)
 			buffer.WriteString(
@@ -397,55 +395,4 @@ func (cs *clusterStatCollector) getStatSummary(
 		}
 	}
 	return ret, nil
-}
-
-// GetOpenmetricsLabelString creates a string that follows the openmetrics labels format
-func GetOpenmetricsLabelString(t test.Test, c cluster.Cluster, labels map[string]string) string {
-	return util.LabelMapToString(GetOpenmetricsLabelMap(t, c, labels))
-}
-
-// GetOpenmetricsLabelMap creates a map of label keys and values
-// It takes roachtest parameters and create relevant labels.
-// Test name is split and each split is added as a subtype
-func GetOpenmetricsLabelMap(
-	t test.Test, c cluster.Cluster, labels map[string]string,
-) map[string]string {
-	defaultMap := map[string]string{
-		"test-run-id": t.GetRunId(),
-		"cloud":       c.Cloud().String(),
-		"owner":       string(t.Spec().(*registry.TestSpec).Owner),
-	}
-
-	// Since the roachtest have / delimiter for subtests
-	// Partitioning the name by '/'
-	testNameArray := strings.Split(t.Name(), "/")
-	defaultMap["test"] = testNameArray[0]
-
-	subTestIterator := 1
-	for i := 1; i < len(testNameArray); i++ {
-		testSubName := testNameArray[i]
-
-		// If the partition has '=', add the key as a label itself
-		// and the value as its value
-		if strings.Contains(testSubName, "=") {
-			testLabels := strings.Split(testSubName, "=")
-			defaultMap[testLabels[0]] = testLabels[1]
-		} else {
-
-			// Add the subtest label with the iterator since there can be nested subtests
-			testSubType := fmt.Sprintf("subtest-%d", subTestIterator)
-			subTestIterator++
-			defaultMap[testSubType] = testSubName
-		}
-	}
-
-	// If the tests has passed some custom labels, copy them to the map created above
-	if labels != nil {
-		maps.Copy(defaultMap, labels)
-	}
-	return defaultMap
-}
-
-func GetOpenmetricsGaugeType(metricName string) string {
-	return fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(metricName))
 }

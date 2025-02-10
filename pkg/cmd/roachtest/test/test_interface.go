@@ -99,4 +99,7 @@ type Test interface {
 	// GetRunId returns the run id of the roachtest run, this is set to build id
 	// when ran from teamcity
 	GetRunId() string
+
+	// Owner returns the owner of the test
+	Owner() string
 }

@@ -100,5 +100,6 @@ build/teamcity-roachtest-invoke.sh \
   --selective-tests="${selective_tests:-false}" \
   --side-eye-token="${SIDE_EYE_API_TOKEN}" \
   --export-openmetrics="${EXPORT_OPENMETRICS:-false}" \
+  --openmetrics-labels="branch=$(tc_build_branch), cpu-arch=${arch}, suite=nightly" \
   ${EXTRA_ROACHTEST_ARGS:+$EXTRA_ROACHTEST_ARGS} \
   "${TESTS}"

@@ -379,6 +379,20 @@ func (mr *MockTestMockRecorder) NewGroup(arg0 ...interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewGroup", reflect.TypeOf((*MockTest)(nil).NewGroup), arg0...)
 }
 
+// Owner mocks base method.
+func (m *MockTest) Owner() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Owner")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Owner indicates an expected call of Owner.
+func (mr *MockTestMockRecorder) Owner() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Owner", reflect.TypeOf((*MockTest)(nil).Owner))
+}
+
 // PerfArtifactsDir mocks base method.
 func (m *MockTest) PerfArtifactsDir() string {
 	m.ctrl.T.Helper()

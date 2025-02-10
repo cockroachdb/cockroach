@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -368,7 +367,7 @@ func exportTPCEResults(t test.Test, c cluster.Cluster, result string) error {
 			labels := map[string]string{
 				"workload": "tpce",
 			}
-			labelString := clusterstats.GetOpenmetricsLabelString(t, c, labels)
+			labelString := roachtestutil.GetOpenmetricsLabelString(t, c, labels)
 			metricBytes = getOpenMetrics(metrics, fields[5], labelString)
 		} else {
 			metricBytes, err = json.Marshal(metrics)
