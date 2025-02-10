@@ -93,6 +93,9 @@ var (
 	// deriving the arguments to construct a specific time.Time.
 	MinSupportedTime    = timeutil.Unix(-210866803200, 0) // 4714-11-24 00:00:00+00 BC
 	MinSupportedTimeSec = float64(MinSupportedTime.Unix())
+
+	// ValidateJSONPath is injected from pkg/util/jsonpath/parser/parse.go.
+	ValidateJSONPath func(string) (string, error)
 )
 
 // CompareContext represents the dependencies used to evaluate comparisons

@@ -1,0 +1,135 @@
+# empty string
+error
+
+----
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+
+^
+----
+----
+
+parse
+$
+----
+$
+
+parse
+   $
+----
+$
+
+parse
+$.abc
+----
+$.abc
+
+parse
+$.a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.u.v.w.x.y.z
+----
+$.a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.u.v.w.x.y.z
+
+parse
+   $ .a .b . c
+----
+$.a.b.c -- normalized!
+
+parse
+$.a[*].b.c[*]
+----
+$.a[*].b.c[*]
+
+parse
+  $  .  a  [  *  ] .  bcd
+----
+$.a[*].bcd -- normalized!
+
+error
+$.a[
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+$.a[
+    ^
+
+error
+$.a[]
+----
+at or near "]": syntax error
+DETAIL: source SQL:
+$.a[]
+    ^
+
+parse
+strict $
+----
+strict $
+
+parse
+lax $
+----
+$ -- normalized!
+
+parse
+strict $.strict.lax
+----
+strict $.strict.lax
+
+error
+strict lax $.strict.lax
+----
+at or near "lax": syntax error
+DETAIL: source SQL:
+strict lax $.strict.lax
+       ^
+
+error
+$.$
+----
+at or near "$": syntax error
+DETAIL: source SQL:
+$.$
+  ^
+
+error
+$.a$
+----
+at or near "$": syntax error
+DETAIL: source SQL:
+$.a$
+   ^
+
+error
+$.a$a
+----
+at or near "$": syntax error
+DETAIL: source SQL:
+$.a$a
+   ^
+
+parse
+$.a1
+----
+$.a1
+
+error
+word $
+----
+at or near "word": syntax error
+DETAIL: source SQL:
+word $
+^
+
+error
+$.1e
+----
+at or near "1": syntax error
+DETAIL: source SQL:
+$.1e
+  ^
+
+# parse
+# $.1a
+# ----
+# $.1a
