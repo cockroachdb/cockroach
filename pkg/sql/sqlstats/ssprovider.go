@@ -55,6 +55,7 @@ type AggregatedTransactionVisitor func(appName string, statistics *appstatspb.Tx
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.
 type RecordedStmtStats struct {
+	FingerprintID        appstatspb.StmtFingerprintID
 	SessionID            clusterunique.ID
 	StatementID          clusterunique.ID
 	TransactionID        uuid.UUID
