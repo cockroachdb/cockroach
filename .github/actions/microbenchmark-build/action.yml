@@ -24,6 +24,7 @@ runs:
       if: inputs.ref == 'base'
       uses: actions/checkout@v4
       with:
+        ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 15
     - name: Determine merge base
       id: determine-merge-base
