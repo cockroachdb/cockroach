@@ -147,7 +147,7 @@ func TestUploadZipEndToEnd(t *testing.T) {
 			defer req.Body.Close()
 
 			switch req.URL.Path {
-			case "/v1/input":
+			case "/api/v2/profile":
 				return uploadProfileHook(t, req)
 			case "/api/v2/logs/config/archives":
 				return setupDDArchiveHook(t, req)
