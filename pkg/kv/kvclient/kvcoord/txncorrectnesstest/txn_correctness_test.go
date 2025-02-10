@@ -1,9 +1,9 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvcoord_test
+package txncorrectnesstest
 
 import (
 	"bytes"
@@ -33,6 +33,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The following structs and methods provide a mechanism for verifying
+// the correctness of Cockroach's transaction model. They do this by
+// allowing transaction histories to be specified for concurrent txns
+// and then expanding those histories to enumerate all possible
+// priorities, isolation levels and interleavings of commands in the
+// histories.
+
+// The following tests for concurrency anomalies include documentation
+// taken from the "Concurrency Control Chapter" from the Handbook of
+// Database Technology, written by Patrick O'Neil <poneil@cs.umb.edu>:
+// http://www.cs.umb.edu/~poneil/CCChapter.PDF.
+//
+// Notation for planned histories:
+//   R(x) - read from key "x"
+//   SC(x-y) - scan values from keys "x"-"y"
+//   D(x) - delete key "x"
+//   DR(x-y) - delete range of keys "x"-"y"
+//   W(x,y+z+...) - writes sum of values y+z+... to x
+//   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
+//   C - commit
+//   A - abort ("rollback")
+//
+// Notation for actual histories:
+//   Rn.m(x) - read from txn "n" ("m"th retry) of key "x"
+//   SCn.m(x-y) - scan from txn "n" ("m"th retry) of keys "x"-"y"
+//   Dn.m(x) - delete key from txn ("m"th retry) of key "x"
+//   DRn.m(x-y) - delete range from txn "n" ("m"th retry) of keys "x"-"y"
+//   Wn.m(x,y+z+...) - write sum of values y+z+... to x from txn "n" ("m"th retry)
+//   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
+//   Cn.m - commit of txn "n" ("m"th retry)
+//   An.m - abort of txn "n" ("m"th retry)
+
 type retryError struct {
 	txnIdx, cmdIdx int
 }
@@ -40,13 +72,6 @@ type retryError struct {
 func (re *retryError) Error() string {
 	return fmt.Sprintf("retry error at txn %d, cmd %d", re.txnIdx+1, re.cmdIdx)
 }
-
-// The following structs and methods provide a mechanism for verifying
-// the correctness of Cockroach's transaction model. They do this by
-// allowing transaction histories to be specified for concurrent txns
-// and then expanding those histories to enumerate all possible
-// priorities, isolation levels and interleavings of commands in the
-// histories.
 
 // cmd is a command to run within a transaction. Commands keep a
 // reference to the previous command's wait channel, in order to
@@ -954,31 +979,6 @@ func checkConcurrency(
 	verifier.run(isoLevels, s.DB, t)
 }
 
-// The following tests for concurrency anomalies include documentation
-// taken from the "Concurrency Control Chapter" from the Handbook of
-// Database Technology, written by Patrick O'Neil <poneil@cs.umb.edu>:
-// http://www.cs.umb.edu/~poneil/CCChapter.PDF.
-//
-// Notation for planned histories:
-//   R(x) - read from key "x"
-//   SC(x-y) - scan values from keys "x"-"y"
-//   D(x) - delete key "x"
-//   DR(x-y) - delete range of keys "x"-"y"
-//   W(x,y+z+...) - writes sum of values y+z+... to x
-//   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
-//   C - commit
-//   A - abort ("rollback")
-//
-// Notation for actual histories:
-//   Rn.m(x) - read from txn "n" ("m"th retry) of key "x"
-//   SCn.m(x-y) - scan from txn "n" ("m"th retry) of keys "x"-"y"
-//   Dn.m(x) - delete key from txn ("m"th retry) of key "x"
-//   DRn.m(x-y) - delete range from txn "n" ("m"th retry) of keys "x"-"y"
-//   Wn.m(x,y+z+...) - write sum of values y+z+... to x from txn "n" ("m"th retry)
-//   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
-//   Cn.m - commit of txn "n" ("m"th retry)
-//   An.m - abort of txn "n" ("m"th retry)
-
 // TestTxnDBDirtyWriteAnomaly verifies that none of RC, SI, or SSI
 // isolation are subject to the dirty write anomaly.
 //
@@ -999,7 +999,7 @@ func checkConcurrency(
 //	W1(A) W2(A) (C1 or A1) (C2 or A2)
 func TestTxnDBDirtyWriteAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	//defer log.Scope(t).Close(t)
 	t.Run("one abort, one commit", testTxnDBDirtyWriteAnomalyOneAbortOneCommit)
 	t.Run("both abort", testTxnDBDirtyWriteAnomalyBothAbort)
 	t.Run("both commit", testTxnDBDirtyWriteAnomalyBothCommit)
