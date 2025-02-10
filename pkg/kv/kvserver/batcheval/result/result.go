@@ -51,6 +51,11 @@ type LocalResult struct {
 	// applied index and range descriptor when applied.
 	PopulateBarrierResponse bool
 
+	// RepopulateRequestResponse will overwrite the SubsumeResponse's
+	// LeaseAppliedIndex field with the lease applied index of the
+	// SubsumeRequest itself.
+	RepopulateSubsumeResponseLAI bool
+
 	// When set (in which case we better be the first range), call
 	// GossipFirstRange if the Replica holds the lease.
 	GossipFirstRange bool
@@ -78,6 +83,7 @@ func (lResult *LocalResult) IsZero() bool {
 		lResult.UpdatedTxns == nil &&
 		lResult.EndTxns == nil &&
 		!lResult.PopulateBarrierResponse &&
+		!lResult.RepopulateSubsumeResponseLAI &&
 		!lResult.GossipFirstRange &&
 		!lResult.MaybeGossipSystemConfig &&
 		!lResult.MaybeGossipSystemConfigIfHaveFailure &&
@@ -92,13 +98,15 @@ func (lResult *LocalResult) String() string {
 	return fmt.Sprintf("LocalResult (reply: %v, "+
 		"#encountered intents: %d, #acquired locks: %d, #resolved locks: %d"+
 		"#updated txns: %d #end txns: %d, "+
-		"PopulateBarrierResponse:%t GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
+		"PopulateBarrierResponse:%t RepopulateSubsumeResponse:%t "+
+		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
 		"MaybeGossipNodeLiveness:%s ",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
-		lResult.PopulateBarrierResponse, lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
+		lResult.PopulateBarrierResponse, lResult.RepopulateSubsumeResponseLAI,
+		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
 		lResult.MaybeGossipSystemConfigIfHaveFailure, lResult.MaybeAddToSplitQueue,
 		lResult.MaybeGossipNodeLiveness)
 }
@@ -154,6 +162,17 @@ func (lResult *LocalResult) DetachPopulateBarrierResponse() bool {
 	}
 	r := lResult.PopulateBarrierResponse
 	lResult.PopulateBarrierResponse = false
+	return r
+}
+
+// DetachRepopulateSubsumeResponse returns (and removes) the
+// RepopulateSubsumeResponse value from the local result.
+func (lResult *LocalResult) DetachRepopulateSubsumeResponse() bool {
+	if lResult == nil {
+		return false
+	}
+	r := lResult.RepopulateSubsumeResponseLAI
+	lResult.RepopulateSubsumeResponseLAI = false
 	return r
 }
 
@@ -413,6 +432,14 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		return errors.AssertionFailedf("multiple PopulateBarrierResponse results")
 	}
 	q.Local.PopulateBarrierResponse = false
+
+	if !p.Local.RepopulateSubsumeResponseLAI {
+		p.Local.RepopulateSubsumeResponseLAI = q.Local.RepopulateSubsumeResponseLAI
+	} else {
+		// RepopulateSubsumeResponseLAI is only valid for a single Subsume response.
+		return errors.AssertionFailedf("multiple RepopulateSubsumeResponseLAI results")
+	}
+	q.Local.RepopulateSubsumeResponseLAI = false
 
 	if p.Local.MaybeGossipNodeLiveness == nil {
 		p.Local.MaybeGossipNodeLiveness = q.Local.MaybeGossipNodeLiveness
