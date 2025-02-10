@@ -2722,7 +2722,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 			if len(lastUpdateTimes) == 3 {
 				return nil
 			}
-			return errors.Errorf("expected leader replica to have 3 entries in lastUpdateTimes map, found %s", lastUpdateTimes)
+			return errors.Errorf("expected leader replica to have 3 entries in lastUpdateTimes map, found %v", lastUpdateTimes)
 		})
 
 		// Lock the follower replica to prevent it from making progress from now
@@ -2762,7 +2762,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		leaderNow := leaderClock.PhysicalTime()
 		if !leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold) {
 			t.Fatalf("expected follower to still be considered active; "+
-				"follower id: %d, last update times: %s, leader clock: %s",
+				"follower id: %d, last update times: %v, leader clock: %s",
 				followerID, leaderRepl.LastUpdateTimes(), leaderNow)
 		}
 
@@ -2784,7 +2784,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 			leaderNow = leaderClock.PhysicalTime()
 			if leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold) {
 				return errors.Errorf("expected follower to be considered inactive; "+
-					"follower id: %d, last update times: %s, leader clock: %s",
+					"follower id: %d, last update times: %v, leader clock: %s",
 					followerID, leaderRepl.LastUpdateTimes(), leaderNow)
 			}
 			return nil
