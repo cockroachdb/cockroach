@@ -124,7 +124,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:default_value_column_level.bnf",
     "//docs/generated/sql/bnf:delete_stmt.bnf",
     "//docs/generated/sql/bnf:discard_stmt.bnf",
-    "//docs/generated/sql/bnf:do_stmt.bnf",
+    "//docs/generated/sql/bnf:do.bnf",
     "//docs/generated/sql/bnf:drop_column.bnf",
     "//docs/generated/sql/bnf:drop_constraint.bnf",
     "//docs/generated/sql/bnf:drop_database.bnf",
