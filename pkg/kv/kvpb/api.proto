@@ -2266,6 +2266,10 @@ message SubsumeRequest {
   // The range descriptor for the right-hand side of the merge. Should match
   // the range descriptor of the range evaluating this request.
   RangeDescriptor right_desc = 3 [(gogoproto.nullable) = false];
+
+  // PreserveUnreplicatedLocks instructs the Subsume request to flush any unreplicated
+  // locks to the replicated lock table before returning.
+  bool preserve_unreplicated_locks = 4;
 }
 
 // SubsumeResponse is the response to a SubsumeRequest.
