@@ -1040,7 +1040,11 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 
 		batchTime := timeutil.Since(preBatchTime)
 		lrw.debug.RecordBatchApplied(batchTime, int64(len(batch)))
-		lrw.metrics.ApplyBatchNanosHist.RecordValue(batchTime.Nanoseconds())
+		nanosPerRow := batchTime.Nanoseconds()
+		if len(batch) > 0 {
+			nanosPerRow /= int64(len(batch))
+		}
+		lrw.metrics.ApplyBatchNanosHist.RecordValue(nanosPerRow)
 	}
 	return stats, nil
 }
