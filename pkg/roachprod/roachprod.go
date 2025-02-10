@@ -816,7 +816,10 @@ func updatePrometheusTargets(
 		return err
 	}
 
-	cl := promhelperclient.NewPromClient()
+	cl, err := promhelperclient.NewPromClient()
+	if err != nil {
+		return err
+	}
 	nodeIPPorts := make(map[int][]*promhelperclient.NodeInfo)
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
@@ -867,8 +870,7 @@ func updatePrometheusTargets(
 	}
 	wg.Wait()
 	if len(nodeIPPorts) > 0 {
-		if err := cl.UpdatePrometheusTargets(ctx,
-			c.Name, false, nodeIPPorts, false, l); err != nil {
+		if err := cl.UpdatePrometheusTargets(ctx, c.Name, nodeIPPorts, l); err != nil {
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
 	}
