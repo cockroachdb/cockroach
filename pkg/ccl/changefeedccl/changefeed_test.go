@@ -5992,6 +5992,10 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `this sink is incompatible with envelope=enriched`,
 		`CREATE CHANGEFEED FOR foo INTO 'nodelocal://.' WITH envelope=enriched`,
 	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `enriched_properties is only usable with envelope=enriched`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH enriched_properties='schema'`,
+	)
 
 	t.Run("sinkless enriched non-json", func(t *testing.T) {
 		skip.WithIssue(t, 130949, "sinkless feed validations are subpar")
