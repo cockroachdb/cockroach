@@ -416,7 +416,6 @@ exec-sql
 USE defaultdb;
 DROP DATABASE testdb CASCADE;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/';
@@ -502,8 +501,6 @@ USE defaultdb;
 DROP DATABASE testdb CASCADE;
 ALTER USER testuser CREATEDB;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # Lastly, restore the database as a non-admin (testuser). We expect only root
 # and admin to have privileges, but testuser to be the owner of all objects.
