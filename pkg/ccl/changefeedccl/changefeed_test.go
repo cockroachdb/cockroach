@@ -3851,8 +3851,20 @@ func TestChangefeedEnriched(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	cases := []struct {
+		name               string
+		enrichedProperties []string
+	}{
+		{name: "solo"},
+		{name: "with schema", enrichedProperties: []string{"schema"}},
+		{name: "with source", enrichedProperties: []string{"source"}},
+		{name: "with schema and source", enrichedProperties: []string{"schema", "source"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
 				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
@@ -6006,7 +6018,7 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH enriched_properties='schema'`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `idk`,
+		t, `unknown enriched_properties: potato, valid values are: source, schema`,
 		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH enriched_properties='schema,potato'`,
 	)
 

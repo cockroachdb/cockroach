@@ -1249,17 +1249,23 @@ func extractFieldFromJSONValue(
 		field = parsed[fieldName]
 		delete(parsed, fieldName)
 	case changefeedbase.OptEnvelopeEnriched:
-		var payload map[string]gojson.RawMessage
-		if err := gojson.Unmarshal(parsed["payload"], &payload); err != nil {
-			return nil, nil, errors.Wrapf(err, "unmarshalling json %v", parsed["payload"])
+		// Enriched messages are wrapped in a "payload" field if format=json and schema is included.
+		if _, ok := parsed["payload"]; !ok {
+			field = parsed[fieldName]
+			delete(parsed, fieldName)
+		} else {
+			var payload map[string]gojson.RawMessage
+			if err := gojson.Unmarshal(parsed["payload"], &payload); err != nil {
+				return nil, nil, errors.Wrapf(err, "unmarshalling json %v", parsed["payload"])
+			}
+			field = payload[fieldName]
+			delete(payload, fieldName)
+			payloadVal, err := reformatJSON(payload)
+			if err != nil {
+				return nil, nil, err
+			}
+			parsed["payload"] = payloadVal
 		}
-		field = payload[fieldName]
-		delete(payload, fieldName)
-		payloadVal, err := reformatJSON(payload)
-		if err != nil {
-			return nil, nil, err
-		}
-		parsed["payload"] = payloadVal
 	default:
 		return nil, nil, errors.AssertionFailedf("unknown envelope type %s", envelopeType)
 	}

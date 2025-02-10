@@ -143,7 +143,12 @@ func stripTsFromPayloads(
 
 		switch envelopeType {
 		case changefeedbase.OptEnvelopeEnriched:
-			delete(message["payload"].(map[string]any), "ts_ns")
+			// This message may have a `payload` wrapper if format=json and `enriched_properties` includes `schema`
+			if message["payload"] == nil {
+				delete(message, "ts_ns")
+			} else {
+				delete(message["payload"].(map[string]any), "ts_ns")
+			}
 		case changefeedbase.OptEnvelopeWrapped:
 			delete(message, "updated")
 		default:
