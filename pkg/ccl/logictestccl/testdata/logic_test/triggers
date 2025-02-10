@@ -4030,4 +4030,54 @@ drop_trigger
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
+# ==============================================================================
+# Test that descriptor backreferences are cleaned up
+# ==============================================================================
+
+subtest ensure_back_ref_cleanup
+
+statement ok
+create table listings_balance (c1 int);
+
+# Create a function that references listings_balance
+statement ok
+create or replace function update_listing_balance()
+returns TRIGGER language PLpgSQL AS
+$$
+BEGIN
+  INSERT INTO listings_balance VALUES (1);
+  RETURN NEW;
+END
+$$;
+
+statement ok
+CREATE TABLE transaction_entries (c1 int);
+
+# Create a trigger that references listings_balance through the trigger function.
+statement ok
+create trigger tr AFTER INSERT OR UPDATE ON transaction_entries FOR EACH ROW execute function update_listing_balance();
+
+# Force the legacy schema change for the drop table. We will save the original
+# DSC setting so that it be reset properly.
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = off;
+
+# This should cleanup the dependency in listings_balance.
+statement ok
+DROP TABLE transaction_entries;
+
+# Reinstate original DSC setting
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
+
+statement ok
+DROP FUNCTION update_listing_balance ;
+
+# Sanity to verify the dependency no longer exists.
+statement ok
+drop table listings_balance cascade;
+
 subtest end
