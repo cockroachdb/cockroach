@@ -1,9 +1,9 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvcoord_test
+package txncorrectnesstest
 
 import (
 	"bytes"
@@ -33,6 +33,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The following structs and methods provide a mechanism for verifying
+// the correctness of Cockroach's transaction model. They do this by
+// allowing transaction histories to be specified for concurrent txns
+// and then expanding those histories to enumerate all possible
+// priorities, isolation levels and interleavings of commands in the
+// histories.
+
+// The following tests for concurrency anomalies include documentation
+// taken from the "Concurrency Control Chapter" from the Handbook of
+// Database Technology, written by Patrick O'Neil <poneil@cs.umb.edu>:
+// http://www.cs.umb.edu/~poneil/CCChapter.PDF.
+//
+// Notation for planned histories:
+//   R(x) - read from key "x"
+//   SC(x-y) - scan values from keys "x"-"y"
+//   D(x) - delete key "x"
+//   DR(x-y) - delete range of keys "x"-"y"
+//   W(x,y+z+...) - writes sum of values y+z+... to x
+//   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
+//   C - commit
+//   A - abort ("rollback")
+//
+// Notation for actual histories:
+//   Rn.m(x) - read from txn "n" ("m"th retry) of key "x"
+//   SCn.m(x-y) - scan from txn "n" ("m"th retry) of keys "x"-"y"
+//   Dn.m(x) - delete key from txn ("m"th retry) of key "x"
+//   DRn.m(x-y) - delete range from txn "n" ("m"th retry) of keys "x"-"y"
+//   Wn.m(x,y+z+...) - write sum of values y+z+... to x from txn "n" ("m"th retry)
+//   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
+//   Cn.m - commit of txn "n" ("m"th retry)
+//   An.m - abort of txn "n" ("m"th retry)
+
 type retryError struct {
 	txnIdx, cmdIdx int
 }
@@ -40,13 +72,6 @@ type retryError struct {
 func (re *retryError) Error() string {
 	return fmt.Sprintf("retry error at txn %d, cmd %d", re.txnIdx+1, re.cmdIdx)
 }
-
-// The following structs and methods provide a mechanism for verifying
-// the correctness of Cockroach's transaction model. They do this by
-// allowing transaction histories to be specified for concurrent txns
-// and then expanding those histories to enumerate all possible
-// priorities, isolation levels and interleavings of commands in the
-// histories.
 
 // cmd is a command to run within a transaction. Commands keep a
 // reference to the previous command's wait channel, in order to
@@ -954,321 +979,6 @@ func checkConcurrency(
 	verifier.run(isoLevels, s.DB, t)
 }
 
-// The following tests for concurrency anomalies include documentation
-// taken from the "Concurrency Control Chapter" from the Handbook of
-// Database Technology, written by Patrick O'Neil <poneil@cs.umb.edu>:
-// http://www.cs.umb.edu/~poneil/CCChapter.PDF.
-//
-// Notation for planned histories:
-//   R(x) - read from key "x"
-//   SC(x-y) - scan values from keys "x"-"y"
-//   D(x) - delete key "x"
-//   DR(x-y) - delete range of keys "x"-"y"
-//   W(x,y+z+...) - writes sum of values y+z+... to x
-//   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
-//   C - commit
-//   A - abort ("rollback")
-//
-// Notation for actual histories:
-//   Rn.m(x) - read from txn "n" ("m"th retry) of key "x"
-//   SCn.m(x-y) - scan from txn "n" ("m"th retry) of keys "x"-"y"
-//   Dn.m(x) - delete key from txn ("m"th retry) of key "x"
-//   DRn.m(x-y) - delete range from txn "n" ("m"th retry) of keys "x"-"y"
-//   Wn.m(x,y+z+...) - write sum of values y+z+... to x from txn "n" ("m"th retry)
-//   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
-//   Cn.m - commit of txn "n" ("m"th retry)
-//   An.m - abort of txn "n" ("m"th retry)
-
-// TestTxnDBDirtyWriteAnomaly verifies that none of RC, SI, or SSI
-// isolation are subject to the dirty write anomaly.
-//
-// With dirty writes, two transactions concurrently write to the same
-// key(s). If one transaction then rolls back, the final state must
-// reflect the write performed by the committing transaction. Crucially,
-// the rollback must not interfere with the write from the committing
-// transaction.
-//
-// Two closely related cases are when both transactions roll back and
-// when both transactions commit. In the first case, the final state
-// must reflect neither write. In the second case, the final state must
-// reflect a consistent commit order across keys, such that all written
-// keys reflect writes from the second transaction to commit.
-//
-// Dirty writes would typically fail with a history such as:
-//
-//	W1(A) W2(A) (C1 or A1) (C2 or A2)
-func TestTxnDBDirtyWriteAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	t.Run("one abort, one commit", testTxnDBDirtyWriteAnomalyOneAbortOneCommit)
-	t.Run("both abort", testTxnDBDirtyWriteAnomalyBothAbort)
-	t.Run("both commit", testTxnDBDirtyWriteAnomalyBothCommit)
-}
-
-func testTxnDBDirtyWriteAnomalyOneAbortOneCommit(t *testing.T) {
-	txn1 := "W(A,1) W(B,1) A"
-	txn2 := "W(A,2) W(B,2) C"
-	verify := &verifier{
-		history: "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["A"] != 2 || env["B"] != 2 {
-				return errors.Errorf("expected A=2 and B=2, got A=%d and B=%d", env["A"], env["B"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
-}
-
-func testTxnDBDirtyWriteAnomalyBothAbort(t *testing.T) {
-	txn1 := "W(A,1) W(B,1) A"
-	txn2 := "W(A,2) W(B,2) A"
-	verify := &verifier{
-		history: "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["A"] != 0 || env["B"] != 0 {
-				return errors.Errorf("expected A=0 and B=0, got A=%d and B=%d", env["A"], env["B"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
-}
-
-func testTxnDBDirtyWriteAnomalyBothCommit(t *testing.T) {
-	txn1 := "W(A,1) W(B,1) C"
-	txn2 := "W(A,2) W(B,2) C"
-	verify := &verifier{
-		history: "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["A"] != 1 && env["A"] != 2 {
-				return errors.Errorf("expected A=1 or A=2, got %d", env["A"])
-			}
-			if env["A"] != env["B"] {
-				return errors.Errorf("expected A == B (%d != %d)", env["A"], env["B"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBDirtyReadAnomaly verifies that none of RC, SI, or SSI
-// isolation are subject to the dirty read anomaly.
-//
-// With dirty reads, a transaction writes to a key while a concurrent
-// transaction reads from that key. The writing transaction then rolls
-// back. If the reading transaction observes the write, either before or
-// after the rollback, it has experienced a dirty read.
-//
-// Dirty reads would typically fail with a history such as:
-//
-//	W1(A) R2(A) A1 C2
-func TestTxnDBDirtyReadAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	txn1 := "W(A,1) A"
-	txn2 := "R(A) W(B,A) C"
-	verify := &verifier{
-		history: "R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["B"] != 0 {
-				return errors.Errorf("expected B=0, got %d", env["B"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("dirty read", allLevels, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBReadSkewAnomaly verifies that neither SI nor SSI isolation
-// are subject to the read skew anomaly, an example of a database
-// constraint violation known as inconsistent analysis[^1]. This
-// anomaly is prevented by REPEATABLE_READ.
-//
-// With read skew, there are two concurrent txns. One
-// reads keys A & B, the other reads and then writes keys A & B. The
-// reader must not see intermediate results from the reader/writer.
-//
-// Read skew would typically fail with a history such as:
-//
-//	R1(A) R2(B) I2(B) R2(A) I2(A) R1(B) C1 C2
-//
-// [^1]: 1995, https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf
-func TestTxnDBReadSkewAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	txn1 := "R(A) R(B) W(C,A+B) C"
-	txn2 := "R(A) R(B) I(A) I(B) C"
-	verify := &verifier{
-		history: "R(C)",
-		checkFn: func(env map[string]int64) error {
-			if env["C"] != 2 && env["C"] != 0 {
-				return errors.Errorf("expected C to be either 0 or 2, got %d", env["C"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("read skew", serializableAndSnapshot, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBLostUpdateAnomaly verifies that neither SI nor SSI isolation
-// are subject to the lost update anomaly. This anomaly is prevented
-// in most cases by using the READ_COMMITTED ANSI isolation level.
-// However, only REPEATABLE_READ fully protects against it.
-//
-// With lost update, the write from txn1 is overwritten by the write
-// from txn2, and thus txn1's update is lost. Both SI and SSI notice
-// this write/write conflict and either txn1 or txn2 is aborted,
-// depending on priority.
-//
-// Lost update would typically fail with a history such as:
-//
-//	R1(A) R2(A) I1(A) I2(A) C1 C2
-//
-// However, the following variant will cause a lost update in
-// READ_COMMITTED and in practice requires REPEATABLE_READ to avoid.
-//
-//	R1(A) R2(A) I1(A) C1 I2(A) C2
-func TestTxnDBLostUpdateAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	txn := "R(A) I(A) C"
-	verify := &verifier{
-		history: "R(A)",
-		checkFn: func(env map[string]int64) error {
-			if env["A"] != 2 {
-				return errors.Errorf("expected A=2, got %d", env["A"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("lost update", serializableAndSnapshot, []string{txn, txn}, verify, t)
-}
-
-// TestTxnDBLostDeleteAnomaly verifies that neither SI nor SSI
-// isolation are subject to the lost delete anomaly. See #6240.
-//
-// With lost delete, the two deletions from txn2 are interleaved
-// with a read and write from txn1, allowing txn1 to read a pre-
-// existing value for A and then write to B, rewriting history
-// underneath txn2's deletion of B.
-//
-// This anomaly is prevented by the use of deletion tombstones,
-// even on keys which have no values written.
-//
-// Lost delete would typically fail with a history such as:
-//
-//	D2(A) R1(A) D2(B) C2 W1(B,A) C1
-func TestTxnDBLostDeleteAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// B must not exceed A.
-	txn1 := "R(A) W(B,A) C"
-	txn2 := "D(A) D(B) C"
-	verify := &verifier{
-		preHistory: "W(A,1)",
-		history:    "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["B"] != 0 && env["A"] == 0 {
-				return errors.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("lost update (delete)", serializableAndSnapshot, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBLostDeleteRangeAnomaly verifies that SSI isolation is not
-// subject to the lost delete range anomaly. See #6240.
-//
-// With lost delete range, the delete range for keys B-C leave no
-// deletion tombstones (as there are an infinite number of keys in the
-// range [B,C)). Without deletion tombstones, the anomaly manifests in
-// snapshot mode when txn1 pushes txn2 to commit at a higher timestamp
-// and then txn1 writes B and commits at an earlier timestamp. The
-// delete range request therefore committed but failed to delete the
-// value written to key B.
-//
-// Lost delete range would typically fail with a history such as:
-//
-//	D2(A) DR2(B-C) R1(A) C2 W1(B,A) C1
-func TestTxnDBLostDeleteRangeAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// B must not exceed A.
-	txn1 := "R(A) W(B,A) C"
-	txn2 := "D(A) DR(B-C) C"
-	verify := &verifier{
-		preHistory: "W(A,1)",
-		history:    "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["B"] != 0 && env["A"] == 0 {
-				return errors.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("lost update (range delete)", onlySerializable, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBPhantomReadAnomaly verifies that neither SI nor SSI isolation
-// are subject to the phantom reads anomaly. This anomaly is prevented by
-// the SQL ANSI SERIALIZABLE isolation level, though it's also prevented
-// by snapshot isolation (i.e. Oracle's traditional "serializable").
-//
-// Phantom reads occur when a single txn does two identical queries but
-// ends up reading different results. This is a variant of non-repeatable
-// reads, but is special because it requires the database to be aware of
-// ranges when settling concurrency issues.
-//
-// Phantom reads would typically fail with a history such as:
-//
-//	R2(B) SC1(A-C) I2(B) C2 SC1(A-C) C1
-func TestTxnDBPhantomReadAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	txn1 := "SC(A-C) W(D,A+B) SC(A-C) W(E,A+B) C"
-	txn2 := "R(B) I(B) C"
-	verify := &verifier{
-		history: "R(D) R(E)",
-		checkFn: func(env map[string]int64) error {
-			if env["D"] != env["E"] {
-				return errors.Errorf("expected D == E (%d != %d)", env["D"], env["E"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("phantom read", serializableAndSnapshot, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBPhantomDeleteAnomaly verifies that neither SI nor SSI
-// isolation are subject to the phantom deletion anomaly; this is
-// similar to phantom reads, but verifies the delete range
-// functionality causes read/write conflicts.
-//
-// Phantom deletes would typically fail with a history such as:
-//
-//	R2(B) DR1(A-C) I2(B) C2 SC1(A-C) W1(D,A+B) C1
-func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	txn1 := "DR(A-C) SC(A-C) W(D,A+B) C"
-	txn2 := "R(B) I(B) C"
-	verify := &verifier{
-		history: "R(D)",
-		checkFn: func(env map[string]int64) error {
-			if env["D"] != 0 {
-				return errors.Errorf("expected delete range to yield an empty scan of same range, sum=%d", env["D"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("phantom delete", serializableAndSnapshot, []string{txn1, txn2}, verify, t)
-}
-
 func runWriteSkewTest(t *testing.T, iso isolation.Level) {
 	checks := make(map[isolation.Level]func(map[string]int64) error)
 	checks[isolation.Serializable] = func(env map[string]int64) error {
@@ -1291,31 +1001,4 @@ func runWriteSkewTest(t *testing.T, iso isolation.Level) {
 		checkFn: checks[iso],
 	}
 	checkConcurrency("write skew", []isolation.Level{iso}, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBWriteSkewAnomaly verifies that SI suffers from the write
-// skew anomaly but not SSI. The write skew anomaly is a condition which
-// illustrates that snapshot isolation is not serializable in practice.
-//
-// With write skew, two transactions both read values from A and B
-// respectively, but each writes to either A or B only. Thus there are
-// no write/write conflicts but a cycle of dependencies which result in
-// "skew". Only serializable isolation prevents this anomaly.
-//
-// Write skew would typically fail with a history such as:
-//
-//	SC1(A-C) SC2(A-C) W1(A,A+B+1) C1 W2(B,A+B+1) C2
-//
-// In the test below, each txn reads A and B and increments one by 1.
-// The read values and increment are then summed and written either to
-// A or B. If we have serializable isolation, then the final value of
-// A + B must be equal to 3 (the first txn sets A or B to 1, the
-// second sets the other value to 2, so the total should be
-// 3). Snapshot isolation, however, may not notice any conflict (see
-// history above) and may set A=1, B=1.
-func TestTxnDBWriteSkewAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	runWriteSkewTest(t, isolation.Serializable)
-	runWriteSkewTest(t, isolation.Snapshot)
 }
