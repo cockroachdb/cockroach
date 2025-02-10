@@ -555,7 +555,8 @@ func makePlan(
 
 		// Log the plan diagram URL so that we don't have to rely on it being in system.job_info.
 		const maxLenDiagURL = 1 << 20 // 1 MiB
-		flowSpecs := p.GenerateFlowSpecs()
+		flowSpecs, cleanup := p.GenerateFlowSpecs()
+		defer cleanup(flowSpecs)
 		if _, diagURL, err := execinfrapb.GeneratePlanDiagramURL(
 			fmt.Sprintf("changefeed: %d", jobID),
 			flowSpecs,
