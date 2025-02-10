@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,7 +37,16 @@ import (
 // replica and redirect read requests when the lease moves elsewhere.
 func TestDistSenderReplicaStall(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	scope := log.Scope(t)
+	defer scope.Close(t)
+
+	// See https://github.com/cockroachdb/cockroach/issues/140957.
+	// If this test fails again, we should investigate the issue further, as
+	// it could indicate a failure of the DistSender to circuit break.
+	{
+		skip.UnderDuress(t)
+		defer testutils.StartExecTrace(t, scope.GetDirectory()).Finish(t)
+	}
 
 	testutils.RunTrueAndFalse(t, "clientTimeout", func(t *testing.T, clientTimeout bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
