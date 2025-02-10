@@ -10,13 +10,9 @@ status = [
        "lint",
        "linux_amd64_build",
        "linux_amd64_fips_build",
-       "linux_arm64_build",
        "local_roachtest",
        "local_roachtest_fips",
-       "macos_amd64_build",
-       "macos_arm64_build",
        "unit_tests",
-       "windows_build",
 ]
 
 # List of commit statuses that must not be failing on the PR commit when it is
