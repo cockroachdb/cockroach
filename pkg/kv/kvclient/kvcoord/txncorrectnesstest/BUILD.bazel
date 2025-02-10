@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "txncorrectnesstest_test",
     srcs = [
+        "dirty_write_anomaly_test.go",
         "main_test.go",
         "txn_correctness_test.go",
     ],
