@@ -18,7 +18,6 @@ import (
 )
 
 type streamCloseScheduler struct {
-	stopper   *stop.Stopper
 	clock     timeutil.TimeSource
 	scheduler RaftScheduler
 	// nonEmptyCh is used to signal the scheduler that there are events to
@@ -43,15 +42,15 @@ type scheduledQueue struct {
 }
 
 func NewStreamCloseScheduler(
-	stopper *stop.Stopper, clock timeutil.TimeSource, scheduler RaftScheduler,
+	clock timeutil.TimeSource, scheduler RaftScheduler,
 ) *streamCloseScheduler {
-	return &streamCloseScheduler{stopper: stopper, scheduler: scheduler, clock: clock}
+	return &streamCloseScheduler{scheduler: scheduler, clock: clock}
 }
 
-func (s *streamCloseScheduler) Start(ctx context.Context) error {
+func (s *streamCloseScheduler) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.nonEmptyCh = make(chan struct{}, 1)
-	return s.stopper.RunAsyncTask(ctx,
-		"flow-control-stream-close-scheduler", s.run)
+	return stopper.RunAsyncTask(ctx, "flow-control-stream-close-scheduler",
+		func(ctx context.Context) { s.run(ctx, stopper) })
 }
 
 // streamCloseScheduler implements the rac2.ProbeToCloseTimerScheduler
@@ -92,7 +91,7 @@ func (s *streamCloseScheduler) ScheduleSendStreamCloseRaftMuLocked(
 // constant is used to avoid the timer from signaling.
 const maxStreamCloserDelay = 24 * time.Hour
 
-func (s *streamCloseScheduler) run(_ context.Context) {
+func (s *streamCloseScheduler) run(_ context.Context, stopper *stop.Stopper) {
 	timer := s.clock.NewTimer()
 	timer.Reset(s.nextDelay(s.clock.Now()))
 	defer timer.Stop()
@@ -102,7 +101,7 @@ func (s *streamCloseScheduler) run(_ context.Context) {
 		// maxStreamCloserDelay. When an event is added, the nonEmptyCh will be
 		// signaled and the timer will be reset to the next event's delay.
 		select {
-		case <-s.stopper.ShouldQuiesce():
+		case <-stopper.ShouldQuiesce():
 			return
 		case <-s.nonEmptyCh:
 		case <-timer.Ch():
