@@ -858,7 +858,7 @@ func DecodeDatum(
 		return da.NewDRefCursor(tree.DString(bs)), nil
 	}
 	switch id {
-	case oid.T_text, oid.T_varchar, oid.T_unknown:
+	case oid.T_text, oid.T_varchar, oid.T_unknown, oid.T_anyelement:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
