@@ -521,7 +521,7 @@ func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
 func (oc *optCatalog) LeaseByStableID(ctx context.Context, stableID cat.StableID) error {
 	// Lease the descriptor, so that schema changes cannot move forward
 	// after the current version.
-	_, err := oc.planner.byIDGetterBuilder().WithoutNonPublic().Get().Desc(ctx, descpb.ID(stableID))
+	err := oc.planner.Descriptors().LockDescriptorWithLease(ctx, oc.planner.txn, descpb.ID(stableID))
 	return err
 }
 
