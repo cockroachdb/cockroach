@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,15 +31,10 @@ import (
 // Dirty writes would typically fail with a history such as:
 //
 //	W1(A) W2(A) (C1 or A1) (C2 or A2)
-func TestTxnDBDirtyWriteAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	//defer log.Scope(t).Close(t)
-	t.Run("one abort, one commit", testTxnDBDirtyWriteAnomalyOneAbortOneCommit)
-	t.Run("both abort", testTxnDBDirtyWriteAnomalyBothAbort)
-	t.Run("both commit", testTxnDBDirtyWriteAnomalyBothCommit)
-}
 
-func testTxnDBDirtyWriteAnomalyOneAbortOneCommit(t *testing.T) {
+func TestTxnDBDirtyWriteAnomalyOneAbortOneCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	txn1 := "W(A,1) W(B,1) A"
 	txn2 := "W(A,2) W(B,2) C"
 	verify := &verifier{
@@ -53,7 +49,9 @@ func testTxnDBDirtyWriteAnomalyOneAbortOneCommit(t *testing.T) {
 	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
 }
 
-func testTxnDBDirtyWriteAnomalyBothAbort(t *testing.T) {
+func TestTxnDBDirtyWriteAnomalyBothAbort(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	txn1 := "W(A,1) W(B,1) A"
 	txn2 := "W(A,2) W(B,2) A"
 	verify := &verifier{
@@ -68,7 +66,9 @@ func testTxnDBDirtyWriteAnomalyBothAbort(t *testing.T) {
 	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
 }
 
-func testTxnDBDirtyWriteAnomalyBothCommit(t *testing.T) {
+func TestTxnDBDirtyWriteAnomalyBothCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	txn1 := "W(A,1) W(B,1) C"
 	txn2 := "W(A,2) W(B,2) C"
 	verify := &verifier{
