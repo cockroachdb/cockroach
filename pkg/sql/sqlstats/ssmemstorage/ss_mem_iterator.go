@@ -32,8 +32,8 @@ func NewStmtStatsIterator(
 ) StmtStatsIterator {
 	var stmtKeys stmtList
 	func() {
-		container.mu.RLock()
-		defer container.mu.RUnlock()
+		container.mu.Lock()
+		defer container.mu.Unlock()
 		for k := range container.mu.stmts {
 			stmtKeys = append(stmtKeys, k)
 		}
