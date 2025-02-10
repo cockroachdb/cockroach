@@ -3233,6 +3233,17 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 				errRunInTxnRbkSentinel,
 			)
 		}
+
+		// Command is too large errors are allowed on DML operations since,
+		// some of the tables can be pretty wide in this test.
+		if s.queryType == OpStmtDML && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
+			strings.Contains(pgErr.Error(), "command is too large") {
+			return errors.Mark(
+				err,
+				errRunInTxnRbkSentinel,
+			)
+		}
+
 		if !s.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
 			!s.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 			return errors.Mark(
