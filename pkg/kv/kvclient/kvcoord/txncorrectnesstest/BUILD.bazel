@@ -3,9 +3,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "txncorrectnesstest_test",
     srcs = [
+        "dirty_read_anomaly_test.go",
         "dirty_write_anomaly_test.go",
+        "lost_delete_anomaly_test.go",
+        "lost_delete_range_anomaly_test.go",
+        "lost_update_anomaly_test.go",
         "main_test.go",
+        "phantom_delete_anomaly_test.go",
+        "phantom_read_anomaly_test.go",
+        "read_skew_anomaly_test.go",
         "txn_correctness_test.go",
+        "write_skew_anomaly_test.go",
     ],
     deps = [
         "//build/bazelutil:noop",
