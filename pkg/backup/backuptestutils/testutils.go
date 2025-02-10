@@ -135,6 +135,11 @@ func StartBackupRestoreTestCluster(
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
+	// Disable autocommit before DDLs in order to make schema changes during
+	// test setup faster.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`)
+	sqlDB.Exec(t, "SET autocommit_before_ddl = false")
+
 	if opts.bankArgs != nil {
 		const payloadSize = 100
 		splits := 10
@@ -149,11 +154,6 @@ func StartBackupRestoreTestCluster(
 		// monitor.
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.index_buffer_size = '16MiB'`)
-
-		// Disable autocommit before DDLs in order to make schema changes during
-		// test setup faster.
-		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`)
-		sqlDB.Exec(t, "SET autocommit_before_ddl = false")
 
 		// Set the max buffer size to something low to prevent
 		// backup/restore tests from hitting OOM errors. If any test
