@@ -1942,3 +1942,8 @@ statement error cross database type references are not supported: db106602a.publ
 CREATE OR REPLACE VIEW v AS (SELECT 1 FROM (VALUES (1)) val(i) WHERE 'foo'::db106602a.e = 'foo'::db106602a.e)
 
 subtest end
+
+# Regression test for hitting an assertion error when using an unimplemented
+# builtin in the view (#128535).
+statement error pgcode 0A000 unimplemented
+CREATE VIEW v128535 AS SELECT json_to_tsvector()

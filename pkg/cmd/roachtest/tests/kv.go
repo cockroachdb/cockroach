@@ -355,6 +355,13 @@ func registerKV(r registry.Registry) {
 			tags["weekly"] = struct{}{}
 		}
 
+		var skipPostValidations registry.PostValidation
+		if opts.blockSize == 1<<16 {
+			// Large block size variations may timeout waiting for replica divergence
+			// post-test validation due to high write volume, see #141007.
+			skipPostValidations = registry.PostValidationReplicaDivergence
+		}
+
 		r.Add(registry.TestSpec{
 			Name:      strings.Join(nameParts, "/"),
 			Owner:     owner,
@@ -363,9 +370,10 @@ func registerKV(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
-			CompatibleClouds:  clouds,
-			Suites:            suites,
-			EncryptionSupport: encryption,
+			CompatibleClouds:    clouds,
+			Suites:              suites,
+			EncryptionSupport:   encryption,
+			SkipPostValidations: skipPostValidations,
 		})
 	}
 }
