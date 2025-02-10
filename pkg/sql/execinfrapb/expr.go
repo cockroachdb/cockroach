@@ -256,7 +256,7 @@ func (eh *exprHelper) deserializeExpr(ctx context.Context, e Expression) (tree.T
 	defer func() { eh.semaCtx.IVarContainer = originalIVarContainer }()
 
 	// Type-check the expression.
-	typedExpr, err := tree.TypeCheck(ctx, expr, eh.semaCtx, types.Any)
+	typedExpr, err := tree.TypeCheck(ctx, expr, eh.semaCtx, types.AnyElement)
 	if err != nil {
 		// Type checking must succeed.
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "%s", expr)

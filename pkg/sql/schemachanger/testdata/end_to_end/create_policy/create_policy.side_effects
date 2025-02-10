@@ -12,6 +12,14 @@ begin transaction #1
 checking for feature: CREATE POLICY
 increment telemetry for sql.schema.create_policy
 checking role/user "public" exists
+write *eventpb.CreatePolicy to event log:
+  policyName: policy 1
+  sql:
+    descriptorId: 104
+    statement: CREATE POLICY ‹"policy 1"› ON ‹t1› AS PERMISSIVE FOR SELECT USING (‹tenant_id› = ‹'01538898-f55c-44db-a306-89078e2c430e'›)
+    tag: CREATE POLICY
+    user: root
+  tableName: defaultdb.public.t1
 ## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
   ...

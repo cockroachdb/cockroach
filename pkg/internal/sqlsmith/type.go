@@ -28,7 +28,7 @@ func (s *Smither) typeFromSQLTypeSyntax(typeStr string) (*types.T, error) {
 	return typ, nil
 }
 
-// pickAnyType returns a concrete type if typ is types.Any or types.AnyArray,
+// pickAnyType returns a concrete type if typ is types.AnyElement or types.AnyArray,
 // otherwise typ.
 func (s *Smither) pickAnyType(typ *types.T) *types.T {
 	switch typ.Family() {

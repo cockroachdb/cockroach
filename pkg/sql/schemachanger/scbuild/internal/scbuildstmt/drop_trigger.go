@@ -50,4 +50,5 @@ func DropTrigger(b BuildCtx, n *tree.DropTrigger) {
 			b.Drop(e)
 		}
 	})
+	b.LogEventForExistingTarget(trigger)
 }

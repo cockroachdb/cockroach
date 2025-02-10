@@ -392,7 +392,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.Any},
+			Types:      tree.VariadicType{VarType: types.AnyElement},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
@@ -1954,7 +1954,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
@@ -1992,7 +1992,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			CalledOnNullInput: true,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
@@ -4438,7 +4438,7 @@ value if you rely on the HLC for accuracy.`,
 			// Note that datums_to_bytes(a) == datums_to_bytes(b) iff (a IS NOT DISTINCT FROM b)
 			Info: "Converts datums into key-encoded bytes. " +
 				"Supports NULLs and all data types which may be used in index keys",
-			Types:      tree.VariadicType{VarType: types.Any},
+			Types:      tree.VariadicType{VarType: types.AnyElement},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var out []byte
@@ -5303,7 +5303,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Types: tree.ParamTypes{
 				{Name: "table_id", Typ: types.Int},
 				{Name: "index_id", Typ: types.Int},
-				{Name: "row_tuple", Typ: types.Any},
+				{Name: "row_tuple", Typ: types.AnyElement},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6571,8 +6571,8 @@ SELECT
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{Name: "val", Typ: types.Any},
-				{Name: "type", Typ: types.Any},
+				{Name: "val", Typ: types.AnyElement},
+				{Name: "type", Typ: types.AnyElement},
 			},
 			ReturnType: tree.IdentityReturnType(1),
 			FnWithExprs: eval.FnWithExprsOverload(func(
@@ -7171,7 +7171,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.Any,
+				VarType: types.AnyElement,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7194,7 +7194,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.Any,
+				VarType: types.AnyElement,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -8784,7 +8784,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				{Name: "name", Typ: types.RefCursor},
 				{Name: "direction", Typ: types.Int},
 				{Name: "count", Typ: types.Int},
-				{Name: "resultTypes", Typ: types.Any},
+				{Name: "resultTypes", Typ: types.AnyElement},
 			},
 			ReturnType: tree.IdentityReturnType(3),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -9191,7 +9191,7 @@ func makeSubStringImpls() builtinDefinition {
 
 var formatImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 	tree.Overload{
-		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
+		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.AnyElement},
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			if args[0] == tree.DNull {
@@ -9902,7 +9902,7 @@ func jsonProps() tree.FunctionProperties {
 }
 
 var jsonBuildObjectImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.Any},
+	Types:      tree.VariadicType{VarType: types.AnyElement},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		if len(args)%2 != 0 {
@@ -9945,7 +9945,7 @@ var jsonBuildObjectImpl = tree.Overload{
 }
 
 var toJSONImpl = tree.Overload{
-	Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
+	Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		return toJSONObject(evalCtx, args[0])
@@ -9980,7 +9980,7 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 )
 
 var jsonBuildArrayImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.Any},
+	Types:      tree.VariadicType{VarType: types.AnyElement},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))

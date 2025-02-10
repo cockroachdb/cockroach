@@ -208,6 +208,21 @@ func triggerName(b buildCtx, e scpb.Element) string {
 	return triggerNameElem.Name
 }
 
+// policyName returns the name of the policy that element `e` belongs to.
+// `e` must therefore have a DescID and PolicyID attr and is a policy-related
+// element.
+func policyName(b buildCtx, e scpb.Element) string {
+	descID := screl.GetDescID(e)
+	policyID, err := screl.Schema.GetAttribute(screl.PolicyID, e)
+	if err != nil {
+		panic(err)
+	}
+	pn := b.QueryByID(descID).FilterPolicyName().FilterElement(func(e *scpb.PolicyName) bool {
+		return e.PolicyID == policyID
+	}).MustGetOneElement()
+	return pn.Name
+}
+
 // ownerName finds the owner of the descriptor that element `e` belongs to.
 // `e` must therefore have a DescID attr.
 func ownerName(b buildCtx, e scpb.Element) string {
@@ -504,6 +519,18 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			return &eventpb.DropTrigger{
 				TableName:   fullyQualifiedNameFromID(b, e.TableID),
 				TriggerName: triggerName(b, e),
+			}
+		}
+	case *scpb.Policy:
+		if pb.TargetStatus == scpb.Status_PUBLIC {
+			return &eventpb.CreatePolicy{
+				TableName:  fullyQualifiedNameFromID(b, e.TableID),
+				PolicyName: policyName(b, e),
+			}
+		} else {
+			return &eventpb.DropPolicy{
+				TableName:  fullyQualifiedNameFromID(b, e.TableID),
+				PolicyName: policyName(b, e),
 			}
 		}
 	}

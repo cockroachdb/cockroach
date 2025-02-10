@@ -230,7 +230,7 @@ func (e *ProjectionsExpr) SetChild(nth int, child opt.Expr) {
 }
 
 func (e *ProjectionsExpr) DataType() *types.T {
-	return types.Any
+	return types.AnyElement
 }
 
 type ProjectionsItem struct {

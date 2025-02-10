@@ -38,10 +38,11 @@ func CreateTrigger(b BuildCtx, n *tree.CreateTrigger) {
 	_, _, tbl := scpb.FindTable(relationElements)
 	tableID, triggerID := tbl.TableID, b.NextTableTriggerID(tbl.TableID)
 
-	b.Add(&scpb.Trigger{
+	trigger := &scpb.Trigger{
 		TableID:   tableID,
 		TriggerID: triggerID,
-	})
+	}
+	b.Add(trigger)
 	b.Add(&scpb.TriggerName{
 		TableID:   tableID,
 		TriggerID: triggerID,
@@ -144,4 +145,5 @@ func CreateTrigger(b BuildCtx, n *tree.CreateTrigger) {
 		UsesTypeIDs:     refProvider.ReferencedTypes().Ordered(),
 		UsesRoutineIDs:  refProvider.ReferencedRoutines().Ordered(),
 	})
+	b.LogEventForExistingTarget(trigger)
 }

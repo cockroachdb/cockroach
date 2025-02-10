@@ -55,7 +55,7 @@ func TestIndexedVars(t *testing.T) {
 	ctx := context.Background()
 	semaContext := tree.MakeSemaContext(nil /* resolver */)
 	semaContext.IVarContainer = c
-	typedExpr, err := expr.TypeCheck(ctx, &semaContext, types.Any)
+	typedExpr, err := expr.TypeCheck(ctx, &semaContext, types.AnyElement)
 	if err != nil {
 		t.Fatal(err)
 	}
