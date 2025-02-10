@@ -147,7 +147,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	shouldInitQuotaPool := false
 	if r.mu.leaderID != lastLeaderID {
 		if r.replicaID == r.mu.leaderID {
-			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
+			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]lastReplicaUpdateTime)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.shMu.state.Desc.Replicas().Descriptors(), now)
 			r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
 			r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
