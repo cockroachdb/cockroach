@@ -47,12 +47,6 @@ GRANT ZONECONFIG ON DATABASE test TO testuser;
 GRANT ZONECONFIG ON test_table TO testuser;
 GRANT ALL ON test_table2 TO testuser;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP INTO 'nodelocal://1/priv-zone-cfg'
@@ -219,8 +213,6 @@ CREATE SCHEMA d.foo;
 CREATE SCHEMA d.bar;
 CREATE SCHEMA d.baz;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 # The ID of "collide" is normally 109. However, we can't add an assertion for that since ID
 # generation is not deterministic.
@@ -243,7 +235,6 @@ exec-sql
 CREATE DATABASE d2;
 CREATE SCHEMA d2.me;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 RESTORE TABLE b.me.foo FROM LATEST IN 'nodelocal://1/cluster' WITH into_db=d2
