@@ -601,6 +601,22 @@ func (m *managerImpl) OnRangeLeaseTransferEval() []*roachpb.LockAcquisition {
 	return acquistions
 }
 
+// OnRangeSubumeEval implements the RangeStateListener interface. It is called
+// during evalutation of Subsume. The returned LockAcquisition structs represent
+// held locks that we may want to flush to disk as replicated.
+func (m *managerImpl) OnRangeSubsumeEval() []*roachpb.LockAcquisition {
+	if !UnreplicatedLockReliability.Get(&m.st.SV) {
+		return nil
+	}
+
+	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
+	acquistions := make([]*roachpb.LockAcquisition, 0)
+	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) {
+		acquistions = append(acquistions, acq)
+	})
+	return acquistions
+}
+
 // OnRangeLeaseUpdated implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeaseholder bool) {
 	if isLeaseholder {
