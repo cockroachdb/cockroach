@@ -1550,7 +1550,7 @@
 <tr><td>APPLICATION</td><td>kv.streamer.batches.sent</td><td>Number of BatchRequests sent across all KV Streamer operators</td><td>Batches</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>APPLICATION</td><td>kv.streamer.batches.throttled</td><td>Number of BatchRequests currently being throttled due to reaching the concurrency limit, across all KV Streamer operators</td><td>Batches</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>kv.streamer.operators.active</td><td>Number of KV Streamer operators currently in use</td><td>Operators</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
-<tr><td>APPLICATION</td><td>logical_replication.batch_hist_nanos</td><td>Time spent flushing a batch</td><td>Nanoseconds</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>APPLICATION</td><td>logical_replication.batch_hist_nanos</td><td>Time spent per row flushing a batch</td><td>Nanoseconds</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>logical_replication.catchup_ranges</td><td>Source side ranges undergoing catch up scans (inaccurate with multiple LDR jobs)</td><td>Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>logical_replication.catchup_ranges_by_label</td><td>Source side ranges undergoing catch up scans</td><td>Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>logical_replication.checkpoint_events_ingested</td><td>Checkpoint events ingested by all replication jobs</td><td>Events</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
