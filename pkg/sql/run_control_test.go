@@ -666,64 +666,105 @@ func TestTransactionTimeout(t *testing.T) {
 
 	_, err = conn.ExecContext(ctx, `SET transaction_timeout = '1s'`)
 	require.NoError(t, err)
-
-	_, err = conn.ExecContext(ctx, `BEGIN`)
+	_, err = conn.ExecContext(ctx, `CREATE TABLE t (k INT PRIMARY KEY, v INT)`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `INSERT INTO t VALUES (1,1), (2,2), (3,3)`)
 	require.NoError(t, err)
 
-	_, err = conn.ExecContext(ctx, `select pg_sleep(0.1);`)
-	require.NoError(t, err)
+	t.Run("times out during query", func(t *testing.T) {
+		_, err = conn.ExecContext(ctx, `BEGIN`)
+		require.NoError(t, err)
 
-	_, err = conn.ExecContext(ctx, `select pg_sleep(10);`)
-	require.Regexp(t, "pq: query execution canceled due to transaction timeout", err)
+		_, err = conn.ExecContext(ctx, `select pg_sleep(0.1);`)
+		require.NoError(t, err)
 
-	err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
-	require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `select pg_sleep(10);`)
+		require.Regexp(t, "pq: query execution canceled due to transaction timeout", err)
 
-	require.Equal(t, "Aborted", TransactionStatus)
+		err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
 
-	_, err = conn.ExecContext(ctx, `SELECT 1;`)
-	require.Regexp(t, "current transaction is aborted", err)
+		require.Equal(t, "Aborted", TransactionStatus)
 
-	_, err = conn.ExecContext(ctx, `ROLLBACK`)
-	require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `SELECT 1;`)
+		require.Regexp(t, "current transaction is aborted", err)
+
+		_, err = conn.ExecContext(ctx, `ROLLBACK`)
+		require.NoError(t, err)
+
+	})
 
 	// Ensure the transaction times out when transaction is open and no statement
 	// is executed.
-	_, err = conn.ExecContext(ctx, `BEGIN`)
-	require.NoError(t, err)
+	t.Run("times out while idle", func(t *testing.T) {
+		_, err = conn.ExecContext(ctx, `BEGIN`)
+		require.NoError(t, err)
 
-	time.Sleep(1010 * time.Millisecond)
+		time.Sleep(1010 * time.Millisecond)
 
-	_, err = conn.ExecContext(ctx, `SELECT 1;`)
-	require.Regexp(t, "pq: query execution canceled due to transaction timeout", err)
+		_, err = conn.ExecContext(ctx, `SELECT 1;`)
+		require.Regexp(t, "pq: query execution canceled due to transaction timeout", err)
 
-	err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
-	require.NoError(t, err)
+		err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
 
-	require.Equal(t, "Aborted", TransactionStatus)
+		require.Equal(t, "Aborted", TransactionStatus)
 
-	_, err = conn.ExecContext(ctx, `ROLLBACK`)
-	require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `ROLLBACK`)
+		require.NoError(t, err)
+	})
 
-	_, err = conn.ExecContext(ctx, `SET transaction_timeout = '10s'`)
-	require.NoError(t, err)
+	t.Run("timeeout releases locks", func(t *testing.T) {
+		conn2, err := tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
 
-	_, err = conn.ExecContext(ctx, `BEGIN`)
-	require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `BEGIN`)
+		require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `UPDATE t SET v = 33 WHERE k = 3`)
+		require.NoError(t, err)
 
-	_, err = conn.ExecContext(ctx, `select pg_sleep(0.1);`)
-	require.NoError(t, err)
+		// Set a statement timeout just to prevent the command from hanging
+		// forever in case there's a bug.
+		_, err = conn2.ExecContext(ctx, `SET statement_timeout = '5s'`)
+		require.NoError(t, err)
+		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 333 WHERE k = 3`)
+		require.NoError(t, err)
 
-	_, err = conn.ExecContext(ctx, `SELECT 1;`)
-	require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `SELECT 1;`)
+		require.ErrorContains(t, err, "query execution canceled due to transaction timeout")
+		err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
+		require.Equal(t, "Aborted", TransactionStatus)
+		_, err = conn.ExecContext(ctx, `ROLLBACK`)
+		require.NoError(t, err)
 
-	err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
-	require.NoError(t, err)
+		var v int
+		err = conn.QueryRowContext(ctx, `SELECT v FROM t WHERE k = 3`).Scan(&v)
+		require.NoError(t, err)
+		require.Equal(t, 333, v)
+	})
 
-	require.Equal(t, "Open", TransactionStatus)
+	t.Run("longer transaction timeout allows queries", func(t *testing.T) {
+		_, err = conn.ExecContext(ctx, `SET transaction_timeout = '10s'`)
+		require.NoError(t, err)
 
-	_, err = conn.ExecContext(ctx, `COMMIT`)
-	require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `BEGIN`)
+		require.NoError(t, err)
+
+		_, err = conn.ExecContext(ctx, `select pg_sleep(0.1);`)
+		require.NoError(t, err)
+
+		_, err = conn.ExecContext(ctx, `SELECT 1;`)
+		require.NoError(t, err)
+
+		err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
+
+		require.Equal(t, "Open", TransactionStatus)
+
+		_, err = conn.ExecContext(ctx, `COMMIT`)
+		require.NoError(t, err)
+	})
 }
 
 func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
