@@ -91,6 +91,9 @@ func registerHotSpotSplits(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		// This test may timeout waiting for replica divergence post-test
+		// validation due to high write volume, see #141007.
+		SkipPostValidations: registry.PostValidationReplicaDivergence,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				concurrency = 32
