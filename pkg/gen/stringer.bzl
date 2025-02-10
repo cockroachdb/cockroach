@@ -19,7 +19,6 @@ STRINGER_SRCS = [
     "//pkg/sql/catalog/catalogkeys:commenttype_string.go",
     "//pkg/sql/catalog/catpb:privilegedescversion_string.go",
     "//pkg/sql/catalog/descpb:formatversion_string.go",
-    "//pkg/sql/catalog/lease:sessionbasedleasingmode_string.go",
     "//pkg/sql/colfetcher:fetcherstate_string.go",
     "//pkg/sql/execinfra:consumerstatus_string.go",
     "//pkg/sql/execinfra:procstate_string.go",

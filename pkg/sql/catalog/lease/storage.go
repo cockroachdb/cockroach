@@ -46,15 +46,14 @@ import (
 // the manager. Some of these fields belong on the manager, in any case, since
 // they're only used by the manager and not by the store itself.
 type storage struct {
-	nodeIDContainer         *base.SQLIDContainer
-	db                      isql.DB
-	clock                   *hlc.Clock
-	settings                *cluster.Settings
-	codec                   keys.SQLCodec
-	regionPrefix            *atomic.Value
-	sessionBasedLeasingMode sessionBasedLeasingModeReader
-	sysDBCache              *catkv.SystemDatabaseCache
-	livenessProvider        sqlliveness.Provider
+	nodeIDContainer  *base.SQLIDContainer
+	db               isql.DB
+	clock            *hlc.Clock
+	settings         *cluster.Settings
+	codec            keys.SQLCodec
+	regionPrefix     *atomic.Value
+	sysDBCache       *catkv.SystemDatabaseCache
+	livenessProvider sqlliveness.Provider
 
 	// group is used for all calls made to acquireNodeLease to prevent
 	// concurrent lease acquisitions from the store.
@@ -87,11 +86,6 @@ type leaseFields struct {
 type writer interface {
 	deleteLease(context.Context, *kv.Txn, leaseFields) error
 	insertLease(context.Context, *kv.Txn, leaseFields) error
-}
-
-type sessionBasedLeasingModeReader interface {
-	sessionBasedLeasingModeAtLeast(ctx context.Context, minimumMode SessionBasedLeasingMode) bool
-	getSessionBasedLeasingMode(ctx context.Context) SessionBasedLeasingMode
 }
 
 // LeaseRenewalDuration controls the default time before a lease expires when

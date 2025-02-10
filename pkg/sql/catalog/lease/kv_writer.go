@@ -28,22 +28,16 @@ type kvWriter struct {
 	// but have their lifetime tied to a sqlliveness session.
 	sessionBasedWriter bootstrap.KVWriter
 
-	settingsWatcher    *settingswatcher.SettingsWatcher
-	sessionBasedReader sessionBasedLeasingModeReader
+	settingsWatcher *settingswatcher.SettingsWatcher
 }
 
 func newKVWriter(
-	codec keys.SQLCodec,
-	db *kv.DB,
-	id descpb.ID,
-	settingsWatcher *settingswatcher.SettingsWatcher,
-	sessionModeReader sessionBasedLeasingModeReader,
+	codec keys.SQLCodec, db *kv.DB, id descpb.ID, settingsWatcher *settingswatcher.SettingsWatcher,
 ) *kvWriter {
 	return &kvWriter{
 		db:                 db,
 		sessionBasedWriter: bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable())),
 		settingsWatcher:    settingsWatcher,
-		sessionBasedReader: sessionModeReader,
 	}
 }
 
