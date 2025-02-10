@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1963,6 +1964,104 @@ func TestAbortedTxnLocks(t *testing.T) {
 		_, err = conn1.ExecContext(ctx, `COMMIT`)
 		require.NoError(t, err)
 	})
+}
+
+// TestRetriableErrorDuringUpgradedTransaction ensures that a retriable error
+// that happens during a transaction does not cause the transaction to release
+// the locks it previously held.
+// NOTE: There have been discussions around changing this behavior in the KV
+// layer, but for now this is the expected behavior.
+// See https://github.com/cockroachdb/cockroach/issues/117020.
+func TestRetriableErrorDuringTransactionHoldsLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	filter := newDynamicRequestFilter()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: filter.filter,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	codec := s.ApplicationLayer().Codec()
+
+	conn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
+	testDB := sqlutils.MakeSQLRunner(conn)
+
+	var barTableID uint32
+	testDB.Exec(t, "SET enable_implicit_transaction_for_batch_statements = true")
+	testDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT)")
+	testDB.Exec(t, "INSERT INTO foo VALUES(1, 1)")
+	testDB.Exec(t, "CREATE TABLE bar (a INT PRIMARY KEY)")
+	testDB.QueryRow(t, "SELECT 'bar'::regclass::oid").Scan(&barTableID)
+
+	// Inject an error that will happen during execution.
+	injectedRetry := false
+	var injectedRetryWG, secondConnWG sync.WaitGroup
+	injectedRetryWG.Add(1)
+	secondConnWG.Add(1)
+	filter.setFilter(func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		if ba.Txn == nil {
+			return nil
+		}
+		if req, ok := ba.GetArg(kvpb.ConditionalPut); ok {
+			put := req.(*kvpb.ConditionalPutRequest)
+			_, tableID, err := codec.DecodeTablePrefix(put.Key)
+			if err != nil || tableID != barTableID {
+				return nil
+			}
+			if !injectedRetry {
+				injectedRetry = true
+				defer injectedRetryWG.Done()
+				return kvpb.NewErrorWithTxn(
+					kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected retry error"), ba.Txn,
+				)
+			} else {
+				secondConnWG.Wait()
+			}
+		}
+		return nil
+	})
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		defer secondConnWG.Done()
+		conn2, err := sqlDB.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = conn2.ExecContext(ctx, "SET statement_timeout = '1s'")
+		if err != nil {
+			return err
+		}
+
+		injectedRetryWG.Wait()
+		_, err = conn2.ExecContext(ctx, "UPDATE foo SET b = 100 WHERE a = 1")
+		if !testutils.IsError(err, "query execution canceled due to statement timeout") {
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
+			return errors.Newf("expected a statement timeout error, got: %v", err)
+		}
+
+		return nil
+	})
+
+	fmt.Printf("running txn\n")
+	testDB.Exec(t, "UPDATE foo SET b = 10 WHERE a = 1; INSERT INTO bar VALUES(2); COMMIT;")
+
+	// Verify that the implicit transaction completed successfully, and the second
+	// transaction did not.
+	var x int
+	testDB.QueryRow(t, "SELECT b FROM foo WHERE a = 1").Scan(&x)
+	require.Equal(t, 10, x)
+	testDB.QueryRow(t, "SELECT a FROM bar").Scan(&x)
+	require.Equal(t, 2, x)
+
+	require.NoError(t, g.Wait())
 }
 
 func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
