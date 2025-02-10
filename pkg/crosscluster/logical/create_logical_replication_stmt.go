@@ -662,6 +662,9 @@ func lookupFunctionID(
 	if len(rf.Overloads) > 1 {
 		return 0, errors.Newf("function %q has more than 1 overload", u.String())
 	}
+	if rf.UnsupportedWithIssue != 0 {
+		return 0, rf.MakeUnsupportedError()
+	}
 	fnOID := rf.Overloads[0].Oid
 	descID := typedesc.UserDefinedTypeOIDToID(fnOID)
 	if descID == 0 {
