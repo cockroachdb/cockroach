@@ -1324,6 +1324,20 @@ func (tc *Collection) GetConstraintComment(
 	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(constraintID), catalogkeys.ConstraintCommentType))
 }
 
+// LockDescriptorWithLease locks a descriptor within the lease manager, where the
+// lease is tied to this collection. The underlying descriptor is never returned,
+// since this code path skips validation and hydration required for it to be
+// usable.
+func (tc *Collection) LockDescriptorWithLease(
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
+) (uint64, error) {
+	desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id)
+	if err != nil || shouldReadFromStore {
+		return 0, err
+	}
+	return uint64(desc.GetVersion()), err
+}
+
 // MakeTestCollection makes a Collection that can be used for tests.
 func MakeTestCollection(
 	ctx context.Context, codec keys.SQLCodec, leaseManager LeaseManager,
