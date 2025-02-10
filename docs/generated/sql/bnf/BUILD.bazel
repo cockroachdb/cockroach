@@ -124,7 +124,7 @@ FILES = [
     "default_value_column_level",
     "delete_stmt",
     "discard_stmt",
-    "do_stmt",
+    "do",
     "drop_column",
     "drop_constraint",
     "drop_database",
