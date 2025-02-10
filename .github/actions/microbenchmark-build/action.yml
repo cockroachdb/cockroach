@@ -20,22 +20,22 @@ runs:
       shell: bash
     - run: ./build/github/get-engflow-keys.sh
       shell: bash
+    - run: |
+        echo "FETCH_DEPTH=$(( ${{ github.event.pull_request.commits }} + 1 ))" >> "${GITHUB_ENV}"
+      shell: bash
     - name: Checkout revision with limited depth
       if: inputs.ref == 'base'
       uses: actions/checkout@v4
       with:
         ref: ${{ github.event.pull_request.head.sha }}
-        fetch-depth: 15
+        fetch-depth: ${{ env.FETCH_DEPTH }}
     - name: Determine merge base
       id: determine-merge-base
       if: inputs.ref == 'base'
       run: |
         set -e
-        MERGE_BASE=$(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
-        if [ -z "$MERGE_BASE" ]; then
-          echo "Error: Merge base could not be found within the last 15 commits." >&2
-          exit 1
-        fi
+        NUM_COMMITS=${{ github.event.pull_request.commits }}          
+        MERGE_BASE=$(git rev-parse HEAD~${NUM_COMMITS})
         echo "merge_base=$MERGE_BASE" >> "$GITHUB_OUTPUT"
       shell: bash
     - name: Checkout build commit
