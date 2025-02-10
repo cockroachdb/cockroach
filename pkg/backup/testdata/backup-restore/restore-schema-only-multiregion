@@ -80,8 +80,6 @@ CREATE DATABASE no_region_db_2;
 CREATE TABLE no_region_db_2.t (x INT);
 INSERT INTO no_region_db_2.t VALUES (1), (2), (3);
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP DATABASE no_region_db INTO 'nodelocal://1/no_region_database_backup/';
@@ -139,7 +137,6 @@ CREATE TABLE eu_central_db.t (x INT);
 INSERT INTO eu_central_db.t VALUES (1), (2), (3);
 ----
 NOTICE: defaulting to 'WITH PRIMARY REGION "eu-central-1"' as no primary region was specified
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql
 BACKUP DATABASE eu_central_db INTO 'nodelocal://1/eu_central_database_backup/';
