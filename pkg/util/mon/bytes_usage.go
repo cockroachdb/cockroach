@@ -882,6 +882,16 @@ func (c *ConcurrentBoundAccount) Shrink(ctx context.Context, delta int64) {
 	c.wrapped.Shrink(ctx, delta)
 }
 
+// Clear wraps BoundAccount.Clear()
+func (c *ConcurrentBoundAccount) Clear(ctx context.Context) {
+	if c == nil {
+		return
+	}
+	c.Lock()
+	defer c.Unlock()
+	c.wrapped.Clear(ctx)
+}
+
 // NewStandaloneBudget creates a BoundAccount suitable for root monitors.
 func NewStandaloneBudget(capacity int64) *BoundAccount {
 	return &BoundAccount{used: capacity}
