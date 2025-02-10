@@ -45,4 +45,5 @@ func DropPolicy(b BuildCtx, n *tree.DropPolicy) {
 		}
 	})
 	b.IncrementSchemaChangeDropCounter("policy")
+	b.LogEventForExistingTarget(policy)
 }

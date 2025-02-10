@@ -49,12 +49,13 @@ func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
 	})
 
 	policyID := b.NextTablePolicyID(tbl.TableID)
-	b.Add(&scpb.Policy{
+	policy := &scpb.Policy{
 		TableID:  tbl.TableID,
 		PolicyID: policyID,
 		Type:     convertPolicyType(n.Type),
 		Command:  convertPolicyCommand(n.Cmd),
-	})
+	}
+	b.Add(policy)
 	b.Add(&scpb.PolicyName{
 		TableID:  tbl.TableID,
 		PolicyID: policyID,
@@ -62,6 +63,7 @@ func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
 	})
 	addRoleElements(b, n, tbl.TableID, policyID)
 	addPolicyExpressions(b, n, tbl.TableID, policyID)
+	b.LogEventForExistingTarget(policy)
 }
 
 // convertPolicyType will convert from a tree.PolicyType to a catpb.PolicyType

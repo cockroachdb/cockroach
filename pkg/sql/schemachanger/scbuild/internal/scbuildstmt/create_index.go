@@ -860,7 +860,7 @@ func maybeCreateVirtualColumnForIndex(
 	// Infer column type from expression.
 	{
 		replacedExpr := b.ComputedColumnExpression(tbl, d)
-		typedExpr, err := tree.TypeCheck(b, replacedExpr, b.SemaCtx(), types.Any)
+		typedExpr, err := tree.TypeCheck(b, replacedExpr, b.SemaCtx(), types.AnyElement)
 		if err != nil {
 			panic(err)
 		}

@@ -555,7 +555,7 @@ func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
 
 	// Generate the DataType method.
 	fmt.Fprintf(g.w, "func (e *%s) DataType() *types.T {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  return types.Any\n")
+	fmt.Fprintf(g.w, "  return types.AnyElement\n")
 	fmt.Fprintf(g.w, "}\n\n")
 }
 

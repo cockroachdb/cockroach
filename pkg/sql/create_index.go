@@ -521,10 +521,10 @@ func replaceExpressionElemsWithVirtualCols(
 		elem := &elems[i]
 		if elem.Expr != nil {
 			// Create a dummy ColumnTableDef to use for validating the
-			// expression. The type is Any because it is unknown until
+			// expression. The type is AnyElement because it is unknown until
 			// validation is performed.
 			colDef := &tree.ColumnTableDef{
-				Type: types.Any,
+				Type: types.AnyElement,
 			}
 			colDef.Computed.Computed = true
 			colDef.Computed.Expr = elem.Expr

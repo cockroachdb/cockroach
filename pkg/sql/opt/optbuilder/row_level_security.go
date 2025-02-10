@@ -61,7 +61,7 @@ func (b *Builder) buildRowLevelSecurityUsingExpression(
 		if err != nil {
 			panic(err)
 		}
-		typedExpr := tableScope.resolveType(parsedExpr, types.Any)
+		typedExpr := tableScope.resolveType(parsedExpr, types.AnyElement)
 		scalar := b.buildScalar(typedExpr, tableScope, nil, nil, nil)
 		// TODO(136742): Apply multiple RLS policies.
 		return scalar
