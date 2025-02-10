@@ -212,10 +212,6 @@ func (ex *connExecutor) recordStatementSummary(
 		ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 	}
 
-	// TODO(xinhaoz): This can be set directly within statsCollector once
-	// https://github.com/cockroachdb/cockroach/pull/123698 is merged.
-	ex.statsCollector.SetStatementFingerprintID(stmtFingerprintID)
-
 	// Record statement execution statistics if span is recorded and no error was
 	// encountered while collecting query-level statistics.
 	if queryLevelStatsOk {

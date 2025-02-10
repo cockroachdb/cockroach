@@ -49,7 +49,7 @@ func TestRecordStatement(t *testing.T) {
 		statsKey := appstatspb.StatementStatisticsKey{
 			Query: "SELECT _",
 		}
-		_, err := memContainer.RecordStatement(ctx, statsKey, sqlstats.RecordedStmtStats{})
+		err := memContainer.RecordStatement(ctx, statsKey, sqlstats.RecordedStmtStats{})
 		require.NoError(t, err)
 		require.Zero(t, numStmtInsights)
 	})
