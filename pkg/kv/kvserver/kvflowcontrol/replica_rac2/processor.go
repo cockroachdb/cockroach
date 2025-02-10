@@ -133,7 +133,7 @@ type rangeControllerInitState struct {
 // RangeControllerFactory abstracts RangeController creation for testing.
 type RangeControllerFactory interface {
 	// New creates a new RangeController.
-	New(ctx context.Context, state rangeControllerInitState) rac2.RangeController
+	New(context.Context, rangeControllerInitState) rac2.RangeController
 }
 
 // ProcessorOptions are specified when creating a new Processor.
