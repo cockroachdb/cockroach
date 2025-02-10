@@ -96,54 +96,6 @@ var WaitForInitialVersion = settings.RegisterBoolSetting(settings.ApplicationLev
 	"enables waiting for the initial version of a descriptor",
 	true)
 
-//go:generate stringer -type=SessionBasedLeasingMode
-type SessionBasedLeasingMode int64
-
-const (
-	// SessionBasedOnly session based leases are only active, and schema
-	// changes only need to consult this table.
-	SessionBasedOnly SessionBasedLeasingMode = iota
-)
-
-var (
-	// SessionBasedLeasingModeByName maps session based leasing modes from name
-	// to enum values.
-	SessionBasedLeasingModeByName = map[string]SessionBasedLeasingMode{
-		"session": SessionBasedOnly,
-	}
-)
-
-// LeaseEnableSessionBasedLeasing used to enable / disable support for
-// session based leasing.
-var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
-	settings.ApplicationLevel,
-	"sql.catalog.experimental_use_session_based_leasing",
-	"enables session based leasing for internal testing.",
-	"session",
-	map[SessionBasedLeasingMode]string{
-		SessionBasedOnly: "session",
-	},
-)
-
-// sessionBasedLeasingModeActive determines if the current mode at least meets
-// the required minimum.
-func (m *Manager) sessionBasedLeasingModeAtLeast(
-	ctx context.Context, minimumMode SessionBasedLeasingMode,
-) bool {
-	return m.getSessionBasedLeasingMode(ctx) >= minimumMode
-}
-
-func readSessionBasedLeasingMode(
-	ctx context.Context, settings *cluster.Settings,
-) SessionBasedLeasingMode {
-	return SessionBasedOnly
-}
-
-// getSessionBasedLeasingMode returns the current session based leasing mode.
-func (m *Manager) getSessionBasedLeasingMode(ctx context.Context) SessionBasedLeasingMode {
-	return readSessionBasedLeasingMode(ctx, m.settings)
-}
-
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
@@ -1253,8 +1205,7 @@ func NewLeaseManager(
 	lm.leaseGeneration.Swap(1) // Start off with 1 as the initial value.
 	lm.storage.regionPrefix = &atomic.Value{}
 	lm.storage.regionPrefix.Store(enum.One)
-	lm.storage.sessionBasedLeasingMode = lm
-	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher, lm)
+	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher)
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
 	lm.waitForInit = make(chan struct{})
