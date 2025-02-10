@@ -1504,7 +1504,7 @@ func (r *Replica) tick(
 		r.mu.lastUpdateTimes.update(r.replicaID, r.Clock().PhysicalTime())
 		// We also update lastUpdateTimes for replicas that provide store liveness
 		// support to the leader.
-		r.updateLastUpdateTimesUsingStoreLivenessRLocked(storeClockTimestamp)
+		r.updateLastUpdateTimesUsingStoreLivenessLocked(storeClockTimestamp)
 	}
 
 	r.mu.ticks++
@@ -3077,8 +3077,8 @@ func (r *Replica) printRaftTail(
 // under the raft fortification protocol, where failure detection is subsumed by
 // store liveness.
 //
-// This method assume that Replica.mu is held in read mode.
-func (r *Replica) updateLastUpdateTimesUsingStoreLivenessRLocked(
+// This method assumes that Replica.mu is locked for writes.
+func (r *Replica) updateLastUpdateTimesUsingStoreLivenessLocked(
 	storeClockTimestamp hlc.ClockTimestamp,
 ) {
 	// If store liveness is not enabled, there is nothing to do. The
