@@ -69,7 +69,7 @@ type Container struct {
 	uniqueServerCount *SQLStatsAtomicCounters
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// acc is the memory account that tracks memory allocations related to stmts
 		// and txns within this Container struct.
@@ -431,8 +431,8 @@ func (s *stmtStats) mergeStatsLocked(statistics *appstatspb.CollectedStatementSt
 
 // getStatsForStmtWithKey returns an instance of stmtStats.
 func (s *Container) getStatsForStmtWithKey(key stmtKey) (stats *stmtStats) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	stats = s.mu.stmts[key]
 	return stats
 }
@@ -480,8 +480,8 @@ func (s *Container) tryCreateStatsForStmtWithKeyLocked(
 }
 
 func (s *Container) getStatsForTxnWithKey(key appstatspb.TransactionFingerprintID) *txnStats {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.mu.txns[key]
 }
 

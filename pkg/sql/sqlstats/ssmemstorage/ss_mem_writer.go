@@ -163,8 +163,8 @@ func (s *Container) StatementSampled(fingerprint string, implicitTxn bool, datab
 		implicitTxn:     implicitTxn,
 		database:        database,
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, ok := s.mu.sampledStatementCache[key]
 	return ok
 }
