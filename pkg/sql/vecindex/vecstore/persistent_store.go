@@ -61,7 +61,7 @@ func NewPersistentStoreWithColumnID(
 		tableID:       tableDesc.GetID(),
 		indexID:       indexID,
 		quantizer:     quantizer,
-		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetOriginalDims()),
+		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims()),
 	}
 
 	pk := tableDesc.GetPrimaryIndex()

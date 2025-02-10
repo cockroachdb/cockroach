@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
-	"github.com/cockroachdb/errors"
 )
 
 // UnQuantizer trivially implements the Quantizer interface, storing the
@@ -29,29 +28,9 @@ func NewUnQuantizer(dims int) Quantizer {
 	return &UnQuantizer{dims: dims}
 }
 
-// GetOriginalDims implements the Quantizer interface.
-func (q *UnQuantizer) GetOriginalDims() int {
+// GetDims implements the Quantizer interface.
+func (q *UnQuantizer) GetDims() int {
 	return q.dims
-}
-
-// GetRandomDims implements the Quantizer interface.
-func (q *UnQuantizer) GetRandomDims() int {
-	return q.dims
-}
-
-// RandomizeVector implements the Quantizer interface.
-func (q *UnQuantizer) RandomizeVector(
-	ctx context.Context, input vector.T, output vector.T, invert bool,
-) {
-	if len(input) != q.dims {
-		panic(errors.AssertionFailedf(
-			"input dimensions %d do not match quantizer dims %d", len(input), q.dims))
-	}
-	if len(output) != q.dims {
-		panic(errors.AssertionFailedf(
-			"output dimensions %d do not match quantizer dims %d", len(output), q.dims))
-	}
-	copy(output, input)
 }
 
 // Quantize implements the Quantizer interface.
@@ -77,10 +56,10 @@ func (q *UnQuantizer) QuantizeInSet(
 
 // NewQuantizedVectorSet implements the Quantizer interface
 func (q *UnQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
-	dataBuffer := make([]float32, 0, capacity*q.GetRandomDims())
+	dataBuffer := make([]float32, 0, capacity*q.GetDims())
 	unquantizedSet := &UnQuantizedVectorSet{
 		Centroid: centroid,
-		Vectors:  vector.MakeSetFromRawData(dataBuffer, q.GetRandomDims()),
+		Vectors:  vector.MakeSetFromRawData(dataBuffer, q.GetDims()),
 	}
 	return unquantizedSet
 }

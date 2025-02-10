@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 )
@@ -46,4 +47,12 @@ func LoadFeatures(t testing.TB, count int) vector.Set {
 	require.NoError(t, err)
 
 	return vector.MakeSetFromRawData(data[:count*512], 512)
+}
+
+// RoundFloats rounds all float32 values in the slice using the given precision.
+func RoundFloats(s []float32, prec int) []float32 {
+	t := make([]float32, len(s))
+	copy(t, s)
+	num32.Round(t, prec)
+	return t
 }
