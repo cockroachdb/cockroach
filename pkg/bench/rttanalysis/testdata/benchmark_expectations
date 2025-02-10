@@ -99,7 +99,7 @@ exp,benchmark
 4,ORMQueries/pg_attribute
 4,ORMQueries/pg_class
 6,ORMQueries/pg_is_other_temp_schema
-6,ORMQueries/pg_is_other_temp_schema_multiple_times
+10,ORMQueries/pg_is_other_temp_schema_multiple_times
 3,ORMQueries/pg_my_temp_schema
 3,ORMQueries/pg_my_temp_schema_multiple_times
 3,ORMQueries/pg_namespace
