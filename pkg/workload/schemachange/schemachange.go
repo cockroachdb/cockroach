@@ -15,7 +15,6 @@ import (
 	"io"
 	"os"
 	"regexp"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -532,15 +531,6 @@ func (w *schemaChangeWorker) runInTxn(
 				// to rollback.
 				if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 					w.recordInHist(timeutil.Since(start), txnRollback)
-					return errors.Mark(
-						err,
-						errRunInTxnRbkSentinel,
-					)
-				}
-				// Command is too large errors are allowed on DML operations since,
-				// some of the tables can be pretty wide in this test.
-				if op.queryType == OpStmtDML && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
-					strings.Contains(pgErr.Error(), "command is too large") {
 					return errors.Mark(
 						err,
 						errRunInTxnRbkSentinel,
