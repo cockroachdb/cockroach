@@ -190,13 +190,28 @@ func (tx *inMemoryTxn) DeletePartition(ctx context.Context, partitionKey Partiti
 	return nil
 }
 
+// GetPartitionMetadata implements the Txn interface.
+func (tx *inMemoryTxn) GetPartitionMetadata(
+	ctx context.Context, partitionKey PartitionKey, forUpdate bool,
+) (PartitionMetadata, error) {
+	inMemPartition, err := tx.store.getPartition(partitionKey)
+	if err != nil {
+		return PartitionMetadata{}, err
+	}
+
+	// Acquire shared lock on the partition and get its metadata.
+	inMemPartition.lock.AcquireShared(tx.id)
+	defer inMemPartition.lock.ReleaseShared()
+	return inMemPartition.lock.partition.Metadata(), nil
+}
+
 // AddToPartition implements the Txn interface.
 func (tx *inMemoryTxn) AddToPartition(
 	ctx context.Context, partitionKey PartitionKey, vector vector.T, childKey ChildKey,
-) (int, error) {
+) (PartitionMetadata, error) {
 	inMemPartition, err := tx.store.getPartition(partitionKey)
 	if err != nil {
-		return 0, err
+		return PartitionMetadata{}, err
 	}
 
 	// Acquire exclusive lock on the partition.
@@ -211,7 +226,7 @@ func (tx *inMemoryTxn) AddToPartition(
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.current = tx.store.tickLocked()
-		return 0, ErrRestartOperation
+		return PartitionMetadata{}, ErrRestartOperation
 	}
 
 	// Add the vector to the partition.
@@ -223,16 +238,16 @@ func (tx *inMemoryTxn) AddToPartition(
 	}
 
 	tx.updated = true
-	return partition.Count(), nil
+	return partition.Metadata(), nil
 }
 
 // RemoveFromPartition implements the Txn interface.
 func (tx *inMemoryTxn) RemoveFromPartition(
 	ctx context.Context, partitionKey PartitionKey, childKey ChildKey,
-) (int, error) {
+) (PartitionMetadata, error) {
 	inMemPartition, err := tx.store.getPartition(partitionKey)
 	if err != nil {
-		return 0, err
+		return PartitionMetadata{}, err
 	}
 
 	// Acquire exclusive lock on the partition.
@@ -247,7 +262,7 @@ func (tx *inMemoryTxn) RemoveFromPartition(
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.current = tx.store.tickLocked()
-		return 0, ErrRestartOperation
+		return PartitionMetadata{}, ErrRestartOperation
 	}
 
 	// Remove vector from the partition.
@@ -266,7 +281,7 @@ func (tx *inMemoryTxn) RemoveFromPartition(
 	}
 
 	tx.updated = true
-	return partition.Count(), nil
+	return partition.Metadata(), nil
 }
 
 // SearchPartitions implements the Txn interface.
