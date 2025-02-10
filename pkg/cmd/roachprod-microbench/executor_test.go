@@ -10,6 +10,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 )
@@ -20,7 +21,7 @@ func TestExtractBenchmarkResultsDataDriven(t *testing.T) {
 		if d.Cmd != "benchmark" {
 			d.Fatalf(t, "unknown command %s", d.Cmd)
 		}
-		result := extractBenchmarkResults(d.Input)
+		result := parser.ExtractBenchmarkResults(d.Input)
 		output := fmt.Sprintf("%v", result)
 		return output
 	})
