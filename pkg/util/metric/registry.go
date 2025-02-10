@@ -123,6 +123,8 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 	}
 	t := v.Type()
 
+	const allowNil = true
+	const disallowNil = false
 	for i := 0; i < v.NumField(); i++ {
 		vfield, tfield := v.Field(i), t.Field(i)
 		tname := tfield.Name
@@ -137,14 +139,18 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 			for i := 0; i < vfield.Len(); i++ {
 				velem := vfield.Index(i)
 				telemName := fmt.Sprintf("%s[%d]", tname, i)
-				// Permit elements in the array to be nil.
-				const skipNil = true
-				r.addMetricValue(ctx, velem, telemName, skipNil, t)
+				r.addMetricValue(ctx, velem, telemName, allowNil, t)
+			}
+		case reflect.Map:
+			iter := vfield.MapRange()
+			for iter.Next() {
+				// telemName is only used for assertion errors.
+				telemName := iter.Key().String()
+				r.addMetricValue(ctx, iter.Value(), telemName, allowNil, t)
 			}
 		default:
 			// No metric fields should be nil.
-			const skipNil = false
-			r.addMetricValue(ctx, vfield, tname, skipNil, t)
+			r.addMetricValue(ctx, vfield, tname, disallowNil, t)
 		}
 	}
 }
@@ -274,7 +280,7 @@ func checkFieldCanBeSkipped(
 	}
 
 	switch fieldType.Kind() {
-	case reflect.Array, reflect.Slice:
+	case reflect.Array, reflect.Slice, reflect.Map:
 		checkFieldCanBeSkipped(skipReason, fieldName, fieldType.Elem(), parentType)
 	case reflect.Struct:
 		containsMetrics := false
@@ -317,7 +323,7 @@ func containsMetricType(ft reflect.Type) bool {
 	}
 
 	switch ft.Kind() {
-	case reflect.Slice, reflect.Array:
+	case reflect.Slice, reflect.Array, reflect.Map:
 		return containsMetricType(ft.Elem())
 	case reflect.Struct:
 		for i := 0; i < ft.NumField(); i++ {
