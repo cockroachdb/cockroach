@@ -55,33 +55,33 @@ import (
 // the SQL column type is embedded as metadata in the Avro field schema in a way
 // that Avro ignores it but passes it along.
 
-// schemaType is one of the set of avro primitive types.
-type schemaType interface{}
+// SchemaType is one of the set of avro primitive types.
+type SchemaType interface{}
 
 const (
-	schemaTypeArray   = `array`
-	schemaTypeBoolean = `boolean`
-	schemaTypeBytes   = `bytes`
-	schemaTypeDouble  = `double`
-	schemaTypeInt     = `int`
-	schemaTypeLong    = `long`
-	schemaTypeNull    = `null`
-	schemaTypeString  = `string`
+	SchemaTypeArray   = `array`
+	SchemaTypeBoolean = `boolean`
+	SchemaTypeBytes   = `bytes`
+	SchemaTypeDouble  = `double`
+	SchemaTypeInt     = `int`
+	SchemaTypeLong    = `long`
+	SchemaTypeNull    = `null`
+	SchemaTypeString  = `string`
 )
 
 type logicalType struct {
-	SchemaType  schemaType `json:"type"`
+	SchemaType  SchemaType `json:"type"`
 	LogicalType string     `json:"logicalType"`
 	Precision   *int       `json:"precision,omitempty"`
 	Scale       *int       `json:"scale,omitempty"`
 }
 
 type arrayType struct {
-	SchemaType schemaType `json:"type"`
-	Items      schemaType `json:"items"`
+	SchemaType SchemaType `json:"type"`
+	Items      SchemaType `json:"items"`
 }
 
-func unionKey(t schemaType) string {
+func unionKey(t SchemaType) string {
 	switch s := t.(type) {
 	case string:
 		return s
@@ -103,10 +103,10 @@ func unionKey(t schemaType) string {
 // that can be safely overwritten to save allocs.
 type datumToNativeFn func(datum tree.Datum, memo interface{}) (interface{}, error)
 
-// schemaField is our representation of the schema of a field in an avro
+// SchemaField is our representation of the schema of a field in an avro
 // record. Serializing it to JSON gives the standard schema representation.
-type schemaField struct {
-	SchemaType schemaType `json:"type"`
+type SchemaField struct {
+	SchemaType SchemaType `json:"type"`
 	Name       string     `json:"name"`
 	Default    *string    `json:"default"`
 	Metadata   string     `json:"__crdb__,omitempty"`
@@ -142,7 +142,7 @@ type schemaField struct {
 type Record struct {
 	SchemaType string         `json:"type"`
 	Name       string         `json:"name"`
-	Fields     []*schemaField `json:"fields"`
+	Fields     []*SchemaField `json:"fields"`
 	Namespace  string         `json:"namespace,omitempty"`
 	codec      *goavro.Codec
 }
@@ -165,6 +165,39 @@ type DataRecord struct {
 	native map[string]interface{}
 }
 
+type FunctionalRecord struct {
+	// Use the Record just for schema info
+	Record
+
+	nativeFromRowFn func(row cdcevent.Row) (map[string]any, error)
+}
+
+func NewFunctionalRecord(
+	name, namespace string,
+	fields []*SchemaField,
+	nativeFromRowFn func(row cdcevent.Row) (map[string]any, error),
+) (*FunctionalRecord, error) {
+	schema := &FunctionalRecord{
+		Record: Record{
+			Name:       name,
+			SchemaType: `record`,
+			Namespace:  namespace,
+			Fields:     fields,
+		},
+		nativeFromRowFn: nativeFromRowFn,
+	}
+
+	schemaJSON, err := json.Marshal(schema)
+	if err != nil {
+		return nil, err
+	}
+	schema.codec, err = goavro.NewCodec(string(schemaJSON))
+	if err != nil {
+		return nil, err
+	}
+	return schema, nil
+}
+
 // Metadata is the `EnvelopeRecord` metadata.
 type Metadata map[string]interface{}
 
@@ -173,6 +206,7 @@ type EnvelopeOpts struct {
 	BeforeField, AfterField, RecordField bool
 	UpdatedField, ResolvedField          bool
 	MVCCTimestampField                   bool
+	OpField, TsField, SourceField        bool
 }
 
 // EnvelopeRecord is an `avroRecord` that wraps a changed SQL row and some
@@ -182,13 +216,14 @@ type EnvelopeRecord struct {
 
 	// NOTE: this struct gets serialized to json, but we still need to be able
 	// to access these fields outside this package, so we hide them.
-	Opts               EnvelopeOpts `json:"-"`
-	Before, After, Rec *DataRecord  `json:"-"`
+	Opts               EnvelopeOpts      `json:"-"`
+	Before, After, Rec *DataRecord       `json:"-"`
+	Source             *FunctionalRecord `json:"-"`
 }
 
 // typeToSchema converts a database type to an avro field
-func typeToSchema(typ *types.T) (*schemaField, error) {
-	schema := &schemaField{
+func typeToSchema(typ *types.T) (*SchemaField, error) {
+	schema := &SchemaField{
 		typ: typ,
 	}
 
@@ -198,13 +233,13 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 	// makes it much easier to work with long histories of table data afterward,
 	// especially for things like loading into analytics databases.
 	setNullable := func(
-		avroType schemaType,
+		avroType SchemaType,
 		encoder datumToNativeFn,
 		decoder func(interface{}) (tree.Datum, error),
 	) {
 		// The default for a union type is the default for the first element of
 		// the union.
-		schema.SchemaType = []schemaType{schemaTypeNull, avroType}
+		schema.SchemaType = []SchemaType{SchemaTypeNull, avroType}
 		unionKey := unionKey(avroType)
 		schema.nativeEncoded = map[string]interface{}{unionKey: nil}
 		schema.encodeDatum = encoder
@@ -231,13 +266,13 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 	// Handles types that mostly encode to non-strings,
 	// but have special cases like Infinity that encode as strings.
 	setNullableWithStringFallback := func(
-		avroType schemaType,
+		avroType SchemaType,
 		encoder datumToNativeFn,
 		decoder func(interface{}) (tree.Datum, error),
 	) {
-		schema.SchemaType = []schemaType{schemaTypeNull, avroType, schemaTypeString}
+		schema.SchemaType = []SchemaType{SchemaTypeNull, avroType, SchemaTypeString}
 		mainUnionKey := unionKey(avroType)
-		stringUnionKey := unionKey(schemaTypeString)
+		stringUnionKey := unionKey(SchemaTypeString)
 		schema.nativeEncoded = map[string]interface{}{mainUnionKey: nil}
 		schema.nativeEncodedSecondaryType = map[string]interface{}{stringUnionKey: nil}
 		schema.encodeDatum = encoder
@@ -269,7 +304,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 	switch typ.Family() {
 	case types.IntFamily:
 		setNullable(
-			schemaTypeLong,
+			SchemaTypeLong,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return int64(*d.(*tree.DInt)), nil
 			},
@@ -279,7 +314,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.BoolFamily:
 		setNullable(
-			schemaTypeBoolean,
+			SchemaTypeBoolean,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return bool(*d.(*tree.DBool)), nil
 			},
@@ -290,8 +325,8 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 	case types.BitFamily:
 		setNullable(
 			arrayType{
-				SchemaType: schemaTypeArray,
-				Items:      schemaTypeLong,
+				SchemaType: SchemaTypeArray,
+				Items:      SchemaTypeLong,
 			},
 			func(d tree.Datum, memo interface{}) (interface{}, error) {
 				uints, lastBitsUsed := d.(*tree.DBitArray).EncodingParts()
@@ -326,7 +361,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.FloatFamily:
 		setNullable(
-			schemaTypeDouble,
+			SchemaTypeDouble,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return float64(*d.(*tree.DFloat)), nil
 			},
@@ -336,7 +371,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.PGLSNFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DPGLSN).LSN.String(), nil
 			},
@@ -346,7 +381,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.RefCursorFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return string(tree.MustBeDString(d)), nil
 			},
@@ -356,7 +391,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.Box2DFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DBox2D).CartesianBoundingBox.Repr(), nil
 			},
@@ -370,7 +405,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.GeographyFamily:
 		setNullable(
-			schemaTypeBytes,
+			SchemaTypeBytes,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return []byte(d.(*tree.DGeography).EWKB()), nil
 			},
@@ -384,7 +419,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.GeometryFamily:
 		setNullable(
-			schemaTypeBytes,
+			SchemaTypeBytes,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return []byte(d.(*tree.DGeometry).EWKB()), nil
 			},
@@ -398,7 +433,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.StringFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return string(*d.(*tree.DString)), nil
 			},
@@ -408,7 +443,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.CollatedStringFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DCollatedString).Contents, nil
 			},
@@ -418,7 +453,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.BytesFamily:
 		setNullable(
-			schemaTypeBytes,
+			SchemaTypeBytes,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return []byte(*d.(*tree.DBytes)), nil
 			},
@@ -429,7 +464,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 	case types.DateFamily:
 		setNullable(
 			logicalType{
-				SchemaType:  schemaTypeInt,
+				SchemaType:  SchemaTypeInt,
 				LogicalType: `date`,
 			},
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -449,7 +484,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 	case types.TimeFamily:
 		setNullable(
 			logicalType{
-				SchemaType:  schemaTypeLong,
+				SchemaType:  SchemaTypeLong,
 				LogicalType: `time-micros`,
 			},
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -466,7 +501,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.TimeTZFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			// We cannot encode this as a long, as it does not encode
 			// timezone correctly.
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -480,7 +515,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 	case types.TimestampFamily:
 		setNullable(
 			logicalType{
-				SchemaType:  schemaTypeLong,
+				SchemaType:  SchemaTypeLong,
 				LogicalType: `timestamp-micros`,
 			},
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -493,7 +528,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 	case types.TimestampTZFamily:
 		setNullable(
 			logicalType{
-				SchemaType:  schemaTypeLong,
+				SchemaType:  SchemaTypeLong,
 				LogicalType: `timestamp-micros`,
 			},
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
@@ -515,7 +550,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 			// Using ISO 8601 format (https://en.wikipedia.org/wiki/ISO_8601#Durations)
 			// because it's the tersest of the input formats we support
 			// and isn't golang-specific.
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DInterval).ValueAsISO8601String(), nil
 			},
@@ -532,7 +567,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		width := int(typ.Width())
 		prec := int(typ.Precision())
 		decimalType := logicalType{
-			SchemaType:  schemaTypeBytes,
+			SchemaType:  SchemaTypeBytes,
 			LogicalType: `decimal`,
 			Precision:   &prec,
 			Scale:       &width,
@@ -574,14 +609,14 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 				if ok {
 					return &tree.DDecimal{Decimal: ratToDecimal(*rat.(*big.Rat), int32(width))}, nil
 				}
-				return tree.ParseDDecimal(unionMap[unionKey(schemaTypeString)].(string))
+				return tree.ParseDDecimal(unionMap[unionKey(SchemaTypeString)].(string))
 			},
 		)
 	case types.UuidFamily:
 		// Should be logical type of "uuid", but the avro library doesn't support
 		// that yet.
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DUuid).UUID.String(), nil
 			},
@@ -591,7 +626,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.INetFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DIPAddr).IPAddr.String(), nil
 			},
@@ -601,7 +636,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.JsonFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DJSON).JSON.String(), nil
 			},
@@ -611,7 +646,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.TSQueryFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DTSQuery).TSQuery.String(), nil
 			},
@@ -621,7 +656,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 		)
 	case types.TSVectorFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DTSVector).TSVector.String(), nil
 			},
@@ -637,7 +672,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 	// for now.
 	case types.EnumFamily:
 		setNullable(
-			schemaTypeString,
+			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				return d.(*tree.DEnum).LogicalRep, nil
 			},
@@ -655,11 +690,11 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 			return nil, changefeedbase.WithTerminalError(
 				errors.Wrapf(err, `could not create item schema for %s`, typ))
 		}
-		itemUnionKey := unionKey(itemSchema.SchemaType.([]schemaType)[1])
+		itemUnionKey := unionKey(itemSchema.SchemaType.([]SchemaType)[1])
 
 		setNullable(
 			arrayType{
-				SchemaType: schemaTypeArray,
+				SchemaType: SchemaTypeArray,
 				Items:      itemSchema.SchemaType,
 			},
 			func(d tree.Datum, memo interface{}) (interface{}, error) {
@@ -742,7 +777,7 @@ func typeToSchema(typ *types.T) (*schemaField, error) {
 
 // columnToAvroSchema converts a column descriptor into its corresponding
 // avro field schema.
-func columnToAvroSchema(col cdcevent.ResultColumn) (*schemaField, error) {
+func columnToAvroSchema(col cdcevent.ResultColumn) (*SchemaField, error) {
 	schema, err := typeToSchema(col.Typ)
 	if err != nil {
 		return nil, changefeedbase.WithTerminalError(errors.Wrapf(err, "column %s", col.Name))
@@ -919,7 +954,11 @@ func (r *DataRecord) rowFromNative(native interface{}) (rowenc.EncDatumRow, erro
 // before and after versions of a row change and metadata about that row change.
 // before is optional, and after can instead be record.
 func NewEnvelopeRecord(
-	topic string, opts EnvelopeOpts, before, after, record *DataRecord, namespace string,
+	topic string,
+	opts EnvelopeOpts,
+	before, after, record *DataRecord,
+	source *FunctionalRecord,
+	namespace string,
 ) (*EnvelopeRecord, error) {
 	schema := &EnvelopeRecord{
 		Record: Record{
@@ -932,41 +971,41 @@ func NewEnvelopeRecord(
 
 	if opts.BeforeField {
 		schema.Before = before
-		beforeField := &schemaField{
+		beforeField := &SchemaField{
 			Name:       `before`,
-			SchemaType: []schemaType{schemaTypeNull, before},
+			SchemaType: []SchemaType{SchemaTypeNull, before},
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, beforeField)
 	}
 	if opts.AfterField {
 		schema.After = after
-		afterField := &schemaField{
+		afterField := &SchemaField{
 			Name:       `after`,
-			SchemaType: []schemaType{schemaTypeNull, after},
+			SchemaType: []SchemaType{SchemaTypeNull, after},
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, afterField)
 	}
 	if opts.UpdatedField {
-		updatedField := &schemaField{
-			SchemaType: []schemaType{schemaTypeNull, schemaTypeString},
+		updatedField := &SchemaField{
+			SchemaType: []SchemaType{SchemaTypeNull, SchemaTypeString},
 			Name:       `updated`,
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, updatedField)
 	}
 	if opts.MVCCTimestampField {
-		mvccTimestampField := &schemaField{
-			SchemaType: []schemaType{schemaTypeNull, schemaTypeString},
+		mvccTimestampField := &SchemaField{
+			SchemaType: []SchemaType{SchemaTypeNull, SchemaTypeString},
 			Name:       `mvcc_timestamp`,
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, mvccTimestampField)
 	}
 	if opts.ResolvedField {
-		resolvedField := &schemaField{
-			SchemaType: []schemaType{schemaTypeNull, schemaTypeString},
+		resolvedField := &SchemaField{
+			SchemaType: []SchemaType{SchemaTypeNull, SchemaTypeString},
 			Name:       `resolved`,
 			Default:    nil,
 		}
@@ -974,12 +1013,38 @@ func NewEnvelopeRecord(
 	}
 	if opts.RecordField {
 		schema.Rec = record
-		recordField := &schemaField{
+		recordField := &SchemaField{
 			Name:       `record`,
-			SchemaType: []schemaType{schemaTypeNull, record},
+			SchemaType: []SchemaType{SchemaTypeNull, record},
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, recordField)
+	}
+
+	if opts.SourceField {
+		schema.Source = source
+		sourceField := &SchemaField{
+			Name:       `source`,
+			SchemaType: []SchemaType{SchemaTypeNull, source},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, sourceField)
+	}
+	if opts.TsField {
+		tsNsField := &SchemaField{
+			Name:       `ts_ns`,
+			SchemaType: []SchemaType{SchemaTypeNull, SchemaTypeLong},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, tsNsField)
+	}
+	if opts.OpField {
+		opField := &SchemaField{
+			Name:       `op`,
+			SchemaType: []SchemaType{SchemaTypeNull, SchemaTypeString},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, opField)
 	}
 
 	schemaJSON, err := json.Marshal(schema)
@@ -1044,7 +1109,7 @@ func (r *EnvelopeRecord) BinaryFromRow(
 				return nil, changefeedbase.WithTerminalError(
 					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
-			native[`updated`] = goavro.Union(unionKey(schemaTypeString), ts.AsOfSystemTime())
+			native[`updated`] = goavro.Union(unionKey(SchemaTypeString), ts.AsOfSystemTime())
 		}
 	}
 
@@ -1057,7 +1122,7 @@ func (r *EnvelopeRecord) BinaryFromRow(
 				return nil, changefeedbase.WithTerminalError(
 					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
-			native[`mvcc_timestamp`] = goavro.Union(unionKey(schemaTypeString), ts.AsOfSystemTime())
+			native[`mvcc_timestamp`] = goavro.Union(unionKey(SchemaTypeString), ts.AsOfSystemTime())
 		}
 	}
 
@@ -1070,13 +1135,50 @@ func (r *EnvelopeRecord) BinaryFromRow(
 				return nil, changefeedbase.WithTerminalError(
 					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
-			native[`resolved`] = goavro.Union(unionKey(schemaTypeString), ts.AsOfSystemTime())
+			native[`resolved`] = goavro.Union(unionKey(SchemaTypeString), ts.AsOfSystemTime())
 		}
 	}
+
+	if r.Opts.SourceField {
+		sourceNative, err := r.Source.nativeFromRowFn(recordRow)
+		if err != nil {
+			return nil, err
+		}
+		native[`source`] = goavro.Union(unionKey(&r.Source.Record), sourceNative)
+	}
+	if r.Opts.TsField {
+		native[`ts_ns`] = nil
+		if u, ok := meta[`ts_ns`]; ok {
+			delete(meta, `ts_ns`)
+			ts, ok := u.(int64)
+			if !ok {
+				return nil, changefeedbase.WithTerminalError(
+					errors.Errorf(`unknown metadata timestamp type: %T`, u))
+			}
+			native[`ts_ns`] = goavro.Union(unionKey(SchemaTypeLong), ts)
+		}
+	}
+	if r.Opts.OpField {
+		native[`op`] = nil
+		if u, ok := meta[`op`]; ok {
+			delete(meta, `op`)
+			op, ok := u.(string)
+			if !ok {
+				return nil, changefeedbase.WithTerminalError(
+					errors.Errorf(`unknown metadata operation type: %T`, u))
+			}
+			native[`op`] = goavro.Union(unionKey(SchemaTypeString), op)
+		}
+	}
+
 	for k := range meta {
 		return nil, changefeedbase.WithTerminalError(errors.AssertionFailedf(`unhandled meta key: %s`, k))
 	}
-	return r.codec.BinaryFromNative(buf, native)
+	buf, err := r.codec.BinaryFromNative(buf, native)
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
 }
 
 // Refresh the metadata for user-defined types on a cached schema
