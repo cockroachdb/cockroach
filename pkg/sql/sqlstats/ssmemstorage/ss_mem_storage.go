@@ -408,27 +408,6 @@ func (s *stmtStats) recordExecStatsLocked(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Record(count, float64(stats.MvccRangeKeySkippedPoints))
 }
 
-func (s *stmtStats) mergeStatsLocked(statistics *appstatspb.CollectedStatementStatistics) {
-	// This handles all the statistics fields.
-	s.mu.data.Add(&statistics.Stats)
-
-	// Setting all metadata fields.
-	if s.mu.data.SensitiveInfo.LastErr == "" {
-		s.mu.data.SensitiveInfo.LastErr = statistics.Stats.SensitiveInfo.LastErr
-	}
-
-	if s.mu.data.SensitiveInfo.MostRecentPlanTimestamp.Before(statistics.Stats.SensitiveInfo.MostRecentPlanTimestamp) {
-		s.mu.data.SensitiveInfo.MostRecentPlanDescription = statistics.Stats.SensitiveInfo.MostRecentPlanDescription
-		s.mu.data.SensitiveInfo.MostRecentPlanTimestamp = statistics.Stats.SensitiveInfo.MostRecentPlanTimestamp
-	}
-
-	s.mu.vectorized = statistics.Key.Vec
-	s.mu.distSQLUsed = statistics.Key.DistSQL
-	s.mu.fullScan = statistics.Key.FullScan
-	s.mu.database = statistics.Key.Database
-	s.mu.querySummary = statistics.Key.QuerySummary
-}
-
 // getStatsForStmtWithKey returns an instance of stmtStats.
 func (s *Container) getStatsForStmtWithKey(key stmtKey) (stats *stmtStats) {
 	s.mu.Lock()
@@ -640,50 +619,6 @@ func (s *Container) freeLocked(ctx context.Context) {
 	}
 
 	s.mu.acc.Clear(ctx)
-}
-
-func (s *Container) MergeApplicationStatementStats(
-	ctx context.Context,
-	other *Container,
-	transactionFingerprintID appstatspb.TransactionFingerprintID,
-) (discardedStats uint64) {
-	if err := other.IterateStatementStats(
-		ctx,
-		sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			statistics.Key.TransactionFingerprintID = transactionFingerprintID
-			key := stmtKey{
-				sampledPlanKey: sampledPlanKey{
-					stmtNoConstants: statistics.Key.Query,
-					implicitTxn:     statistics.Key.ImplicitTxn,
-					database:        statistics.Key.Database,
-				},
-				planHash:                 statistics.Key.PlanHash,
-				transactionFingerprintID: statistics.Key.TransactionFingerprintID,
-			}
-
-			stmtStats, _, throttled := s.tryCreateStatsForStmtWithKey(key, statistics.ID)
-			if throttled {
-				discardedStats++
-				return nil
-			}
-
-			stmtStats.mu.Lock()
-			defer stmtStats.mu.Unlock()
-
-			stmtStats.mergeStatsLocked(statistics)
-
-			return nil
-		},
-	); err != nil {
-		// Calling Iterate.*Stats() function with a visitor function that does not
-		// return error should not cause any error.
-		panic(
-			errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error returned when iterating through application stats"),
-		)
-	}
-
-	return discardedStats
 }
 
 // Add combines one Container into another. Add manages locks on a, so taking

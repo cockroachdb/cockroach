@@ -31,28 +31,20 @@ var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 
 // RecordStatement saves per-statement statistics.
 //
-// samplePlanDescription can be nil, as these are only sampled periodically
-// per unique fingerprint.
-// RecordStatement always returns a valid stmtFingerprintID corresponding to the given
-// stmt regardless of whether the statement is actually recorded or not.
-//
 // If the statement is not actually recorded due to either:
 // 1. the memory budget has been exceeded
 // 2. the unique statement fingerprint limit has been exceeded
-// and error is being returned.
+// an error is returned.
 // Note: This error is only related to the operation of recording the statement
 // statistics into in-memory structs. It is unrelated to the stmtErr in the
 // arguments.
 func (s *Container) RecordStatement(
 	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
-) (appstatspb.StmtFingerprintID, error) {
-	// If the statement is below the latency threshold, or stats aren't being
-	// recorded we don't need to create an entry in the stmts map for it.
-
+) error {
 	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.StmtStatsEnable.Get(&s.st.SV) || (t > 0 && t.Seconds() >= value.ServiceLatencySec) {
-		return invalidStmtFingerprintID, nil
+		return nil
 	}
 
 	statementKey := stmtKey{
@@ -65,15 +57,16 @@ func (s *Container) RecordStatement(
 		transactionFingerprintID: key.TransactionFingerprintID,
 	}
 
-	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, invalidStmtFingerprintID)
+	// Get the statistics object.
+	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, value.FingerprintID)
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
 	// record anything and abort the operation.
 	if throttled {
-		return invalidStmtFingerprintID, ErrFingerprintLimitReached
+		return ErrFingerprintLimitReached
 	}
 
-	// Collect the per-statement statistics.
+	// Collect the per-statement statisticstats.
 	stats.mu.Lock()
 	defer stats.mu.Unlock()
 
@@ -141,18 +134,18 @@ func (s *Container) RecordStatement(
 
 		// If the monitor is nil, we do not track memory usage.
 		if s.mu.acc.Monitor() == nil {
-			return stats.ID, nil
+			return nil
 		}
 
 		// We attempt to account for all the memory we used. If we have exceeded our
 		// memory budget, delete the entry that we just created and report the error.
 		if err := s.mu.acc.Grow(ctx, estimatedMemoryAllocBytes); err != nil {
 			delete(s.mu.stmts, statementKey)
-			return stats.ID, ErrMemoryPressure
+			return ErrMemoryPressure
 		}
 	}
 
-	return stats.ID, nil
+	return nil
 }
 
 // StatementSampled returns true if the statement with the given fingerprint
@@ -193,18 +186,6 @@ func (s *Container) RecordTransaction(
 	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
-
-	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
-	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
-		return nil
-	}
-	// Do not collect transaction statistics if the stats collection latency
-	// threshold is set, since our transaction UI relies on having stats for every
-	// statement in the transaction.
-	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
-	if t > 0 {
-		return nil
-	}
 
 	// Get the statistics object.
 	stats, created, throttled := s.tryCreateStatsForTxnWithKey(key, value.StatementFingerprintIDs)

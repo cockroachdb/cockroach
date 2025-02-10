@@ -405,7 +405,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 				QuerySummary:             "",
 				TransactionFingerprintID: appstatspb.TransactionFingerprintID(i),
 			}
-			_, err := appContainer.RecordStatement(ctx, stmtKey, mockStmtValue)
+			err := appContainer.RecordStatement(ctx, stmtKey, mockStmtValue)
 			if errors.Is(err, ssmemstorage.ErrFingerprintLimitReached) {
 				break
 			}
