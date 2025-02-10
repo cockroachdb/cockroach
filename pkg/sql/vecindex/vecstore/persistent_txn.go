@@ -7,7 +7,6 @@ package vecstore
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -109,8 +108,8 @@ func (psc *persistentStoreCodec) encodeVectorFromSet(
 		dist := vs.GetCentroidDistances()
 		return EncodeUnquantizedVector([]byte{}, dist[idx], vs.(*quantize.UnQuantizedVectorSet).Vectors.At(idx))
 	case *quantize.RaBitQuantizer:
-		dist := psc.tmpVectorSet.GetCentroidDistances()
-		qs := psc.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet)
+		dist := vs.GetCentroidDistances()
+		qs := vs.(*quantize.RaBitQuantizedVectorSet)
 		return EncodeRaBitQVector(
 			[]byte{},
 			qs.CodeCounts[idx],
@@ -122,9 +121,9 @@ func (psc *persistentStoreCodec) encodeVectorFromSet(
 	return nil, errors.Errorf("unknown quantizer type %T", psc.quantizer)
 }
 
-// NewPersistentStoreTxn wraps a PersistentStore transaction around a kv
+// newPersistentStoreTxn wraps a PersistentStore transaction around a kv
 // transaction for use with the vecstore API.
-func NewPersistentStoreTxn(store *PersistentStore, kv *kv.Txn) *persistentStoreTxn {
+func newPersistentStoreTxn(store *PersistentStore, kv *kv.Txn) *persistentStoreTxn {
 	psTxn := persistentStoreTxn{
 		kv:        kv,
 		store:     store,
@@ -185,7 +184,7 @@ func (psTxn *persistentStoreTxn) decodePartition(
 	// Clear and ensure storage for the vector entries and child keys.
 	codec.clear(len(vectorEntries), centroid)
 	if cap(psTxn.tmpChildKeys) < len(vectorEntries) {
-		psTxn.tmpChildKeys = slices.Grow(psTxn.tmpChildKeys, len(vectorEntries)-cap(psTxn.tmpChildKeys))
+		psTxn.tmpChildKeys = make([]ChildKey, len(vectorEntries))
 	}
 	psTxn.tmpChildKeys = psTxn.tmpChildKeys[:len(vectorEntries)]
 
@@ -537,8 +536,8 @@ func (psTxn *persistentStoreTxn) GetFullVectors(ctx context.Context, refs []Vect
 // partition's metadata. Vector data can be read by scanning from the metadata to
 // the next partition's metadata.
 func (psTxn *persistentStoreTxn) encodePartitionKey(partitionKey PartitionKey) roachpb.Key {
-	keyBuffer := make(roachpb.Key, len(psTxn.store.prefix)+EncodedPartitionKeyLen(partitionKey))
-	copy(keyBuffer, psTxn.store.prefix)
+	keyBuffer := make(roachpb.Key, 0, len(psTxn.store.prefix)+EncodedPartitionKeyLen(partitionKey))
+	keyBuffer = append(keyBuffer, psTxn.store.prefix...)
 	keyBuffer = EncodePartitionKey(keyBuffer, partitionKey)
 	return keyBuffer
 }

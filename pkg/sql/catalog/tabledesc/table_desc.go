@@ -352,9 +352,22 @@ func (desc *wrapper) NonDropIndexes() []catalog.Index {
 
 // PartialIndexes returns a slice of all partial indexes in the underlying
 // proto, in their canonical order. This is equivalent to taking the slice
-// produced by AllIndexes and filtering indexes with non-empty expressions.
+// produced by DeletableNonPrimaryIndexes and filtering indexes with non-empty
+// expressions.
+//
+// Backfilling indexes are excluded.
 func (desc *wrapper) PartialIndexes() []catalog.Index {
 	return desc.getExistingOrNewIndexCache().partial
+}
+
+// VectorIndexes returns a slice of all vector indexes in the underlying
+// proto, in their canonical order. This is equivalent to taking the slice
+// produced by DeletableNonPrimaryIndexes and filtering indexes that are not
+// vector indexes.
+//
+// Backfilling indexes are excluded.
+func (desc *wrapper) VectorIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().vector
 }
 
 // NonPrimaryIndexes returns a slice of all non-primary indexes, in

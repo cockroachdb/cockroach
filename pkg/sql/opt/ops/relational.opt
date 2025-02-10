@@ -1466,20 +1466,27 @@ define VectorSearchPrivate {
     TargetNeighborCount int64
 }
 
-# VectorPartitionSearch is used to determine the vector-index partition that
-# contains (or should contain) each vector from the input. It is used in the
-# input of mutation operators. It always produces exactly one row for each
-# input row, containing the partition key and optionally the centroid of the
-# partition. If the input query vector is NULL, no vector search is performed,
-# and the projected output columns are NULL.
+# VectorMutationSearch is used to determine the vector-index partition that
+# contains (or should contain) each vector from the input. It can also produce
+# the quantized and encoded vector for insertion into the index.
+#
+# VectorMutationSearch is used in the input of mutation operators. It always
+# produces exactly one output row for each input row, containing the partition
+# key and optionally (for INSERT/UPSERT/UPDATE) the quantized and encoded
+# vector. If the input query vector is NULL, no vector search is performed, and
+# the projected output columns are NULL.
+#
+# For DELETE operations, the primary key columns are used to constrain the
+# search to a specific row. In rare cases it is possible not to find the
+# requested row, in which case the output partition key will be NULL.
 [Relational]
-define VectorPartitionSearch {
+define VectorMutationSearch {
     Input RelExpr
-    _ VectorPartitionSearchPrivate
+    _ VectorMutationSearchPrivate
 }
 
 [Private]
-define VectorPartitionSearchPrivate {
+define VectorMutationSearchPrivate {
     # Table identifies the table to perform the search in.
     Table TableID
 
@@ -1493,8 +1500,8 @@ define VectorPartitionSearchPrivate {
     PrefixKeyCols ColList
 
     # QueryVectorCol is the input column that contains the query vectors.
-    # When the query vector is NULL, the partition and centroid output columns
-    # will be NULL.
+    # When the query vector is NULL, the partition and quantized vector output
+    # columns will be NULL.
     QueryVectorCol ColumnID
 
     # PrimaryKeyCols is the optional set of input columns used to constrain
@@ -1507,10 +1514,10 @@ define VectorPartitionSearchPrivate {
     # vector. It is always set.
     PartitionCol ColumnID
 
-    # CentroidCol is the output column that contains the centroid of the
-    # partition. It is only set for inserts into the index (including those
-    # performed for a SQL UPDATE or UPSERT).
-    CentroidCol ColumnID
+    # QuantizedVectorCol is the output column that contains the quantized and
+    # encoded form of the vector, which will be inserted as a value into the
+    # index. It is only set for inserts into the index.
+    QuantizedVectorCol ColumnID
 }
 
 # Barrier is a relational operator that simply passes through its input columns

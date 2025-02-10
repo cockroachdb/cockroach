@@ -211,7 +211,7 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 			searchOptions := vecindex.SearchOptions{BaseBeamSize: beamSize}
 
 			// Calculate prediction set for the vector.
-			err = index.Search(ctx, txn, queryVector, &searchSet, searchOptions)
+			err = index.Search(ctx, txn, queryVector, &searchSet, searchOptions, vecstore.LeafLevel)
 			if err != nil {
 				panic(err)
 			}

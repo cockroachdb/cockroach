@@ -301,6 +301,20 @@ func NewProcessor(
 		}
 		return newWindower(ctx, flowCtx, processorID, core.Windower, inputs[0], post)
 	}
+	if core.VectorSearch != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		return newVectorSearchProcessor(ctx, flowCtx, processorID, core.VectorSearch, post)
+	}
+	if core.VectorMutationSearch != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		return newVectorMutationSearchProcessor(
+			ctx, flowCtx, processorID, core.VectorMutationSearch, inputs[0], post,
+		)
+	}
 	if core.LocalPlanNode != nil {
 		numInputs := int(core.LocalPlanNode.NumInputs)
 		if err := checkNumIn(inputs, numInputs); err != nil {

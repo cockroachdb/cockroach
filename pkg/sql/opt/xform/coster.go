@@ -596,8 +596,8 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.VectorSearchOp:
 		cost = c.computeVectorSearchCost(candidate.(*memo.VectorSearchExpr))
 
-	case opt.VectorPartitionSearchOp:
-		cost = c.computeVectorPartitionSearchCost(candidate.(*memo.VectorPartitionSearchExpr))
+	case opt.VectorMutationSearchOp:
+		cost = c.computeVectorMutationSearchCost(candidate.(*memo.VectorMutationSearchExpr))
 
 	case opt.InsertOp:
 		insertExpr, _ := candidate.(*memo.InsertExpr)
@@ -768,9 +768,7 @@ func (c *coster) computeVectorSearchCost(search *memo.VectorSearchExpr) memo.Cos
 	return memo.Cost{C: cpuCostFactor * search.Relational().Statistics().RowCount}
 }
 
-func (c *coster) computeVectorPartitionSearchCost(
-	search *memo.VectorPartitionSearchExpr,
-) memo.Cost {
+func (c *coster) computeVectorMutationSearchCost(search *memo.VectorMutationSearchExpr) memo.Cost {
 	// TODO(drewk, mw5h): implement a proper cost function.
 	return memo.Cost{C: cpuCostFactor * search.Relational().Statistics().RowCount}
 }

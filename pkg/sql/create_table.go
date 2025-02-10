@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -527,6 +528,17 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
+	// Vector indexes must initialize the root partition upon creation.
+	for _, idx := range desc.VectorIndexes() {
+		tableID, indexID := desc.GetID(), idx.GetID()
+		indexDims := int(idx.GetVecConfig().Dims)
+		if err = vecstore.InitRootPartition(
+			params.ctx, params.p.txn, params.ExecCfg().Codec, tableID, indexID, indexDims,
+		); err != nil {
+			return err
+		}
+	}
+
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
 	if err := params.p.logEvent(params.ctx,
@@ -610,11 +622,12 @@ func (n *createTableNode) startExec(params runParams) error {
 				// Populate the buffer.
 				copy(rowBuffer, n.input.Values())
 
-				// CREATE TABLE AS does not copy indexes from the input table.
-				// An empty row.PartialIndexUpdateHelper is used here because
-				// there are no indexes, partial or otherwise, to update.
+				// CREATE TABLE AS does not copy indexes from the input table. Empty
+				// partial and vector index helpers are used here because there are no
+				// indexes, partial, vector, or otherwise, to update.
 				var pm row.PartialIndexUpdateHelper
-				if err := ti.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				var vh row.VectorIndexUpdateHelper
+				if err := ti.row(params.ctx, rowBuffer, pm, vh, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
 			}

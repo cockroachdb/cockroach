@@ -1539,6 +1539,16 @@ func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
 	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
 }
 
+// InitVectorIndexRootPartition implements the scexec.Catalog interface.
+func (s *TestState) InitVectorIndexRootPartition(
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, dims int,
+) error {
+	s.LogSideEffectf(
+		"initializing root partition for vector index %d on table %d", indexID, tableID,
+	)
+	return nil
+}
+
 // TemporarySchemaName is part of scbuild.TemporarySchemaProvider interface.
 func (s *TestState) TemporarySchemaName() string {
 	return fmt.Sprintf("pg_temp_%d_%d", 123, 456)

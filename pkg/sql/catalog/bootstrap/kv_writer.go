@@ -61,10 +61,15 @@ func (w KVWriter) RecordToKeyValues(values ...tree.Datum) (ret []roachpb.KeyValu
 		}
 	}
 
-	// Encode the secondary index rows.
+	// Encode the secondary index rows. An empty VectorIndexEncodingHelper is ok
+	// because system tables do not have vector indexes.
+	var vh rowenc.VectorIndexEncodingHelper
 	for _, idx := range w.tableDesc.PublicNonPrimaryIndexes() {
+		//if idx.GetType() == descpb.IndexDescriptor_VECTOR {
+		//	return nil, errors.AssertionFailedf("system tables cannot have vector indexes")
+		//}
 		indexEntries, err := rowenc.EncodeSecondaryIndex(
-			context.Background(), w.codec, w.tableDesc, idx, w.colIDtoRowIndex, values, true, /* includeEmpty */
+			context.Background(), w.codec, w.tableDesc, idx, w.colIDtoRowIndex, values, vh, true, /* includeEmpty */
 		)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(

@@ -8,6 +8,7 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -51,6 +52,16 @@ func init() {
 						TypeIDs:               this.EmbeddedExpr.UsesTypeIDs,
 						BackReferencedTableID: this.TableID,
 					}
+				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.MaybeAddVectorIndexRootPartition {
+					if this.Type == idxtype.VECTOR {
+						return &scop.MaybeAddVectorIndexRootPartition{
+							TableID: this.TableID,
+							IndexID: this.IndexID,
+							Dims:    int(this.VecConfig.Dims),
+						}
+					}
+					return nil
 				}),
 			),
 			to(scpb.Status_BACKFILLED,

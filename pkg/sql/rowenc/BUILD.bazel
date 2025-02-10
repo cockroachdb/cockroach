@@ -8,6 +8,7 @@ go_library(
         "index_fetch.go",
         "partition.go",
         "roundtrip_format.go",
+        "vector_index.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/rowenc",
     visibility = ["//visibility:public"],

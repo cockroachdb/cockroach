@@ -448,6 +448,14 @@ type Planner interface {
 
 	// ClearTableStatsCache removes all entries from the node's table stats cache.
 	ClearTableStatsCache()
+
+	// FormatVectorIndex returns a tree-formatted string representation of the
+	// vector index with the given ID.
+	FormatVectorIndex(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID) (string, error)
+
+	// ProcessVectorIndexFixups waits until all outstanding fixups for the vector
+	// index with the given ID have been processed.
+	ProcessVectorIndexFixups(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

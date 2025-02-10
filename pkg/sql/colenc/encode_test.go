@@ -606,8 +606,9 @@ func buildRowKVs(
 	}
 	p := &capturePutter{}
 	var pm row.PartialIndexUpdateHelper
+	var vh row.VectorIndexUpdateHelper
 	for _, d := range datums {
-		if err := inserter.InsertRow(context.Background(), p, d, pm, nil, false, true); err != nil {
+		if err := inserter.InsertRow(context.Background(), p, d, pm, vh, nil, false, true); err != nil {
 			return kvs{}, err
 		}
 	}

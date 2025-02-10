@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -79,7 +80,7 @@ type SearchOptions struct {
 	BaseBeamSize int
 	// SkipRerank does not rerank search results using the original full-size
 	// vectors. While this speeds up the search, it can also significantly
-	// reduce accuracy. It is currently only used for testing.
+	// reduce accuracy.
 	SkipRerank bool
 	// ReturnVectors specifies whether to return the original full-size vectors
 	// in search results. If this is a leaf-level search then the returned
@@ -391,11 +392,15 @@ func (vi *VectorIndex) Search(
 	queryVector vector.T,
 	searchSet *vecstore.SearchSet,
 	options SearchOptions,
+	level vecstore.Level,
 ) error {
+	if level == vecstore.InvalidLevel {
+		panic(errors.AssertionFailedf("caller passed invalid level %d", level))
+	}
 	searchCtx := searchContext{
 		Txn:      txn,
 		Original: queryVector,
-		Level:    vecstore.LeafLevel,
+		Level:    level,
 		Options:  options,
 	}
 	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
@@ -528,16 +533,17 @@ func (vi *VectorIndex) searchHelper(searchCtx *searchContext, searchSet *vecstor
 	}
 
 	if searchLevel < searchCtx.Level {
-		// This should only happen when inserting into the root.
+		// This should only happen during the search for an insert when the root
+		// partition is at the leaf level.
 		if searchLevel != searchCtx.Level-1 {
 			panic(errors.AssertionFailedf("caller passed invalid level %d", searchCtx.Level))
 		}
+		res := &vecstore.SearchResult{ChildKey: vecstore.ChildKey{PartitionKey: vecstore.RootKey}}
 		if searchCtx.Options.ReturnVectors {
-			panic(errors.AssertionFailedf("ReturnVectors=true not supported for this case"))
+			// The centroid of the root partition is always the zero-vector.
+			res.Vector = make(vector.T, vi.rootQuantizer.GetRandomDims())
 		}
-		searchSet.Add(&vecstore.SearchResult{
-			ChildKey: vecstore.ChildKey{PartitionKey: vecstore.RootKey},
-		})
+		searchSet.Add(res)
 		return nil
 	}
 
@@ -893,11 +899,20 @@ func (vi *VectorIndex) Format(
 		if options.PrimaryKeyStrings {
 			buf.WriteString(string(key))
 		} else {
-			for i, b := range key {
-				if i != 0 {
-					buf.WriteByte(' ')
+			switch vi.Store().(type) {
+			case *vecstore.InMemoryStore:
+				for i, b := range key {
+					if i != 0 {
+						buf.WriteByte(' ')
+					}
+					buf.WriteString(strconv.FormatUint(uint64(b), 10))
 				}
-				buf.WriteString(strconv.FormatUint(uint64(b), 10))
+			case *vecstore.PersistentStore:
+				vals, _ := encoding.PrettyPrintValuesWithTypes(nil /* valDirs */, key)
+				for i := range vals {
+					buf.WriteByte('/')
+					buf.WriteString(vals[i])
+				}
 			}
 		}
 	}
