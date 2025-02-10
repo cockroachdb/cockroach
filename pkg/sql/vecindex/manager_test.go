@@ -192,6 +192,9 @@ func TestVectorManager(t *testing.T) {
 	})
 
 	t.Run("test multiple threaded erroring", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		pullDelayer := sync.WaitGroup{}
 		pullDelayer.Add(10)
 		testingKnobs := vecindex.VecIndexTestingKnobs{
@@ -207,10 +210,10 @@ func TestVectorManager(t *testing.T) {
 		wg := sync.WaitGroup{}
 		for i := 0; i < 11; i++ {
 			wg.Add(1)
-			go func() {
+			go func(idx int) {
 				defer wg.Done()
-				_, errs[i] = vectorMgr.Get(ctx, 142, 4)
-			}()
+				_, errs[idx] = vectorMgr.Get(ctx, 142, 4)
+			}(i)
 		}
 		wg.Wait()
 		require.Error(t, errs[0])
