@@ -675,7 +675,8 @@ func (dsp *DistSQLPlanner) Run(
 	evalCtx *extendedEvalContext,
 	finishedSetupFn func(localFlow flowinfra.Flow),
 ) {
-	flows := plan.GenerateFlowSpecs()
+	// Ignore the cleanup function since we will release each spec separately.
+	flows, _ := plan.GenerateFlowSpecs()
 	gatewayFlowSpec, ok := flows[dsp.gatewaySQLInstanceID]
 	if !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
