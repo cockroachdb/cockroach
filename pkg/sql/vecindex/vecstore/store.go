@@ -35,6 +35,19 @@ type VectorWithKey struct {
 	Vector vector.T
 }
 
+// PartitionMetadata includes the size of the partition, as well as information
+// from the metadata record.
+type PartitionMetadata struct {
+	// Level is the level of the partition in the K-means tree.
+	Level Level
+	// Centroid is the centroid for vectors in the partition. It is calculated
+	// once when the partition is created and never changes, even if additional
+	// vectors are added later.
+	Centroid vector.T
+	// Count is the number of vectors in the partition.
+	Count int
+}
+
 // Store encapsulates the component that’s actually storing the vectors, whether
 // that’s in a CRDB cluster for production or in memory for testing and
 // benchmarking. Callers can use Store to start and commit transactions against
@@ -89,23 +102,38 @@ type Txn interface {
 	// or returns ErrPartitionNotFound if the key cannot be found.
 	DeletePartition(ctx context.Context, partitionKey PartitionKey) error
 
+	// GetPartitionMetadata returns metadata for the given partition, including
+	// its size, its centroid, and its level in the K-means tree. If "forUpdate"
+	// is true, fetching the metadata is part of a mutation operation; the store
+	// can perform any needed locking in this case. GetPartitionMetadata returns
+	// ErrPartitionNotFound if the partition cannot be found, or
+	// ErrRestartOperation if the caller should retry the operation that triggered
+	// this call.
+	GetPartitionMetadata(
+		ctx context.Context, partitionKey PartitionKey, forUpdate bool,
+	) (PartitionMetadata, error)
+
 	// AddToPartition adds the given vector and its associated child key to the
-	// partition with the given key. It returns the count of quantized vectors in
-	// the partition, or ErrPartitionNotFound if the partition cannot be found,
-	// or ErrRestartOperation if the caller should retry the insert operation
-	// that triggered this call.
+	// partition with the given key. If the vector already exists, it is
+	// overwritten with the new key. AddToPartition returns the partition's
+	// metadata, reflecting its size after the add operation. It returns
+	// ErrPartitionNotFound if the partition cannot be found, or
+	// ErrRestartOperation if the caller should retry the insert operation that
+	// triggered this call.
 	AddToPartition(
 		ctx context.Context, partitionKey PartitionKey, vector vector.T, childKey ChildKey,
-	) (int, error)
+	) (PartitionMetadata, error)
 
 	// RemoveFromPartition removes the given vector and its associated child key
-	// from the partition with the given key. It returns the count of quantized
-	// vectors in the partition, or ErrPartitionNotFound if the partition cannot
-	// be found, or ErrRestartOperation if the caller should retry the delete
-	// operation that triggered this call.
+	// from the partition with the given key. If the key is not present in the
+	// partition, it is a no-op. RemoveFromPartition returns the partition's
+	// metadata, reflecting its size after the remove operation. It returns
+	// ErrPartitionNotFound if the partition cannot be found, or
+	// ErrRestartOperation if the caller should retry the delete operation that
+	// triggered this call.
 	RemoveFromPartition(
 		ctx context.Context, partitionKey PartitionKey, childKey ChildKey,
-	) (int, error)
+	) (PartitionMetadata, error)
 
 	// SearchPartitions finds vectors that are closest to the given query vector.
 	// Only partitions with the given keys are searched, and all of them must be
