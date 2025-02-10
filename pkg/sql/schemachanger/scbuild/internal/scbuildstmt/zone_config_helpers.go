@@ -1405,9 +1405,6 @@ func configureZoneConfigForNewIndexBackfill(
 	return nil
 }
 
-// TODO(annie): This is unused for now.
-var _ = configureZoneConfigForNewIndexPartitioning
-
 // configureZoneConfigForNewIndexPartitioning configures the zone config for any
 // new index in a REGIONAL BY ROW table.
 // This *must* be done after the index ID has been allocated.
@@ -1431,7 +1428,7 @@ func configureZoneConfigForNewIndexPartitioning(
 			indexIDs = append(indexIDs, idx.IndexID)
 		}
 
-		if err := ApplyZoneConfigForMultiRegionTable(
+		if err := applyZoneConfigForMultiRegionTable(
 			b,
 			regionConfig,
 			tableID,
@@ -1443,9 +1440,9 @@ func configureZoneConfigForNewIndexPartitioning(
 	return nil
 }
 
-// ApplyZoneConfigForMultiRegionTable applies zone config settings based
+// applyZoneConfigForMultiRegionTable applies zone config settings based
 // on the options provided and adds the scpb.TableZoneConfig to our builder.
-func ApplyZoneConfigForMultiRegionTable(
+func applyZoneConfigForMultiRegionTable(
 	b BuildCtx,
 	regionConfig multiregion.RegionConfig,
 	tableID catid.DescID,
