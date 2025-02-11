@@ -120,8 +120,8 @@ type searchContext struct {
 	tempVectorsWithKeys []vecstore.VectorWithKey
 }
 
-// VectorIndex implements the C-SPANN algorithm, which adapts Microsoft’s SPANN
-// and SPFresh algorithms to work well with CockroachDB’s unique distributed
+// VectorIndex implements the C-SPANN algorithm, which adapts Microsoft's SPANN
+// and SPFresh algorithms to work well with CockroachDB's unique distributed
 // architecture. This enables CockroachDB to efficiently answer approximate
 // nearest neighbor (ANN) queries with high accuracy, low latency, and fresh
 // results, with millions or even billions of indexed vectors. In a departure
@@ -314,60 +314,17 @@ func (vi *VectorIndex) Insert(
 func (vi *VectorIndex) Delete(
 	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.PrimaryKey,
 ) error {
-	// Potentially throttle delete operation if background work is falling behind.
-	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
+	result, err := vi.SearchForDelete(ctx, txn, vector, key)
+	if err != nil {
 		return err
 	}
-
-	// Search for the vector in the index.
-	searchCtx := searchContext{
-		Txn:      txn,
-		Original: vector,
-		Level:    vecstore.LeafLevel,
-		Options: SearchOptions{
-			SkipRerank:  vi.options.DisableErrorBounds,
-			UpdateStats: true,
-		},
+	if result == nil {
+		return nil
 	}
-	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
 
-	// Randomize the vector.
-	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
-	defer searchCtx.Workspace.FreeVector(tempRandomized)
-	searchCtx.Randomized = vi.randomizeVector(vector, tempRandomized)
-
-	searchSet := vecstore.SearchSet{MaxResults: 1, MatchKey: key}
-
-	// Search with the base beam size. If that fails to find the vector, try again
-	// with a larger beam size, in order to minimize the chance of dangling
-	// vector references in the index.
-	baseBeamSize := max(vi.options.BaseBeamSize, 1)
-	for {
-		searchCtx.Options.BaseBeamSize = baseBeamSize
-
-		err := vi.searchHelper(&searchCtx, &searchSet)
-		if err != nil {
-			return err
-		}
-		results := searchSet.PopUnsortedResults()
-		if len(results) == 0 {
-			// Retry search with significantly higher beam size.
-			if baseBeamSize == vi.options.BaseBeamSize {
-				baseBeamSize *= 8
-				continue
-			}
-			return nil
-		}
-
-		// Remove the vector from its partition in the store.
-		_, err = vi.removeFromPartition(ctx, txn, results[0].ParentPartitionKey, results[0].ChildKey)
-		if errors.Is(err, vecstore.ErrRestartOperation) {
-			// If store requested the operation be retried, then re-run the
-			// search and delete.
-			continue
-		}
-		return err
-	}
+	// Remove the vector from its partition in the store.
+	_, err = vi.removeFromPartition(ctx, txn, result.ParentPartitionKey, result.ChildKey)
+	return err
 }
 
 // Search finds vectors in the index that are closest to the given query vector
@@ -436,6 +393,59 @@ func (vi *VectorIndex) SearchForInsert(
 
 	result.Vector = metadata.Centroid
 	return result, nil
+}
+
+// SearchForDelete finds the leaf partition containing the vector to be deleted.
+// It returns a single search result containing the key of that partition, or
+// nil if the vector cannot be found. This is useful for callers that directly
+// delete KV rows rather than using this library to do it.
+func (vi *VectorIndex) SearchForDelete(
+	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.PrimaryKey,
+) (*vecstore.SearchResult, error) {
+	// Potentially throttle operation if background work is falling behind.
+	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
+		return nil, err
+	}
+
+	searchCtx := searchContext{
+		Txn:      txn,
+		Original: vector,
+		Level:    vecstore.LeafLevel,
+		Options: SearchOptions{
+			SkipRerank:  vi.options.DisableErrorBounds,
+			UpdateStats: true,
+		},
+	}
+	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
+
+	// Randomize the vector.
+	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
+	defer searchCtx.Workspace.FreeVector(tempRandomized)
+	searchCtx.Randomized = vi.randomizeVector(vector, tempRandomized)
+
+	searchCtx.tempSearchSet = vecstore.SearchSet{MaxResults: 1, MatchKey: key}
+
+	// Search with the base beam size. If that fails to find the vector, try again
+	// with a larger beam size, in order to minimize the chance of dangling
+	// vector references in the index.
+	baseBeamSize := max(vi.options.BaseBeamSize, 1)
+	for i := 0; i < 2; i++ {
+		searchCtx.Options.BaseBeamSize = baseBeamSize
+
+		err := vi.searchHelper(&searchCtx, &searchCtx.tempSearchSet)
+		if err != nil {
+			return nil, err
+		}
+		results := searchCtx.tempSearchSet.PopUnsortedResults()
+		if len(results) == 0 {
+			// Retry search with significantly higher beam size.
+			baseBeamSize *= 8
+		} else {
+			return &results[0], nil
+		}
+	}
+
+	return nil, nil
 }
 
 // SuspendFixups suspends background fixup processing until ProcessFixups is
