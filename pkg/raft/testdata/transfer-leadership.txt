@@ -48,6 +48,7 @@ stabilize
 > 2 receiving messages
   1->2 MsgTimeoutNow Term:1 Log:0/0
   INFO 2 [term 1] received MsgTimeoutNow from 1 and starts an election to get leadership
+  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 2 is starting a new election at term 1
   INFO 2 became candidate at term 2
   INFO 2 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
@@ -209,6 +210,7 @@ stabilize
 > 3 receiving messages
   2->3 MsgTimeoutNow Term:2 Log:0/0
   INFO 3 [term 2] received MsgTimeoutNow from 2 and starts an election to get leadership
+  DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 3 is starting a new election at term 2
   INFO 3 became candidate at term 3
   INFO 3 [logterm: 2, index: 12] sent MsgVote request to 1 at term 3
