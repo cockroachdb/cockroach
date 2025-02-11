@@ -41,7 +41,7 @@ func (ex *connExecutor) maybeAutoCommitBeforeDDL(
 		ex.sessionData().AutoCommitBeforeDDL &&
 		(!ex.planner.EvalContext().TxnIsSingleStmt || !ex.implicitTxn()) &&
 		ex.extraTxnState.firstStmtExecuted {
-		if err := ex.planner.SendClientNotice(
+		if err := ex.planner.BufferClientNoticeInConnection(
 			ctx,
 			pgnotice.Newf("auto-committing transaction before processing DDL due to autocommit_before_ddl setting"),
 		); err != nil {

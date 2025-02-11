@@ -327,6 +327,13 @@ func (r *commandResult) BufferNotice(notice pgnotice.Notice) {
 	r.buffer.notices = append(r.buffer.notices, notice)
 }
 
+// BufferNoticeInConnection is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) BufferNoticeInConnection(
+	ctx context.Context, notice pgnotice.Notice,
+) error {
+	return r.conn.bufferNotice(ctx, notice)
+}
+
 // SendNotice is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) SendNotice(ctx context.Context, notice pgnotice.Notice) error {
 	if err := r.conn.bufferNotice(ctx, notice); err != nil {

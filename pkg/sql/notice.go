@@ -29,6 +29,9 @@ type noticeSender interface {
 	// BufferNotice buffers the given notice to be flushed to the client before
 	// the connection is closed.
 	BufferNotice(pgnotice.Notice)
+	// BufferNoticeInConnection buffers the notice in the client connection,
+	// but does not flush it yet.
+	BufferNoticeInConnection(ctx context.Context, notice pgnotice.Notice) error
 	// SendNotice immediately flushes the given notice to the client.
 	SendNotice(context.Context, pgnotice.Notice) error
 }
@@ -42,6 +45,19 @@ func (p *planner) BufferClientNotice(ctx context.Context, notice pgnotice.Notice
 		return
 	}
 	p.noticeSender.BufferNotice(notice)
+}
+
+// BufferClientNoticeInConnection implements the eval.ClientNoticeSender interface.
+func (p *planner) BufferClientNoticeInConnection(
+	ctx context.Context, notice pgnotice.Notice,
+) error {
+	if log.V(2) {
+		log.Infof(ctx, "buffered notice in connection: %+v", notice)
+	}
+	if !p.checkNoticeSeverity(notice) {
+		return nil
+	}
+	return p.noticeSender.BufferNoticeInConnection(ctx, notice)
 }
 
 // SendClientNotice implements the eval.ClientNoticeSender interface.

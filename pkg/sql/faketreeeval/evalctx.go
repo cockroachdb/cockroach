@@ -650,6 +650,13 @@ var _ eval.ClientNoticeSender = &DummyClientNoticeSender{}
 // BufferClientNotice is part of the eval.ClientNoticeSender interface.
 func (c *DummyClientNoticeSender) BufferClientNotice(context.Context, pgnotice.Notice) {}
 
+// BufferClientNoticeInConnection is part of the eval.ClientNoticeSender interface.
+func (c *DummyClientNoticeSender) BufferClientNoticeInConnection(
+	context.Context, pgnotice.Notice,
+) error {
+	return nil
+}
+
 // SendClientNotice is part of the eval.ClientNoticeSender interface.
 func (c *DummyClientNoticeSender) SendClientNotice(context.Context, pgnotice.Notice) error {
 	return nil

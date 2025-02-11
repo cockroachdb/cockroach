@@ -550,6 +550,12 @@ type ClientNoticeSender interface {
 	// BufferClientNotice buffers the notice to send to the client.
 	// This is flushed before the connection is closed.
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
+	// BufferClientNoticeInConnection buffers the notice in the client connection
+	// buffer rather than in the ClientNoticeSender itself. This should only be
+	// used when the notice should be buffered even if the current command will be
+	// executed again, like with the autocommit_before_ddl notice. Most cases
+	// should use BufferClientNotice.
+	BufferClientNoticeInConnection(ctx context.Context, notice pgnotice.Notice) error
 	// SendClientNotice immediately flushes the notice to the client. This is used
 	// to implement PLpgSQL RAISE statements; most cases should use
 	// BufferClientNotice.
