@@ -4008,11 +4008,23 @@ CREATE TRIGGER foo AFTER UPDATE OF y ON xy FOR EACH ROW EXECUTE FUNCTION f();
 statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
 
+# Verify we log to the event log.
+query T
+select "eventType" from system.eventlog order by timestamp desc limit 1;
+----
+create_trigger
+
 statement error pgcode 0A000 pq: unimplemented: cannot replace a trigger function with an active trigger
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 statement ok
 DROP TRIGGER foo ON xy;
+
+# Verify we log to the event log.
+query T
+select "eventType" from system.eventlog order by timestamp desc limit 1;
+----
+drop_trigger
 
 # CREATE OR REPLACE still works if there are no referencing triggers.
 statement ok
