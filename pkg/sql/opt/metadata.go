@@ -384,28 +384,43 @@ func (md *Metadata) dependencyDigestEquals(currentDigest *cat.DependencyDigest) 
 	return currentDigest.Equal(&md.digest.depDigest)
 }
 
+var errMetaDataVersionMistmatch = errors.New("descriptor version mismatches metadata")
+
 // leaseObjectsInMetaData ensures that all references within this metadata
 // are leased to prevent schema changes from modifying the underlying objects
-// excessively.
+// excessively. Additionally, the metadata version and leased descriptor versions
+// are compared.
 func (md *Metadata) leaseObjectsInMetaData(ctx context.Context, optCatalog cat.Catalog) error {
-	for id := range md.dataSourceDeps {
-		if err := optCatalog.LeaseByStableID(ctx, id); err != nil {
+	for id, ds := range md.dataSourceDeps {
+		ver, err := optCatalog.LeaseByStableID(ctx, id)
+		if err != nil {
 			return err
 		}
-	}
-	for id := range md.routineDeps {
-		if err := optCatalog.LeaseByStableID(ctx, id); err != nil {
-			return err
+		if ver != ds.Version() {
+			return errMetaDataVersionMistmatch
 		}
 	}
-	for oid := range md.userDefinedTypes {
-		id := typedesc.UserDefinedTypeOIDToID(oid)
+	for id, rd := range md.routineDeps {
+		ver, err := optCatalog.LeaseByStableID(ctx, id)
+		if err != nil {
+			return errMetaDataVersionMistmatch
+		}
+		if ver != rd.overload.Version {
+			return errors.AssertionFailedf("version does not match")
+		}
+	}
+	for _, typ := range md.userDefinedTypesSlice {
+		id := typedesc.UserDefinedTypeOIDToID(typ.Oid())
 		// Not a user defined type.
 		if id == catid.InvalidDescID {
 			continue
 		}
-		if err := optCatalog.LeaseByStableID(ctx, cat.StableID(id)); err != nil {
+		ver, err := optCatalog.LeaseByStableID(ctx, cat.StableID(id))
+		if err != nil {
 			return err
+		}
+		if ver != uint64(typ.TypeMeta.Version) {
+			return errMetaDataVersionMistmatch
 		}
 	}
 	return nil
@@ -440,8 +455,12 @@ func (md *Metadata) CheckDependencies(
 		// Lease the underlying descriptors for this metadata. If we fail to lease
 		// any descriptors attempt to resolve them by name through the more expensive
 		// code path below.
-		if err := md.leaseObjectsInMetaData(ctx, optCatalog); err == nil {
+		err := md.leaseObjectsInMetaData(ctx, optCatalog)
+		if err == nil {
 			return true, nil
+		} else if errors.Is(err, errMetaDataVersionMistmatch) {
+			// Versions have changed on us, so re-plan.
+			return false, nil
 		}
 	}
 

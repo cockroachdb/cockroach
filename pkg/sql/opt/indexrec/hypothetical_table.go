@@ -187,3 +187,8 @@ func (ht *HypotheticalTable) addInvertedCol(invertedSourceCol *cat.Column) *cat.
 	ht.invertedCols = append(ht.invertedCols, &invertedCol)
 	return &invertedCol
 }
+
+// Version is part of the cat.Object interface.
+func (ht *HypotheticalTable) Version() uint64 {
+	return 1
+}
