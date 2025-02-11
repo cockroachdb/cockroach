@@ -870,23 +870,16 @@ func (b *Batch) Del(keys ...interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
-	begin, err := marshalKey(s)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	end, err := marshalKey(e)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	b.appendReqs(kvpb.NewDeleteRange(begin, end, returnKeys))
-	b.initResult(1, 0, notRaw, nil)
+	b.delRangeImpl(s, e, returnKeys, false /* usingTombstone */)
 }
 
 // DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
 // (exclusive) using an MVCC range tombstone.
 func (b *Batch) DelRangeUsingTombstone(s, e interface{}) {
+	b.delRangeImpl(s, e, false /* returnKeys */, true /* usingTombstone */)
+}
+
+func (b *Batch) delRangeImpl(s, e interface{}, returnKeys bool, usingTombstone bool) {
 	start, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -902,7 +895,8 @@ func (b *Batch) DelRangeUsingTombstone(s, e interface{}) {
 			Key:    start,
 			EndKey: end,
 		},
-		UseRangeTombstone: true,
+		ReturnKeys:        returnKeys,
+		UseRangeTombstone: usingTombstone,
 	})
 	b.initResult(1, 0, notRaw, nil)
 }
