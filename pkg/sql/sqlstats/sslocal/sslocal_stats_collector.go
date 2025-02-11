@@ -20,10 +20,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-type bufferedStmtStats struct {
-	key   appstatspb.StatementStatisticsKey
-	value sqlstats.RecordedStmtStats
-}
+type bufferedStmtStats []*sqlstats.RecordedStmtStats
 
 // StatsCollector is used to collect statistics for transactions and
 // statements for the entire lifetime of a session. It must be closed
@@ -34,7 +31,7 @@ type StatsCollector struct {
 	// statistics. They will be flushed to flushTarget when the transaction is done
 	// so that we can include the transaction fingerprint ID as part of the
 	// statement's key. This buffer is cleared for reuse after every transaction.
-	stmtBuf []*bufferedStmtStats
+	stmtBuf bufferedStmtStats
 
 	// If writeDirectlyToFlushTarget is set to true, the stmtBuf
 	// will be written directly to the flushTarget instead of being buffered to be written
@@ -99,7 +96,7 @@ func NewStatsCollector(
 ) *StatsCollector {
 	return &StatsCollector{
 		flushTarget:                appStats,
-		stmtBuf:                    make([]*bufferedStmtStats, 0, 1),
+		stmtBuf:                    make(bufferedStmtStats, 0, 1),
 		writeDirectlyToFlushTarget: underOuterTxn,
 		insightsWriter:             insights,
 		phaseTimes:                 *phaseTime,
@@ -138,7 +135,7 @@ func (s *StatsCollector) Reset(appStats *ssmemstorage.Container, phaseTime *sess
 // Close frees any local memory used by the stats collector and
 // any memory allocated by underlying sql stats systems for the session
 // that owns this stats collector.
-func (s *StatsCollector) Close(ctx context.Context, sessionID clusterunique.ID) {
+func (s *StatsCollector) Close(_ctx context.Context, sessionID clusterunique.ID) {
 	s.stmtBuf = nil
 	if s.insightsWriter != nil {
 		s.insightsWriter.ClearSession(sessionID)
@@ -169,9 +166,9 @@ func (s *StatsCollector) EndTransaction(
 	}
 
 	for _, stmt := range s.stmtBuf {
-		stmt.key.TransactionFingerprintID = transactionFingerprintID
-		stmt.key.ImplicitTxn = implicitTxn
-		if err := s.flushTarget.RecordStatement(ctx, stmt.key, stmt.value); err != nil {
+		stmt.TransactionFingerprintID = transactionFingerprintID
+		stmt.ImplicitTxn = implicitTxn
+		if err := s.flushTarget.RecordStatement(ctx, *stmt); err != nil {
 			discardedStats++
 		}
 	}
@@ -181,7 +178,7 @@ func (s *StatsCollector) EndTransaction(
 		s.flushTarget.MaybeLogDiscardMessage(ctx)
 	}
 
-	s.stmtBuf = make([]*bufferedStmtStats, 0, len(s.stmtBuf)/2)
+	s.stmtBuf = make(bufferedStmtStats, 0, len(s.stmtBuf)/2)
 
 	return discardedStats
 }
@@ -277,7 +274,7 @@ func (s *StatsCollector) ObserveStatement(
 // ObserveTransaction sends the recorded transaction stats to the insights system
 // for further processing.
 func (s *StatsCollector) ObserveTransaction(
-	ctx context.Context,
+	_ctx context.Context,
 	txnFingerprintID appstatspb.TransactionFingerprintID,
 	value sqlstats.RecordedTxnStats,
 ) {
@@ -333,21 +330,18 @@ func (s *StatsCollector) ObserveTransaction(
 
 // RecordStatement records the statistics of a statement.
 func (s *StatsCollector) RecordStatement(
-	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
+	ctx context.Context, value sqlstats.RecordedStmtStats,
 ) (appstatspb.StmtFingerprintID, error) {
-	s.stmtFingerprintID = appstatspb.ConstructStatementFingerprintID(key.Query, key.ImplicitTxn, key.Database)
-	value.FingerprintID = s.stmtFingerprintID
-	if s.writeDirectlyToFlushTarget {
-		err := s.flushTarget.RecordStatement(ctx, key, value)
-		return s.stmtFingerprintID, err
-	}
-	s.stmtFingerprintID = appstatspb.ConstructStatementFingerprintID(key.Query, key.ImplicitTxn, key.Database)
 	// TODO(xinhaoz): This isn't the best place to set this, but we'll clean this up
 	// when we refactor the stats collection code to send the stats to an ingester.
-	s.stmtBuf = append(s.stmtBuf, &bufferedStmtStats{
-		key:   key,
-		value: value,
-	})
+	s.stmtFingerprintID = value.FingerprintID
+
+	if s.writeDirectlyToFlushTarget {
+		err := s.flushTarget.RecordStatement(ctx, value)
+		return s.stmtFingerprintID, err
+	}
+
+	s.stmtBuf = append(s.stmtBuf, &value)
 	return s.stmtFingerprintID, nil
 }
 
@@ -374,4 +368,15 @@ func (s *StatsCollector) IterateStatementStats(
 	ctx context.Context, opts sqlstats.IteratorOptions, f sqlstats.StatementVisitor,
 ) error {
 	return s.flushTarget.IterateStatementStats(ctx, opts, f)
+}
+
+// UpgradeToExplicitTransaction is called by the connExecutor when the current
+// transaction is upgraded from an implicit transaction to explicit. Since this
+// property is part of the statement fingerprint ID, we need to update the
+// fingerprint ID of all the statements in the current transaction.
+func (s *StatsCollector) UpgradeToExplicitTransaction() {
+	for _, stmt := range s.stmtBuf {
+		// Recalculate stmt fingerprint id.
+		stmt.FingerprintID = appstatspb.ConstructStatementFingerprintID(stmt.Query, false /* implicit */, stmt.Database)
+	}
 }
