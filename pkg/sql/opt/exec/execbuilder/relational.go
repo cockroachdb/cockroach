@@ -268,7 +268,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	case *memo.LockExpr:
 		ep, outputCols, err = b.buildLock(t)
 
-	case *memo.VectorSearchExpr, *memo.VectorPartitionSearchExpr:
+	case *memo.VectorSearchExpr, *memo.VectorMutationSearchExpr:
 		err = unimplemented.New("vector index search",
 			"execution planning for vector index search is not yet implemented")
 

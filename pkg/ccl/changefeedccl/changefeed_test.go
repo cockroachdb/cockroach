@@ -3851,28 +3851,49 @@ func TestChangefeedEnriched(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	cases := []struct {
+		name               string
+		enrichedProperties []string
+	}{
+		{name: "solo"},
+		{name: "with schema", enrichedProperties: []string{"schema"}},
+		{name: "with source", enrichedProperties: []string{"source"}},
+		{name: "with schema and source", enrichedProperties: []string{"schema", "source"}},
+	}
 
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope=enriched`)
-		defer closeFeed(t, foo)
-		// TODO(#139660): the webhook sink forces topic_in_value, but
-		// this is not supported by the enriched envelope type. We should adapt
-		// the test framework to account for this.
-		topic := "foo"
-		if _, ok := foo.(*webhookFeed); ok {
-			topic = ""
-		}
-		assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{
-			fmt.Sprintf(`%s: [0]->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic),
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+
+				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='%s'`,
+					strings.Join(tc.enrichedProperties, ", ")))
+				defer closeFeed(t, foo)
+				// TODO(#139660): the webhook sink forces topic_in_value, but
+				// this is not supported by the enriched envelope type. We should adapt
+				// the test framework to account for this.
+				topic := "foo"
+				if _, ok := foo.(*webhookFeed); ok {
+					topic = ""
+				}
+
+				msg := fmt.Sprintf(`%s: [0]->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic)
+				if slices.Contains(tc.enrichedProperties, "schema") {
+					msg = fmt.Sprintf(`%s: [0]->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic)
+				}
+
+				assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{msg})
+			}
+			supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
+			for _, sink := range supportedSinks {
+				cdcTest(t, testFn, feedTestForceSink(sink))
+			}
 		})
 	}
-	supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
-	for _, sink := range supportedSinks {
-		cdcTest(t, testFn, feedTestForceSink(sink))
-	}
+
 }
 
 func TestChangefeedEnrichedAvro(t *testing.T) {
@@ -5991,6 +6012,14 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErrWithTimeout(
 		t, `this sink is incompatible with envelope=enriched`,
 		`CREATE CHANGEFEED FOR foo INTO 'nodelocal://.' WITH envelope=enriched`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `enriched_properties is only usable with envelope=enriched`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH enriched_properties='schema'`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `unknown enriched_properties: potato, valid values are: source, schema`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH enriched_properties='schema,potato'`,
 	)
 
 	t.Run("sinkless enriched non-json", func(t *testing.T) {

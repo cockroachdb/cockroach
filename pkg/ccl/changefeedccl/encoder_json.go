@@ -54,6 +54,7 @@ func init() {
 type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, keyInValue, topicInValue bool
 	envelopeType                                                            changefeedbase.EnvelopeType
+	enrichedProperties                                                      map[changefeedbase.EnrichedProperty]struct{}
 
 	buf             bytes.Buffer
 	versionEncoder  func(ed *cdcevent.EventDescriptor, isPrev bool) *versionEncoder
@@ -100,9 +101,10 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 		customKeyColumn:    opts.CustomKeyColumn,
 		// In the bare envelope we don't output diff directly, it's incorporated into the
 		// projection as desired.
-		beforeField:  opts.Diff && opts.Envelope != changefeedbase.OptEnvelopeBare,
-		keyInValue:   opts.KeyInValue,
-		topicInValue: opts.TopicInValue,
+		beforeField:        opts.Diff && opts.Envelope != changefeedbase.OptEnvelopeBare,
+		keyInValue:         opts.KeyInValue,
+		topicInValue:       opts.TopicInValue,
+		enrichedProperties: opts.EnrichedProperties,
 		versionEncoder: func(ed *cdcevent.EventDescriptor, isPrev bool) *versionEncoder {
 			key := jsonEncoderVersionKey{
 				CacheKey: cdcevent.CacheKey{
@@ -464,11 +466,15 @@ func deduceOp(updated, prev cdcevent.Row) enrichedEventOp {
 }
 
 func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
-	envelopeKeys := []string{"payload"}
-	// TODO(#139658): implement schema field.
-	envelopeBuilder, err := json.NewFixedKeysObjectBuilder(envelopeKeys)
-	if err != nil {
-		return err
+	var err error
+	var envelopeBuilder *json.FixedKeysObjectBuilder
+	if _, ok := e.enrichedProperties[changefeedbase.EnrichedPropertySchema]; ok {
+		// TODO(#139658): implement schema field.
+		envelopeKeys := []string{"payload"}
+		envelopeBuilder, err = json.NewFixedKeysObjectBuilder(envelopeKeys)
+		if err != nil {
+			return err
+		}
 	}
 
 	payloadKeys := []string{"after", "op", "ts_ns"}
@@ -508,6 +514,11 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 		if err != nil {
 			return nil, err
 		}
+		// If we aren't inluding a schema, we don't need to wrap this in "payload".
+		if envelopeBuilder == nil {
+			return payload, nil
+		}
+
 		if err := envelopeBuilder.Set("payload", payload); err != nil {
 			return nil, err
 		}

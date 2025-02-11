@@ -30,7 +30,7 @@ type StatementOptions struct {
 	// Rework changefeed_stmt.go so that we can have one static StatementOptions
 	// that validates everything at once and don't need this cache.
 	cache struct {
-		EncodingOptions
+		*EncodingOptions
 	}
 }
 
@@ -62,6 +62,16 @@ type InitialScanType int
 // SinkSpecificJSONConfig is a JSON string that the sink is responsible
 // for parsing, validating, and honoring.
 type SinkSpecificJSONConfig string
+
+// EnrichedProperty is used with the `enriched_properties` option to specify
+// which properties are included in the enriched envelope. That option is specified
+// as a csv of these values.
+type EnrichedProperty string
+
+const (
+	EnrichedPropertySource EnrichedProperty = `source`
+	EnrichedPropertySchema EnrichedProperty = `schema`
+)
 
 // Constants for the initial scan types
 const (
@@ -143,6 +153,8 @@ const (
 	OptEmitAllResolvedTimestamps = ``
 
 	OptInitialScanOnly = `initial_scan_only`
+
+	OptEnrichedProperties = `enriched_properties`
 
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
@@ -282,6 +294,8 @@ const (
 	OptionTypeEnum
 
 	OptionTypeJSON
+
+	OptionTypeCommaSepStrings
 )
 
 // OptionPermittedValues is used in validations and is meant to be self-documenting.
@@ -293,6 +307,10 @@ type OptionPermittedValues struct {
 	// EnumValues lists all possible values for OptionTypeEnum.
 	// Empty for non-enums.
 	EnumValues map[string]struct{}
+
+	// CSVValues lists all possible values for OptionTypeCommaSepStrings.
+	// Empty for non-CSVs.
+	CSVValues map[string]struct{}
 
 	// CanBeEmpty describes an option that can be provided either as a key with no value,
 	// or a key/value pair.
@@ -313,6 +331,14 @@ func enum(strs ...string) OptionPermittedValues {
 		Type:       OptionTypeEnum,
 		EnumValues: makeStringSet(strs...),
 		desc:       describeEnum(strs...),
+	}
+}
+
+func csv(strs ...string) OptionPermittedValues {
+	return OptionPermittedValues{
+		Type:      OptionTypeCommaSepStrings,
+		CSVValues: makeStringSet(strs...),
+		desc:      describeCSV(strs...),
 	}
 }
 
@@ -376,6 +402,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptLaggingRangesPollingInterval:       durationOption,
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
+	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
 }
 
 // CommonOptions is options common to all sinks
@@ -389,7 +416,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered, OptCustomKeyColumn,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
 	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
-	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject,
+	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject, OptEnrichedProperties,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -646,6 +673,30 @@ func (s StatementOptions) getEnumValue(k string) (string, error) {
 	return rawVal, nil
 }
 
+func (s StatementOptions) getCSVValues(k string) (map[string]struct{}, error) {
+	permitted := ChangefeedOptionExpectValues[k]
+	rawVal, present := s.m[k]
+	if !present {
+		return nil, nil
+	}
+	if rawVal == `` {
+		return nil, nil
+	}
+
+	vals := strings.Split(rawVal, `,`)
+	set := make(map[string]struct{}, len(vals))
+	for _, val := range vals {
+		val = strings.TrimSpace(val)
+		if _, ok := permitted.CSVValues[val]; !ok {
+			return nil, errors.Errorf(
+				`unknown %s: %s, %s`, k, val, permitted.desc)
+		}
+		set[val] = struct{}{}
+	}
+
+	return set, nil
+}
+
 // getDurationValue validates that the option `k` was supplied with a
 // valid duration.
 func (s StatementOptions) getDurationValue(k string) (*time.Duration, error) {
@@ -787,13 +838,14 @@ type EncodingOptions struct {
 	SchemaRegistryURI           string
 	Compression                 string
 	CustomKeyColumn             string
+	EnrichedProperties          map[EnrichedProperty]struct{}
 }
 
 // GetEncodingOptions populates and validates an EncodingOptions.
 func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	o := EncodingOptions{}
-	if s.cache.EncodingOptions != o {
-		return s.cache.EncodingOptions, nil
+	if s.cache.EncodingOptions != nil {
+		return *s.cache.EncodingOptions, nil
 	}
 	format, err := s.getEnumValue(OptFormat)
 	if err != nil {
@@ -835,7 +887,19 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	o.Compression = s.m[OptCompression]
 	o.CustomKeyColumn = s.m[OptCustomKeyColumn]
 
-	s.cache.EncodingOptions = o
+	enrichedProperties, err := s.getCSVValues(OptEnrichedProperties)
+	if err != nil {
+		return o, err
+	}
+	if len(enrichedProperties) > 0 {
+		o.EnrichedProperties = make(map[EnrichedProperty]struct{}, len(enrichedProperties))
+		for k := range enrichedProperties {
+			o.EnrichedProperties[EnrichedProperty(k)] = struct{}{}
+		}
+	}
+
+	s.cache.EncodingOptions = &o
+
 	return o, o.Validate()
 }
 
@@ -849,8 +913,15 @@ func (e EncodingOptions) Validate() error {
 	if e.Format != OptFormatJSON && e.EncodeJSONValueNullAsObject {
 		return errors.Errorf(`%s is only usable with %s=%s`, OptEncodeJSONValueNullAsObject, OptFormat, OptFormatJSON)
 	}
-	if e.Envelope == OptEnvelopeEnriched && !(e.Format == OptFormatJSON || e.Format == OptFormatAvro) {
-		return errors.Errorf(`%s=%s is only usable with %s=%s/%s`, OptEnvelope, OptEnvelopeEnriched, OptFormat, OptFormatJSON, OptFormatAvro)
+
+	if e.Envelope == OptEnvelopeEnriched {
+		if e.Format != OptFormatJSON && e.Format != OptFormatAvro {
+			return errors.Errorf(`%s=%s is only usable with %s=%s/%s`, OptEnvelope, OptEnvelopeEnriched, OptFormat, OptFormatJSON, OptFormatAvro)
+		}
+	} else {
+		if len(e.EnrichedProperties) > 0 {
+			return errors.Errorf(`%s is only usable with %s=%s`, OptEnrichedProperties, OptEnvelope, OptEnvelopeEnriched)
+		}
 	}
 
 	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
@@ -1041,7 +1112,7 @@ func (s StatementOptions) GetPTSExpiration() (time.Duration, error) {
 // resoluting encoding options.
 func (s StatementOptions) ForceKeyInValue() error {
 	s.m[OptKeyInValue] = ``
-	s.cache.EncodingOptions = EncodingOptions{}
+	s.cache.EncodingOptions = &EncodingOptions{}
 	_, err := s.GetEncodingOptions()
 	return err
 }
@@ -1050,7 +1121,7 @@ func (s StatementOptions) ForceKeyInValue() error {
 // resoluting encoding options.
 func (s StatementOptions) ForceTopicInValue() error {
 	s.m[OptTopicInValue] = ``
-	s.cache.EncodingOptions = EncodingOptions{}
+	s.cache.EncodingOptions = &EncodingOptions{}
 	_, err := s.GetEncodingOptions()
 	return err
 }
@@ -1058,7 +1129,7 @@ func (s StatementOptions) ForceTopicInValue() error {
 // ForceDiff sets diff to true regardess of its previous value.
 func (s StatementOptions) ForceDiff() {
 	s.m[OptDiff] = ``
-	s.cache.EncodingOptions = EncodingOptions{}
+	s.cache.EncodingOptions = &EncodingOptions{}
 }
 
 // SetTopics stashes the list of topics in the options as a handy place
@@ -1072,14 +1143,14 @@ func (s StatementOptions) SetTopics(topics []string) {
 // ClearDiff clears diff option.
 func (s StatementOptions) ClearDiff() {
 	delete(s.m, OptDiff)
-	s.cache.EncodingOptions = EncodingOptions{}
+	s.cache.EncodingOptions = &EncodingOptions{}
 }
 
 // SetDefaultEnvelope sets the envelope if not already set.
 func (s StatementOptions) SetDefaultEnvelope(t EnvelopeType) {
 	if _, ok := s.m[OptEnvelope]; !ok {
 		s.m[OptEnvelope] = string(t)
-		s.cache.EncodingOptions = EncodingOptions{}
+		s.cache.EncodingOptions = &EncodingOptions{}
 	}
 }
 
@@ -1111,6 +1182,10 @@ func describeEnum(strs ...string) string {
 		}
 		return s
 	}
+}
+
+func describeCSV(strs ...string) string {
+	return fmt.Sprintf("valid values are: %s", strings.Join(strs, ", "))
 }
 
 // ValidateForCreateChangefeed checks that the provided options are
@@ -1187,6 +1262,10 @@ func (s StatementOptions) validateAgainst(m map[string]OptionPermittedValues) er
 			}
 		case OptionTypeEnum:
 			if _, err := s.getEnumValue(k); err != nil {
+				return err
+			}
+		case OptionTypeCommaSepStrings:
+			if _, err := s.getCSVValues(k); err != nil {
 				return err
 			}
 		}
