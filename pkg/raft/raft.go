@@ -438,6 +438,12 @@ type raft struct {
 	randomizedElectionTimeout int64
 	disableProposalForwarding bool
 
+	// campaignOnAppliedIndex is set when a peer receives a MsgTimeoutNow from a
+	// leader, and it can't yet campaign because it hasn't yet applied the
+	// ConfChange entry yet. It will attempt to campaign once the applied index is
+	// at least this value.
+	campaignOnAppliedIndex uint64
+
 	// testingDisablePreCampaignStoreLivenessCheck may be used by tests to disable
 	// the check performed by a peer before campaigning to ensure it has
 	// StoreLiveness support from a majority quorum.
@@ -992,6 +998,8 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 	newApplied := max(index, oldApplied)
 	r.raftLog.appliedTo(newApplied, size)
 
+	//fmt.Printf("!!! IBRAHIM !!! %x applied to %d\n", r.id, newApplied)
+
 	if r.config.AutoLeave && newApplied >= r.pendingConfIndex && r.state == pb.StateLeader {
 		// If the current (and most recent, at least for this leader's term)
 		// configuration should be auto-left, initiate that now. We use a
@@ -1090,6 +1098,7 @@ func (r *raft) reset(term uint64) {
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
+	r.campaignOnAppliedIndex = 0
 }
 
 func (r *raft) setTerm(term uint64) {
@@ -1488,6 +1497,7 @@ func (r *raft) hasUnappliedConfChanges() bool {
 	pageSize := r.raftLog.maxApplyingEntsSize
 	if err := r.raftLog.scan(lo, hi, pageSize, func(ents []pb.Entry) error {
 		for i := range ents {
+			//fmt.Printf("!!! IBRAHIM !!! scanning entry i:%d, entry: %v\n", i, ents[i])
 			if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
 				found = true
 				return errBreak
@@ -1498,6 +1508,38 @@ func (r *raft) hasUnappliedConfChanges() bool {
 		r.logger.Panicf("error scanning unapplied entries (%d, %d]: %v", lo, hi, err)
 	}
 	return found
+}
+
+func (r *raft) firstUnappliedConfChangeIndex() uint64 {
+	if r.raftLog.applied >= r.raftLog.committed { // in fact applied == committed
+		return 0
+	}
+
+	firstUnappliedConfChangeIndex := uint64(0)
+	// Scan all unapplied committed entries to find a config change. Paginate the
+	// scan, to avoid a potentially unlimited memory spike.
+	lo, hi := r.raftLog.applied, r.raftLog.committed
+
+	// Reuse the maxApplyingEntsSize limit because it is used for similar purposes
+	// (limiting the read of unapplied committed entries) when raft sends entries
+	// via the Ready struct for application.
+	// TODO(pavelkalinnikov): find a way to budget memory/bandwidth for this scan
+	// outside the raft package.
+	pageSize := r.raftLog.maxApplyingEntsSize
+	if err := r.raftLog.scan(lo, hi, pageSize, func(ents []pb.Entry) error {
+		for i := range ents {
+			//fmt.Printf("!!! IBRAHIM !!! scanning entry index:%d, entry: %v\n", ents[i].Index, ents[i])
+			if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
+				firstUnappliedConfChangeIndex = ents[i].Index
+				return errBreak
+			}
+		}
+		return nil
+	}); err != nil && err != errBreak {
+		r.logger.Panicf("error scanning unapplied entries (%d, %d]: %v", lo, hi, err)
+	}
+
+	return firstUnappliedConfChangeIndex
 }
 
 // campaign transitions the raft instance to candidate state. This must only be
@@ -1737,6 +1779,11 @@ func (r *raft) Step(m pb.Message) error {
 			index := m.Entries[len(m.Entries)-1].Index
 			r.appliedTo(index, entsSize(m.Entries))
 			r.reduceUncommittedSize(payloadsSize(m.Entries))
+		}
+
+		if r.campaignOnAppliedIndex != 0 && r.campaignOnAppliedIndex <= r.raftLog.applied {
+			r.campaignOnAppliedIndex = 0
+			r.hup(campaignTransfer)
 		}
 
 	case pb.MsgVote, pb.MsgPreVote:
@@ -2313,10 +2360,17 @@ func stepFollower(r *raft, m pb.Message) error {
 		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
 		// The leader told us to call an elections, so consider it defortified.
 		r.deFortify(m.From, m.Term)
-		// Leadership transfers never use pre-vote even if r.preVote is true; we
-		// know we are not recovering from a partition so there is no need for the
-		// extra round trip.
-		r.hup(campaignTransfer)
+
+		firstUnappliedConfChangeIndex := r.firstUnappliedConfChangeIndex()
+		if firstUnappliedConfChangeIndex != 0 {
+			r.logger.Infof("%x will attempt to campaign at term %d once it applies the pending configuration changes at indeex: %d", r.id, r.Term, firstUnappliedConfChangeIndex)
+			r.campaignOnAppliedIndex = firstUnappliedConfChangeIndex
+		} else {
+			// Leadership transfers never use pre-vote even if r.preVote is true; we
+			// know we are not recovering from a partition so there is no need for the
+			// extra round trip.
+			r.hup(campaignTransfer)
+		}
 	}
 	return nil
 }
