@@ -141,9 +141,6 @@ REVOKE CONNECT ON DATABASE d FROM public;
 CREATE USER testuser;
 GRANT CONNECT ON DATABASE d TO testuser;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 exec-sql cluster=s3 user=testuser
 SHOW BACKUP FROM LATEST IN 'http://COCKROACH_TEST_HTTP_SERVER/'
