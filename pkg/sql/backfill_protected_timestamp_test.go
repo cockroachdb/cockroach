@@ -233,6 +233,7 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 	skip.UnderDeadlock(t, "test takes too long")
 	skip.UnderStress(t, "test takes too long")
 	skip.UnderRace(t, "test takes too long")
+	skip.WithIssue(t, 139862)
 
 	ctx := context.Background()
 	backfillQueryWait := make(chan struct{})
