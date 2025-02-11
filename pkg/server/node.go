@@ -2267,6 +2267,9 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			tags = tags.Add("r", req.RangeID)
 			tags = tags.Add("sm", req.Replica.StoreID)
 			tags = tags.Add("sid", req.StreamID)
+			if req.ConsumerID != 0 {
+				tags = tags.Add("cid", req.ConsumerID)
+			}
 			streamCtx := logtags.AddTags(ctx, tags)
 
 			streamSink := sm.NewStream(req.StreamID, req.RangeID)
