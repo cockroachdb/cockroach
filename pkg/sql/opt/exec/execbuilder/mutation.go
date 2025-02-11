@@ -102,7 +102,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
 	colList := appendColsWhenPresent(
 		ins.InsertCols, ins.CheckCols, ins.PartialIndexPutCols,
-		ins.VectorIndexPutPartitionCols, ins.VectorIndexPutCentroidCols,
+		ins.VectorIndexPutPartitionCols, ins.VectorIndexPutQuantizedVecCols,
 	)
 	input, _, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
@@ -335,7 +335,7 @@ func (b *Builder) tryBuildFastPathInsert(
 
 	colList := appendColsWhenPresent(
 		ins.InsertCols, ins.CheckCols, ins.PartialIndexPutCols,
-		ins.VectorIndexDelPartitionCols, ins.VectorIndexPutCentroidCols,
+		ins.VectorIndexDelPartitionCols, ins.VectorIndexPutQuantizedVecCols,
 	)
 	rows, err := b.buildValuesRows(values)
 	if err != nil {
@@ -415,7 +415,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 	colList := appendColsWhenPresent(
 		upd.FetchCols, upd.UpdateCols, neededPassThroughCols, upd.CheckCols,
 		upd.PartialIndexPutCols, upd.PartialIndexDelCols,
-		upd.VectorIndexPutPartitionCols, upd.VectorIndexPutCentroidCols,
+		upd.VectorIndexPutPartitionCols, upd.VectorIndexPutQuantizedVecCols,
 		upd.VectorIndexDelPartitionCols,
 	)
 
@@ -489,7 +489,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	colList := appendColsWhenPresent(
 		ups.InsertCols, ups.FetchCols, ups.UpdateCols, opt.OptionalColList{ups.CanaryCol},
 		ups.CheckCols, ups.PartialIndexPutCols, ups.PartialIndexDelCols,
-		ups.VectorIndexPutPartitionCols, ups.VectorIndexPutCentroidCols,
+		ups.VectorIndexPutPartitionCols, ups.VectorIndexPutQuantizedVecCols,
 		ups.VectorIndexDelPartitionCols,
 	)
 

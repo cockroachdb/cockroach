@@ -275,7 +275,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *ScanExpr, *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *LockExpr, *SequenceSelectExpr,
-		*WindowExpr, *VectorSearchExpr, *VectorPartitionSearchExpr, *OpaqueRelExpr,
+		*WindowExpr, *VectorSearchExpr, *VectorMutationSearchExpr, *OpaqueRelExpr,
 		*OpaqueMutationExpr, *OpaqueDDLExpr, *AlterTableSplitExpr, *AlterTableUnsplitExpr,
 		*AlterTableUnsplitAllExpr, *AlterTableRelocateExpr, *AlterRangeRelocateExpr,
 		*ControlJobsExpr, *CancelQueriesExpr, *CancelSessionsExpr, *CreateViewExpr,
@@ -651,7 +651,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
 			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
-			f.formatOptionalColList(e, tp, "vector index put centroid columns:", t.VectorIndexPutCentroidCols)
+			f.formatOptionalColList(e, tp, "vector index put quantized vector columns:", t.VectorIndexPutQuantizedVecCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventInsert)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -671,7 +671,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
 			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
-			f.formatOptionalColList(e, tp, "vector index put centroid columns:", t.VectorIndexPutCentroidCols)
+			f.formatOptionalColList(e, tp, "vector index put quantized vector columns:", t.VectorIndexPutQuantizedVecCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventUpdate)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -698,7 +698,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
 			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
-			f.formatOptionalColList(e, tp, "vector index put centroid columns:", t.VectorIndexPutCentroidCols)
+			f.formatOptionalColList(e, tp, "vector index put quantized vector columns:", t.VectorIndexPutQuantizedVecCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventInsert, tree.TriggerEventUpdate)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -761,7 +761,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
 
-	case *VectorPartitionSearchExpr:
+	case *VectorMutationSearchExpr:
 		if len(t.PrefixKeyCols) > 0 {
 			tp.Childf("prefix key columns: %v", t.PrefixKeyCols)
 		}
@@ -770,8 +770,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("primary key columns: %v", t.PrimaryKeyCols)
 		}
 		tp.Childf("partition col: %s", f.ColumnString(t.PartitionCol))
-		if t.CentroidCol != 0 {
-			tp.Childf("centroid col: %s", f.ColumnString(t.CentroidCol))
+		if t.QuantizedVectorCol != 0 {
+			tp.Childf("quantized vector col: %s", f.ColumnString(t.QuantizedVectorCol))
 		}
 
 	case *CreateTableExpr:
@@ -1926,7 +1926,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *VectorSearchPrivate:
 		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
-	case *VectorPartitionSearchPrivate:
+	case *VectorMutationSearchPrivate:
 		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
 	case *props.OrderingChoice:
