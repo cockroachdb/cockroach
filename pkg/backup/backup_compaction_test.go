@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -35,7 +36,7 @@ func TestBackupCompaction(t *testing.T) {
 	defer tempDirCleanup()
 	st := cluster.MakeTestingClusterSettings()
 	backupinfo.WriteMetadataWithExternalSSTsEnabled.Override(ctx, &st.SV, true)
-	_, db, cleanupDB := backupRestoreTestSetupEmpty(
+	tc, db, cleanupDB := backupRestoreTestSetupEmpty(
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
@@ -44,7 +45,13 @@ func TestBackupCompaction(t *testing.T) {
 	)
 	defer cleanupDB()
 
-	compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY['nodelocal://1/backup'], 'LATEST', ''::BYTES, '%s'::DECIMAL, '%s'::DECIMAL)"
+	startAndAwaitCompaction := func(start, end string) {
+		compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY['nodelocal://1/backup'], 'LATEST', ''::BYTES, '%s'::DECIMAL, '%s'::DECIMAL)"
+		row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, start, end))
+		var jobID jobspb.JobID
+		row.Scan(&jobID)
+		waitForSuccessfulJob(t, tc, jobID)
+	}
 	fullBackupAostCmd := "BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'"
 	incBackupCmd := "BACKUP INTO LATEST IN 'nodelocal://1/backup'"
 	incBackupAostCmd := "BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'"
@@ -71,7 +78,7 @@ func TestBackupCompaction(t *testing.T) {
 				t,
 				fmt.Sprintf(incBackupAostCmd, end),
 			)
-			db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
+			startAndAwaitCompaction(start, end)
 			validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
 			start = end
 		}
@@ -110,7 +117,7 @@ func TestBackupCompaction(t *testing.T) {
 			t,
 			fmt.Sprintf(incBackupAostCmd, end),
 		)
-		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
+		startAndAwaitCompaction(start, end)
 		validateCompactedBackupForTables(
 			t, db,
 			[]string{"foo", "bar", "baz"},
@@ -123,7 +130,7 @@ func TestBackupCompaction(t *testing.T) {
 			t,
 			fmt.Sprintf(incBackupAostCmd, end),
 		)
-		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
+		startAndAwaitCompaction(start, end)
 
 		db.Exec(t, "DROP TABLE foo, baz")
 		db.Exec(t, "RESTORE FROM LATEST IN 'nodelocal://1/backup'")
@@ -151,7 +158,7 @@ func TestBackupCompaction(t *testing.T) {
 			t,
 			fmt.Sprintf(incBackupAostCmd, end),
 		)
-		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
+		startAndAwaitCompaction(start, end)
 
 		var numIndexes, restoredNumIndexes int
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&numIndexes)
@@ -192,7 +199,7 @@ func TestBackupCompaction(t *testing.T) {
 		db.Exec(t, "INSERT INTO foo VALUES (6, 6)")
 		db.Exec(t, incBackupCmd)
 
-		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
+		startAndAwaitCompaction(start, end)
 		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
 	})
 
@@ -220,7 +227,7 @@ func TestBackupCompaction(t *testing.T) {
 			),
 		)
 
-		db.Exec(t, fmt.Sprintf(compactionBuiltin, start, end))
+		startAndAwaitCompaction(start, end)
 		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
 	})
 
@@ -274,7 +281,7 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 
 	tempDir, tempDirCleanup := testutils.TempDir(t)
 	defer tempDirCleanup()
-	_, db, cleanupDB := backupRestoreTestSetupEmpty(
+	tc, db, cleanupDB := backupRestoreTestSetupEmpty(
 		t, multiNode, tempDir, InitManualReplication,
 		base.TestClusterArgs{
 			ServerArgsPerNode: map[int]base.TestServerArgs{
@@ -337,12 +344,11 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 		t,
 		fmt.Sprintf("BACKUP INTO LATEST IN (%s) AS OF SYSTEM TIME '%s'", collectionURIs, end),
 	)
-	db.Exec(t, fmt.Sprintf(
-		"SELECT crdb_internal.backup_compaction(ARRAY[%s], 'LATEST', '', '%s', '%s')",
-		collectionURIs,
-		start,
-		end,
-	))
+	compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY[%s], 'LATEST', '', '%s', '%s')"
+	row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, collectionURIs, start, end))
+	var jobID jobspb.JobID
+	row.Scan(&jobID)
+	waitForSuccessfulJob(t, tc, jobID)
 	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs)
 }
 

@@ -199,14 +199,14 @@ func init() {
 	}
 }
 
-var CompactBackups func(
+var StartCompactionJob func(
 	ctx context.Context,
-	exCtx interface{},
+	planner interface{},
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
 	start, end hlc.Timestamp,
-) error
+) (jobspb.JobID, error)
 
 // builtins contains the built-in functions indexed by name.
 //
@@ -8963,7 +8963,10 @@ WHERE object_id = table_descriptor_id
 		},
 	),
 	"crdb_internal.backup_compaction": makeBuiltin(
-		tree.FunctionProperties{Undocumented: true},
+		tree.FunctionProperties{
+			Undocumented: true,
+			ReturnLabels: []string{"job_id"},
+		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "collection_uri", Typ: types.StringArray},
@@ -8972,9 +8975,9 @@ WHERE object_id = table_descriptor_id
 				{Name: "start_time", Typ: types.Decimal},
 				{Name: "end_time", Typ: types.Decimal},
 			},
-			ReturnType: tree.FixedReturnType(types.Void),
+			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if CompactBackups == nil {
+				if StartCompactionJob == nil {
 					return nil, errors.Newf("missing CompactBackups")
 				}
 				ary := *tree.MustBeDArray(args[0])
@@ -9000,11 +9003,14 @@ WHERE object_id = table_descriptor_id
 				if err != nil {
 					return nil, err
 				}
-				return tree.DVoidDatum, CompactBackups(
-					ctx, evalCtx.JobExecContext, collectionURI, nil, fullPath, encryption, startTs, endTs,
+				evalCtx.Planner.ExecutorConfig()
+				jobID, err := StartCompactionJob(
+					ctx, evalCtx.Planner, collectionURI, nil, fullPath,
+					encryption, startTs, endTs,
 				)
+				return tree.NewDInt(tree.DInt(jobID)), err
 			},
-			Info:       "Compacts the chain of incremental backups described by the start and end times.",
+			Info:       "Compacts the chain of incremental backups described by the start and end times (nanosecond epoch).",
 			Volatility: volatility.Volatile,
 		},
 	),
