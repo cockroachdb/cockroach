@@ -4047,6 +4047,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			}
 			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
 				ex.extraTxnState.txnFinishClosure.implicit = false
+				ex.statsCollector.UpgradeToExplicitTransaction()
 			}
 		}
 	case txnStart:
