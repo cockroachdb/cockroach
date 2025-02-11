@@ -838,6 +838,10 @@ type RestrictedCommandResult interface {
 	// This gets flushed only when the CommandResult is closed.
 	BufferNotice(notice pgnotice.Notice)
 
+	// BufferNoticeInConnection buffers the notice in the client connection,
+	// but does not flush it yet.
+	BufferNoticeInConnection(ctx context.Context, notice pgnotice.Notice) error
+
 	// SendNotice immediately flushes a notice to the client.
 	SendNotice(ctx context.Context, notice pgnotice.Notice) error
 
@@ -1111,6 +1115,13 @@ func (r *streamingCommandResult) BufferParamStatusUpdate(key string, val string)
 // BufferNotice is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) BufferNotice(notice pgnotice.Notice) {
 	// Unimplemented: the internal executor does not support notices.
+}
+
+// BufferNoticeInConnection is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) BufferNoticeInConnection(
+	ctx context.Context, notice pgnotice.Notice,
+) error {
+	return nil
 }
 
 // SendNotice is part of the RestrictedCommandResult interface.

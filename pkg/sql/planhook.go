@@ -114,6 +114,7 @@ type PlanHookState interface {
 	SpanConfigReconciler() spanconfig.Reconciler
 	SpanStatsConsumer() keyvisualizer.SpanStatsConsumer
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
+	BufferClientNoticeInConnection(ctx context.Context, notice pgnotice.Notice) error
 	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
 	Txn() *kv.Txn
 	LookupTenantInfo(ctx context.Context, tenantSpec *tree.TenantSpec, op string) (*mtinfopb.TenantInfo, error)
