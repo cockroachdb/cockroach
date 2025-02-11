@@ -2648,6 +2648,10 @@ var builtinOidsArray = []string{
 	2685: `jsonb_path_query(target: jsonb, path: jsonpath) -> jsonb`,
 	2686: `jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb) -> jsonb`,
 	2687: `jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> jsonb`,
+	2688: `any_send(any: any) -> bytes`,
+	2689: `any_recv(input: anyelement) -> any`,
+	2690: `any_out(any: any) -> bytes`,
+	2691: `any_in(input: anyelement) -> any`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
