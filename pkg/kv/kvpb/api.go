@@ -1704,11 +1704,12 @@ func NewConditionalPutInline(
 }
 
 // NewDelete returns a Request initialized to delete the value at key.
-func NewDelete(key roachpb.Key) Request {
+func NewDelete(key roachpb.Key, mustAcquireExclusiveLock bool) Request {
 	return &DeleteRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
+		MustAcquireExclusiveLock: mustAcquireExclusiveLock,
 	}
 }
 

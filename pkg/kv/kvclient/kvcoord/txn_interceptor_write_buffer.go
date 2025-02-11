@@ -284,10 +284,9 @@ func (twb *txnWriteBuffer) applyTransformations(
 		case *kvpb.DeleteRequest:
 			var ru kvpb.ResponseUnion
 			ru.MustSetInner(&kvpb.DeleteResponse{
-				// TODO(arul): We need to add a flag to DeleteRequests to indicate
-				// whether we care about the return value or not. If we do, we need to
-				// decompose the Delete into a read-write phase. Otherwise, we can
-				// consider the Delete a blind write, and return false here.
+				// TODO(yuzefovich): if MustAcquireExclusiveLock flag is set on
+				// the Del, then we need to add a locking Get to the
+				// BatchRequest, including if the key doesn't exist (#139232).
 				FoundKey: false,
 			})
 			ts = append(ts, transformation{
