@@ -172,7 +172,8 @@ type AppendStats struct {
 
 // Metrics contains metrics specific to the log storage.
 type Metrics struct {
-	RaftLogCommitLatency metric.IHistogram
+	RaftLogCommitLatency       metric.IHistogram
+	LoadTermFromStorageLatency metric.IHistogram
 }
 
 // LogStore is a stub of a separated Raft log storage.
@@ -608,14 +609,22 @@ func LoadTerm(
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	index kvpb.RaftIndex,
-) (kvpb.RaftTerm, error) {
+	metric metric.IHistogram,
+) (term kvpb.RaftTerm, err error) {
+	start := crtime.NowMono()
+	eCache.Metric.LoadTermAccesses.Inc(1)
 	entry, found := eCache.Get(rangeID, index)
 	if found {
+		eCache.Metric.LoadTermHits.Inc(1)
 		return kvpb.RaftTerm(entry.Term), nil
 	}
 
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
+
+	defer func() {
+		metric.RecordValue(start.Elapsed().Nanoseconds())
+	}()
 
 	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {

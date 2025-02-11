@@ -526,7 +526,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	//Ingest metrics
+	// Ingest metrics
 	metaIngestCount = metric.Metadata{
 		Name:        "storage.ingest.count",
 		Help:        "Number of successful ingestions performed",
@@ -1449,6 +1449,12 @@ traffic), make it likely that the storage layer is healthy. Spikes in the
 latency bands can either hint at the presence of large sets of Raft entries
 being received, or at performance issues at the storage layer.
 `,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaLoadTermFromStorageLatency = metric.Metadata{
+		Name:        "raft.process.loadTerm.latency",
+		Help:        `Latency histogram for loading the term of a Raft log entries`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -2840,6 +2846,7 @@ type StoreMetrics struct {
 	RaftCommandsPending        *metric.Gauge
 	RaftCommandsApplied        *metric.Counter
 	RaftLogCommitLatency       metric.IHistogram
+	LoadTermFromStorageLatency metric.IHistogram
 	RaftCommandCommitLatency   metric.IHistogram
 	RaftHandleReadyLatency     metric.IHistogram
 	RaftApplyCommittedLatency  metric.IHistogram
@@ -3566,6 +3573,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftLogCommitLatency,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		LoadTermFromStorageLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaLoadTermFromStorageLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
