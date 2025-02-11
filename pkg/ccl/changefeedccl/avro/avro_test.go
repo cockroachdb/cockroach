@@ -760,15 +760,15 @@ func TestAvroSchema(t *testing.T) {
 	})
 }
 
-func (f *schemaField) defaultValueNative() (interface{}, bool) {
+func (f *SchemaField) defaultValueNative() (interface{}, bool) {
 	schType := f.SchemaType
-	if union, ok := schType.([]schemaType); ok {
+	if union, ok := schType.([]SchemaType); ok {
 		// "Default values for union fields correspond to the first schema in
 		// the union."
 		schType = union[0]
 	}
 	switch schType {
-	case schemaTypeNull:
+	case SchemaTypeNull:
 		return nil, true
 	}
 	panic(errors.Errorf(`unimplemented %T: %v`, schType, schType))

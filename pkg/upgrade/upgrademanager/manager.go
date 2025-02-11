@@ -768,7 +768,7 @@ WITH
 running_migration_jobs AS (
     SELECT id, status
     FROM system.jobs
-    WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
+    WHERE status IN ` + jobs.NonTerminalStateTupleString + `
     AND job_type = 'MIGRATION'
 ),
 payloads AS (
@@ -800,8 +800,8 @@ func (m *Manager) getRunningMigrationJob(
 	if err != nil {
 		return false, 0, err
 	}
-	parseRow := func(row tree.Datums) (id jobspb.JobID, status jobs.Status) {
-		return jobspb.JobID(*row[0].(*tree.DInt)), jobs.Status(*row[1].(*tree.DString))
+	parseRow := func(row tree.Datums) (id jobspb.JobID, status jobs.State) {
+		return jobspb.JobID(*row[0].(*tree.DInt)), jobs.State(*row[1].(*tree.DString))
 	}
 	switch len(rows) {
 	case 0:

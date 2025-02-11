@@ -74,10 +74,10 @@ type EnterpriseTestFeed interface {
 	Pause() error
 	// Resume restarts the feed from the last changefeed-wide resolved timestamp.
 	Resume() error
-	// WaitForStatus waits for the provided func to return true, or returns an error.
-	WaitForStatus(func(s jobs.Status) bool) error
-	// WaitDurationForStatus waits for a specified time for the provided func to return true, or returns an error.
-	WaitDurationForStatus(dur time.Duration, statusPred func(status jobs.Status) bool) error
+	// WaitForState waits for the provided func to return true, or returns an error.
+	WaitForState(func(s jobs.State) bool) error
+	// WaitDurationForState waits for a specified time for the provided func to return true, or returns an error.
+	WaitDurationForState(dur time.Duration, statusPred func(state jobs.State) bool) error
 	// FetchTerminalJobErr retrieves the error message from changefeed job.
 	FetchTerminalJobErr() error
 	// FetchRunningStatus retrieves running status from changefeed job.

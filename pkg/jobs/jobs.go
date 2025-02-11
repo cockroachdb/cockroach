@@ -48,7 +48,7 @@ type Job struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
 		progress jobspb.Progress
-		status   Status
+		state    State
 	}
 }
 
@@ -147,13 +147,13 @@ func init() {
 
 }
 
-// Status represents the status of a job in the system.jobs table.
-type Status string
+// State represents the state of a job in the system.jobs table.
+type State string
 
 // SafeValue implements redact.SafeValue.
-func (s Status) SafeValue() {}
+func (s State) SafeValue() {}
 
-var _ redact.SafeValue = Status("")
+var _ redact.SafeValue = State("")
 
 // RunningStatus represents the more detailed status of a running job in
 // the system.jobs table.
@@ -165,37 +165,37 @@ func (s RunningStatus) SafeValue() {}
 var _ redact.SafeValue = RunningStatus("")
 
 const (
-	// StatusPending is `for jobs that have been created but on which work has
+	// StatePending is `for jobs that have been created but on which work has
 	// not yet started.
-	StatusPending Status = "pending"
-	// StatusRunning is for jobs that are currently in progress.
-	StatusRunning Status = "running"
-	// StatusPaused is for jobs that are not currently performing work, but have
+	StatePending State = "pending"
+	// StateRunning is for jobs that are currently in progress.
+	StateRunning State = "running"
+	// StatePaused is for jobs that are not currently performing work, but have
 	// saved their state and can be resumed by the user later.
-	StatusPaused Status = "paused"
-	// StatusFailed is for jobs that failed.
-	StatusFailed Status = "failed"
-	// StatusReverting is for jobs that failed or were canceled and their changes are being
+	StatePaused State = "paused"
+	// StateFailed is for jobs that failed.
+	StateFailed State = "failed"
+	// StateReverting is for jobs that failed or were canceled and their changes are being
 	// being reverted.
-	StatusReverting Status = "reverting"
-	// StatusSucceeded is for jobs that have successfully completed.
-	StatusSucceeded Status = "succeeded"
-	// StatusCanceled is for jobs that were explicitly canceled by the user and
+	StateReverting State = "reverting"
+	// StateSucceeded is for jobs that have successfully completed.
+	StateSucceeded State = "succeeded"
+	// StateCanceled is for jobs that were explicitly canceled by the user and
 	// cannot be resumed.
-	StatusCanceled Status = "canceled"
-	// StatusCancelRequested is for jobs that were requested to be canceled by
+	StateCanceled State = "canceled"
+	// StateCancelRequested is for jobs that were requested to be canceled by
 	// the user but may be still running Resume. The node that is running the job
-	// will change it to StatusReverting the next time it runs maybeAdoptJobs.
-	StatusCancelRequested Status = "cancel-requested"
-	// StatusPauseRequested is for jobs that were requested to be paused by the
+	// will change it to StateReverting the next time it runs maybeAdoptJobs.
+	StateCancelRequested State = "cancel-requested"
+	// StatePauseRequested is for jobs that were requested to be paused by the
 	// user but may be still resuming or reverting. The node that is running the
-	// job will change its state to StatusPaused the next time it runs
+	// job will change its state to StatePaused the next time it runs
 	// maybeAdoptJobs and will stop running it.
-	StatusPauseRequested Status = "pause-requested"
-	// StatusRevertFailed is for jobs that encountered an non-retryable error when
+	StatePauseRequested State = "pause-requested"
+	// StateRevertFailed is for jobs that encountered an non-retryable error when
 	// reverting their changes. Manual cleanup is required when a job ends up in
 	// this state.
-	StatusRevertFailed Status = "revert-failed"
+	StateRevertFailed State = "revert-failed"
 )
 
 var (
@@ -208,10 +208,10 @@ func HasErrJobCanceled(err error) bool {
 	return errors.Is(err, errJobCanceled)
 }
 
-// Terminal returns whether this status represents a "terminal" state: a state
+// Terminal returns whether this state represents a "terminal" state: a state
 // after which the job should never be updated again.
-func (s Status) Terminal() bool {
-	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled || s == StatusRevertFailed
+func (s State) Terminal() bool {
+	return s == StateFailed || s == StateSucceeded || s == StateCanceled || s == StateRevertFailed
 }
 
 // ID returns the ID of the job.
@@ -237,7 +237,7 @@ func (j *Job) taskName() redact.SafeString {
 	return redact.SafeString(fmt.Sprintf(`job-%d`, j.ID()))
 }
 
-// Started marks the tracked job as started by updating status to running in
+// Started marks the tracked job as started by updating state to running in
 // jobs table.
 func (u Updater) started(ctx context.Context) error {
 	sp := tracing.SpanFromContext(ctx)
@@ -246,11 +246,11 @@ func (u Updater) started(ctx context.Context) error {
 		traceID = sp.TraceID()
 	}
 	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status != StatusPending && md.Status != StatusRunning {
-			return errors.Errorf("job with status %s cannot be marked started", md.Status)
+		if md.State != StatePending && md.State != StateRunning {
+			return errors.Errorf("job with state %s cannot be marked started", md.State)
 		}
 		if md.Payload.StartedMicros == 0 {
-			ju.UpdateStatus(StatusRunning)
+			ju.UpdateState(StateRunning)
 			md.Payload.StartedMicros = timeutil.ToUnixMicros(u.now())
 			ju.UpdatePayload(md.Payload)
 		}
@@ -262,9 +262,9 @@ func (u Updater) started(ctx context.Context) error {
 	})
 }
 
-// CheckStatus verifies the status of the job and returns an error if the job's
-// status isn't Running or Reverting.
-func (u Updater) CheckStatus(ctx context.Context) error {
+// CheckState verifies the state of the job and returns an error if the job's
+// state isn't Running or Reverting.
+func (u Updater) CheckState(ctx context.Context) error {
 	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, _ *JobUpdater) error {
 		return md.CheckRunningOrReverting()
 	})
@@ -285,7 +285,7 @@ func (u Updater) RunningStatus(ctx context.Context, runningStatus RunningStatus)
 }
 
 // NonCancelableUpdateFn is a callback that computes a job's non-cancelable
-// status given its current one.
+// state given its current one.
 type NonCancelableUpdateFn func(ctx context.Context, nonCancelable bool) bool
 
 // FractionProgressedFn is a callback that computes a job's completion fraction
@@ -344,12 +344,12 @@ func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionPr
 	})
 }
 
-// CancelRequested sets the status of the tracked job to cancel-requested. It
+// CancelRequested sets the state of the tracked job to cancel-requested. It
 // does not directly cancel the job; like job.Paused, it expects the job to call
 // job.Progressed soon, observe a "job is cancel-requested" error, and abort.
 // Further the node the runs the job will actively cancel it when it notices
-// that it is in state StatusCancelRequested and will move it to state
-// StatusReverting.
+// that it is in state StateCancelRequested and will move it to state
+// StateReverting.
 func (u Updater) CancelRequested(ctx context.Context) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
 		return ju.CancelRequestedWithReason(ctx, md, errJobCanceled)
@@ -360,10 +360,10 @@ func (u Updater) CancelRequested(ctx context.Context) error {
 // implementation when a pause is requested.
 type onPauseRequestFunc func(ctx context.Context, md JobMetadata, ju *JobUpdater) error
 
-// PauseRequestedWithFunc sets the status of the tracked job to pause-requested.
+// PauseRequestedWithFunc sets the state of the tracked job to pause-requested.
 // It does not directly pause the job; it expects the node that runs the job will
-// actively cancel it when it notices that it is in state StatusPauseRequested
-// and will move it to state StatusPaused. If a function is passed, it will be
+// actively cancel it when it notices that it is in state StatePauseRequested
+// and will move it to state StatePaused. If a function is passed, it will be
 // used to update the job state. If the job has builtin logic to run upon
 // pausing, it will be ignored; use PauseRequested if you want that logic to run.
 func (u Updater) PauseRequestedWithFunc(
@@ -374,7 +374,7 @@ func (u Updater) PauseRequestedWithFunc(
 	})
 }
 
-// reverted sets the status of the tracked job to reverted.
+// reverted sets the state of the tracked job to reverted.
 func (u Updater) reverted(
 	ctx context.Context, err error, fn func(context.Context, isql.Txn) error,
 ) error {
@@ -385,13 +385,13 @@ func (u Updater) reverted(
 	}
 
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status != StatusReverting &&
-			md.Status != StatusCancelRequested &&
-			md.Status != StatusRunning &&
-			md.Status != StatusPending {
-			return fmt.Errorf("job with status %s cannot be reverted", md.Status)
+		if md.State != StateReverting &&
+			md.State != StateCancelRequested &&
+			md.State != StateRunning &&
+			md.State != StatePending {
+			return fmt.Errorf("job with state %s cannot be reverted", md.State)
 		}
-		if md.Status != StatusReverting {
+		if md.State != StateReverting {
 			if fn != nil {
 				if err := fn(ctx, txn); err != nil {
 					return err
@@ -408,7 +408,7 @@ func (u Updater) reverted(
 						"tried to mark job as reverting, but no error was provided or recorded")
 				}
 			}
-			ju.UpdateStatus(StatusReverting)
+			ju.UpdateState(StateReverting)
 		}
 		if traceID != 0 && md.Progress != nil && md.Progress.TraceID != traceID {
 			md.Progress.TraceID = traceID
@@ -418,16 +418,16 @@ func (u Updater) reverted(
 	})
 }
 
-// Canceled sets the status of the tracked job to cancel.
+// Canceled sets the state of the tracked job to cancel.
 func (u Updater) canceled(ctx context.Context) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusCanceled {
+		if md.State == StateCanceled {
 			return nil
 		}
-		if md.Status != StatusReverting {
-			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
+		if md.State != StateReverting {
+			return fmt.Errorf("job with state %s cannot be requested to be canceled", md.State)
 		}
-		ju.UpdateStatus(StatusCanceled)
+		ju.UpdateState(StateCanceled)
 		var now time.Time
 		if u.j.registry.knobs.StubTimeNow != nil {
 			now = u.j.registry.knobs.StubTimeNow()
@@ -443,8 +443,8 @@ func (u Updater) canceled(ctx context.Context) error {
 // Failed marks the tracked job as having failed with the given error.
 func (u Updater) failed(ctx context.Context, err error) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		// TODO(spaskob): should we fail if the terminal state is not StatusFailed?
-		if md.Status.Terminal() {
+		// TODO(spaskob): should we fail if the terminal state is not StateFailed?
+		if md.State.Terminal() {
 			// Already done - do nothing.
 			return nil
 		}
@@ -452,7 +452,7 @@ func (u Updater) failed(ctx context.Context, err error) error {
 		// TODO (sajjad): We don't have any checks for state transitions here. Consequently,
 		// a pause-requested job can transition to failed, which may or may not be
 		// acceptable depending on the job.
-		ju.UpdateStatus(StatusFailed)
+		ju.UpdateState(StateFailed)
 
 		// Truncate all errors to avoid large rows in the jobs
 		// table.
@@ -478,15 +478,15 @@ func (u Updater) revertFailed(
 	ctx context.Context, err error, fn func(context.Context, isql.Txn) error,
 ) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status != StatusReverting {
-			return fmt.Errorf("job with status %s cannot fail during a revert", md.Status)
+		if md.State != StateReverting {
+			return fmt.Errorf("job with state %s cannot fail during a revert", md.State)
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
 				return err
 			}
 		}
-		ju.UpdateStatus(StatusRevertFailed)
+		ju.UpdateState(StateRevertFailed)
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(u.j.registry.clock.Now().GoTime())
 		md.Payload.Error = err.Error()
 		ju.UpdatePayload(md.Payload)
@@ -498,18 +498,18 @@ func (u Updater) revertFailed(
 // completed to 1.0.
 func (u Updater) succeeded(ctx context.Context, fn func(context.Context, isql.Txn) error) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusSucceeded {
+		if md.State == StateSucceeded {
 			return nil
 		}
-		if md.Status != StatusRunning && md.Status != StatusPending {
-			return errors.Errorf("job with status %s cannot be marked as succeeded", md.Status)
+		if md.State != StateRunning && md.State != StatePending {
+			return errors.Errorf("job with state %s cannot be marked as succeeded", md.State)
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
 				return err
 			}
 		}
-		ju.UpdateStatus(StatusSucceeded)
+		ju.UpdateState(StateSucceeded)
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(u.j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
@@ -565,12 +565,12 @@ func (j *Job) Details() jobspb.Details {
 	return j.mu.payload.UnwrapDetails()
 }
 
-// Status returns the status of the job. It will be "" if the status has
+// State returns the state of the job. It will be "" if the state has
 // not been set or the job has never been loaded.
-func (j *Job) Status() Status {
+func (j *Job) State() State {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return j.mu.status
+	return j.mu.state
 }
 
 // FractionCompleted returns completion according to the in-memory job state.
@@ -667,7 +667,7 @@ func (u Updater) load(ctx context.Context) (retErr error) {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	var createdBy *CreatedByInfo
-	var status Status
+	var state State
 	j := u.j
 	defer func() {
 		if retErr != nil {
@@ -677,7 +677,7 @@ func (u Updater) load(ctx context.Context) (retErr error) {
 		defer j.mu.Unlock()
 		j.mu.payload = *payload
 		j.mu.progress = *progress
-		j.mu.status = status
+		j.mu.state = state
 		j.createdBy = createdBy
 	}()
 
@@ -706,7 +706,7 @@ func (u Updater) load(ctx context.Context) (retErr error) {
 	if err != nil {
 		return err
 	}
-	status, err = unmarshalStatus(row[2])
+	state, err = unmarshalState(row[2])
 	if err != nil {
 		return err
 	}
@@ -762,12 +762,12 @@ func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, 
 		"job: failed to unmarshal created_by_type as DString (was %T)", createdByType)
 }
 
-func unmarshalStatus(datum tree.Datum) (Status, error) {
-	statusString, ok := datum.(*tree.DString)
+func unmarshalState(datum tree.Datum) (State, error) {
+	stateString, ok := datum.(*tree.DString)
 	if !ok {
-		return "", errors.AssertionFailedf("expected string status, but got %T", datum)
+		return "", errors.AssertionFailedf("expected string state, but got %T", datum)
 	}
-	return Status(*statusString), nil
+	return State(*stateString), nil
 }
 
 // Start will resume the job. The transaction used to create the StartableJob
@@ -797,7 +797,7 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 	if err := sj.registry.stopper.RunAsyncTask(ctx, string(sj.taskName()), func(_ context.Context) {
 		resumeCtx, cancel := sj.registry.stopper.WithCancelOnQuiesce(sj.resumerCtx)
 		defer cancel()
-		sj.execErr = sj.registry.runJob(resumeCtx, sj.resumer, sj.Job, StatusRunning, sj.taskName())
+		sj.execErr = sj.registry.runJob(resumeCtx, sj.resumer, sj.Job, StateRunning, sj.taskName())
 		close(sj.execDone)
 	}); err != nil {
 		return err

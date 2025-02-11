@@ -1129,7 +1129,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	fullDir := getLatestFullDir(t, sqlDB, collectionDir)
 
 	sqlDB.Exec(t, `BACKUP TABLE bank INTO LATEST IN $1`, collectionDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobspb.TypeBackup, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobspb.TypeBackup, jobs.StateSucceeded, jobs.Record{
 		Username: username.RootUserName(),
 		Description: fmt.Sprintf(
 			`BACKUP TABLE bank INTO '%s' IN '%s'`, fullDir, sanitizedCollectionDir+"redacted"),
@@ -1144,7 +1144,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	sqlDB.Exec(t, `RESTORE TABLE bank FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb')`, collectionDir)
 
-	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StateSucceeded, jobs.Record{
 		Username: username.RootUserName(),
 		Description: fmt.Sprintf(
 			`RESTORE TABLE bank FROM '%s' IN '%sredacted' WITH OPTIONS (into_db = 'restoredb')`,
@@ -1229,7 +1229,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			fullDir := getLatestFullDir(t, sqlDB, backupLoc1)
 
 			// Verify the BACKUP job description is sanitized.
-			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StatusSucceeded,
+			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StateSucceeded,
 				jobs.Record{
 					Username: username.RootUserName(),
 					Description: fmt.Sprintf(
@@ -1249,7 +1249,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 
 			// Verify the RESTORE job description is sanitized.
-			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StateSucceeded, jobs.Record{
 				Username: username.RootUserName(),
 				Description: fmt.Sprintf(
 					`RESTORE TABLE data.bank FROM '%s' IN '%s' WITH OPTIONS (%s, into_db = 'restoredb')`,
@@ -1683,7 +1683,7 @@ func createAndWaitForJob(
 	var jobID jobspb.JobID
 	db.QueryRow(
 		t, `INSERT INTO system.jobs (created, status) VALUES ($1, $2) RETURNING id`,
-		timeutil.FromUnixMicros(now), jobs.StatusRunning,
+		timeutil.FromUnixMicros(now), jobs.StateRunning,
 	).Scan(&jobID)
 	db.Exec(
 		t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, jobID, jobs.GetLegacyPayloadKey(), payload,
@@ -5087,7 +5087,7 @@ func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id jobspb.J
 		var unused int64
 		return tc.ServerConn(0).QueryRow(
 			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
-			id, jobs.StatusSucceeded).Scan(&unused)
+			id, jobs.StateSucceeded).Scan(&unused)
 	})
 }
 
@@ -8661,7 +8661,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 	var unused interface{}
 	sqlDB.QueryRow(t, restoreQuery).Scan(&jobID, &unused, &unused, &unused)
 
-	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
+	expectedStatus := []string{string(jobs.StateSucceeded), string(jobs.StateRunning)}
 	expectedRecoveryEvent := eventpb.RecoveryEvent{
 		RecoveryType: restoreJobEventType,
 		NumRows:      int64(3),
@@ -8680,8 +8680,8 @@ func TestRestoreJobEventLogging(t *testing.T) {
 	row.Scan(&jobID)
 
 	expectedStatus = []string{
-		string(jobs.StatusFailed), string(jobs.StatusReverting),
-		string(jobs.StatusRunning),
+		string(jobs.StateFailed), string(jobs.StateReverting),
+		string(jobs.StateRunning),
 	}
 	expectedRecoveryEvent = eventpb.RecoveryEvent{
 		RecoveryType: restoreJobEventType,
@@ -10481,7 +10481,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 			EventType: "recovery_event",
 		},
 		RecoveryType: backupJobEventType,
-		ResultStatus: string(jobs.StatusSucceeded),
+		ResultStatus: string(jobs.StateSucceeded),
 	}
 
 	requireRecoveryEvent(t, beforeBackup.UnixNano(), backupEventType, expectedBackupEvent)
@@ -10516,7 +10516,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 			EventType: "recovery_event",
 		},
 		RecoveryType: restoreJobEventType,
-		ResultStatus: string(jobs.StatusSucceeded),
+		ResultStatus: string(jobs.StateSucceeded),
 	}
 
 	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreEventType, expectedRestoreEvent)
@@ -10534,7 +10534,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 			EventType: "recovery_event",
 		},
 		RecoveryType: restoreJobEventType,
-		ResultStatus: string(jobs.StatusFailed),
+		ResultStatus: string(jobs.StateFailed),
 		ErrorText:    redact.Sprintf("testing injected failure: %s", "sensitive text"),
 	}
 	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreJobEventType, expectedRestoreFailEvent)

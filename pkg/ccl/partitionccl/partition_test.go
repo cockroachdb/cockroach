@@ -153,7 +153,7 @@ SELECT count(*) > 0
 		tdb.QueryRow(t, `
 SELECT bool_and(done)
   FROM (
-        SELECT status NOT IN `+jobs.NonTerminalStatusTupleString+` AS done
+        SELECT status NOT IN `+jobs.NonTerminalStateTupleString+` AS done
           FROM [SHOW JOBS]
          WHERE job_type = 'TYPEDESC SCHEMA CHANGE'
        );`).

@@ -180,12 +180,12 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus jobs.Status,
+	jobState jobs.State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
 ) error {
-	if jobStatus == jobs.StatusSucceeded {
+	if jobState == jobs.StateSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
 		log.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
 		return e.backupSucceeded(ctx, jobs.ScheduledJobTxn(txn), schedule, details, env)
@@ -193,8 +193,8 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 
 	e.metrics.NumFailed.Inc(1)
 	err := errors.Errorf(
-		"backup job %d scheduled by %d failed with status %s",
-		jobID, schedule.ScheduleID(), jobStatus)
+		"backup job %d scheduled by %d failed with state %s",
+		jobID, schedule.ScheduleID(), jobState)
 	log.Errorf(ctx, "backup error: %v	", err)
 	jobs.DefaultHandleFailedRun(schedule, "backup job %d failed with err=%v", jobID, err)
 	return nil

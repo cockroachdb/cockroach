@@ -128,7 +128,7 @@ func (h *testHelper) waitForSuccessfulScheduledJob(
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
 		return h.sqlDB.DB.QueryRowContext(context.Background(),
-			query, jobs.StatusSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&jobID)
+			query, jobs.StateSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&jobID)
 	})
 
 	return jobID
