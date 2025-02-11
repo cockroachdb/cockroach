@@ -55,37 +55,44 @@ type AggregatedTransactionVisitor func(appName string, statistics *appstatspb.Tx
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.
 type RecordedStmtStats struct {
-	FingerprintID        appstatspb.StmtFingerprintID
-	SessionID            clusterunique.ID
-	StatementID          clusterunique.ID
-	TransactionID        uuid.UUID
-	AutoRetryCount       int
-	Failed               bool
-	AutoRetryReason      error
-	RowsAffected         int
-	IdleLatencySec       float64
-	ParseLatencySec      float64
-	PlanLatencySec       float64
-	RunLatencySec        float64
-	ServiceLatencySec    float64
-	OverheadLatencySec   float64
-	BytesRead            int64
-	RowsRead             int64
-	RowsWritten          int64
-	Nodes                []int64
-	KVNodeIDs            []int32
-	StatementType        tree.StatementType
-	Plan                 *appstatspb.ExplainTreePlanNode
-	PlanGist             string
-	StatementError       error
-	IndexRecommendations []string
-	Query                string
-	StartTime            time.Time
-	EndTime              time.Time
-	FullScan             bool
-	ExecStats            *execstats.QueryLevelStats
-	Indexes              []string
-	Database             string
+	FingerprintID            appstatspb.StmtFingerprintID
+	Query                    string
+	App                      string
+	DistSQL                  bool
+	ImplicitTxn              bool
+	Vec                      bool
+	FullScan                 bool
+	Database                 string
+	PlanHash                 uint64
+	QuerySummary             string
+	TransactionFingerprintID appstatspb.TransactionFingerprintID
+	SessionID                clusterunique.ID
+	StatementID              clusterunique.ID
+	TransactionID            uuid.UUID
+	AutoRetryCount           int
+	Failed                   bool
+	AutoRetryReason          error
+	RowsAffected             int
+	IdleLatencySec           float64
+	ParseLatencySec          float64
+	PlanLatencySec           float64
+	RunLatencySec            float64
+	ServiceLatencySec        float64
+	OverheadLatencySec       float64
+	BytesRead                int64
+	RowsRead                 int64
+	RowsWritten              int64
+	Nodes                    []int64
+	KVNodeIDs                []int32
+	StatementType            tree.StatementType
+	Plan                     *appstatspb.ExplainTreePlanNode
+	PlanGist                 string
+	StatementError           error
+	IndexRecommendations     []string
+	StartTime                time.Time
+	EndTime                  time.Time
+	ExecStats                *execstats.QueryLevelStats
+	Indexes                  []string
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.

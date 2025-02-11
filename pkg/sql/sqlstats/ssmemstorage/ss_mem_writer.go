@@ -38,9 +38,7 @@ var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 // Note: This error is only related to the operation of recording the statement
 // statistics into in-memory structs. It is unrelated to the stmtErr in the
 // arguments.
-func (s *Container) RecordStatement(
-	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
-) error {
+func (s *Container) RecordStatement(ctx context.Context, value sqlstats.RecordedStmtStats) error {
 	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.StmtStatsEnable.Get(&s.st.SV) || (t > 0 && t.Seconds() >= value.ServiceLatencySec) {
@@ -48,17 +46,17 @@ func (s *Container) RecordStatement(
 	}
 
 	statementKey := stmtKey{
-		sampledPlanKey: sampledPlanKey{
-			stmtNoConstants: key.Query,
-			implicitTxn:     key.ImplicitTxn,
-			database:        key.Database,
-		},
-		planHash:                 key.PlanHash,
-		transactionFingerprintID: key.TransactionFingerprintID,
+		fingerprintID:            value.FingerprintID,
+		planHash:                 value.PlanHash,
+		transactionFingerprintID: value.TransactionFingerprintID,
 	}
 
 	// Get the statistics object.
-	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, value.FingerprintID)
+	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, sampledPlanKey{
+		stmtNoConstants: value.Query,
+		implicitTxn:     value.ImplicitTxn,
+		database:        value.Database,
+	})
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
 	// record anything and abort the operation.
@@ -72,8 +70,11 @@ func (s *Container) RecordStatement(
 
 	stats.mu.data.Count++
 	if value.Failed {
-		stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
-		stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
+		// StatementError shouldn't be nil if Failed is true, but let's check to be cautious.
+		if value.StatementError != nil {
+			stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
+			stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
+		}
 		stats.mu.data.FailureCount++
 	}
 	if value.AutoRetryCount == 0 {
@@ -116,11 +117,10 @@ func (s *Container) RecordStatement(
 	// on-demand.
 	// TODO(asubiotto): Record the aforementioned fields here when always-on
 	//  tracing is a thing.
-	stats.mu.vectorized = key.Vec
-	stats.mu.distSQLUsed = key.DistSQL
+	stats.mu.vectorized = value.Vec
+	stats.mu.distSQLUsed = value.DistSQL
 	stats.mu.fullScan = value.FullScan
-	stats.mu.database = value.Database
-	stats.mu.querySummary = key.QuerySummary
+	stats.mu.querySummary = value.QuerySummary
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey
@@ -128,7 +128,8 @@ func (s *Container) RecordStatement(
 
 		// We also account for the memory used for s.sampledStatementCache.
 		// timestamp size + key size + hash.
-		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
+		estimatedMemoryAllocBytes += timestampSize + 8
+
 		// If the monitor is nil, we do not track memory usage.
 		if s.acc == nil {
 			return nil
