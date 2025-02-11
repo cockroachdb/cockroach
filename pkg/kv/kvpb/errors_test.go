@@ -282,7 +282,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &BatchTimestampBeforeGCError{},
-			expect: "batch timestamp 0,0 must be after replica GC threshold 0,0 (r0: ‹/Min›)",
+			expect: "batch timestamp 0,0 must be after replica GC threshold 0,0 (r0: /Min)",
 		},
 		{
 			err:    &TxnAlreadyEncounteredErrorError{},
@@ -322,7 +322,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &MVCCHistoryMutationError{},
-			expect: "unexpected MVCC history mutation in span ‹/Min›",
+			expect: "unexpected MVCC history mutation in span /Min",
 		},
 		{
 			err:    &UnhandledRetryableError{},
