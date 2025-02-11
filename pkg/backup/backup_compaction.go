@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -43,46 +44,69 @@ import (
 	"github.com/gogo/protobuf/types"
 )
 
-// CompactBackups performs a compaction of the backups at the given collection
-// URI within the start and end timestamps.
+// StartCompactionJob kicks off an asynchronous job to compact the backups at
+// the collection URI within the start and end timestamps.
 //
-// Note that exCtx should be a sql.JobExecContext. Due to import cycles with
+// Note that planner should be a sql.PlanHookState. Due to import cycles with
 // the sql and builtins package, the interface{} type is used.
-func CompactBackups(
+func StartCompactionJob(
 	ctx context.Context,
-	execCtx interface{},
+	planner interface{},
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
 	start, end hlc.Timestamp,
-) error {
-	jobCtx, ok := execCtx.(sql.JobExecContext)
+) (jobspb.JobID, error) {
+	planHook, ok := planner.(sql.PlanHookState)
 	if !ok {
-		return errors.New("missing job execution context")
+		return 0, errors.New("missing job execution context")
 	}
-	if len(incrLoc) == 0 {
-		var err error
-		incrLoc, err = backuputils.AppendPaths(
-			collectionURI, backupbase.DefaultIncrementalsSubdir,
-		)
-		if err != nil {
-			return err
-		}
-	} else if len(collectionURI) != len(incrLoc) {
-		return errors.New(
-			"incremental locations must contain the same number of locality " +
-				"aware URIs as the full backup destination",
-		)
+	details := jobspb.BackupDetails{
+		StartTime: start,
+		EndTime:   end,
+		Destination: jobspb.BackupDetails_Destination{
+			To:                 collectionURI,
+			IncrementalStorage: incrLoc,
+			Subdir:             fullBackupPath,
+			Exists:             true,
+		},
+		EncryptionOptions: &encryptionOpts,
+		Compact:           true,
 	}
+	jobID := planHook.ExecCfg().JobRegistry.MakeJobID()
+	description, err := compactionJobDescription(details)
+	if err != nil {
+		return 0, err
+	}
+	jobRecord := jobs.Record{
+		Description: description,
+		Details:     details,
+		Progress:    jobspb.BackupProgress{},
+		Username:    planHook.User(),
+	}
+	if _, err := planHook.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+		ctx, jobRecord, jobID, planHook.InternalSQLTxn(),
+	); err != nil {
+		return 0, err
+	}
+	return jobID, nil
+}
+
+// compactBackups performs a compaction of the backups at the given collection
+// URI within the start and end timestamps specified in the job details.
+func compactBackups(
+	ctx context.Context, jobID jobspb.JobID, execCtx sql.JobExecContext, details jobspb.BackupDetails,
+) error {
+	dest := details.Destination
 	resolvedBaseDirs, resolvedIncDirs, _, err := resolveBackupDirs(
-		ctx, jobCtx, collectionURI, incrLoc, fullBackupPath,
+		ctx, execCtx, dest.To, dest.IncrementalStorage, dest.Subdir,
 	)
 	if err != nil {
 		return err
 	}
-	mkStore := jobCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+	mkStore := execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 	baseStores, baseCleanup, err := backupdest.MakeBackupDestinationStores(
-		ctx, jobCtx.User(), mkStore, resolvedBaseDirs,
+		ctx, execCtx.User(), mkStore, resolvedBaseDirs,
 	)
 	if err != nil {
 		return err
@@ -93,7 +117,7 @@ func CompactBackups(
 		}
 	}()
 	incStores, incCleanup, err := backupdest.MakeBackupDestinationStores(
-		ctx, jobCtx.User(), mkStore, resolvedIncDirs,
+		ctx, execCtx.User(), mkStore, resolvedIncDirs,
 	)
 	if err != nil {
 		return err
@@ -105,24 +129,24 @@ func CompactBackups(
 	}()
 	ioConf := baseStores[0].ExternalIOConf()
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
-		jobCtx.ExecCfg().Settings,
+		execCtx.ExecCfg().Settings,
 		&ioConf,
-		jobCtx.ExecCfg().InternalDB,
-		jobCtx.User(),
+		execCtx.ExecCfg().InternalDB,
+		execCtx.User(),
 	)
 	encryption, err := backupencryption.GetEncryptionFromBaseStore(
-		ctx, baseStores[0], encryptionOpts, &kmsEnv,
+		ctx, baseStores[0], *details.EncryptionOptions, &kmsEnv,
 	)
 	if err != nil {
 		return err
 	}
-	mem := jobCtx.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
+	mem := execCtx.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
-		resolvedIncDirs, end, encryption, &kmsEnv,
-		jobCtx.User(), false,
+		resolvedIncDirs, details.EndTime, encryption, &kmsEnv,
+		execCtx.User(), false,
 	)
 	if err != nil {
 		return err
@@ -130,30 +154,21 @@ func CompactBackups(
 	defer func() {
 		mem.Shrink(ctx, memReserved)
 	}()
-	dest := jobspb.BackupDetails_Destination{
-		To:                 collectionURI,
-		Subdir:             fullBackupPath,
-		IncrementalStorage: incrLoc,
-		Exists:             true,
-	}
 	return compactIncrementals(
-		ctx, jobCtx, dest, start, end, manifests, encryption, &kmsEnv, localityInfo,
+		ctx, jobID, execCtx, details, manifests, encryption, &kmsEnv, localityInfo,
 	)
 }
 
 func compactIncrementals(
 	ctx context.Context,
+	jobID jobspb.JobID,
 	execCtx sql.JobExecContext,
-	dest jobspb.BackupDetails_Destination,
-	start, end hlc.Timestamp,
+	details jobspb.BackupDetails,
 	backupChain []backuppb.BackupManifest,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 ) error {
-	// TODO (kev-cao): For now, use a random job ID. Once compaction has been jobified, can come
-	// back around and properly assign a job ID.
-	jobID := execCtx.ExecCfg().JobRegistry.MakeJobID()
 	ctx, span := tracing.ChildSpan(ctx, "backup.compaction")
 	defer span.Finish()
 	allIters, err := backupinfo.GetBackupManifestIterFactories(
@@ -162,7 +177,7 @@ func compactIncrementals(
 	if err != nil {
 		return err
 	}
-	compactChain, err := newCompactionChain(backupChain, start, end, allIters)
+	compactChain, err := newCompactionChain(backupChain, details.StartTime, details.EndTime, allIters)
 	if err != nil {
 		return err
 	}
@@ -175,7 +190,7 @@ func compactIncrementals(
 		}),
 	)
 	backupManifest, newDetails, err := prepareCompactedBackupMeta(
-		ctx, execCtx, jobID, dest, compactChain, encryption, kmsEnv, allIters,
+		ctx, execCtx, jobID, details.Destination, compactChain, encryption, kmsEnv, allIters,
 	)
 	if err != nil {
 		return err
@@ -770,6 +785,32 @@ func newCompactionChain(
 	}, nil
 }
 
+func compactionJobDescription(details jobspb.BackupDetails) (string, error) {
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	redactedURIs, err := sanitizeURIList(details.Destination.To)
+	if err != nil {
+		return "", err
+	}
+	fmtCtx.WriteString("COMPACT BACKUPS FROM ")
+	fmtCtx.WriteString(details.Destination.Subdir)
+	fmtCtx.WriteString(" IN ")
+	fmtCtx.FormatURIs(redactedURIs)
+	fmtCtx.WriteString(" BETWEEN ")
+	fmtCtx.WriteString(details.StartTime.String())
+	fmtCtx.WriteString(" AND ")
+	fmtCtx.WriteString(details.EndTime.String())
+	if details.Destination.IncrementalStorage != nil {
+		redactedIncURIs, err := sanitizeURIList(details.Destination.IncrementalStorage)
+		if err != nil {
+			return "", err
+		}
+		fmtCtx.WriteString("WITH (incremental_location = ")
+		fmtCtx.FormatURIs(redactedIncURIs)
+		fmtCtx.WriteString(")")
+	}
+	return fmtCtx.CloseAndGetString(), nil
+}
+
 func init() {
-	builtins.CompactBackups = CompactBackups
+	builtins.StartCompactionJob = StartCompactionJob
 }
