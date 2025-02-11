@@ -862,7 +862,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	assert.True(t, txn.ObservedTimestamps[0].Timestamp.ToTimestamp().Less(writeTs))
 
 	if t.Failed() {
-		t.Logf("writeTs=%s, txn=%+v", writeTs, txn)
+		t.Logf("writeTs=%s, txn=%+v, obsTs=%+v", writeTs, txn, txn.ObservedTimestamps)
 		t.FailNow()
 	}
 
