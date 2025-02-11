@@ -831,3 +831,38 @@ func TestVMPreemptionPolling(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestRunnerFailureAfterTimeout checks that a test has a failure added
+// after the test has timed out works as expected.
+//
+// Specifically, this is a regression test that replacing the test logger
+// for post test artifacts collection or assertion checks is atomic and
+// doesn't race with the logger potentially still being used by the test.
+func TestRunnerFailureAfterTimeout(t *testing.T) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cr := newClusterRegistry()
+	runner := newUnitTestRunner(cr, stopper)
+
+	var buf syncedBuffer
+	copt := defaultClusterOpt()
+	lopt := defaultLoggingOpt(&buf)
+	test := registry.TestSpec{
+		Name:  `timeout`,
+		Owner: OwnerUnitTest,
+		// Set the timeout very low so we can observe the timeout
+		// and error racing.
+		Timeout:          1 * time.Nanosecond,
+		Cluster:          spec.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  registry.StandardCockroach,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Error("test failed")
+		},
+	}
+	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
+		defaultParallelism, copt, testOpts{}, lopt)
+	require.Error(t, err)
+}

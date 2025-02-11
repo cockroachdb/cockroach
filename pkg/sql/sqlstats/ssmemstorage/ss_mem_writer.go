@@ -46,41 +46,34 @@ var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 func (s *Container) RecordStatement(
 	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
 ) (appstatspb.StmtFingerprintID, error) {
-	createIfNonExistent := true
 	// If the statement is below the latency threshold, or stats aren't being
-	// recorded we don't need to create an entry in the stmts map for it. We do
-	// still need stmtFingerprintID for transaction level metrics tracking.
+	// recorded we don't need to create an entry in the stmts map for it.
+
 	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.StmtStatsEnable.Get(&s.st.SV) || (t > 0 && t.Seconds() >= value.ServiceLatencySec) {
-		createIfNonExistent = false
+		return invalidStmtFingerprintID, nil
 	}
 
-	// Get the statistics object.
-	stats, statementKey, stmtFingerprintID, created, throttled := s.getStatsForStmt(
-		key.Query,
-		key.ImplicitTxn,
-		key.Database,
-		key.PlanHash,
-		key.TransactionFingerprintID,
-		createIfNonExistent,
-	)
+	statementKey := stmtKey{
+		sampledPlanKey: sampledPlanKey{
+			stmtNoConstants: key.Query,
+			implicitTxn:     key.ImplicitTxn,
+			database:        key.Database,
+		},
+		planHash:                 key.PlanHash,
+		transactionFingerprintID: key.TransactionFingerprintID,
+	}
+
+	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, invalidStmtFingerprintID)
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
 	// record anything and abort the operation.
 	if throttled {
-		return stmtFingerprintID, ErrFingerprintLimitReached
+		return invalidStmtFingerprintID, ErrFingerprintLimitReached
 	}
 
-	// This statement was below the latency threshold or sql stats aren't being
-	// recorded. Either way, we don't need to record anything in the stats object
-	// for this statement, though we do need to return the statement fingerprint ID for
-	// transaction level metrics collection.
-	if !createIfNonExistent {
-		return stmtFingerprintID, nil
-	}
-
-	// Collect the per-statement statisticstats.
+	// Collect the per-statement statistics.
 	stats.mu.Lock()
 	defer stats.mu.Unlock()
 
@@ -132,8 +125,8 @@ func (s *Container) RecordStatement(
 	//  tracing is a thing.
 	stats.mu.vectorized = key.Vec
 	stats.mu.distSQLUsed = key.DistSQL
-	stats.mu.fullScan = key.FullScan
-	stats.mu.database = key.Database
+	stats.mu.fullScan = value.FullScan
+	stats.mu.database = value.Database
 	stats.mu.querySummary = key.QuerySummary
 
 	if created {
@@ -170,8 +163,8 @@ func (s *Container) StatementSampled(fingerprint string, implicitTxn bool, datab
 		implicitTxn:     implicitTxn,
 		database:        database,
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, ok := s.mu.sampledStatementCache[key]
 	return ok
 }
@@ -214,7 +207,7 @@ func (s *Container) RecordTransaction(
 	}
 
 	// Get the statistics object.
-	stats, created, throttled := s.getStatsForTxnWithKey(key, value.StatementFingerprintIDs, true /* createIfNonexistent */)
+	stats, created, throttled := s.tryCreateStatsForTxnWithKey(key, value.StatementFingerprintIDs)
 
 	if throttled {
 		return ErrFingerprintLimitReached

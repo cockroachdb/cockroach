@@ -69,7 +69,7 @@ type Container struct {
 	uniqueServerCount *SQLStatsAtomicCounters
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// acc is the memory account that tracks memory allocations related to stmts
 		// and txns within this Container struct.
@@ -222,7 +222,7 @@ func NewTempContainerFromExistingStmtStats(
 			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
 		}
 		stmtStats, _, throttled :=
-			container.getStatsForStmtWithKeyLocked(key, statistics[i].ID, true /* createIfNonexistent */)
+			container.tryCreateStatsForStmtWithKeyLocked(key, statistics[i].ID)
 		if throttled {
 			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
 		}
@@ -287,10 +287,9 @@ func NewTempContainerFromExistingTxnStats(
 		}
 		// Since we just created the container and haven't exposed it yet, we
 		// don't need to take a lock on it.
-		txnStats, _, throttled := container.getStatsForTxnWithKeyLocked(
+		txnStats, _, throttled := container.tryCreateStatsForTxnWithKey(
 			statistics[i].StatsData.TransactionFingerprintID,
-			statistics[i].StatsData.StatementFingerprintIDs,
-			true /* createIfNonexistent */)
+			statistics[i].StatsData.StatementFingerprintIDs)
 		if throttled {
 			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
 		}
@@ -430,111 +429,82 @@ func (s *stmtStats) mergeStatsLocked(statistics *appstatspb.CollectedStatementSt
 	s.mu.querySummary = statistics.Key.QuerySummary
 }
 
-// getStatsForStmt retrieves the per-stmt stat object. Regardless of if a valid
-// stat object is returned or not, we always return the correct stmtFingerprintID
-// for the given stmt.
-func (s *Container) getStatsForStmt(
-	stmtNoConstants string,
-	implicitTxn bool,
-	database string,
-	planHash uint64,
-	transactionFingerprintID appstatspb.TransactionFingerprintID,
-	createIfNonexistent bool,
-) (
-	stats *stmtStats,
-	key stmtKey,
-	stmtFingerprintID appstatspb.StmtFingerprintID,
-	created bool,
-	throttled bool,
-) {
-	// Extend the statement key with various characteristics, so
-	// that we use separate buckets for the different situations.
-	key = stmtKey{
-		sampledPlanKey: sampledPlanKey{
-			stmtNoConstants: stmtNoConstants,
-			implicitTxn:     implicitTxn,
-			database:        database,
-		},
-		planHash:                 planHash,
-		transactionFingerprintID: transactionFingerprintID,
-	}
-
-	// We first try and see if we can get by without creating a new entry for this
-	// key, as this allows us to not construct the statementFingerprintID from scratch (which
-	// is an expensive operation)
-	stats, _, _ = s.getStatsForStmtWithKey(key, invalidStmtFingerprintID, false /* createIfNonexistent */)
-	if stats == nil {
-		stmtFingerprintID = constructStatementFingerprintIDFromStmtKey(key)
-		stats, created, throttled = s.getStatsForStmtWithKey(key, stmtFingerprintID, createIfNonexistent)
-		return stats, key, stmtFingerprintID, created, throttled
-	}
-	return stats, key, stats.ID, false /* created */, false /* throttled */
+// getStatsForStmtWithKey returns an instance of stmtStats.
+func (s *Container) getStatsForStmtWithKey(key stmtKey) (stats *stmtStats) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stats = s.mu.stmts[key]
+	return stats
 }
 
-// getStatsForStmtWithKey returns an instance of stmtStats.
-// If createIfNonexistent flag is set to true, then a new entry is created in
-// the Container if it does not yet exist.
-func (s *Container) getStatsForStmtWithKey(
-	key stmtKey, stmtFingerprintID appstatspb.StmtFingerprintID, createIfNonexistent bool,
+// tryCreateStatsForStmtWithKey attemps to insert a new stmtStats entry with
+// the given stmtKey and stmtFingerprintID. If the stmtKey exists already
+// we'll return the existing stmtStats object. If the provided stmtFingerprintID
+// is 0, we'll also compute the fingerprintID from the stmtKey.
+// we'll construct it from the stmtKey.
+func (s *Container) tryCreateStatsForStmtWithKey(
+	key stmtKey, stmtFingerprintID appstatspb.StmtFingerprintID,
 ) (stats *stmtStats, created, throttled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.getStatsForStmtWithKeyLocked(key, stmtFingerprintID, createIfNonexistent)
+	return s.tryCreateStatsForStmtWithKeyLocked(key, stmtFingerprintID)
 }
 
-func (s *Container) getStatsForStmtWithKeyLocked(
-	key stmtKey, stmtFingerprintID appstatspb.StmtFingerprintID, createIfNonexistent bool,
+func (s *Container) tryCreateStatsForStmtWithKeyLocked(
+	key stmtKey, stmtFingerprintID appstatspb.StmtFingerprintID,
 ) (stats *stmtStats, created, throttled bool) {
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
 	stats, ok := s.mu.stmts[key]
-	if !ok && createIfNonexistent {
-		// If the uniqueStmtFingerprintCount is nil, then we don't check for
-		// fingerprint limit.
-		if s.uniqueServerCount != nil && !s.uniqueServerCount.tryAddStmtFingerprint() {
-			return stats, false /* created */, true /* throttled */
-		}
-		stats = &stmtStats{}
-		stats.ID = stmtFingerprintID
-		s.mu.stmts[key] = stats
-		s.mu.sampledStatementCache[key.sampledPlanKey] = struct{}{}
-
-		return stats, true /* created */, false /* throttled */
+	if ok {
+		return stats, false /* created */, false /* throttled */
 	}
-	return stats, false /* created */, false /* throttled */
+
+	// If the uniqueStmtFingerprintCount is nil, then we don't check for
+	// fingerprint limit.
+	if s.uniqueServerCount != nil && !s.uniqueServerCount.tryAddStmtFingerprint() {
+		return stats, false /* created */, true /* throttled */
+	}
+
+	// Otherwise try to create a new entry.
+	if stmtFingerprintID == 0 {
+		stmtFingerprintID = constructStatementFingerprintIDFromStmtKey(key)
+	}
+
+	stats = &stmtStats{}
+	stats.ID = stmtFingerprintID
+	s.mu.stmts[key] = stats
+	s.mu.sampledStatementCache[key.sampledPlanKey] = struct{}{}
+
+	return stats, true /* created */, false /* throttled */
 }
 
-func (s *Container) getStatsForTxnWithKey(
-	key appstatspb.TransactionFingerprintID,
-	stmtFingerprintIDs []appstatspb.StmtFingerprintID,
-	createIfNonexistent bool,
+func (s *Container) getStatsForTxnWithKey(key appstatspb.TransactionFingerprintID) *txnStats {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.txns[key]
+}
+
+func (s *Container) tryCreateStatsForTxnWithKey(
+	key appstatspb.TransactionFingerprintID, stmtFingerprintIDs []appstatspb.StmtFingerprintID,
 ) (stats *txnStats, created, throttled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.getStatsForTxnWithKeyLocked(key, stmtFingerprintIDs, createIfNonexistent)
-}
-
-func (s *Container) getStatsForTxnWithKeyLocked(
-	key appstatspb.TransactionFingerprintID,
-	stmtFingerprintIDs []appstatspb.StmtFingerprintID,
-	createIfNonexistent bool,
-) (stats *txnStats, created, throttled bool) {
-	// Retrieve the per-transaction statistic object, and create it if it doesn't
-	// exist yet.
 	stats, ok := s.mu.txns[key]
-	if !ok && createIfNonexistent {
-		// If the uniqueTxnFingerprintCount is nil, then we don't check for
-		// fingerprint limit.
-		if s.uniqueServerCount != nil && !s.uniqueServerCount.tryAddTxnFingerprint() {
-			return nil /* stats */, false /* created */, true /* throttled */
-		}
-		stats = &txnStats{}
-		stats.statementFingerprintIDs = stmtFingerprintIDs
-		s.mu.txns[key] = stats
-		return stats, true /* created */, false /* throttled */
+	if ok {
+		return stats, false /* created */, false /* throttled */
 	}
-	return stats, false /* created */, false /* throttled */
+
+	// If the uniqueTxnFingerprintCount is nil, then we don't check for
+	// fingerprint limit.
+	if s.uniqueServerCount != nil && !s.uniqueServerCount.tryAddTxnFingerprint() {
+		return nil /* stats */, false /* created */, true /* throttled */
+	}
+	stats = &txnStats{}
+	stats.statementFingerprintIDs = stmtFingerprintIDs
+	s.mu.txns[key] = stats
+	return stats, true /* created */, false /* throttled */
 }
 
 // SaveToLog saves the existing statement stats into the info log.
@@ -692,8 +662,7 @@ func (s *Container) MergeApplicationStatementStats(
 				transactionFingerprintID: statistics.Key.TransactionFingerprintID,
 			}
 
-			stmtStats, _, throttled :=
-				s.getStatsForStmtWithKey(key, statistics.ID, true /* createIfNoneExistent */)
+			stmtStats, _, throttled := s.tryCreateStatsForStmtWithKey(key, statistics.ID)
 			if throttled {
 				discardedStats++
 				return nil
@@ -746,8 +715,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 
 	// Merge the statement stats.
 	for k, v := range statMap {
-		stats, created, throttled := s.getStatsForStmtWithKey(k, v.ID, true /* createIfNonexistent */)
-
+		stats, created, throttled := s.tryCreateStatsForStmtWithKey(k, v.ID)
 		// If we have reached the limit of fingerprints, we skip this fingerprint.
 		// No cleanup necessary.
 		if throttled {
@@ -818,7 +786,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 		// We don't check if we have created a new entry here because we have
 		// already accounted for all the memory that we will be allocating in this
 		// function.
-		t, created, throttled := s.getStatsForTxnWithKey(k, v.statementFingerprintIDs, true /* createIfNonExistent */)
+		t, created, throttled := s.tryCreateStatsForTxnWithKey(k, v.statementFingerprintIDs)
 
 		// If we have reached the unique fingerprint limit, we skip adding the
 		// current fingerprint. No cleanup is necessary.
