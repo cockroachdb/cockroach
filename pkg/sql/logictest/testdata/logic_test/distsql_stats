@@ -3071,7 +3071,7 @@ SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE int_outer_buckets] WHERE sta
 query I
 SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_int_outer_buckets_full]
 ----
-202
+200
 
 statement ok
 INSERT INTO int_outer_buckets SELECT generate_series(-10, -1) UNION ALL SELECT generate_series(10000, 10009);
