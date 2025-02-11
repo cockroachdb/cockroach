@@ -93,6 +93,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/cancelchecker",
+        "//pkg/util/collatedstring",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

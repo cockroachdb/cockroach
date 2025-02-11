@@ -122,7 +122,7 @@ func runSampleAggregator(
 			rowPartitions[j] = append(rowPartitions[j], row)
 		}
 		for i := 0; i < numSamplers; i++ {
-			rows := randgen.GenEncDatumRowsInt(rowPartitions[i])
+			rows := randgen.GenEncDatumRowsInt(rowPartitions[i], randgen.DatumEncoding_NONE)
 			in[i] = distsqlutils.NewRowBuffer(types.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
 		}
 
@@ -135,7 +135,7 @@ func runSampleAggregator(
 			rowPartitions[j] = append(rowPartitions[j], row)
 		}
 		for i := 0; i < numSamplers; i++ {
-			rows := randgen.GenEncDatumRowsString(rowPartitions[i])
+			rows := randgen.GenEncDatumRowsString(rowPartitions[i], randgen.DatumEncoding_NONE)
 			in[i] = distsqlutils.NewRowBuffer([]*types.T{types.String, types.String}, rows, distsqlutils.RowBufferArgs{})
 		}
 		// Override original columns in samplerOutTypes.
