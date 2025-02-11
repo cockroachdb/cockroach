@@ -168,13 +168,25 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roach
 	for _, span := range spans {
 		if span.EndKey == nil {
 			if traceKV {
-				log.VEventf(ctx, 2, "Del %s", span.Key)
+				log.VEventf(ctx, 2, "Del (locking) %s", span.Key)
 			}
-			b.Del(span.Key)
+			// We use the locking Del here unconditionally since:
+			// - if buffered writes are enabled, since we haven't performed the
+			// read, we need to tell the KV layer to acquire the lock
+			// explicitly.
+			// - if buffered writes are disabled, then the KV layer will write
+			// an intent which acts as a lock.
+			// TODO(yuzefovich): add a tracing test to ensure that the lock is
+			// acquired here once the interceptor is updated.
+			b.DelMustAcquireExclusiveLock(span.Key)
 		} else {
 			if traceKV {
 				log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
 			}
+			// TODO(yuzefovich): decide what we do with DeleteRange requests. If
+			// we won't buffer them, then we don't need to make any changes; if
+			// we do buffer them in the interceptor, we'll need to set
+			// to-be-added MustAcquireExclusiveLock flag too.
 			b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 		}
 	}

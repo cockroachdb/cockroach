@@ -849,6 +849,16 @@ func (b *Batch) ReverseScanForShare(s, e interface{}, dur kvpb.KeyLockingDurabil
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Del(keys ...interface{}) {
+	b.delImpl(false /* mustAcquireExclusiveLock */, keys...)
+}
+
+// DelMustAcquireExclusiveLock is the same as Del but also sets
+// mustAcquireExclusiveLock flag on the DeleteRequest.
+func (b *Batch) DelMustAcquireExclusiveLock(keys ...interface{}) {
+	b.delImpl(true /* mustAcquireExclusiveLock */, keys...)
+}
+
+func (b *Batch) delImpl(mustAcquireExclusiveLock bool, keys ...interface{}) {
 	reqs := make([]kvpb.Request, 0, len(keys))
 	for _, key := range keys {
 		k, err := marshalKey(key)
@@ -856,7 +866,7 @@ func (b *Batch) Del(keys ...interface{}) {
 			b.initResult(len(keys), 0, notRaw, err)
 			return
 		}
-		reqs = append(reqs, kvpb.NewDelete(k))
+		reqs = append(reqs, kvpb.NewDelete(k, mustAcquireExclusiveLock))
 		b.approxMutationReqBytes += len(k)
 	}
 	b.appendReqs(reqs...)
