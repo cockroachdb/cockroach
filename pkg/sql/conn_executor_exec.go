@@ -4180,11 +4180,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 		}
 
-		discardedStats := ex.statsCollector.EndTransaction(
-			ctx,
-			transactionFingerprintID,
-			implicit,
-		)
+		discardedStats := ex.statsCollector.EndTransaction(ctx, transactionFingerprintID)
 		if discardedStats > 0 {
 			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(discardedStats)
 		}
