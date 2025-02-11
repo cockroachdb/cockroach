@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -1043,6 +1044,98 @@ var attributeToUserEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// deepCopy creates a deep copy of any value using reflection.
+// It handles basic types, structs, pointers, slices, arrays, and maps.
+func deepCopy(v interface{}) interface{} {
+	if v == nil {
+		return nil
+	}
+
+	// Get the value that the interface contains
+	val := reflect.ValueOf(v)
+
+	// Handle special case of nil pointer/interface/slice/map
+	if !val.IsValid() {
+		return nil
+	}
+
+	// Get the actual type and value that we're copying
+	val = reflect.Indirect(val)
+	typ := val.Type()
+
+	// Special case: if it's not addressable, return as is (handles basic types)
+	if !val.CanAddr() {
+		return v
+	}
+
+	// Create a new instance to copy into
+	cpy := reflect.New(typ).Elem()
+
+	switch val.Kind() {
+	case reflect.Struct:
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			if field.CanInterface() {
+				copyVal := deepCopy(field.Interface())
+				if copyVal != nil {
+					cpy.Field(i).Set(reflect.ValueOf(copyVal))
+				}
+			}
+		}
+
+	case reflect.Slice:
+		if val.IsNil() {
+			return nil
+		}
+		cpy.Set(reflect.MakeSlice(typ, val.Len(), val.Cap()))
+		for i := 0; i < val.Len(); i++ {
+			copyVal := deepCopy(val.Index(i).Interface())
+			if copyVal != nil {
+				cpy.Index(i).Set(reflect.ValueOf(copyVal))
+			}
+		}
+
+	case reflect.Map:
+		if val.IsNil() {
+			return nil
+		}
+		cpy.Set(reflect.MakeMap(typ))
+		for _, key := range val.MapKeys() {
+			copyKey := deepCopy(key.Interface())
+			copyVal := deepCopy(val.MapIndex(key).Interface())
+			if copyVal != nil {
+				cpy.SetMapIndex(reflect.ValueOf(copyKey), reflect.ValueOf(copyVal))
+			}
+		}
+
+	case reflect.Ptr:
+		if val.IsNil() {
+			return nil
+		}
+		cpy.Set(reflect.New(typ.Elem()))
+		copyVal := deepCopy(val.Elem().Interface())
+		if copyVal != nil {
+			cpy.Set(reflect.ValueOf(copyVal))
+		}
+
+	case reflect.Interface:
+		if val.IsNil() {
+			return nil
+		}
+		copyVal := deepCopy(val.Elem().Interface())
+		if copyVal != nil {
+			cpy.Set(reflect.ValueOf(copyVal))
+		}
+
+	default:
+		// For basic types, just set the value directly
+		cpy.Set(val)
+	}
+
+	// Return the appropriate type
+	return cpy.Interface()
+}
+
 // execInternal is the main entry point for executing a statement via the
 // InternalExecutor. From the high level it does the following:
 // - parses the statement as well as its arguments
@@ -1253,13 +1346,26 @@ func (ie *InternalExecutor) execInternal(
 
 	timeReceived := crtime.NowMono()
 	parseStart := timeReceived
-	parsed := ieStmt.parsed
+	var parsed statements.Statement[tree.Statement]
 	if parsed.AST == nil {
 		var err error
 		parsed, err = parser.ParseOne(ieStmt.stmt)
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		parsed = ieStmt.parsed
+		copied, err := tree.SimpleStmtVisit(
+			parsed.AST,
+			func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+				n := deepCopy(expr)
+				return true, n.(tree.Expr), nil
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		parsed.AST = copied
 	}
 	if err := ie.checkIfStmtIsAllowed(parsed.AST, txn); err != nil {
 		return nil, err
