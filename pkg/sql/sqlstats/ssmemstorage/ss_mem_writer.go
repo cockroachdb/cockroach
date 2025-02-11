@@ -48,17 +48,17 @@ func (s *Container) RecordStatement(
 	}
 
 	statementKey := stmtKey{
-		sampledPlanKey: sampledPlanKey{
-			stmtNoConstants: key.Query,
-			implicitTxn:     key.ImplicitTxn,
-			database:        key.Database,
-		},
+		fingerprintID:            value.FingerprintID,
 		planHash:                 key.PlanHash,
 		transactionFingerprintID: key.TransactionFingerprintID,
 	}
 
 	// Get the statistics object.
-	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, value.FingerprintID)
+	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, sampledPlanKey{
+		stmtNoConstants: key.Query,
+		implicitTxn:     key.ImplicitTxn,
+		database:        key.Database,
+	})
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
 	// record anything and abort the operation.
@@ -72,8 +72,11 @@ func (s *Container) RecordStatement(
 
 	stats.mu.data.Count++
 	if value.Failed {
-		stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
-		stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
+		// StatementError shouldn't be nil if Failed is true, but let's check to be cautious.
+		if value.StatementError != nil {
+			stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
+			stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
+		}
 		stats.mu.data.FailureCount++
 	}
 	if value.AutoRetryCount == 0 {
@@ -119,7 +122,6 @@ func (s *Container) RecordStatement(
 	stats.mu.vectorized = key.Vec
 	stats.mu.distSQLUsed = key.DistSQL
 	stats.mu.fullScan = value.FullScan
-	stats.mu.database = value.Database
 	stats.mu.querySummary = key.QuerySummary
 
 	if created {
@@ -128,7 +130,10 @@ func (s *Container) RecordStatement(
 
 		// We also account for the memory used for s.sampledStatementCache.
 		// timestamp size + key size + hash.
-		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
+		estimatedMemoryAllocBytes += timestampSize + 8
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
 		// If the monitor is nil, we do not track memory usage.
 		if s.acc == nil {
 			return nil
