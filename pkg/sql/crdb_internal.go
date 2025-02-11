@@ -2017,7 +2017,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		}
 
 		var alloc tree.DatumAlloc
-		sqlStats := p.extendedEvalCtx.statsProvider
+		localSqlStats := p.extendedEvalCtx.localStatsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		statementVisitor := func(_ context.Context, stats *appstatspb.CollectedStatementStatistics) error {
@@ -2159,7 +2159,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return nil
 		}
 
-		return sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, sqlstats.IteratorOptions{
+		return localSqlStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{
 			SortedAppNames: true,
 			SortedKey:      true,
 		}, statementVisitor)
@@ -2240,7 +2240,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
-		sqlStats := p.extendedEvalCtx.statsProvider
+		localMemSqlStats := p.extendedEvalCtx.localStatsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		var alloc tree.DatumAlloc
@@ -2317,7 +2317,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return nil
 		}
 
-		return sqlStats.GetLocalMemProvider().IterateTransactionStats(ctx, sqlstats.IteratorOptions{
+		return localMemSqlStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{
 			SortedAppNames: true,
 			SortedKey:      true,
 		}, transactionVisitor)
@@ -2342,7 +2342,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			return err
 		}
 
-		sqlStats := p.extendedEvalCtx.statsProvider
+		localMemSqlStats := p.extendedEvalCtx.localStatsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		appTxnStatsVisitor := func(appName string, stats *appstatspb.TxnStats) error {
@@ -2357,7 +2357,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			)
 		}
 
-		return sqlStats.IterateAggregatedTransactionStats(ctx, sqlstats.IteratorOptions{
+		return localMemSqlStats.IterateAggregatedTransactionStats(ctx, sqlstats.IteratorOptions{
 			SortedAppNames: true,
 		}, appTxnStatsVisitor)
 	},
