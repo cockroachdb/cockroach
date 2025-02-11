@@ -101,12 +101,14 @@ type flushReq struct {
 // but separate from the encoded keys and values.
 type attributes struct {
 	tableName string
+	headers   map[string][]byte
 }
 
 type rowEvent struct {
 	key             []byte
 	val             []byte
 	topicDescriptor TopicDescriptor
+	headers         map[string][]byte
 
 	alloc kvevent.Alloc
 	mvcc  hlc.Timestamp
@@ -195,13 +197,16 @@ func (s *batchingSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	headers map[string][]byte,
 ) error {
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
+	// TODO: record header size?
 
 	payload := newRowEvent()
 	payload.key = key
 	payload.val = value
 	payload.topicDescriptor = topic
+	payload.headers = headers
 	payload.mvcc = mvcc
 	payload.alloc = alloc
 
@@ -305,6 +310,7 @@ func (sb *sinkBatch) Append(e *rowEvent) {
 
 	sb.buffer.Append(e.key, e.val, attributes{
 		tableName: e.topicDescriptor.GetTableName(),
+		headers:   e.headers,
 	})
 
 	sb.keys.Add(hashToInt(sb.hasher, e.key))

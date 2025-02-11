@@ -200,6 +200,7 @@ func (p *deprecatedPubsubSink) EmitRow(
 	updated hlc.Timestamp,
 	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	_headers map[string][]byte,
 ) error {
 	p.metrics.recordMessageSize(int64(len(key) + len(value)))
 

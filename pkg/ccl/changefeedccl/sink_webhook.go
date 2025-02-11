@@ -649,6 +649,7 @@ func (s *deprecatedWebhookSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	_headers map[string][]byte,
 ) error {
 	select {
 	// check the webhook sink context in case workers have been terminated

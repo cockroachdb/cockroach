@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -444,9 +445,50 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
 	stop()
 
+	var headers map[string][]byte
+	if c.encodingOpts.HeadersJSONColName != "" {
+		it, err := updatedRow.DatumNamed(c.encodingOpts.HeadersJSONColName)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get headers column %s: %s", c.encodingOpts.HeadersJSONColName, updatedRow.DebugString())
+		}
+		var headersJSON *tree.DJSON
+		var ok bool
+		err = it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+			if headersJSON, ok = tree.AsDJSON(d); !ok {
+				return errors.Newf("headers column %s must be a flat JSON object with string values, got %T", c.encodingOpts.HeadersJSONColName, d)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		objIt, err := headersJSON.ObjectIter()
+		if err != nil {
+			return err
+		}
+		if objIt == nil {
+			return errors.Newf("headers column %s must be a flat JSON object with string values, got %s", c.encodingOpts.HeadersJSONColName, headersJSON.String())
+		}
+		headers = make(map[string][]byte, headersJSON.Len())
+		for objIt.Next() {
+			k := objIt.Key()
+			if objIt.Value().Type() != json.StringJSONType {
+				return errors.Newf("headers column %s must be a flat JSON object with string values, got %s", c.encodingOpts.HeadersJSONColName, headersJSON.String())
+			}
+			v, err := objIt.Value().AsText()
+			if err != nil {
+				return err
+			}
+			if v == nil {
+				return errors.Newf("headers column %s must be a flat JSON object with string values, got %s", c.encodingOpts.HeadersJSONColName, headersJSON.String())
+			}
+			headers[k] = []byte(*v)
+		}
+	}
+
 	c.metrics.Timers.EmitRow.Time(func() {
 		err = c.sink.EmitRow(
-			ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
+			ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc, headers,
 		)
 	})
 	if err != nil {
