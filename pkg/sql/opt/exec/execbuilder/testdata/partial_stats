@@ -1243,32 +1243,36 @@ SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
 statement ok
 CREATE TABLE ka (k INT PRIMARY KEY, a INT, INDEX(a))
 
+# Inject a full stats collection with 2 outer buckets with upper bounds of
+# MaxInt64 and MinInt64.
 statement ok
-INSERT INTO ka select x, x from generate_series(0, 9998) as g(x)
-
-statement ok
-INSERT INTO ka VALUES (9999, NULL)
-
-statement ok
-CREATE STATISTICS ka_fullstat ON a FROM ka
+ALTER TABLE ka INJECT STATISTICS '[
+  {
+    "name": "ka_fullstat",
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000,
+    "null_count": 1,
+    "avg_size": 2,
+    "histo_version": 3,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "-9223372036854775808"},
+      {"num_eq": 1, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 9997, "distinct_range": 9997, "upper_bound": "9998"},
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "9223372036854775807"}
+    ]
+  }
+]'
 
 # Clear the stat cache so that creating partial statistics has access to the
 # latest full statistic.
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
 
-let $hist_id_ka_outer_buckets_full
-SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE ka] WHERE statistics_name = 'ka_fullstat'
-
-# The full stats collection should have added 2 outer buckets for a total of 202
-# with upper bounds of MaxInt64 and MinInt64.
-query I
-SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_ka_outer_buckets_full]
-----
-202
-
 statement ok
-INSERT INTO ka VALUES (10000, 9999), (10001, 10000)
+INSERT INTO ka VALUES (10000, 9999), (10001, 10000), (9999, NULL)
 
 statement ok
 CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
@@ -1279,8 +1283,8 @@ FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
 ORDER BY statistics_name
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__merged__       {a}           10002      9922            1
-ka_fullstat      {a}           10000      9920            1
+__merged__       {a}           10002      10002           1
+ka_fullstat      {a}           10000      10000           1
 ka_partialstat   {a}           3          3               1
 
 # Verify that the merged histogram correctly appends the partial stat buckets
@@ -1309,21 +1313,33 @@ LIMIT 3
     "upper_bound": "9999"
 }
 {
-    "distinct_range": 49.591730440470876,
+    "distinct_range": 9997,
     "num_eq": 1,
-    "num_range": 50,
+    "num_range": 9997,
     "upper_bound": "9998"
 }
 
 # Verify that distinct counts and null counts are merged correctly.
 statement ok
-SET CLUSTER SETTING sql.stats.histogram_samples.count = 10005
-
-statement ok
-INSERT INTO ka VALUES (10002, 10001)
-
-statement ok
-CREATE STATISTICS ka_fullstat ON a FROM ka
+ALTER TABLE ka INJECT STATISTICS '[
+  {
+    "name": "ka_fullstat",
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10004,
+    "distinct_count": 10004,
+    "null_count": 1,
+    "avg_size": 2,
+    "histo_version": 3,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "-9223372036854775808"},
+      {"num_eq": 1, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 10001, "distinct_range": 10001, "upper_bound": "10002"},
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "9223372036854775807"}
+    ]
+  }
+]'
 
 # Clear the stat cache so that creating partial statistics has access to the
 # latest full statistic.
@@ -1342,9 +1358,9 @@ FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
 ORDER BY statistics_name
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__merged__       {a}           10005      9924            2
-ka_fullstat      {a}           10003      9923            1
-ka_partialstat   {a}           3          2               2
+__merged__       {a}           10005      10004           2
+ka_fullstat      {a}           10004      10004           1
+ka_partialstat   {a}           2          1               2
 
 statement ok
 RESET CLUSTER SETTING sql.stats.histogram_samples.count
