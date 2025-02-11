@@ -545,6 +545,7 @@ func TestLeaseQueueShedsOnIOOverload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	skip.UnderDeadlock(t)
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
