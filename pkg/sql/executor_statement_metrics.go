@@ -205,17 +205,16 @@ func (ex *connExecutor) recordStatementSummary(
 
 	stmtFingerprintID, err :=
 		ex.statsCollector.RecordStatement(ctx, recordedStmtStatsKey, recordedStmtStats)
-
-	// TODO(xinhaoz): This can be set directly within statsCollector once
-	// https://github.com/cockroachdb/cockroach/pull/123698 is merged.
-	ex.statsCollector.SetStatementFingerprintID(stmtFingerprintID)
-
 	if err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "failed to record statement: %s", err)
 		}
 		ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 	}
+
+	// TODO(xinhaoz): This can be set directly within statsCollector once
+	// https://github.com/cockroachdb/cockroach/pull/123698 is merged.
+	ex.statsCollector.SetStatementFingerprintID(stmtFingerprintID)
 
 	// Record statement execution statistics if span is recorded and no error was
 	// encountered while collecting query-level statistics.
@@ -235,12 +234,6 @@ func (ex *connExecutor) recordStatementSummary(
 		if queryLevelStats.ContentionTime > 0 {
 			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.ContendedQueriesCount.Inc(1)
 			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.CumulativeContentionNanos.Inc(queryLevelStats.ContentionTime.Nanoseconds())
-		}
-
-		if err != nil {
-			if log.V(2 /* level */) {
-				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
-			}
 		}
 	}
 
