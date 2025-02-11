@@ -44,7 +44,7 @@ var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 // statistics into in-memory structs. It is unrelated to the stmtErr in the
 // arguments.
 func (s *Container) RecordStatement(
-	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
+	ctx context.Context, value *sqlstats.RecordedStmtStats,
 ) (appstatspb.StmtFingerprintID, error) {
 	createIfNonExistent := true
 	// If the statement is below the latency threshold, or stats aren't being
@@ -58,11 +58,11 @@ func (s *Container) RecordStatement(
 
 	// Get the statistics object.
 	stats, statementKey, stmtFingerprintID, created, throttled := s.getStatsForStmt(
-		key.Query,
-		key.ImplicitTxn,
-		key.Database,
-		key.PlanHash,
-		key.TransactionFingerprintID,
+		value.Query,
+		value.ImplicitTxn,
+		value.Database,
+		value.PlanHash,
+		value.TransactionFingerprintID,
 		createIfNonExistent,
 	)
 
@@ -130,11 +130,11 @@ func (s *Container) RecordStatement(
 	// on-demand.
 	// TODO(asubiotto): Record the aforementioned fields here when always-on
 	//  tracing is a thing.
-	stats.mu.vectorized = key.Vec
-	stats.mu.distSQLUsed = key.DistSQL
-	stats.mu.fullScan = key.FullScan
-	stats.mu.database = key.Database
-	stats.mu.querySummary = key.QuerySummary
+	stats.mu.vectorized = value.Vec
+	stats.mu.distSQLUsed = value.DistSQL
+	stats.mu.fullScan = value.FullScan
+	stats.mu.database = value.Database
+	stats.mu.querySummary = value.QuerySummary
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey

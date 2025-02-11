@@ -14,23 +14,27 @@ import (
 // Provider offers access to the insights subsystem.
 type Provider struct {
 	store           *LockingStore
-	ingester        *ConcurrentBufferIngester
+	registry        *LockingRegistry
 	anomalyDetector *AnomalyDetector
 }
 
 // Start launches the background tasks necessary for processing insights.
 func (p *Provider) Start(ctx context.Context, stopper *stop.Stopper) {
-	p.ingester.Start(ctx, stopper)
+	//p.ingester.Start(ctx, stopper)
 }
 
-// Writer returns an object that observes statement and transaction executions.
-func (p *Provider) Writer() *ConcurrentBufferIngester {
-	return p.ingester
-}
+//// Writer returns an object that observes statement and transaction executions.
+//func (p *Provider) Writer() *ConcurrentBufferIngester {
+//	return p.ingester
+//}
 
 // Store returns an object that offers read access to any detected insights.
 func (p *Provider) Store() *LockingStore {
 	return p.store
+}
+
+func (p *Provider) Registry() *LockingRegistry {
+	return p.registry
 }
 
 // Anomalies returns an object that offers read access to latency information,

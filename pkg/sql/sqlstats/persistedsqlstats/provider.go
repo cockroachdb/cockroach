@@ -139,6 +139,8 @@ SET
 }
 
 func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
+	s.SQLStats.Start(ctx, stopper)
+
 	s.startSQLStatsFlushLoop(ctx, stopper)
 	s.jobMonitor.start(ctx, stopper, s.drain, &s.tasksDoneWG)
 	stopper.AddCloser(stop.CloserFn(func() {

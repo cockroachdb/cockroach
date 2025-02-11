@@ -4070,14 +4070,6 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 		}
 
-		discardedStats := ex.statsCollector.EndTransaction(
-			ctx,
-			transactionFingerprintID,
-		)
-		if discardedStats > 0 {
-			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(discardedStats)
-		}
-
 		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
 			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(
 				ex.sessionData(),
@@ -4268,8 +4260,6 @@ func (ex *connExecutor) recordTransactionFinish(
 			ex.extraTxnState.telemetrySkippedTxns,
 		)
 	}
-
-	ex.statsCollector.ObserveTransaction(ctx, transactionFingerprintID, recordedTxnStats)
 
 	return ex.statsCollector.RecordTransaction(
 		ctx,
