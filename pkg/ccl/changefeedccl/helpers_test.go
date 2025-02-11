@@ -132,7 +132,7 @@ func readNextMessages(
 }
 
 func stripTsFromPayloads(
-	envelopeType changefeedbase.EnvelopeType, payloads []cdctest.TestFeedMessage,
+	envelopeType changefeedbase.EnvelopeType, payloads []cdctest.TestFeedMessage, includeSource bool,
 ) ([]string, error) {
 	var actual []string
 	for _, m := range payloads {
@@ -149,6 +149,32 @@ func stripTsFromPayloads(
 				delete(message, "ts_ns")
 			} else {
 				delete(message["payload"].(map[string]any), "ts_ns")
+			}
+
+			if includeSource {
+				var sourceMap map[string]interface{}
+				if message["payload"] != nil {
+					payload := message["payload"].(map[string]any)
+					sourceMap = payload["source"].(map[string]any)
+				} else {
+					sourceMap = message["source"].(map[string]any)
+				}
+				nodeID := sourceMap["node_id"]
+				sourceNodeLocality := sourceMap["source_node_locality"]
+				if nodeID == "" {
+					return nil, errors.Newf("Node ID is empty, should be a number.")
+				}
+				if sourceNodeLocality != fmt.Sprintf("region=us-east%s", nodeID) {
+					return nil, errors.Newf("source_node_locality is not region=us-east%s", nodeID)
+				}
+				delete(sourceMap, "node_id")
+				delete(sourceMap, "source_node_locality")
+			} else {
+				if message["payload"] == nil {
+					delete(message, "source")
+				} else {
+					delete(message["payload"].(map[string]any), "source")
+				}
 			}
 		case changefeedbase.OptEnvelopeWrapped:
 			delete(message, "updated")
@@ -220,7 +246,7 @@ func assertPayloadsBase(
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, envelopeType)
+				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, false, envelopeType)
 			},
 		))
 }
@@ -231,6 +257,7 @@ func assertPayloadsBaseErr(
 	expected []string,
 	stripTs bool,
 	perKeyOrdered bool,
+	includeSource bool,
 	envelopeType changefeedbase.EnvelopeType,
 ) error {
 	actual, err := readNextMessages(ctx, f, len(expected))
@@ -257,7 +284,7 @@ func assertPayloadsBaseErr(
 	// strip timestamps after checking per-key ordering since check uses timestamps
 	if stripTs {
 		// format again with timestamps stripped
-		actualFormatted, err = stripTsFromPayloads(envelopeType, actual)
+		actualFormatted, err = stripTsFromPayloads(envelopeType, actual, includeSource)
 		if err != nil {
 			return err
 		}
@@ -300,11 +327,26 @@ func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 	assertPayloadsBase(t, f, expected, false, false, changefeedbase.OptEnvelopeWrapped)
 }
 
-func assertPayloadsEnvelopeStripTs(
-	t testing.TB, f cdctest.TestFeed, envelopeType changefeedbase.EnvelopeType, expected []string,
+// assertPayloadsEnriched is used to assert payloads for the enriched envelope.
+// When the source is included with includeSource, we dynamically make assertions
+// about the "source" fields but when it's false we remove the source fields entirely.
+// In either case we strip the timestamps.
+func assertPayloadsEnriched(
+	t testing.TB, f cdctest.TestFeed, expected []string, includeSource bool,
 ) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, true, false, envelopeType)
+	timeout := assertPayloadsTimeout()
+	if len(expected) > 100 {
+		// Webhook sink is very slow; We have few tests that read 1000 messages.
+		timeout += time.Duration(math.Log(float64(len(expected)))) * time.Minute
+	}
+
+	require.NoError(t,
+		withTimeout(f, timeout,
+			func(ctx context.Context) (err error) {
+				return assertPayloadsBaseErr(ctx, f, expected, true, false, includeSource, changefeedbase.OptEnvelopeEnriched)
+			},
+		))
 }
 
 func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
@@ -1441,7 +1483,15 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 // getTestingEnrichedSourceData creates an enrichedSourceData
 // for use in tests.
 func getTestingEnrichedSourceData() enrichedSourceData {
-	return enrichedSourceData{jobId: "test_id"}
+	return enrichedSourceData{
+		jobID:              "test_id",
+		dbVersion:          "test_db_version",
+		clusterName:        "test_cluster_name",
+		clusterID:          "test_cluster_id",
+		sourceNodeLocality: "test_source_node_locality",
+		nodeName:           "test_node_name",
+		nodeID:             "test_node_id",
+	}
 }
 
 // getTestingEnrichedSourceProvider creates an enrichedSourceProvider
