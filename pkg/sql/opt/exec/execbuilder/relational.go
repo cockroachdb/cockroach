@@ -378,6 +378,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	}
 
 	b.maybeAnnotateWithEstimates(ep.root, e)
+	b.maybeAnnotatePolicyInfo(ep.root, e)
 
 	if saveTableName != "" {
 		// The output columns do not change in applySaveTable.
@@ -439,6 +440,40 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 			}
 		}
 		ef.AnnotateNode(node, exec.EstimatedStatsID, &val)
+	}
+}
+
+// maybeAnnotatePolicyInfo checks if we are building against an
+// ExplainFactory and annotates the node with row-level security policy
+// information.
+func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
+	if ef, ok := b.factory.(exec.ExplainFactory); ok {
+		rlsMeta := b.mem.Metadata().GetRLSMeta()
+		// RLS is lazily initialized, and only when it comes across a RLS enabled
+		// table.
+		if !rlsMeta.IsInitialized {
+			return
+		}
+		if values, ok := e.(*memo.ValuesExpr); ok {
+			// Normally, since policies apply to specific tables, we annotate when we
+			// come across a scan of a single table. We need to annotate a "norows"
+			// value as this can be emitted when scanning a table and RLS forced all
+			// rows to be filtered out because none of the policies applied.
+			if len(values.Rows) == 0 && rlsMeta.NoPoliciesApplied {
+				ef.AnnotateNode(node, exec.PolicyInfoID, &exec.RLSPoliciesApplied{})
+			}
+		} else if scan, ok := e.(*memo.ScanExpr); ok {
+			// For scan node, we pull out the policy information for the table we the
+			// node was built for.
+			policies, found := rlsMeta.PoliciesApplied[scan.Table]
+			if found {
+				val := exec.RLSPoliciesApplied{
+					PoliciesSkippedForRole: rlsMeta.HasAdminRole,
+					Policies:               policies,
+				}
+				ef.AnnotateNode(node, exec.PolicyInfoID, &val)
+			}
+		}
 	}
 }
 
