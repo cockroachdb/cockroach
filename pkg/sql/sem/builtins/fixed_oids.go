@@ -2645,6 +2645,10 @@ var builtinOidsArray = []string{
 	2682: `char(jsonpath: jsonpath) -> "char"`,
 	2683: `substring_index(input: string, delim: string, count: int) -> string`,
 	2684: `crdb_internal.sql_liveness_is_alive(session_id: bytes, is_sync: bool) -> bool`,
+	2685: `anysend(any: any) -> bytes`,
+	2686: `anyrecv(input: anyelement) -> any`,
+	2687: `anyout(any: any) -> bytes`,
+	2688: `anyin(input: anyelement) -> any`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
