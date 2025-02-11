@@ -401,3 +401,73 @@ func TestFinderPopularKeyFrequency(t *testing.T) {
 		assert.Equal(t, test.expectedPopularKeyFrequency, popularKeyFrequency, "unexpected popular key frequency in test %d", i)
 	}
 }
+
+func TesUnweightedFinderSampleMovement(t *testing.T) {
+	testCases := []struct {
+		name             string
+		samples          [splitKeySampleSize]sample
+		expectedMovement float64
+	}{
+		{
+			name: "all samples to the left",
+			samples: [splitKeySampleSize]sample{
+				{left: 10, right: 0},
+				{left: 20, right: 0},
+				{left: 30, right: 0},
+			},
+			expectedMovement: -1,
+		},
+		{
+			name: "all samples to the right",
+			samples: [splitKeySampleSize]sample{
+				{left: 0, right: 10},
+				{left: 0, right: 20},
+				{left: 0, right: 30},
+			},
+			expectedMovement: 1,
+		},
+		{
+			name: "balanced samples",
+			samples: [splitKeySampleSize]sample{
+				{left: 10, right: 10},
+				{left: 20, right: 20},
+				{left: 30, right: 30},
+			},
+			expectedMovement: 0,
+		},
+		{
+			name: "more samples to the left",
+			samples: [splitKeySampleSize]sample{
+				{left: 30, right: 10},
+				{left: 40, right: 20},
+				{left: 50, right: 30},
+			},
+			expectedMovement: -(1.0 / 3),
+		},
+		{
+			name: "more samples to the right",
+			samples: [splitKeySampleSize]sample{
+				{left: 10, right: 30},
+				{left: 20, right: 40},
+				{left: 30, right: 50},
+			},
+			expectedMovement: (1.0 / 3),
+		},
+		{
+			name:             "no samples",
+			samples:          [splitKeySampleSize]sample{},
+			expectedMovement: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			finder := NewUnweightedFinder(timeutil.Now(), rand.New(rand.NewSource(2022)))
+			finder.samples = tc.samples
+			movement := finder.SampleMovement()
+			if movement != tc.expectedMovement {
+				t.Errorf("expected movement %v, but got %v", tc.expectedMovement, movement)
+			}
+		})
+	}
+}

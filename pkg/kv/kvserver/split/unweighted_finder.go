@@ -223,6 +223,28 @@ func (f *UnweightedFinder) PopularKeyFrequency() float64 {
 	return float64(popularKeyCount) / float64(splitKeySampleSize)
 }
 
+// SampleMovement calculates the movement of samples based on the left and
+// right counters of the samples contained. Returns a float64 value between
+// -1 and 1, where -1 indicates all samples are to the left, 1 indicates all
+// samples are to the right, and values in between indicate the proportion.
+func (f *UnweightedFinder) SampleMovement() float64 {
+	if f == nil {
+		return 0
+	}
+
+	var totalLeft, totalRight int
+	for _, s := range f.samples {
+		totalLeft += s.left
+		totalRight += s.right
+	}
+
+	if totalLeft == 0 && totalRight == 0 {
+		return 0
+	}
+
+	return float64(totalRight-totalLeft) / float64(totalLeft+totalRight)
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (f *UnweightedFinder) SafeFormat(w redact.SafePrinter, r rune) {
 	w.Printf("key=%v start=%v count=%d samples=%v",

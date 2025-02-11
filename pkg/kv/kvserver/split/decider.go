@@ -9,6 +9,7 @@ package split
 
 import (
 	"context"
+	"math"
 	"math/rand"
 	"time"
 
@@ -49,6 +50,12 @@ type LoadBasedSplitter interface {
 
 	// String formats the state of the load based splitter.
 	String() string
+
+	// SampleMovement calculates the movement of samples based on the left and
+	// right counters of the samples contained. Returns a float64 value between
+	// -1 and 1, where -1 indicates all samples are to the left, 1 indicates all
+	// samples are to the right, and values in between indicate the proportion.
+	SampleMovement() float64
 }
 
 type LoadSplitConfig interface {
@@ -126,8 +133,9 @@ func GlobalRandSource() RandSource {
 
 // LoadSplitterMetrics consists of metrics for load-based splitter split key.
 type LoadSplitterMetrics struct {
-	PopularKeyCount *metric.Counter
-	NoSplitKeyCount *metric.Counter
+	PopularKeyCount          *metric.Counter
+	AbsoluteKeyMovementCount *metric.Counter
+	NoSplitKeyCount          *metric.Counter
 }
 
 // Decider tracks the latest load and if certain conditions are met, records
@@ -268,6 +276,12 @@ func (d *Decider) recordLocked(
 						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))
 						if popularKeyFrequency >= splitKeyThreshold {
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
+						}
+						movement := d.mu.splitFinder.SampleMovement()
+						log.KvDistribution.Infof(ctx, "%s, movement of samples is %.2f",
+							causeMsg, movement)
+						if math.Abs(movement) == 1 {
+							d.loadSplitterMetrics.AbsoluteKeyMovementCount.Inc(1)
 						}
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
 					}
