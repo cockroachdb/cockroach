@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -30,8 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
@@ -608,7 +611,8 @@ func LoadTerm(
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	index kvpb.RaftIndex,
-) (kvpb.RaftTerm, error) {
+) (term kvpb.RaftTerm, err error) {
+	start := timeutil.Now()
 	entry, found := eCache.Get(rangeID, index)
 	if found {
 		return kvpb.RaftTerm(entry.Term), nil
@@ -616,6 +620,11 @@ func LoadTerm(
 
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
+
+	defer func(start time.Time) {
+		log.Infof(ctx, "Cache miss, LoadTerm took %s", timeutil.Since(start))
+		log.Infof(ctx, "Returning term: %d, error: %v", term, err)
+	}(start)
 
 	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {
