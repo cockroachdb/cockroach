@@ -277,7 +277,7 @@ func (p *planner) dropTableImpl(
 	for i := range tableDesc.Triggers {
 		trigger := &tableDesc.Triggers[i]
 		for _, id := range trigger.DependsOn {
-			if err := p.removeTriggerBackReference(ctx, tableDesc, id); err != nil {
+			if err := p.removeTriggerBackReference(ctx, tableDesc, id, trigger.Name); err != nil {
 				return droppedViews, err
 			}
 		}
@@ -671,7 +671,7 @@ func removeFKBackReferenceFromTable(
 // removeTriggerBackReference removes the trigger back reference for the
 // referenced table with the given ID.
 func (p *planner) removeTriggerBackReference(
-	ctx context.Context, tableDesc *tabledesc.Mutable, refID descpb.ID,
+	ctx context.Context, tableDesc *tabledesc.Mutable, refID descpb.ID, triggerName string,
 ) error {
 	var refTableDesc *tabledesc.Mutable
 	// We don't want to lookup/edit a second copy of the same table.
@@ -689,7 +689,18 @@ func (p *planner) removeTriggerBackReference(
 		return nil
 	}
 	refTableDesc.DependedOnBy = removeMatchingReferences(refTableDesc.DependedOnBy, tableDesc.ID)
-	return nil
+
+	name, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+	refName, err := p.getQualifiedTableName(ctx, refTableDesc)
+	if err != nil {
+		return err
+	}
+	jobDesc := fmt.Sprintf("updating table %q after removing trigger %q from table %q",
+		refName.FQString(), triggerName, name.FQString())
+	return p.writeSchemaChange(ctx, refTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
 // removeMatchingReferences removes all refs from the provided slice that
