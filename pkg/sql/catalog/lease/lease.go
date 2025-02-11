@@ -1730,9 +1730,15 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 				// will be acquired if the schema is already leased to invalidate metadata
 				// caches (like optimizer memos).
 				purgeOldVersionsOrAcquireInitialVersion := func(ctx context.Context) {
+					if m.testingKnobs.TestingOnNewVersion != nil {
+						m.testingKnobs.TestingOnNewVersion(desc.GetID())
+					}
 					// Notify of any new / modified descriptors below once a new lease is
 					// acquired.
 					defer m.leaseGeneration.Add(1)
+					if m.testingKnobs.TestingOnLeaseGenerationBumpForNewVersion != nil {
+						defer m.testingKnobs.TestingOnLeaseGenerationBumpForNewVersion(desc.GetID())
+					}
 
 					// Whenever a new relation / type is created under an already leased
 					// schema we are going to lease the object out immediately. This allows
