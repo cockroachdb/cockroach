@@ -118,7 +118,12 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 				splitPrevRowVersion: isPrev && opts.encodeForQuery && opts.Envelope != changefeedbase.OptEnvelopeBare,
 			}
 			return getCachedOrCreate(key, versionCache, func() interface{} {
-				return &versionEncoder{encodeJSONValueNullAsObject: opts.EncodeJSONValueNullAsObject}
+				_, inclSchema := opts.EnrichedProperties[changefeedbase.EnrichedPropertySchema]
+				return &versionEncoder{
+					encodeJSONValueNullAsObject: opts.EncodeJSONValueNullAsObject,
+					encodeKeyAsObject:           opts.Envelope == changefeedbase.OptEnvelopeEnriched,
+					includeKeyObjectSchema:      inclSchema,
+				}
 			}).(*versionEncoder)
 		},
 	}
@@ -156,8 +161,8 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 
 // versionEncoder memoizes version specific encoding state.
 type versionEncoder struct {
-	encodeJSONValueNullAsObject bool
-	valueBuilder                *json.FixedKeysObjectBuilder
+	encodeJSONValueNullAsObject, encodeKeyAsObject, includeKeyObjectSchema bool
+	valueBuilder                                                           *json.FixedKeysObjectBuilder
 }
 
 // EncodeKey implements the Encoder interface.
@@ -180,7 +185,41 @@ func (e *jsonEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) (enc []by
 	return e.buf.Bytes(), nil
 }
 
-func (e *versionEncoder) encodeKeyRaw(
+// encodeKeyRawAsObject encodes the key as a JSON object. if
+// includeKeyObjectSchema is true, the key is nested under the "payload" key.
+func (e *versionEncoder) encodeKeyRawAsObject(
+	ctx context.Context, it cdcevent.Iterator,
+) (json.JSON, error) {
+	var err error
+	var outerBuilder *json.FixedKeysObjectBuilder
+	kb := json.NewObjectBuilder(1)
+	if e.includeKeyObjectSchema {
+		outerBuilder, err = json.NewFixedKeysObjectBuilder([]string{"payload"})
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		v, err := e.datumToJSON(ctx, d)
+		if err != nil {
+			return err
+		}
+		kb.Add(col.Name, v)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	keyJSON := kb.Build()
+	if outerBuilder != nil {
+		if err := outerBuilder.Set("payload", keyJSON); err != nil {
+			return nil, err
+		}
+		return outerBuilder.Build()
+	}
+	return keyJSON, nil
+}
+
+func (e *versionEncoder) encodeKeyRawAsArray(
 	ctx context.Context, it cdcevent.Iterator,
 ) (json.JSON, error) {
 	kb := json.NewArrayBuilder(1)
@@ -198,14 +237,23 @@ func (e *versionEncoder) encodeKeyRaw(
 	return kb.Build(), nil
 }
 
+func (e *versionEncoder) encodeKeyRaw(
+	ctx context.Context, it cdcevent.Iterator,
+) (json.JSON, error) {
+	if e.encodeKeyAsObject {
+		return e.encodeKeyRawAsObject(ctx, it)
+	}
+	return e.encodeKeyRawAsArray(ctx, it)
+}
+
 func (e *versionEncoder) encodeKeyInValue(
 	ctx context.Context, updated cdcevent.Row, b *json.FixedKeysObjectBuilder,
 ) error {
-	keyEntries, err := e.encodeKeyRaw(ctx, updated.ForEachKeyColumn())
+	keyJSON, err := e.encodeKeyRaw(ctx, updated.ForEachKeyColumn())
 	if err != nil {
 		return err
 	}
-	return b.Set("key", keyEntries)
+	return b.Set("key", keyJSON)
 }
 
 func (e *versionEncoder) rowAsGoNative(
