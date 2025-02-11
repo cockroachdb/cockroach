@@ -64,6 +64,11 @@ func (p *GlobalPrivilege) ID() cat.StableID {
 	return cat.DefaultStableID
 }
 
+// Version implements the cat.Object interface.
+func (p *GlobalPrivilege) Version() uint64 {
+	return cat.InvalidVersion
+}
+
 // PostgresDescriptorID implements the cat.Object interface.
 func (p *GlobalPrivilege) PostgresDescriptorID() catid.DescID {
 	return descpb.InvalidID

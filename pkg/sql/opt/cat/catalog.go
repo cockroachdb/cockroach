@@ -49,6 +49,11 @@ type StableID uint64
 // always return this value as their ID.
 const DefaultStableID = StableID(catid.InvalidDescID)
 
+// InvalidVersion is the version number used to represent objects that
+// are not versioned in any way. For example the GlobalPrivilege object,
+// which is not backed by a descriptor.
+const InvalidVersion = uint64(0)
+
 // SchemaName is an alias for tree.ObjectNamePrefix, since it consists of the
 // catalog + schema name.
 type SchemaName = tree.ObjectNamePrefix
@@ -260,8 +265,8 @@ type Catalog interface {
 	GetDependencyDigest() DependencyDigest
 
 	// LeaseByStableID leases out a descriptor by the stable ID, which will block
-	// schema changes. The underlying schema object is not returned.
-	LeaseByStableID(ctx context.Context, id StableID) error
+	// schema changes. The version of the underlying object is returned.
+	LeaseByStableID(ctx context.Context, id StableID) (uint64, error)
 
 	// GetRoutineOwner returns the username.SQLUsername of the routine's
 	// (specified by routineOid) owner.
