@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -940,4 +941,321 @@ func TestRaftPreVoteEpochLeases(t *testing.T) {
 			t.Logf("n1 is still leader")
 		})
 	})
+}
+
+// TestRangeQuiescenceEpochLeases tests that ranges quiesce and if a follower
+// unquiesces the leader is woken up.
+func TestRangeQuiescenceEpochLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// Only epoch based leases can be quiesced.
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
+
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableScanner: true,
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	pauseNodeLivenessHeartbeatLoops(tc)
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	waitForQuiescence := func(key roachpb.RKey) {
+		testutils.SucceedsSoon(t, func() error {
+			for i := range tc.Servers {
+				rep := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
+				require.NotNil(t, rep)
+				if !rep.IsQuiescent() {
+					return errors.Errorf("%s not quiescent", rep)
+				}
+			}
+			return nil
+		})
+	}
+
+	// Wait for the range to quiesce.
+	waitForQuiescence(roachpb.RKey(key))
+
+	// Find the leader replica.
+	leader := tc.GetRaftLeader(t, roachpb.RKey(key))
+
+	// Unquiesce a follower range, this should "wake the leader" and not result
+	// in an election.
+	followerIdx := int(leader.StoreID()) % len(tc.Servers)
+	tc.GetFirstStoreFromServer(t, followerIdx).EnqueueRaftUpdateCheck(tc.LookupRangeOrFatal(t, key).RangeID)
+
+	// Wait for a bunch of ticks to occur which will allow the follower time to
+	// campaign.
+	ticks := tc.GetFirstStoreFromServer(t, followerIdx).Metrics().RaftTicks.Count
+	for targetTicks := ticks() + 2*tc.GetFirstStoreFromServer(t, followerIdx).GetStoreConfig().RaftElectionTimeoutTicks; ticks() < targetTicks; {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Wait for the range to quiesce again.
+	waitForQuiescence(roachpb.RKey(key))
+
+	// The leadership should not have changed.
+	if state := leader.RaftStatus().SoftState.RaftState; state != raftpb.StateLeader {
+		t.Fatalf("%s should be the leader: %s", leader, state)
+	}
+}
+
+// TestRaftUnquiesceLeaderNoProposalEpochLeases tests that unquiescing a Raft
+// leader does not result in a proposal, since this is unnecessary and expensive.
+func TestRaftUnquiesceLeaderNoProposalEpochLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Timing-sensitive, so skip under deadlock detector and race.
+	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Disable lease extensions and expiration-based lease transfers,
+	// since these cause range writes and prevent quiescence.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, &st.SV, false)
+	// Quiescing the leader is possible only for epoch leases.
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
+
+	// Block writes to the range, to prevent spurious proposals (typically due to
+	// txn record GC).
+	var blockRange atomic.Int64
+	reqFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		if rangeID := roachpb.RangeID(blockRange.Load()); rangeID > 0 && rangeID == ba.RangeID {
+			t.Logf("r%d write rejected: %s", rangeID, ba)
+			return kvpb.NewError(errors.New("rejected"))
+		}
+		return nil
+	}
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			RaftConfig: base.RaftConfig{
+				RaftTickInterval: 100 * time.Millisecond, // speed up test
+			},
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: reqFilter,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	logStatus := func(s *raft.Status) {
+		t.Helper()
+		require.NotNil(t, s)
+		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
+	}
+
+	sender := tc.GetFirstStoreFromServer(t, 0).TestSender()
+
+	// Create a range, upreplicate it, and replicate a write.
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	_, pErr := kv.SendWrapped(ctx, sender, incrementArgs(key, 1))
+	require.NoError(t, pErr.GoError())
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+
+	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl2, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repls := []*kvserver.Replica{repl1, repl2, repl3}
+
+	// Block writes.
+	blockRange.Store(int64(desc.RangeID))
+	defer blockRange.Store(0)
+
+	// Wait for the range to quiesce.
+	require.Eventually(t, func() bool {
+		for _, repl := range repls {
+			if !repl.IsQuiescent() {
+				return false
+			}
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+	t.Logf("range quiesced")
+
+	// Make sure n1 is still leader.
+	initialStatus := repl1.RaftStatus()
+	require.Equal(t, raftpb.StateLeader, initialStatus.RaftState)
+	logStatus(initialStatus)
+	t.Logf("n1 leader")
+
+	// Unquiesce n1. This may result in it immediately quiescing again, which is
+	// fine, but it shouldn't submit a proposal to wake up the followers.
+	require.True(t, repl1.MaybeUnquiesce())
+	t.Logf("n1 unquiesced")
+
+	require.Eventually(t, repl1.IsQuiescent, 10*time.Second, 100*time.Millisecond)
+	t.Logf("n1 quiesced")
+
+	status := repl1.RaftStatus()
+	logStatus(status)
+	require.Equal(t, raftpb.StateLeader, status.RaftState)
+	require.Equal(t, initialStatus.Term, status.Term)
+	require.Equal(t, initialStatus.Progress[1].Match, status.Progress[1].Match)
+	t.Logf("n1 still leader with no new proposals at log index %d", status.Progress[1].Match)
+}
+
+// TestRaftPreVoteUnquiesceDeadLeaderEpochLeases tests that if a quorum of
+// replicas independently consider the leader dead, they can successfully hold
+// an election despite having recently heard from a leader under the
+// PreVote+CheckQuorum condition. It also tests that it does not result in an
+// election tie.
+//
+// We quiesce the range and partition away the leader as such:
+//
+//	               n1 (leader)
+//	              x  x
+//	             x    x
+//	(follower) n2 ---- n3 (follower)
+//
+// We also mark the leader as dead in liveness, and then unquiesce n2. This
+// should detect the dead leader via liveness, transition to pre-candidate, and
+// solicit a prevote from n3. This should cause n3 to unquiesce, detect the dead
+// leader, forget it (becoming a leaderless follower), and grant the prevote.
+func TestRaftPreVoteUnquiesceDeadLeaderEpochLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Timing-sensitive, so skip under deadlock detector and race.
+	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+
+	// This test is specifically designed for epoch based leases, as it manually
+	// manipulates the node liveness record. Similar coverage for leader leases is
+	// provided in TestRaftCheckQuorum and TestFollowersFallAsleep.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
+	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, &st.SV, false)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			RaftConfig: base.RaftConfig{
+				RaftEnableCheckQuorum: true,
+				RaftTickInterval:      200 * time.Millisecond, // speed up test
+				// Set an large election timeout. We don't want replicas to call
+				// elections due to timeouts, we want them to campaign and obtain
+				// prevotes because they detected a dead leader when unquiescing.
+				RaftElectionTimeoutTicks: 100,
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	logStatus := func(s *raft.Status) {
+		t.Helper()
+		require.NotNil(t, s)
+		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
+	}
+
+	// Create a range, upreplicate it, and replicate a write.
+	sender := tc.GetFirstStoreFromServer(t, 0).TestSender()
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	_, pErr := kv.SendWrapped(ctx, sender, incrementArgs(key, 1))
+	require.NoError(t, pErr.GoError())
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+
+	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl2, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+
+	// Set up a complete partition for n1, but don't activate it yet.
+	var partitioned atomic.Bool
+	dropRaftMessagesFrom(t, tc.Servers[0], desc, []roachpb.ReplicaID{2, 3}, &partitioned)
+	dropRaftMessagesFrom(t, tc.Servers[1], desc, []roachpb.ReplicaID{1}, &partitioned)
+	dropRaftMessagesFrom(t, tc.Servers[2], desc, []roachpb.ReplicaID{1}, &partitioned)
+
+	// Make sure the lease is on n1 and that everyone has applied it.
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(0))
+	_, pErr = kv.SendWrapped(ctx, sender, incrementArgs(key, 1))
+	require.NoError(t, pErr.GoError())
+	tc.WaitForValues(t, key, []int64{2, 2, 2})
+	t.Logf("n1 has lease")
+
+	// Wait for the range to quiesce.
+	require.Eventually(t, func() bool {
+		return repl1.IsQuiescent() && repl2.IsQuiescent() && repl3.IsQuiescent()
+	}, 10*time.Second, 100*time.Millisecond)
+	t.Logf("n1, n2, and n3 quiesced")
+
+	// Partition n1.
+	partitioned.Store(true)
+	t.Logf("n1 partitioned")
+
+	// Pause n1's heartbeats and move the clock to expire its lease and liveness.
+	l1 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
+	resumeHeartbeats := l1.PauseAllHeartbeatsForTest()
+	defer resumeHeartbeats()
+
+	lv, ok := l1.Self()
+	require.True(t, ok)
+	manualClock.Forward(lv.Expiration.WallTime + 1)
+
+	for i := 0; i < tc.NumServers(); i++ {
+		isLive := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness).GetNodeVitalityFromCache(1).IsLive(livenesspb.LeaseCampaign)
+		require.False(t, isLive)
+		tc.GetFirstStoreFromServer(t, i).UpdateLivenessMap()
+	}
+	t.Logf("n1 not live")
+
+	// Fetch the leader's initial status.
+	initialStatus := repl1.RaftStatus()
+	require.Equal(t, raftpb.StateLeader, initialStatus.RaftState)
+	logStatus(initialStatus)
+
+	// Unquiesce n2. This should cause it to see n1 as dead and immediately
+	// transition to pre-candidate, sending prevotes to n3. When n3 receives the
+	// prevote request and unquiesces, it will also see n1 as dead, and become a
+	// leaderless follower which enables it to grant n2's prevote despite having
+	// heard from n1 recently, and they can hold an election.
+	//
+	// n2 always wins, since n3 shouldn't become a candidate, only a leaderless
+	// follower, and we've disabled the election timeout.
+	require.True(t, repl2.MaybeUnquiesce())
+	t.Logf("n2 unquiesced")
+
+	require.Eventually(t, func() bool {
+		status := repl2.RaftStatus()
+		logStatus(status)
+		return status.RaftState == raftpb.StateLeader
+	}, 5*time.Second, 500*time.Millisecond)
+	t.Logf("n2 is leader")
 }

@@ -40,6 +40,8 @@ type ReplicaMetrics struct {
 
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
+	// Asleep indicates whether the replica believes itself to be asleep.
+	Asleep bool
 	// Ticking indicates whether the store is ticking the replica. It should be
 	// the opposite of Quiescent.
 	Ticking bool
@@ -74,9 +76,9 @@ func (r *Replica) Metrics(
 	vitalityMap livenesspb.NodeVitalityMap,
 	clusterNodes int,
 ) ReplicaMetrics {
-	r.store.unquiescedReplicas.Lock()
-	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
-	r.store.unquiescedReplicas.Unlock()
+	r.store.unquiescedOrAwakeReplicas.Lock()
+	_, ticking := r.store.unquiescedOrAwakeReplicas.m[r.RangeID]
+	r.store.unquiescedOrAwakeReplicas.Unlock()
 
 	latchMetrics := r.concMgr.LatchMetrics()
 	lockTableMetrics := r.concMgr.LockTableMetrics()
@@ -108,6 +110,7 @@ func (r *Replica) Metrics(
 		nodeAttrs:                nodeAttrs,
 		nodeLocality:             nodeLocality,
 		quiescent:                r.mu.quiescent,
+		asleep:                   r.mu.asleep,
 		ticking:                  ticking,
 		latchMetrics:             latchMetrics,
 		lockTableMetrics:         lockTableMetrics,
@@ -139,6 +142,7 @@ type calcReplicaMetricsInput struct {
 	storeAttrs, nodeAttrs    roachpb.Attributes
 	nodeLocality             roachpb.Locality
 	quiescent                bool
+	asleep                   bool
 	ticking                  bool
 	latchMetrics             concurrency.LatchMetrics
 	lockTableMetrics         concurrency.LockTableMetrics
@@ -202,6 +206,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		LessPreferredLease:        lessPreferredLease,
 		LeaderNotFortified:        leaderNotFortified,
 		Quiescent:                 d.quiescent,
+		Asleep:                    d.asleep,
 		Ticking:                   d.ticking,
 		RangeCounter:              rangeCounter,
 		Unavailable:               unavailable,

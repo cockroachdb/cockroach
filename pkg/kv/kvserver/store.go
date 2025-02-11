@@ -1081,8 +1081,8 @@ type Store struct {
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
-	// The unquiesced subset of replicas.
-	unquiescedReplicas struct {
+	// The unquiesced or awake subset of replicas.
+	unquiescedOrAwakeReplicas struct {
 		syncutil.Mutex
 		m map[roachpb.RangeID]struct{}
 	}
@@ -1605,9 +1605,9 @@ func NewStore(
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
 
-	s.unquiescedReplicas.Lock()
-	s.unquiescedReplicas.m = map[roachpb.RangeID]struct{}{}
-	s.unquiescedReplicas.Unlock()
+	s.unquiescedOrAwakeReplicas.Lock()
+	s.unquiescedOrAwakeReplicas.m = map[roachpb.RangeID]struct{}{}
+	s.unquiescedOrAwakeReplicas.Unlock()
 
 	s.rangefeedReplicas.Lock()
 	s.rangefeedReplicas.m = map[roachpb.RangeID]int64{}
@@ -2235,6 +2235,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	)
 	s.cfg.StoreLivenessTransport.ListenMessages(s.StoreID(), sm)
 	s.storeLiveness = sm
+	s.storeLiveness.RegisterSupportWithdrawalCallback(s.supportWithdrawnCallback)
 	s.metrics.registry.AddMetricStruct(sm.Metrics())
 	if err = sm.Start(ctx); err != nil {
 		return errors.Wrap(err, "starting store liveness")
@@ -2349,6 +2350,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// or expiration leases. We want to eagerly establish raft leaders for such
 		// ranges and acquire leases on top of this. This happens during Raft ticks.
 		// We rely on Raft pre-vote to avoid disturbance to Raft leaders.
+		//
+		// For followers that are asleep, the leader will send a message as part of
+		// acquiring the new lease, which will wake them up.
 		//
 		// NB: cluster settings haven't propagated yet, so we have to check the last
 		// known lease instead of desiredLeaseTypeRLocked. We also check Sequence >
@@ -3334,6 +3338,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		raftLeaderNotFortifiedCount    int64
 		raftLeaderInvalidLeaseCount    int64
 		quiescentCount                 int64
+		asleepCount                    int64
 		uninitializedCount             int64
 		averageQueriesPerSecond        float64
 		averageRequestsPerSecond       float64
@@ -3436,6 +3441,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if metrics.Quiescent {
 			quiescentCount++
 		}
+		if metrics.Asleep {
+			asleepCount++
+		}
 		if metrics.RangeCounter {
 			rangeCount++
 			if metrics.Unavailable {
@@ -3503,6 +3511,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseLessPreferredCount.Update(leaseLessPreferredCount)
 	s.metrics.LeaseLivenessCount.Update(leaseLivenessCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
+	s.metrics.AsleepCount.Update(asleepCount)
 	s.metrics.UninitializedCount.Update(uninitializedCount)
 	for state, cnt := range raftFlowStateCounts {
 		s.metrics.RaftFlowStateCounts[state].Update(cnt)

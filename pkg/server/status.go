@@ -2545,6 +2545,7 @@ func (s *systemStatusServer) rangesHelper(
 				Value: tier.Value,
 			})
 		}
+		quiescentOrAsleep := metrics.Quiescent || metrics.Asleep
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     convertRaftStatus(raftStatus),
@@ -2569,7 +2570,7 @@ func (s *systemStatusServer) rangesHelper(
 				Underreplicated:        metrics.Underreplicated,
 				Overreplicated:         metrics.Overreplicated,
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
-				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
+				QuiescentEqualsTicking: raftStatus != nil && quiescentOrAsleep == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
 				RangeTooLarge:          metrics.RangeTooLarge,
 				CircuitBreakerError:    len(state.CircuitBreakerError) > 0,

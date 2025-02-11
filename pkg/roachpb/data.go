@@ -2046,12 +2046,27 @@ func (l Lease) SupportsQuiescence() bool {
 		// Expiration based leases do not support quiescence because they'll likely
 		// be renewed soon, so there's not much point to it.
 		//
-		// Leader leases do not support quiescence because a fortified raft leader
-		// will not send raft heartbeats, so quiescence is not needed. All liveness
-		// decisions are based on store liveness communication, which is cheap
-		// enough to not need a notion of quiescence.
+		// Leader leases use the similar but separate concept of sleep to indicate
+		// that followers should stop ticking.
 		return false
 	case LeaseEpoch:
+		return true
+	default:
+		panic("unexpected lease type")
+	}
+}
+
+// SupportsSleep returns whether the lease supports replica sleep or not.
+func (l Lease) SupportsSleep() bool {
+	switch l.Type() {
+	case LeaseExpiration, LeaseEpoch:
+		// Expiration based leases do not support sleep because they'll likely be
+		// renewed soon, so there's not much point to it.
+		//
+		// Epoch leases use the similar but separate concept of quiescence to
+		// indicate that replicas should stop ticking.
+		return false
+	case LeaseLeader:
 		return true
 	default:
 		panic("unexpected lease type")

@@ -524,6 +524,19 @@ type Replica struct {
 		// laggingFollowersOnQuiesce is the set of dead replicas that are not
 		// up-to-date with the rest of the quiescent Raft group. Nil if !quiescent.
 		laggingFollowersOnQuiesce laggingReplicaSet
+		// asleep is the same as quiescent but wrt store liveness quiescence.
+		// Similarly to regular quiescence, store liveness quiescense helps the
+		// replica not tick in Raft. Unlike regular quiescence, store liveness
+		// quiescence allows only followers to quiesce (not the leader), and as a
+		// result, uses much simpler rules to do so:
+		// - A follower quiesces if it supports a fortified leader and hasn't
+		//   received a Raft message in a given number of ticks.
+		// - A follower unquiesces if it receives any Raft message or if store
+		//   liveness has withdrawn support for the store on which the leader lives.
+		// To avoid confusion, we use the terms asleep and awake for store liveness
+		// quiescence, instead of quiesced and unquiesced, but otherwise, the
+		// concept is the same.
+		asleep bool
 		// mergeComplete is non-nil if a merge is in-progress, in which case any
 		// requests should be held until the completion of the merge is signaled by
 		// the closing of the channel.
@@ -837,6 +850,10 @@ type Replica struct {
 
 		// lastProposalAtTicks tracks the time of the last proposal, in ticks.
 		lastProposalAtTicks int64
+
+		// lastMessageAtTicks tracks the time of the last received message, in
+		// ticks.
+		lastMessageAtTicks int64
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
@@ -1167,6 +1184,13 @@ func (r *Replica) IsQuiescent() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.quiescent
+}
+
+// IsAsleep returns whether the replica is asleep or not.
+func (r *Replica) IsAsleep() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.asleep
 }
 
 // DescAndSpanConfig returns the authoritative range descriptor as well
@@ -1684,6 +1708,13 @@ func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
 		return rg.BasicStatus()
 	}
 	return raft.BasicStatus{}
+}
+
+func (r *Replica) raftSupportingFortifiedLeaderRLocked() bool {
+	if rg := r.mu.internalRaftGroup; rg != nil {
+		return rg.SupportingFortifiedLeader()
+	}
+	return false
 }
 
 // RACv2Status returns the status of the RACv2 range controller of this replica.
