@@ -1944,6 +1944,7 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 2210    _regclass              4294967095    NULL        -1      false     b
 2211    _regtype               4294967095    NULL        -1      false     b
 2249    record                 4294967095    NULL        0       true      p
+2276    any                    4294967095    NULL        -1      false     p
 2277    anyarray               4294967095    NULL        -1      false     p
 2278    void                   4294967095    NULL        0       true      p
 2279    trigger                4294967095    NULL        4       true      p
@@ -2064,6 +2065,7 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 2210    _regclass              A            false           true          ,         0         2205     0
 2211    _regtype               A            false           true          ,         0         2206     0
 2249    record                 P            false           true          ,         0         0        2287
+2276    any                    P            false           true          ,         0         0        0
 2277    anyarray               P            false           true          ,         0         0        0
 2278    void                   P            false           true          ,         0         0        0
 2279    trigger                P            false           true          ,         0         0        0
@@ -2184,6 +2186,7 @@ oid     typname                typinput        typoutput        typreceive      
 2210    _regclass              array_in        array_out        array_recv        array_send        0         0          0
 2211    _regtype               array_in        array_out        array_recv        array_send        0         0          0
 2249    record                 record_in       record_out       record_recv       record_send       0         0          0
+2276    any                    -               -                -                 -                 0         0          0
 2277    anyarray               anyarray_in     anyarray_out     anyarray_recv     anyarray_send     0         0          0
 2278    void                   voidin          voidout          voidrecv          voidsend          0         0          0
 2279    trigger                -               -                -                 -                 0         0          0
@@ -2304,6 +2307,7 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 2210    _regclass              NULL      NULL        false       0            -1
 2211    _regtype               NULL      NULL        false       0            -1
 2249    record                 NULL      NULL        false       0            -1
+2276    any                    NULL      NULL        false       0            -1
 2277    anyarray               NULL      NULL        false       0            -1
 2278    void                   NULL      NULL        false       0            -1
 2279    trigger                NULL      NULL        false       0            -1
@@ -2424,6 +2428,7 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 2210    _regclass              0         0             NULL           NULL        NULL
 2211    _regtype               0         0             NULL           NULL        NULL
 2249    record                 0         0             NULL           NULL        NULL
+2276    any                    0         0             NULL           NULL        NULL
 2277    anyarray               0         3403232968    NULL           NULL        NULL
 2278    void                   0         0             NULL           NULL        NULL
 2279    trigger                0         0             NULL           NULL        NULL

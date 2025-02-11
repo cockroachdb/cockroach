@@ -3439,7 +3439,13 @@ func addPGTypeRow(
 	case types.VoidFamily:
 		// void does not have an array type.
 	case types.TriggerFamily:
-		// trigger does not have an array type.
+	// trigger does not have an array type.
+	case types.AnyFamily:
+		// Any does not have an array type. You may be thinking of AnyElement.
+		if typ.Oid() == oid.T_any {
+			break
+		}
+		fallthrough
 	default:
 		typArray = tree.NewDOid(types.CalcArrayOid(typ))
 	}
