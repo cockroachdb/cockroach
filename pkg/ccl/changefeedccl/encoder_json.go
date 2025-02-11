@@ -571,7 +571,6 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 				return nil, err
 			}
 		}
-
 		if e.sourceField {
 			sourceJson, err := e.enrichedEnvelopeSourceProvider.GetJSON(updated)
 			if err != nil {
@@ -661,9 +660,10 @@ func EncodeAsJSONChangefeedWithFlags(
 	if err != nil {
 		return nil, err
 	}
-	sourceProvider := newEnrichedSourceProvider(opts, enrichedSourceData{
-		jobId: "ccl_builtin", // This encoder is not used in the context of a real changefeed.
-	})
+	// This encoder is not used in the context of a real changefeed so make an empty
+	// source provider.
+	sourceProvider := newEnrichedSourceProvider(opts, enrichedSourceData{})
+
 	// If this function ends up needing to be optimized, cache or pool these.
 	// Nontrivial to do as an encoder generally isn't safe to call on different
 	// rows in parallel.
