@@ -3055,23 +3055,33 @@ upper_bound            range_rows  distinct_range_rows  equal_rows
 # Verify that the correct partial predicate is used for partial stats using
 # extremes when outer buckets exist (int column type).
 statement ok
-CREATE TABLE int_outer_buckets (a PRIMARY KEY) AS SELECT generate_series(0, 9999);
+CREATE TABLE int_outer_buckets (a INT PRIMARY KEY)
 
+# Inject a full stats collection with 2 outer buckets with upper bounds of
+# MaxInt64 and MinInt64.
 statement ok
-CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
+ALTER TABLE int_outer_buckets INJECT STATISTICS '[
+  {
+    "name": "int_outer_buckets_full",
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_version": 3,
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "-9223372036854775808"},
+      {"num_eq": 1, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 9998, "distinct_range": 9998, "upper_bound": "9999"},
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "9223372036854775807"}
+    ]
+  }
+]'
 
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
-
-let $hist_id_int_outer_buckets_full
-SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE int_outer_buckets] WHERE statistics_name = 'int_outer_buckets_full'
-
-# The full stats collection should have added 2 outer buckets for a total of 202
-# with upper bounds of MaxInt64 and MinInt64.
-query I
-SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_int_outer_buckets_full]
-----
-202
 
 statement ok
 INSERT INTO int_outer_buckets SELECT generate_series(-10, -1) UNION ALL SELECT generate_series(10000, 10009);
