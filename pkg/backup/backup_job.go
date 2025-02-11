@@ -573,6 +573,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
+	if details.CompactionDetails != nil {
+		return compactBackups(ctx, b.job.ID(), p, *details.CompactionDetails)
+	}
+
 	if err := maybeRelocateJobExecution(ctx, b.job.ID(), p, details.ExecutionLocality, "BACKUP"); err != nil {
 		return err
 	}
