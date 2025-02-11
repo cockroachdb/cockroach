@@ -386,29 +386,44 @@ func (md *Metadata) dependencyDigestEquals(currentDigest *cat.DependencyDigest) 
 
 // leaseObjectsInMetaData ensures that all references within this metadata
 // are leased to prevent schema changes from modifying the underlying objects
-// excessively.
-func (md *Metadata) leaseObjectsInMetaData(ctx context.Context, optCatalog cat.Catalog) error {
-	for id := range md.dataSourceDeps {
-		if err := optCatalog.LeaseByStableID(ctx, id); err != nil {
-			return err
+// excessively. Additionally, the metadata version and leased descriptor versions
+// are compared.
+func (md *Metadata) leaseObjectsInMetaData(
+	ctx context.Context, optCatalog cat.Catalog,
+) (leasedVersionMatchesMetadata bool, err error) {
+	for id, ds := range md.dataSourceDeps {
+		ver, err := optCatalog.LeaseByStableID(ctx, id)
+		if err != nil {
+			return false, err
+		}
+		if ver != ds.Version() {
+			return false, nil
 		}
 	}
-	for id := range md.routineDeps {
-		if err := optCatalog.LeaseByStableID(ctx, id); err != nil {
-			return err
+	for id, rd := range md.routineDeps {
+		ver, err := optCatalog.LeaseByStableID(ctx, id)
+		if err != nil {
+			return false, err
+		}
+		if ver != rd.overload.Version {
+			return false, nil
 		}
 	}
-	for oid := range md.userDefinedTypes {
-		id := typedesc.UserDefinedTypeOIDToID(oid)
+	for _, typ := range md.userDefinedTypesSlice {
+		id := typedesc.UserDefinedTypeOIDToID(typ.Oid())
 		// Not a user defined type.
 		if id == catid.InvalidDescID {
 			continue
 		}
-		if err := optCatalog.LeaseByStableID(ctx, cat.StableID(id)); err != nil {
-			return err
+		ver, err := optCatalog.LeaseByStableID(ctx, cat.StableID(id))
+		if err != nil {
+			return false, err
+		}
+		if ver != uint64(typ.TypeMeta.Version) {
+			return false, nil
 		}
 	}
-	return nil
+	return true, nil
 }
 
 // CheckDependencies resolves (again) each database object on which this
@@ -440,8 +455,9 @@ func (md *Metadata) CheckDependencies(
 		// Lease the underlying descriptors for this metadata. If we fail to lease
 		// any descriptors attempt to resolve them by name through the more expensive
 		// code path below.
-		if err := md.leaseObjectsInMetaData(ctx, optCatalog); err == nil {
-			return true, nil
+		upToDate, err = md.leaseObjectsInMetaData(ctx, optCatalog)
+		if err == nil {
+			return upToDate, err
 		}
 	}
 
