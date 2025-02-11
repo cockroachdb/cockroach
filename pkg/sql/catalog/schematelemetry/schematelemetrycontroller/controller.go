@@ -162,7 +162,7 @@ func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clust
 			if err := sj.SetScheduleAndNextRun(cronExpr); err != nil {
 				return err
 			}
-			sj.SetScheduleStatus(string(jobs.StatusPending))
+			sj.SetScheduleStatus(string(jobs.StatePending))
 			return jobs.ScheduledJobTxn(txn).Update(ctx, sj)
 		}); err != nil && ctx.Err() == nil {
 			log.Warningf(ctx, "failed to update SQL schema telemetry schedule: %s", err)
@@ -242,7 +242,7 @@ func CreateSchemaTelemetrySchedule(
 		jobspb.ExecutionArguments{Args: args},
 	)
 
-	scheduledJob.SetScheduleStatus(string(jobs.StatusPending))
+	scheduledJob.SetScheduleStatus(string(jobs.StatePending))
 	if err = jobs.ScheduledJobTxn(txn).Create(ctx, scheduledJob); err != nil {
 		return nil, err
 	}

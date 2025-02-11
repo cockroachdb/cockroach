@@ -20,15 +20,15 @@ import (
 
 type controlJobsNode struct {
 	singleInputPlanNode
-	desiredStatus jobs.Status
+	desiredStatus jobs.State
 	numRows       int
 	reason        string
 }
 
-var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
-	tree.CancelJob: jobs.StatusCanceled,
-	tree.ResumeJob: jobs.StatusRunning,
-	tree.PauseJob:  jobs.StatusPaused,
+var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.State{
+	tree.CancelJob: jobs.StateCanceled,
+	tree.ResumeJob: jobs.StateRunning,
+	tree.PauseJob:  jobs.StatePaused,
 }
 
 // FastPathResults implements the planNodeFastPath interface.
@@ -37,9 +37,9 @@ func (n *controlJobsNode) FastPathResults() (int, bool) {
 }
 
 func (n *controlJobsNode) startExec(params runParams) error {
-	if n.desiredStatus != jobs.StatusPaused && len(n.reason) > 0 {
+	if n.desiredStatus != jobs.StatePaused && len(n.reason) > 0 {
 		return errors.AssertionFailedf("status %v is not %v and thus does not support a reason %v",
-			n.desiredStatus, jobs.StatusPaused, n.reason)
+			n.desiredStatus, jobs.StatePaused, n.reason)
 	}
 
 	reg := params.p.ExecCfg().JobRegistry
@@ -76,11 +76,11 @@ func (n *controlJobsNode) startExec(params runParams) error {
 					return err
 				}
 				switch n.desiredStatus {
-				case jobs.StatusPaused:
+				case jobs.StatePaused:
 					return ju.PauseRequested(params.ctx, txn, md, n.reason)
-				case jobs.StatusRunning:
+				case jobs.StateRunning:
 					return ju.Unpaused(params.ctx, md)
-				case jobs.StatusCanceled:
+				case jobs.StateCanceled:
 					return ju.CancelRequested(params.ctx, md)
 				default:
 					return errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
@@ -92,11 +92,11 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		n.numRows++
 	}
 	switch n.desiredStatus {
-	case jobs.StatusPaused:
+	case jobs.StatePaused:
 		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("pause"))
-	case jobs.StatusRunning:
+	case jobs.StateRunning:
 		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("resume"))
-	case jobs.StatusCanceled:
+	case jobs.StateCanceled:
 		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("cancel"))
 	}
 	return nil

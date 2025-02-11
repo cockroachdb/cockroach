@@ -1269,10 +1269,10 @@ func makeTenantSQLServerArgs(
 		Settings: st,
 		Knobs:    protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
-			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
+			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStateFunc(
 				circularJobRegistry, jobsprotectedts.Jobs,
 			),
-			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
+			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStateFunc(
 				circularJobRegistry, jobsprotectedts.Schedules,
 			),
 			sessionprotectedts.SessionMetaType: sessionprotectedts.MakeStatusFunc(),

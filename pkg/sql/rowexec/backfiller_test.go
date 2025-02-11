@@ -130,7 +130,7 @@ func TestWriteResumeSpan(t *testing.T) {
 	require.NoError(t, job.NoTxn().Update(ctx, func(
 		_ isql.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
-		ju.UpdateStatus(jobs.StatusRunning)
+		ju.UpdateState(jobs.StateRunning)
 		return nil
 	}))
 

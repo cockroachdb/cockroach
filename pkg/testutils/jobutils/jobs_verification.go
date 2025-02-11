@@ -26,37 +26,37 @@ import (
 // WaitForJobToSucceed waits for the specified job ID to succeed.
 func WaitForJobToSucceed(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StatusSucceeded)
+	waitForJobToHaveStatus(t, db, jobID, jobs.StateSucceeded)
 }
 
 // WaitForJobToPause waits for the specified job ID to be paused.
 func WaitForJobToPause(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StatusPaused)
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatePaused)
 }
 
 // WaitForJobToCancel waits for the specified job ID to be in a cancelled state.
 func WaitForJobToCancel(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StatusCanceled)
+	waitForJobToHaveStatus(t, db, jobID, jobs.StateCanceled)
 }
 
 // WaitForJobToRun waits for the specified job ID to be in a running state.
 func WaitForJobToRun(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StatusRunning)
+	waitForJobToHaveStatus(t, db, jobID, jobs.StateRunning)
 }
 
 // WaitForJobToFail waits for the specified job ID to be in a failed state.
 func WaitForJobToFail(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StatusFailed)
+	waitForJobToHaveStatus(t, db, jobID, jobs.StateFailed)
 }
 
 // WaitForJobReverting waits for the specified job ID to be in a reverting state.
 func WaitForJobReverting(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StatusReverting)
+	waitForJobToHaveStatus(t, db, jobID, jobs.StateReverting)
 }
 
 const (
@@ -76,20 +76,20 @@ const (
 )
 
 func waitForJobToHaveStatus(
-	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
+	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.State,
 ) {
 	t.Helper()
 	testutils.SucceedsWithin(t, func() error {
 		var status string
 		db.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", jobID).Scan(&status)
-		if jobs.Status(status) == jobs.StatusFailed {
-			if expectedStatus == jobs.StatusFailed {
+		if jobs.State(status) == jobs.StateFailed {
+			if expectedStatus == jobs.StateFailed {
 				return nil
 			}
 			payload := GetJobPayload(t, db, jobID)
 			t.Fatalf("job failed: %s", payload.Error)
 		}
-		if e, a := expectedStatus, jobs.Status(status); e != a {
+		if e, a := expectedStatus, jobs.State(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
@@ -180,7 +180,7 @@ func VerifySystemJob(
 	db *sqlutils.SQLRunner,
 	offset int,
 	filterType jobspb.Type,
-	expectedStatus jobs.Status,
+	expectedStatus jobs.State,
 	expected jobs.Record,
 ) error {
 	return verifySystemJob(t, db, offset, filterType, string(expectedStatus), "", expected)

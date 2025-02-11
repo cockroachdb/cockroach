@@ -290,7 +290,7 @@ ORDER BY created DESC LIMIT 1`, c.Args.DestTenantName)
 		// Grab the latest producer job on the destination cluster.
 		var status string
 		c.DestSysSQL.QueryRow(c.T, "SELECT status FROM system.jobs WHERE id = $1", retentionJobID).Scan(&status)
-		if jobs.Status(status) == jobs.StatusRunning || jobs.Status(status) == jobs.StatusSucceeded {
+		if jobs.State(status) == jobs.StateRunning || jobs.State(status) == jobs.StateSucceeded {
 			return nil
 		}
 		return errors.Newf("Unexpected status %s", status)
@@ -594,7 +594,7 @@ func WaitUntilReplicatedTime(
 			// Include job status in the error in case it is useful.
 			err = errors.Wrapf(err, "job status %s %s", jobStatus[0][0], jobStatus[0][1])
 			// Don't wait for an advance that is never happening if paused or failed.
-			if jobStatus[0][0] == string(jobs.StatusPaused) || jobStatus[0][0] == string(jobs.StatusFailed) {
+			if jobStatus[0][0] == string(jobs.StatePaused) || jobStatus[0][0] == string(jobs.StateFailed) {
 				t.Fatal(err)
 			}
 		}

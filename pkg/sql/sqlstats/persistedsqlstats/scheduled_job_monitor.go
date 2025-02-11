@@ -181,7 +181,7 @@ func (j *jobMonitor) updateSchedule(ctx context.Context, cronExpr string) {
 			if err := sj.SetScheduleAndNextRun(cronExpr); err != nil {
 				return err
 			}
-			sj.SetScheduleStatus(string(jobs.StatusPending))
+			sj.SetScheduleStatus(string(jobs.StatePending))
 			return jobs.ScheduledJobTxn(txn).Update(ctx, sj)
 		}); err != nil && ctx.Err() == nil {
 			log.Errorf(ctx, "failed to update stats scheduled compaction job: %s", err)

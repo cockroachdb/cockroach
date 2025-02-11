@@ -1867,7 +1867,7 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 
 		expectedJobID := jobIDs[rowIdx]
 		require.Equal(t, expectedJobID, jobID)
-		require.Equal(t, jobs.StatusRunning, jobs.Status(status))
+		require.Equal(t, jobs.StateRunning, jobs.State(status))
 
 		if expectedJobID == jobAID {
 			require.Equal(t, pq.StringArray{"a.public.tab"}, targets)

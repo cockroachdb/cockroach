@@ -1128,7 +1128,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 	}
 	oldJobMetadata := jobs.JobMetadata{
 		ID:       scJob.JobID,
-		Status:   jobs.StatusRunning,
+		State:    jobs.StateRunning,
 		Payload:  &oldPayload,
 		Progress: &oldProgress,
 	}

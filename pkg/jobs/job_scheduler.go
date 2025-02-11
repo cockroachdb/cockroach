@@ -106,7 +106,7 @@ func lookupNumRunningJobs(
 ) (int64, error) {
 	lookupStmt := fmt.Sprintf(
 		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND created_by_id = %d AND status IN %s",
-		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStatusTupleString)
+		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStateTupleString)
 	row, err := txn.QueryRowEx(
 		ctx, "lookup-num-running",
 		txn.KV(),

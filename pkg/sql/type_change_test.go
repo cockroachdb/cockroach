@@ -542,7 +542,7 @@ SELECT job_id FROM [SHOW JOBS]
 WHERE 
 	job_type = 'TYPEDESC SCHEMA CHANGE' AND 
 	status = $1
-	)`, jobs.StatusRunning)
+	)`, jobs.StateRunning)
 
 			if !tc.cancelable && !testutils.IsError(err, "not cancelable") {
 				t.Fatalf("expected type schema change job to be not cancelable; found %v ", err)

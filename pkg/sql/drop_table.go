@@ -452,20 +452,20 @@ func (p *planner) markTableMutationJobsSuccessful(
 		if err := mutationJob.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
-			status := md.Status
+			status := md.State
 			switch status {
-			case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
+			case jobs.StateSucceeded, jobs.StateCanceled, jobs.StateFailed, jobs.StateRevertFailed:
 				log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
 				return nil
-			case jobs.StatusRunning, jobs.StatusPending:
-				status = jobs.StatusSucceeded
+			case jobs.StateRunning, jobs.StatePending:
+				status = jobs.StateSucceeded
 			default:
 				// We shouldn't mark jobs as succeeded if they're not in a state where
 				// they're eligible to ever succeed, so mark them as failed.
-				status = jobs.StatusFailed
+				status = jobs.StateFailed
 			}
 			log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
-			ju.UpdateStatus(status)
+			ju.UpdateState(status)
 			return nil
 		}); err != nil {
 			return errors.Wrap(err, "updating mutation job for dropped table")

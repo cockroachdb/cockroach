@@ -217,7 +217,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 			// Re-initialize details after prepare step.
 			details = r.job.Details().(jobspb.ImportDetails)
-			emitImportJobEvent(ctx, p, jobs.StatusRunning, r.job)
+			emitImportJobEvent(ctx, p, jobs.StateRunning, r.job)
 		}
 
 		// Create a mapping from schemaID to schemaName.
@@ -371,7 +371,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}); err != nil {
 		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
-	emitImportJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+	emitImportJobEvent(ctx, p, jobs.StateSucceeded, r.job)
 
 	addToFileFormatTelemetry(details.Format.Format.String(), "succeeded")
 	telemetry.CountBucketed("import.rows", r.res.Rows)
@@ -1380,7 +1380,7 @@ func ingestWithRetry(
 
 // emitImportJobEvent emits an import job event to the event log.
 func emitImportJobEvent(
-	ctx context.Context, p sql.JobExecContext, status jobs.Status, job *jobs.Job,
+	ctx context.Context, p sql.JobExecContext, status jobs.State, job *jobs.Job,
 ) {
 	var importEvent eventpb.Import
 	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -1472,7 +1472,7 @@ func (r *importResumer) OnFailOrCancel(
 	p := execCtx.(sql.JobExecContext)
 
 	// Emit to the event log that the job has started reverting.
-	emitImportJobEvent(ctx, p, jobs.StatusReverting, r.job)
+	emitImportJobEvent(ctx, p, jobs.StateReverting, r.job)
 
 	// TODO(sql-exp): increase telemetry count for import.total.failed and
 	// import.duration-sec.failed.
@@ -1531,7 +1531,7 @@ func (r *importResumer) OnFailOrCancel(
 	}
 
 	// Emit to the event log that the job has completed reverting.
-	emitImportJobEvent(ctx, p, jobs.StatusFailed, r.job)
+	emitImportJobEvent(ctx, p, jobs.StateFailed, r.job)
 
 	return nil
 }
@@ -1807,7 +1807,7 @@ func (r *importResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 	select {
 	case resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(r.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDString(string(jobs.StateSucceeded)),
 		tree.NewDFloat(tree.DFloat(1.0)),
 		tree.NewDInt(tree.DInt(r.res.Rows)),
 		tree.NewDInt(tree.DInt(r.res.IndexEntries)),

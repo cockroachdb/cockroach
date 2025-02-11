@@ -18,7 +18,7 @@ import (
 )
 
 // RunningJobExists checks that whether there are any job of the given types
-// in the pending, running, or paused status, optionally ignoring the job with
+// in the pending, running, or paused state, optionally ignoring the job with
 // the ID specified by ignoreJobID as well as any jobs created after it, if
 // the passed ID is not InvalidJobID.
 func RunningJobExists(
@@ -43,7 +43,7 @@ FROM
   system.jobs@jobs_status_created_idx
 WHERE
 	job_type IN ` + typeStrs + ` AND
-  status IN ` + NonTerminalStatusTupleString + orderBy + `
+  status IN ` + NonTerminalStateTupleString + orderBy + `
 LIMIT 1`
 	it, err := txn.QueryIterator(
 		ctx,
@@ -70,7 +70,7 @@ LIMIT 1`
 }
 
 // RunningJobs returns the IDs of all jobs of the given types in the pending,
-// running, or paused status, optionally ignoring the job with the ID specified
+// running, or paused state, optionally ignoring the job with the ID specified
 // by ignoreJobID as well as any jobs created after it, if the passed ID is not
 // InvalidJobID.
 func RunningJobs(
@@ -95,7 +95,7 @@ FROM
   system.jobs@jobs_status_created_idx
 WHERE
 	job_type IN ` + typeStrs + ` AND
-  status IN ` + NonTerminalStatusTupleString + orderBy
+  status IN ` + NonTerminalStateTupleString + orderBy
 	it, err := txn.QueryIterator(
 		ctx,
 		"find-all-running-jobs-of-type",

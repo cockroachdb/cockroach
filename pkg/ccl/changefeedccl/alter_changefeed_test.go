@@ -118,7 +118,7 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 			row := userDB.QueryRow(t, "CREATE CHANGEFEED for table_a INTO 'external://first'")
 			row.Scan(&jobID)
 			userDB.Exec(t, `PAUSE JOB $1`, jobID)
-			waitForJobStatus(userDB, t, catpb.JobID(jobID), `paused`)
+			waitForJobState(userDB, t, catpb.JobID(jobID), `paused`)
 		})
 
 		// user1 is missing the CHANGEFEED privilege on table_b and table_c.
@@ -170,7 +170,7 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 			row := userDB.QueryRow(t, "CREATE CHANGEFEED for table_a INTO 'kafka://foo'")
 			row.Scan(&jobID)
 			userDB.Exec(t, `PAUSE JOB $1`, jobID)
-			waitForJobStatus(userDB, t, catpb.JobID(jobID), `paused`)
+			waitForJobState(userDB, t, catpb.JobID(jobID), `paused`)
 		})
 
 		// user2 is missing the SELECT privilege on table_b and table_c.
@@ -212,12 +212,12 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 		require.True(t, ok)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(1)`)
 		assertPayloads(t, testFeed, []string{
@@ -272,12 +272,12 @@ func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 		})
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD foo FAMILY onlyb`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(37, 'goodbye')`)
 		assertPayloads(t, testFeed, []string{
 			// Note that we don't see foo.onlyb.[42] here, because we're not
@@ -331,12 +331,12 @@ func TestAlterChangefeedSwitchFamily(t *testing.T) {
 		})
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD foo FAMILY onlyb DROP foo FAMILY onlya`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
 		assertPayloads(t, testFeed, []string{
@@ -366,12 +366,12 @@ func TestAlterChangefeedDropTarget(t *testing.T) {
 		require.True(t, ok)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP bar`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(1)`)
 		assertPayloads(t, testFeed, []string{
@@ -402,12 +402,12 @@ func TestAlterChangefeedDropTargetAfterTableDrop(t *testing.T) {
 
 		// Drop bar table.  This should cause the job to be paused.
 		sqlDB.Exec(t, `DROP TABLE bar`)
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP bar`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(1)`)
 		assertPayloads(t, testFeed, []string{
@@ -433,12 +433,12 @@ func TestAlterChangefeedDropTargetFamily(t *testing.T) {
 		require.True(t, ok)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP foo FAMILY onlyb`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(1, 'hello')`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
@@ -467,12 +467,12 @@ func TestAlterChangefeedSetDiffOption(t *testing.T) {
 		require.True(t, ok)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		assertPayloads(t, testFeed, []string{
@@ -499,7 +499,7 @@ func TestAlterChangefeedRespectsCDCQuery(t *testing.T) {
 		require.True(t, ok)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff`, feed.JobID()))
 		registry := s.Server.JobRegistry().(*jobs.Registry)
@@ -540,12 +540,12 @@ func TestAlterChangefeedUnsetDiffOption(t *testing.T) {
 		require.True(t, ok)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d UNSET diff`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		assertPayloads(t, testFeed, []string{
@@ -590,7 +590,7 @@ func TestAlterChangefeedErrors(t *testing.T) {
 		)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.ExpectErr(t,
 			`pq: target "TABLE baz" does not exist`,
@@ -669,7 +669,7 @@ func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 		require.True(t, ok)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.ExpectErr(t,
 			`cannot drop all targets`,
@@ -784,12 +784,12 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR TABLE foo, bar INTO $1`, unredactedSinkURI).Scan(&changefeedID)
 
 	sqlDB.Exec(t, `PAUSE JOB $1`, changefeedID)
-	waitForJobStatus(sqlDB, t, changefeedID, `paused`)
+	waitForJobState(sqlDB, t, changefeedID, `paused`)
 
 	sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff`, changefeedID))
 
 	sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, changefeedID))
-	waitForJobStatus(sqlDB, t, changefeedID, `running`)
+	waitForJobState(sqlDB, t, changefeedID, `running`)
 
 	job, err := registry.LoadJob(ctx, changefeedID)
 	require.NoError(t, err)
@@ -815,7 +815,7 @@ func TestAlterChangefeedChangeSinkTypeError(t *testing.T) {
 		require.True(t, ok)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.ExpectErr(t,
 			`pq: New sink type "null" does not match original sink type "kafka". Altering the sink type of a changefeed is disallowed, consider creating a new changefeed instead.`,
@@ -844,14 +844,14 @@ func TestAlterChangefeedChangeSinkURI(t *testing.T) {
 		require.True(t, ok)
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		newSinkURI := `kafka://new_kafka_uri`
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET sink = '%s'`, feed.JobID(), newSinkURI))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
 		job, err := registry.LoadJob(ctx, feed.JobID())
 		require.NoError(t, err)
@@ -912,7 +912,7 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		require.True(t, ok)
 
 		require.NoError(t, feed.Pause())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO bar VALUES (1), (2), (3)`)
@@ -941,7 +941,7 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		})
 
 		require.NoError(t, feed.Pause())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.Exec(t, `CREATE TABLE baz (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO baz VALUES (1), (2), (3)`)
@@ -1339,7 +1339,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		})
 
 		require.NoError(t, jobFeed.Pause())
-		waitForJobStatus(sqlDB, t, jobFeed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, jobFeed.JobID(), `paused`)
 
 		errMsg := fmt.Sprintf(
 			`pq: cannot perform initial scan on newly added targets while the checkpoint is non-empty, please unpause the changefeed and wait until the high watermark progresses past the current value %s to add these targets.`,
@@ -1518,12 +1518,12 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 			require.True(t, ok)
 
 			sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-			waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+			waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
 			sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH %s`, feed.JobID(), initialScanOption))
 
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-			waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+			waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
 			expectPayloads := (initialScanOption == "initial_scan = 'yes'" || initialScanOption == "initial_scan")
 			if expectPayloads {
@@ -1587,7 +1587,7 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 		})
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, castedFeed.JobID())
-		waitForJobStatus(sqlDB, t, castedFeed.JobID(), `paused`)
+		waitForJobState(sqlDB, t, castedFeed.JobID(), `paused`)
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'after')`)
 
@@ -1605,7 +1605,7 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d UNSET resolved`, castedFeed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, castedFeed.JobID()))
-		waitForJobStatus(sqlDB, t, castedFeed.JobID(), `running`)
+		waitForJobState(sqlDB, t, castedFeed.JobID(), `running`)
 
 		assertPayloads(t, testFeed, []string{
 			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
@@ -1642,7 +1642,7 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 			currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
 		})
 		rootDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
-		waitForJobStatus(rootDB, t, currentFeed.JobID(), `paused`)
+		waitForJobState(rootDB, t, currentFeed.JobID(), `paused`)
 
 		// Verify who can modify the existing changefeed.
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
@@ -1669,8 +1669,8 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 		})
 		asUser(t, f, `otherAdminUser`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
-			require.NoError(t, currentFeed.WaitForStatus(func(s jobs.Status) bool {
-				return s == jobs.StatusPaused
+			require.NoError(t, currentFeed.WaitForState(func(s jobs.State) bool {
+				return s == jobs.StatePaused
 			}))
 		})
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {

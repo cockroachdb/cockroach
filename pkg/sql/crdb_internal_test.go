@@ -1314,7 +1314,7 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 
 	tdb.Exec(t,
 		"INSERT INTO system.jobs (id, status, created) values ($1, $2, $3)",
-		1, jobs.StatusRunning, timeutil.Now(),
+		1, jobs.StateRunning, timeutil.Now(),
 	)
 	tdb.Exec(t,
 		"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",
@@ -1324,7 +1324,7 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	tdb.Exec(t,
 		`INSERT INTO system.jobs (id, status, created, created_by_type, created_by_id, 
                          claim_session_id, claim_instance_id, num_runs, last_run, job_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		2, jobs.StatusRunning, timeutil.Now(), "created by", 2, []byte("claim session id"),
+		2, jobs.StateRunning, timeutil.Now(), "created by", 2, []byte("claim session id"),
 		2, 2, timeutil.Now(), jobspb.TypeImport.String(),
 	)
 	tdb.Exec(t,

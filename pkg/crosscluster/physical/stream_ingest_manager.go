@@ -99,7 +99,7 @@ func getReplicationStatsAndStatus(
 	if err != nil {
 		return nil, jobspb.ReplicationError.String(), err
 	}
-	if job.Status() == jobs.StatusPaused {
+	if job.State() == jobs.StatePaused {
 		return stats, jobspb.ReplicationPaused.String(), nil
 	}
 	return stats, stats.IngestionProgress.ReplicationStatus.String(), nil

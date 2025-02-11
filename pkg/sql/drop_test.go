@@ -205,7 +205,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	// Job still running, waiting for GC.
 	// TODO (lucy): Maybe this test API should use an offset starting
 	// from the most recent job instead.
-	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 		Username:      username.RootUserName(),
 		Description:   "DROP DATABASE t CASCADE",
 		DescriptorIDs: nil,
@@ -368,7 +368,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0,
-		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 			Username:    username.RootUserName(),
 			Description: "DROP DATABASE t CASCADE",
 		}); err != nil {
@@ -398,7 +398,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StateRunning, jobs.Record{
 			Username:    username.NodeUserName(),
 			Description: "GC for DROP DATABASE t CASCADE",
 			DescriptorIDs: descpb.IDs{
@@ -426,7 +426,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), table2Span, 0)
 
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StateSucceeded, jobs.Record{
 			Username:    username.NodeUserName(),
 			Description: "GC for DROP DATABASE t CASCADE",
 			DescriptorIDs: descpb.IDs{
@@ -495,7 +495,7 @@ func TestDropIndex(t *testing.T) {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 		Username:    username.RootUserName(),
 		Description: `DROP INDEX t.public.kv@foo`,
 	}); err != nil {
@@ -535,7 +535,7 @@ func TestDropIndex(t *testing.T) {
 			},
 		}); err != nil {
 			// If the job is not running, check if it already succeeded.
-			if secondErr := jobutils.VerifySystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+			if secondErr := jobutils.VerifySystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, jobs.StateSucceeded, jobs.Record{
 				Username:    username.NodeUserName(),
 				Description: `GC for CREATE INDEX foo ON t.public.kv (v)`,
 				DescriptorIDs: descpb.IDs{
@@ -698,7 +698,7 @@ func TestDropTable(t *testing.T) {
 	// Job still running, waiting for GC.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 1,
-		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 			Username:      username.RootUserName(),
 			Description:   `DROP TABLE t.public.kv`,
 			DescriptorIDs: nil,
@@ -813,7 +813,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	for i := 0; i < numTables; i++ {
 		if err := jobutils.VerifySystemJob(t, sqlRun, numTables+i,
-			jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+			jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 				Username:    username.RootUserName(),
 				Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
 			}); err != nil {
@@ -839,7 +839,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 		// Ensure that the job is marked as succeeded.
 		if err := jobutils.VerifySystemJob(t, sqlRun, numTables+i,
-			jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+			jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 				Username:    username.RootUserName(),
 				Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
 			}); err != nil {
@@ -849,7 +849,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		// Ensure that the gc job is marked as succeeded.
 		testutils.SucceedsSoon(t, func() error {
 			return jobutils.VerifySystemJob(t, sqlRun, numTables+i,
-				jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+				jobspb.TypeSchemaChangeGC, jobs.StateSucceeded, jobs.Record{
 					Username:    username.NodeUserName(),
 					Description: fmt.Sprintf(`GC for DROP TABLE t.public.%s`, descs[i].GetName()),
 					DescriptorIDs: descpb.IDs{
