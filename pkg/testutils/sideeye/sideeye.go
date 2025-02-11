@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/DataExMachina-dev/side-eye-go/sideeye"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 type testingT interface {
 	require.TestingT
-	TestFatalerLogger
+	testutils.TestFatalerLogger
 }
 
 // CaptureSideEyeSnapshot captures a Side-Eye snapshot if the
@@ -39,7 +40,7 @@ func CaptureSideEyeSnapshot(ctx context.Context, t testingT) {
 	require.NoError(t, err)
 
 	var name string
-	if t, ok := t.(TestNamedFatalerLogger); ok {
+	if t, ok := t.(testutils.TestNamedFatalerLogger); ok {
 		name = t.Name()
 	} else {
 		name = "unknown test"
