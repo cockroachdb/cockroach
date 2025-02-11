@@ -65,6 +65,9 @@ func TestVectorIndex(t *testing.T) {
 			case "search-for-insert":
 				return state.SearchForInsert(d)
 
+			case "search-for-delete":
+				return state.SearchForDelete(d)
+
 			case "insert":
 				return state.Insert(d)
 
@@ -154,7 +157,7 @@ func (s *testState) FormatTree(d *datadriven.TestData) string {
 }
 
 func (s *testState) Search(d *datadriven.TestData) string {
-	var vector vector.T
+	var vec vector.T
 	searchSet := vecstore.SearchSet{MaxResults: 1}
 	options := SearchOptions{}
 
@@ -165,7 +168,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 			require.Len(s.T, arg.Vals, 1)
 			offset, err := strconv.Atoi(arg.Vals[0])
 			require.NoError(s.T, err)
-			vector = s.Features.At(offset)
+			vec = s.Features.At(offset)
 
 		case "max-results":
 			require.Len(s.T, arg.Vals, 1)
@@ -183,14 +186,14 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		}
 	}
 
-	if vector == nil {
+	if vec == nil {
 		// Parse input as the vector to search for.
-		vector = s.parseVector(d.Input)
+		vec = s.parseVector(d.Input)
 	}
 
 	// Search the index within a transaction.
 	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-	err = s.Index.Search(s.Ctx, txn, vector, &searchSet, options)
+	err = s.Index.Search(s.Ctx, txn, vec, &searchSet, options)
 	require.NoError(s.T, err)
 	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -263,6 +266,36 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 	return buf.String()
 }
 
+func (s *testState) SearchForDelete(d *datadriven.TestData) string {
+	var buf bytes.Buffer
+
+	for _, line := range strings.Split(d.Input, "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+
+		key, vec := s.parseKeyAndVector(line)
+
+		// Search within a transaction.
+		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+		result, err := s.Index.SearchForDelete(s.Ctx, txn, vec, key)
+		require.NoError(s.T, err)
+		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+
+		if result == nil {
+			fmt.Fprintf(&buf, "%s: vector not found\n", string(key))
+		} else {
+			fmt.Fprintf(&buf, "%s: partition %d\n", string(key), result.ParentPartitionKey)
+		}
+	}
+
+	// Handle any fixups triggered by the search.
+	s.Index.ProcessFixups()
+
+	return buf.String()
+}
+
 func (s *testState) Insert(d *datadriven.TestData) string {
 	var err error
 	hideTree := false
@@ -322,6 +355,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 		if (i+1)%step == 0 && !noFixups {
+			// Run synchronous fixups so that test results are deterministic.
 			s.Index.ProcessFixups()
 		}
 	}
@@ -357,21 +391,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 			continue
 		}
 
-		// If vector to delete has a colon, then its value is specified as well
-		// as its name. This is useful for forcing a certain value to delete.
-		var key vecstore.PrimaryKey
-		var vec vector.T
-		parts := strings.Split(line, ":")
-		if len(parts) == 1 {
-			// Get the value from the store.
-			key = vecstore.PrimaryKey(line)
-			vec = s.InMemStore.GetVector(key)
-		} else {
-			require.Len(s.T, parts, 2)
-			// Parse the value after the colon.
-			key = vecstore.PrimaryKey(parts[0])
-			vec = s.parseVector(parts[1])
-		}
+		key, vec := s.parseKeyAndVector(line)
 
 		// Delete within the scope of a transaction.
 		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
@@ -611,6 +631,23 @@ func (s *testState) parseVector(str string) vector.T {
 	}
 
 	return vector
+}
+
+// parseKeyAndVector parses a line that may contain a key and vector separated
+// by a colon. If there's no colon, it treats the line as just a key and gets
+// the vector from the store.
+func (s *testState) parseKeyAndVector(line string) (vecstore.PrimaryKey, vector.T) {
+	parts := strings.Split(line, ":")
+	if len(parts) == 1 {
+		// Get the value from the store.
+		key := vecstore.PrimaryKey(line)
+		return key, s.InMemStore.GetVector(key)
+	}
+
+	// Parse the value after the colon.
+	require.Len(s.T, parts, 2)
+	key := vecstore.PrimaryKey(parts[0])
+	return key, s.parseVector(parts[1])
 }
 
 func beginTransaction(ctx context.Context, t *testing.T, store vecstore.Store) vecstore.Txn {
