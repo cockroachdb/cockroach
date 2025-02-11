@@ -20,19 +20,19 @@ for pkg in "${TEST_PACKAGES[@]}"; do
   for sha in "${shas[@]}"; do
     pkg_bin=$(echo "${pkg}" | tr '/' '_')
     url="gs://${storage_bucket}/builds/${sha}/bin/${pkg_bin}"
-    dest="$working_dir/$sha/bin/"
+    dest="$working_dir/$sha/bin"
     mkdir -p "$dest"
     gcloud storage cp "${url}" "$dest/${pkg_bin}"
     chmod +x "$dest/${pkg_bin}"
   done
 done
 
-# Get the microbenchmark CI utility (HEAD version)
-gcloud storage cp "gs://${storage_bucket}/builds/${HEAD_SHA}/bin/microbench-ci" "$working_dir/microbench-ci"
-chmod +x "$working_dir/microbench-ci"
-
 # Run the microbenchmarks
-"$working_dir/microbench-ci" run --group="$GROUP" --working-dir="$working_dir" --old="$BASE_SHA" --new="$HEAD_SHA"
+./build/github/microbenchmarks/util.sh run \
+  --group="$GROUP" \
+  --working-dir="$working_dir" \
+  --old="$BASE_SHA" \
+  --new="$HEAD_SHA"
 
 # Copy benchmark results to GCS
 curl -H "Metadata-Flavor: Google" \
