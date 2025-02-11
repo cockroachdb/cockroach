@@ -739,7 +739,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	if physicalStores > 0 {
 		perStoreLimit := pebble.FileCacheSize(int(openFileLimitPerStore))
 		totalFileLimit := perStoreLimit * physicalStores
-		fileCache = pebble.NewFileCache(pebbleCache, runtime.GOMAXPROCS(0), totalFileLimit)
+		fileCache = pebble.NewFileCache(runtime.GOMAXPROCS(0), totalFileLimit)
 	}
 
 	var storeKnobs kvserver.StoreTestingKnobs
