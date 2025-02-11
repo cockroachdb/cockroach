@@ -9,6 +9,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb";
 
 import "kv/kvserver/kvflowcontrol/kvflowinspectpb/kvflowinspect.proto";
 import "kv/kvserver/storeliveness/storelivenesspb/service.proto";
+import "kv/kvserver/rangefeed/rangefeedpb/service.proto";
 
 // Inspectz exposes in-memory state of various CRDB components.
 //
@@ -50,6 +51,8 @@ service Inspectz {
   rpc StoreLivenessSupportFor(kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessRequest)
       returns (kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessResponse) {}
 
+  rpc Rangefeed(kv.kvserver.rangefeed.rangefeedpb.InspectStoreRangefeedsRequest)
+    returns (kv.kvserver.rangefeed.rangefeedpb.InspectStoreRangefeedsResponse) {}
 }
 
 // As of 04/23, we're not invoking these RPC interfaces as RPCs. But they're

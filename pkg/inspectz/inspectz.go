@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,6 +36,7 @@ type Server struct {
 	handlesV1, handlesV2                   kvflowcontrol.InspectHandles
 	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController
 	storeLiveness                          kvserver.InspectAllStoreLiveness
+	rangefeed                              kvserver.InspectAllRangefeeds
 }
 
 var _ inspectzpb.InspectzServer = &Server{}
@@ -45,6 +47,7 @@ func NewServer(
 	handlesV1, handlesV2 kvflowcontrol.InspectHandles,
 	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController,
 	storeLiveness kvserver.InspectAllStoreLiveness,
+	rangefeed kvserver.InspectAllRangefeeds,
 ) *Server {
 	mux := http.NewServeMux()
 	server := &Server{
@@ -56,6 +59,7 @@ func NewServer(
 		kvflowControllerV1: kvflowControllerV1,
 		kvflowControllerV2: kvflowControllerV2,
 		storeLiveness:      storeLiveness,
+		rangefeed:          rangefeed,
 	}
 	mux.Handle("/inspectz/v1/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandles))
 	mux.Handle("/inspectz/v1/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowController))
@@ -170,6 +174,13 @@ func (s *Server) StoreLivenessSupportFrom(
 	support, err := s.storeLiveness.InspectAllSupportFrom()
 	resp.SupportStatesPerStore = support
 	return resp, err
+}
+
+func (s *Server) Rangefeed(
+	_ context.Context, _ *rangefeedpb.InspectStoreRangefeedsRequest,
+) (*rangefeedpb.InspectStoreRangefeedsResponse, error) {
+	resp := &rangefeedpb.InspectStoreRangefeedsResponse{}
+	return resp, nil
 }
 
 // StoreLivenessSupportFor implements the InspectzServer interface.
