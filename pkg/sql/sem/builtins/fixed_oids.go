@@ -2649,6 +2649,10 @@ var builtinOidsArray = []string{
 	2686: `jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb) -> jsonb`,
 	2687: `jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> jsonb`,
 	2688: `crdb_internal.backup_compaction(backup_stmt: string, start_time: decimal, end_time: decimal) -> int`,
+	2689: `any_send(any: any) -> bytes`,
+	2690: `any_recv(input: anyelement) -> any`,
+	2691: `any_out(any: any) -> bytes`,
+	2692: `any_in(input: anyelement) -> any`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

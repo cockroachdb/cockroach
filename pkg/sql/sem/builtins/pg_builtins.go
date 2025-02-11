@@ -65,6 +65,7 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
+	types.Any.Oid():         {},
 	types.AnyElement.Oid():  {},
 	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
