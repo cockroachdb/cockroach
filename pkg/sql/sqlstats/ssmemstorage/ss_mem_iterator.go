@@ -32,8 +32,8 @@ func NewStmtStatsIterator(
 ) StmtStatsIterator {
 	var stmtKeys stmtList
 	func() {
-		container.mu.RLock()
-		defer container.mu.RUnlock()
+		container.mu.Lock()
+		defer container.mu.Unlock()
 		for k := range container.mu.stmts {
 			stmtKeys = append(stmtKeys, k)
 		}
@@ -67,8 +67,7 @@ func (s *StmtStatsIterator) Next() bool {
 
 	stmtKey := s.stmtKeys[s.idx]
 
-	statementStats, _, _ :=
-		s.container.getStatsForStmtWithKey(stmtKey, invalidStmtFingerprintID, false /* createIfNonexistent */)
+	statementStats := s.container.getStatsForStmtWithKey(stmtKey)
 
 	// If the key is not found (and we expected to find it), the table must
 	// have been cleared between now and the time we read all the keys. In
@@ -173,7 +172,7 @@ func (t *TxnStatsIterator) Next() bool {
 	// We don't want to create the key if it doesn't exist, so it's okay to
 	// pass nil for the statementFingerprintIDs, as they are only set when a key is
 	// constructed.
-	txnStats, _, _ := t.container.getStatsForTxnWithKey(txnKey, nil /* stmtFingerprintIDs */, false /* createIfNonexistent */)
+	txnStats := t.container.getStatsForTxnWithKey(txnKey)
 
 	// If the key is not found (and we expected to find it), the table must
 	// have been cleared between now and the time we read all the keys. In

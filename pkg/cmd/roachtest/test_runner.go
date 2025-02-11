@@ -830,7 +830,6 @@ func (r *testRunner) runWorker(
 			buildVersion:           binaryVersion,
 			artifactsDir:           testArtifactsDir,
 			artifactsSpec:          artifactsSpec,
-			l:                      testL,
 			versionsBinaryOverride: topt.versionsBinaryOverride,
 			skipInit:               topt.skipInit,
 			debug:                  clustersOpt.debugMode.IsDebug(),
@@ -838,6 +837,7 @@ func (r *testRunner) runWorker(
 			exportOpenmetrics:      topt.exportOpenMetrics,
 			runID:                  generateRunID(clustersOpt),
 		}
+		t.ReplaceL(testL)
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
 		// handleClusterCreationFailure can be called when the `err` given
