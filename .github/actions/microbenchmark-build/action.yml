@@ -11,6 +11,12 @@ outputs:
   merge_base:
     description: "merge base"
     value: ${{ steps.determine-merge-base.outputs.merge_base }}
+  extended:
+    description: "extended run"
+    value: ${{ steps.config.outputs.extended }}
+  config:
+    description: "config"
+    value: ${{ steps.config.outputs.config }}
 
 runs:
   using: "composite"
@@ -23,8 +29,7 @@ runs:
     - run: |
         echo "FETCH_DEPTH=$(( ${{ github.event.pull_request.commits }} + 1 ))" >> "${GITHUB_ENV}"
       shell: bash
-    - name: Checkout revision with limited depth
-      if: inputs.ref == 'base'
+    - name: Checkout revision with required depth
       uses: actions/checkout@v4
       with:
         ref: ${{ github.event.pull_request.head.sha }}
@@ -38,7 +43,18 @@ runs:
         MERGE_BASE=$(git rev-parse HEAD~${NUM_COMMITS})
         echo "merge_base=$MERGE_BASE" >> "$GITHUB_OUTPUT"
       shell: bash
-    - name: Checkout build commit
+    - name: Config
+      id: config
+      run: |
+        if ${{ contains(github.event.pull_request.labels.*.name, 'T-microbench-extended') }}; then
+          echo "extended=true" >> "$GITHUB_OUTPUT"
+          echo "config=pull-request-ext-suite.yml" >> "$GITHUB_OUTPUT"
+        else
+          echo "extended=false" >> "$GITHUB_OUTPUT"
+          echo "config=pull-request-suite.yml" >> "$GITHUB_OUTPUT"
+        fi
+      shell: bash
+    - name: Checkout base if needed
       if: inputs.ref == 'base'
       uses: actions/checkout@v4
       with:
@@ -48,11 +64,9 @@ runs:
       shell: bash
       env:
         TEST_PKG: ${{ inputs.pkg }}
-    - name: Checkout Head # required for post job cleanup (if still on the base ref)
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.pull_request.head.sha || github.ref }}
+    - name: Checkout # required for post job cleanup (if still on the base ref)
       if: inputs.ref == 'base'
+      uses: actions/checkout@v4
     - name: Clean up
       run: ./build/github/cleanup-engflow-keys.sh
       shell: bash
