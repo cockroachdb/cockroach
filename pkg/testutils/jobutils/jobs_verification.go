@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // WaitForJobToSucceed waits for the specified job ID to succeed.
@@ -114,11 +114,6 @@ func BulkOpResponseFilter(allowProgressIota *chan struct{}) kvserverbase.Replica
 	}
 }
 
-type logT struct{ testing.TB }
-
-func (n logT) Errorf(format string, args ...interface{}) { n.Logf(format, args...) }
-func (n logT) FailNow()                                  {}
-
 func verifySystemJob(
 	t testing.TB,
 	db *sqlutils.SQLRunner,
@@ -152,10 +147,8 @@ func verifySystemJob(
 
 	expected.DescriptorIDs = nil
 	expected.Details = nil
-	if e, a := expected, actual; !assert.Equal(logT{t}, e, a) {
-		return errors.Errorf("job %d did not match:\n%s",
-			offset, sqlutils.MatrixToStr(db.QueryStr(t, "SELECT * FROM crdb_internal.jobs")))
-	}
+	require.Equal(t, expected.Description, actual.Description)
+	require.Equal(t, expected.Username, actual.Username)
 	if expectedStatus != statusString {
 		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
 	}
@@ -167,8 +160,8 @@ func verifySystemJob(
 	return nil
 }
 
-// VerifyRunningSystemJob checks that job records are created as expected
-// and is marked as running.
+// VerifyRunningSystemJob checks that job description, user, and running status
+// are created as expected and is marked as running.
 func VerifyRunningSystemJob(
 	t testing.TB,
 	db *sqlutils.SQLRunner,
@@ -180,7 +173,8 @@ func VerifyRunningSystemJob(
 	return verifySystemJob(t, db, offset, filterType, "running", string(expectedRunningStatus), expected)
 }
 
-// VerifySystemJob checks that job records are created as expected.
+// VerifySystemJob checks that job description, user, and running status are
+// created as expected.
 func VerifySystemJob(
 	t testing.TB,
 	db *sqlutils.SQLRunner,

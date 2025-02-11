@@ -18,6 +18,6 @@ go_library(
         "//pkg/testutils/sqlutils",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
