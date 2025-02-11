@@ -782,6 +782,6 @@ func TestLatchStringAndSafeformat(t *testing.T) {
 		prev: nil,
 	}
 	require.EqualValues(t, `00011{-\x00}@0.000000010,0 for request Get ["a"]`, la.String())
-	require.EqualValues(t, `‹00011{-\x00}›@0.000000010,0 for request Get [‹"a"›]`, redact.Sprint(la))
-	require.EqualValues(t, `‹×›@0.000000010,0 for request Get [‹×›]`, redact.Sprint(la).Redact())
+	require.EqualValues(t, `‹00011›{-‹\x00›}@0.000000010,0 for request Get [‹"a"›]`, redact.Sprint(la))
+	require.EqualValues(t, `‹×›{-‹×›}@0.000000010,0 for request Get [‹×›]`, redact.Sprint(la).Redact())
 }

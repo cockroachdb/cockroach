@@ -1,4 +1,4 @@
 echo
 ----
 replica unavailable: (n1,s2):3 unable to serve request to r123:/M{in-ax} [(n1,s2):1, next=2, gen=0]: slow proposal
-replica unavailable: (n1,s2):3 unable to serve request to r123:‹/M{in-ax}› [(n1,s2):1, next=2, gen=0]: slow proposal
+replica unavailable: (n1,s2):3 unable to serve request to r123:/M{in-ax} [(n1,s2):1, next=2, gen=0]: slow proposal
