@@ -391,8 +391,8 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 	// Fills the in-memory stats for the 'bench' application until the fingerprint limit is reached.
 	fillBenchAppMemStats := func() {
 		appContainer := sqlStats.SQLStats.GetApplicationStats("bench")
-		mockStmtValue := sqlstats.RecordedStmtStats{}
 		for i := int64(1); i <= stmtFingerprintLimit; i++ {
+			mockStmtValue := sqlstats.RecordedStmtStats{FingerprintID: appstatspb.StmtFingerprintID(i)}
 			stmtKey := appstatspb.StatementStatisticsKey{
 				Query:                    "SELECT 1",
 				App:                      "bench",

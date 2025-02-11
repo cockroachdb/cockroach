@@ -48,17 +48,17 @@ func (s *Container) RecordStatement(
 	}
 
 	statementKey := stmtKey{
-		sampledPlanKey: sampledPlanKey{
-			stmtNoConstants: key.Query,
-			implicitTxn:     key.ImplicitTxn,
-			database:        key.Database,
-		},
+		fingerprintID:            value.FingerprintID,
 		planHash:                 key.PlanHash,
 		transactionFingerprintID: key.TransactionFingerprintID,
 	}
 
 	// Get the statistics object.
-	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, value.FingerprintID)
+	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, sampledPlanKey{
+		stmtNoConstants: key.Query,
+		implicitTxn:     key.ImplicitTxn,
+		database:        key.Database,
+	})
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
 	// record anything and abort the operation.
@@ -119,7 +119,6 @@ func (s *Container) RecordStatement(
 	stats.mu.vectorized = key.Vec
 	stats.mu.distSQLUsed = key.DistSQL
 	stats.mu.fullScan = value.FullScan
-	stats.mu.database = value.Database
 	stats.mu.querySummary = key.QuerySummary
 
 	if created {
@@ -128,7 +127,7 @@ func (s *Container) RecordStatement(
 
 		// We also account for the memory used for s.sampledStatementCache.
 		// timestamp size + key size + hash.
-		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
+		estimatedMemoryAllocBytes += timestampSize + 8
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
