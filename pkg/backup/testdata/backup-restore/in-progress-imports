@@ -227,8 +227,6 @@ DROP TABLE d.foo;
 DROP TABLE d.foofoo;
 DROP TABLE d.baz;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 
 
 restore aost=t0
@@ -298,9 +296,6 @@ DROP TABLE d.foo;
 DROP TABLE d.foofoo;
 DROP TABLE d.baz;
 ----
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-
 
 exec-sql
 RESTORE TABLE d.* FROM LATEST IN 'nodelocal://1/table/' WITH into_db= d;
