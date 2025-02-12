@@ -9,13 +9,16 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -23,8 +26,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
+
+type flushBucket struct {
+	aggInterval  time.Duration
+	aggregatedTs time.Time
+	nodeID       base.SQLInstanceID
+}
+
+func (s *PersistedSQLStats) getBucket() flushBucket {
+	return flushBucket{
+		aggInterval:  s.GetAggregationInterval(),
+		aggregatedTs: s.ComputeAggregatedTs(),
+		nodeID:       s.GetEnabledSQLInstanceID(),
+	}
+}
 
 // MaybeFlush flushes in-memory sql stats into a system table, returning true if the flush
 // was attempted. Any errors encountered will be logged as warning. We may return
@@ -33,6 +49,12 @@ import (
 // 2. The flush is called too soon after the last flush (`sql.stats.flush.minimum_interval`).
 // 3. We have reached the limit of the number of rows in the system table.
 func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stopper) bool {
+	return s.MaybeFlushWithDrainer(ctx, stopper, s.SQLStats)
+}
+
+func (s *PersistedSQLStats) MaybeFlushWithDrainer(
+	ctx context.Context, stopper *stop.Stopper, ssDrainer sqlstats.SSDrainer,
+) bool {
 	now := s.getTimeNow()
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
 	minimumFlushInterval := MinimumInterval.Get(&s.cfg.Settings.SV)
@@ -41,12 +63,12 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 	flushingTooSoon := now.Before(s.lastFlushStarted.Add(minimumFlushInterval))
 
 	// Reset stats is performed individually for statement and transaction stats
-	// within SQLStats.ConsumeStats function. Here, we reset stats only when
+	// within SSDrainer.DrainStats function. Here, we reset stats only when
 	// sql stats flush is disabled.
 	if !enabled && allowDiscardWhenDisabled {
 		defer func() {
-			if err := s.SQLStats.Reset(ctx); err != nil {
-				log.Warningf(ctx, "fail to reset in-memory SQL Stats: %s", err)
+			if err := ssDrainer.Reset(ctx); err != nil {
+				log.Warningf(ctx, "fail to reset SQL Stats: %s", err)
 			}
 		}()
 	}
@@ -61,16 +83,6 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 			"The minimum interval between flushes is %s", minimumFlushInterval.String())
 		return false
 	}
-
-	fingerprintCount := s.SQLStats.GetTotalFingerprintCount()
-	s.cfg.FlushedFingerprintCount.Inc(fingerprintCount)
-	if log.V(1) {
-		log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
-			fingerprintCount, s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
-	}
-	s.lastFlushStarted = now
-
-	aggregatedTs := s.ComputeAggregatedTs()
 
 	// We only check the statement count as there should always be at least as many statements as transactions.
 	limitReached := false
@@ -88,22 +100,19 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 		return false
 	}
 
+	lastFlush := s.lastFlushStarted
+	s.lastFlushStarted = now
+
 	flushBegin := s.getTimeNow()
-	s.SQLStats.ConsumeStats(ctx, stopper,
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			s.doFlush(ctx, func() error {
-				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
-			}, "failed to flush statement statistics" /* errMsg */)
+	stmtStats, txnStats, fingerprintCount := ssDrainer.DrainStats(ctx)
+	s.cfg.FlushedFingerprintCount.Inc(fingerprintCount)
+	if log.V(1) {
+		log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
+			fingerprintCount, s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(lastFlush))
+	}
 
-			return nil
-		},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
-			s.doFlush(ctx, func() error {
-				return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)
-			}, "failed to flush transaction statistics" /* errMsg */)
-
-			return nil
-		})
+	bucket := s.getBucket()
+	s.flush(ctx, stopper, &bucket, stmtStats, txnStats)
 	s.cfg.FlushLatency.RecordValue(s.getTimeNow().Sub(flushBegin).Nanoseconds())
 
 	if s.cfg.Knobs != nil && s.cfg.Knobs.OnStmtStatsFlushFinished != nil {
@@ -167,30 +176,72 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 	return isSizeLimitReached, nil
 }
 
-func (s *PersistedSQLStats) doFlush(
-	ctx context.Context, workFn func() error, errMsg redact.RedactableString,
+func (s *PersistedSQLStats) flush(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	flushBucket *flushBucket,
+	stmtStats []*appstatspb.CollectedStatementStatistics,
+	txnStats []*appstatspb.CollectedTransactionStatistics,
 ) {
-	var err error
+	if s.cfg.Knobs != nil && s.cfg.Knobs.FlushInterceptor != nil {
+		s.cfg.Knobs.FlushInterceptor(ctx, stopper, flushBucket.aggregatedTs, stmtStats, txnStats)
+		return
+	}
 
-	defer func() {
-		if err != nil {
-			s.cfg.FlushesFailed.Inc(1)
-			log.Warningf(ctx, "%s: %s", errMsg, err)
-		} else {
-			s.cfg.FlushesSuccessful.Inc(1)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	err := stopper.RunAsyncTask(ctx, "sql-stmt-stats-flush", func(ctx context.Context) {
+		defer wg.Done()
+
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		for _, statistics := range stmtStats {
+			if err := doFlushSingleStmtStats(ctx, statistics, flushBucket, s.cfg.DB); err != nil {
+				s.cfg.FlushesFailed.Inc(1)
+				log.Warningf(ctx, "failed to flush statement statistics: %s", err)
+			} else {
+				s.cfg.FlushesSuccessful.Inc(1)
+			}
 		}
-	}()
+	})
+	if err != nil {
+		log.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
+	}
 
-	err = workFn()
+	err = stopper.RunAsyncTask(ctx, "sql-txn-stats-flush", func(ctx context.Context) {
+		defer wg.Done()
+
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		for _, statistics := range txnStats {
+			if err := doFlushSingleTxnStats(ctx, statistics, flushBucket, s.cfg.DB); err != nil {
+				s.cfg.FlushesFailed.Inc(1)
+				log.Warningf(ctx, "failed to flush transaction statistics: %s", err)
+			} else {
+				s.cfg.FlushesSuccessful.Inc(1)
+			}
+		}
+	})
+	if err != nil {
+		log.Warningf(ctx, "failed to execute sql-txn-stats-flush task, %s", err.Error())
+	}
+
+	wg.Wait()
 }
 
-func (s *PersistedSQLStats) doFlushSingleTxnStats(
-	ctx context.Context, stats *appstatspb.CollectedTransactionStatistics, aggregatedTs time.Time,
+func doFlushSingleTxnStats(
+	ctx context.Context,
+	stats *appstatspb.CollectedTransactionStatistics,
+	bucket *flushBucket,
+	db isql.DB,
 ) error {
-	return s.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.TransactionFingerprintID))
 
-		err := s.upsertTransactionStats(ctx, txn, aggregatedTs, serializedFingerprintID, stats)
+		err := upsertTransactionStats(ctx, txn, bucket, serializedFingerprintID, stats)
 		if err != nil {
 			return errors.Wrapf(err, "flushing transaction %d's statistics", stats.TransactionFingerprintID)
 		}
@@ -198,18 +249,21 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 	}, isql.WithPriority(admissionpb.UserLowPri))
 }
 
-func (s *PersistedSQLStats) doFlushSingleStmtStats(
-	ctx context.Context, stats *appstatspb.CollectedStatementStatistics, aggregatedTs time.Time,
+func doFlushSingleStmtStats(
+	ctx context.Context,
+	stats *appstatspb.CollectedStatementStatistics,
+	flushBucket *flushBucket,
+	db isql.DB,
 ) error {
-	return s.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.ID))
 		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.Key.TransactionFingerprintID))
 		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(stats.Key.PlanHash)
 
-		err := s.upsertStatementStats(
+		err := upsertStatementStats(
 			ctx,
 			txn,
-			aggregatedTs,
+			flushBucket,
 			serializedFingerprintID,
 			serializedTransactionFingerprintID,
 			serializedPlanHash,
@@ -247,14 +301,13 @@ func (s *PersistedSQLStats) getTimeNow() time.Time {
 	return timeutil.Now()
 }
 
-func (s *PersistedSQLStats) upsertTransactionStats(
+func upsertTransactionStats(
 	ctx context.Context,
 	txn isql.Txn,
-	aggregatedTs time.Time,
+	flushBucket *flushBucket,
 	serializedFingerprintID []byte,
 	stats *appstatspb.CollectedTransactionStatistics,
 ) error {
-	aggInterval := s.GetAggregationInterval()
 
 	// Prepare data for insertion.
 	metadataJSON, err := sqlstatsutil.BuildTxnMetadataJSON(stats)
@@ -269,35 +322,33 @@ func (s *PersistedSQLStats) upsertTransactionStats(
 	}
 	statistics := tree.NewDJSON(statisticsJSON)
 
-	nodeID := s.GetEnabledSQLInstanceID()
 	_, err = txn.ExecParsed(
 		ctx,
 		"upsert-txn-stats",
 		txn.KV(),
 		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
-		s.upsertTxnStatsStmt,
-		aggregatedTs,            // aggregated_ts
-		serializedFingerprintID, // fingerprint_id
-		stats.App,               // app_name
-		nodeID,                  // node_id
-		aggInterval,             // agg_interval
-		metadata,                // metadata
-		statistics,              // statistics
+		upsertTxnStatsStmt,
+		flushBucket.aggregatedTs, // aggregated_ts
+		serializedFingerprintID,  // fingerprint_id
+		stats.App,                // app_name
+		flushBucket.nodeID,       // node_id
+		flushBucket.aggInterval,  // agg_interval
+		metadata,                 // metadata
+		statistics,               // statistics
 	)
 
 	return err
 }
 
-func (s *PersistedSQLStats) upsertStatementStats(
+func upsertStatementStats(
 	ctx context.Context,
 	txn isql.Txn,
-	aggregatedTs time.Time,
+	flushBucket *flushBucket,
 	serializedFingerprintID []byte,
 	serializedTransactionFingerprintID []byte,
 	serializedPlanHash []byte,
 	stats *appstatspb.CollectedStatementStatistics,
 ) error {
-	aggInterval := s.GetAggregationInterval()
 
 	// Prepare data for insertion.
 	metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(stats)
@@ -313,7 +364,6 @@ func (s *PersistedSQLStats) upsertStatementStats(
 	statistics := tree.NewDJSON(statisticsJSON)
 
 	plan := tree.NewDJSON(sqlstatsutil.ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription))
-	nodeID := s.GetEnabledSQLInstanceID()
 
 	indexRecommendations := tree.NewDArray(types.String)
 	for _, recommendation := range stats.Stats.IndexRecommendations {
@@ -323,13 +373,13 @@ func (s *PersistedSQLStats) upsertStatementStats(
 	}
 
 	args := append(make([]interface{}, 0, 11),
-		aggregatedTs,                       // aggregated_ts
+		flushBucket.aggregatedTs,           // aggregated_ts
 		serializedFingerprintID,            // fingerprint_id
 		serializedTransactionFingerprintID, // transaction_fingerprint_id
 		serializedPlanHash,                 // plan_hash
 		stats.Key.App,                      // app_name
-		nodeID,                             // node_id
-		aggInterval,                        // agg_interval
+		flushBucket.nodeID,                 // node_id
+		flushBucket.aggInterval,            // agg_interval
 		metadata,                           // metadata
 		statistics,                         // statistics
 		plan,                               // plan
@@ -341,7 +391,7 @@ func (s *PersistedSQLStats) upsertStatementStats(
 		"upsert-stmt-stats",
 		txn.KV(), /* txn */
 		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
-		s.upsertStmtStatsStmt,
+		upsertStmtStatsStmt,
 		args...,
 	)
 

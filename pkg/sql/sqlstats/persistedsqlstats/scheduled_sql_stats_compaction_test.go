@@ -18,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -119,7 +119,6 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	var tm atomic.Value
 	tm.Store(timeutil.Now().Add(-2 * time.Hour))
 	knobs := &sqlstats.TestingKnobs{
@@ -134,7 +133,7 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	// We run some queries then flush so that we ensure that are some stats in
 	// the system table.
 	helper.sqlDB.Exec(t, "SELECT 1; SELECT 1, 1")
-	helper.server.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider().MaybeFlush(ctx, helper.server.AppStopper())
+	sqlstatstestutil.FlushTestServerLocal(helper.server)
 	helper.sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 1")
 
 	stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, helper.sqlDB)
