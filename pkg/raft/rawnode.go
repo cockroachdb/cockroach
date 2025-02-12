@@ -176,6 +176,15 @@ func (rn *RawNode) SetLazyReplication(lazy bool) {
 	}
 }
 
+// Compact notifies the node about a log compaction about to occur.
+func (rn *RawNode) Compact() {
+	// TODO(#132114): if, for any peer, Progress.Next < raftLog.firstIndex(), we
+	// can't send the next MsgApp, so transition to StateSnapshot proactively.
+	// Ultimately, we can remove the lazy snapshot sending from maybeSendAppend,
+	// and ErrCompacted from the LogStorage API.
+	rn.raft.raftLog.compact()
+}
+
 // LogSnapshot returns a point-in-time read-only state of the raft log.
 //
 // The returned snapshot can be read from while RawNode continues operation, as
