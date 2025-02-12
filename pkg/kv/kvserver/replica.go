@@ -2556,6 +2556,8 @@ func (r *Replica) RangeUsageInfo() allocator.RangeUsageInfo {
 	}
 }
 
+// SplitStats returns split statistics if the
+
 // measureNanosRunning measures the difference in cpu time from when this
 // method is called, to when the returned function is called. This difference
 // is recorded against the replica's cpu time attribution.

@@ -2,18 +2,25 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "replicastats",
-    srcs = ["replica_stats.go"],
+    srcs = [
+        "replica_load_notifier.go",
+        "replica_stats.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/util/syncutil",
     ],
 )
 
 go_test(
     name = "replicastats_test",
-    srcs = ["replica_stats_test.go"],
+    srcs = [
+        "replica_load_notifier_test.go",
+        "replica_stats_test.go",
+    ],
     embed = [":replicastats"],
     deps = [
         "//pkg/roachpb",

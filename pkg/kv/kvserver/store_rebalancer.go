@@ -264,8 +264,8 @@ func formatHotRanges(ranges []CandidateReplica) redact.RedactableString {
 			buf.SafeRune('\n')
 		}
 		desc := r.Desc()
-		buf.Printf("\t%d: r%d:%v replicas=[%v] load=%v",
-			idx+1, desc.RangeID, desc.KeySpan(), desc.Replicas(), r.RangeUsageInfo())
+		buf.Printf("\t%d: r%d:%v replicas=[%v] load=%v splitstats=%v",
+			idx+1, desc.RangeID, desc.KeySpan(), desc.Replicas(), r.RangeUsageInfo(), r.Repl().SplitStats())
 	}
 	return buf.RedactableString()
 }
@@ -279,7 +279,7 @@ func (r *RebalanceContext) logRemainingHotRanges(ctx context.Context) {
 			candidatesToLog = n
 		}
 		log.KvDistribution.Infof(ctx,
-			"%v", formatHotRanges(r.leftoverCandidates[:candidatesToLog]))
+			"RebalanceContext hot ranges %v", formatHotRanges(r.leftoverCandidates[:candidatesToLog]))
 	}
 }
 

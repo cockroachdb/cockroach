@@ -2971,6 +2971,10 @@ func (s *systemStatusServer) HotRangesV2(
 						Databases:           databases,
 						Tables:              tables,
 						Indexes:             indexes,
+						MvccGarbagePct:      r.MvccGarbagePct,
+						PopularKey:          r.PopularKey,
+						PopularKeyFrequency: r.PopularKeyFrequency,
+						AccessDirection:     r.AccessDirection,
 					})
 				}
 			}
@@ -3037,13 +3041,29 @@ func (s *systemStatusServer) localHotRanges(
 				storeResp.HotRanges[i].LeaseholderNodeID = lease.Replica.NodeID
 			}
 			storeResp.HotRanges[i].Desc = *r.Desc
-			storeResp.HotRanges[i].QueriesPerSecond = r.QPS
-			storeResp.HotRanges[i].RequestsPerSecond = r.RequestsPerSecond
-			storeResp.HotRanges[i].WritesPerSecond = r.WriteKeysPerSecond
-			storeResp.HotRanges[i].ReadsPerSecond = r.ReadKeysPerSecond
-			storeResp.HotRanges[i].WriteBytesPerSecond = r.WriteBytesPerSecond
-			storeResp.HotRanges[i].ReadBytesPerSecond = r.ReadBytesPerSecond
-			storeResp.HotRanges[i].CPUTimePerSecond = r.CPUTimePerSecond
+
+			// add garbage data percentage
+			mvccStats := replica.GetMVCCStats()
+			garbagePct := 1 - (float64(mvccStats.LiveBytes) / float64(mvccStats.KeyBytes+mvccStats.ValBytes))
+			storeResp.HotRanges[i].MvccGarbagePct = garbagePct
+
+			// Patch values used for load balancing with shorter duration ones.
+			loadStats := replica.LoadStatsShort()
+			storeResp.HotRanges[i].QueriesPerSecond = loadStats.QueriesPerSecond
+			storeResp.HotRanges[i].RequestsPerSecond = loadStats.RequestsPerSecond
+			storeResp.HotRanges[i].WritesPerSecond = loadStats.WriteKeysPerSecond
+			storeResp.HotRanges[i].ReadsPerSecond = loadStats.ReadKeysPerSecond
+			storeResp.HotRanges[i].WriteBytesPerSecond = loadStats.WriteBytesPerSecond
+			storeResp.HotRanges[i].ReadBytesPerSecond = loadStats.ReadBytesPerSecond
+			storeResp.HotRanges[i].CPUTimePerSecond = loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
+
+			// Collect splitstats if applicable.
+			splitStats := replica.SplitStats()
+			if splitStats != nil {
+				storeResp.HotRanges[i].PopularKey = splitStats.PopularKey.Key.String()
+				storeResp.HotRanges[i].PopularKeyFrequency = splitStats.PopularKey.Frequency
+				storeResp.HotRanges[i].AccessDirection = splitStats.AccessDirection
+			}
 		}
 		resp.Stores = append(resp.Stores, storeResp)
 		return nil

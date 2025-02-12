@@ -54,6 +54,15 @@ type sample struct {
 	left, right, contained int
 }
 
+func (s sample) Map() map[string]interface{} {
+	return map[string]interface{}{
+		"key":   s.key.String(),
+		"left":  s.left,
+		"right": s.right,
+		"count": s.contained,
+	}
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s sample) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("%s(l=%d r=%d c=%d)",
@@ -201,14 +210,15 @@ func (f *UnweightedFinder) NoSplitKeyCauseLogMsg() redact.RedactableString {
 		imbalanceAndTooManyContained)
 }
 
-// PopularKeyFrequency implements the LoadBasedSplitter interface.
-func (f *UnweightedFinder) PopularKeyFrequency() float64 {
+// PopularKey implements the LoadBasedSplitter interface.
+func (f *UnweightedFinder) PopularKey() PopularKey {
 	slices.SortFunc(f.samples[:], func(a, b sample) int {
 		return bytes.Compare(a.key, b.key)
 	})
 
 	currentKeyCount := 1
 	popularKeyCount := 1
+	popularKey := f.samples[0].key
 	for i := 1; i < len(f.samples); i++ {
 		if bytes.Equal(f.samples[i].key, f.samples[i-1].key) {
 			currentKeyCount++
@@ -217,25 +227,29 @@ func (f *UnweightedFinder) PopularKeyFrequency() float64 {
 		}
 		if popularKeyCount < currentKeyCount {
 			popularKeyCount = currentKeyCount
+			popularKey = f.samples[i].key
 		}
 	}
 
-	return float64(popularKeyCount) / float64(splitKeySampleSize)
+	return PopularKey{
+		Key:       popularKey,
+		Frequency: float64(popularKeyCount) / float64(splitKeySampleSize),
+	}
 }
 
-// SampleMovement calculates the movement of samples based on the left and
+// KeyAccessDirection calculates the movement of samples based on the left and
 // right counters of the samples contained. Returns a float64 value between
 // -1 and 1, where -1 indicates all samples are to the left, 1 indicates all
 // samples are to the right, and values in between indicate the proportion.
-func (f *UnweightedFinder) SampleMovement() float64 {
+func (f *UnweightedFinder) KeyAccessDirection() float64 {
 	if f == nil {
 		return 0
 	}
 
 	var totalLeft, totalRight int
 	for _, s := range f.samples {
-		totalLeft += s.left
-		totalRight += s.right
+		totalLeft += s.left * s.contained
+		totalRight += s.right * s.contained
 	}
 
 	if totalLeft == 0 && totalRight == 0 {

@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 // TODO(tbg): rename this package. `lbsplit`?
+// microbench please rerun
 
 package split
 
@@ -23,6 +24,16 @@ import (
 const minSplitSuggestionInterval = time.Minute
 const minNoSplitKeyLoggingMetricsInterval = time.Minute
 const minPerSecondSampleDuration = time.Second
+
+type SplitStatistics struct {
+	PopularKey      PopularKey
+	AccessDirection float64
+}
+
+type PopularKey struct {
+	Key       roachpb.Key
+	Frequency float64
+}
 
 type LoadBasedSplitter interface {
 	redact.SafeFormatter
@@ -44,18 +55,17 @@ type LoadBasedSplitter interface {
 	// empty string.
 	NoSplitKeyCauseLogMsg() redact.RedactableString
 
-	// PopularKeyFrequency returns the percentage that the most popular key
-	// appears in the sampled candidate split keys.
-	PopularKeyFrequency() float64
+	// PopularKey returns the most popular key in the sample.
+	PopularKey() PopularKey
 
 	// String formats the state of the load based splitter.
 	String() string
 
-	// SampleMovement calculates the movement of samples based on the left and
+	// KeyAccessDirection calculates the movement of samples based on the left and
 	// right counters of the samples contained. Returns a float64 value between
 	// -1 and 1, where -1 indicates all samples are to the left, 1 indicates all
 	// samples are to the right, and values in between indicate the proportion.
-	SampleMovement() float64
+	KeyAccessDirection() float64
 }
 
 type LoadSplitConfig interface {
@@ -133,9 +143,9 @@ func GlobalRandSource() RandSource {
 
 // LoadSplitterMetrics consists of metrics for load-based splitter split key.
 type LoadSplitterMetrics struct {
-	PopularKeyCount          *metric.Counter
-	AbsoluteKeyMovementCount *metric.Counter
-	NoSplitKeyCount          *metric.Counter
+	PopularKeyCount         *metric.Counter
+	ClearKeyAccessDirection *metric.Counter
+	NoSplitKeyCount         *metric.Counter
 }
 
 // Decider tracks the latest load and if certain conditions are met, records
@@ -270,18 +280,18 @@ func (d *Decider) recordLocked(
 				if now.Sub(d.mu.lastNoSplitKeyLoggingMetrics) > minNoSplitKeyLoggingMetricsInterval {
 					d.mu.lastNoSplitKeyLoggingMetrics = now
 					if causeMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg(); causeMsg != "" {
-						popularKeyFrequency := d.mu.splitFinder.PopularKeyFrequency()
+						popularKey := d.mu.splitFinder.PopularKey()
 						log.KvDistribution.Infof(ctx, "%s, most popular key occurs in %d%% of samples",
-							causeMsg, int(popularKeyFrequency*100))
+							causeMsg, int(popularKey.Frequency*100))
 						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))
-						if popularKeyFrequency >= splitKeyThreshold {
+						if popularKey.Frequency >= splitKeyThreshold {
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
 						}
-						movement := d.mu.splitFinder.SampleMovement()
+						movement := d.mu.splitFinder.KeyAccessDirection()
 						log.KvDistribution.Infof(ctx, "%s, movement of samples is %.2f",
 							causeMsg, movement)
 						if math.Abs(movement) == 1 {
-							d.loadSplitterMetrics.AbsoluteKeyMovementCount.Inc(1)
+							d.loadSplitterMetrics.ClearKeyAccessDirection.Inc(1)
 						}
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
 					}
@@ -290,6 +300,18 @@ func (d *Decider) recordLocked(
 		}
 	}
 	return false
+}
+
+func (d *Decider) SplitStatistics() *SplitStatistics {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.mu.splitFinder != nil {
+		return &SplitStatistics{
+			PopularKey:      d.mu.splitFinder.PopularKey(),
+			AccessDirection: d.mu.splitFinder.KeyAccessDirection(),
+		}
+	}
+	return nil
 }
 
 // RecordMax adds a stat measurement directly into the Decider's historical

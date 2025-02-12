@@ -69,5 +69,9 @@ Support status: [alpha](#support-status)
 | write_bytes_per_second | [double](#double) |  | Write bytes per second is the recent number of bytes written per second on this range. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#double) |  | Read bytes per second is the recent number of bytes read per second on this range. | [reserved](#support-status) |
 | cpu_time_per_second | [double](#double) |  | CPU time per second is the recent cpu usage in nanoseconds of this range. | [reserved](#support-status) |
+| mvcc_garbage_pct | [double](#double) |  |  | [reserved](#support-status) |
+| popular_key | [string](#string) |  |  | [reserved](#support-status) |
+| popular_key_frequency | [double](#double) |  |  | [reserved](#support-status) |
+| access_direction | [double](#double) |  |  | [reserved](#support-status) |
 
 

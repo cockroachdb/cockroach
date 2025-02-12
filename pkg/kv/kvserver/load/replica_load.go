@@ -182,6 +182,18 @@ func (rl *ReplicaLoad) getLocked(stat LoadStat) float64 {
 	return ret
 }
 
+// getLockedShort returns the current value for the LoadStat with ordinal stat. It
+// requires holding a lock. And only pulls from the most recent bucket.
+func (rl *ReplicaLoad) getLockedShort(stat LoadStat) float64 {
+	var ret float64
+	// Only return the value if the statistics have been gathered for longer
+	// than the minimum duration.
+	if val, dur := rl.mu.stats[stat].AverageRatePerSecondShort(timeutil.Unix(0, rl.clock.PhysicalNow())); dur >= replicastats.MinStatsDuration {
+		ret = val
+	}
+	return ret
+}
+
 // Stats returns a current stat summary of replica load.
 func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
 	rl.mu.Lock()
@@ -196,6 +208,23 @@ func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
 		ReadBytesPerSecond:       rl.getLocked(ReadBytes),
 		RequestCPUNanosPerSecond: rl.getLocked(ReqCPUNanos),
 		RaftCPUNanosPerSecond:    rl.getLocked(RaftCPUNanos),
+	}
+}
+
+// StatsShort returns a current stat summary of replica load using only one bucket.
+func (rl *ReplicaLoad) StatsShort() ReplicaLoadStats {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	return ReplicaLoadStats{
+		QueriesPerSecond:         rl.getLockedShort(Queries),
+		RequestsPerSecond:        rl.getLockedShort(Requests),
+		WriteKeysPerSecond:       rl.getLockedShort(WriteKeys),
+		ReadKeysPerSecond:        rl.getLockedShort(ReadKeys),
+		WriteBytesPerSecond:      rl.getLockedShort(WriteBytes),
+		ReadBytesPerSecond:       rl.getLockedShort(ReadBytes),
+		RequestCPUNanosPerSecond: rl.getLockedShort(ReqCPUNanos),
+		RaftCPUNanosPerSecond:    rl.getLockedShort(RaftCPUNanos),
 	}
 }
 
@@ -215,7 +244,7 @@ func (rl *ReplicaLoad) TestingGetSum(stat LoadStat) float64 {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	val, _ := rl.mu.stats[stat].Sum()
+	val, _ := rl.mu.stats[stat].Sum(6)
 	return val
 }
 

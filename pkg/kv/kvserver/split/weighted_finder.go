@@ -49,6 +49,16 @@ type weightedSample struct {
 	count       int
 }
 
+func (ws weightedSample) Map() map[string]interface{} {
+	return map[string]interface{}{
+		"key":    ws.key.String(),
+		"weight": ws.weight,
+		"left":   ws.left,
+		"right":  ws.right,
+		"count":  ws.count,
+	}
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (ws weightedSample) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("%s(l=%.1f r=%.1f c=%d w=%.1f)",
@@ -252,8 +262,8 @@ func (f *WeightedFinder) NoSplitKeyCauseLogMsg() redact.RedactableString {
 		insufficientCounters, imbalance)
 }
 
-// PopularKeyFrequency implements the LoadBasedSplitter interface.
-func (f *WeightedFinder) PopularKeyFrequency() float64 {
+// PopularKey implements the LoadBasedSplitter interface.
+func (f *WeightedFinder) PopularKey() PopularKey {
 	// Sort the sample slice to determine the frequency that a popular key
 	// appears. We could copy the slice, however it would require an allocation.
 	// The probability a sample is replaced doesn't change as it is independent
@@ -263,6 +273,7 @@ func (f *WeightedFinder) PopularKeyFrequency() float64 {
 	})
 
 	weight := f.samples[0].weight
+	popularKey := f.samples[0].key
 	currentKeyWeight := weight
 	popularKeyWeight := weight
 	totalWeight := weight
@@ -275,18 +286,22 @@ func (f *WeightedFinder) PopularKeyFrequency() float64 {
 		}
 		if popularKeyWeight < currentKeyWeight {
 			popularKeyWeight = currentKeyWeight
+			popularKey = f.samples[i].key
 		}
 		totalWeight += weight
 	}
 
-	return popularKeyWeight / totalWeight
+	return PopularKey{
+		Key:       popularKey,
+		Frequency: popularKeyWeight / totalWeight,
+	}
 }
 
-// SampleMovement calculates the movement of samples based on the left and
+// KeyAccessDirection calculates the movement of samples based on the left and
 // right counters of the samples contained. Returns a float64 value between
 // -1 and 1, where -1 indicates all samples are to the left, 1 indicates all
 // samples are to the right, and values in between indicate the proportion.
-func (f *WeightedFinder) SampleMovement() float64 {
+func (f *WeightedFinder) KeyAccessDirection() float64 {
 	if f == nil {
 		return 0
 	}

@@ -400,14 +400,14 @@ func TestWeightedFinderPopularKeyFrequency(t *testing.T) {
 	for i, test := range testCases {
 		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 		weightedFinder.samples = test.samples
-		popularKeyFrequency := weightedFinder.PopularKeyFrequency()
+		popularKeyFrequency := weightedFinder.PopularKey().Frequency
 		assert.True(t, math.Abs(test.expectedPopularKeyFrequency-popularKeyFrequency) < eps,
 			"%d: expected popular key frequency %f, got %f",
 			i, test.expectedPopularKeyFrequency, popularKeyFrequency)
 	}
 }
 
-func TestWeightedFinderSampleMovement(t *testing.T) {
+func TestWeightedFinderKeyAccessDirection(t *testing.T) {
 	testCases := []struct {
 		name             string
 		samples          [splitKeySampleSize]weightedSample
@@ -485,7 +485,7 @@ func TestWeightedFinderSampleMovement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			finder := NewWeightedFinder(timeutil.Now(), rand.New(rand.NewSource(2022)))
 			finder.samples = tc.samples
-			movement := finder.SampleMovement()
+			movement := finder.KeyAccessDirection()
 			if movement != tc.expectedMovement {
 				t.Errorf("expected movement %v, but got %v", tc.expectedMovement, movement)
 			}

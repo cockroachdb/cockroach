@@ -326,9 +326,9 @@ func (dc deciderConfig) makeDecider(randSource rand.Source) *Decider {
 	}
 
 	Init(d, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount:          metric.NewCounter(metric.Metadata{}),
-		AbsoluteKeyMovementCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount:          metric.NewCounter(metric.Metadata{}),
+		PopularKeyCount:         metric.NewCounter(metric.Metadata{}),
+		ClearKeyAccessDirection: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount:         metric.NewCounter(metric.Metadata{}),
 	}, dc.objective)
 	return d
 }

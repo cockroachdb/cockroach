@@ -2432,7 +2432,7 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaAbsoluteKeyMovementCount = metric.Metadata{
+	metaClearKeyAccessDirectionCount = metric.Metadata{
 		Name:        "kv.loadsplitter.absolutekeymovement",
 		Help:        "Load-based splitter could not find a split key and all new keys in the sample are at the head or the tail of existing samples.",
 		Measurement: "Occurrences",
@@ -3310,9 +3310,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		registry:              storeRegistry,
 		TenantsStorageMetrics: newTenantsStorageMetrics(),
 		LoadSplitterMetrics: &split.LoadSplitterMetrics{
-			AbsoluteKeyMovementCount: metric.NewCounter(metaAbsoluteKeyMovementCount),
-			PopularKeyCount:          metric.NewCounter(metaPopularKeyCount),
-			NoSplitKeyCount:          metric.NewCounter(metaNoSplitKeyCount),
+			ClearKeyAccessDirection: metric.NewCounter(metaClearKeyAccessDirectionCount),
+			PopularKeyCount:         metric.NewCounter(metaPopularKeyCount),
+			NoSplitKeyCount:         metric.NewCounter(metaNoSplitKeyCount),
 		},
 
 		// Replica metrics.

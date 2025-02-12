@@ -16,6 +16,7 @@ import (
 const (
 	replStatsRotateInterval = 5 * time.Minute
 	decayFactor             = 0.8
+	numBuckets              = 6
 
 	// MinStatsDuration defines a lower bound on how long users of replica stats
 	// should wait before using those stats for anything. If the duration of a
@@ -74,7 +75,7 @@ type ReplicaStats struct {
 	idx int
 	// Each window record is reused internally by flipping an active field and
 	// clearing the fields.
-	records    [6]replicaStatsRecord
+	records    [numBuckets]replicaStatsRecord
 	lastRotate time.Time
 
 	// Testing only.
@@ -317,10 +318,13 @@ func (rs *ReplicaStats) PerLocalityDecayingRate(now time.Time) PerLocalityCounts
 }
 
 // Sum returns the sum of all queries currently recorded.
-func (rs *ReplicaStats) Sum() (float64, int) {
+func (rs *ReplicaStats) Sum(buckets int) (float64, int) {
+	if buckets >= numBuckets {
+		buckets = numBuckets
+	}
 	var sum float64
 	var windowsUsed int
-	for i := range rs.records {
+	for i := 0; i < buckets; i++ {
 		// We have to add len(rs.requests) to the numerator to avoid getting a
 		// negative result from the modulus operation when rs.idx is small.
 		requestsIdx := (rs.idx + len(rs.records) - i) % len(rs.records)
@@ -338,6 +342,16 @@ func (rs *ReplicaStats) Sum() (float64, int) {
 // one way or the other, but not decaying makes the average more stable,
 // which is probably better for avoiding rebalance thrashing).
 func (rs *ReplicaStats) AverageRatePerSecond(now time.Time) (float64, time.Duration) {
+	return rs.averageRatePerSecond(now, numBuckets)
+}
+
+// AverageRatePerSecondShort behaves like AverageRatePerSecond, but only uses
+// the most recent bucket.
+func (rs *ReplicaStats) AverageRatePerSecondShort(now time.Time) (float64, time.Duration) {
+	return rs.averageRatePerSecond(now, 1)
+}
+
+func (rs *ReplicaStats) averageRatePerSecond(now time.Time, buckets int) (float64, time.Duration) {
 	if rs.avgRateForTesting != 0 {
 		return rs.avgRateForTesting, MinStatsDuration
 	}
@@ -345,7 +359,7 @@ func (rs *ReplicaStats) AverageRatePerSecond(now time.Time) (float64, time.Durat
 	rs.maybeRotate(now)
 
 	// First accumulate the counts, then divide by the total number of seconds.
-	sum, windowsUsed := rs.Sum()
+	sum, windowsUsed := rs.Sum(buckets)
 	if windowsUsed <= 0 {
 		return 0, 0
 	}

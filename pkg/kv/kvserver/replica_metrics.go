@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -368,6 +369,21 @@ func calcDecommissioningCount(
 // LoadStats returns the load statistics for the replica.
 func (r *Replica) LoadStats() load.ReplicaLoadStats {
 	return r.loadStats.Stats()
+}
+
+func (r *Replica) LoadStatsShort() load.ReplicaLoadStats {
+	if r == nil || r.loadStats == nil {
+		return load.ReplicaLoadStats{}
+	}
+	return r.loadStats.StatsShort()
+}
+
+// SplitStats returns the split statistics collected if the decider is engaged.
+func (r *Replica) SplitStats() *split.SplitStatistics {
+	if r == nil {
+		return nil
+	}
+	return r.loadBasedSplitter.SplitStatistics()
 }
 
 func (r *Replica) needsSplitBySizeRLocked() bool {

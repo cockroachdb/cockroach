@@ -80,9 +80,9 @@ func NewSplitDecider(settings *config.SimulationSettings) *SplitDecider {
 func (s *SplitDecider) newDecider() *split.Decider {
 	decider := &split.Decider{}
 	split.Init(decider, s.splitConfig, &split.LoadSplitterMetrics{
-		AbsoluteKeyMovementCount: metric.NewCounter(metric.Metadata{}),
-		PopularKeyCount:          metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount:          metric.NewCounter(metric.Metadata{}),
+		ClearKeyAccessDirection: metric.NewCounter(metric.Metadata{}),
+		PopularKeyCount:         metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount:         metric.NewCounter(metric.Metadata{}),
 	}, split.SplitQPS)
 	return decider
 }
