@@ -125,18 +125,18 @@ with t=A ts=11,0 max=3
   scan      k=k end=o
   scan      k=k end=o reverse=true
 ----
-put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
-put: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
-put: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
-put: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
-put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
-put: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
-put: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
-put: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
-put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
-put: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
-put: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
-put: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
+put: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
 scan: "k" -> /BYTES/b @11.000000000,0
 scan: "l" -> /BYTES/b @11.000000000,0
 scan: "m" -> /BYTES/b @11.000000000,0
@@ -217,15 +217,15 @@ with t=B ts=12,0 max=3
   txn_step  seq=20
   scan      k=k end=o
 ----
-put: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=10 Replicated Intent []}
-put: lock acquisition = {l id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=10 Replicated Intent []}
-put: lock acquisition = {m id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=10 Replicated Intent []}
-put: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20 Replicated Intent []}
-put: lock acquisition = {l id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20 Replicated Intent []}
-put: lock acquisition = {m id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20 Replicated Intent []}
-put: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=30 Replicated Intent []}
-put: lock acquisition = {l id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=30 Replicated Intent []}
-put: lock acquisition = {m id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=30 Replicated Intent []}
+put: lock acquisition = {span=k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=l id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=m id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=l id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=m id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=l id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=m id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
 scan: "k" -> /BYTES/b @12.000000000,0
 scan: "l" -> /BYTES/b @12.000000000,0
 scan: "m" -> /BYTES/b @12.000000000,0
