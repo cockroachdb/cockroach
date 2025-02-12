@@ -519,8 +519,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Codec:                cfg.Codec,
 		Clock:                cfg.DB.KV().Clock(),
 		Spans:                spans,
-		CheckpointSpans:      ca.spec.Checkpoint.Spans,
-		CheckpointTimestamp:  ca.spec.Checkpoint.Timestamp,
 		SpanLevelCheckpoint:  ca.spec.SpanLevelCheckpoint,
 		Targets:              AllTargets(ca.spec.Feed),
 		Metrics:              &ca.metrics.KVFeedMetrics,
@@ -605,23 +603,31 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, err
 	}
 
-	checkpointedSpanTs := ca.spec.Checkpoint.Timestamp
-
-	// Checkpoint records from 21.2 were used only for backfills and did not store
-	// the timestamp, since in a backfill it must either be the StatementTime for
-	// an initial backfill, or right after the high-water for schema backfills.
-	if checkpointedSpanTs.IsEmpty() {
-		if initialHighWater.IsEmpty() {
-			checkpointedSpanTs = ca.spec.Feed.StatementTime
-		} else {
-			checkpointedSpanTs = initialHighWater.Next()
+	// Convert the legacy checkpoint to the new span-level checkpoint so that we
+	// can ignore it from this point on.
+	if !ca.spec.Checkpoint.IsZero() {
+		if ca.spec.SpanLevelCheckpoint != nil {
+			return nil, errors.New("both legacy and current checkpoint set on change aggregator spec")
 		}
+
+		// This conversion undoes an unnecessary conversion when the spec
+		// was created in the first place.
+		//lint:ignore SA1019 deprecated usage
+		legacyCheckpoint := &jobspb.ChangefeedProgress_Checkpoint{
+			Spans:     ca.spec.Checkpoint.Spans,
+			Timestamp: ca.spec.Checkpoint.Timestamp,
+		}
+		statementTime := ca.spec.Feed.StatementTime
+		ca.spec.SpanLevelCheckpoint = checkpoint.ConvertLegacyCheckpoint(legacyCheckpoint, statementTime, initialHighWater)
+		ca.spec.Checkpoint.Reset()
 	}
+
 	// Checkpointed spans are spans that were above the highwater mark, and we
 	// must preserve that information in the frontier for future checkpointing.
-	if err := checkpoint.Restore(ca.frontier, ca.spec.Checkpoint.Spans, checkpointedSpanTs, ca.spec.SpanLevelCheckpoint); err != nil {
+	if err := checkpoint.Restore(ca.frontier, ca.spec.SpanLevelCheckpoint); err != nil {
 		return nil, err
 	}
+
 	return spans, nil
 }
 
