@@ -1281,7 +1281,7 @@ type diskStatsMap struct {
 }
 
 func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
-	clusterProvisionedBandwidth int64,
+	clusterProvisionedBandwidth int64, clusterProvisionedIOPS int64,
 ) (stats map[roachpb.StoreID]admission.DiskStats, err error) {
 	if dsm.empty() {
 		return stats, nil
@@ -1294,14 +1294,21 @@ func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 		}
 
 		provisionedBandwidth := clusterProvisionedBandwidth
+		provisionedIOPS := clusterProvisionedIOPS
 		spec, ok := dsm.provisionedRate[id]
 		if ok && spec.ProvisionedBandwidth > 0 {
 			provisionedBandwidth = spec.ProvisionedBandwidth
 		}
+		if ok && spec.ProvisionedIOPS > 0 {
+			provisionedIOPS = spec.ProvisionedIOPS
+		}
 		stats[id] = admission.DiskStats{
 			ProvisionedBandwidth: provisionedBandwidth,
+			ProvisionedIOPS:      provisionedIOPS,
 			BytesRead:            uint64(cumulativeStats.BytesRead()),
+			ReadCount:            uint64(cumulativeStats.ReadsCount),
 			BytesWritten:         uint64(cumulativeStats.BytesWritten()),
+			WriteCount:           uint64(cumulativeStats.WritesCount),
 		}
 	}
 	return stats, nil
@@ -1380,7 +1387,9 @@ type nodePebbleMetricsProvider struct {
 func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetrics {
 	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
 		&pmp.n.storeCfg.Settings.SV)
-	storeIDToDiskStats, err := pmp.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth)
+	clusterProvisionedIOPS := kvadmission.ProvisionedIOPS.Get(
+		&pmp.n.storeCfg.Settings.SV)
+	storeIDToDiskStats, err := pmp.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth, clusterProvisionedIOPS)
 	if err != nil {
 		log.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))

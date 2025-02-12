@@ -82,6 +82,10 @@ func makeTokensLinearModelFitter(
 //
 //   - Exponentially smooth this exact model's multiplier and constant based on
 //     history.
+//
+// TODO(aaditya): Now that we also use this model logic for things that are not
+// measured in bytes (i.e. IOPS), we should consider updating names and comments
+// in tokens_linear_model.go.
 func (f *tokensLinearModelFitter) updateModelUsingIntervalStats(
 	accountedBytes int64, actualBytes int64, workCount int64,
 ) {
