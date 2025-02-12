@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sideeye",
+    srcs = ["sideeye.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/sideeye",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/testutils",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dataexmachina_dev_side_eye_go//sideeye",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -2416,6 +2416,7 @@ GO_TARGETS = [
     "//pkg/testutils/serverutils/regionlatency:regionlatency",
     "//pkg/testutils/serverutils:serverutils",
     "//pkg/testutils/serverutils:serverutils_test",
+    "//pkg/testutils/sideeye:sideeye",
     "//pkg/testutils/skip:skip",
     "//pkg/testutils/sqlutils:sqlutils",
     "//pkg/testutils/sqlutils:sqlutils_test",
