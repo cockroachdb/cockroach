@@ -43,6 +43,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO fix this test
 func TestKVFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -107,7 +108,6 @@ func TestKVFeed(t *testing.T) {
 		initialHighWater     hlc.Timestamp
 		endTime              hlc.Timestamp
 		spans                []roachpb.Span
-		checkpoint           []roachpb.Span
 		spanLevelCheckpoint  *jobspb.TimestampSpansMap
 		events               []kvpb.RangeFeedEvent
 
@@ -147,7 +147,7 @@ func TestKVFeed(t *testing.T) {
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
 		st := timers.New(time.Minute).GetOrCreateScopedTimers("")
-		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{}, nil,
+		f := newKVFeed(buf, tc.spans, nil,
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff, true /* withFiltering */, tc.withFrontierQuantize,
 			0, /* consumerID */

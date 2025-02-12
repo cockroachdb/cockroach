@@ -298,6 +298,13 @@ func TestCheckpointRestore(t *testing.T) {
 	}
 }
 
+func TestConvertLegacyCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO fill in
+}
+
 // TestCheckpointCatchupTime generates 100 random non-overlapping spans with random
 // timestamps within a minute of each other and turns them into checkpoint
 // spans. It then does some sanity checks. It also compares the total
