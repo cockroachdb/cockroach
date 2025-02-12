@@ -62,7 +62,6 @@ go_library(
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/security/username",
         "//pkg/server",

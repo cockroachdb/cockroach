@@ -547,13 +547,16 @@ type PreparedStatementState interface {
 // interface only work on the gateway node (i.e. not from
 // distributed processors).
 type ClientNoticeSender interface {
-	// BufferClientNotice buffers the notice to send to the client.
-	// This is flushed before the connection is closed.
+	// BufferClientNotice buffers the notice in the command result to send to the
+	// client. This is flushed before the connection is closed.
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
-	// SendClientNotice immediately flushes the notice to the client. This is used
-	// to implement PLpgSQL RAISE statements; most cases should use
+	// SendClientNotice immediately flushes the notice to the client.
+	// SendNotice sends the given notice to the client. The notice will be in
+	// the client communication buffer until it is flushed. Flushing can be forced
+	// to occur immediately by setting immediateFlush to true.
+	// This is used to implement PLpgSQL RAISE statements; most cases should use
 	// BufferClientNotice.
-	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
+	SendClientNotice(ctx context.Context, notice pgnotice.Notice, immediateFlush bool) error
 }
 
 // DeferredRoutineSender allows a nested routine to send the information needed
