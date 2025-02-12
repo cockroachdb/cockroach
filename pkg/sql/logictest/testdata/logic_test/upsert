@@ -623,6 +623,7 @@ CREATE TABLE t29494(x INT); INSERT INTO t29494 VALUES (12)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
@@ -643,6 +644,7 @@ UPSERT INTO t29494(x) VALUES (123) RETURNING y
 statement ok
 ROLLBACK;
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" does not exist
@@ -653,6 +655,7 @@ ROLLBACK
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 query I
@@ -694,6 +697,7 @@ CREATE TABLE t29497(x INT PRIMARY KEY);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error UPSERT has more expressions than target columns
@@ -704,6 +708,7 @@ ROLLBACK;
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" does not exist
@@ -716,6 +721,7 @@ subtest visible_returning_columns
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE tc DROP COLUMN y
 
 query I colnames,rowsort
@@ -974,6 +980,7 @@ CREATE TABLE table38627 (a INT PRIMARY KEY, b INT); INSERT INTO table38627 VALUE
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
 
 statement ok
