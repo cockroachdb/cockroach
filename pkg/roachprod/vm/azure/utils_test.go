@@ -31,6 +31,7 @@ func TestWriteStartupScriptTemplate(t *testing.T) {
 				StartupLogs:          vm.StartupLogs,
 				ChronyServers: []string{
 					"time1.google.com",
+					"time2.google.com",
 				},
 			},
 		})
