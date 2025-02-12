@@ -125,14 +125,6 @@ func newUnstable(last entryID, logger raftlogger.Logger) unstable {
 	}
 }
 
-// maybeCompacted returns the pending compacted index if there is a snapshot.
-func (u *unstable) maybeCompacted() (uint64, bool) {
-	if u.snapshot != nil {
-		return u.snapshot.Metadata.Index, true
-	}
-	return 0, false
-}
-
 // nextEntries returns the unstable entries that are not already in the process
 // of being written to storage.
 func (u *unstable) nextEntries() []pb.Entry {
