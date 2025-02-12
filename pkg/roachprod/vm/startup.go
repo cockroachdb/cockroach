@@ -65,7 +65,9 @@ dumpdir /var/lib/chrony
 logchange 0.01
 hwclockfile /etc/adjtime
 rtcsync
-{{ range .ChronyServers }}server {{.}} prefer iburst{{ end }}
+{{ range .ChronyServers -}}
+server {{.}} prefer iburst
+{{ end -}}
 makestep 0.1 3
 EOF
 

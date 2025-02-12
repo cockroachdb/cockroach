@@ -126,6 +126,7 @@ logchange 0.01
 hwclockfile /etc/adjtime
 rtcsync
 server time1.google.com prefer iburst
+server time2.google.com prefer iburst
 makestep 0.1 3
 EOF
 
