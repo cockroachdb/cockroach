@@ -162,6 +162,18 @@ func getResultColumns(
 		}
 		return a.Ref.Columns(), nil
 
+	case vectorSearchOp:
+		a := args.(*vectorSearchArgs)
+		return tableColumns(a.Table, a.OutCols), nil
+
+	case vectorMutationSearchOp:
+		a := args.(*vectorMutationSearchArgs)
+		cols := appendColumns(inputs[0], colinfo.ResultColumn{Name: "partition-key", Typ: types.Int})
+		if a.IsIndexPut {
+			cols = append(cols, colinfo.ResultColumn{Name: "quantized-vector", Typ: types.Bytes})
+		}
+		return cols, nil
+
 	case insertOp:
 		a := args.(*insertArgs)
 		return tableColumns(a.Table, a.ReturnCols), nil
