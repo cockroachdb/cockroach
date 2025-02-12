@@ -285,6 +285,7 @@ go_library(
         "user.go",
         "values.go",
         "vars.go",
+        "vector_search.go",
         "views.go",
         "virtual_schema.go",
         "virtual_table.go",

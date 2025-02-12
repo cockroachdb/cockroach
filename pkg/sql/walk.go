@@ -290,6 +290,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *exportNode:
 		n.input = v.visit(n.input)
+
+	case *vectorSearchNode:
+	case *vectorMutationSearchNode:
+		n.input = v.visit(n.input)
 	}
 }
 
@@ -476,6 +480,8 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&updateNode{}):                              "update",
 	reflect.TypeOf(&upsertNode{}):                              "upsert",
 	reflect.TypeOf(&valuesNode{}):                              "values",
+	reflect.TypeOf(&vectorMutationSearchNode{}):                "vector mutation search",
+	reflect.TypeOf(&vectorSearchNode{}):                        "vector search",
 	reflect.TypeOf(&virtualTableNode{}):                        "virtual table values",
 	reflect.TypeOf(&vTableLookupJoinNode{}):                    "virtual table lookup join",
 	reflect.TypeOf(&windowNode{}):                              "window",
