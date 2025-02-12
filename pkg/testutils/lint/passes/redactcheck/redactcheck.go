@@ -259,6 +259,12 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"LegacyTimestamp": {},
 						"Timestamp":       {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/util/uuid": {
+						"Bytes":     {},
+						"Short":     {},
+						"UUID":      {},
+						"Timestamp": {},
+					},
 					"github.com/cockroachdb/pebble": {
 						"FormatMajorVersion": {},
 					},
