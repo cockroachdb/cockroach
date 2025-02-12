@@ -562,7 +562,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 			case "on-split":
 				mon.runSync("split range", func(ctx context.Context) {
 					log.Event(ctx, "complete")
-					m.OnRangeSplit()
+					var endKeyStr string
+					d.ScanArgs(t, "key", &endKeyStr)
+					locks := m.OnRangeSplit(roachpb.Key(endKeyStr))
+					if len(locks) > 0 {
+						log.Eventf(ctx, "range split returned %d locks for re-acquistion", len(locks))
+					}
 				})
 				return c.waitAndCollect(t, mon)
 
@@ -720,6 +725,7 @@ func newClusterWithSettings(st *clustersettings.Settings) *cluster {
 	// Set the latch manager's long latch threshold to infinity to disable
 	// logging, which could cause a test to erroneously fail.
 	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	concurrency.UnreplicatedLockReliability.Override(context.Background(), &st.SV, true)
 	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
