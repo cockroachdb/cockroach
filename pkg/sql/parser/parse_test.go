@@ -53,14 +53,13 @@ func TestParseDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "parse":
-				const plpgsql = false
 				reparseWithoutLiterals := true
 				for _, arg := range d.CmdArgs {
 					if arg.Key == "no-parse-without-literals" {
 						reparseWithoutLiterals = false
 					}
 				}
-				return sqlutils.VerifyParseFormat(t, d.Input, d.Pos, plpgsql, reparseWithoutLiterals)
+				return sqlutils.VerifyParseFormat(t, d.Input, d.Pos, sqlutils.SQL, reparseWithoutLiterals)
 			case "parse-no-verify":
 				_, err := parser.Parse(d.Input)
 				if err != nil {
