@@ -229,20 +229,22 @@ const (
 //
 // See props/statistics.go for more details.
 type statisticsBuilder struct {
-	ctx         context.Context
-	evalCtx     *eval.Context
-	md          *opt.Metadata
-	minRowCount float64
+	ctx                   context.Context
+	evalCtx               *eval.Context
+	md                    *opt.Metadata
+	checkInputMinRowCount float64
+	minRowCount           float64
 }
 
 func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, md *opt.Metadata) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*sb = statisticsBuilder{
-		ctx:         ctx,
-		evalCtx:     evalCtx,
-		md:          md,
-		minRowCount: evalCtx.SessionData().OptimizerMinRowCount,
+		ctx:                   ctx,
+		evalCtx:               evalCtx,
+		md:                    md,
+		checkInputMinRowCount: evalCtx.SessionData().OptimizerCheckInputMinRowCount,
+		minRowCount:           evalCtx.SessionData().OptimizerMinRowCount,
 	}
 }
 
@@ -2748,6 +2750,9 @@ func (sb *statisticsBuilder) buildWithScan(
 
 	s.Available = bindingProps.Statistics().Available
 	s.RowCount = bindingProps.Statistics().RowCount
+	if withScan.CheckInput {
+		s.RowCount = max(s.RowCount, sb.checkInputMinRowCount)
+	}
 
 	// TODO(michae2): Set operations and with-scans currently act as barriers for
 	// VirtualCols, due to the column ID translation. To fix this we would need to

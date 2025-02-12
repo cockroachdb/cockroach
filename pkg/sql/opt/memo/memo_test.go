@@ -549,6 +549,11 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerMinRowCount = 0
 	notStale()
 
+	evalCtx.SessionData().OptimizerCheckInputMinRowCount = 1.0
+	stale()
+	evalCtx.SessionData().OptimizerCheckInputMinRowCount = 0
+	notStale()
+
 	evalCtx.SessionData().Internal = true
 	stale()
 	evalCtx.SessionData().Internal = false
