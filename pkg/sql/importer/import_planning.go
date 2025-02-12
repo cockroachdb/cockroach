@@ -99,9 +99,9 @@ const (
 	pgDumpUnsupportedSchemaStmtLog = "unsupported_schema_stmts"
 	pgDumpUnsupportedDataStmtLog   = "unsupported_data_stmts"
 
-	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
+	// statusImportBundleParseSchema indicates to the user that a bundle format
 	// schema is being parsed
-	runningStatusImportBundleParseSchema jobs.RunningStatus = "parsing schema on Import Bundle"
+	statusImportBundleParseSchema jobs.StatusMessage = "parsing schema on Import Bundle"
 )
 
 var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{

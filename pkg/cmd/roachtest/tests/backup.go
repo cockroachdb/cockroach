@@ -615,31 +615,31 @@ func runBackupMVCCRangeTombstones(
 	waitForState := func(
 		jobID string,
 		exxpectedState jobs.State,
-		expectRunningStatus jobs.RunningStatus,
+		expectStatus jobs.StatusMessage,
 		duration time.Duration,
 	) {
 		ctx, cancel := context.WithTimeout(ctx, duration)
 		defer cancel()
 		require.NoError(t, retry.Options{}.Do(ctx, func(ctx context.Context) error {
-			var status string
+			var statusMessage string
 			var payloadBytes, progressBytes []byte
 			require.NoError(t, conn.QueryRowContext(
 				ctx, jobutils.InternalSystemJobsBaseQuery, jobID).
-				Scan(&status, &payloadBytes, &progressBytes))
-			if jobs.State(status) == jobs.StateFailed {
+				Scan(&statusMessage, &payloadBytes, &progressBytes))
+			if jobs.State(statusMessage) == jobs.StateFailed {
 				var payload jobspb.Payload
 				require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
 				t.Fatalf("job failed: %s", payload.Error)
 			}
-			if jobs.State(status) != exxpectedState {
-				return errors.Errorf("expected job state %s, but got %s", exxpectedState, status)
+			if jobs.State(statusMessage) != exxpectedState {
+				return errors.Errorf("expected job state %s, but got %s", exxpectedState, statusMessage)
 			}
-			if expectRunningStatus != "" {
+			if expectStatus != "" {
 				var progress jobspb.Progress
 				require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
-				if jobs.RunningStatus(progress.RunningStatus) != expectRunningStatus {
+				if jobs.StatusMessage(progress.StatusMessage) != expectStatus {
 					return errors.Errorf("expected running status %s, but got %s",
-						expectRunningStatus, progress.RunningStatus)
+						expectStatus, progress.StatusMessage)
 				}
 			}
 			return nil
@@ -780,7 +780,7 @@ func runBackupMVCCRangeTombstones(
 	require.NoError(t, err)
 	require.NoError(t, conn.QueryRowContext(ctx,
 		`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'`).Scan(&jobID))
-	waitForState(jobID, jobs.StateRunning, sql.RunningStatusWaitingForMVCCGC, 2*time.Minute)
+	waitForState(jobID, jobs.StateRunning, sql.StatusWaitingForMVCCGC, 2*time.Minute)
 
 	// Check that the data has been deleted. We don't write MVCC range tombstones
 	// unless the range contains live data, so only assert their existence if the

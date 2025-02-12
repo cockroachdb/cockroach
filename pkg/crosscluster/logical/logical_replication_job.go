@@ -93,19 +93,19 @@ func (r *logicalReplicationResumer) handleResumeError(
 		return nil
 	}
 	if jobs.IsPermanentJobError(err) {
-		r.updateRunningStatus(ctx, redact.Sprintf("permanent error: %s", err.Error()))
+		r.updateStatusMessage(ctx, redact.Sprintf("permanent error: %s", err.Error()))
 		return err
 	}
-	r.updateRunningStatus(ctx, redact.Sprintf("pausing after error: %s", err.Error()))
+	r.updateStatusMessage(ctx, redact.Sprintf("pausing after error: %s", err.Error()))
 	return jobs.MarkPauseRequestError(err)
 }
 
-func (r *logicalReplicationResumer) updateRunningStatus(
-	ctx context.Context, runningStatus redact.RedactableString,
+func (r *logicalReplicationResumer) updateStatusMessage(
+	ctx context.Context, status redact.RedactableString,
 ) {
-	log.Infof(ctx, "%s", runningStatus)
+	log.Infof(ctx, "%s", status)
 	err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		md.Progress.RunningStatus = string(runningStatus.Redact())
+		md.Progress.StatusMessage = string(status.Redact())
 		ju.UpdateProgress(md.Progress)
 		return nil
 	})
@@ -787,7 +787,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 
 			// TODO (msbutler): add ldr initial and lagging range timeseries metrics.
 			aggRangeStats, fractionCompleted, status := rh.rangeStats.RollupStats()
-			progress.RunningStatus = status
+			progress.StatusMessage = status
 
 			if replicatedTime.IsSet() {
 				prog.ReplicatedTime = replicatedTime

@@ -54,8 +54,8 @@ func WaitForNoIngestingNodes(
 		}
 
 		if timeutil.Since(lastStatusUpdate) > statusUpdateFrequency {
-			status := jobs.RunningStatus(fmt.Sprintf("waiting for all nodes to finish ingesting writing before proceeding: %s", err))
-			if statusErr := job.NoTxn().RunningStatus(ctx, status); statusErr != nil {
+			status := jobs.StatusMessage(fmt.Sprintf("waiting for all nodes to finish ingesting writing before proceeding: %s", err))
+			if statusErr := job.NoTxn().UpdateStatusMessage(ctx, status); statusErr != nil {
 				log.Warningf(ctx, "failed to update running status of job %d: %s", job.ID(), statusErr)
 			} else {
 				lastStatusUpdate = timeutil.Now()

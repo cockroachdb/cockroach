@@ -689,9 +689,9 @@ func ConfigureClusterSettings(setting map[string]string) []string {
 	return res
 }
 
-func RunningStatus(t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int) string {
+func GetStatusMesssage(t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int) string {
 	p := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
-	return p.RunningStatus
+	return p.StatusMessage
 }
 
 func DecimalTimeToHLC(t *testing.T, s string) hlc.Timestamp {
