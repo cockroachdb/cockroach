@@ -27,7 +27,6 @@ jobs:
       matrix:
         branch:
           - "master"
-          - "release-23.1"
           - "release-23.2"
           - "release-24.1"
           - "release-24.2"
