@@ -167,7 +167,7 @@ ALTER TABLE p137547 INJECT STATISTICS '[
 # Regression test for #137547. Estimate that the FK check WithScan produces at
 # least 1 row to avoid a lookup into the secondary index of p137547 using just
 # the region column.
-opt locality=(region=us) set=(optimizer_check_input_min_row_count=1)
+opt locality=(region=us)
 INSERT INTO c137547 VALUES ('us', 'foo', 'foo') ON CONFLICT DO NOTHING
 ----
 insert c137547
