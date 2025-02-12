@@ -669,10 +669,11 @@ var specs = []stmtSpec{
 		stmt:   "do_stmt",
 		inline: []string{"do_stmt_opt_list", "do_stmt_opt_item"},
 		replace: map[string]string{
-			"'SCONST'":                    "",
-			"non_reserved_word_or_sconst": "( 'PLPGSQL' ) routine_body_str",
+			"'SCONST' | ":                 "",
+			"non_reserved_word_or_sconst": "'PLPGSQL'  | routine_body_str",
 		},
-		unlink: []string{"routine_body_str"},
+		unlink:  []string{"routine_body_str"},
+		nosplit: true,
 	},
 	{
 		name:   "for_locking",
