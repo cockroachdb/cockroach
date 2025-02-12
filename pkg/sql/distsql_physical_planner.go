@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -449,6 +450,9 @@ var (
 	ordinalityNotDistributableErr = newQueryNotSupportedError(
 		"ordinality operation cannot be distributed",
 	)
+	cannotDistributeVectorSearchErr = newQueryNotSupportedError(
+		"vector search operation cannot be distributed",
+	)
 )
 
 // mustWrapNode returns true if a node has no DistSQL-processor equivalent.
@@ -477,6 +481,8 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *unionNode:
 	case *valuesNode:
 		return mustWrapValuesNode(planCtx, n.specifiedInQuery)
+	case *vectorSearchNode:
+	case *vectorMutationSearchNode:
 	case *windowNode:
 	case *zeroNode:
 	case *zigzagJoinNode:
@@ -787,6 +793,10 @@ func checkSupportForPlanNode(
 			}
 		}
 		return canDistribute, nil
+
+	case *vectorSearchNode, *vectorMutationSearchNode:
+		// Don't allow distribution for vector search operators, for now.
+		return cannotDistribute, cannotDistributeVectorSearchErr
 
 	case *windowNode:
 		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
@@ -4122,6 +4132,12 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			}
 		}
 
+	case *vectorSearchNode:
+		plan, err = dsp.createPlanForVectorSearch(planCtx, n)
+
+	case *vectorMutationSearchNode:
+		plan, err = dsp.createPlanForVectorMutationSearch(ctx, planCtx, n)
+
 	case *windowNode:
 		plan, err = dsp.createPlanForWindow(ctx, planCtx, n)
 
@@ -4441,6 +4457,20 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 		plan.GetResultTypes(), plan.MergeOrdering, plan.ResultRouters,
 	)
 	plan.SetMergeOrdering(spec.OutputOrdering)
+}
+
+func (dsp *DistSQLPlanner) createPlanForVectorSearch(
+	planCtx *PlanningCtx, n *vectorSearchNode,
+) (*PhysicalPlan, error) {
+	return nil, unimplemented.New("vector search",
+		"vector search is not yet supported by the DistSQLPlanner")
+}
+
+func (dsp *DistSQLPlanner) createPlanForVectorMutationSearch(
+	ctx context.Context, planCtx *PlanningCtx, n *vectorMutationSearchNode,
+) (*PhysicalPlan, error) {
+	return nil, unimplemented.New("vector mutation search",
+		"vector mutation search is not yet supported by the DistSQLPlanner")
 }
 
 func (dsp *DistSQLPlanner) createPlanForOrdinality(
