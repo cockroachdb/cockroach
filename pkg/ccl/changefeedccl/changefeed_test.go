@@ -3870,7 +3870,7 @@ func TestChangefeedEnriched(t *testing.T) {
 				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
 
 				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='%s'`,
-					strings.Join(tc.enrichedProperties, ", ")))
+					strings.Join(tc.enrichedProperties, ",")))
 				defer closeFeed(t, foo)
 				// TODO(#139660): the webhook sink forces topic_in_value, but
 				// this is not supported by the enriched envelope type. We should adapt
@@ -3880,9 +3880,10 @@ func TestChangefeedEnriched(t *testing.T) {
 					topic = ""
 				}
 
-				msg := fmt.Sprintf(`%s: [0]->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic)
+				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic)
 				if slices.Contains(tc.enrichedProperties, "schema") {
-					msg = fmt.Sprintf(`%s: [0]->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic)
+					// TODO(#139658): add the schema to the key and the value here
+					msg = fmt.Sprintf(`%s: {"payload": {"a": 0}}->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic)
 				}
 
 				assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{msg})
