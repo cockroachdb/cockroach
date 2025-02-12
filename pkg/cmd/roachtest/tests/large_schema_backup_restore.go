@@ -56,13 +56,12 @@ func largeSchemaBackupRestore(r registry.Registry, numTables int) {
 			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
-			_, err := conn.ExecContext(ctx, "SET autocommit_before_ddl = false")
-			require.NoError(t, err)
-
 			t.L().Printf("Creating tables")
 			// Normally it's a bit risky to do schema changes in a transaction, but it is much faster.
 			// Since this is a very contrived test, it's a fine optimization.
 			tx, err := conn.BeginTx(ctx, nil)
+			require.NoError(t, err)
+			_, err = tx.ExecContext(ctx, "SET LOCAL autocommit_before_ddl = false")
 			require.NoError(t, err)
 			for i := range numDbs {
 				t.L().Printf("Building database %d of %d", i+1, numDbs)
@@ -95,6 +94,8 @@ func largeSchemaBackupRestore(r registry.Registry, numTables int) {
 				t.L().Printf("Building layer %d of %d", i+1, numLayers)
 				tx, err = conn.BeginTx(ctx, nil)
 				require.NoError(t, err)
+				_, err = tx.ExecContext(ctx, "SET LOCAL autocommit_before_ddl = false")
+				require.NoError(t, err)
 				for _, tableName := range tables {
 					_, err := tx.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s", tableName))
 					require.NoError(t, err)
@@ -110,6 +111,8 @@ func largeSchemaBackupRestore(r registry.Registry, numTables int) {
 
 			t.L().Printf("Dropping databases\n") // Needed to do the full cluster restore.
 			tx, err = conn.BeginTx(ctx, nil)
+			require.NoError(t, err)
+			_, err = tx.ExecContext(ctx, "SET LOCAL autocommit_before_ddl = false")
 			require.NoError(t, err)
 			for _, dbName := range dbs {
 				_, err = tx.Exec("DROP DATABASE " + dbName + " CASCADE")
