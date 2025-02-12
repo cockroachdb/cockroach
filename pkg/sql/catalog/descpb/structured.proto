@@ -725,10 +725,19 @@ message PolicyDescriptor {
   // field is omitted, the policy will not be used for reads.
   optional string using_expr = 6 [(gogoproto.nullable) = false];
 
+  // UsingColumnIDs is an ordered list of column IDs used by the USING expression.
+  repeated uint32 using_column_ids = 11 [(gogoproto.customname) = "UsingColumnIDs",
+    (gogoproto.casttype) = "ColumnID"];
+
   // WithCheck defines the condition applied to validate new rows during
   // write operations (e.g., INSERT or UPDATE). If omitted, the UsingExpr
   // will serve as a fallback, provided it is defined.
   optional string with_check_expr = 7 [(gogoproto.nullable) = false];
+
+  // WithCheckColumnIDs is an ordered list of column IDs used by the WITH CHECK
+  // expression.
+  repeated uint32 with_check_column_ids = 12 [(gogoproto.customname) = "WithCheckColumnIDs",
+    (gogoproto.casttype) = "ColumnID"];
 
   // DependsOnTypes are the IDs of all user defined types that the policy
   // expressions depend on.
@@ -741,6 +750,8 @@ message PolicyDescriptor {
   // DependsOnRelations are the IDs of the tables, views and sequences that the
   // policy expressions depend on.
   repeated uint32 depends_on_relations = 10 [(gogoproto.casttype) = "ID"];
+
+  // Next ID: 13
 }
 
 // A DescriptorMutation represents a column or an index that
