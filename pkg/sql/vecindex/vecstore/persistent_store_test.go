@@ -42,9 +42,16 @@ func TestPersistentStore(t *testing.T) {
 	childKey10 := ChildKey{PartitionKey: 10}
 	childKey20 := ChildKey{PartitionKey: 20}
 	childKey30 := ChildKey{PartitionKey: 30}
-	primaryKey200 := ChildKey{PrimaryKey: PrimaryKey{2, 00}}
-	primaryKey300 := ChildKey{PrimaryKey: PrimaryKey{3, 00}}
-	primaryKey400 := ChildKey{PrimaryKey: PrimaryKey{4, 00}}
+	valueBytes2 := ValueBytes{1, 2}
+	valueBytes10 := ValueBytes{3, 4}
+	valueBytes20 := ValueBytes{5, 6}
+	valueBytes30 := ValueBytes{7, 8}
+	primaryKey200 := ChildKey{KeyBytes: KeyBytes{2, 00}}
+	primaryKey300 := ChildKey{KeyBytes: KeyBytes{3, 00}}
+	primaryKey400 := ChildKey{KeyBytes: KeyBytes{4, 00}}
+	valueBytes200 := ValueBytes{9, 10}
+	valueBytes300 := ValueBytes{11, 12}
+	valueBytes400 := ValueBytes{13, 14}
 
 	tdb.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(2))")
 	tdb.Exec(t, "INSERT INTO t VALUES (11, '[100, 200]'), (12, '[300, 400]')")
@@ -80,7 +87,7 @@ func TestPersistentStore(t *testing.T) {
 
 	pk1 := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 11), 0 /* famID */)
 	pk2 := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 12), 0 /* famID */)
-	testPKs := []PrimaryKey{pk1, pk2}
+	testPKs := []KeyBytes{pk1, pk2}
 	testVectors := []vector.T{{100, 200}, {300, 400}}
 
 	// TODO(mw5h): Figure out where to create the empty root partition.
@@ -88,7 +95,8 @@ func TestPersistentStore(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
 		defer commitTransaction(ctx, t, store, txn)
 
-		emptyRoot := NewPartition(quantizer, quantizer.Quantize(ctx, vector.Set{}), []ChildKey{}, LeafLevel)
+		emptyRoot := NewPartition(
+			quantizer, quantizer.Quantize(ctx, vector.Set{}), []ChildKey{}, []ValueBytes{}, LeafLevel)
 		require.NoError(t, txn.SetRootPartition(ctx, emptyRoot))
 	})
 
@@ -100,7 +108,8 @@ func TestPersistentStore(t *testing.T) {
 
 		vectors := vector.T{4, 3}.AsSet()
 		quantizedSet := quantizer.Quantize(ctx, vectors)
-		root := NewPartition(quantizer, quantizedSet, []ChildKey{childKey2}, Level(2))
+		root := NewPartition(
+			quantizer, quantizedSet, []ChildKey{childKey2}, []ValueBytes{valueBytes2}, Level(2))
 		require.NoError(t, txn.SetRootPartition(ctx, root))
 		readRoot, err := txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
@@ -109,7 +118,9 @@ func TestPersistentStore(t *testing.T) {
 		vectors = vector.T{4, 3}.AsSet()
 		vectors.Add(vector.T{2, 1})
 		quantizedSet = quantizer.Quantize(ctx, vectors)
-		root = NewPartition(quantizer, quantizedSet, []ChildKey{childKey10, childKey20}, Level(2))
+		root = NewPartition(
+			quantizer, quantizedSet, []ChildKey{childKey10, childKey20},
+			[]ValueBytes{valueBytes10, valueBytes20}, Level(2))
 		require.NoError(t, txn.SetRootPartition(ctx, root))
 		readRoot, err = txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
@@ -119,7 +130,9 @@ func TestPersistentStore(t *testing.T) {
 		vectors.Add(vector.T{2, 1})
 		vectors.Add(vector.T{5, 6})
 		quantizedSet = quantizer.Quantize(ctx, vectors)
-		root = NewPartition(quantizer, quantizedSet, []ChildKey{primaryKey200, primaryKey300, primaryKey400}, LeafLevel)
+		root = NewPartition(
+			quantizer, quantizedSet, []ChildKey{primaryKey200, primaryKey300, primaryKey400},
+			[]ValueBytes{valueBytes200, valueBytes300, valueBytes400}, LeafLevel)
 		require.NoError(t, txn.SetRootPartition(ctx, root))
 		readRoot, err = txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
@@ -132,7 +145,8 @@ func TestPersistentStore(t *testing.T) {
 
 		vectors := vector.T{4, 3}.AsSet()
 		quantizedSet := quantizer.Quantize(ctx, vectors)
-		testPartition := NewPartition(quantizer, quantizedSet, []ChildKey{childKey2}, Level(2))
+		testPartition := NewPartition(
+			quantizer, quantizedSet, []ChildKey{childKey2}, []ValueBytes{valueBytes2}, Level(2))
 		partitionKey, err := txn.InsertPartition(ctx, testPartition)
 		require.NoError(t, err)
 		newPartition, err := txn.GetPartition(ctx, partitionKey)
@@ -150,23 +164,24 @@ func TestPersistentStore(t *testing.T) {
 		defer commitTransaction(ctx, t, store, txn)
 
 		emptySet := vector.MakeSet(2)
-		root := NewPartition(quantizer, quantizer.Quantize(ctx, emptySet), []ChildKey{}, Level(2))
+		root := NewPartition(
+			quantizer, quantizer.Quantize(ctx, emptySet), []ChildKey{}, []ValueBytes{}, Level(2))
 		err := txn.SetRootPartition(ctx, root)
 		require.NoError(t, err)
 
 		// Add to root partition.
-		metadata, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, childKey10)
+		metadata, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, childKey10, valueBytes10)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, Level(2), vector.T{0, 0}, 1)
-		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, childKey20)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, childKey20, valueBytes20)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, Level(2), vector.T{0, 0}, 2)
-		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, childKey30)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, childKey30, valueBytes30)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, Level(2), vector.T{0, 0}, 3)
 
 		// Add duplicate and expect value to be overwritten
-		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, childKey30)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, childKey30, valueBytes30)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, Level(2), vector.T{0, 0}, 3)
 
@@ -177,8 +192,10 @@ func TestPersistentStore(t *testing.T) {
 			ctx, []PartitionKey{RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(2), level)
-		result1 := SearchResult{QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: 1, ChildKey: childKey10}
-		result2 := SearchResult{QuerySquaredDistance: 32, ErrorBound: 0, CentroidDistance: 7.0711, ParentPartitionKey: 1, ChildKey: childKey30}
+		result1 := SearchResult{
+			QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: 1, ChildKey: childKey10, ValueBytes: valueBytes10}
+		result2 := SearchResult{
+			QuerySquaredDistance: 32, ErrorBound: 0, CentroidDistance: 7.0711, ParentPartitionKey: 1, ChildKey: childKey30, ValueBytes: valueBytes30}
 		results := searchSet.PopResults()
 		roundResults(results, 4)
 		require.Equal(t, SearchResults{result1, result2}, results)

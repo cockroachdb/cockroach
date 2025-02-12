@@ -121,21 +121,21 @@ func Encode(appendTo []byte, t T) ([]byte, error) {
 	return appendTo, nil
 }
 
-// Decode decodes the byte array into a vector.
-func Decode(b []byte) (ret T, err error) {
+// Decode decodes the byte array into a vector and returns any remaining bytes.
+func Decode(b []byte) (remaining []byte, ret T, err error) {
 	var n uint32
 	b, n, err = encoding.DecodeUint32Ascending(b)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ret = make(T, n)
 	for i := range ret {
 		b, ret[i], err = encoding.DecodeUntaggedFloat32Value(b)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return ret, nil
+	return b, ret, nil
 }
 
 // L1Distance returns the L1 (Manhattan) distance between t and t2.

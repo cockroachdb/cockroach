@@ -30,7 +30,7 @@ func TestInMemoryStore(t *testing.T) {
 
 	store := NewInMemoryStore(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
-	testPKs := []PrimaryKey{{11}, {12}}
+	testPKs := []KeyBytes{{11}, {12}}
 	testVectors := []vector.T{{100, 200}, {300, 400}}
 
 	t.Run("insert and get all vectors", func(t *testing.T) {
@@ -45,8 +45,8 @@ func TestInMemoryStore(t *testing.T) {
 			return a.Key.Compare(b.Key)
 		})
 		require.Equal(t, []VectorWithKey{
-			{Key: ChildKey{PrimaryKey: testPKs[0]}, Vector: testVectors[0]},
-			{Key: ChildKey{PrimaryKey: testPKs[1]}, Vector: testVectors[1]},
+			{Key: ChildKey{KeyBytes: testPKs[0]}, Vector: testVectors[0]},
+			{Key: ChildKey{KeyBytes: testPKs[1]}, Vector: testVectors[1]},
 		}, vectors)
 	})
 
@@ -57,7 +57,7 @@ func TestInMemoryStore(t *testing.T) {
 		defer commitTransaction(ctx, t, store, txn)
 
 		store.DeleteVector([]byte{10})
-		refs := []VectorWithKey{{Key: ChildKey{PrimaryKey: PrimaryKey{10}}}}
+		refs := []VectorWithKey{{Key: ChildKey{KeyBytes: KeyBytes{10}}}}
 		err := txn.GetFullVectors(ctx, refs)
 		require.NoError(t, err)
 		require.Nil(t, refs[0].Vector)
@@ -72,7 +72,7 @@ func TestInMemoryStore(t *testing.T) {
 		require.NoError(t, err)
 
 		err = txn.GetFullVectors(ctx, []VectorWithKey{
-			{Key: ChildKey{PrimaryKey: testPKs[0]}},
+			{Key: ChildKey{KeyBytes: testPKs[0]}},
 		})
 		require.NoError(t, err)
 	})
@@ -85,6 +85,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 
 	childKey10 := ChildKey{PartitionKey: 10}
+	valueBytes10 := ValueBytes{1, 2, 3}
 
 	// Insert root partition into new store.
 	store := NewInMemoryStore(2, 42)
@@ -113,7 +114,8 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 			_, err := txn2.SearchPartitions(
 				ctx2, []PartitionKey{RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
 			require.NoError(t, err)
-			result1 := SearchResult{QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: RootKey, ChildKey: childKey10}
+			result1 := SearchResult{
+				QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: RootKey, ChildKey: childKey10, ValueBytes: valueBytes10}
 			require.Equal(t, SearchResults{result1}, searchSet.PopResults())
 			require.Equal(t, 1, partitionCounts[0])
 
@@ -123,7 +125,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		// Add vector to root partition after yielding to the background goroutine.
 		// The add should always happen before the background search.
 		runtime.Gosched()
-		_, err = txn.AddToPartition(ctx, RootKey, vector.T{3, 4}, childKey10)
+		_, err = txn.AddToPartition(ctx, RootKey, vector.T{3, 4}, childKey10, valueBytes10)
 		require.NoError(t, err)
 	}()
 
@@ -147,9 +149,14 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	childKey30 := ChildKey{PartitionKey: 30}
 	childKey40 := ChildKey{PartitionKey: 40}
 
-	_, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, childKey10)
+	valueBytes10 := ValueBytes{1, 2}
+	valueBytes20 := ValueBytes{3, 4}
+	valueBytes30 := ValueBytes{5, 6}
+	valueBytes40 := ValueBytes{7, 8}
+
+	_, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, childKey10, valueBytes10)
 	require.NoError(t, err)
-	_, err = txn.AddToPartition(ctx, RootKey, vector.T{3, 4}, childKey20)
+	_, err = txn.AddToPartition(ctx, RootKey, vector.T{3, 4}, childKey20, valueBytes20)
 	require.NoError(t, err)
 
 	// Update stats.
@@ -175,7 +182,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	// Insert new partition with lower level and check stats.
 	vectors := vector.MakeSetFromRawData([]float32{5, 6}, 2)
 	quantizedSet := quantizer.Quantize(ctx, vectors)
-	partition := NewPartition(quantizer, quantizedSet, []ChildKey{childKey30}, 2)
+	partition := NewPartition(quantizer, quantizedSet, []ChildKey{childKey30}, []ValueBytes{valueBytes30}, 2)
 	partitionKey, err := txn.InsertPartition(ctx, partition)
 	require.NoError(t, err)
 
@@ -187,7 +194,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	require.Equal(t, []CVStats{{Mean: 2.775, Variance: 0.1}, {Mean: 1.25, Variance: 0.05}}, roundCVStats(stats.CVStats))
 
 	// Add vector to partition and check stats.
-	_, err = txn.AddToPartition(ctx, partitionKey, vector.T{7, 8}, childKey40)
+	_, err = txn.AddToPartition(ctx, partitionKey, vector.T{7, 8}, childKey40, valueBytes40)
 	require.NoError(t, err)
 
 	stats.CVStats = []CVStats{{Mean: 3, Variance: 1}, {Mean: 1.5, Variance: 0.5}}

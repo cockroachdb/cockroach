@@ -35,12 +35,13 @@ func (s *splitData) Init(
 	vectors vector.Set,
 	oldCentroidDistances []float32,
 	childKeys []vecstore.ChildKey,
+	valueBytes []vecstore.ValueBytes,
 	level vecstore.Level,
 ) {
 	s.Vectors = vectors
 	s.OldCentroidDistances = oldCentroidDistances
 	quantizedSet := quantizer.Quantize(ctx, s.Vectors)
-	s.Partition = vecstore.NewPartition(quantizer, quantizedSet, childKeys, level)
+	s.Partition = vecstore.NewPartition(quantizer, quantizedSet, childKeys, valueBytes, level)
 }
 
 // ReplaceWithLast removes the vector at the given offset in the set, replacing

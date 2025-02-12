@@ -49,13 +49,16 @@ func TestSplitPartitionData(t *testing.T) {
 		quantizer,
 		quantizedSet,
 		[]vecstore.ChildKey{
-			{PrimaryKey: vecstore.PrimaryKey("vec1")},
-			{PrimaryKey: vecstore.PrimaryKey("vec2")},
-			{PrimaryKey: vecstore.PrimaryKey("vec3")},
-			{PrimaryKey: vecstore.PrimaryKey("vec4")},
-			{PrimaryKey: vecstore.PrimaryKey("vec5")},
-			{PrimaryKey: vecstore.PrimaryKey("vec6")},
-			{PrimaryKey: vecstore.PrimaryKey("vec7")},
+			{KeyBytes: vecstore.KeyBytes("vec1")},
+			{KeyBytes: vecstore.KeyBytes("vec2")},
+			{KeyBytes: vecstore.KeyBytes("vec3")},
+			{KeyBytes: vecstore.KeyBytes("vec4")},
+			{KeyBytes: vecstore.KeyBytes("vec5")},
+			{KeyBytes: vecstore.KeyBytes("vec6")},
+			{KeyBytes: vecstore.KeyBytes("vec7")},
+		},
+		[]vecstore.ValueBytes{
+			{1, 2}, {3, 4}, {5, 6}, {7, 8}, {9, 10}, {11, 12}, {13, 14},
 		},
 		1)
 
@@ -76,6 +79,7 @@ func TestSplitPartitionData(t *testing.T) {
 			require.Equal(t, 0, cmp)
 			require.Equal(t, oldCentroidDistances[offset], split.OldCentroidDistances[i])
 			require.Equal(t, splitPartition.ChildKeys()[offset], split.Partition.ChildKeys()[i])
+			require.Equal(t, splitPartition.ValueBytes()[offset], split.Partition.ValueBytes()[i])
 
 			// Validate centroid distances.
 			expectedDistance := num32.L2Distance(centroid, split.Vectors.At(i))
