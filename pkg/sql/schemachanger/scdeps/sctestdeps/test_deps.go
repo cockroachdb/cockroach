@@ -1107,7 +1107,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 	oldProgress := jobspb.Progress{
 		Progress:       nil,
 		ModifiedMicros: 0,
-		RunningStatus:  "",
+		StatusMessage:  "",
 		Details:        jobspb.WrapProgressDetails(scJob.Progress),
 		TraceID:        0,
 	}
@@ -1134,7 +1134,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 	}
 	updateProgress := func(newProgress *jobspb.Progress) {
 		scJob.Progress = *newProgress.GetNewSchemaChange()
-		s.LogSideEffectf("update progress of schema change job #%d: %q", scJob.JobID, newProgress.RunningStatus)
+		s.LogSideEffectf("update progress of schema change job #%d: %q", scJob.JobID, newProgress.StatusMessage)
 	}
 	updatePayload := func(newPayload *jobspb.Payload) {
 		if newPayload.Noncancelable {

@@ -123,14 +123,14 @@ func verifySystemJob(
 	db *sqlutils.SQLRunner,
 	offset int,
 	filterType jobspb.Type,
+	expectedState string,
 	expectedStatus string,
-	expectedRunningStatus string,
 	expected jobs.Record,
 ) error {
 	var actual jobs.Record
+	var stateString string
+	var status gosql.NullString
 	var statusString string
-	var runningStatus gosql.NullString
-	var runningStatusString string
 	var usernameString string
 	// We have to query for the nth job created rather than filtering by ID,
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
@@ -142,23 +142,23 @@ func verifySystemJob(
 		offset,
 	).Scan(
 		&actual.Description, &usernameString,
-		&statusString, &runningStatus,
+		&stateString, &status,
 	)
 	actual.Username = username.MakeSQLUsernameFromPreNormalizedString(usernameString)
-	if runningStatus.Valid {
-		runningStatusString = runningStatus.String
+	if status.Valid {
+		statusString = status.String
 	}
 
 	expected.DescriptorIDs = nil
 	expected.Details = nil
 	require.Equal(t, expected.Description, actual.Description)
 	require.Equal(t, expected.Username, actual.Username)
-	if expectedStatus != statusString {
-		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
+	if expectedState != stateString {
+		return errors.Errorf("job %d: expected state %v, got %v", offset, expectedState, stateString)
 	}
-	if expectedRunningStatus != "" && expectedRunningStatus != runningStatusString {
-		return errors.Errorf("job %d: expected running status %v, got %v",
-			offset, expectedRunningStatus, runningStatusString)
+	if expectedStatus != "" && expectedStatus != statusString {
+		return errors.Errorf("job %d: expected status %v, got %v",
+			offset, expectedStatus, statusString)
 	}
 
 	return nil
@@ -171,10 +171,10 @@ func VerifyRunningSystemJob(
 	db *sqlutils.SQLRunner,
 	offset int,
 	filterType jobspb.Type,
-	expectedRunningStatus jobs.RunningStatus,
+	expectedStatus jobs.StatusMessage,
 	expected jobs.Record,
 ) error {
-	return verifySystemJob(t, db, offset, filterType, "running", string(expectedRunningStatus), expected)
+	return verifySystemJob(t, db, offset, filterType, "running", string(expectedStatus), expected)
 }
 
 // VerifySystemJob checks that job description, user, and running status are

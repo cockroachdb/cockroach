@@ -112,7 +112,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	// The ingestion job will stop retrying as this is a permanent job error.
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 	require.Regexp(t, "ingestion job failed .* but is being paused",
-		replicationtestutils.RunningStatus(t, c.DestSysSQL, ingestionJobID))
+		replicationtestutils.GetStatusMesssage(t, c.DestSysSQL, ingestionJobID))
 
 	ts := c.DestCluster.Server(0).Clock().Now()
 	afterPauseFingerprint := replicationtestutils.FingerprintTenantAtTimestampNoHistory(t, c.DestSysSQL, c.Args.DestTenantName, ts.AsOfSystemTime())

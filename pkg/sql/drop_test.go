@@ -503,7 +503,7 @@ func TestDropIndex(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingForMVCCGC, jobs.Record{
+		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, sql.StatusWaitingForMVCCGC, jobs.Record{
 			Username:    username.NodeUserName(),
 			Description: `GC for DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
@@ -527,7 +527,7 @@ func TestDropIndex(t *testing.T) {
 	newIdxSpan := tableDesc.IndexSpan(codec, newIdx.GetID())
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingForMVCCGC, jobs.Record{
+		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, sql.StatusWaitingForMVCCGC, jobs.Record{
 			Username:    username.NodeUserName(),
 			Description: `GC for CREATE INDEX foo ON t.public.kv (v)`,
 			DescriptorIDs: descpb.IDs{

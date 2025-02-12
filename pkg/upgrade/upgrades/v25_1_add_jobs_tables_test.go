@@ -102,7 +102,7 @@ func TestBackfillJobsTablesAndColumns(t *testing.T) {
 	mkJob(1002, "two")
 	mkJob(1003, "three")
 	require.NoError(t, getJob(1002).NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(.5)))
-	require.NoError(t, getJob(1003).NoTxn().RunningStatus(ctx, "up that hill"))
+	require.NoError(t, getJob(1003).NoTxn().UpdateStatusMessage(ctx, "up that hill"))
 
 	// Do this again on the verison that includes status and progress tables.
 	sqlDB.Exec(t, `SET CLUSTER SETTING version = $1`, clusterversion.V25_1_AddJobsTables.Version().String())
@@ -110,7 +110,7 @@ func TestBackfillJobsTablesAndColumns(t *testing.T) {
 	mkJob(1005, "five")
 
 	require.NoError(t, getJob(1004).NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(.5)))
-	require.NoError(t, getJob(1005).NoTxn().RunningStatus(ctx, "up that hill"))
+	require.NoError(t, getJob(1005).NoTxn().UpdateStatusMessage(ctx, "up that hill"))
 
 	// And again on the version that has the new columns.
 	sqlDB.Exec(t, `SET CLUSTER SETTING version = $1`, clusterversion.V25_1_JobsWritesFence.Version().String())
@@ -119,9 +119,9 @@ func TestBackfillJobsTablesAndColumns(t *testing.T) {
 	mkJob(1007, "seven")
 	mkJob(1008, "eight")
 	require.NoError(t, getJob(1006).NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(.5)))
-	require.NoError(t, getJob(1006).NoTxn().RunningStatus(ctx, "up that hill"))
+	require.NoError(t, getJob(1006).NoTxn().UpdateStatusMessage(ctx, "up that hill"))
 	require.NoError(t, getJob(1007).NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(.5)))
-	require.NoError(t, getJob(1007).NoTxn().RunningStatus(ctx, "up that hill"))
+	require.NoError(t, getJob(1007).NoTxn().UpdateStatusMessage(ctx, "up that hill"))
 	resume[1006] <- nil
 	resume[1008] <- errors.New("eight failed")
 

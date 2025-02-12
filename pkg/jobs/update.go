@@ -290,9 +290,9 @@ WHERE id = $1
 			if err := j.Messages().Record(ctx, u.txn, "state", string(ju.md.State)); err != nil {
 				return err
 			}
-			// If we are changing state, we should clear out "running status", unless
+			// If we are changing state, we should clear out the status, unless
 			// we are about to set it to something instead.
-			if progress == nil || progress.RunningStatus == "" {
+			if progress == nil || progress.StatusMessage == "" {
 				if err := j.StatusStorage().Clear(ctx, u.txn); err != nil {
 					return err
 				}
@@ -309,8 +309,8 @@ WHERE id = $1
 				return err
 			}
 
-			if progress.RunningStatus != beforeProgress.RunningStatus {
-				if err := j.StatusStorage().Set(ctx, u.txn, progress.RunningStatus); err != nil {
+			if progress.StatusMessage != beforeProgress.StatusMessage {
+				if err := j.StatusStorage().Set(ctx, u.txn, progress.StatusMessage); err != nil {
 					return err
 				}
 			}

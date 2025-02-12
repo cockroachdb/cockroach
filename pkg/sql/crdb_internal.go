@@ -1380,8 +1380,8 @@ func makeLegacyJobsTableRows(
 				}
 
 				if s, ok := status.(*tree.DString); ok {
-					if jobs.State(*s) == jobs.StateRunning && len(progress.RunningStatus) > 0 {
-						runningStatus = tree.NewDString(progress.RunningStatus)
+					if jobs.State(*s) == jobs.StateRunning && len(progress.StatusMessage) > 0 {
+						runningStatus = tree.NewDString(progress.StatusMessage)
 					} else if jobs.State(*s) == jobs.StatePaused && payload != nil && payload.PauseReason != "" {
 						errorStr = tree.NewDString(fmt.Sprintf("%s: %s", jobs.PauseRequestExplained, payload.PauseReason))
 					}
@@ -6251,7 +6251,7 @@ func getPayloadAndProgressFromJobsRecord(
 	progressMarshalled, err := protoutil.Marshal(&jobspb.Progress{
 		ModifiedMicros: p.txn.ReadTimestamp().GoTime().UnixMicro(),
 		Details:        jobspb.WrapProgressDetails(job.Progress),
-		RunningStatus:  string(job.RunningStatus),
+		StatusMessage:  string(job.StatusMessage),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -6336,7 +6336,7 @@ SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs
 			return err
 		}
 		mj := marshaledJobMetadata{
-			status:        tree.NewDString(string(record.RunningStatus)),
+			status:        tree.NewDString(string(record.StatusMessage)),
 			payloadBytes:  payloadBytes,
 			progressBytes: progressBytes,
 		}
