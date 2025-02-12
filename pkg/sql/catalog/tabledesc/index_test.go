@@ -180,6 +180,12 @@ func TestIndexInterface(t *testing.T) {
 			catalog.ForEachPartialIndex,
 			catalog.FindPartialIndex,
 		},
+		{"VectorIndex",
+			[]string{"s7"},
+			catalog.TableDescriptor.VectorIndexes,
+			catalog.ForEachVectorIndex,
+			catalog.FindVectorIndex,
+		},
 		{
 			"PublicNonPrimaryIndex",
 			indexNames[1:],
