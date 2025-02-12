@@ -26,10 +26,12 @@ var NoticesEnabled = settings.RegisterBoolSetting(
 // noticeSender is a subset of RestrictedCommandResult which allows
 // sending notices.
 type noticeSender interface {
-	// BufferNotice buffers the given notice to be flushed to the client before
-	// the connection is closed.
+	// BufferNotice buffers the given notice to be sent to the client before
+	// the connection is closed. The notice will be in the command result buffer,
+	// meaning that it will not be sent if the result buffer is discarded.
 	BufferNotice(pgnotice.Notice)
-	// SendNotice immediately flushes the given notice to the client.
+	// SendNotice sends the given notice to the client. The notice will be in
+	// the client communication buffer until it is flushed.
 	SendNotice(context.Context, pgnotice.Notice) error
 }
 

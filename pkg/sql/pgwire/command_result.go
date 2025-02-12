@@ -332,7 +332,7 @@ func (r *commandResult) SendNotice(ctx context.Context, notice pgnotice.Notice) 
 	if err := r.conn.bufferNotice(ctx, notice); err != nil {
 		return err
 	}
-	return r.conn.Flush(r.pos)
+	return nil
 }
 
 // SetColumns is part of the sql.RestrictedCommandResult interface.
