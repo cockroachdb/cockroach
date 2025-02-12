@@ -113,15 +113,19 @@ type Txn interface {
 		ctx context.Context, partitionKey PartitionKey, forUpdate bool,
 	) (PartitionMetadata, error)
 
-	// AddToPartition adds the given vector and its associated child key to the
-	// partition with the given key. If the vector already exists, it is
-	// overwritten with the new key. AddToPartition returns the partition's
+	// AddToPartition adds the given vector and its associated child key and value
+	// bytes to the partition with the given key. If the vector already exists, it
+	// is overwritten with the new key. AddToPartition returns the partition's
 	// metadata, reflecting its size after the add operation. It returns
 	// ErrPartitionNotFound if the partition cannot be found, or
 	// ErrRestartOperation if the caller should retry the insert operation that
 	// triggered this call.
 	AddToPartition(
-		ctx context.Context, partitionKey PartitionKey, vector vector.T, childKey ChildKey,
+		ctx context.Context,
+		partitionKey PartitionKey,
+		vector vector.T,
+		childKey ChildKey,
+		valueBytes ValueBytes,
 	) (PartitionMetadata, error)
 
 	// RemoveFromPartition removes the given vector and its associated child key
