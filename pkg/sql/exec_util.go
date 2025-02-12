@@ -4036,6 +4036,10 @@ func (m *sessionDataMutator) SetBufferedWritesEnabled(b bool) {
 	}
 }
 
+func (m *sessionDataMutator) SetOptimizerCheckInputMinRowCount(val float64) {
+	m.data.OptimizerCheckInputMinRowCount = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
