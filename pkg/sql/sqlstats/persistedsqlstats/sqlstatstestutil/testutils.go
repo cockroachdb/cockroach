@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
 )
 
@@ -292,4 +293,9 @@ VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 	)
 
 	return err
+}
+
+func FlushTestServerLocal(ts serverutils.TestServerInterface) {
+	sqlStatsFlusher := ts.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	sqlStatsFlusher.MaybeFlush(context.Background(), ts.Stopper())
 }

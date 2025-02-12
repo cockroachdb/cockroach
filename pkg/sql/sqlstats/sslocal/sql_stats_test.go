@@ -335,8 +335,7 @@ WHERE
   key LIKE 'SELECT _ WHERE%'
 `, [][]string{{"SELECT _ WHERE _", "1"}})
 
-	server.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().MaybeFlush(ctx, cluster.ApplicationLayer(0).AppStopper())
+	sqlstatstestutil.FlushTestServerLocal(cluster.Server(0 /* idx */))
 
 	sqlDB.CheckQueryResults(t, `
 SELECT
@@ -1680,9 +1679,9 @@ func TestSQLStatsRegions(t *testing.T) {
 	}
 }
 
-// TestSQLStats_ConsumeStats validates that ConsumeStats function pops all statement and transaction stats from the
+// TestSQLStats_DrainStats validates that DrainSqlStats function pops all statement and transaction stats from the
 // in-memory stats and clears it.
-func TestSQLStats_ConsumeStats(t *testing.T) {
+func TestSQLStats_DrainStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1731,24 +1730,11 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	txnContainer, _, _ := ssmemstorage.NewTempContainerFromExistingTxnStats(testTxnData)
 	err = sqlStats.AddAppStats(context.Background(), "app", txnContainer)
 	require.NoError(t, err)
-
-	// Validate that ConsumeStats calls functions for every stmt and txn stats respectively.
-	consumedStmtsCount := 0
-	consumedTxnCount := 0
-	sqlStats.ConsumeStats(
-		context.Background(),
-		stopper,
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			consumedStmtsCount++
-			return nil
-		},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
-			consumedTxnCount++
-			return nil
-		},
-	)
-	require.Equal(t, expectedCountStats, consumedStmtsCount)
-	require.Equal(t, expectedCountStats, consumedTxnCount)
+	expectedTotalFPCount := sqlStats.GetTotalFingerprintCount()
+	stmtStats, txnStats, totalFPCount := sqlStats.DrainStats(context.Background())
+	require.Equal(t, expectedTotalFPCount, totalFPCount)
+	require.Equal(t, expectedCountStats, len(stmtStats))
+	require.Equal(t, expectedCountStats, len(txnStats))
 
 	// Assert that no stats left after ConsumeStats func is executed.
 	err = sqlStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, _ *appstatspb.CollectedStatementStatistics) error {
