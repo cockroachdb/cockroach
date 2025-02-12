@@ -7795,3 +7795,55 @@ func TestConcurrentDropAndCreateTable(t *testing.T) {
 	}
 	require.NoError(t, grp.Wait())
 }
+
+// TestLeaseGenerationBumpWithSchemaChange validates that DML queries properly
+// have plans invalidated even if the lease generation is bumped a bit later.
+// i.e. The lease generation is not a replacement for comparing versions, since
+// a new descriptor can be available slightly earlier then the generation bump.
+func TestLeaseGenerationBumpWithSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	descIDToDelay := descpb.InvalidID
+	grp := ctxgroup.WithContext(ctx)
+	var startDelayCallback func() chan struct{}
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				TestingOnNewVersion: func(id descpb.ID) {
+					if id == descIDToDelay {
+						<-startDelayCallback()
+					}
+				},
+				TestingOnLeaseGenerationBumpForNewVersion: func(id descpb.ID) {
+					if id == descIDToDelay {
+						<-startDelayCallback()
+					}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	var nextValue atomic.Int64
+	startDelayCallback = func() chan struct{} {
+		ch := make(chan struct{})
+
+		grp.GoCtx(func(ctx context.Context) error {
+			defer close(ch)
+			_, err := sqlDB.Exec("INSERT INTO t1 VALUES ($1, $2)", nextValue.Add(1), nextValue.Add(1))
+			return err
+		})
+
+		return ch
+	}
+
+	runner.Exec(t, "CREATE TABLE t1(n int not null, j int not null)")
+	runner.Exec(t, "INSERT INTO t1 VALUES ($1, $2)", nextValue.Add(1), nextValue.Add(1))
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "t1")
+	descIDToDelay = tableDesc.GetID()
+	runner.Exec(t, "ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS(n, j)")
+	require.NoError(t, grp.Wait())
+}
