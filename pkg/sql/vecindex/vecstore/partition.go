@@ -26,9 +26,16 @@ const (
 	RootKey PartitionKey = 1
 )
 
-// PrimaryKey points to the unique row in the primary index that contains the
-// indexed vector.
-type PrimaryKey []byte
+// KeyBytes refers to the unique row in the primary index that contains the
+// indexed vector. It typically contains part or all of the primary key for the
+// row.
+type KeyBytes []byte
+
+// ValueBytes are opaque bytes that are stored alongside the quantized vector
+// and returned by searches. Depending on the store, this could be empty, or it
+// could contain information associated with the vector, such as STORING
+// columns.
+type ValueBytes []byte
 
 // Level specifies a level in the K-means tree. Levels are numbered from leaf to
 // root, in ascending order, with the leaf level always equal to one.
@@ -52,6 +59,7 @@ type Partition struct {
 	quantizer    quantize.Quantizer
 	quantizedSet quantize.QuantizedVectorSet
 	childKeys    []ChildKey
+	valueBytes   []ValueBytes
 	level        Level
 }
 
@@ -60,12 +68,14 @@ func NewPartition(
 	quantizer quantize.Quantizer,
 	quantizedSet quantize.QuantizedVectorSet,
 	childKeys []ChildKey,
+	valueBytes []ValueBytes,
 	level Level,
 ) *Partition {
 	return &Partition{
 		quantizer:    quantizer,
 		quantizedSet: quantizedSet,
 		childKeys:    childKeys,
+		valueBytes:   valueBytes,
 		level:        level,
 	}
 }
@@ -77,6 +87,7 @@ func (p *Partition) Clone() *Partition {
 		quantizer:    p.quantizer,
 		quantizedSet: p.quantizedSet.Clone(),
 		childKeys:    slices.Clone(p.childKeys),
+		valueBytes:   slices.Clone(p.valueBytes),
 		level:        p.level,
 	}
 }
@@ -125,6 +136,14 @@ func (p *Partition) ChildKeys() []ChildKey {
 	return p.childKeys
 }
 
+// ValueBytes are opaque bytes stored alongside the quantized vectors and
+// returned by searches. Depending on the store, this could be empty, or it
+// could contain information associated with the vector, such as STORING
+// columns.
+func (p *Partition) ValueBytes() []ValueBytes {
+	return p.valueBytes
+}
+
 // Search estimates the set of data vectors that are nearest to the given query
 // vector and returns them in the given search set. Search also returns this
 // partition's level in the K-means tree and the count of quantized vectors in
@@ -153,6 +172,7 @@ func (p *Partition) Search(
 			CentroidDistance:     centroidDistances[i],
 			ParentPartitionKey:   partitionKey,
 			ChildKey:             p.childKeys[i],
+			ValueBytes:           p.valueBytes[i],
 		}
 		searchSet.Add(&searchSet.result)
 	}
@@ -162,7 +182,9 @@ func (p *Partition) Search(
 
 // Add quantizes the given vector as part of this partition. If a vector with
 // the same key is already in the partition, update its value and return false.
-func (p *Partition) Add(ctx context.Context, vector vector.T, childKey ChildKey) bool {
+func (p *Partition) Add(
+	ctx context.Context, vector vector.T, childKey ChildKey, valueBytes ValueBytes,
+) bool {
 	offset := p.Find(childKey)
 	if offset != -1 {
 		// Remove the vector from the partition and re-add it below.
@@ -172,6 +194,7 @@ func (p *Partition) Add(ctx context.Context, vector vector.T, childKey ChildKey)
 	vectorSet := vector.AsSet()
 	p.quantizer.QuantizeInSet(ctx, p.quantizedSet, vectorSet)
 	p.childKeys = append(p.childKeys, childKey)
+	p.valueBytes = append(p.valueBytes, valueBytes)
 
 	return offset == -1
 }
@@ -185,6 +208,8 @@ func (p *Partition) ReplaceWithLast(offset int) {
 	newCount := len(p.childKeys) - 1
 	p.childKeys[offset] = p.childKeys[newCount]
 	p.childKeys = p.childKeys[:newCount]
+	p.valueBytes[offset] = p.valueBytes[newCount]
+	p.valueBytes = p.valueBytes[:newCount]
 }
 
 // ReplaceWithLastByKey calls ReplaceWithLast with the offset of the given child

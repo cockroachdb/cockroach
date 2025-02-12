@@ -207,7 +207,11 @@ func (tx *inMemoryTxn) GetPartitionMetadata(
 
 // AddToPartition implements the Txn interface.
 func (tx *inMemoryTxn) AddToPartition(
-	ctx context.Context, partitionKey PartitionKey, vector vector.T, childKey ChildKey,
+	ctx context.Context,
+	partitionKey PartitionKey,
+	vector vector.T,
+	childKey ChildKey,
+	valueBytes ValueBytes,
 ) (PartitionMetadata, error) {
 	inMemPartition, err := tx.store.getPartition(partitionKey)
 	if err != nil {
@@ -231,7 +235,7 @@ func (tx *inMemoryTxn) AddToPartition(
 
 	// Add the vector to the partition.
 	partition := inMemPartition.lock.partition
-	if partition.Add(ctx, vector, childKey) {
+	if partition.Add(ctx, vector, childKey, valueBytes) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.store.reportPartitionSizeLocked(partition.Count())
@@ -341,7 +345,7 @@ func (tx *inMemoryTxn) GetFullVectors(ctx context.Context, refs []VectorWithKey)
 			// is immutable and thread-safe.
 			ref.Vector = inMemPartition.lock.partition.Centroid()
 		} else {
-			vector, ok := tx.store.mu.vectors[string(refs[i].Key.PrimaryKey)]
+			vector, ok := tx.store.mu.vectors[string(refs[i].Key.KeyBytes)]
 			if ok {
 				ref.Vector = vector
 			} else {

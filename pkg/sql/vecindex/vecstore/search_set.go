@@ -49,6 +49,10 @@ type SearchResult struct {
 	// and is only set when SearchOptions.SkipRerank is false or
 	// SearchOptions.ReturnVectors is true.
 	Vector vector.T
+	// ValueBytes are the opaque bytes stored alongside the quantized vector.
+	// Depending on the store, this could be empty, or it could contain
+	// information associated with the vector, such as STORING columns.
+	ValueBytes []byte
 }
 
 // MaybeCloser returns true if this result's data vector may be closer (or the
@@ -175,7 +179,7 @@ type SearchSet struct {
 
 	// MatchKey, if non-nil, filters out all search candidates that do not have
 	// a matching primary key.
-	MatchKey PrimaryKey
+	MatchKey KeyBytes
 
 	// Stats tracks useful information about the search, such as how many vectors
 	// and partitions were scanned.
@@ -189,7 +193,7 @@ type SearchSet struct {
 // Add includes a new candidate in the search set. If set limits have been
 // reached, then the candidate with the farthest distance will be discarded.
 func (ss *SearchSet) Add(candidate *SearchResult) {
-	if ss.MatchKey != nil && !bytes.Equal(ss.MatchKey, candidate.ChildKey.PrimaryKey) {
+	if ss.MatchKey != nil && !bytes.Equal(ss.MatchKey, candidate.ChildKey.KeyBytes) {
 		// Filter out candidates without a matching primary key.
 		return
 	}

@@ -56,7 +56,7 @@ type fixup struct {
 	// partition, if the fixup operates on a partition
 	ParentPartitionKey vecstore.PartitionKey
 	// VectorKey is the primary key of the fixup vector.
-	VectorKey vecstore.PrimaryKey
+	VectorKey vecstore.KeyBytes
 }
 
 // FixupProcessor applies index fixups in a background goroutine. Fixups repair
@@ -236,7 +236,7 @@ func (fp *FixupProcessor) AddMerge(
 
 // AddDeleteVector enqueues a vector deletion fixup for later processing.
 func (fp *FixupProcessor) AddDeleteVector(
-	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.PrimaryKey,
+	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.KeyBytes,
 ) {
 	fp.addFixup(ctx, fixup{
 		Type:         vectorDeleteFixup,

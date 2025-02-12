@@ -206,7 +206,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 			errorBound = fmt.Sprintf("±%s ", formatFloat(result.ErrorBound, 2))
 		}
 		fmt.Fprintf(&buf, "%s: %s %s(centroid=%s)\n",
-			string(result.ChildKey.PrimaryKey), formatFloat(result.QuerySquaredDistance, 4),
+			string(result.ChildKey.KeyBytes), formatFloat(result.QuerySquaredDistance, 4),
 			errorBound, formatFloat(result.CentroidDistance, 2))
 	}
 
@@ -326,8 +326,8 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		vectors = s.Features
 		vectors.SplitAt(count)
 		for i := 0; i < count; i++ {
-			key := vecstore.PrimaryKey(fmt.Sprintf("vec%d", i))
-			childKeys = append(childKeys, vecstore.ChildKey{PrimaryKey: key})
+			key := vecstore.KeyBytes(fmt.Sprintf("vec%d", i))
+			childKeys = append(childKeys, vecstore.ChildKey{KeyBytes: key})
 		}
 	} else {
 		// Parse vectors.
@@ -340,8 +340,8 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 			require.Len(s.T, parts, 2)
 
 			vectors.Add(s.parseVector(parts[1]))
-			key := vecstore.PrimaryKey(parts[0])
-			childKeys = append(childKeys, vecstore.ChildKey{PrimaryKey: key})
+			key := vecstore.KeyBytes(parts[0])
+			childKeys = append(childKeys, vecstore.ChildKey{KeyBytes: key})
 		}
 	}
 
@@ -350,8 +350,8 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	for i := 0; i < vectors.Count; i++ {
 		// Insert within the scope of a transaction.
 		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-		s.InMemStore.InsertVector(childKeys[i].PrimaryKey, vectors.At(i))
-		require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(i), childKeys[i].PrimaryKey))
+		s.InMemStore.InsertVector(childKeys[i].KeyBytes, vectors.At(i))
+		require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(i), childKeys[i].KeyBytes))
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 		if (i+1)%step == 0 && !noFixups {
@@ -510,7 +510,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 	// calcTruth calculates the true nearest neighbors for the query vector.
-	calcTruth := func(queryVector vector.T, data []vecstore.VectorWithKey) []vecstore.PrimaryKey {
+	calcTruth := func(queryVector vector.T, data []vecstore.VectorWithKey) []vecstore.KeyBytes {
 		distances := make([]float32, len(data))
 		offsets := make([]int, len(data))
 		for i := 0; i < len(data); i++ {
@@ -525,9 +525,9 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 			return data[offsets[i]].Key.Compare(data[offsets[j]].Key) < 0
 		})
 
-		truth := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+		truth := make([]vecstore.KeyBytes, searchSet.MaxResults)
 		for i := 0; i < len(truth); i++ {
-			truth[i] = data[offsets[i]].Key.PrimaryKey
+			truth[i] = data[offsets[i]].Key.KeyBytes
 		}
 		return truth
 	}
@@ -544,9 +544,9 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		require.NoError(s.T, err)
 		results := searchSet.PopResults()
 
-		prediction := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+		prediction := make([]vecstore.KeyBytes, searchSet.MaxResults)
 		for res := 0; res < len(results); res++ {
-			prediction[res] = results[res].ChildKey.PrimaryKey
+			prediction[res] = results[res].ChildKey.KeyBytes
 		}
 
 		sumMAP += findMAP(prediction, truth)
@@ -598,7 +598,7 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 		}
 
 		// If this is not the leaf level, then process the next level.
-		if childKeys[0].PrimaryKey == nil {
+		if childKeys[0].KeyBytes == nil {
 			partitionKeys = make([]vecstore.PartitionKey, len(childKeys))
 			for i := range childKeys {
 				partitionKeys[i] = childKeys[i].PartitionKey
@@ -636,17 +636,17 @@ func (s *testState) parseVector(str string) vector.T {
 // parseKeyAndVector parses a line that may contain a key and vector separated
 // by a colon. If there's no colon, it treats the line as just a key and gets
 // the vector from the store.
-func (s *testState) parseKeyAndVector(line string) (vecstore.PrimaryKey, vector.T) {
+func (s *testState) parseKeyAndVector(line string) (vecstore.KeyBytes, vector.T) {
 	parts := strings.Split(line, ":")
 	if len(parts) == 1 {
 		// Get the value from the store.
-		key := vecstore.PrimaryKey(line)
+		key := vecstore.KeyBytes(line)
 		return key, s.InMemStore.GetVector(key)
 	}
 
 	// Parse the value after the colon.
 	require.Len(s.T, parts, 2)
-	key := vecstore.PrimaryKey(parts[0])
+	key := vecstore.KeyBytes(parts[0])
 	return key, s.parseVector(parts[1])
 }
 
@@ -665,7 +665,7 @@ func commitTransaction(ctx context.Context, t *testing.T, store vecstore.Store, 
 // results with the true set of results. Both sets are expected to be of equal
 // length. It returns the percentage overlap of the predicted set with the truth
 // set.
-func findMAP(prediction, truth []vecstore.PrimaryKey) float64 {
+func findMAP(prediction, truth []vecstore.KeyBytes) float64 {
 	if len(prediction) != len(truth) {
 		panic(errors.AssertionFailedf("prediction and truth sets are not same length"))
 	}
@@ -754,9 +754,9 @@ func TestVectorIndexConcurrency(t *testing.T) {
 	// Load features.
 	vectors := testutils.LoadFeatures(t, 100)
 
-	primaryKeys := make([]vecstore.PrimaryKey, vectors.Count)
+	primaryKeys := make([]vecstore.KeyBytes, vectors.Count)
 	for i := 0; i < vectors.Count; i++ {
-		primaryKeys[i] = vecstore.PrimaryKey(fmt.Sprintf("vec%d", i))
+		primaryKeys[i] = vecstore.KeyBytes(fmt.Sprintf("vec%d", i))
 	}
 
 	for i := 0; i < 10; i++ {
@@ -787,7 +787,7 @@ func buildIndex(
 	store *vecstore.InMemoryStore,
 	index *VectorIndex,
 	vectors vector.Set,
-	primaryKeys []vecstore.PrimaryKey,
+	primaryKeys []vecstore.KeyBytes,
 ) {
 	// Insert block of vectors within the scope of a transaction.
 	insertBlock := func(start, end int) {
@@ -860,7 +860,7 @@ func validateIndex(ctx context.Context, t *testing.T, store *vecstore.InMemorySt
 		}
 
 		// If this is not the leaf level, then process the next level.
-		if childKeys[0].PrimaryKey == nil {
+		if childKeys[0].KeyBytes == nil {
 			partitionKeys = make([]vecstore.PartitionKey, len(childKeys))
 			for i := range childKeys {
 				partitionKeys[i] = childKeys[i].PartitionKey

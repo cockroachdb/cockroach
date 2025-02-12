@@ -217,13 +217,13 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 			}
 			results := searchSet.PopResults()
 
-			prediction := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+			prediction := make([]vecstore.KeyBytes, searchSet.MaxResults)
 			for res := 0; res < len(results); res++ {
-				prediction[res] = results[res].ChildKey.PrimaryKey
+				prediction[res] = results[res].ChildKey.KeyBytes
 			}
 
 			primaryKeys := make([]byte, searchSet.MaxResults*4)
-			truth := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+			truth := make([]vecstore.KeyBytes, searchSet.MaxResults)
 			for neighbor := 0; neighbor < searchSet.MaxResults; neighbor++ {
 				primaryKey := primaryKeys[neighbor*4 : neighbor*4+4]
 				binary.BigEndian.PutUint32(primaryKey, uint32(data.Neighbors[i][neighbor]))
@@ -592,7 +592,7 @@ func commitTransaction(ctx context.Context, store vecstore.Store, txn vecstore.T
 // results with the true set of results. Both sets are expected to be of equal
 // length. It returns the percentage overlap of the predicted set with the truth
 // set.
-func findMAP(prediction, truth []vecstore.PrimaryKey) float64 {
+func findMAP(prediction, truth []vecstore.KeyBytes) float64 {
 	if len(prediction) != len(truth) {
 		panic(errors.AssertionFailedf("prediction and truth sets are not same length"))
 	}

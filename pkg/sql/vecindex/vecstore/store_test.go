@@ -19,16 +19,23 @@ func commonStoreTests(
 	t *testing.T,
 	store Store,
 	quantizer quantize.Quantizer,
-	testPKs []PrimaryKey,
+	testPKs []KeyBytes,
 	testVectors []vector.T,
 ) {
 	childKey2 := ChildKey{PartitionKey: 2}
-	primaryKey100 := ChildKey{PrimaryKey: PrimaryKey{1, 00}}
-	primaryKey200 := ChildKey{PrimaryKey: PrimaryKey{2, 00}}
-	primaryKey300 := ChildKey{PrimaryKey: PrimaryKey{3, 00}}
-	primaryKey400 := ChildKey{PrimaryKey: PrimaryKey{4, 00}}
-	primaryKey500 := ChildKey{PrimaryKey: PrimaryKey{5, 00}}
-	primaryKey600 := ChildKey{PrimaryKey: PrimaryKey{6, 00}}
+	valueBytes2 := ValueBytes{0}
+	primaryKey100 := ChildKey{KeyBytes: KeyBytes{1, 00}}
+	primaryKey200 := ChildKey{KeyBytes: KeyBytes{2, 00}}
+	primaryKey300 := ChildKey{KeyBytes: KeyBytes{3, 00}}
+	primaryKey400 := ChildKey{KeyBytes: KeyBytes{4, 00}}
+	primaryKey500 := ChildKey{KeyBytes: KeyBytes{5, 00}}
+	primaryKey600 := ChildKey{KeyBytes: KeyBytes{6, 00}}
+	valueBytes100 := ValueBytes{1, 2}
+	valueBytes200 := ValueBytes{3, 4}
+	valueBytes300 := ValueBytes{5, 6}
+	valueBytes400 := ValueBytes{7, 8}
+	valueBytes500 := ValueBytes{9, 10}
+	valueBytes600 := ValueBytes{11, 12}
 
 	t.Run("get full vectors", func(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
@@ -36,11 +43,11 @@ func commonStoreTests(
 
 		// Include primary keys that cannot be found.
 		results := []VectorWithKey{
-			{Key: ChildKey{PrimaryKey: testPKs[0]}},
-			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
-			{Key: ChildKey{PrimaryKey: testPKs[1]}},
-			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
-			{Key: ChildKey{PrimaryKey: testPKs[0]}},
+			{Key: ChildKey{KeyBytes: testPKs[0]}},
+			{Key: ChildKey{KeyBytes: KeyBytes{0}}},
+			{Key: ChildKey{KeyBytes: testPKs[1]}},
+			{Key: ChildKey{KeyBytes: KeyBytes{0}}},
+			{Key: ChildKey{KeyBytes: testPKs[0]}},
 		}
 		err := txn.GetFullVectors(ctx, results)
 		require.NoError(t, err)
@@ -52,12 +59,12 @@ func commonStoreTests(
 
 		// Grab another set of vectors to ensure that saved state is properly reset.
 		results = []VectorWithKey{
-			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
-			{Key: ChildKey{PrimaryKey: testPKs[0]}},
-			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
-			{Key: ChildKey{PrimaryKey: testPKs[1]}},
-			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
-			{Key: ChildKey{PrimaryKey: testPKs[1]}},
+			{Key: ChildKey{KeyBytes: KeyBytes{0}}},
+			{Key: ChildKey{KeyBytes: testPKs[0]}},
+			{Key: ChildKey{KeyBytes: KeyBytes{0}}},
+			{Key: ChildKey{KeyBytes: testPKs[1]}},
+			{Key: ChildKey{KeyBytes: KeyBytes{0}}},
+			{Key: ChildKey{KeyBytes: testPKs[1]}},
 		}
 		err = txn.GetFullVectors(ctx, results)
 		require.NoError(t, err)
@@ -98,18 +105,18 @@ func commonStoreTests(
 		checkPartitionMetadata(t, metadata, Level(1), vector.T{0, 0}, 0)
 
 		// Add to root partition.
-		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, primaryKey100)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, primaryKey100, valueBytes100)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 1)
-		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, primaryKey200)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, primaryKey200, valueBytes200)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 2)
-		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, primaryKey300)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, primaryKey300, valueBytes300)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 3)
 
 		// Add duplicate and expect value to be overwritten
-		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, primaryKey300)
+		metadata, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, primaryKey300, valueBytes300)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 3)
 
@@ -120,8 +127,10 @@ func commonStoreTests(
 			ctx, []PartitionKey{RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
-		result1 := SearchResult{QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: 1, ChildKey: primaryKey100}
-		result2 := SearchResult{QuerySquaredDistance: 32, ErrorBound: 0, CentroidDistance: 7.0711, ParentPartitionKey: 1, ChildKey: primaryKey300}
+		result1 := SearchResult{
+			QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: 1, ChildKey: primaryKey100, ValueBytes: valueBytes100}
+		result2 := SearchResult{
+			QuerySquaredDistance: 32, ErrorBound: 0, CentroidDistance: 7.0711, ParentPartitionKey: 1, ChildKey: primaryKey300, ValueBytes: valueBytes300}
 		results := searchSet.PopResults()
 		roundResults(results, 4)
 		require.Equal(t, SearchResults{result1, result2}, results)
@@ -144,13 +153,14 @@ func commonStoreTests(
 		require.NoError(t, err)
 		require.Equal(t, Level(1), root.Level())
 		require.Equal(t, []ChildKey{primaryKey100, primaryKey200, primaryKey300}, root.ChildKeys())
+		require.Equal(t, []ValueBytes{valueBytes100, valueBytes200, valueBytes300}, root.ValueBytes())
 		require.Equal(t, vector.T{0, 0}, root.Centroid())
 
 		// Get partition centroid + full vectors.
 		results := []VectorWithKey{
 			{Key: ChildKey{PartitionKey: RootKey}},
-			{Key: ChildKey{PrimaryKey: testPKs[0]}},
-			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
+			{Key: ChildKey{KeyBytes: testPKs[0]}},
+			{Key: ChildKey{KeyBytes: KeyBytes{0}}},
 		}
 		err = txn.GetFullVectors(ctx, results)
 		require.NoError(t, err)
@@ -173,12 +183,14 @@ func commonStoreTests(
 		require.NoError(t, err)
 		vectors := vector.T{4, 3}.AsSet()
 		quantizedSet := quantizer.Quantize(ctx, vectors)
-		newRoot := NewPartition(quantizer, quantizedSet, []ChildKey{childKey2}, Level(2))
+		newRoot := NewPartition(
+			quantizer, quantizedSet, []ChildKey{childKey2}, []ValueBytes{valueBytes2}, Level(2))
 		require.NoError(t, txn.SetRootPartition(ctx, newRoot))
 		newRoot, err = txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
 		require.Equal(t, Level(2), newRoot.Level())
 		require.Equal(t, []ChildKey{childKey2}, newRoot.ChildKeys())
+		require.Equal(t, []ValueBytes{valueBytes2}, newRoot.ValueBytes())
 
 		searchSet := SearchSet{MaxResults: 2}
 		partitionCounts := []int{0}
@@ -186,7 +198,8 @@ func commonStoreTests(
 			ctx, []PartitionKey{RootKey}, vector.T{2, 2}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(2), level)
-		result3 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 0, ParentPartitionKey: 1, ChildKey: childKey2}
+		result3 := SearchResult{
+			QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 0, ParentPartitionKey: 1, ChildKey: childKey2, ValueBytes: valueBytes2}
 		require.Equal(t, SearchResults{result3}, searchSet.PopResults())
 		require.Equal(t, 1, partitionCounts[0])
 
@@ -215,10 +228,12 @@ func commonStoreTests(
 		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 2)
 
 		// Add an alternate element and add duplicate, expecting value to be overwritten.
-		metadata, err = txn.AddToPartition(ctx, partitionKey1, vector.T{-1, 0}, primaryKey400)
+		metadata, err = txn.AddToPartition(
+			ctx, partitionKey1, vector.T{-1, 0}, primaryKey400, valueBytes400)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 3)
-		metadata, err = txn.AddToPartition(ctx, partitionKey1, vector.T{1, 1}, primaryKey400)
+		metadata, err = txn.AddToPartition(
+			ctx, partitionKey1, vector.T{1, 1}, primaryKey400, valueBytes400)
 		require.NoError(t, err)
 		checkPartitionMetadata(t, metadata, LeafLevel, vector.T{0, 0}, 3)
 
@@ -228,8 +243,10 @@ func commonStoreTests(
 			ctx, []PartitionKey{partitionKey1}, vector.T{1, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
-		result4 := SearchResult{QuerySquaredDistance: 0, ErrorBound: 0, CentroidDistance: 1.4142, ParentPartitionKey: partitionKey1, ChildKey: primaryKey400}
-		result5 := SearchResult{QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: partitionKey1, ChildKey: primaryKey100}
+		result4 := SearchResult{
+			QuerySquaredDistance: 0, ErrorBound: 0, CentroidDistance: 1.4142, ParentPartitionKey: partitionKey1, ChildKey: primaryKey400, ValueBytes: valueBytes400}
+		result5 := SearchResult{
+			QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: partitionKey1, ChildKey: primaryKey100, ValueBytes: valueBytes100}
 		require.Equal(t, SearchResults{result4, result5}, roundResults(searchSet.PopResults(), 4))
 		require.Equal(t, 3, partitionCounts[0])
 	})
@@ -245,7 +262,9 @@ func commonStoreTests(
 		vectors.Add(vector.T{4, -1})
 		vectors.Add(vector.T{2, 8})
 		quantizedSet := quantizer.Quantize(ctx, vectors)
-		partition := NewPartition(quantizer, quantizedSet, []ChildKey{primaryKey500, primaryKey600}, LeafLevel)
+		partition := NewPartition(
+			quantizer, quantizedSet, []ChildKey{primaryKey500, primaryKey600},
+			[]ValueBytes{valueBytes500, valueBytes600}, LeafLevel)
 		partitionKey2, err := txn.InsertPartition(ctx, partition)
 		require.NoError(t, err)
 
@@ -255,8 +274,10 @@ func commonStoreTests(
 			ctx, []PartitionKey{partitionKey1, partitionKey2}, vector.T{3, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
-		result4 := SearchResult{QuerySquaredDistance: 4, ErrorBound: 0, CentroidDistance: 1.41, ParentPartitionKey: partitionKey1, ChildKey: primaryKey400}
-		result5 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 2.24, ParentPartitionKey: partitionKey1, ChildKey: primaryKey100}
+		result4 := SearchResult{
+			QuerySquaredDistance: 4, ErrorBound: 0, CentroidDistance: 1.41, ParentPartitionKey: partitionKey1, ChildKey: primaryKey400, ValueBytes: valueBytes400}
+		result5 := SearchResult{
+			QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 2.24, ParentPartitionKey: partitionKey1, ChildKey: primaryKey100, ValueBytes: valueBytes100}
 		require.Equal(t, SearchResults{result4, result5}, roundResults(searchSet.PopResults(), 2))
 		require.Equal(t, []int{3, 2}, partitionCounts)
 	})
