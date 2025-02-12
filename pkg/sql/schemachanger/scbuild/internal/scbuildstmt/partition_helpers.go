@@ -28,7 +28,127 @@ import (
 )
 
 // TODO(annie): This is unused for now.
-var _ = createPartitioningImpl
+var _ = createPartitioning
+
+// createPartitioning returns a set of implicit columns and a new partitioning
+// descriptor to build an index with partitioning fields populated to align with
+// the tree.PartitionBy clause.
+func createPartitioning(
+	b BuildCtx,
+	tableID catid.DescID,
+	partBy *tree.PartitionBy,
+	oldNumImplicitColumns int,
+	oldKeyColumnNames []string,
+	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
+) (newImplicitCols []*scpb.ColumnName, newPartitioning catpb.PartitioningDescriptor, err error) {
+	if partBy == nil {
+		if oldNumImplicitColumns > 0 {
+			return nil, newPartitioning, unimplemented.Newf(
+				"ALTER ... PARTITION BY NOTHING",
+				"cannot alter to PARTITION BY NOTHING if the object has implicit column partitioning",
+			)
+		}
+		return nil, newPartitioning, nil
+	}
+
+	// Truncate existing implicitly partitioned column names.
+	newIdxColumnNames := oldKeyColumnNames[oldNumImplicitColumns:]
+
+	if allowImplicitPartitioning {
+		newImplicitCols, err = collectImplicitPartitionColumns(
+			b,
+			tableID,
+			oldKeyColumnNames[0],
+			partBy,
+			allowedNewColumnNames,
+		)
+		if err != nil {
+			return nil, newPartitioning, err
+		}
+	}
+	if len(newImplicitCols) > 0 {
+		// Prepend with new implicit column names.
+		newIdxColumnNames = make([]string, len(newImplicitCols), len(newImplicitCols)+len(newIdxColumnNames))
+		for i, col := range newImplicitCols {
+			newIdxColumnNames[i] = col.Name
+		}
+		newIdxColumnNames = append(newIdxColumnNames, oldKeyColumnNames[oldNumImplicitColumns:]...)
+	}
+
+	// If we had implicit column partitioning beforehand, check we have the
+	// same implicitly partitioned columns.
+	// Having different implicitly partitioned columns requires rewrites,
+	// which is outside the scope of createPartitioning.
+	if oldNumImplicitColumns > 0 {
+		if len(newImplicitCols) != oldNumImplicitColumns {
+			return nil, newPartitioning, errors.AssertionFailedf(
+				"mismatching number of implicit columns: old %d vs new %d",
+				oldNumImplicitColumns,
+				len(newImplicitCols),
+			)
+		}
+		for i, col := range newImplicitCols {
+			if oldKeyColumnNames[i] != col.Name {
+				return nil, newPartitioning, errors.AssertionFailedf("found new implicit partitioning at column ordinal %d", i)
+			}
+		}
+	}
+
+	newPartitioning, err = createPartitioningImpl(
+		b,
+		tableID,
+		newIdxColumnNames,
+		partBy,
+		allowedNewColumnNames,
+		len(newImplicitCols),
+		0, /* colOffset */
+	)
+	if err != nil {
+		return nil, catpb.PartitioningDescriptor{}, err
+	}
+	return newImplicitCols, newPartitioning, err
+}
+
+// collectImplicitPartitionColumns collects implicit partitioning columns.
+func collectImplicitPartitionColumns(
+	b BuildCtx,
+	tableID catid.DescID,
+	indexFirstColumnName string,
+	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
+) (implicitCols []*scpb.ColumnName, _ error) {
+	seenImplicitColumnNames := map[string]struct{}{}
+	// Iterate over each field in the PARTITION BY until it matches the start
+	// of the actual explicitly indexed columns.
+	for _, field := range partBy.Fields {
+		// As soon as the fields match, we have no implicit columns to add.
+		if string(field) == indexFirstColumnName {
+			break
+		}
+
+		col, err := findColumnByNameOnTable(
+			b,
+			tableID,
+			field,
+			allowedNewColumnNames,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seenImplicitColumnNames[col.Name]; ok {
+			return nil, pgerror.Newf(
+				pgcode.InvalidObjectDefinition,
+				`found multiple definitions in partition using column "%s"`,
+				col.Name,
+			)
+		}
+		seenImplicitColumnNames[col.Name] = struct{}{}
+		implicitCols = append(implicitCols, col)
+	}
+
+	return implicitCols, nil
+}
 
 func createPartitioningImpl(
 	b BuildCtx,
