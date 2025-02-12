@@ -56,7 +56,7 @@ with t=A
   txn_remove
 ----
 >> del_range k=b end=c returnKeys t=A
-del_range: lock acquisitions = [{b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0 Replicated Intent []} {b/123 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0 Replicated Intent []}]
+del_range: lock acquisitions = [{span=b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]} {span=b/123 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}]
 del_range: "b"-"c" -> deleted 2 key(s)
 del_range: returned "b"
 del_range: returned "b/123"
@@ -155,7 +155,7 @@ with t=A
   txn_remove
 ----
 >> del_range k=c end=z returnKeys t=A
-del_range: lock acquisitions = [{d id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0 Replicated Intent []} {d/123 id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0 Replicated Intent []}]
+del_range: lock acquisitions = [{span=d id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]} {span=d/123 id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}]
 del_range: "c"-"z" -> deleted 2 key(s)
 del_range: returned "d"
 del_range: returned "d/123"

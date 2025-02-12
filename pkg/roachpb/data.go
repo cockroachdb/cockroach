@@ -2384,6 +2384,11 @@ func (m *LockAcquisition) Empty() bool {
 	return m.Span.Equal(Span{})
 }
 
+func (m LockAcquisition) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("{span=%v %v durability=%v strength=%v ignored=%v}",
+		m.Span, m.Txn, m.Durability, m.Strength, m.IgnoredSeqNums)
+}
+
 // MakeLockUpdate makes a lock update from the given txn and span.
 //
 // See also txn.LocksAsLockUpdates().
