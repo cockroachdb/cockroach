@@ -45,10 +45,11 @@ func getEncoder(
 	encodeForQuery bool,
 	p externalConnectionProvider,
 	sliMetrics *sliMetrics,
+	sourceProvider *enrichedSourceProvider,
 ) (Encoder, error) {
 	switch opts.Format {
 	case changefeedbase.OptFormatJSON:
-		return makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts, encodeForQuery: encodeForQuery})
+		return makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts, encodeForQuery: encodeForQuery}, sourceProvider)
 	case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
 		return newConfluentAvroEncoder(opts, targets, p, sliMetrics)
 	case changefeedbase.OptFormatCSV:

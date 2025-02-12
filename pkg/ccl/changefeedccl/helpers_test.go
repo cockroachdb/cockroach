@@ -1436,3 +1436,15 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 		`CREATE USER regularUser`,
 	)
 }
+
+// getTestingEnrichedSourceData creates an enrichedSourceData
+// for use in tests.
+func getTestingEnrichedSourceData() enrichedSourceData {
+	return enrichedSourceData{jobId: "test_id"}
+}
+
+// getTestingEnrichedSourceProvider creates an enrichedSourceProvider
+// for use in tests.
+func getTestingEnrichedSourceProvider(opts changefeedbase.EncodingOptions) *enrichedSourceProvider {
+	return newEnrichedSourceProvider(opts, getTestingEnrichedSourceData())
+}
