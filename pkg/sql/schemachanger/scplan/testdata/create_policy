@@ -49,6 +49,9 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
         RoleName: public
         TableID: 106
     *scop.SetPolicyUsingExpression
+      ColumnIDs:
+      - 1
+      - 2
       Expr: (tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID) AND ((c1).x > 0:::INT8)
       PolicyID: 1
       TableID: 106
@@ -116,6 +119,9 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
         RoleName: public
         TableID: 106
     *scop.SetPolicyUsingExpression
+      ColumnIDs:
+      - 1
+      - 2
       Expr: (tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID) AND ((c1).x > 0:::INT8)
       PolicyID: 1
       TableID: 106
@@ -162,10 +168,14 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         RoleName: public
         TableID: 106
     *scop.SetPolicyUsingExpression
+      ColumnIDs:
+      - 3
       Expr: c2::@100108 = b'\xc0':::@100108
       PolicyID: 1
       TableID: 106
     *scop.SetPolicyWithCheckExpression
+      ColumnIDs:
+      - 3
       Expr: c2::@100108 = b'@':::@100108
       PolicyID: 1
       TableID: 106
@@ -217,10 +227,14 @@ PreCommitPhase stage 2 of 2 with 7 MutationType ops
         RoleName: public
         TableID: 106
     *scop.SetPolicyUsingExpression
+      ColumnIDs:
+      - 3
       Expr: c2::@100108 = b'\xc0':::@100108
       PolicyID: 1
       TableID: 106
     *scop.SetPolicyWithCheckExpression
+      ColumnIDs:
+      - 3
       Expr: c2::@100108 = b'@':::@100108
       PolicyID: 1
       TableID: 106
@@ -265,10 +279,14 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         RoleName: public
         TableID: 106
     *scop.SetPolicyUsingExpression
+      ColumnIDs:
+      - 2
       Expr: '[FUNCTION 100110]((c1).x)'
       PolicyID: 1
       TableID: 106
     *scop.SetPolicyWithCheckExpression
+      ColumnIDs:
+      - 2
       Expr: '[FUNCTION 100111]((c1).y)'
       PolicyID: 1
       TableID: 106
@@ -321,10 +339,14 @@ PreCommitPhase stage 2 of 2 with 7 MutationType ops
         RoleName: public
         TableID: 106
     *scop.SetPolicyUsingExpression
+      ColumnIDs:
+      - 2
       Expr: '[FUNCTION 100110]((c1).x)'
       PolicyID: 1
       TableID: 106
     *scop.SetPolicyWithCheckExpression
+      ColumnIDs:
+      - 2
       Expr: '[FUNCTION 100111]((c1).y)'
       PolicyID: 1
       TableID: 106
