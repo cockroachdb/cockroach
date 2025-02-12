@@ -152,9 +152,10 @@ func TestSetupSpansAndFrontierWithNewSpec(t *testing.T) {
 	statementTime := hlc.Timestamp{WallTime: 10}
 
 	for _, tc := range []struct {
-		name                 string
-		initialHighWater     hlc.Timestamp
-		watches              []execinfrapb.ChangeAggregatorSpec_Watch
+		name             string
+		initialHighWater hlc.Timestamp
+		watches          []execinfrapb.ChangeAggregatorSpec_Watch
+		//lint:ignore SA1019 deprecated usage
 		checkpoints          execinfrapb.ChangeAggregatorSpec_Checkpoint
 		expectedFrontierTs   hlc.Timestamp
 		expectedFrontierSpan checkpointSpans
@@ -197,6 +198,7 @@ func TestSetupSpansAndFrontierWithNewSpec(t *testing.T) {
 				{Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
 				{Span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
 			},
+			//lint:ignore SA1019 deprecated usage
 			checkpoints: execinfrapb.ChangeAggregatorSpec_Checkpoint{
 				Spans:     []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, {Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
 				Timestamp: hlc.Timestamp{WallTime: 5},
@@ -216,6 +218,7 @@ func TestSetupSpansAndFrontierWithNewSpec(t *testing.T) {
 				{Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
 				{Span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
 			},
+			//lint:ignore SA1019 deprecated usage
 			checkpoints: execinfrapb.ChangeAggregatorSpec_Checkpoint{
 				Spans: []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, {Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
 			},
@@ -234,6 +237,7 @@ func TestSetupSpansAndFrontierWithNewSpec(t *testing.T) {
 				{Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
 				{Span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
 			},
+			//lint:ignore SA1019 deprecated usage
 			checkpoints: execinfrapb.ChangeAggregatorSpec_Checkpoint{
 				Spans:     []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, {Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
 				Timestamp: hlc.Timestamp{WallTime: 7},
@@ -253,6 +257,7 @@ func TestSetupSpansAndFrontierWithNewSpec(t *testing.T) {
 				{Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
 				{Span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
 			},
+			//lint:ignore SA1019 deprecated usage
 			checkpoints: execinfrapb.ChangeAggregatorSpec_Checkpoint{
 				Spans: []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, {Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
 			},

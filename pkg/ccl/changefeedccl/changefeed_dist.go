@@ -457,6 +457,7 @@ func makePlan(
 		// Use the same checkpoint for all aggregators; each aggregator will only look at
 		// spans that are assigned to it.
 		// We could compute per-aggregator checkpoint, but that's probably an overkill.
+		//lint:ignore SA1019 deprecated usage
 		var aggregatorCheckpoint execinfrapb.ChangeAggregatorSpec_Checkpoint
 		var checkpointSpanGroup roachpb.SpanGroup
 
