@@ -3880,10 +3880,18 @@ func TestChangefeedEnriched(t *testing.T) {
 					topic = ""
 				}
 
-				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic)
+				var jobID int64
+				// Fetching the jobId this way is not supported by the sinkless sink.
+				// In that case we will assert the job_id is 0, so we don't need this query.
+				if _, ok := foo.(*sinklessFeed); !ok {
+					sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
+				}
+				sourceMsg := fmt.Sprintf(`, "source": {"job_id": "%d"}`, jobID)
+
+				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"%s}`, topic, sourceMsg)
 				if slices.Contains(tc.enrichedProperties, "schema") {
 					// TODO(#139658): add the schema to the key and the value here
-					msg = fmt.Sprintf(`%s: {"payload": {"a": 0}}->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic)
+					msg = fmt.Sprintf(`%s: {"payload": {"a": 0}}->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"%s}}`, topic, sourceMsg)
 				}
 
 				assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{msg})

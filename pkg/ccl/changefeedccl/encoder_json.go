@@ -53,8 +53,10 @@ func init() {
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, keyInValue, topicInValue bool
-	envelopeType                                                            changefeedbase.EnvelopeType
-	enrichedProperties                                                      map[changefeedbase.EnrichedProperty]struct{}
+
+	envelopeType                   changefeedbase.EnvelopeType
+	enrichedEnvelopeSourceProvider *enrichedSourceProvider
+	enrichedProperties             map[changefeedbase.EnrichedProperty]struct{}
 
 	buf             bytes.Buffer
 	versionEncoder  func(ed *cdcevent.EventDescriptor, isPrev bool) *versionEncoder
@@ -92,7 +94,9 @@ type jsonEncoderOptions struct {
 	encodeForQuery bool
 }
 
-func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder, error) {
+func makeJSONEncoder(
+	ctx context.Context, opts jsonEncoderOptions, sourceProvider *enrichedSourceProvider,
+) (*jsonEncoder, error) {
 	versionCache := cache.NewUnorderedCache(cdcevent.DefaultCacheConfig)
 	e := &jsonEncoder{
 		envelopeType:       opts.Envelope,
@@ -126,6 +130,7 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 				}
 			}).(*versionEncoder)
 		},
+		enrichedEnvelopeSourceProvider: sourceProvider,
 	}
 
 	if !canJSONEncodeMetadata(e.envelopeType) {
@@ -525,7 +530,8 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 		}
 	}
 
-	payloadKeys := []string{"after", "op", "ts_ns"}
+	// TODO(#141001): only include the source if requested.
+	payloadKeys := []string{"after", "op", "ts_ns", "source"}
 	if e.keyInValue {
 		payloadKeys = append(payloadKeys, "key")
 	}
@@ -549,6 +555,13 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 			return nil, err
 		}
 		if err := payloadBuilder.Set("op", json.FromString(string(deduceOp(updated, prev)))); err != nil {
+			return nil, err
+		}
+		sourceJson, err := e.enrichedEnvelopeSourceProvider.GetJSON(updated)
+		if err != nil {
+			return nil, err
+		}
+		if err := payloadBuilder.Set("source", sourceJson); err != nil {
 			return nil, err
 		}
 
@@ -637,10 +650,13 @@ func EncodeAsJSONChangefeedWithFlags(
 	if err != nil {
 		return nil, err
 	}
+	sourceProvider := newEnrichedSourceProvider(opts, enrichedSourceData{
+		jobId: "ccl_builtin", // This encoder is not used in the context of a real changefeed.
+	})
 	// If this function ends up needing to be optimized, cache or pool these.
 	// Nontrivial to do as an encoder generally isn't safe to call on different
 	// rows in parallel.
-	e, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts})
+	e, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts}, sourceProvider)
 	if err != nil {
 		return nil, err
 	}
