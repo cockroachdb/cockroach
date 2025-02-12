@@ -79,9 +79,18 @@ type intervalDiskLoadInfo struct {
 	intReadBytes int64
 	// intWriteBytes represents measured write bytes in a given interval.
 	intWriteBytes int64
+	// intReadCount represents the number of read IO operations in a given
+	// interval.
+	intReadCount int64
+	// intWriteCount represents the number of write IO operations in a given
+	// interval.
+	intWriteCount int64
 	// intProvisionedDiskBytes represents the disk writes (in bytes) available in
 	// an adjustmentInterval.
 	intProvisionedDiskBytes int64
+	// intProvisionedIOCount represents the number of total IO operations
+	// available in an adjustmentInterval.
+	intProvisionedIOCount int64
 	// elasticBandwidthMaxUtil sets the maximum disk bandwidth utilization for
 	// elastic requests
 	elasticBandwidthMaxUtil float64
@@ -90,11 +99,12 @@ type intervalDiskLoadInfo struct {
 // diskBandwidthLimiterState is used as auxiliary information for logging
 // purposes and keeping past state.
 type diskBandwidthLimiterState struct {
-	tokens     diskTokens
-	prevTokens diskTokens
-	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens
-	diskBWUtil float64
-	diskLoad   intervalDiskLoadInfo
+	tokens       diskTokens
+	prevTokens   diskTokens
+	usedTokens   [admissionpb.NumStoreWorkTypes]diskTokens
+	diskBWUtil   float64
+	diskIOPSUtil float64
+	diskLoad     intervalDiskLoadInfo
 }
 
 // diskBandwidthLimiter produces tokens for elastic work.
@@ -140,26 +150,34 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 	// elastic writes completely due to out-sized reads from above.
 	diskWriteTokens = int64(math.Max(0, float64(diskWriteTokens)))
 
+	// IOPS calculation.
+	writeIOPSTokens := int64(float64(id.intProvisionedIOCount) * id.elasticBandwidthMaxUtil)
+	smoothedReadIOPS := alpha*float64(id.intReadCount) + alpha*float64(d.state.diskLoad.intReadCount)
+	intReadIOPS := int64(math.Max(smoothedReadIOPS, float64(id.intReadCount)))
+	writeIOPSTokens = writeIOPSTokens - intReadIOPS
+
 	totalUsedTokens := sumDiskTokens(usedTokens)
 	tokens := diskTokens{
 		readByteTokens:  intReadBytes,
 		writeByteTokens: diskWriteTokens,
-		readIOPSTokens:  0,
-		writeIOPSTokens: 0,
+		readIOPSTokens:  intReadIOPS,
+		writeIOPSTokens: writeIOPSTokens,
 	}
 	prevState := d.state
 	d.state = diskBandwidthLimiterState{
-		tokens:     tokens,
-		prevTokens: prevState.tokens,
-		usedTokens: usedTokens,
-		diskBWUtil: float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens),
-		diskLoad:   id,
+		tokens:       tokens,
+		prevTokens:   prevState.tokens,
+		usedTokens:   usedTokens,
+		diskBWUtil:   float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens),
+		diskIOPSUtil: float64(totalUsedTokens.writeIOPSTokens) / float64(prevState.tokens.writeIOPSTokens),
+		diskLoad:     id,
 	}
 	return tokens
 }
 
 func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
+	// TODO(aaditya): add relevant IOPS tokens.
 	p.Printf("diskBandwidthLimiter (tokenUtilization %.2f, tokensUsed (elastic %s, "+
 		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
 		"readBW %s/s, provisioned %s/s)",
