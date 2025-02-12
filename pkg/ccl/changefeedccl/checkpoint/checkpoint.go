@@ -26,7 +26,7 @@ type SpanIter func(forEachSpan span.Operation)
 func Make(
 	frontier hlc.Timestamp, forEachSpan SpanIter, maxBytes int64, metrics *Metrics,
 ) jobspb. //lint:ignore SA1019 deprecated usage
-		ChangefeedProgress_Checkpoint {
+					ChangefeedProgress_Checkpoint {
 	start := timeutil.Now()
 
 	// Collect leading spans into a SpanGroup to merge adjacent spans and store
