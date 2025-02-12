@@ -7,9 +7,11 @@ package stats
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -291,13 +294,8 @@ func equiDepthHistogramWithoutAdjustment(
 		}
 	}
 
-	sort.Slice(samples, func(i, j int) bool {
-		cmp, err := samples[i].Compare(ctx, compareCtx, samples[j])
-		if err != nil {
-			panic(err)
-		}
-		return cmp < 0
-	})
+	var os orderedSamples
+	os.Init(ctx, compareCtx, samples)
 	numBuckets := maxBuckets
 	if maxBuckets > numSamples {
 		numBuckets = numSamples
@@ -312,7 +310,7 @@ func equiDepthHistogramWithoutAdjustment(
 	if HistogramMCVsClusterMode.Get(&st.SV) {
 		maxMCVs := getMaxMCVs(st, numBuckets)
 		var err error
-		mcvs, err = getMCVs(ctx, compareCtx, samples, maxMCVs)
+		mcvs, err = getMCVs(os, maxMCVs)
 		if err != nil {
 			return histogram{}, err
 		}
@@ -341,11 +339,11 @@ func equiDepthHistogramWithoutAdjustment(
 				numBuckets++
 			}
 		}
-		upper := samples[i+numSamplesInBucket-1]
+		upperIdx := i + numSamplesInBucket - 1
 		// numLess is the number of samples less than upper (in this bucket).
 		numLess := 0
 		for ; numLess < numSamplesInBucket-1; numLess++ {
-			if c, err := samples[i+numLess].Compare(ctx, compareCtx, upper); err != nil {
+			if c, err := os.Compare(i+numLess, upperIdx); err != nil {
 				return histogram{}, err
 			} else if c == 0 {
 				break
@@ -355,7 +353,7 @@ func equiDepthHistogramWithoutAdjustment(
 		}
 		// Advance the boundary of the bucket to cover all samples equal to upper.
 		for ; i+numSamplesInBucket < numSamples; numSamplesInBucket++ {
-			if c, err := samples[i+numSamplesInBucket].Compare(ctx, compareCtx, upper); err != nil {
+			if c, err := os.Compare(i+numSamplesInBucket, upperIdx); err != nil {
 				return histogram{}, err
 			} else if c != 0 {
 				break
@@ -371,6 +369,7 @@ func equiDepthHistogramWithoutAdjustment(
 		// upper bound, as well as the number of distinct values less than the upper
 		// bound. These estimates may be adjusted later based on the total distinct
 		// count.
+		upper := samples[upperIdx]
 		numEq := float64(numSamplesInBucket-numLess) * float64(numRows) / float64(numSamples)
 		numRange := float64(numLess) * float64(numRows) / float64(numSamples)
 		distinctRange := estimatedDistinctValuesInRange(ctx, compareCtx, numRange, lowerBound, upper)
@@ -387,6 +386,162 @@ func equiDepthHistogramWithoutAdjustment(
 	}
 
 	return h, nil
+}
+
+// orderedSamples is used to sort a homogenous slice of tree.Datums. It
+// optimizes sorting for some types by building a slice of uint64s, abbr, which
+// has the properties:
+//
+// abbr[i] < abbr[j] iff samples[i] < samples[j]
+// abbr[i] > abbr[j] iff samples[i] > samples[j]
+//
+// If abbr[i] == abbr[j] then samples[i] may be greater than, less than, or
+// equal to samples[j].
+//
+// The O(n) overhead of building this slice is worth it because it allows for
+// faster O(n*log(n)) comparisons between samples. When abbr[i] != abbr[j], the
+// dynamic dispatch and indirection of Datum.Compare is avoided. Also, abbr is
+// compact and allows for better cache efficiency.
+type orderedSamples struct {
+	ctx        context.Context
+	compareCtx tree.CompareContext
+	abbr       []uint64
+	samples    tree.Datums
+}
+
+// Init initializes the orderedSamples struct and sorts the orderedSamples.
+func (os *orderedSamples) Init(
+	ctx context.Context, compareCtx tree.CompareContext, samples tree.Datums,
+) {
+	*os = orderedSamples{
+		ctx:        ctx,
+		compareCtx: compareCtx,
+		abbr:       buildAbbr(samples),
+		samples:    samples,
+	}
+	if len(os.abbr) > 0 {
+		// The samples were abbreviated so we can sort using an abbrSorter.
+		as := abbrSorter{orderedSamples: *os}
+		sort.Sort(&as)
+		return
+	}
+	// The samples could not be abbreviated, so we sort using Datum.Compare only.
+	sort.Slice(os.samples, func(i, j int) bool {
+		cmp, err := os.samples[i].Compare(os.ctx, os.compareCtx, os.samples[j])
+		if err != nil {
+			panic(err)
+		}
+		return cmp < 0
+	})
+}
+
+// Len returns the number of samples.
+func (os *orderedSamples) Len() int {
+	return len(os.samples)
+}
+
+// Compare returns -1, 0, or 1 if the sample at position i is less than, equal
+// to, or greater than, the sample at index j, respectively.
+func (os *orderedSamples) Compare(i, j int) (int, error) {
+	if len(os.abbr) > 0 {
+		if os.abbr[i] < os.abbr[j] {
+			return -1, nil
+		}
+		if os.abbr[i] > os.abbr[j] {
+			return 1, nil
+		}
+	}
+	cmp, err := os.samples[i].Compare(os.ctx, os.compareCtx, os.samples[j])
+	if err != nil {
+		return 0, err
+	}
+	return cmp, nil
+}
+
+// abbrSorter should only be used if the orderedSamples have been abbreviated,
+// i.e., len(orderedSamples.abbr) > 0. The Less and Swap methods assume this to
+// avoid branching.
+type abbrSorter struct {
+	orderedSamples
+}
+
+var _ sort.Interface = &abbrSorter{}
+
+// Less implements sort.Interface.
+func (as *abbrSorter) Less(i, j int) bool {
+	if as.abbr[i] < as.abbr[j] {
+		return true
+	}
+	if as.abbr[i] > as.abbr[j] {
+		return false
+	}
+	c, err := as.samples[i].Compare(as.ctx, as.compareCtx, as.samples[j])
+	if err != nil {
+		panic(err)
+	}
+	return c < 0
+}
+
+// Swap implements sort.Interface.
+func (as *abbrSorter) Swap(i, j int) {
+	as.abbr[i], as.abbr[j] = as.abbr[j], as.abbr[i]
+	as.samples[i], as.samples[j] = as.samples[j], as.samples[i]
+}
+
+// buildAbbr returns a slice of uint64s representing the most significant "bits"
+// of each sample. All samples must have the same concrete type. It returns nil
+// if the sample's type is not supported.
+func buildAbbr(samples tree.Datums) (abbr []uint64) {
+	switch samples[0].(type) {
+	case *tree.DString, *tree.DBytes, *tree.DInt:
+	default:
+		return nil
+	}
+
+	abbr = make([]uint64, len(samples))
+	for i := range samples {
+		if buildutil.CrdbTestBuild {
+			if reflect.TypeOf(samples[0]) != reflect.TypeOf(samples[i]) {
+				panic(fmt.Sprintf("expected all samples to have type %T, got %T",
+					samples[0], samples[i]))
+			}
+		}
+		switch t := samples[i].(type) {
+		case *tree.DString:
+			abbr[i] = abbreviate(t.UnsafeBytes())
+		case *tree.DBytes:
+			abbr[i] = abbreviate(t.UnsafeBytes())
+		case *tree.DInt:
+			// Map an int64 in the range [math.MinInt64, math.MaxInt64] to a
+			// uint64 in the range [0, math.MaxUint64].
+			abbr[i] = uint64(*t) + math.MaxInt64 + 1
+		}
+	}
+	return abbr
+}
+
+// abbreviate interprets up to the first 8 bytes of the slice as a big-endian
+// uint64. If the slice has less than 8 bytes, the value returned is the same as
+// if the slice was filled to 8 bytes with zero value bytes. For example:
+//
+//	abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+//	  => 1
+//
+//	abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00})
+//	  => 256
+//
+//	abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+//	  => 256
+func abbreviate(bs []byte) uint64 {
+	if len(bs) >= 8 {
+		return binary.BigEndian.Uint64(bs)
+	}
+	var v uint64
+	for _, b := range bs {
+		v <<= 8
+		v |= uint64(b)
+	}
+	return v << uint(8*(8-len(bs)))
 }
 
 // TS represents a timestamp when stats were created. It is like a type union.
@@ -803,12 +958,10 @@ func getMaxMCVs(st *cluster.Settings, maxBuckets int) int {
 }
 
 // getMCVs returns the indexes in samples of the last instance of each of the
-// most common values, in index order. For example, if samples contains
+// most common values, in index order. For example, if the samples in ss contain
 // [ a, a, a, b, c, c ], and maxMCVs is 2, getMCVs returns [ 2, 5 ].
-func getMCVs(
-	ctx context.Context, compareCtx tree.CompareContext, samples tree.Datums, maxMCVs int,
-) ([]int, error) {
-	if len(samples) == 0 {
+func getMCVs(os orderedSamples, maxMCVs int) ([]int, error) {
+	if os.Len() == 0 {
 		return nil, errors.AssertionFailedf("empty samples passed to getMCVs")
 	}
 
@@ -817,8 +970,8 @@ func getMCVs(
 	heap.Init[MCV](&h)
 	count := 1
 	distinctValues := 0
-	for i := 1; i < len(samples); i++ {
-		if c, err := samples[i].Compare(ctx, compareCtx, samples[i-1]); err != nil {
+	for i, n := 1, os.Len(); i < n; i++ {
+		if c, err := os.Compare(i, i-1); err != nil {
 			return nil, err
 		} else if c < 0 {
 			return nil, errors.AssertionFailedf("%+v", "samples not sorted")
@@ -838,7 +991,7 @@ func getMCVs(
 	}
 	// Add the last value.
 	heap.Push[MCV](&h, MCV{
-		idx:   len(samples) - 1,
+		idx:   os.Len() - 1,
 		count: count,
 	})
 	if len(h) > maxMCVs {
@@ -848,7 +1001,7 @@ func getMCVs(
 
 	// Only keep the values that are actually common. If the frequency of any
 	// value is less than or equal to the average sample frequency, remove it.
-	expectedCount := len(samples) / distinctValues
+	expectedCount := os.Len() / distinctValues
 	for len(h) > 0 && h[0].count <= expectedCount {
 		heap.Pop[MCV](&h)
 	}
