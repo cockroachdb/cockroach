@@ -324,6 +324,7 @@ func (h *Handle) Inspect(ctx context.Context) kvflowinspectpb.Handle {
 	for _, c := range h.mu.connections {
 		connected := kvflowinspectpb.ConnectedStream{
 			Stream:            h.controller.InspectStream(ctx, c.Stream()),
+			Connected:         true,
 			TrackedDeductions: h.mu.perStreamTokenTracker[c.Stream()].Inspect(ctx),
 		}
 		handle.ConnectedStreams = append(handle.ConnectedStreams, connected)

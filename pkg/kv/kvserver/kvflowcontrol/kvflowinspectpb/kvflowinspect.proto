@@ -79,6 +79,9 @@ message ConnectedStream {
   // before sending, for this connected stream. Only populated on versions >=
   // 24.3.
   int64 total_send_deducted_tokens = 4;
+  // Connected is true if the stream is connected for active replication. This
+  // corresponds to StateReplicate in raft.
+  bool connected = 5;
 }
 
 // Stream represents a given kvflowcontrol.Stream and the number of tokens
