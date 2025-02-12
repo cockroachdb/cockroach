@@ -724,7 +724,7 @@ func (coord *GrantCoordinator) adjustDiskTokenError(m StoreMetrics) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	if storeGranter, ok := coord.granters[KVWork].(*kvStoreTokenGranter); ok {
-		storeGranter.adjustDiskTokenErrorLocked(m.DiskStats.BytesRead, m.DiskStats.BytesWritten)
+		storeGranter.adjustDiskTokenErrorLocked(m.DiskStats)
 	}
 }
 
@@ -1021,7 +1021,7 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 					g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
 					g.coordMu.availableIOTokens[admissionpb.ElasticWorkClass],
 					g.coordMu.diskTokensAvailable.writeByteTokens,
-					g.coordMu.diskTokensError.diskReadTokensAlreadyDeducted,
+					g.coordMu.diskTokensError.tokensAlreadyDeducted.readByteTokens,
 				)
 			}
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
