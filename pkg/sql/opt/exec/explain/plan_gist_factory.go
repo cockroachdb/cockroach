@@ -498,6 +498,10 @@ func (u *unknownTable) ID() cat.StableID {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
+func (u *unknownTable) Version() uint64 {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
 func (u *unknownTable) PostgresDescriptorID() catid.DescID {
 	panic(errors.AssertionFailedf("not implemented"))
 }
