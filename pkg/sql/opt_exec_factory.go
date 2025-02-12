@@ -1842,6 +1842,71 @@ func (ef *execFactory) ConstructDeleteRange(
 	return dr, nil
 }
 
+// ConstructVectorSearch is part of the exec.Factory interface.
+func (ef *execFactory) ConstructVectorSearch(
+	table cat.Table,
+	index cat.Index,
+	outCols exec.TableColumnOrdinalSet,
+	prefixKey constraint.Key,
+	queryVector tree.TypedExpr,
+	targetNeighborCount uint64,
+) (exec.Node, error) {
+	tabDesc := table.(*optTable).desc
+	indexDesc := index.(*optIndex).idx
+	cols := makeColList(table, outCols)
+	resultCols := colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols)
+
+	// Encode the prefix values as a roachpb.Key.
+	var sb span.Builder
+	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
+	encPrefixKey, _, err := sb.EncodeConstraintKey(prefixKey)
+	if err != nil {
+		return nil, err
+	}
+	return &vectorSearchNode{
+		table:               tabDesc,
+		index:               indexDesc,
+		prefixKey:           encPrefixKey,
+		queryVector:         queryVector,
+		targetNeighborCount: targetNeighborCount,
+		cols:                cols,
+		resultCols:          resultCols,
+	}, nil
+}
+
+// ConstructVectorMutationSearch is part of the exec.Factory interface.
+func (ef *execFactory) ConstructVectorMutationSearch(
+	input exec.Node,
+	table cat.Table,
+	index cat.Index,
+	prefixKeyCols []exec.NodeColumnOrdinal,
+	queryVectorCol exec.NodeColumnOrdinal,
+	suffixKeyCols []exec.NodeColumnOrdinal,
+	isIndexPut bool,
+) (exec.Node, error) {
+	// Pass through the input columns, and project the partition key column and
+	// optionally the quantized vectors.
+	inputPlan := input.(planNode)
+	inputColumns := planColumns(inputPlan)
+	cols := make(colinfo.ResultColumns, len(inputColumns), len(inputColumns)+2)
+	copy(cols, inputColumns)
+	cols = append(cols, colinfo.ResultColumn{Name: "partition-key", Typ: types.Int})
+	if isIndexPut {
+		cols = append(cols, colinfo.ResultColumn{Name: "quantized-vector", Typ: types.Bytes})
+	}
+
+	return &vectorMutationSearchNode{
+		singleInputPlanNode: singleInputPlanNode{input: inputPlan},
+		table:               table.(*optTable).desc,
+		index:               index.(*optIndex).idx,
+		prefixKeyCols:       prefixKeyCols,
+		queryVectorCol:      queryVectorCol,
+		suffixKeyCols:       suffixKeyCols,
+		isIndexPut:          isIndexPut,
+		columns:             cols,
+	}, nil
+}
+
 // ConstructCreateTable is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateTable(
 	schema cat.Schema, ct *tree.CreateTable,
