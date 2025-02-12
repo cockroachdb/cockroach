@@ -102,6 +102,17 @@ var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 	0,
 	settings.WithPublic)
 
+// ProvisionedIOPS set a value of the provisioned IOPS for each store in the
+// cluster.
+var ProvisionedIOPS = settings.RegisterIntSetting(
+	settings.SystemOnly, "kvadmission.store.provisioned_iops",
+	"if set to a non-zero value, this is used as the provisioned IOPS (in IO per second), for "+
+		"each store. It can be overridden on a per-store basis using the --store flag. Note that "+
+		"setting the provisioned IOPS to a positive value may enable disk IOPS based "+
+		"admission control, since admission.disk_bandwidth_tokens.elastic.enabled defaults to true",
+	0,
+	settings.WithPublic)
+
 // FlowTokenDropInterval determines the frequency at which we check for pending
 // flow token dispatches to nodes we're no longer connected to, in order to drop
 // them.
