@@ -3480,12 +3480,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if ex.sessionData().AutoCommitBeforeDDL {
 			// If autocommit_before_ddl is set, we allow these statements to be
 			// executed, and send a warning rather than an error.
-			if err := ex.planner.SendClientNotice(
-				ctx,
-				pgerror.WithSeverity(errNoTransactionInProgress, "WARNING"),
-			); err != nil {
-				return ex.makeErrEvent(err, ast)
-			}
+			ex.planner.BufferClientNotice(ctx, pgerror.WithSeverity(errNoTransactionInProgress, "WARNING"))
 			return nil, nil
 		}
 		return ex.makeErrEvent(errNoTransactionInProgress, ast)
