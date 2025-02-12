@@ -19,28 +19,45 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func parse(t *testing.T, input string, plpgsql bool) (statements.ParsedStmts, error) {
+type Parser int
+
+const (
+	SQL Parser = iota
+	PLpgSQL
+)
+
+func parse(t *testing.T, input string, p Parser) (statements.ParsedStmts, error) {
 	t.Helper()
-	if plpgsql {
+	switch p {
+	case SQL:
+		return parser.Parse(input)
+	case PLpgSQL:
 		return plpgsqlparser.Parse(input)
+	default:
+		t.Fatalf("unexpected parser type: %v", p)
 	}
-	return parser.Parse(input)
+	return nil, fmt.Errorf("unreachable code")
 }
 
-func parseOne(t *testing.T, input string, plpgsql bool) (tree.NodeFormatter, error) {
+func parseOne(t *testing.T, input string, p Parser) (tree.NodeFormatter, error) {
 	t.Helper()
-	if plpgsql {
+	switch p {
+	case SQL:
+		stmt, err := parser.ParseOne(input)
+		if err != nil {
+			return nil, err
+		}
+		return stmt.AST, err
+	case PLpgSQL:
 		stmt, err := plpgsqlparser.Parse(input)
 		if err != nil {
 			return nil, err
 		}
 		return stmt.AST, err
+	default:
+		t.Fatalf("unexpected parser type: %v", p)
 	}
-	stmt, err := parser.ParseOne(input)
-	if err != nil {
-		return nil, err
-	}
-	return stmt.AST, err
+	return nil, fmt.Errorf("unreachable code")
 }
 
 // VerifyParseFormat is used in the SQL and PL/pgSQL datadriven parser tests to
@@ -51,22 +68,25 @@ func parseOne(t *testing.T, input string, plpgsql bool) (tree.NodeFormatter, err
 // after constants are removed. This can be needed to handle cases where quotes
 // are formatted differently depending on the string content.
 func VerifyParseFormat(
-	t *testing.T, input, pos string, plpgsql, reParseWithoutLiterals bool,
+	t *testing.T, input, pos string, p Parser, reParseWithoutLiterals bool,
 ) string {
 	t.Helper()
 
 	// Check parse.
-	stmts, err := parse(t, input, plpgsql)
+	stmts, err := parse(t, input, p)
 	if err != nil {
 		t.Fatalf("%s\nunexpected parse error: %v", pos, err)
 	}
 
 	// Check pretty-print roundtrip.
-	if plpgsql {
-		plStmt := stmts.(statements.PLpgStatement).AST
-		verifyStatementPrettyRoundTrip(t, input, plStmt, true /* plpgsql */)
-	} else {
+	switch p {
+	case SQL:
 		VerifyStatementPrettyRoundtrip(t, input)
+	case PLpgSQL:
+		plStmt := stmts.(statements.PLpgStatement).AST
+		verifyStatementPrettyRoundTrip(t, input, plStmt, PLpgSQL)
+	default:
+		t.Fatalf("unexpected parser type: %v", p)
 	}
 
 	ref := stmts.StringWithFlags(tree.FmtSimple)
@@ -87,7 +107,7 @@ func VerifyParseFormat(
 		// first the literals are removed from statement to form a stat key,
 		// then the stat key is re-parsed, to undergo the anonymization stage.
 		// We also want to check the re-parsing is fine.
-		reparsedStmts, err := parse(t, constantsHidden, plpgsql)
+		reparsedStmts, err := parse(t, constantsHidden, p)
 		if err != nil {
 			t.Fatalf("%s\nunexpected error when reparsing without literals: %+v", pos, err)
 		} else {
