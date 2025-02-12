@@ -823,7 +823,8 @@ a  b   v
 
 # Add virtual columns inside an explicit transactions.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE sc ADD COLUMN w1 INT AS (a*b) VIRTUAL
@@ -878,7 +879,8 @@ ALTER TABLE sc DROP COLUMN v
 
 # Add a column and an index on that column in the same transaction.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
@@ -905,10 +907,8 @@ ALTER TABLE sc DROP COLUMN v
 # Adding a column and a partial index using that column in the predicate in the
 # same transaction is not allowed.
 statement ok
-SET autocommit_before_ddl = false
-
-statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
@@ -918,9 +918,6 @@ CREATE INDEX partial_idx ON sc(b) WHERE v > 20
 
 statement ok
 END
-
-statement ok
-RESET autocommit_before_ddl
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
@@ -1088,11 +1085,9 @@ statement error pgcode 0A000 virtual computed column "k" referencing columns \("
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
    ADD COLUMN k INT AS (i+j) VIRTUAL;
 
-statement ok
-SET autocommit_before_ddl = false
-
 statement error pgcode 0A000 virtual computed column "l" referencing columns \("j", "k"\) added in the current transaction
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+    SET LOCAL autocommit_before_ddl = false;
     ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
     ALTER TABLE t_ref ADD COLUMN k INT NOT NULL DEFAULT 42;
     ALTER TABLE t_ref ADD COLUMN l INT AS (i+j+k) VIRTUAL;
@@ -1101,9 +1096,6 @@ COMMIT;
 statement ok
 ROLLBACK;
 
-statement ok
-RESET autocommit_before_ddl
-
 # Test that adding virtual computed columns to tables which have been created
 # in the current transaction is fine.
 
@@ -1111,10 +1103,8 @@ statement ok
 DROP TABLE t_ref;
 
 statement ok
-SET autocommit_before_ddl = false
-
-statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+    SET LOCAL autocommit_before_ddl = false;
     CREATE TABLE t_ref (i INT PRIMARY KEY);
     ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
     ALTER TABLE t_ref ADD COLUMN k INT AS (i+j) VIRTUAL;
@@ -1122,9 +1112,6 @@ COMMIT;
 
 statement ok
 DROP TABLE t_ref;
-
-statement ok
-RESET autocommit_before_ddl
 
 # Tests for virtual computed columns that reference foreign key columns.
 subtest referencing_fks
@@ -1315,12 +1302,14 @@ ALTER TABLE virtual_pk DROP COLUMN d;
 # the legacy schema changer.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 SET LOCAL use_declarative_schema_changer = off;
 ALTER TABLE virtual_pk ADD COLUMN d INT NOT NULL DEFAULT 42;
 COMMIT;
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 SET LOCAL use_declarative_schema_changer = off;
 ALTER TABLE virtual_pk DROP COLUMN d;
 COMMIT;
