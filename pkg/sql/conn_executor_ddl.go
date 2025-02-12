@@ -44,6 +44,7 @@ func (ex *connExecutor) maybeAutoCommitBeforeDDL(
 		if err := ex.planner.SendClientNotice(
 			ctx,
 			pgnotice.Newf("auto-committing transaction before processing DDL due to autocommit_before_ddl setting"),
+			false, /* immediateFlush */
 		); err != nil {
 			return ex.makeErrEvent(err, ast)
 		}

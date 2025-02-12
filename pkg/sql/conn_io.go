@@ -838,8 +838,9 @@ type RestrictedCommandResult interface {
 	// This gets flushed only when the CommandResult is closed.
 	BufferNotice(notice pgnotice.Notice)
 
-	// SendNotice immediately flushes a notice to the client.
-	SendNotice(ctx context.Context, notice pgnotice.Notice) error
+	// SendNotice sends a notice to the client, which can optionally be flushed
+	// immediately.
+	SendNotice(ctx context.Context, notice pgnotice.Notice, immediateFlush bool) error
 
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
@@ -1114,7 +1115,9 @@ func (r *streamingCommandResult) BufferNotice(notice pgnotice.Notice) {
 }
 
 // SendNotice is part of the RestrictedCommandResult interface.
-func (r *streamingCommandResult) SendNotice(ctx context.Context, notice pgnotice.Notice) error {
+func (r *streamingCommandResult) SendNotice(
+	ctx context.Context, notice pgnotice.Notice, immediateFlush bool,
+) error {
 	// Unimplemented: the internal executor does not support notices.
 	return nil
 }
