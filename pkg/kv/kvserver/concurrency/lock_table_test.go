@@ -618,7 +618,17 @@ func TestLockTableBasic(t *testing.T) {
 			case "clear":
 				lt.Clear(d.HasArg("disable"))
 				return lt.String()
-
+			case "clear-ge":
+				var endKeyStr string
+				d.ScanArgs(t, "key", &endKeyStr)
+				locks := lt.ClearGE(roachpb.Key(endKeyStr))
+				var buf strings.Builder
+				fmt.Fprintf(&buf, "num returned for re-acquisition: %d", len(locks))
+				for _, l := range locks {
+					fmt.Fprintf(&buf, "\n span: %s, txn: %s epo: %d, dur: %s, str: %s",
+						l.Span, l.Txn.ID, l.Txn.Epoch, l.Durability, l.Strength)
+				}
+				return buf.String()
 			case "print":
 				return lt.String()
 

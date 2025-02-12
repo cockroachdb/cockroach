@@ -36,6 +36,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
