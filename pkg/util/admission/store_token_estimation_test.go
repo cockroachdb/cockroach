@@ -27,6 +27,7 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 	var admissionStats storeAdmissionStats
 	var cumLSMIngestedBytes uint64
 	var cumDiskWrites uint64
+	var cumWriteCount uint64
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "store_per_work_token_estimator"),
 		func(t *testing.T, d *datadriven.TestData) string {
@@ -95,17 +96,24 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 					d.ScanArgs(t, "disk-writes", &diskWrites)
 					cumDiskWrites += uint64(diskWrites)
 				}
+				if d.HasArg("disk-write-count") {
+					var writeCount int
+					d.ScanArgs(t, "disk-write-count", &writeCount)
+					cumWriteCount += uint64(writeCount)
+				}
 				unflushedTooLarge := false
 				if d.HasArg("unflushed-too-large") {
 					unflushedTooLarge = true
 				}
+
 				estimator.updateEstimates(
-					l0Metrics, cumLSMIngestedBytes, cumDiskWrites, admissionStats, unflushedTooLarge)
-				wL0lm, iL0lm, ilm, wamplm := estimator.getModelsAtDone()
+					l0Metrics, cumLSMIngestedBytes, cumDiskWrites, cumWriteCount, admissionStats, unflushedTooLarge)
+				wL0lm, iL0lm, ilm, wamplm, iopsLM := estimator.getModelsAtDone()
 				require.Equal(t, wL0lm, estimator.atDoneL0WriteTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, iL0lm, estimator.atDoneL0IngestTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, ilm, estimator.atDoneIngestTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, wamplm, estimator.atDoneWriteAmpLinearModel.smoothedLinearModel)
+				require.Equal(t, iopsLM, estimator.atDoneWriteIOPSLinearModel.smoothedLinearModel)
 				var b strings.Builder
 				fmt.Fprintf(&b, "interval state: %+v\n", estimator.aux)
 				fmt.Fprintf(&b, "at-admission-tokens: %d\n",
@@ -118,6 +126,8 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 				printLinearModelFitter(&b, estimator.atDoneIngestTokensLinearModel)
 				fmt.Fprintf(&b, "write-amp: ")
 				printLinearModelFitter(&b, estimator.atDoneWriteAmpLinearModel)
+				fmt.Fprintf(&b, "write-iops: ")
+				printLinearModelFitter(&b, estimator.atDoneWriteIOPSLinearModel)
 				return b.String()
 
 			default:

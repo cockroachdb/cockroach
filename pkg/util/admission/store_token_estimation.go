@@ -112,6 +112,12 @@ const ingestMultiplierMax = 1.5
 const writeAmpMultiplierMin = 1.0
 const writeAmpMultiplierMax = 100.0
 
+// 256KiB sequential write can be 1 IO operation.
+const writeIOPSMultiplierMin = 1.0 / (256 * 1024)
+
+// Worst case scenario is that a 1B random write will use up 1 IO operation on its own.
+const writeIOPSMultiplierMax = 1.0
+
 type storePerWorkTokenEstimator struct {
 	atAdmissionWorkTokens int64
 
@@ -129,12 +135,18 @@ type storePerWorkTokenEstimator struct {
 	// total disk write throughput in a given interval. We ignore range snapshots
 	// here, since they land into lower levels (usually L6) of the LSM.
 	atDoneWriteAmpLinearModel tokensLinearModelFitter
+	// atDoneWriteIOPSLinearModel aims to model the relation between on disk bytes
+	// written and the write IOPS consumed by those bytes written. When deducting
+	// tokens for incoming writes, we should use bytes that already account for
+	// write-amp, and bytes from snapshot ingestion (without write-amp).
+	atDoneWriteIOPSLinearModel tokensLinearModelFitter
 
 	cumStoreAdmissionStats storeAdmissionStats
 	cumL0WriteBytes        uint64
 	cumL0IngestedBytes     uint64
 	cumLSMIngestedBytes    uint64
-	cumDiskWrites          uint64
+	cumDiskWriteBytes      uint64
+	cumDiskWriteCount      uint64
 
 	// Tracked for logging and copied out of here.
 	aux perWorkTokensAux
@@ -153,6 +165,7 @@ type perWorkTokensAux struct {
 	intL0IngestedLinearModel  tokensLinearModel
 	intIngestedLinearModel    tokensLinearModel
 	intWriteAmpLinearModel    tokensLinearModel
+	intWriteIOPSLinearModel   tokensLinearModel
 
 	// The bypassed count and bytes are also included in the overall interval
 	// stats.
@@ -188,6 +201,8 @@ func makeStorePerWorkTokenEstimator() storePerWorkTokenEstimator {
 			ingestMultiplierMin, ingestMultiplierMax, false),
 		atDoneWriteAmpLinearModel: makeTokensLinearModelFitter(
 			writeAmpMultiplierMin, writeAmpMultiplierMax, false),
+		atDoneWriteIOPSLinearModel: makeTokensLinearModelFitter(
+			writeIOPSMultiplierMin, writeIOPSMultiplierMax, false),
 	}
 }
 
@@ -195,7 +210,8 @@ func makeStorePerWorkTokenEstimator() storePerWorkTokenEstimator {
 func (e *storePerWorkTokenEstimator) updateEstimates(
 	l0Metrics pebble.LevelMetrics,
 	cumLSMIngestedBytes uint64,
-	cumDiskWrite uint64,
+	cumDiskWriteBytes uint64,
+	cumDiskWriteCount uint64,
 	admissionStats storeAdmissionStats,
 	unflushedMemTableTooLarge bool,
 ) {
@@ -204,7 +220,8 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		e.cumL0WriteBytes = l0Metrics.BytesFlushed
 		e.cumL0IngestedBytes = l0Metrics.BytesIngested
 		e.cumLSMIngestedBytes = cumLSMIngestedBytes
-		e.cumDiskWrites = cumDiskWrite
+		e.cumDiskWriteBytes = cumDiskWriteBytes
+		e.cumDiskWriteCount = cumDiskWriteCount
 		return
 	}
 	intL0WriteBytes := int64(l0Metrics.BytesFlushed) - int64(e.cumL0WriteBytes)
@@ -248,13 +265,23 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		intIngestedAccountedBytes, adjustedIntLSMIngestedBytes, intWorkCount)
 
 	// Write amplification model.
-	intDiskWrite := int64(cumDiskWrite - e.cumDiskWrites)
+	intDiskWrite := int64(cumDiskWriteBytes - e.cumDiskWriteBytes)
 	adjustedIntLSMWrites := adjustedIntL0WriteBytes + adjustedIntLSMIngestedBytes
 	adjustedIntDiskWrites := intDiskWrite - intIgnoredIngestedBytes - intL0IgnoredWriteBytes
 	if adjustedIntDiskWrites < 0 {
 		adjustedIntDiskWrites = 0
 	}
 	e.atDoneWriteAmpLinearModel.updateModelUsingIntervalStats(adjustedIntLSMWrites, adjustedIntDiskWrites, intWorkCount)
+
+	// Write IOPS model.
+	intDiskWriteCount := int64(cumDiskWriteCount - e.cumDiskWriteCount)
+	// We use intDiskWrite here as this model aims to estimate the conversion of
+	// on-disk bytes written to IOPS consumed. See comment on the declaration of
+	// atDoneWriteIOPSLinearModel.
+	e.atDoneWriteIOPSLinearModel.updateModelUsingIntervalStats(intDiskWrite, intDiskWriteCount, intWorkCount)
+
+	// TODO(aaditya): We need similar read models to the ones above in order to
+	// pace read traffic.
 
 	intL0TotalBytes := adjustedIntL0WriteBytes + adjustedIntL0IngestedBytes
 	intAboveRaftWorkCount := int64(admissionStats.aboveRaftStats.workCount) -
@@ -301,6 +328,7 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		intL0IngestedLinearModel:  e.atDoneL0IngestTokensLinearModel.intLinearModel,
 		intIngestedLinearModel:    e.atDoneIngestTokensLinearModel.intLinearModel,
 		intWriteAmpLinearModel:    e.atDoneWriteAmpLinearModel.intLinearModel,
+		intWriteIOPSLinearModel:   e.atDoneWriteIOPSLinearModel.intLinearModel,
 		intBypassedWorkCount: int64(admissionStats.aux.bypassedCount) -
 			int64(e.cumStoreAdmissionStats.aux.bypassedCount),
 		intL0WriteBypassedAccountedBytes: int64(admissionStats.aux.writeBypassedAccountedBytes) -
@@ -317,7 +345,8 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	e.cumL0WriteBytes = l0Metrics.BytesFlushed
 	e.cumL0IngestedBytes = l0Metrics.BytesIngested
 	e.cumLSMIngestedBytes = cumLSMIngestedBytes
-	e.cumDiskWrites = cumDiskWrite
+	e.cumDiskWriteBytes = cumDiskWriteBytes
+	e.cumDiskWriteCount = cumDiskWriteCount
 }
 
 func (e *storePerWorkTokenEstimator) getStoreRequestEstimatesAtAdmission() storeRequestEstimates {
@@ -329,9 +358,11 @@ func (e *storePerWorkTokenEstimator) getModelsAtDone() (
 	l0IngestLM tokensLinearModel,
 	ingestLM tokensLinearModel,
 	writeAmpLM tokensLinearModel,
+	writeIOPSLM tokensLinearModel,
 ) {
 	return e.atDoneL0WriteTokensLinearModel.smoothedLinearModel,
 		e.atDoneL0IngestTokensLinearModel.smoothedLinearModel,
 		e.atDoneIngestTokensLinearModel.smoothedLinearModel,
-		e.atDoneWriteAmpLinearModel.smoothedLinearModel
+		e.atDoneWriteAmpLinearModel.smoothedLinearModel,
+		e.atDoneWriteIOPSLinearModel.smoothedLinearModel
 }

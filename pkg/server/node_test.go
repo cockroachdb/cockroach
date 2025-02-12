@@ -1150,6 +1150,7 @@ func TestDiskStatsMap(t *testing.T) {
 		{
 			ProvisionedRateSpec: base.ProvisionedRateSpec{
 				ProvisionedBandwidth: 200,
+				ProvisionedIOPS:      150,
 			},
 			Path: "bar",
 		},
@@ -1173,9 +1174,10 @@ func TestDiskStatsMap(t *testing.T) {
 	}
 	var dsm diskStatsMap
 	clusterProvisionedBW := int64(150)
+	clusterProvisionedIOPS := int64(100)
 
 	// diskStatsMap contains nothing, so does not populate anything.
-	stats, err := dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW)
+	stats, err := dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW, clusterProvisionedIOPS)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(stats))
 
@@ -1196,7 +1198,7 @@ func TestDiskStatsMap(t *testing.T) {
 			WritesSectors: 5,
 		},
 	})
-	stats, err = dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW)
+	stats, err = dsm.tryPopulateAdmissionDiskStats(clusterProvisionedBW, clusterProvisionedIOPS)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(stats))
 	for _, id := range engineIDs {
@@ -1210,6 +1212,7 @@ func TestDiskStatsMap(t *testing.T) {
 				BytesRead:            disk.SectorSizeBytes,
 				BytesWritten:         2 * disk.SectorSizeBytes,
 				ProvisionedBandwidth: clusterProvisionedBW,
+				ProvisionedIOPS:      clusterProvisionedIOPS,
 			}
 		// "bar"
 		case 5:
@@ -1217,6 +1220,7 @@ func TestDiskStatsMap(t *testing.T) {
 				BytesRead:            4 * disk.SectorSizeBytes,
 				BytesWritten:         5 * disk.SectorSizeBytes,
 				ProvisionedBandwidth: 200,
+				ProvisionedIOPS:      150,
 			}
 		}
 		require.Equal(t, expectedDS, ds)

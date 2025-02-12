@@ -251,6 +251,8 @@ type ioLoadListenerState struct {
 		// Cumulative
 		bytesRead    uint64
 		bytesWritten uint64
+		readCount    uint64
+		writeCount   uint64
 	}
 	cumCompactionStats           cumStoreCompactionStats
 	cumWALSecondaryWriteDuration time.Duration
@@ -283,16 +285,15 @@ type ioLoadListenerState struct {
 	totalNumElasticByteTokens  int64
 	elasticByteTokensAllocated int64
 
-	// diskWriteTokens represents the tokens to give out until the next
-	// call to adjustTokens. They are parceled out in small intervals.
-	// diskWriteTokensAllocated represents what has been given out.
-	diskWriteTokens          int64
-	diskWriteTokensAllocated int64
-	// diskReadTokens are tokens that were already deducted during token
-	// estimation. These tokens are used for read error accounting
-	// adjustDiskTokenErrorLocked.
-	diskReadTokens          int64
-	diskReadTokensAllocated int64
+	// diskTokensAvailable represents the tokens to give out until the next call
+	// to adjustTokens. They are parceled out in small intervals.
+	//
+	// NB: Both read byte and IOPS tokens are used for read error accounting in
+	// adjustDiskTokenErrorLocked. They represent tokens that were already
+	// deducted from their write counterparts.
+	diskTokensAvailable diskTokens
+	// diskTokensAllocated represents what has been given out.
+	diskTokensAllocated diskTokens
 }
 
 type cumStoreCompactionStats struct {
@@ -542,7 +543,8 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 		sas := io.kvRequester.getStoreAdmissionStats()
 		cumIngestBytes := cumLSMIngestedBytes(metrics.Metrics)
 		io.perWorkTokenEstimator.updateEstimates(
-			metrics.Levels[0], cumIngestBytes, metrics.DiskStats.BytesWritten, sas, false)
+			metrics.Levels[0], cumIngestBytes, metrics.DiskStats.BytesWritten, metrics.DiskStats.WriteCount,
+			sas, false)
 		io.adjustTokensResult = adjustTokensResult{
 			ioLoadListenerState: ioLoadListenerState{
 				cumL0AddedBytes:              m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
@@ -554,11 +556,15 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 				// No initial limit, i.e, the first interval is unlimited.
 				totalNumByteTokens:        unlimitedTokens,
 				totalNumElasticByteTokens: unlimitedTokens,
-				diskWriteTokens:           unlimitedTokens,
-				// Currently, disk read tokens are only used to assess how many tokens
-				// were deducted from the writes bucket to account for future reads. A 0
-				// value here represents that.
-				diskReadTokens: 0,
+				diskTokensAvailable: diskTokens{
+					writeByteTokens: unlimitedTokens,
+					writeIOPSTokens: unlimitedTokens,
+					// Disk read tokens are only used to assess how many tokens were
+					// deducted from the writes bucket to account for future reads. A 0
+					// value here represents that.
+					readByteTokens: 0,
+					readIOPSTokens: 0,
+				},
 			},
 			aux: adjustTokensAuxComputations{},
 			ioThreshold: &admissionpb.IOThreshold{
@@ -628,29 +634,54 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		panic(errors.AssertionFailedf("toAllocateElasticByteTokens is negative %d",
 			toAllocateElasticByteTokens))
 	}
+
 	toAllocateDiskWriteTokens :=
 		allocateFunc(
-			io.diskWriteTokens,
-			io.diskWriteTokensAllocated,
+			io.diskTokensAvailable.writeByteTokens,
+			io.diskTokensAllocated.writeByteTokens,
 			remainingTicks,
 		)
 	if toAllocateDiskWriteTokens < 0 {
 		panic(errors.AssertionFailedf("toAllocateDiskWriteTokens is negative %d",
 			toAllocateDiskWriteTokens))
 	}
-	io.diskWriteTokensAllocated += toAllocateDiskWriteTokens
+	io.diskTokensAllocated.writeByteTokens += toAllocateDiskWriteTokens
+
+	toAllocateDiskWriteIOPSTokens :=
+		allocateFunc(
+			io.diskTokensAvailable.writeIOPSTokens,
+			io.diskTokensAllocated.writeIOPSTokens,
+			remainingTicks,
+		)
+	if toAllocateDiskWriteIOPSTokens < 0 {
+		panic(errors.AssertionFailedf("toAllocateDiskWriteIOPSTokens is negative %d",
+			toAllocateDiskWriteIOPSTokens))
+	}
+	io.diskTokensAllocated.writeIOPSTokens += toAllocateDiskWriteTokens
 
 	toAllocateDiskReadTokens :=
 		allocateFunc(
-			io.diskReadTokens,
-			io.diskReadTokensAllocated,
+			io.diskTokensAvailable.readByteTokens,
+			io.diskTokensAllocated.readByteTokens,
 			remainingTicks,
 		)
 	if toAllocateDiskReadTokens < 0 {
 		panic(errors.AssertionFailedf("toAllocateDiskReadTokens is negative %d",
 			toAllocateDiskReadTokens))
 	}
-	io.diskReadTokensAllocated += toAllocateDiskReadTokens
+	io.diskTokensAllocated.readByteTokens += toAllocateDiskReadTokens
+
+	toAllocateDiskReadIOPSTokens :=
+		allocateFunc(
+			io.diskTokensAvailable.readIOPSTokens,
+			io.diskTokensAllocated.readIOPSTokens,
+			remainingTicks,
+		)
+	if toAllocateDiskReadIOPSTokens < 0 {
+		panic(errors.AssertionFailedf("toAllocateDiskReadIOPSTokens is negative %d",
+			toAllocateDiskReadIOPSTokens))
+	}
+	io.diskTokensAllocated.readIOPSTokens += toAllocateDiskReadIOPSTokens
 
 	// INVARIANT: toAllocate >= 0.
 	io.byteTokensAllocated += toAllocateByteTokens
@@ -670,17 +701,27 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		io.totalNumElasticByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
 	diskWriteTokenMaxCapacity := allocateFunc(
-		io.diskWriteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
+		io.diskTokensAvailable.writeByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
+	diskWriteIOPSTokenMaxCapacity := allocateFunc(
+		io.diskTokensAvailable.writeIOPSTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
+	)
+
+	toAllocateDiskTokens := diskTokens{
+		readByteTokens:  toAllocateDiskReadTokens,
+		writeByteTokens: toAllocateDiskWriteTokens,
+		readIOPSTokens:  toAllocateDiskReadIOPSTokens,
+		writeIOPSTokens: toAllocateDiskWriteIOPSTokens,
+	}
 
 	tokensUsed, tokensUsedByElasticWork := io.kvGranter.setAvailableTokens(
 		toAllocateByteTokens,
 		toAllocateElasticByteTokens,
-		toAllocateDiskWriteTokens,
-		toAllocateDiskReadTokens,
+		toAllocateDiskTokens,
 		tokensMaxCapacity,
 		elasticTokensMaxCapacity,
 		diskWriteTokenMaxCapacity,
+		diskWriteIOPSTokenMaxCapacity,
 		remainingTicks == 1,
 	)
 	io.byteTokensUsed += tokensUsed
@@ -688,12 +729,20 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 }
 
 func computeIntervalDiskLoadInfo(
-	prevCumBytesRead uint64, prevCumBytesWritten uint64, diskStats DiskStats, elasticBWUtil float64,
+	prevCumBytesRead uint64,
+	prevCumBytesWritten uint64,
+	prevCumReadCount uint64,
+	prevCumWriteCount uint64,
+	diskStats DiskStats,
+	elasticBWUtil float64,
 ) intervalDiskLoadInfo {
 	return intervalDiskLoadInfo{
 		intReadBytes:            int64(diskStats.BytesRead - prevCumBytesRead),
 		intWriteBytes:           int64(diskStats.BytesWritten - prevCumBytesWritten),
+		intReadCount:            int64(diskStats.ReadCount - prevCumReadCount),
+		intWriteCount:           int64(diskStats.WriteCount - prevCumWriteCount),
 		intProvisionedDiskBytes: diskStats.ProvisionedBandwidth * adjustmentInterval,
+		intProvisionedIOCount:   diskStats.ProvisionedIOPS * adjustmentInterval,
 		elasticBandwidthMaxUtil: elasticBWUtil,
 	}
 }
@@ -732,39 +781,47 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	io.adjustTokensResult = res
 	cumIngestedBytes := cumLSMIngestedBytes(metrics.Metrics)
 
-	// Disk Bandwidth tokens.
+	// Disk Bandwidth and IOPS tokens.
 	elasticBWMaxUtil := ElasticBandwidthMaxUtil.Get(&io.settings.SV)
 	intDiskLoadInfo := computeIntervalDiskLoadInfo(
-		cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats, elasticBWMaxUtil)
+		cumDiskBW.bytesRead, cumDiskBW.bytesWritten, cumDiskBW.readCount, cumDiskBW.writeCount, metrics.DiskStats, elasticBWMaxUtil)
 	diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
-	if metrics.DiskStats.ProvisionedBandwidth > 0 {
+	if metrics.DiskStats.ProvisionedBandwidth > 0 || metrics.DiskStats.ProvisionedIOPS > 0 {
 		tokens := io.diskBandwidthLimiter.computeElasticTokens(
 			intDiskLoadInfo, diskTokensUsed)
-		io.diskWriteTokens = tokens.writeByteTokens
-		io.diskWriteTokensAllocated = 0
-		io.diskReadTokens = tokens.readByteTokens
-		io.diskWriteTokensAllocated = 0
+		io.diskTokensAvailable = tokens
 	}
 	if metrics.DiskStats.ProvisionedBandwidth == 0 ||
 		!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) {
-		io.diskWriteTokens = unlimitedTokens
+		io.diskTokensAvailable.writeByteTokens = unlimitedTokens
 		// Currently, disk read tokens are only used to assess how many tokens were
 		// deducted from the writes bucket to account for future reads. A 0 value
 		// here represents that.
-		io.diskReadTokens = 0
+		io.diskTokensAvailable.readByteTokens = 0
+	}
+	if metrics.DiskStats.ProvisionedIOPS == 0 ||
+		!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) {
+		io.diskTokensAvailable.writeIOPSTokens = unlimitedTokens
+		// Currently, disk read tokens are only used to assess how many tokens were
+		// deducted from the writes bucket to account for future reads. A 0 value
+		// here represents that.
+		io.diskTokensAvailable.readIOPSTokens = 0
 	}
 	io.diskBW.bytesRead = metrics.DiskStats.BytesRead
 	io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
+	io.diskBW.readCount = metrics.DiskStats.ReadCount
+	io.diskBW.writeCount = metrics.DiskStats.WriteCount
 
 	io.perWorkTokenEstimator.updateEstimates(
-		metrics.Levels[0], cumIngestedBytes, metrics.DiskStats.BytesWritten, sas,
-		io.aux.recentUnflushedMemTableTooLarge)
+		metrics.Levels[0], cumIngestedBytes, metrics.DiskStats.BytesWritten, metrics.DiskStats.WriteCount,
+		sas, io.aux.recentUnflushedMemTableTooLarge)
 	io.copyAuxEtcFromPerWorkEstimator()
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
-	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM := io.perWorkTokenEstimator.getModelsAtDone()
-	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM)
-	if io.aux.doLogFlush || io.diskBandwidthLimiter.state.diskBWUtil > 0.8 || log.V(1) {
+	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM, writeIOPSLM := io.perWorkTokenEstimator.getModelsAtDone()
+	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM, writeIOPSLM)
+	diskBandwidthOrIOPSHighUsage := io.diskBandwidthLimiter.state.diskBWUtil > 0.8 || io.diskBandwidthLimiter.state.diskIOPSUtil > 0.8
+	if io.aux.doLogFlush || diskBandwidthOrIOPSHighUsage || log.V(1) {
 		log.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
 	}
 }
@@ -778,11 +835,12 @@ func (io *ioLoadListener) copyAuxEtcFromPerWorkEstimator() {
 	io.adjustTokensResult.aux.perWorkTokensAux = io.perWorkTokenEstimator.aux
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.adjustTokensResult.requestEstimates = requestEstimates
-	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM := io.perWorkTokenEstimator.getModelsAtDone()
+	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM, writeIOPSLM := io.perWorkTokenEstimator.getModelsAtDone()
 	io.adjustTokensResult.l0WriteLM = l0WriteLM
 	io.adjustTokensResult.l0IngestLM = l0IngestLM
 	io.adjustTokensResult.ingestLM = ingestLM
 	io.adjustTokensResult.writeAmpLM = writeAmpLM
+	io.adjustTokensResult.writeIOPSLM = writeIOPSLM
 }
 
 type tokenKind int8
@@ -1294,6 +1352,7 @@ type adjustTokensResult struct {
 	l0IngestLM       tokensLinearModel
 	ingestLM         tokensLinearModel
 	writeAmpLM       tokensLinearModel
+	writeIOPSLM      tokensLinearModel
 	aux              adjustTokensAuxComputations
 	ioThreshold      *admissionpb.IOThreshold // never nil
 }
@@ -1344,6 +1403,10 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 		res.aux.perWorkTokensAux.intWriteAmpLinearModel.multiplier,
 		ib(res.aux.perWorkTokensAux.intWriteAmpLinearModel.constant),
 		res.writeAmpLM.multiplier, ib(res.writeAmpLM.constant))
+	p.Printf("write-iops-model %.2fx+%d (smoothed %.2fx+%d) + ",
+		res.aux.perWorkTokensAux.intWriteIOPSLinearModel.multiplier,
+		res.aux.perWorkTokensAux.intWriteIOPSLinearModel.constant,
+		res.writeIOPSLM.multiplier, res.writeIOPSLM.constant)
 	// The tokens used per request at admission time, when no size information
 	// is known.
 	p.Printf("at-admission-tokens %s, ", ib(res.requestEstimates.writeTokens))

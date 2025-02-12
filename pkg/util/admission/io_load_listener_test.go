@@ -200,11 +200,30 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("disk-write-tokens-used") {
 					var regularTokensUsed, elasticTokensUsed int64
 					d.ScanArgs(t, "disk-write-tokens-used", &regularTokensUsed, &elasticTokensUsed)
-					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = diskTokens{writeByteTokens: regularTokensUsed}
-					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = diskTokens{writeByteTokens: elasticTokensUsed}
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularStoreWorkType].writeByteTokens = regularTokensUsed
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticStoreWorkType].writeByteTokens = elasticTokensUsed
 				} else {
-					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = diskTokens{}
-					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = diskTokens{}
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularStoreWorkType].writeByteTokens = 0
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticStoreWorkType].writeByteTokens = 0
+				}
+				var provisionedIOPS, readCount, writeCount int
+				if d.HasArg("provisioned-iops") {
+					d.ScanArgs(t, "provisioned-iops", &provisionedIOPS)
+				}
+				if d.HasArg("read-count") {
+					d.ScanArgs(t, "read-count", &readCount)
+				}
+				if d.HasArg("write-count") {
+					d.ScanArgs(t, "write-count", &writeCount)
+				}
+				if d.HasArg("disk-write-iops-tokens-used") {
+					var regularTokensUsed, elasticTokensUsed int64
+					d.ScanArgs(t, "disk-write-iops-tokens-used", &regularTokensUsed, &elasticTokensUsed)
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularStoreWorkType].writeIOPSTokens = regularTokensUsed
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticStoreWorkType].writeIOPSTokens = elasticTokensUsed
+				} else {
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularStoreWorkType].writeIOPSTokens = 0
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticStoreWorkType].writeIOPSTokens = 0
 				}
 				var printOnlyFirstTick bool
 				if d.HasArg("print-only-first-tick") {
@@ -224,7 +243,10 @@ func TestIOLoadListener(t *testing.T) {
 					DiskStats: DiskStats{
 						BytesRead:            uint64(bytesRead),
 						BytesWritten:         uint64(bytesWritten),
+						ReadCount:            uint64(readCount),
+						WriteCount:           uint64(writeCount),
 						ProvisionedBandwidth: int64(provisionedBandwidth),
+						ProvisionedIOPS:      int64(provisionedIOPS),
 					},
 					MemTableSizeForStopWrites: memTableSizeForStopWrites,
 				})
@@ -260,10 +282,11 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	ioll := ioLoadListener{
-		settings:         st,
-		kvRequester:      req,
-		l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
-		l0TokensProduced: metric.NewCounter(l0TokensProduced),
+		settings:             st,
+		kvRequester:          req,
+		l0CompactedBytes:     metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced:     metric.NewCounter(l0TokensProduced),
+		diskBandwidthLimiter: newDiskBandwidthLimiter(),
 	}
 	ioll.kvGranter = kvGranter
 	// Bug 1: overflow when totalNumByteTokens is too large.
@@ -388,10 +411,14 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			require.LessOrEqual(t, float64(0), ioll.flushUtilTargetFraction)
 			require.LessOrEqual(t, int64(0), ioll.totalNumByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.byteTokensAllocated)
-			require.LessOrEqual(t, int64(0), ioll.diskWriteTokens)
-			require.LessOrEqual(t, int64(0), ioll.diskWriteTokensAllocated)
-			require.LessOrEqual(t, int64(0), ioll.diskReadTokens)
-			require.LessOrEqual(t, int64(0), ioll.diskReadTokensAllocated)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAvailable.writeByteTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAvailable.readByteTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAvailable.writeIOPSTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAvailable.readIOPSTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAllocated.writeByteTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAllocated.readByteTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAllocated.writeIOPSTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAllocated.readIOPSTokens)
 		}
 	}
 }
@@ -428,23 +455,29 @@ var _ granterWithIOTokens = &testGranterWithIOTokens{}
 func (g *testGranterWithIOTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	elasticDiskBandwidthTokens int64,
-	elasticReadBandwidthTokens int64,
+	elasticDiskTokens diskTokens,
 	maxIOTokens int64,
 	maxElasticIOTokens int64,
 	maxElasticDiskBandwidthTokens int64,
+	maxElasticWriteIOPSTokens int64,
 	lastTick bool,
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
+	// TODO(aaditya): update for iops
 	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
 		"elastic-disk-bw-tokens=%s read-bw-tokens=%s "+
-		"max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
+		"elastic-disk-iops-tokens=%s read-iops-tokens=%s "+
+		"max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s max-disk-bw-tokens=%s "+
+		"lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
 		tokensForTokenTickDurationToString(elasticIOTokens),
-		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
-		tokensForTokenTickDurationToString(elasticReadBandwidthTokens),
+		tokensForTokenTickDurationToString(elasticDiskTokens.writeByteTokens),
+		tokensForTokenTickDurationToString(elasticDiskTokens.readByteTokens),
+		tokensForTokenTickDurationToString(elasticDiskTokens.writeIOPSTokens),
+		tokensForTokenTickDurationToString(elasticDiskTokens.readIOPSTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
 		tokensForTokenTickDurationToString(maxElasticIOTokens),
 		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
+		tokensForTokenTickDurationToString(maxElasticWriteIOPSTokens),
 		lastTick,
 	)
 	if g.allTokensUsed {
@@ -464,6 +497,7 @@ func (g *testGranterWithIOTokens) setLinearModels(
 	l0IngestLM tokensLinearModel,
 	ingestLM tokensLinearModel,
 	writeAmpLM tokensLinearModel,
+	iopsLM tokensLinearModel,
 ) {
 	fmt.Fprintf(&g.buf, "setAdmittedDoneModelsLocked: l0-write-lm: ")
 	printLinearModel(&g.buf, l0WriteLM)
@@ -473,6 +507,8 @@ func (g *testGranterWithIOTokens) setLinearModels(
 	printLinearModel(&g.buf, ingestLM)
 	fmt.Fprintf(&g.buf, " write-amp-lm: ")
 	printLinearModel(&g.buf, writeAmpLM)
+	fmt.Fprintf(&g.buf, " write-iops-lm: ")
+	printLinearModel(&g.buf, iopsLM)
 	fmt.Fprintf(&g.buf, "\n")
 }
 
@@ -494,8 +530,8 @@ var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	elasticDiskBandwidthTokens int64,
-	elasticDiskReadBandwidthTokens int64,
+	elasticDiskTokens diskTokens,
+	_ int64,
 	_ int64,
 	_ int64,
 	_ int64,
@@ -503,8 +539,8 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
 	require.LessOrEqual(g.t, int64(0), elasticIOTokens)
-	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
-	require.LessOrEqual(g.t, int64(0), elasticDiskReadBandwidthTokens)
+	require.LessOrEqual(g.t, int64(0), elasticDiskTokens.writeByteTokens)
+	require.LessOrEqual(g.t, int64(0), elasticDiskTokens.readByteTokens)
 	return 0, 0
 }
 
@@ -519,6 +555,7 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	l0IngestLM tokensLinearModel,
 	ingestLM tokensLinearModel,
 	writeAmpLM tokensLinearModel,
+	iopsLM tokensLinearModel,
 ) {
 	require.LessOrEqual(g.t, 0.5, l0WriteLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), l0WriteLM.constant)
@@ -528,6 +565,8 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	require.LessOrEqual(g.t, int64(0), ingestLM.constant)
 	require.LessOrEqual(g.t, 1.0, writeAmpLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), writeAmpLM.constant)
+	require.Less(g.t, 0.0, iopsLM.multiplier)
+	require.LessOrEqual(g.t, int64(0), iopsLM.constant)
 }
 
 // Tests if the tokenAllocationTicker produces correct adjustment interval
