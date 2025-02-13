@@ -738,7 +738,7 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
 	ib.indexBackfillerCols, err = makeIndexBackfillColumns(
-		desc.DeletableColumns(), ib.sourceIndex, ib.added,
+		desc, desc.DeletableColumns(), ib.sourceIndex, ib.added,
 	)
 	return err
 }

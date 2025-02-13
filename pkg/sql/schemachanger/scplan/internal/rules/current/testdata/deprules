@@ -4031,21 +4031,6 @@ deprules
     - $old-index-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
     - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
-- name: primary index with new columns should exist before secondary indexes
-  from: primary-index-Node
-  kind: Precedence
-  to: secondary-index-Node
-  query:
-    - $primary-index[Type] = '*scpb.PrimaryIndex'
-    - $secondary-index[Type] = '*scpb.SecondaryIndex'
-    - joinOnDescID($primary-index, $secondary-index, $table-id)
-    - $primary-index[IndexID] = $primary-index-id
-    - $secondary-index[SourceIndexID] = $primary-index-id
-    - ToPublicOrTransient($primary-index-Target, $secondary-index-Target)
-    - $primary-index-Node[CurrentStatus] = PUBLIC
-    - $secondary-index-Node[CurrentStatus] = BACKFILL_ONLY
-    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
-    - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
 - name: primary index with new columns should exist before temp indexes
   from: primary-index-Node
   kind: Precedence
@@ -4057,10 +4042,25 @@ deprules
     - $primary-index[IndexID] = $primary-index-id
     - $temp-index[SourceIndexID] = $primary-index-id
     - ToPublicOrTransient($primary-index-Target, $temp-index-Target)
-    - $primary-index-Node[CurrentStatus] = PUBLIC
+    - $primary-index-Node[CurrentStatus] = VALIDATED
     - $temp-index-Node[CurrentStatus] = DELETE_ONLY
     - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
     - joinTargetNode($temp-index, $temp-index-Target, $temp-index-Node)
+- name: primary index with new columns should validated before secondary indexes
+  from: primary-index-Node
+  kind: Precedence
+  to: secondary-index-Node
+  query:
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - $secondary-index[Type] = '*scpb.SecondaryIndex'
+    - joinOnDescID($primary-index, $secondary-index, $table-id)
+    - $primary-index[IndexID] = $primary-index-id
+    - $secondary-index[SourceIndexID] = $primary-index-id
+    - ToPublicOrTransient($primary-index-Target, $secondary-index-Target)
+    - $primary-index-Node[CurrentStatus] = VALIDATED
+    - $secondary-index-Node[CurrentStatus] = BACKFILL_ONLY
+    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
+    - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
 - name: relation dropped before dependent column
   from: descriptor-Node
   kind: Precedence
@@ -4462,6 +4462,21 @@ deprules
     - isIndexKeyColumnKey(*scpb.IndexColumn)($index-column)
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: secondary indexes should be in a validated state before primary indexes can go public
+  from: secondary-index-Node
+  kind: Precedence
+  to: primary-index-Node
+  query:
+    - $secondary-index[Type] = '*scpb.SecondaryIndex'
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - joinOnDescID($secondary-index, $primary-index, $table-id)
+    - $secondary-index[SourceIndexID] = $primary-index-id
+    - $primary-index[IndexID] = $primary-index-id
+    - ToPublicOrTransient($secondary-index-Target, $primary-index-Target)
+    - $secondary-index-Node[CurrentStatus] = VALIDATED
+    - $primary-index-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
+    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
 - name: simple constraint public right before its dependents
   from: simple-constraint-Node
   kind: SameStagePrecedence
@@ -8687,21 +8702,6 @@ deprules
     - $old-index-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
     - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
-- name: primary index with new columns should exist before secondary indexes
-  from: primary-index-Node
-  kind: Precedence
-  to: secondary-index-Node
-  query:
-    - $primary-index[Type] = '*scpb.PrimaryIndex'
-    - $secondary-index[Type] = '*scpb.SecondaryIndex'
-    - joinOnDescID($primary-index, $secondary-index, $table-id)
-    - $primary-index[IndexID] = $primary-index-id
-    - $secondary-index[SourceIndexID] = $primary-index-id
-    - ToPublicOrTransient($primary-index-Target, $secondary-index-Target)
-    - $primary-index-Node[CurrentStatus] = PUBLIC
-    - $secondary-index-Node[CurrentStatus] = BACKFILL_ONLY
-    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
-    - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
 - name: primary index with new columns should exist before temp indexes
   from: primary-index-Node
   kind: Precedence
@@ -8713,10 +8713,25 @@ deprules
     - $primary-index[IndexID] = $primary-index-id
     - $temp-index[SourceIndexID] = $primary-index-id
     - ToPublicOrTransient($primary-index-Target, $temp-index-Target)
-    - $primary-index-Node[CurrentStatus] = PUBLIC
+    - $primary-index-Node[CurrentStatus] = VALIDATED
     - $temp-index-Node[CurrentStatus] = DELETE_ONLY
     - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
     - joinTargetNode($temp-index, $temp-index-Target, $temp-index-Node)
+- name: primary index with new columns should validated before secondary indexes
+  from: primary-index-Node
+  kind: Precedence
+  to: secondary-index-Node
+  query:
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - $secondary-index[Type] = '*scpb.SecondaryIndex'
+    - joinOnDescID($primary-index, $secondary-index, $table-id)
+    - $primary-index[IndexID] = $primary-index-id
+    - $secondary-index[SourceIndexID] = $primary-index-id
+    - ToPublicOrTransient($primary-index-Target, $secondary-index-Target)
+    - $primary-index-Node[CurrentStatus] = VALIDATED
+    - $secondary-index-Node[CurrentStatus] = BACKFILL_ONLY
+    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
+    - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
 - name: relation dropped before dependent column
   from: descriptor-Node
   kind: Precedence
@@ -9118,6 +9133,21 @@ deprules
     - isIndexKeyColumnKey(*scpb.IndexColumn)($index-column)
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: secondary indexes should be in a validated state before primary indexes can go public
+  from: secondary-index-Node
+  kind: Precedence
+  to: primary-index-Node
+  query:
+    - $secondary-index[Type] = '*scpb.SecondaryIndex'
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - joinOnDescID($secondary-index, $primary-index, $table-id)
+    - $secondary-index[SourceIndexID] = $primary-index-id
+    - $primary-index[IndexID] = $primary-index-id
+    - ToPublicOrTransient($secondary-index-Target, $primary-index-Target)
+    - $secondary-index-Node[CurrentStatus] = VALIDATED
+    - $primary-index-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
+    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
 - name: simple constraint public right before its dependents
   from: simple-constraint-Node
   kind: SameStagePrecedence
