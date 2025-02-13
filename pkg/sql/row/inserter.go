@@ -124,9 +124,15 @@ func insertPutMustAcquireExclusiveLockFn(
 }
 
 // insertDelFn is used by insertRow to delete existing rows.
-func insertDelFn(ctx context.Context, b Putter, key *roachpb.Key, traceKV bool) {
+func insertDelFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
+) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "Del %s", *key)
+		log.VEventfDepth(ctx, 1, 2, "Del %s", keys.PrettyPrint(keyEncodingDirs, *key))
 	}
 	b.Del(key)
 }

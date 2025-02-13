@@ -155,7 +155,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	if n := len(d.run.td.tableDesc().PartialIndexes()); n > 0 {
 		partialIndexDelVals := sourceVals[deleteCols : deleteCols+n]
 
-		err := pm.Init(nil /*partialIndexPutVals */, partialIndexDelVals, d.run.td.tableDesc())
+		err := pm.Init(nil /* partialIndexPutVals */, partialIndexDelVals, d.run.td.tableDesc())
 		if err != nil {
 			return err
 		}

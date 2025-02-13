@@ -100,9 +100,7 @@ func MakeDeleter(
 }
 
 // DeleteRow adds to the batch the kv operations necessary to delete a table row
-// with the given values. It also will cascade as required and check for
-// orphaned rows. The bytesMonitor is only used if cascading/fk checking and can
-// be nil if not.
+// with the given values.
 func (rd *Deleter) DeleteRow(
 	ctx context.Context,
 	b *kv.Batch,
