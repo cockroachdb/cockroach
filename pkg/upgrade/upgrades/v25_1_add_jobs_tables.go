@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // addJobsTables adds the job_progress, job_progress_history, job_status and
@@ -95,57 +94,76 @@ func backfillJobsTablesAndColumns(
 	log.Infof(ctx, "backfilling new jobs tables and columns")
 	jobsBackfilled := 0
 	for {
+		candidateRows, err := d.DB.Executor().QueryBufferedEx(ctx, "jobs-backfill-find", nil, sessiondata.NodeUserSessionDataOverride,
+			`SELECT id FROM system.jobs WHERE owner IS NULL LIMIT $1`, jobsBackfillPageSize)
+		if err != nil {
+			return err
+		}
+		if len(candidateRows) == 0 {
+			// All done!
+			break
+		}
+
+		candidates := make([]int, len(candidateRows))
+		for i := range candidateRows {
+			candidates[i] = int(tree.MustBeDInt(candidateRows[i][0]))
+		}
 		var done int
 		if err := d.DB.DescsTxn(ctx, func(ctx context.Context, tx descs.Txn) (retErr error) {
-			// Find rows that have not been backfilled, which we will detect via a
-			// NULL owner. The coalesce() here isn't necessary since the vtable will
-			// produce empty strings rather than nulls if a job somehow is missing an
-			// owner, but since the owner not being null is what breaks the loop the
-			// extra coalesce here just ensures wouldn't loop forever if that were to
-			// change out from under us.
-			q, err := tx.QueryIteratorEx(ctx, "jobs-backfill-read", tx.KV(), sessiondata.NodeUserSessionDataOverride,
-				`SELECT
-				v.job_id,
-				v.description,
-				coalesce(v.user_name, ''),
-				v.finished,
-				v.error,
-				v.running_status,
-				v.fraction_completed,
-				v.high_water_timestamp
-				FROM crdb_internal.jobs v
-				LEFT JOIN system.jobs j ON j.id = v.job_id
-				WHERE j.owner IS NULL
-				LIMIT $1`, jobsBackfillPageSize,
-			)
+			if _, err := tx.ExecEx(ctx, "jobs-backfill-upgrade-locking", tx.KV(), sessiondata.NodeUserSessionDataOverride,
+				"SET enable_durable_locking_for_serializable = true"); err != nil {
+				return err
+			}
+
+			// re-read the jobs in the txn, acquiring locks this time.
+			todoRows, err := tx.QueryBufferedEx(ctx, "jobs-backfill-lock-job", tx.KV(), sessiondata.NodeUserSessionDataOverride,
+				`SELECT id FROM system.jobs WHERE id = ANY($1) AND owner IS NULL FOR UPDATE`, candidates)
 			if err != nil {
 				return err
 			}
-			defer func() {
-				retErr = errors.CombineErrors(retErr, q.Close())
-			}()
 
-			done = 0
-			for {
-				ok, err := q.Next(ctx)
+			// No candidates are remained eligible as of txn; move on.
+			if len(todoRows) == 0 {
+				return nil
+			}
+
+			todo := candidates[:0]
+			for i := range todoRows {
+				todo = append(todo, int(tree.MustBeDInt(todoRows[i][0])))
+			}
+			for _, id := range candidates {
+				// Lock the job infos to prevent concurrent modifications there as well.
+				_, err = tx.QueryBufferedEx(ctx, "jobs-backfill-lock-info", tx.KV(), sessiondata.NodeUserSessionDataOverride,
+					`SELECT job_id FROM system.job_info WHERE job_id = ANY($1) FOR UPDATE`, todo)
 				if err != nil {
 					return err
 				}
-				if !ok {
-					break
+				// Materialize the job details for the (now locked) row jobs.
+				row, err := tx.QueryRowEx(ctx, "jobs-backfill-read", tx.KV(), sessiondata.NodeUserSessionDataOverride,
+					`SELECT
+					job_id,
+					description,
+					user_name,
+					finished,
+					error,
+					running_status,
+					fraction_completed,
+					high_water_timestamp
+					FROM crdb_internal.jobs
+					WHERE job_id = $1`, id,
+				)
+				if err != nil {
+					return err
 				}
-
-				row := q.Cur()
-
 				// Update the job row.
 				if _, err := tx.ExecEx(ctx, "jobs-backfill-jobs", tx.KV(),
 					sessiondata.NodeUserSessionDataOverride,
 					`UPDATE system.jobs
-					SET description = $1,
-					owner = $2,
-					finished = $3,
-					error_msg = NULLIF($4, '')
-					WHERE id = $5`, row[1], row[2], row[3], row[4], row[0],
+						SET description = $1,
+						owner = $2,
+						finished = $3,
+						error_msg = NULLIF($4, '')
+						WHERE id = $5`, row[1], row[2], row[3], row[4], row[0],
 				); err != nil {
 					return err
 				}
@@ -174,17 +192,13 @@ func backfillJobsTablesAndColumns(
 						return err
 					}
 				}
-				done++
 			}
+			done = len(todo)
 			return nil
 		}); err != nil {
 			return err
 		}
-
 		jobsBackfilled += done
-		if done == 0 {
-			break
-		}
 	}
 	log.Infof(ctx, "finished backfilling new jobs tables and columns for %d jobs", jobsBackfilled)
 	return nil
