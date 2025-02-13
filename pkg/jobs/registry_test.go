@@ -122,6 +122,7 @@ func TestRegistryGC(t *testing.T) {
 				SkipJobMetricsPollingJobBootstrap:     true,
 				SkipMVCCStatisticsJobBootstrap:        true,
 				SkipUpdateTableMetadataCacheBootstrap: true,
+				SkipSqlActivityFlushJobBootstrap:      true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -282,6 +283,7 @@ func TestRegistryGCPagination(t *testing.T) {
 				SkipUpdateSQLActivityJobBootstrap:     true,
 				SkipMVCCStatisticsJobBootstrap:        true,
 				SkipUpdateTableMetadataCacheBootstrap: true,
+				SkipSqlActivityFlushJobBootstrap:      true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,

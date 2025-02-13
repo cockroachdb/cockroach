@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqlactivityjob",
+    srcs = ["sql_activity_flush_job.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sqlactivityjob",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
