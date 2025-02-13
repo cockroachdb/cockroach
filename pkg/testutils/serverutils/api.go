@@ -130,6 +130,17 @@ type TestServerController interface {
 	RunInitialSQL(ctx context.Context, startSingleNode bool, adminUser, adminPassword string) error
 }
 
+// DeploymentMode defines the mode of the underlying test server or tenant,
+// which can be single-tenant (system-only), shared-process, or
+// external-process.
+type DeploymentMode uint8
+
+const (
+	SingleTenant DeploymentMode = iota
+	SharedProcess
+	ExternalProcess
+)
+
 // ApplicationLayerInterface defines accessors to the application
 // layer of a test server. Tests written against this interface are
 // effectively agnostic to whether they use a virtual cluster or not.
@@ -451,6 +462,11 @@ type ApplicationLayerInterface interface {
 
 	// DistSQLPlanningNodeID returns the NodeID to use by the DistSQL span resolver.
 	DistSQLPlanningNodeID() roachpb.NodeID
+
+	// DeploymentMode returns the deployment mode of the underlying server or
+	// tenant, which can be single-tenant (system-only), shared-process, or
+	// external-process.
+	DeploymentMode() DeploymentMode
 }
 
 // TenantControlInterface defines the API of a test server that can
