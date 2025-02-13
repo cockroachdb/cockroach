@@ -82,6 +82,7 @@ func TestRunAndCompare(t *testing.T) {
 		config = &Config{
 			WorkingDir:          tempDir,
 			BenchmarkConfigPath: path.Join(tempDir, "suite.yml"),
+			SummaryPath:         path.Join(tempDir, "summary.json"),
 			GitHubSummaryPath:   path.Join(tempDir, "github-summary.md"),
 		}
 		logLines := make(map[logIdentity][]string)
@@ -108,7 +109,13 @@ func TestRunAndCompare(t *testing.T) {
 				require.NoError(t, err)
 				err = results.writeGitHubSummary(config.GitHubSummaryPath)
 				require.NoError(t, err)
+				err = results.writeJSONSummary(config.SummaryPath)
+				require.NoError(t, err)
 				data, err := os.ReadFile(config.GitHubSummaryPath)
+				require.NoError(t, err)
+				return string(data)
+			case "json":
+				data, err := os.ReadFile(config.SummaryPath)
 				require.NoError(t, err)
 				return string(data)
 			case "tree":
