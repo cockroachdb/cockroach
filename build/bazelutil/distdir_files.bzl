@@ -897,7 +897,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/performancecopilot/speed/com_github_performancecopilot_speed-v3.0.0+incompatible.zip": "44150a760ccfe232d3ce6bf40e537342d01f78ddac18b795f623d004257c00b0",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/peterbourgon/diskv/com_github_peterbourgon_diskv-v2.0.1+incompatible.zip": "1eeff260bd1ad71cd1611078995db99e1c7eba28628e7d6f24c79039536ea1cb",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/peterh/liner/com_github_peterh_liner-v1.0.1-0.20180619022028-8c1271fcf47f.zip": "0d96c450f9c55a8102f4ae7fd8a583ebfaeba23e3939d6b6284306a82a21430f",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/petermattis/goid/com_github_petermattis_goid-v0.0.0-20211229010228-4d14c490ee36.zip": "9f536c5d39d6a3c851670ec585e1c876fe31f3402556d215ebbaffcecbacb30a",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/petermattis/goid/com_github_petermattis_goid-v0.0.0-20250211185408-f2b9d978cd7a.zip": "cfafcde2b7eba51fc9f08d45491de4f91d9b22a77d18ee5c491bf92f9d93a18a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/philhofer/fwd/com_github_philhofer_fwd-v1.0.0.zip": "b4e79b1f5fdfe8c44bf6dae3dd593c62862930114411a30968f304084de1d0b3",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/phpdave11/gofpdf/com_github_phpdave11_gofpdf-v1.4.2.zip": "4db05258f281b40d8a17392fd71648779ea758a9aa506a8d1346ded737ede43f",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/phpdave11/gofpdi/com_github_phpdave11_gofpdi-v1.0.13.zip": "09b728136cf290f4ee87aa47b60f2f9df2b3f4f64119ff10f12319bc3438b58d",
