@@ -86,6 +86,23 @@ func makeIndexBackfillColumns(
 				allIndexColumns.Contains(column.GetID())) {
 			continue
 		}
+		// Public columns that are not in the source primary index and not
+		// needed by the secondary index can be skipped. If there are virtual
+		// columns that are needed by the secondary index then pick tohse up.
+		if column.Public() && !primaryColumns.Contains(column.GetID()) {
+			// If an non-virtual column requested by the secondary index is missing
+			// we are going to error out.
+			if allIndexColumns.Contains(column.GetID()) && !column.IsVirtual() {
+				return indexBackfillerCols{}, errors.AssertionFailedf(
+					"column %s is public but not in the source primary index",
+					column.GetName(),
+				)
+			}
+			// If the column is not needed by the secondary index then we can skip it.
+			if !allIndexColumns.Contains(column.GetID()) {
+				continue
+			}
+		}
 		if column.IsComputed() && column.IsVirtual() {
 			computedVirtual.Add(column.GetID())
 			ib.computedCols = append(ib.computedCols, column)

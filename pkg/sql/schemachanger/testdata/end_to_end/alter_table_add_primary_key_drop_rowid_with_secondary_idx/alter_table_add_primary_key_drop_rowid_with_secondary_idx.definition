@@ -52,5 +52,5 @@ idx_b
 t_pkey
 
 test
-alter table t add primary key (a);
+alter table t add primary key (a) USING HASH WITH (bucket_count=10);
 ----

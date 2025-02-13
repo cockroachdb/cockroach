@@ -113,9 +113,8 @@ func TestIndexBackfillerColumns(t *testing.T) {
 					keyCols: colIDs{1},
 				},
 			},
-			expCols:     colIDs{1, 2, 3},
-			expComputed: colIDs{3},
-			expNeeded:   colIDs{1},
+			expCols:   colIDs{1, 2},
+			expNeeded: colIDs{1},
 		},
 		{
 			name: "one virtual, one computed mutation column in primary",
