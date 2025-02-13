@@ -260,7 +260,7 @@ func runTPCC(
 			return
 		}
 		cep, err := opts.ChaosEventsProcessor(
-			c.Nodes(int(promCfg.PrometheusNode[0])),
+			c.Nodes(int(promCfg.PrometheusNode)),
 			workloadInstances,
 		)
 		if err != nil {
