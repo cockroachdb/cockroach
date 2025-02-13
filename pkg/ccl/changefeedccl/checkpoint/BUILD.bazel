@@ -10,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/util/hlc",
@@ -27,9 +28,12 @@ go_test(
     deps = [
         ":checkpoint",
         "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvserver/rangefeed",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

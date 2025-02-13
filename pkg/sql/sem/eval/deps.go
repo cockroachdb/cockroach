@@ -659,7 +659,8 @@ type ChangefeedState interface {
 	// SetCheckpoint sets the checkpoint for the changefeed.
 	SetCheckpoint(
 		//lint:ignore SA1019 deprecated usage
-		checkpoint jobspb.ChangefeedProgress_Checkpoint,
+		legacyCheckpoint *jobspb.ChangefeedProgress_Checkpoint,
+		checkpoint *jobspb.TimestampSpansMap,
 	)
 }
 

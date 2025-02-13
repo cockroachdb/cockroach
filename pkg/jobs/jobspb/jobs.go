@@ -94,6 +94,27 @@ func (tsm *TimestampSpansMap) ToGoMap() map[hlc.Timestamp]roachpb.Spans {
 	return m
 }
 
-func (m *ChangefeedProgress_Checkpoint) IsZero() bool {
-	return len(m.Spans) == 0 && m.Timestamp.IsEmpty()
+// MinTimestamp returns the min timestamp in the map.
+// Returns the empty timestamp if map is empty.
+func (tsm *TimestampSpansMap) MinTimestamp() hlc.Timestamp {
+	if tsm.IsEmpty() {
+		return hlc.Timestamp{}
+	}
+	minTS := hlc.MaxTimestamp
+	for ts := range tsm.ToGoMap() {
+		if ts.Less(minTS) {
+			minTS = ts
+		}
+	}
+	return minTS
+}
+
+// IsEmpty returns whether the checkpoint is empty.
+func (tsm *TimestampSpansMap) IsEmpty() bool {
+	return tsm == nil || len(tsm.Entries) == 0
+}
+
+// IsEmpty returns whether the checkpoint is empty.
+func (m *ChangefeedProgress_Checkpoint) IsEmpty() bool {
+	return m == nil || (len(m.Spans) == 0 && m.Timestamp.IsEmpty())
 }

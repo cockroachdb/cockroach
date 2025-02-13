@@ -8,6 +8,9 @@
 package checkpoint
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -23,9 +26,74 @@ type SpanIter func(forEachSpan span.Operation)
 // above the highwater mark) as can fit in maxBytes, along with the earliest
 // timestamp of the checkpointed spans. A SpanGroup is used to merge adjacent
 // spans above the high-water mark.
+//
+// At most one of the returned pointers will be non-nil.
 func Make(
-	frontier hlc.Timestamp, forEachSpan SpanIter, maxBytes int64, metrics *Metrics,
-) jobspb. //lint:ignore SA1019 deprecated usage
+	overallResolved hlc.Timestamp,
+	forEachSpan SpanIter,
+	maxBytes int64,
+	metrics *Metrics,
+	cv clusterversion.Handle,
+) (
+	//lint:ignore SA1019 deprecated usage
+	*jobspb.ChangefeedProgress_Checkpoint,
+	*jobspb.TimestampSpansMap,
+) {
+	if cv.IsActive(context.TODO(), clusterversion.V25_2) {
+		return nil, makeCheckpoint(overallResolved, forEachSpan, maxBytes, metrics)
+	}
+	return makeLegacyCheckpoint(overallResolved, forEachSpan, maxBytes, metrics), nil
+}
+
+func makeCheckpoint(
+	overallResolved hlc.Timestamp, forEachSpan SpanIter, maxBytes int64, metrics *Metrics,
+) *jobspb.TimestampSpansMap {
+	start := timeutil.Now()
+
+	spanGroupMap := make(map[hlc.Timestamp]*roachpb.SpanGroup)
+	forEachSpan(func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
+		if ts.After(overallResolved) {
+			if spanGroupMap[ts] == nil {
+				spanGroupMap[ts] = new(roachpb.SpanGroup)
+			}
+			spanGroupMap[ts].Add(s)
+		}
+		return span.ContinueMatch
+	})
+	if len(spanGroupMap) == 0 {
+		return nil
+	}
+
+	checkpointSpansMap := make(map[hlc.Timestamp]roachpb.Spans)
+	var totalSpanCount, totalSpanKeyBytes int64
+	for ts, spanGroup := range spanGroupMap {
+		for _, span := range spanGroup.Slice() {
+			spanKeyBytes := int64(len(span.Key)) + int64(len(span.EndKey))
+			if totalSpanKeyBytes+spanKeyBytes > maxBytes {
+				break
+			}
+			checkpointSpansMap[ts] = append(checkpointSpansMap[ts], span)
+			totalSpanCount += 1
+			totalSpanKeyBytes += spanKeyBytes
+		}
+	}
+	cp := jobspb.NewTimestampSpansMap(checkpointSpansMap)
+	if cp == nil {
+		return nil
+	}
+
+	if metrics != nil {
+		metrics.CreateNanos.RecordValue(int64(timeutil.Since(start)))
+		metrics.TotalBytes.RecordValue(int64(cp.Size()))
+		metrics.SpanCount.RecordValue(totalSpanCount)
+	}
+
+	return cp
+}
+
+func makeLegacyCheckpoint(
+	overallResolved hlc.Timestamp, forEachSpan SpanIter, maxBytes int64, metrics *Metrics,
+) *jobspb. //lint:ignore SA1019 deprecated usage
 		ChangefeedProgress_Checkpoint {
 	start := timeutil.Now()
 
@@ -34,7 +102,7 @@ func Make(
 	var checkpointSpanGroup roachpb.SpanGroup
 	checkpointTS := hlc.MaxTimestamp
 	forEachSpan(func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
-		if frontier.Less(ts) {
+		if ts.After(overallResolved) {
 			checkpointSpanGroup.Add(s)
 			if ts.Less(checkpointTS) {
 				checkpointTS = ts
@@ -43,8 +111,7 @@ func Make(
 		return span.ContinueMatch
 	})
 	if checkpointSpanGroup.Len() == 0 {
-		//lint:ignore SA1019 deprecated usage
-		return jobspb.ChangefeedProgress_Checkpoint{}
+		return nil
 	}
 
 	// Ensure we only return up to maxBytes spans.
@@ -57,9 +124,12 @@ func Make(
 		}
 		checkpointSpans = append(checkpointSpans, span)
 	}
+	if len(checkpointSpans) == 0 {
+		return nil
+	}
 
 	//lint:ignore SA1019 deprecated usage
-	cp := jobspb.ChangefeedProgress_Checkpoint{
+	cp := &jobspb.ChangefeedProgress_Checkpoint{
 		Spans:     checkpointSpans,
 		Timestamp: checkpointTS,
 	}
@@ -101,7 +171,7 @@ func ConvertLegacyCheckpoint(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
 ) *jobspb.TimestampSpansMap {
-	if checkpoint == nil || checkpoint.IsZero() {
+	if checkpoint.IsEmpty() {
 		return nil
 	}
 

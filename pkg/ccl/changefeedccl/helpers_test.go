@@ -734,8 +734,8 @@ func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Reg
 	for r := retry.Start(jobRecordRetryOpts); ; {
 		t.Log("waiting for checkpoint")
 		progress := loadProgress(t, jf, jr)
-		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-			t.Logf("read checkpoint: %#v", p.Checkpoint)
+		if p := progress.GetChangefeed(); p != nil && !p.SpanLevelCheckpoint.IsEmpty() {
+			t.Logf("read checkpoint: %#v", p.SpanLevelCheckpoint)
 			return
 		}
 		if !r.Next() {
@@ -770,6 +770,34 @@ func loadProgress(
 		t.Errorf("tried to load progress for job %v but it has reached terminal status %s with error %s", job, job.State(), jobFeed.FetchTerminalJobErr())
 	}
 	return job.Progress()
+}
+
+// loadCheckpoint loads a checkpoint into a pointer and/or a span group.
+func loadCheckpoint(
+	t *testing.T,
+	progress jobspb.Progress,
+	cp **jobspb.TimestampSpansMap,
+	spanGroup *roachpb.SpanGroup,
+) bool {
+	t.Helper()
+	changefeedProgress := progress.GetChangefeed()
+	if changefeedProgress == nil {
+		return false
+	}
+	spanLevelCheckpoint := changefeedProgress.SpanLevelCheckpoint
+	if spanLevelCheckpoint.IsEmpty() {
+		return false
+	}
+	t.Logf("found checkpoint: %#v", spanLevelCheckpoint)
+	if cp != nil {
+		*cp = spanLevelCheckpoint
+	}
+	if spanGroup != nil {
+		for _, sp := range spanLevelCheckpoint.ToGoMap() {
+			spanGroup.Add(sp...)
+		}
+	}
+	return true
 }
 
 func feed(

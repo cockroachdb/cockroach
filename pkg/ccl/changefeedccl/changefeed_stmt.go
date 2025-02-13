@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1414,7 +1415,9 @@ func (b *changefeedResumer) resumeWithRetries(
 			sli.ErrorRetries.Inc(1)
 		}
 
-		if err := reconcileJobStateWithLocalState(ctx, jobID, localState, execCfg); err != nil {
+		if err := reconcileJobStateWithLocalState(
+			ctx, jobID, localState, execCfg, jobExec.ExtendedEvalContext().Settings.Version,
+		); err != nil {
 			// Any errors during reconciliation are retry-able.
 			// When retry-able error propagates to jobs registry, it will clear out
 			// claim information, and will restart this job somewhere else (though,
@@ -1476,9 +1479,12 @@ func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfi
 
 // reconcileJobStateWithLocalState ensures that the job progress information
 // is consistent with the state present in the local state.
-// TODO(#137692): SetCheckpoint should take in old and new checkpoints proto.
 func reconcileJobStateWithLocalState(
-	ctx context.Context, jobID jobspb.JobID, localState *cachedState, execCfg *sql.ExecutorConfig,
+	ctx context.Context,
+	jobID jobspb.JobID,
+	localState *cachedState,
+	execCfg *sql.ExecutorConfig,
+	cv clusterversion.Handle,
 ) error {
 	// Re-load the job in order to update our progress object, which may have
 	// been updated by the changeFrontier processor since the flow started.
@@ -1521,7 +1527,7 @@ func reconcileJobStateWithLocalState(
 	}
 
 	maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&execCfg.Settings.SV)
-	checkpoint := checkpoint.Make(
+	legacyCheckpoint, checkpoint := checkpoint.Make(
 		sf.Frontier(),
 		func(forEachSpan span.Operation) {
 			for _, fs := range localState.aggregatorFrontier {
@@ -1530,17 +1536,18 @@ func reconcileJobStateWithLocalState(
 		},
 		maxBytes,
 		nil, /* metrics */
+		cv,
 	)
 
 	// Update checkpoint.
 	updateHW := highWater.Less(sf.Frontier())
-	updateSpanCheckpoint := len(checkpoint.Spans) > 0
+	updateSpanCheckpoint := !legacyCheckpoint.IsEmpty() || !checkpoint.IsEmpty()
 
 	if updateHW || updateSpanCheckpoint {
 		if updateHW {
 			localState.SetHighwater(sf.Frontier())
 		}
-		localState.SetCheckpoint(checkpoint)
+		localState.SetCheckpoint(legacyCheckpoint, checkpoint)
 		if log.V(1) {
 			log.Infof(ctx, "Applying checkpoint to job record:  hw=%v, cf=%v",
 				localState.progress.GetHighWater(), localState.progress.GetChangefeed())
