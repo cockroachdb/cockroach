@@ -333,7 +333,6 @@ COMMIT;
 		return nil
 	}
 
-	//tDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints='newschemachanger.before.exec'`)
 	_, err = sqlDB.Exec(`
 BEGIN;
 SET LOCAL autocommit_before_ddl = false;
