@@ -36,7 +36,6 @@ go_library(
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqlstats/sslocal",
         "//pkg/sql/types",
-        "//pkg/util/admission/admissionpb",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/mon",

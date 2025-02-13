@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -89,21 +88,15 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 	}
 
 	flushBegin := s.getTimeNow()
-	s.SQLStats.ConsumeStats(ctx, stopper,
-		func(statistics *appstatspb.CollectedStatementStatistics) error {
-			s.doFlush(ctx, func() error {
-				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
-			}, "failed to flush statement statistics" /* errMsg */)
-
-			return nil
-		},
-		func(statistics *appstatspb.CollectedTransactionStatistics) error {
-			s.doFlush(ctx, func() error {
-				return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)
-			}, "failed to flush transaction statistics" /* errMsg */)
-
-			return nil
-		})
+	s.SQLStats.ConsumeStats(
+		ctx,
+		stopper,
+		s.doFlushSingleStmtStatsInTxn,
+		s.doFlushSingleTxnStatsInTxn,
+		aggregatedTs,
+		s.cfg.DB,
+		SQLStatsFlushBatchSize.Get(&s.cfg.Settings.SV),
+	)
 	s.cfg.FlushLatency.RecordValue(s.getTimeNow().Sub(flushBegin).Nanoseconds())
 
 	if s.cfg.Knobs != nil && s.cfg.Knobs.OnStmtStatsFlushFinished != nil {
@@ -184,42 +177,44 @@ func (s *PersistedSQLStats) doFlush(
 	err = workFn()
 }
 
-func (s *PersistedSQLStats) doFlushSingleTxnStats(
-	ctx context.Context, stats *appstatspb.CollectedTransactionStatistics, aggregatedTs time.Time,
+func (s *PersistedSQLStats) doFlushSingleTxnStatsInTxn(
+	ctx context.Context,
+	txn isql.Txn,
+	stats *appstatspb.CollectedTransactionStatistics,
+	aggregatedTs time.Time,
 ) error {
-	return s.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.TransactionFingerprintID))
+	serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.TransactionFingerprintID))
 
-		err := s.upsertTransactionStats(ctx, txn, aggregatedTs, serializedFingerprintID, stats)
-		if err != nil {
-			return errors.Wrapf(err, "flushing transaction %d's statistics", stats.TransactionFingerprintID)
-		}
-		return nil
-	}, isql.WithPriority(admissionpb.UserLowPri))
+	err := s.upsertTransactionStats(ctx, txn, aggregatedTs, serializedFingerprintID, stats)
+	if err != nil {
+		return errors.Wrapf(err, "flushing transaction %d's statistics", stats.TransactionFingerprintID)
+	}
+	return nil
 }
 
-func (s *PersistedSQLStats) doFlushSingleStmtStats(
-	ctx context.Context, stats *appstatspb.CollectedStatementStatistics, aggregatedTs time.Time,
+func (s *PersistedSQLStats) doFlushSingleStmtStatsInTxn(
+	ctx context.Context,
+	txn isql.Txn,
+	stats *appstatspb.CollectedStatementStatistics,
+	aggregatedTs time.Time,
 ) error {
-	return s.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.ID))
-		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.Key.TransactionFingerprintID))
-		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(stats.Key.PlanHash)
+	serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.ID))
+	serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.Key.TransactionFingerprintID))
+	serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(stats.Key.PlanHash)
 
-		err := s.upsertStatementStats(
-			ctx,
-			txn,
-			aggregatedTs,
-			serializedFingerprintID,
-			serializedTransactionFingerprintID,
-			serializedPlanHash,
-			stats,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "flush statement %d's statistics", stats.ID)
-		}
-		return nil
-	}, isql.WithPriority(admissionpb.UserLowPri))
+	err := s.upsertStatementStats(
+		ctx,
+		txn,
+		aggregatedTs,
+		serializedFingerprintID,
+		serializedTransactionFingerprintID,
+		serializedPlanHash,
+		stats,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "flush statement %d's statistics", stats.ID)
+	}
+	return nil
 }
 
 // ComputeAggregatedTs returns the aggregation timestamp to assign

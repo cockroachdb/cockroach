@@ -46,6 +46,10 @@ type StatementVisitor func(stats *appstatspb.CollectedStatementStatistics) error
 // encountered when calling the visitor, the iteration is aborted.
 type TransactionVisitor func(stats *appstatspb.CollectedTransactionStatistics) error
 
+type StatementBatchVisitor func([]*appstatspb.CollectedStatementStatistics) error
+
+type TransactionBatchVisitor func([]*appstatspb.CollectedTransactionStatistics) error
+
 // AggregatedTransactionVisitor is the callback invoked when iterate through
 // transaction statistics collected at the application level using
 // IterateAggregatedTransactionStats(). If an error is encountered when calling

@@ -15,9 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -130,21 +132,74 @@ func (s *SQLStats) IterateStatementStats(
 	return nil
 }
 
+// Batcher is a struct that allows iteration through the `data` slice
+// using batches of `size`.
+type Batcher[T any] struct {
+	data  []T
+	size  int64
+	start int64
+}
+
+func NewBatcher[T any](data []T, size int64) *Batcher[T] {
+	return &Batcher[T]{
+		data:  data,
+		size:  size,
+		start: 0,
+	}
+}
+
+// Next returns a slice containing the "next" batch of elements in
+// `data`. If `data` is smaller than `size` the first and final batch
+// will contain all of `data`. Otherwise, we'll continue returning
+// batches until the final batch after which we'll just return `nil`.
+// The final batch will likely be smaller than `size`.
+func (b *Batcher[T]) Next() []T {
+	if b.data == nil {
+		return nil
+	}
+	if b.start >= int64(len(b.data)) {
+		return nil
+	}
+	d := b.data[min(b.start, int64(len(b.data)-1)):min(b.start+b.size, int64(len(b.data)))]
+	b.start += b.size
+	return d
+}
+
 // ConsumeStats leverages the process of atomic pulling stats from in-memory storage, clearing in-memory stats, and
 // then iterating over them pulled stats calling stmtVisitor and txnVisitor on statement and transaction stats
 // respectively. ConsumeStats allows to process pulled statements while new sql stats can be added to in-memory statistics.
 func (s *SQLStats) ConsumeStats(
 	ctx context.Context,
 	stopper *stop.Stopper,
-	stmtVisitor sqlstats.StatementVisitor,
-	txnVisitor sqlstats.TransactionVisitor,
+	stmtVisitor func(
+		ctx context.Context,
+		txn isql.Txn,
+		stats *appstatspb.CollectedStatementStatistics,
+		aggregatedTs time.Time,
+	) error,
+	txnVisitor func(
+		ctx context.Context,
+		txn isql.Txn,
+		stats *appstatspb.CollectedTransactionStatistics,
+		aggregatedTs time.Time,
+	) error,
+	aggregatedTs time.Time,
+	db isql.DB,
+	batchSize int64,
 ) {
+	if batchSize < 1 {
+		panic("sqlstats: batch size must be a postive integer")
+	}
 	if s.knobs != nil {
 		if s.knobs != nil && s.knobs.ConsumeStmtStatsInterceptor != nil {
-			stmtVisitor = s.knobs.ConsumeStmtStatsInterceptor
+			stmtVisitor = func(_ context.Context, _ isql.Txn, stats *appstatspb.CollectedStatementStatistics, _ time.Time) error {
+				return s.knobs.ConsumeStmtStatsInterceptor(stats)
+			}
 		}
 		if s.knobs != nil && s.knobs.ConsumeTxnStatsInterceptor != nil {
-			txnVisitor = s.knobs.ConsumeTxnStatsInterceptor
+			txnVisitor = func(_ context.Context, _ isql.Txn, stats *appstatspb.CollectedTransactionStatistics, _ time.Time) error {
+				return s.knobs.ConsumeTxnStatsInterceptor(stats)
+			}
 		}
 	}
 	apps := s.getAppNames(false)
@@ -168,10 +223,21 @@ func (s *SQLStats) ConsumeStats(
 			ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 			defer cancel()
 
-			for _, stat := range stmtStats {
-				stat := stat
-				if err := stmtVisitor(stat); err != nil {
-					log.Warningf(ctx, "failed to consume statement statistics, %s", err.Error())
+			batcher := Batcher[*appstatspb.CollectedStatementStatistics]{
+				data: stmtStats,
+				size: batchSize,
+			}
+			for b := batcher.Next(); b != nil; b = batcher.Next() {
+				if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					for _, stat := range b {
+						err := stmtVisitor(ctx, txn, stat, aggregatedTs)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				}, isql.WithPriority(admissionpb.UserLowPri)); err != nil {
+					log.Warningf(ctx, "failed to consume statement statistic batch, %s", err.Error())
 				}
 			}
 		})
@@ -187,10 +253,21 @@ func (s *SQLStats) ConsumeStats(
 			ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 			defer cancel()
 
-			for _, stat := range txnStats {
-				stat := stat
-				if err := txnVisitor(stat); err != nil {
-					log.Warningf(ctx, "failed to consume transaction statistics, %s", err.Error())
+			batcher := Batcher[*appstatspb.CollectedTransactionStatistics]{
+				data: txnStats,
+				size: batchSize,
+			}
+			for b := batcher.Next(); b != nil; b = batcher.Next() {
+				if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					for _, stat := range b {
+						err := txnVisitor(ctx, txn, stat, aggregatedTs)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				}, isql.WithPriority(admissionpb.UserLowPri)); err != nil {
+					log.Warningf(ctx, "failed to consume transaction statistic batch, %s", err.Error())
 				}
 			}
 		})

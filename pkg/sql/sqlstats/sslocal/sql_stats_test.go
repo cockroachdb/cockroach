@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
@@ -1677,6 +1679,27 @@ func TestSQLStatsRegions(t *testing.T) {
 	}
 }
 
+type fakeDB struct {
+	txnCounter int
+}
+
+func (f *fakeDB) KV() *kv.DB {
+	panic("implement me")
+}
+
+func (f *fakeDB) Txn(
+	ctx context.Context, f2 func(context.Context, isql.Txn) error, option ...isql.TxnOption,
+) error {
+	f.txnCounter++
+	return f2(ctx, nil)
+}
+
+func (f *fakeDB) Executor(option ...isql.ExecutorOption) isql.Executor {
+	panic("implement me")
+}
+
+var _ isql.DB = &fakeDB{}
+
 // TestSQLStats_ConsumeStats validates that ConsumeStats function pops all statement and transaction stats from the
 // in-memory stats and clears it.
 func TestSQLStats_ConsumeStats(t *testing.T) {
@@ -1686,22 +1709,6 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	// Generate dummy stats to populate in-memory stats container.
-	var testStmtData []serverpb.StatementsResponse_CollectedStatementStatistics
-	var testTxnData []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
-	expectedCountStats := 50
-	for i := 0; i < expectedCountStats; i++ {
-		var stats serverpb.StatementsResponse_CollectedStatementStatistics
-		randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
-		stats.Key.KeyData = randomData.Key
-		testStmtData = append(testStmtData, stats)
-
-		var txnStats serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
-		txnStats.StatsData = sqlstatstestutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
-		txnStats.StatsData.TransactionFingerprintID = appstatspb.TransactionFingerprintID(i)
-		testTxnData = append(testTxnData, txnStats)
-	}
-
 	st := cluster.MakeTestingClusterSettings()
 	monitor := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
 		Name:     mon.MakeMonitorName("test"),
@@ -1709,55 +1716,119 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	})
 	insightsProvider := insights.New(st, insights.NewMetrics(), nil)
 
-	sqlStats := sslocal.New(
-		st,
-		sqlstats.MaxMemSQLStatsStmtFingerprints,
-		sqlstats.MaxMemSQLStatsTxnFingerprints,
-		nil, /* curMemoryBytesCount */
-		nil, /* maxMemoryBytesHist */
-		monitor,
-		nil, /* reportingSink */
-		nil, /* knobs */
-		insightsProvider.Anomalies(),
-	)
-
-	stmtContainer, _, _ := ssmemstorage.NewTempContainerFromExistingStmtStats(testStmtData)
-	err := sqlStats.AddAppStats(context.Background(), "app", stmtContainer)
-	require.NoError(t, err)
-
-	txnContainer, _, _ := ssmemstorage.NewTempContainerFromExistingTxnStats(testTxnData)
-	err = sqlStats.AddAppStats(context.Background(), "app", txnContainer)
-	require.NoError(t, err)
-
-	// Validate that ConsumeStats calls functions for every stmt and txn stats respectively.
-	consumedStmtsCount := 0
-	consumedTxnCount := 0
-	sqlStats.ConsumeStats(
-		context.Background(),
-		stopper,
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			consumedStmtsCount++
-			return nil
+	// Set up test cases with different batch sizes
+	testCases := []struct {
+		name            string
+		batchSize       int64
+		expectedStats   int
+		expectedBatches int
+	}{
+		{
+			name:            "batch size 1",
+			batchSize:       1,
+			expectedStats:   50,
+			expectedBatches: 50,
 		},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
-			consumedTxnCount++
-			return nil
+		{
+			name:            "batch size 10",
+			batchSize:       10,
+			expectedStats:   50,
+			expectedBatches: 5,
 		},
-	)
-	require.Equal(t, expectedCountStats, consumedStmtsCount)
-	require.Equal(t, expectedCountStats, consumedTxnCount)
+		{
+			name:            "batch size 20",
+			batchSize:       20,
+			expectedStats:   50,
+			expectedBatches: 3,
+		},
+		{
+			name:            "batch size larger than total stats",
+			batchSize:       100,
+			expectedStats:   50,
+			expectedBatches: 1,
+		},
+	}
 
-	// Assert that no stats left after ConsumeStats func is executed.
-	err = sqlStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(_ *appstatspb.CollectedStatementStatistics) error {
-		require.Fail(t, "no stats should be available after calling ConsumeStats func")
-		return nil
-	})
-	require.NoError(t, err)
-	err = sqlStats.IterateTransactionStats(context.Background(), sqlstats.IteratorOptions{}, func(_ *appstatspb.CollectedTransactionStatistics) error {
-		require.Fail(t, "no stats should be available after calling ConsumeStats func")
-		return nil
-	})
-	require.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			persistedsqlstats.SQLStatsFlushBatchSize.Override(context.Background(), &st.SV, tc.batchSize)
+
+			// Generate dummy stats to populate in-memory stats container
+			var testStmtData []serverpb.StatementsResponse_CollectedStatementStatistics
+			var testTxnData []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
+			for i := 0; i < tc.expectedStats; i++ {
+				var stats serverpb.StatementsResponse_CollectedStatementStatistics
+				randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+				stats.Key.KeyData = randomData.Key
+				testStmtData = append(testStmtData, stats)
+
+				var txnStats serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
+				txnStats.StatsData = sqlstatstestutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
+				txnStats.StatsData.TransactionFingerprintID = appstatspb.TransactionFingerprintID(i)
+				testTxnData = append(testTxnData, txnStats)
+			}
+
+			sqlStats := sslocal.New(
+				st,
+				sqlstats.MaxMemSQLStatsStmtFingerprints,
+				sqlstats.MaxMemSQLStatsTxnFingerprints,
+				nil, /* curMemoryBytesCount */
+				nil, /* maxMemoryBytesHist */
+				monitor,
+				nil, /* reportingSink */
+				nil, /* knobs */
+				insightsProvider.Anomalies(),
+			)
+
+			stmtContainer, _, _ := ssmemstorage.NewTempContainerFromExistingStmtStats(testStmtData)
+			err := sqlStats.AddAppStats(context.Background(), "app", stmtContainer)
+			require.NoError(t, err)
+
+			txnContainer, _, _ := ssmemstorage.NewTempContainerFromExistingTxnStats(testTxnData)
+			err = sqlStats.AddAppStats(context.Background(), "app", txnContainer)
+			require.NoError(t, err)
+
+			// Validate that ConsumeStats processes stats in correct batch sizes
+			consumedStmtsCount := 0
+			consumedTxnCount := 0
+			db := fakeDB{}
+			sqlStats.ConsumeStats(
+				context.Background(),
+				stopper,
+				func(ctx context.Context, _ isql.Txn, statistics *appstatspb.CollectedStatementStatistics, _ time.Time) error {
+					consumedStmtsCount++
+					return nil
+				},
+				func(ctx context.Context, _ isql.Txn, statistics *appstatspb.CollectedTransactionStatistics, _ time.Time) error {
+					consumedTxnCount++
+					return nil
+				},
+				time.Time{},
+				&db,
+				tc.batchSize,
+			)
+
+			// Verify total counts match expected
+			require.Equal(t, tc.expectedStats, consumedStmtsCount)
+			require.Equal(t, tc.expectedStats, consumedTxnCount)
+
+			// We expect double the batches because they get sent
+			// as statements and transactions.
+			require.Equal(t, tc.expectedBatches*2, db.txnCounter)
+
+			// Assert that no stats left after ConsumeStats func is executed
+			err = sqlStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(_ *appstatspb.CollectedStatementStatistics) error {
+				require.Fail(t, "no stats should be available after calling ConsumeStats func")
+				return nil
+			})
+			require.NoError(t, err)
+			err = sqlStats.IterateTransactionStats(context.Background(), sqlstats.IteratorOptions{}, func(_ *appstatspb.CollectedTransactionStatistics) error {
+				require.Fail(t, "no stats should be available after calling ConsumeStats func")
+				return nil
+			})
+			require.NoError(t, err)
+		})
+	}
 }
 
 // TestSQLStatsInternalStatements verifies SQL stats are captured
@@ -2064,5 +2135,78 @@ func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
 		})
 		utilConn.Exec(t, "RESET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints")
 		utilConn.Exec(t, "RESET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints")
+	}
+}
+
+func TestBatcher(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     []int
+		size     int64
+		expected [][]int // each slice represents an expected batch
+	}{
+		{
+			name:     "nil data returns no batches",
+			data:     nil,
+			size:     2,
+			expected: nil,
+		},
+		{
+			name:     "empty data returns no batches",
+			data:     []int{},
+			size:     2,
+			expected: nil,
+		},
+		{
+			name:     "batch size larger than data returns single batch",
+			data:     []int{1, 2, 3},
+			size:     5,
+			expected: [][]int{{1, 2, 3}},
+		},
+		{
+			name:     "exact batch size returns full batches",
+			data:     []int{1, 2, 3, 4},
+			size:     2,
+			expected: [][]int{{1, 2}, {3, 4}},
+		},
+		{
+			name:     "last batch is smaller than batch size",
+			data:     []int{1, 2, 3, 4, 5},
+			size:     2,
+			expected: [][]int{{1, 2}, {3, 4}, {5}},
+		},
+		{
+			name:     "batch size one returns single element batches",
+			data:     []int{1, 2, 3},
+			size:     1,
+			expected: [][]int{{1}, {2}, {3}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := sslocal.NewBatcher[int](tt.data, tt.size)
+
+			var got [][]int
+			for batch := b.Next(); batch != nil; batch = b.Next() {
+				got = append(got, batch)
+			}
+
+			if tt.expected == nil {
+				require.Empty(t, got, "expected no batches")
+				return
+			}
+
+			require.Equal(t, tt.expected, got, "batches don't match expected")
+
+			// For non-nil input data, verify we got all elements
+			if tt.data != nil {
+				var allElements []int
+				for _, batch := range got {
+					allElements = append(allElements, batch...)
+				}
+				require.Equal(t, tt.data, allElements, "missing or extra elements in batches")
+			}
+		})
 	}
 }
