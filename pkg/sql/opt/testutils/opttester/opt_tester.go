@@ -892,12 +892,17 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 	}
 }
 
+// GetMemo returns the memo for the current command, if any.
+func (ot *OptTester) GetMemo() *memo.Memo {
+	if ot.f == nil {
+		return nil
+	}
+	return ot.f.Memo()
+}
+
 // FormatExpr is a convenience wrapper for memo.FormatExpr.
 func (ot *OptTester) FormatExpr(e opt.Expr) string {
-	var mem *memo.Memo
-	if rel, ok := e.(memo.RelExpr); ok {
-		mem = rel.Memo()
-	}
+	mem := ot.f.Memo()
 	return memo.FormatExpr(
 		ot.ctx, e, ot.Flags.ExprFormat, false /* redactableValues */, mem, ot.catalog,
 	)
@@ -932,9 +937,10 @@ func (ot *OptTester) checkExpectedRules(tb testing.TB, d *datadriven.TestData) {
 func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
 	ot.fillInLazyProps(e)
 
+	mem := ot.f.Memo()
 	if rel, ok := e.(memo.RelExpr); ok {
 		for _, cols := range ot.Flags.ColStats {
-			memo.RequestColStat(ot.ctx, &ot.evalCtx, rel, cols)
+			memo.RequestColStat(ot.ctx, &ot.evalCtx, mem, rel, cols)
 		}
 	}
 	ot.checkExpectedRules(tb, d)
@@ -1345,7 +1351,7 @@ func (ot *OptTester) AssignPlaceholders(
 	o.NotifyOnMatchedRule(maybeDisableRule)
 
 	o.Factory().FoldingControl().AllowStableFolds()
-	if err := o.Factory().AssignPlaceholders(prepMemo); err != nil {
+	if err = o.Factory().AssignPlaceholders(prepMemo); err != nil {
 		return nil, err
 	}
 	return o.Optimize()
@@ -1363,7 +1369,11 @@ func (ot *OptTester) PlaceholderFastPath() (_ opt.Expr, ok bool, _ error) {
 	if err != nil {
 		return nil, false, err
 	}
-	return o.TryPlaceholderFastPath()
+	ok, err = o.TryPlaceholderFastPath()
+	if err != nil {
+		return nil, false, err
+	}
+	return ot.f.Memo().RootExpr(), ok, nil
 }
 
 // Memo returns a string that shows the memo data structure that is constructed
@@ -2144,6 +2154,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 	relProps := rel.Relational()
 	outputCols := relProps.OutputCols
 	colNameGen := memo.NewColumnNameGenerator(rel)
+	mem := ot.f.Memo()
 
 	// Create each of the columns and their estimated stats for the test catalog
 	// table.
@@ -2151,7 +2162,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 	jsonStats := make([]stats.JSONStatistic, outputCols.Len())
 	i := 0
 	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
-		colMeta := rel.Memo().Metadata().ColumnMeta(col)
+		colMeta := mem.Metadata().ColumnMeta(col)
 		colName := colNameGen.GenerateName(col)
 
 		columns[i].Init(
@@ -2171,7 +2182,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 
 		// Make sure we have estimated stats for this column.
 		colSet := opt.MakeColSet(col)
-		memo.RequestColStat(ot.ctx, &ot.evalCtx, rel, colSet)
+		memo.RequestColStat(ot.ctx, &ot.evalCtx, mem, rel, colSet)
 		stat, ok := relProps.Statistics().ColStats.Lookup(colSet)
 		if !ok {
 			return nil, fmt.Errorf("could not find statistic for column %s", colName)
@@ -2270,7 +2281,7 @@ func (ot *OptTester) IndexCandidates() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	indexCandidates := indexrec.FindIndexCandidateSet(expr, expr.(memo.RelExpr).Memo().Metadata())
+	indexCandidates := indexrec.FindIndexCandidateSet(expr, ot.f.Memo().Metadata())
 
 	// Build a formatted string to output from the map of indexCandidates.
 	tablesOutput := make([]string, 0, len(indexCandidates))
@@ -2312,7 +2323,7 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	md := normExpr.(memo.RelExpr).Memo().Metadata()
+	md := ot.f.Memo().Metadata()
 	indexCandidates := indexrec.FindIndexCandidateSet(normExpr, md)
 	_, hypTables := indexrec.BuildOptAndHypTableMaps(ot.catalog, indexCandidates)
 
@@ -2320,7 +2331,7 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	md = optExpr.(memo.RelExpr).Memo().Metadata()
+	md = ot.f.Memo().Metadata()
 	recs, err := indexrec.FindRecs(ot.ctx, optExpr, md)
 	if err != nil {
 		return "", err
