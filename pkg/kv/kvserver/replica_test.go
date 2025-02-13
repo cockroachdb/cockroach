@@ -8161,7 +8161,10 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	cfg.RaftTickInterval = time.Hour
 	// Disable pre-campaign store liveness checks because we're disabling ticking
 	// above, and we don't want the first election attempt to guaranteed fail.
-	cfg.TestingDisablePreCampaignStoreLivenessCheck = true
+	cfg.TestingKnobs.RaftTestingKnobs = &raft.TestingKnobs{
+		DisablePreCampaignStoreLivenessCheck: true,
+	}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)

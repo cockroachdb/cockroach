@@ -399,6 +399,7 @@ func newRaftConfig(
 	logger raftlogger.Logger,
 	storeLiveness raftstoreliveness.StoreLiveness,
 	metrics *raft.Metrics,
+	testingKnobs *raft.TestingKnobs,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,
@@ -415,12 +416,12 @@ func newRaftConfig(
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
 		Storage:                     strg,
 		Logger:                      logger,
-		TestingDisablePreCampaignStoreLivenessCheck: storeCfg.TestingDisablePreCampaignStoreLivenessCheck,
-		StoreLiveness: storeLiveness,
-		PreVote:       true,
-		CheckQuorum:   storeCfg.RaftEnableCheckQuorum,
-		CRDBVersion:   storeCfg.Settings.Version,
-		Metrics:       metrics,
+		StoreLiveness:               storeLiveness,
+		PreVote:                     true,
+		CheckQuorum:                 storeCfg.RaftEnableCheckQuorum,
+		CRDBVersion:                 storeCfg.Settings.Version,
+		Metrics:                     metrics,
+		TestingKnobs:                testingKnobs,
 	}
 }
 
