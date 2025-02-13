@@ -644,11 +644,6 @@ func (m *Memo) DisableCheckExpr() {
 	m.disableCheckExpr = true
 }
 
-// EvalContext returns the eval.Context of the current SQL request.
-func (m *Memo) EvalContext() *eval.Context {
-	return m.logPropsBuilder.evalCtx
-}
-
 // String prints the current expression tree stored in the memo. It should only
 // be used for testing and debugging.
 func (m *Memo) String() string {
