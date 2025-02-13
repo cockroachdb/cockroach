@@ -664,6 +664,7 @@ type indexCache struct {
 	deletableNonPrimary  []catalog.Index
 	deleteOnlyNonPrimary []catalog.Index
 	partial              []catalog.Index
+	vector               []catalog.Index
 }
 
 // newIndexCache returns a fresh fully-populated indexCache struct for the
@@ -713,12 +714,12 @@ func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *inde
 		if !idx.Dropped() && (!idx.Primary() || desc.IsPhysicalTable()) {
 			lazyAllocAppendIndex(&c.nonDrop, idx, len(c.all))
 		}
-		// TODO(ssd): We exclude backfilling indexes from
-		// IsPartial() for the unprincipled reason of not
-		// wanting to modify all of the code that assumes
-		// these are always at least delete-only.
+		// Include only deletable indexes.
 		if idx.IsPartial() && !idx.Backfilling() {
 			lazyAllocAppendIndex(&c.partial, idx, len(c.all))
+		}
+		if idx.GetType() == idxtype.VECTOR && !idx.Backfilling() {
+			lazyAllocAppendIndex(&c.vector, idx, len(c.all))
 		}
 	}
 	return &c
