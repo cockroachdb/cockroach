@@ -132,6 +132,9 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 				repDesc.ReplicaID, nextReplicaID)
 		}
 
+		// Remove the replica from the quiescence data structures.
+		rep.maybeRemoveAsleepReplicaFromQuiescenceStateReplicaMuLocked()
+
 		// Sanity checks passed. Mark the replica as removed before deleting data.
 		rep.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
@@ -297,9 +300,9 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 // store.mu must be held.
 func (s *Store) unlinkReplicaByRangeIDLocked(ctx context.Context, rangeID roachpb.RangeID) {
 	s.mu.AssertHeld()
-	s.unquiescedOrAwakeReplicas.Lock()
-	delete(s.unquiescedOrAwakeReplicas.m, rangeID)
-	s.unquiescedOrAwakeReplicas.Unlock()
+	s.quiescence.Lock()
+	delete(s.quiescence.unquiescedOrAwake, rangeID)
+	s.quiescence.Unlock()
 	delete(s.mu.uninitReplicas, rangeID)
 	s.mu.replicasByRangeID.Delete(rangeID)
 	s.unregisterLeaseholderByID(ctx, rangeID)
