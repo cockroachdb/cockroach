@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect",
         "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
@@ -78,15 +79,9 @@ go_proto_library(
 
 go_test(
     name = "jobspb_test",
-    srcs = [
-        "jobs_test.go",
-        "wrap_test.go",
-    ],
+    srcs = ["wrap_test.go"],
     deps = [
         ":jobspb",
-        "//pkg/roachpb",
-        "//pkg/util/hlc",
         "@com_github_stretchr_testify//assert",
-        "@com_github_stretchr_testify//require",
     ],
 )

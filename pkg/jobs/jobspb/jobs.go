@@ -6,9 +6,14 @@
 package jobspb
 
 import (
+	"iter"
+	"maps"
+	"slices"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
@@ -64,7 +69,7 @@ func (rse ResolvedSpanEntries) Equal(rse2 ResolvedSpanEntries) bool {
 // SafeValue implements the redact.SafeValue interface.
 func (ResolvedSpan_BoundaryType) SafeValue() {}
 
-// NewTimestampSpansMap takes a go timestamp-to-spans map and converts
+// NewTimestampSpansMap takes a go timestamp-to-spans go map and converts
 // it into a new TimestampSpansMap.
 func NewTimestampSpansMap(m map[hlc.Timestamp]roachpb.Spans) *TimestampSpansMap {
 	if len(m) == 0 {
@@ -82,18 +87,50 @@ func NewTimestampSpansMap(m map[hlc.Timestamp]roachpb.Spans) *TimestampSpansMap 
 	return tsm
 }
 
-// ToGoMap converts a TimestampSpansMap into a go map.
-func (tsm *TimestampSpansMap) ToGoMap() map[hlc.Timestamp]roachpb.Spans {
-	if tsm == nil {
-		return nil
+// All returns an iterator over the entries in the map.
+func (tsm *TimestampSpansMap) All() iter.Seq2[hlc.Timestamp, roachpb.Spans] {
+	return func(yield func(hlc.Timestamp, roachpb.Spans) bool) {
+		if tsm.IsEmpty() {
+			return
+		}
+		for _, entry := range tsm.Entries {
+			if !yield(entry.Timestamp, entry.Spans) {
+				return
+			}
+		}
 	}
-	m := make(map[hlc.Timestamp]roachpb.Spans, len(tsm.Entries))
-	for _, entry := range tsm.Entries {
-		m[entry.Timestamp] = entry.Spans
-	}
-	return m
 }
 
-func (m *ChangefeedProgress_Checkpoint) IsZero() bool {
-	return len(m.Spans) == 0 && m.Timestamp.IsEmpty()
+// MinTimestamp returns the min timestamp in the map.
+// Returns the empty timestamp if map is empty.
+func (tsm *TimestampSpansMap) MinTimestamp() hlc.Timestamp {
+	return iterutil.MinFunc(iterutil.Keys(tsm.All()), hlc.Timestamp.Compare)
+}
+
+// SpanCount returns the number of spans in the map.
+func (tsm *TimestampSpansMap) SpanCount() (count int) {
+	for _, sp := range tsm.All() {
+		count += len(sp)
+	}
+	return count
+}
+
+// Equal returns whether two maps contain the same entries.
+func (tsm *TimestampSpansMap) Equal(other *TimestampSpansMap) bool {
+	return maps.EqualFunc(
+		maps.Collect(tsm.All()),
+		maps.Collect(other.All()),
+		func(s roachpb.Spans, t roachpb.Spans) bool {
+			return slices.EqualFunc(s, t, roachpb.Span.Equal)
+		})
+}
+
+// IsEmpty returns whether the map is empty.
+func (tsm *TimestampSpansMap) IsEmpty() bool {
+	return tsm == nil || len(tsm.Entries) == 0
+}
+
+// IsEmpty returns whether the checkpoint is empty.
+func (m *ChangefeedProgress_Checkpoint) IsEmpty() bool {
+	return m == nil || (len(m.Spans) == 0 && m.Timestamp.IsEmpty())
 }

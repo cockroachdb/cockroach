@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -605,7 +606,7 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 
 	// Convert the legacy checkpoint to the new span-level checkpoint so that we
 	// can ignore it from this point on.
-	if !ca.spec.Checkpoint.IsZero() {
+	if !ca.spec.Checkpoint.IsEmpty() {
 		if ca.spec.SpanLevelCheckpoint != nil {
 			return nil, errors.New("both legacy and current checkpoint set on change aggregator spec")
 		}
@@ -618,7 +619,7 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 			Timestamp: ca.spec.Checkpoint.Timestamp,
 		}
 		statementTime := ca.spec.Feed.StatementTime
-		ca.spec.SpanLevelCheckpoint = checkpoint.ConvertLegacyCheckpoint(legacyCheckpoint, statementTime, initialHighWater)
+		ca.spec.SpanLevelCheckpoint = checkpoint.ConvertFromLegacyCheckpoint(legacyCheckpoint, statementTime, initialHighWater)
 		ca.spec.Checkpoint.Reset()
 	}
 
@@ -1097,11 +1098,11 @@ func (cs *cachedState) SetHighwater(frontier hlc.Timestamp) {
 }
 
 // SetCheckpoint implements the eval.ChangefeedState interface.
-func (cs *cachedState) SetCheckpoint(
-	//lint:ignore SA1019 deprecated usage
-	checkpoint jobspb.ChangefeedProgress_Checkpoint,
-) {
-	cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.Checkpoint = &checkpoint
+func (cs *cachedState) SetCheckpoint(checkpoint *jobspb.TimestampSpansMap) {
+	// NB: It's not necessary to set the legacy checkpoint field because this
+	// copy of the checkpoint is only used in-memory on a coordinator node that
+	// knows about the new field.
+	cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.SpanLevelCheckpoint = checkpoint
 }
 
 func newJobState(
@@ -1703,8 +1704,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	updateCheckpoint := (inBackfill || cf.frontier.HasLaggingSpans(&cf.js.settings.SV)) && cf.js.canCheckpointSpans()
 
 	// If the highwater has moved an empty checkpoint will be saved
-	//lint:ignore SA1019 deprecated usage
-	var checkpoint jobspb.ChangefeedProgress_Checkpoint
+	var checkpoint *jobspb.TimestampSpansMap
 	if updateCheckpoint {
 		maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&cf.FlowCtx.Cfg.Settings.SV)
 		checkpoint = cf.frontier.MakeCheckpoint(maxBytes, cf.sliMetrics.CheckpointMetrics)
@@ -1715,7 +1715,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
-		updated, err := cf.checkpointJobProgress(cf.frontier.Frontier(), checkpoint)
+		updated, err := cf.checkpointJobProgress(cf.frontier.Frontier(), checkpoint, cf.evalCtx.Settings.Version)
 		if err != nil {
 			return false, err
 		}
@@ -1729,9 +1729,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 const changefeedJobProgressTxnName = "changefeed job progress"
 
 func (cf *changeFrontier) checkpointJobProgress(
-	frontier hlc.Timestamp,
-	//lint:ignore SA1019 deprecated usage
-	checkpoint jobspb.ChangefeedProgress_Checkpoint,
+	frontier hlc.Timestamp, spanLevelCheckpoint *jobspb.TimestampSpansMap, cv clusterversion.Handle,
 ) (bool, error) {
 	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
 
@@ -1749,6 +1747,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.metrics.FrontierUpdates.Inc(1)
 	if cf.js.job != nil {
 		var ptsUpdated bool
+		var checkpointStr string
 		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
@@ -1764,7 +1763,14 @@ func (cf *changeFrontier) checkpointJobProgress(
 			}
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
-			changefeedProgress.Checkpoint = &checkpoint
+			if cv.IsActive(cf.Ctx(), clusterversion.V25_2) {
+				changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
+				checkpointStr = spanLevelCheckpoint.String()
+			} else {
+				legacyCheckpoint := checkpoint.ConvertToLegacyCheckpoint(spanLevelCheckpoint)
+				changefeedProgress.Checkpoint = legacyCheckpoint
+				checkpointStr = legacyCheckpoint.String()
+			}
 
 			if ptsUpdated, err = cf.manageProtectedTimestamps(cf.Ctx(), txn, changefeedProgress); err != nil {
 				log.Warningf(cf.Ctx(), "error managing protected timestamp record: %v", err)
@@ -1785,13 +1791,13 @@ func (cf *changeFrontier) checkpointJobProgress(
 			cf.lastProtectedTimestampUpdate = timeutil.Now()
 		}
 		if log.V(2) {
-			log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s", frontier, checkpoint)
+			log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
+				frontier, checkpointStr)
 		}
 	}
 
 	cf.localState.SetHighwater(frontier)
-	// TODO(#137692): SetCheckpoint should take in old and new checkpoints proto.
-	cf.localState.SetCheckpoint(checkpoint)
+	cf.localState.SetCheckpoint(spanLevelCheckpoint)
 
 	return true, nil
 }

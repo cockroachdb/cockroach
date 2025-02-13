@@ -535,7 +535,7 @@ func makePlan(
 		if spanLevelCheckpoint != nil {
 			changeFrontierSpec.SpanLevelCheckpoint = spanLevelCheckpoint
 		} else {
-			changeFrontierSpec.SpanLevelCheckpoint = checkpoint.ConvertLegacyCheckpoint(legacyCheckpoint, details.StatementTime, initialHighWater)
+			changeFrontierSpec.SpanLevelCheckpoint = checkpoint.ConvertFromLegacyCheckpoint(legacyCheckpoint, details.StatementTime, initialHighWater)
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
