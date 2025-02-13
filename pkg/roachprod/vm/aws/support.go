@@ -162,6 +162,7 @@ setup_disks
 {{ template "hostname_utils" . }}
 {{ template "fips_utils" . }}
 {{ template "ssh_utils" . }}
+{{ template "node_exporter" . }}
 
 sudo touch {{ .OSInitializedFile }}
 `
@@ -187,17 +188,13 @@ func writeStartupScript(
 	}
 
 	args := tmplParams{
-		StartupArgs: vm.StartupArgs{
-			VMName:               name,
-			SharedUser:           remoteUser,
-			DisksInitializedFile: vm.DisksInitializedFile,
-			OSInitializedFile:    vm.OSInitializedFile,
-			StartupLogs:          vm.StartupLogs,
-			EnableCron:           false,
-			Zfs:                  fileSystem == vm.Zfs,
-			EnableFIPS:           enableFips,
-			ChronyServers:        []string{"169.254.169.123"},
-		},
+		StartupArgs: vm.DefaultStartupArgs(
+			vm.WithVMName(name),
+			vm.WithSharedUser(remoteUser),
+			vm.WithZfs(fileSystem == vm.Zfs),
+			vm.WithEnableFIPS(enableFips),
+			vm.WithChronyServers([]string{"169.254.169.123"}),
+		),
 		ExtraMountOpts:   extraMountOpts,
 		UseMultipleDisks: useMultiple,
 	}
