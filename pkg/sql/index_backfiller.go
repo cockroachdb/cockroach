@@ -83,8 +83,12 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		if meta.BulkProcessorProgress == nil {
 			return nil
 		}
-		progress.CompletedSpans = addCompleted(
-			meta.BulkProcessorProgress.CompletedSpans...)
+		progress.CompletedSpans = append(progress.CompletedSpans, addCompleted(
+			meta.BulkProcessorProgress.CompletedSpans...)...)
+		knobs := &ib.execCfg.DistSQLSrv.TestingKnobs
+		if knobs.RunBeforeIndexBackfillProgressUpdate != nil {
+			knobs.RunBeforeIndexBackfillProgressUpdate(progress.CompletedSpans)
+		}
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
 	var spansToDo []roachpb.Span
@@ -98,6 +102,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	if len(spansToDo) == 0 { // already done
 		return nil
 	}
+
 	now := ib.execCfg.DB.Clock().Now()
 	// Pick now as the read timestamp for the backfill. It's safe to use this
 	// timestamp to read even if we've partially backfilled at an earlier

@@ -326,14 +326,13 @@ COMMIT;
 	tDB.Exec(t, `DELETE FROM t WHERE a = 2`)
 
 	// Make sure function cannot be used before job completes.
-	testingKnob.RunBeforeBackfill = func() error {
+	testingKnob.RunBeforeBackfill = func(_ []scexec.BackfillProgress) error {
 		_, err = sqlDB.Exec(`SELECT f()`)
 		require.Error(t, err, "")
 		require.Contains(t, err.Error(), `function "f" is being added`)
 		return nil
 	}
 
-	//tDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints='newschemachanger.before.exec'`)
 	_, err = sqlDB.Exec(`
 BEGIN;
 SET LOCAL autocommit_before_ddl = false;
