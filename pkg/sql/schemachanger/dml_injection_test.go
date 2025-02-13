@@ -368,7 +368,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			// Run a query against the secondary index at each stage.
 			query:        "SELECT operation FROM tbl@i1",
 			schemaChange: "ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (insert_phase_ordinal, operation_phase_ordinal, operation)",
-			skipIssue:    133129,
 		},
 		{
 			desc:        "alter primary key using columns using hash",
