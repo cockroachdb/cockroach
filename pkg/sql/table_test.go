@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package sql_test
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -182,7 +184,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 	}
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY, b " + d.sqlType + ")"
-		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
+		schema, err := sql.CreateTestTableDescriptor(context.Background(), 1, 100, s,
 			catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()), nil, nil)
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
@@ -312,7 +314,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 	}
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (" + d.sql + ")"
-		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
+		schema, err := sql.CreateTestTableDescriptor(context.Background(), 1, 100, s,
 			catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()), nil, nil)
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
@@ -386,7 +388,7 @@ func TestMakeTableDescUniqueConstraints(t *testing.T) {
 	}
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (" + d.sql + ")"
-		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
+		schema, err := sql.CreateTestTableDescriptor(context.Background(), 1, 100, s,
 			catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()), nil, nil)
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
@@ -405,7 +407,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s := "CREATE TABLE foo.test (a INT, b INT, CONSTRAINT c UNIQUE (b))"
 	ctx := context.Background()
-	desc, err := CreateTestTableDescriptor(ctx, 1, 100, s,
+	desc, err := sql.CreateTestTableDescriptor(ctx, 1, 100, s,
 		catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()), nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -435,7 +437,7 @@ CREATE TABLE test.tt (x test.t);
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
 	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 		var typeDesc catalog.TypeDescriptor
-		if err := TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+		if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 			typeDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Type(ctx, id)
 			return err
 		}); err != nil {
@@ -642,7 +644,7 @@ func TestJobsCache(t *testing.T) {
 	}
 
 	var params base.TestServerArgs
-	params.Knobs.SQLExecutor = &ExecutorTestingKnobs{
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		RunAfterSCJobsCacheLookup: runAfterSCJobsCacheLookup,
 	}
 

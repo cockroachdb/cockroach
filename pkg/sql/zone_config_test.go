@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -133,7 +134,7 @@ func TestGetZoneConfig(t *testing.T) {
 
 			// Verify sql.GetZoneConfigInTxn.
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
-			if err := sql.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			if err := sqltestutils.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
 					ctx, txn.KV(), col, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
@@ -367,7 +368,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 
 			// Verify sql.GetZoneConfigInTxn.
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
-			if err := sql.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			if err := sqltestutils.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
 					ctx, txn.KV(), col, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
