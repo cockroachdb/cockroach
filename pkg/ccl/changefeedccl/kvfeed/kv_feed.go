@@ -59,8 +59,6 @@ type Config struct {
 	Codec               keys.SQLCodec
 	Clock               *hlc.Clock
 	Spans               []roachpb.Span
-	CheckpointSpans     []roachpb.Span
-	CheckpointTimestamp hlc.Timestamp
 	SpanLevelCheckpoint *jobspb.TimestampSpansMap
 	Targets             changefeedbase.Targets
 	Writer              kvevent.Writer
@@ -131,7 +129,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	g := ctxgroup.WithContext(ctx)
 	f := newKVFeed(
-		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp, cfg.SpanLevelCheckpoint,
+		cfg.Writer, cfg.Spans, cfg.SpanLevelCheckpoint,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
 		cfg.WithFrontierQuantize,
@@ -256,8 +254,6 @@ func (e schemaChangeDetectedError) Error() string {
 
 type kvFeed struct {
 	spans                []roachpb.Span
-	checkpoint           []roachpb.Span
-	checkpointTimestamp  hlc.Timestamp
 	spanLevelCheckpoint  *jobspb.TimestampSpansMap
 	withFrontierQuantize time.Duration
 	withDiff             bool
@@ -289,8 +285,6 @@ type kvFeed struct {
 func newKVFeed(
 	writer kvevent.Writer,
 	spans []roachpb.Span,
-	checkpoint []roachpb.Span,
-	checkpointTimestamp hlc.Timestamp,
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
@@ -311,8 +305,6 @@ func newKVFeed(
 	return &kvFeed{
 		writer:               writer,
 		spans:                spans,
-		checkpoint:           checkpoint,
-		checkpointTimestamp:  checkpointTimestamp,
 		spanLevelCheckpoint:  spanLevelCheckpoint,
 		withInitialBackfill:  withInitialBackfill,
 		withDiff:             withDiff,
@@ -396,8 +388,6 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 
 		// Clear out checkpoint after the initial scan or rangefeed.
 		if initialScan {
-			f.checkpoint = nil
-			f.checkpointTimestamp = hlc.Timestamp{}
 			f.spanLevelCheckpoint = nil
 		}
 
@@ -471,31 +461,15 @@ func isPrimaryKeyChange(
 
 // filterCheckpointSpans filters spans which have already been completed,
 // and returns the list of spans that still need to be done.
-func filterCheckpointSpans(spans []roachpb.Span, completed []roachpb.Span) []roachpb.Span {
+func filterCheckpointSpans(
+	spans []roachpb.Span, checkpoint *jobspb.TimestampSpansMap,
+) []roachpb.Span {
 	var sg roachpb.SpanGroup
 	sg.Add(spans...)
-	sg.Sub(completed...)
+	for _, sp := range checkpoint.ToGoMap() {
+		sg.Sub(sp...)
+	}
 	return sg.Slice()
-}
-
-// filterCheckpointSpansFromCheckpoint filters spans which have already been
-// completed based on the given checkpoints information and returns the list of
-// spans that still need to be done. If checkpoint is nil, it will filter out
-// the given oldCheckpoint directly. Otherwise, it extracts and flattens spans
-// from newCheckpoint.Entries into a single slice and filters out the completed
-// spans.
-func filterCheckpointSpansFromCheckpoint(
-	spansToScan []roachpb.Span, oldCheckpoint []roachpb.Span, newCheckpoint *jobspb.TimestampSpansMap,
-) []roachpb.Span {
-	if newCheckpoint == nil {
-		return filterCheckpointSpans(spansToScan, oldCheckpoint)
-	}
-
-	completed := make([]roachpb.Span, 0)
-	for _, sp := range newCheckpoint.Entries {
-		completed = append(completed, sp.Spans...)
-	}
-	return filterCheckpointSpans(spansToScan, completed)
 }
 
 // scanIfShould performs a scan of KV pairs in watched span if
@@ -570,7 +544,7 @@ func (f *kvFeed) scanIfShould(
 
 	// If we have initial checkpoint information specified, filter out
 	// spans which we no longer need to scan.
-	spansToBackfill := filterCheckpointSpansFromCheckpoint(spansToScan, f.checkpoint, f.spanLevelCheckpoint)
+	spansToBackfill := filterCheckpointSpans(spansToScan, f.spanLevelCheckpoint)
 	if len(spansToBackfill) == 0 {
 		return spansToScan, scanTime, nil
 	}
@@ -618,16 +592,8 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 	}()
 
 	// We have catchup scan checkpoint.  Advance frontier.
-	// TODO(#140686): check if we can get rid of this condition and the empty
-	// checkpointTimestamp check in Restore.
-	if f.spanLevelCheckpoint != nil || startFrom.Less(f.checkpointTimestamp) {
-		// Usually, f.checkpointTimestamp should be above the frontier timestamp
-		// startFrom. During ALTER CHANGEFEED and in some testing scenarios,
-		// f.checkpointTimestamp could be empty. Make sure Restore does not regress
-		// and forward the checkpointed spans to the checkpointTimestamp in those
-		// cases. This is not a problem for spanLevelCheckpoint because it always
-		// sets checkpointed timestamp for spans properly.
-		if err := checkpoint.Restore(resumeFrontier, f.checkpoint, f.checkpointTimestamp, f.spanLevelCheckpoint); err != nil {
+	if f.spanLevelCheckpoint != nil {
+		if err := checkpoint.Restore(resumeFrontier, f.spanLevelCheckpoint); err != nil {
 			return err
 		}
 	}

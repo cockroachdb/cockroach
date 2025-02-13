@@ -267,6 +267,20 @@ WHERE id = $1
 		}
 	}
 
+	// Insert the job payload and progress into the system.jobs_info table.
+	infoStorage := j.InfoStorage(u.txn)
+	infoStorage.claimChecked = true
+	if payloadBytes != nil {
+		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+			return err
+		}
+	}
+	if progressBytes != nil {
+		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+			return err
+		}
+	}
+
 	v, err := u.txn.GetSystemSchemaVersion(ctx)
 	if err != nil {
 		return err
@@ -357,20 +371,6 @@ WHERE id = $1
 			); err != nil {
 				return err
 			}
-		}
-	}
-
-	// Insert the job payload and progress into the system.jobs_info table.
-	infoStorage := j.InfoStorage(u.txn)
-	infoStorage.claimChecked = true
-	if payloadBytes != nil {
-		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
-			return err
-		}
-	}
-	if progressBytes != nil {
-		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
-			return err
 		}
 	}
 
