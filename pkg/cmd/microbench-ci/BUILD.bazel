@@ -18,6 +18,7 @@ go_library(
         "//pkg/cmd/roachprod-microbench/parser",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_go_github_v61//github",
+        "@com_github_google_pprof//profile",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_x_exp//maps",
@@ -42,6 +43,7 @@ go_test(
     deps = [
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_google_pprof//profile",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -6,6 +6,8 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/parser"
 	"github.com/cockroachdb/errors"
+	"github.com/google/pprof/profile"
 )
 
 // execFunc is a function that executes a command and returns its output. This
@@ -24,18 +27,18 @@ var execFunc = func(cmd *exec.Cmd) ([]byte, error) {
 
 // command returns the command to run the benchmark binary for a given revision
 // and iteration type.
-func (b *Benchmark) command(revision Revision, iterType BenchmarkIterationType) *exec.Cmd {
+func (b *Benchmark) command(revision Revision, profileSuffix string) *exec.Cmd {
 	cmd := exec.Command(
 		path.Join(suite.binDir(revision), b.binaryName()),
-		b.args(suite.artifactsDir(revision), iterType)...,
+		b.args(suite.artifactsDir(revision), profileSuffix)...,
 	)
 	cmd.Env = append(os.Environ(), "COCKROACH_RANDOM_SEED=1")
 	return cmd
 }
 
 // runIteration runs a single iteration of the benchmark for the given revision.
-func (b *Benchmark) runIteration(revision Revision) error {
-	cmd := b.command(revision, Measure)
+func (b *Benchmark) runIteration(revision Revision, profileSuffix string) error {
+	cmd := b.command(revision, profileSuffix)
 	output, err := execFunc(cmd)
 	if err != nil {
 		return errors.Wrapf(err, "benchmark %q, command %q failed to run:\n%s",
@@ -66,22 +69,6 @@ func (b *Benchmark) runIteration(revision Revision) error {
 	return nil
 }
 
-// collectProfiles collects the profiles of both revisions for the benchmark in
-// an interleaved manner.
-func (b *Benchmark) collectProfiles() error {
-	for _, profile := range []BenchmarkIterationType{ProfileCPU, ProfileMemory, ProfileMutex} {
-		for _, revision := range []Revision{New, Old} {
-			cmd := b.command(revision, profile)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "profile benchmark %q, command %q failed to run:\n%s",
-					b.DisplayName, cmd.String(), string(output))
-			}
-		}
-	}
-	return nil
-}
-
 // run runs the benchmark as configured in the Benchmark struct.
 func (b *Benchmark) run() error {
 	for _, revision := range []Revision{New, Old} {
@@ -91,20 +78,20 @@ func (b *Benchmark) run() error {
 		}
 	}
 
-	log.Printf("Running benchmark %q for %d iterations", b.Name, b.MeasureCount)
-	for i := 0; i < b.MeasureCount; i++ {
+	log.Printf("Running benchmark %q for %d iterations", b.Name, b.Count)
+	for i := 0; i < b.Count; i++ {
 		for _, revision := range []Revision{New, Old} {
 			log.Printf("%s binary iteration (%d out of %d)",
-				revision, i+1, b.MeasureCount,
+				revision, i+1, b.Count,
 			)
-			err := b.runIteration(revision)
+			err := b.runIteration(revision, fmt.Sprintf("%d", i+1))
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	// Only collect profiles if there was a regression.
+	// Write failure marker file if the benchmark regressed.
 	compareResult, err := b.compare()
 	if err != nil {
 		return err
@@ -117,9 +104,58 @@ func (b *Benchmark) run() error {
 				return err
 			}
 		}
-		log.Printf("collecting profiles for each revision")
-		if err = b.collectProfiles(); err != nil {
+	}
+
+	// Concat profiles.
+	for _, profileType := range []ProfileType{ProfileCPU, ProfileMemory, ProfileMutex} {
+		err = b.concatProfile(profileType)
+		if err != nil {
+			return errors.Wrapf(err, "failed to concat %s profiles", profileType)
+		}
+	}
+	return nil
+}
+
+func (b *Benchmark) concatProfile(profileType ProfileType) error {
+	for _, revision := range []Revision{New, Old} {
+		profiles := make([]*profile.Profile, 0, b.Count)
+		deleteProfiles := make([]func() error, 0)
+		for i := 0; i < b.Count; i++ {
+			profilePath := path.Join(suite.artifactsDir(revision),
+				b.profile(profileType, fmt.Sprintf("%d", i+1)))
+			profileData, err := os.ReadFile(profilePath)
+			if err != nil {
+				return err
+			}
+			p, err := profile.Parse(bytes.NewReader(profileData))
+			if err != nil {
+				return err
+			}
+			profiles = append(profiles, p)
+			deleteProfiles = append(deleteProfiles, func() error {
+				return os.Remove(profilePath)
+			})
+		}
+		merged, err := profile.Merge(profiles)
+		if err != nil {
 			return err
+		}
+		mergedPath := path.Join(suite.artifactsDir(revision), b.profile(profileType, "merged"))
+		f, err := os.Create(mergedPath)
+		if err != nil {
+			return err
+		}
+		if err = merged.Write(f); err != nil {
+			_ = f.Close()
+			return err
+		}
+		if err = f.Close(); err != nil {
+			return err
+		}
+		for _, deleteProfile := range deleteProfiles {
+			if err = deleteProfile(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

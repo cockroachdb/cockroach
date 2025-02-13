@@ -19,31 +19,24 @@ import (
 
 type (
 	Benchmark struct {
-		DisplayName  string             `yaml:"display_name"`
-		Package      string             `yaml:"package"`
-		Labels       []string           `yaml:"labels"`
-		Name         string             `yaml:"name"`
-		RunnerGroup  int                `yaml:"runner_group"`
-		MeasureCount int                `yaml:"measure_count"`
-		Measure      Sample             `yaml:"measure"`
-		CPUProfile   Sample             `yaml:"cpu_profile"`
-		MemProfile   Sample             `yaml:"mem_profile"`
-		MutexProfile Sample             `yaml:"mutex_profile"`
-		Thresholds   map[string]float64 `yaml:"thresholds"`
-	}
-	BenchmarkIterationType uint8
-	Benchmarks             []Benchmark
+		DisplayName string   `yaml:"display_name"`
+		Package     string   `yaml:"package"`
+		Labels      []string `yaml:"labels"`
+		Name        string   `yaml:"name"`
+		RunnerGroup int      `yaml:"runner_group"`
+		Count       int      `yaml:"count"`
+		Iterations  int      `yaml:"iterations"`
 
-	Sample struct {
-		Iterations int `yaml:"iterations"`
+		Thresholds map[string]float64 `yaml:"thresholds"`
 	}
+	Benchmarks  []Benchmark
+	ProfileType string
 )
 
 const (
-	Measure BenchmarkIterationType = iota
-	ProfileCPU
-	ProfileMemory
-	ProfileMutex
+	ProfileCPU    ProfileType = "cpu"
+	ProfileMemory ProfileType = "memory"
+	ProfileMutex  ProfileType = "mutex"
 )
 
 var sanitizeRe = regexp.MustCompile(`\W+`)
@@ -68,16 +61,8 @@ func (b *Benchmark) cleanLog() string {
 	return fmt.Sprintf("cleaned_%s.log", b.sanitizedName())
 }
 
-func (b *Benchmark) cpuProfile() string {
-	return fmt.Sprintf("cpu_%s.out", b.sanitizedName())
-}
-
-func (b *Benchmark) memProfile() string {
-	return fmt.Sprintf("mem_%s.out", b.sanitizedName())
-}
-
-func (b *Benchmark) mutexProfile() string {
-	return fmt.Sprintf("mutex_%s.out", b.sanitizedName())
+func (b *Benchmark) profile(profileType ProfileType, suffix string) string {
+	return fmt.Sprintf("%s_%s_%s.prof", profileType, b.sanitizedName(), suffix)
 }
 
 func (b *Benchmark) packageHash() string {
@@ -89,36 +74,18 @@ func (b *Benchmark) packageHash() string {
 
 // args returns the arguments to pass to the test binary for the given iteration
 // type.
-func (b *Benchmark) args(outputDir string, iterType BenchmarkIterationType) []string {
+func (b *Benchmark) args(outputDir string, profileSuffix string) []string {
 	args := []string{
 		"-test.run", "^$",
 		"-test.bench", b.Name,
 		"-test.benchmem",
 		"-test.count", "1",
 		"-test.outputdir", outputDir,
+		"-test.benchtime", fmt.Sprintf("%dx", b.Iterations),
+		"-test.cpuprofile", b.profile(ProfileCPU, profileSuffix),
+		"-test.memprofile", b.profile(ProfileMemory, profileSuffix),
+		"-test.mutexprofile", b.profile(ProfileMutex, profileSuffix),
 	}
-
-	var sample Sample
-	switch iterType {
-	case Measure:
-		sample = b.Measure
-	case ProfileCPU:
-		sample = b.CPUProfile
-		args = append(args, "-test.cpuprofile", b.cpuProfile())
-	case ProfileMemory:
-		sample = b.MemProfile
-		args = append(args, "-test.memprofile", b.memProfile())
-	case ProfileMutex:
-		sample = b.MemProfile
-		args = append(args, "-test.mutexprofile", b.mutexProfile())
-	default:
-		panic("unknown iteration type")
-	}
-	// If the sample does not specify iterations, use the default iterations.
-	if sample.Iterations == 0 {
-		sample.Iterations = b.Measure.Iterations
-	}
-	args = append(args, "-test.benchtime", fmt.Sprintf("%dx", sample.Iterations))
 	return args
 }
 
