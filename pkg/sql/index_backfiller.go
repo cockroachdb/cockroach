@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -101,8 +102,13 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		if meta.BulkProcessorProgress == nil {
 			return nil
 		}
-		progress.CompletedSpans = addCompleted(
-			meta.BulkProcessorProgress.CompletedSpans...)
+		progress.CompletedSpans = append(progress.CompletedSpans, addCompleted(
+			meta.BulkProcessorProgress.CompletedSpans...)...)
+		knobs := &ib.execCfg.DistSQLSrv.TestingKnobs
+		if knobs.RunBeforeIndexBackfillProgressUpdate != nil {
+			fmt.Println(progress.CompletedSpans)
+			knobs.RunBeforeIndexBackfillProgressUpdate(progress.CompletedSpans)
+		}
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
 	var spansToDo []roachpb.Span
@@ -110,12 +116,14 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		sourceIndexSpan := descriptor.IndexSpan(ib.execCfg.Codec, progress.SourceIndexID)
 		var g roachpb.SpanGroup
 		g.Add(sourceIndexSpan)
+		fmt.Println("completedspans", progress.CompletedSpans)
 		g.Sub(progress.CompletedSpans...)
 		spansToDo = g.Slice()
 	}
 	if len(spansToDo) == 0 { // already done
 		return nil
 	}
+
 	now := ib.execCfg.DB.Clock().Now()
 	run, retErr := ib.plan(
 		ctx,

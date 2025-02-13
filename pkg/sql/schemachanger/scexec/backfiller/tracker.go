@@ -7,6 +7,7 @@ package backfiller
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -181,6 +182,7 @@ func (b *Tracker) SetBackfillProgress(ctx context.Context, progress scexec.Backf
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	p, err := b.getBackfillProgressLocked(progress.Backfill)
+	fmt.Println(p)
 	if err != nil {
 		return err
 	}

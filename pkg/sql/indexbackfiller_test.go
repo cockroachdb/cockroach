@@ -8,6 +8,7 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -36,8 +38,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -552,4 +557,124 @@ INSERT INTO foo VALUES (1), (10), (100);
 	for _, test := range indexBackfillerTestCases {
 		t.Run(test.name, func(t *testing.T) { run(t, test) })
 	}
+}
+
+func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	backfillQueryResumeCh := make(chan struct{})
+	backfillQueryWaitCh := make(chan struct{})
+
+	const numSpans = 100
+	isBlockingBackfill := true
+	numProgressPushed := 0
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					BulkAdderFlushesEveryBatch: true,
+					RunBeforeIndexBackfillProgressUpdate: func(completed []roachpb.Span) {
+						if isBlockingBackfill {
+							<-backfillQueryResumeCh
+							backfillQueryWaitCh <- struct{}{}
+						}
+						numProgressPushed++
+					},
+				},
+			},
+		},
+	}
+	// Start the server with a testing knob
+	tc := testcluster.NewTestCluster(t, 1, clusterArgs)
+	tc.Start(t)
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Conns[0]
+
+	_, err := db.Exec(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = 10`)
+	require.NoError(t, err)
+	_, err = db.Exec(`CREATE TABLE t(i INT PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO t SELECT generate_series(1, $1)`, numSpans)
+	require.NoError(t, err)
+	_, err = db.Exec(`ALTER TABLE t SPLIT AT TABLE generate_series(1, $1)`, numSpans)
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	// Start a schema change with an index backfill.
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, err := db.Exec(`ALTER TABLE t ADD COLUMN j INT NOT NULL DEFAULT 42`)
+		return err
+	})
+
+	g.GoCtx(func(ctx context.Context) error {
+		var jobID int
+		testutils.SucceedsSoon(t, func() error {
+			jobIDRow := db.QueryRow(`
+				SELECT job_id FROM [SHOW JOBS]
+				WHERE job_type = 'NEW SCHEMA CHANGE' AND description ILIKE '%ADD COLUMN%'`,
+			)
+			if err = jobIDRow.Scan(&jobID); err != nil {
+				return err
+			}
+			return nil
+		})
+
+		ensureJobState := func(targetState string) {
+			testutils.SucceedsSoon(t, func() error {
+				var jobState string
+				statusRow := db.QueryRow(`SELECT status FROM [SHOW JOB $1]`, jobID)
+				if err = statusRow.Scan(&jobState); err != nil {
+					return err
+				}
+				if jobState != targetState {
+					return errors.Errorf("expected job to be %s, but found status: %s", targetState, jobState)
+				}
+				return nil
+			})
+			fmt.Println(targetState)
+		}
+
+		// Let the backfill step forward a bit.
+		for i := 0; i < 2; i++ {
+			backfillQueryResumeCh <- struct{}{}
+			<-backfillQueryWaitCh
+		}
+		// Verify we have some chunks completed.
+		require.True(t, numProgressPushed > 0)
+
+		// Ensure that progress isn't lost between pauses.
+		_, err = db.Exec(`PAUSE JOB $1`, jobID)
+		require.NoError(t, err)
+		ensureJobState("paused")
+
+		_, err = db.Exec(`RESUME JOB $1`, jobID)
+		require.NoError(t, err)
+		ensureJobState("running")
+
+		_, err = db.Exec(`PAUSE JOB $1`, jobID)
+		require.NoError(t, err)
+		ensureJobState("paused")
+
+		// Resume and ensure the job finishes.
+		isBlockingBackfill = false
+		// Unblock
+		backfillQueryResumeCh <- struct{}{}
+		<-backfillQueryWaitCh
+
+		_, err = db.Exec(`RESUME JOB $1`, jobID)
+		require.NoError(t, err)
+		ensureJobState("running")
+		ensureJobState("succeeded")
+
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		require.NoError(t, err)
+	}
+
+	require.Equal(t, 11, numProgressPushed)
 }
