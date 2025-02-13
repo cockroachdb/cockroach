@@ -9,7 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
-	"encoding/json"
+	gojson "encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -3847,18 +3848,146 @@ func TestChangefeedBareAvro(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func mustT[T any](t *testing.T) func(x T, err error) T {
+	t.Helper()
+	return func(x T, err error) T {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return x
+	}
+}
+
+func toJSON(t *testing.T, x any) string {
+	t.Helper()
+	// Our json library formats differently than the stdlib, and json.MakeJSON()
+	// chokes on some inputs, so marshal it twice.
+	bs, err := gojson.Marshal(x)
+	require.NoError(t, err)
+	j, err := json.ParseJSON(string(bs))
+	require.NoError(t, err)
+	return j.String()
+}
+
+func parseJSON(t *testing.T, s string) map[string]any {
+	t.Helper()
+	var m map[string]any
+	require.NoError(t, gojson.Unmarshal([]byte(s), &m))
+	return m
+}
+
 func TestChangefeedEnriched(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	key := map[string]any{"a": 0}
+	keySchema := map[string]any{
+		"field": "foo_key",
+		"fields": []map[string]any{
+			{"field": "a", "optional": true, "type": "int64"},
+		},
+		"type": "struct",
+	}
+	afterVal := map[string]any{"a": 0, "b": "dog"}
+	afterSchema := map[string]any{
+		"field": "foo_after",
+		"fields": []map[string]any{
+			{"field": "a", "optional": true, "type": "int64"},
+			{"field": "b", "optional": true, "type": "string"},
+		},
+		"optional": true,
+		"type":     "struct",
+	}
+	sourceSchema := map[string]any{
+		"field": "source",
+		"fields": []map[string]any{
+			{"field": "job_id", "optional": true, "type": "string"},
+		},
+		"optional": true,
+		"type":     "struct",
+	}
+
 	cases := []struct {
 		name               string
 		enrichedProperties []string
+		msgBodyJSONFunc    func(source map[string]any) map[string]any
+		expectedKey        map[string]any
 	}{
-		{name: "solo"},
-		{name: "with schema", enrichedProperties: []string{"schema"}},
-		{name: "with source", enrichedProperties: []string{"source"}},
-		{name: "with schema and source", enrichedProperties: []string{"schema", "source"}},
+		{
+			name: "with nothing",
+			msgBodyJSONFunc: func(source map[string]any) map[string]any {
+				return map[string]any{
+					"after": afterVal,
+					"op":    "c",
+				}
+			},
+			expectedKey: key,
+		},
+		{
+			name:               "with schema",
+			enrichedProperties: []string{"schema"},
+			msgBodyJSONFunc: func(source map[string]any) map[string]any {
+				return map[string]any{
+					"payload": map[string]any{
+						"after": afterVal,
+						"op":    "c",
+					},
+					"schema": map[string]any{
+						"field": "cockroachdb_envelope",
+						"fields": []map[string]any{
+							afterSchema,
+							{"field": "ts_ns", "optional": true, "type": "int64"},
+							{"field": "op", "optional": true, "type": "string"},
+						},
+						"type": "struct",
+					},
+				}
+			},
+			expectedKey: map[string]any{
+				"payload": key,
+				"schema":  keySchema,
+			},
+		},
+		{
+			name:               "with source",
+			enrichedProperties: []string{"source"},
+			msgBodyJSONFunc: func(source map[string]any) map[string]any {
+				return map[string]any{
+					"after":  afterVal,
+					"op":     "c",
+					"source": source,
+				}
+			},
+			expectedKey: key,
+		},
+		{
+			name:               "with schema and source",
+			enrichedProperties: []string{"schema", "source"},
+			msgBodyJSONFunc: func(source map[string]any) map[string]any {
+				return map[string]any{
+					"payload": map[string]any{
+						"after":  afterVal,
+						"op":     "c",
+						"source": source,
+					},
+					"schema": map[string]any{
+						"field": "cockroachdb_envelope",
+						"fields": []map[string]any{
+							afterSchema,
+							sourceSchema,
+							{"field": "ts_ns", "optional": true, "type": "int64"},
+							{"field": "op", "optional": true, "type": "string"},
+						},
+						"type": "struct",
+					},
+				}
+			},
+			expectedKey: map[string]any{
+				"payload": key,
+				"schema":  keySchema,
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -3886,19 +4015,11 @@ func TestChangefeedEnriched(t *testing.T) {
 				if _, ok := foo.(*sinklessFeed); !ok {
 					sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
 				}
+				source := map[string]any{"job_id": strconv.FormatInt(jobID, 10)}
 
-				var sourceMsg string
-				if slices.Contains(tc.enrichedProperties, "source") {
-					sourceMsg = fmt.Sprintf(`, "source": {"job_id": "%d"}`, jobID)
-				}
-
-				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"%s}`, topic, sourceMsg)
-				if slices.Contains(tc.enrichedProperties, "schema") {
-					// TODO(#139658): add the schema to the key and the value here
-					msg = fmt.Sprintf(`%s: {"payload": {"a": 0}}->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"%s}}`, topic, sourceMsg)
-				}
-
-				assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{msg})
+				msgBody := toJSON(t, tc.msgBodyJSONFunc(source))
+				assertion := fmt.Sprintf("%s: %s->%s", topic, toJSON(t, tc.expectedKey), msgBody)
+				assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{assertion})
 			}
 			supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
 			for _, sink := range supportedSinks {
@@ -5330,7 +5451,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 						B int
 					}
 				}
-				err = json.Unmarshal(msg.Value, &decodedMessage)
+				err = gojson.Unmarshal(msg.Value, &decodedMessage)
 				require.NoError(t, err)
 				delete(upsertedValues, decodedMessage.After.B)
 				if len(upsertedValues) == 0 {
