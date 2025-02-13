@@ -22,9 +22,11 @@ import (
 
 // RemoteClockMetrics is the collection of metrics for the clock monitor.
 type RemoteClockMetrics struct {
-	ClockOffsetMeanNanos   *metric.Gauge
-	ClockOffsetStdDevNanos *metric.Gauge
-	RoundTripLatency       metric.IHistogram
+	ClockOffsetMeanNanos         *metric.Gauge
+	ClockOffsetStdDevNanos       *metric.Gauge
+	ClockOffsetMedianNanos       *metric.Gauge
+	ClockOffsetMedianAbsDevNanos *metric.Gauge
+	RoundTripLatency             metric.IHistogram
 }
 
 // avgLatencyMeasurementAge determines how to exponentially weight the
@@ -47,7 +49,24 @@ var (
 		Measurement: "Clock Offset",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-
+	metaClockOffsetMedianNanos = metric.Metadata{
+		// An outlier resistant measure of centrality, useful for
+		// diagnosing unhealthy nodes.
+		// Demo: https://docs.google.com/spreadsheets/d/1gmzQxEVYDKb_b-Mn50ZTje-LqZw6TZwUxxUPY2rG69M/edit?gid=0#gid=0
+		Name:        "clock-offset.mediannanos",
+		Help:        "Median clock offset with other nodes",
+		Measurement: "Clock Offset",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaClockOffsetMedianAbsDevNanos = metric.Metadata{
+		// An outlier resistant measure of dispersion, see
+		// https://en.wikipedia.org/wiki/Median_absolute_deviation
+		// and demo above.
+		Name:        "clock-offset.medianabsdevnanos",
+		Help:        "Median Absolute Deviation (MAD) with other nodes",
+		Measurement: "Clock Offset",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaConnectionRoundTripLatency = metric.Metadata{
 		// NB: the name is legacy and should not be changed since customers
 		// rely on it.
@@ -143,8 +162,10 @@ func newRemoteClockMonitor(
 		histogramWindowInterval = time.Duration(math.MaxInt64)
 	}
 	r.metrics = RemoteClockMetrics{
-		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
-		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
+		ClockOffsetMeanNanos:         metric.NewGauge(metaClockOffsetMeanNanos),
+		ClockOffsetStdDevNanos:       metric.NewGauge(metaClockOffsetStdDevNanos),
+		ClockOffsetMedianNanos:       metric.NewGauge(metaClockOffsetMedianNanos),
+		ClockOffsetMedianAbsDevNanos: metric.NewGauge(metaClockOffsetMedianAbsDevNanos),
 		RoundTripLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaConnectionRoundTripLatency,
@@ -344,8 +365,18 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	if err != nil && !errors.Is(err, stats.EmptyInput) {
 		return err
 	}
+	median, err := offsets.Median()
+	if err != nil && !errors.Is(err, stats.EmptyInput) {
+		return err
+	}
+	medianAbsoluteDeviation, err := offsets.MedianAbsoluteDeviation()
+	if err != nil && !errors.Is(err, stats.EmptyInput) {
+		return err
+	}
 	r.metrics.ClockOffsetMeanNanos.Update(int64(mean))
 	r.metrics.ClockOffsetStdDevNanos.Update(int64(stdDev))
+	r.metrics.ClockOffsetMedianNanos.Update(int64(median))
+	r.metrics.ClockOffsetMedianAbsDevNanos.Update(int64(medianAbsoluteDeviation))
 
 	if numClocks > 0 && healthyOffsetCount <= numClocks/2 {
 		return errors.Errorf(
