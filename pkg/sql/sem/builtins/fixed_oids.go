@@ -2608,6 +2608,7 @@ var builtinOidsArray = []string{
 	2645: `crdb_internal.lease_holder_with_errors(key: bytes) -> jsonb`,
 	2646: `crdb_internal.pretty_key(raw_key: bytes) -> string`,
 	2647: `crdb_internal.backup_compaction(collection_uri: string[], full_backup_path: string, encryption_opts: bytes, start_time: decimal, end_time: decimal) -> int`,
+	2648: `crdb_internal.sync_sql_liveness_is_alive(session_id: bytes) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

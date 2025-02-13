@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -448,6 +449,10 @@ type Planner interface {
 
 	// ClearTableStatsCache removes all entries from the node's table stats cache.
 	ClearTableStatsCache()
+
+	// IsAlive uses a slstorage.blockingReader to query the liveness of a
+	// sqlliveness.Session.
+	IsAlive(ctx context.Context, sessionID sqlliveness.SessionID) (bool, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

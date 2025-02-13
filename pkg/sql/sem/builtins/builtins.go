@@ -7016,6 +7016,29 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 	),
 
+	// Returns true iff the given sqlliveness session is not expired.
+	"crdb_internal.sync_sql_liveness_is_alive": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategorySystemInfo,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "session_id", Typ: types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+
+				sid := sqlliveness.SessionID(*(args[0].(*tree.DBytes)))
+				live, err := evalCtx.Planner.IsAlive(ctx, sid)
+				if err != nil {
+					return tree.MakeDBool(true), err
+				}
+				return tree.MakeDBool(tree.DBool(live)), nil
+			},
+			Info:       "Checks if given sqlliveness session id is not expired (sync if no cached info)",
+			Volatility: volatility.Stable,
+		},
+	),
+
 	// Used to configure the tenant token bucket. See UpdateTenantResourceLimits.
 	"crdb_internal.update_tenant_resource_limits": makeBuiltin(
 		tree.FunctionProperties{

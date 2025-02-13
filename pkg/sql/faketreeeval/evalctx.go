@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -571,6 +572,13 @@ func (ep *DummyEvalPlanner) ClearQueryPlanCache() {}
 
 // ClearTableStatsCache is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) ClearTableStatsCache() {}
+
+// IsAlive is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) IsAlive(
+	ctx context.Context, sessionID sqlliveness.SessionID,
+) (isAlive bool, err error) {
+	return
+}
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1031,4 +1032,9 @@ func (p *planner) StartHistoryRetentionJob(
 
 func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID) error {
 	return ExtendHistoryRetention(ctx, p.EvalContext(), p.InternalSQLTxn(), jobID)
+}
+
+// IsAlive is part of the eval.Planner interface.
+func (p *planner) IsAlive(ctx context.Context, sessionID sqlliveness.SessionID) (bool, error) {
+	return p.execCfg.SQLLiveness.BlockingReader().IsAlive(ctx, sessionID)
 }
