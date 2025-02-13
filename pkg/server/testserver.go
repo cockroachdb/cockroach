@@ -910,6 +910,9 @@ type testTenant struct {
 	// pgPreServer handles SQL connections prior to routing them to a
 	// specific tenant.
 	pgPreServer *pgwire.PreServeConnHandler
+	// deploymentMode specifies the tenant's deployment mode.
+	// Allowed values: ExternalProcess or SharedProcess.
+	deploymentMode serverutils.DeploymentMode
 }
 
 var _ serverutils.ApplicationLayerInterface = &testTenant{}
@@ -1258,6 +1261,11 @@ func (t *testTenant) SettingsWatcher() interface{} {
 	return t.sql.settingsWatcher
 }
 
+// DeploymentMode is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) DeploymentMode() serverutils.DeploymentMode {
+	return t.deploymentMode
+}
+
 // WaitForTenantCapabilities is part of the serverutils.TenantControlInterface.
 func (ts *testServer) WaitForTenantCapabilities(
 	ctx context.Context,
@@ -1415,6 +1423,7 @@ func (ts *testServer) StartSharedProcessTenant(
 		pgL:            sqlServerWrapper.loopbackPgL,
 		httpTestServer: hts,
 		drain:          sqlServerWrapper.drainServer,
+		deploymentMode: serverutils.SharedProcess,
 	}
 
 	sqlDB, err := ts.SQLConnE(serverutils.DBName("cluster:" + string(args.TenantName) + "/" + args.UseDatabase))
@@ -1791,6 +1800,7 @@ func (ts *testServer) StartTenant(
 		http:           sw.http,
 		drain:          sw.drainServer,
 		pgL:            sw.loopbackPgL,
+		deploymentMode: serverutils.ExternalProcess,
 	}, err
 }
 
@@ -1918,6 +1928,11 @@ func (ts *testServer) MustGetSQLNetworkCounter(name string) int64 {
 		reg.AddMetricStruct(m)
 	}
 	return mustGetSQLCounterForRegistry(reg, name)
+}
+
+// DeploymentMode is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) DeploymentMode() serverutils.DeploymentMode {
+	return serverutils.SingleTenant
 }
 
 // Locality is part of the serverutils.ApplicationLayerInterface.
