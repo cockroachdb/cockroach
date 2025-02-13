@@ -52,6 +52,8 @@ var (
 const seed = 12345 // expectations are based on this seed
 
 func TestTestPlanner(t *testing.T) {
+	// N.B. we must restore default versions since other tests may depend on it.
+	defer setDefaultVersions()
 	// Make some test-only mutators available to the test.
 	mutatorsAvailable := append([]mutator{
 		concurrentUserHooksMutator{},
