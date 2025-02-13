@@ -34,8 +34,9 @@ type TestingKnobs struct {
 	// error during stage execution.
 	OnPostCommitError func(p scplan.Plan, stageIdx int, err error) error
 
-	// RunBeforeBackfill is called just before starting the backfill.
-	RunBeforeBackfill func() error
+	// RunBeforeBackfill is called just before starting the backfill, with the
+	// BackfillProgress that we will be backfilling with.
+	RunBeforeBackfill func(progresses []BackfillProgress) error
 
 	// RunBeforeMakingPostCommitPlan is called just before making the post commit
 	// plan.
