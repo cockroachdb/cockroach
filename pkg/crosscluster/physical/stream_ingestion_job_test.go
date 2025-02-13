@@ -17,7 +17,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -369,7 +368,7 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 
 	<-planned
-	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, replicationJobID)
+	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, replicationJobID)
 
 	// Assert that the start time hasn't changed.
 	require.Equal(t, startTime, stats.IngestionDetails.ReplicationStartTime)
