@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"golang.org/x/exp/maps"
 	"golang.org/x/perf/benchmath"
 	"golang.org/x/perf/benchunit"
 )
@@ -117,27 +118,54 @@ func (c CompareResults) writeJSONSummary(path string) error {
 	}
 	defer file.Close()
 	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	type (
+		Data struct {
+			Metric  string
+			Summary benchmath.Summary
+			Sample  benchmath.Sample
+		}
+		Entry struct {
+			Name       string
+			Count      int
+			Iterations int
+			Data       map[string][]Data
+		}
+	)
 
-	type Data struct {
-		Metric  string
-		Summary benchmath.Summary
-	}
-	data := make(map[string][]Data)
-	for _, cr := range c {
-		for name, m := range cr.MetricMap {
+	entries := make([]Entry, len(c))
+	for idx, cr := range c {
+		data := make(map[string][]Data)
+		metricKeys := maps.Keys(cr.MetricMap)
+		sort.Strings(metricKeys)
+		for _, name := range metricKeys {
+			m := cr.MetricMap[name]
 			for _, r := range []Revision{Old, New} {
+				if m.BenchmarkEntries[cr.EntryName].Summaries[string(r)] == nil {
+					continue
+				}
+				if m.BenchmarkEntries[cr.EntryName].Samples[string(r)] == nil {
+					continue
+				}
 				data[string(r)] = append(data[string(r)], Data{
 					Metric:  name,
 					Summary: *m.BenchmarkEntries[cr.EntryName].Summaries[string(r)],
+					Sample:  *m.BenchmarkEntries[cr.EntryName].Samples[string(r)],
 				})
 			}
 		}
+		entries[idx] = Entry{
+			Name:       cr.Benchmark.Name,
+			Count:      cr.Benchmark.Count,
+			Iterations: cr.Benchmark.Iterations,
+			Data:       data,
+		}
 	}
 	return encoder.Encode(struct {
-		Summaries map[string][]Data
+		Entries   []Entry
 		Revisions Revisions
 	}{
-		Summaries: data,
+		Entries:   entries,
 		Revisions: suite.Revisions,
 	})
 }
