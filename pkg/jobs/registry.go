@@ -319,6 +319,8 @@ const (
 	MVCCStatisticsJobID = jobspb.JobID(104)
 
 	UpdateTableMetadataCacheJobID = jobspb.JobID(105)
+
+	SqlActivityFlushJobID = jobspb.JobID(106)
 )
 
 // MakeJobID generates a new job ID.
