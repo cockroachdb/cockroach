@@ -22,4 +22,4 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    └── from tbl@[3] into tbl_j_key+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index tbl_j_key+ in relation tbl
- └── execute 2 system table mutations transactions
+ └── execute 3 system table mutations transactions
