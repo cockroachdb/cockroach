@@ -317,7 +317,7 @@ func runBackfiller(
 ) error {
 	if deps.GetTestingKnobs() != nil &&
 		deps.GetTestingKnobs().RunBeforeBackfill != nil {
-		err := deps.GetTestingKnobs().RunBeforeBackfill()
+		err := deps.GetTestingKnobs().RunBeforeBackfill(backfillProgresses)
 		if err != nil {
 			return err
 		}
