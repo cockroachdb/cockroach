@@ -527,7 +527,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	}
 
 	// If the memo has placeholders, first try the placeholder fast path.
-	_, ok, err := opc.optimizer.TryPlaceholderFastPath()
+	ok, err := opc.optimizer.TryPlaceholderFastPath()
 	if err != nil {
 		return nil, memoTypeUnknown, err
 	}
