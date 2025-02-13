@@ -7,7 +7,7 @@ package avro
 
 import (
 	"context"
-	"encoding/json"
+	gojson "encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -127,7 +129,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 
 func parseAvroSchema(t *testing.T, evalCtx *eval.Context, j string) (*DataRecord, error) {
 	var s DataRecord
-	if err := json.Unmarshal([]byte(j), &s); err != nil {
+	if err := gojson.Unmarshal([]byte(j), &s); err != nil {
 		return nil, err
 	}
 	// This avroDataRecord doesn't have any of the derived fields we need for
@@ -403,8 +405,11 @@ func TestAvroSchema(t *testing.T) {
 				cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false),
 				SchemaNoSuffix, "")
 			require.NoError(t, err)
-			jsonSchema := origSchema.codec.Schema()
-			roundtrippedSchema, err := parseAvroSchema(t, evalCtx, jsonSchema)
+
+			validateJSONSchema(t, origSchema)
+
+			schemaJSON := origSchema.codec.Schema()
+			roundtrippedSchema, err := parseAvroSchema(t, evalCtx, schemaJSON)
 			require.NoError(t, err)
 			// It would require some work, but we could also check that the
 			// roundtrippedSchema can be used to recreate the original `CREATE
@@ -506,7 +511,7 @@ func TestAvroSchema(t *testing.T) {
 					cdcevent.ResultColumn{ResultColumn: colinfo.ResultColumn{Typ: tableDesc.PublicColumns()[1].GetType()}},
 				)
 				require.NoError(t, err)
-				schema, err := json.Marshal(field.SchemaType)
+				schema, err := gojson.Marshal(field.SchemaType)
 				require.NoError(t, err)
 				require.Equal(t, goldens[colType], string(schema), `SQL type %s`, colType)
 			})
@@ -855,6 +860,9 @@ func TestAvroMigration(t *testing.T) {
 				cdcevent.TestingMakeEventRow(readerDesc, 0, nil, false), SchemaNoSuffix, "")
 			require.NoError(t, err)
 
+			validateJSONSchema(t, writerSchema)
+			validateJSONSchema(t, readerSchema)
+
 			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
 			require.NoError(t, err)
 			expectedRows, err := parseValues(readerDesc, `VALUES `+test.expectedValues)
@@ -1071,4 +1079,10 @@ func BenchmarkEncodeINet(b *testing.B) {
 
 func BenchmarkEncodeJSON(b *testing.B) {
 	benchmarkEncodeType(b, types.Jsonb, randEncDatumRow(types.Jsonb))
+}
+
+func validateJSONSchema(t *testing.T, sch *DataRecord) {
+	b := json.NewObjectBuilder(3)
+	require.NoError(t, sch.JSONSchema(b))
+	// TODO: find a way to validate the this schema.
 }
