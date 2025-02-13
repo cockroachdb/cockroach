@@ -407,13 +407,18 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	execVersion := execversion.V24_3
-	if dsp.st.Version.IsActive(ctx, clusterversion.V25_1) {
-		execVersion = execversion.V25_1
+	var v execversion.V
+	switch {
+	case dsp.st.Version.IsActive(ctx, clusterversion.V25_2):
+		v = execversion.V25_2
+	case dsp.st.Version.IsActive(ctx, clusterversion.V25_1):
+		v = execversion.V25_1
+	default:
+		v = execversion.V24_3
 	}
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
-		Version:           execVersion,
+		Version:           v,
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
