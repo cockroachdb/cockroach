@@ -93,6 +93,14 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.V25_2_Start.Version()),
 
+	upgrade.NewTenantUpgrade(
+		"add new sql stats flush job",
+		clusterversion.V25_2_AddSqlStatsFlushJob.Version(),
+		upgrade.NoPrecondition,
+		addSqlStatsFlushJob,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

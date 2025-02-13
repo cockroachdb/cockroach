@@ -1467,6 +1467,14 @@ message ImportRollbackDetails {
   ];
 }
 
+message SqlStatsFlushDetails {
+
+}
+
+message SqlStatsFlushProgress {
+
+}
+
 message ImportRollbackProgress {}
 
 message Payload {
@@ -1537,6 +1545,7 @@ message Payload {
     LogicalReplicationDetails logical_replication_details = 48;
     UpdateTableMetadataCacheDetails update_table_metadata_cache_details = 49;
     StandbyReadTSPollerDetails standby_read_ts_poller_details = 50;
+    SqlStatsFlushDetails sql_stats_flush_details = 51;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1613,6 +1622,7 @@ message Progress {
     LogicalReplicationProgress LogicalReplication = 36;
     UpdateTableMetadataCacheProgress table_metadata_cache = 37;
     StandbyReadTSPollerProgress standby_read_ts_poller = 38;
+    SqlStatsFlushProgress sql_stats_flush = 39;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1655,6 +1665,7 @@ enum Type {
   AUTO_CREATE_PARTIAL_STATS = 28 [(gogoproto.enumvalue_customname) = "TypeAutoCreatePartialStats"];
   UPDATE_TABLE_METADATA_CACHE = 29 [(gogoproto.enumvalue_customname) = "TypeUpdateTableMetadataCache"];
   STANDBY_READ_TS_POLLER = 30 [(gogoproto.enumvalue_customname) = "TypeStandbyReadTSPoller"];
+  SQL_STATS_FLUSH = 31 [(gogoproto.enumvalue_customname) = "TypeSQLStatsFlush"];
 }
 
 message Job {
