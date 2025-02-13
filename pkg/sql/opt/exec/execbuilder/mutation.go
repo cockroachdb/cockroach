@@ -31,14 +31,14 @@ func (b *Builder) buildMutationInput(
 		return execPlan{}, colOrdMap{}, err
 	}
 	if toLock != 0 {
-		if b.forceForUpdateLocking.Contains(int(toLock)) {
+		if b.forceForUpdateLocking != 0 {
 			return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
-				"unexpectedly found table %v in forceForUpdateLocking set", toLock,
+				"unexpectedly already locked %d, also want to lock %d", b.forceForUpdateLocking, toLock,
 			)
 		}
-		b.forceForUpdateLocking.Add(int(toLock))
+		b.forceForUpdateLocking = toLock
 		defer func() {
-			b.forceForUpdateLocking.Remove(int(toLock))
+			b.forceForUpdateLocking = 0
 		}()
 	}
 
