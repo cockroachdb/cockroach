@@ -780,6 +780,11 @@ func ForEachPartialIndex(desc TableDescriptor, f func(idx Index) error) error {
 	return forEachIndex(desc.PartialIndexes(), f)
 }
 
+// ForEachVectorIndex is like ForEachIndex over VectorIndexes().
+func ForEachVectorIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.VectorIndexes(), f)
+}
+
 // ForEachNonPrimaryIndex is like ForEachIndex over
 // NonPrimaryIndexes().
 func ForEachNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
@@ -846,10 +851,16 @@ func FindNonDropIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.NonDropIndexes(), test)
 }
 
-// FindPartialIndex returns the first index in PartialIndex() for which test
+// FindPartialIndex returns the first index in PartialIndexes() for which test
 // returns true.
 func FindPartialIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.PartialIndexes(), test)
+}
+
+// FindVectorIndex returns the first index in VectorIndexes() for which test
+// returns true.
+func FindVectorIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.VectorIndexes(), test)
 }
 
 // FindPublicNonPrimaryIndex returns the first index in PublicNonPrimaryIndex()
