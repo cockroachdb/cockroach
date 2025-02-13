@@ -143,9 +143,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │         ├── ValidateIndex {"IndexID":4,"TableID":104}
  │    │         └── ValidateColumnNotNull {"ColumnID":3,"IndexIDForValidation":4,"TableID":104}
  │    ├── Stage 8 of 16 in PostCommitPhase
- │    │    ├── 9 elements transitioning toward PUBLIC
- │    │    │    ├── VALIDATED → PUBLIC        PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey-)}
- │    │    │    ├── ABSENT    → PUBLIC        IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 4 (t_pkey+)}
+ │    │    ├── 7 elements transitioning toward PUBLIC
  │    │    │    ├── VALIDATED → PUBLIC        ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+), IndexID: 4 (t_pkey+)}
  │    │    │    ├── ABSENT    → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
  │    │    │    ├── ABSENT    → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 2 (t_i_key+)}
@@ -158,15 +156,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+), IndexID: 3}
  │    │    │    └── ABSENT    → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3}
- │    │    ├── 2 elements transitioning toward ABSENT
- │    │    │    ├── PUBLIC    → VALIDATED     PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
- │    │    │    └── PUBLIC    → ABSENT        IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
- │    │    └── 18 Mutation operations
- │    │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
- │    │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
- │    │         ├── SetIndexName {"IndexID":4,"Name":"t_pkey","TableID":104}
+ │    │    └── 14 Mutation operations
  │    │         ├── MakeValidatedColumnNotNullPublic {"ColumnID":3,"TableID":104}
- │    │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":4,"TableID":104}
  │    │         ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │    │         ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}
  │    │         ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
@@ -228,11 +219,20 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    └── 1 Validation operation
  │    │         └── ValidateIndex {"IndexID":2,"TableID":104}
  │    └── Stage 16 of 16 in PostCommitPhase
- │         ├── 1 element transitioning toward PUBLIC
- │         │    └── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
- │         └── 4 Mutation operations
+ │         ├── 3 elements transitioning toward PUBLIC
+ │         │    ├── VALIDATED → PUBLIC    PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey-)}
+ │         │    ├── ABSENT    → PUBLIC    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 4 (t_pkey+)}
+ │         │    └── VALIDATED → PUBLIC    SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC    → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
+ │         │    └── PUBLIC    → ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │         └── 8 Mutation operations
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
+ │              ├── SetIndexName {"IndexID":4,"Name":"t_pkey","TableID":104}
  │              ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
  │              ├── RefreshStats {"TableID":104}
+ │              ├── MakeValidatedPrimaryIndexPublic {"IndexID":4,"TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │              └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
