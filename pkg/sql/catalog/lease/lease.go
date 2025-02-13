@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -2085,13 +2084,9 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
 
-		// Read orphaned leases, and join against the internal session
-		// table in case we have dual written leases.
-		query := `
-SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.version), l.expiration, s."session_id", l.crdb_region, s.crdb_region FROM
-	 system.public.lease as l FULL OUTER JOIN "".crdb_internal.kv_session_based_leases as s ON l."nodeID"=s."sql_instance_id" AND
-	  l."descID"=s."desc_id" AND l.version=s.version
-		WHERE COALESCE(l."nodeID", s."sql_instance_id") =%d
+		// Read orphaned leases from the system.lease table.
+		query := `SELECT s."desc_id",  s.version, s."session_id", s.crdb_region FROM system.lease as s 
+		WHERE s."sql_instance_id"=%d
 `
 		sqlQuery := fmt.Sprintf(query, instanceID)
 
@@ -2104,13 +2099,11 @@ SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.vers
 				if err := txn.KV().SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: timeThreshold}); err != nil {
 					return err
 				}
-				return txn.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V23_2()}, func() error {
-					var err error
-					rows, err = txn.QueryBuffered(
-						ctx, "read orphaned leases", txn.KV(), sqlQuery,
-					)
-					return err
-				})
+				var err error
+				rows, err = txn.QueryBuffered(
+					ctx, "read orphaned leases", txn.KV(), sqlQuery,
+				)
+				return err
 			})
 		}); err != nil {
 			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
@@ -2126,22 +2119,13 @@ SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.vers
 				id:      descpb.ID(tree.MustBeDInt(row[0])),
 				version: int(tree.MustBeDInt(row[1])),
 			}
-			// Session based leases will not have a timestamp.
 			if row[2] != tree.DNull {
-				lease.expiration = tree.MustBeDTimestamp(row[2])
+				lease.sessionID = []byte(tree.MustBeDBytes(row[2]))
 			}
-			if row[3] != tree.DNull {
-				lease.sessionID = []byte(tree.MustBeDBytes(row[3]))
-			}
-			if ed, ok := row[4].(*tree.DEnum); ok {
+			if ed, ok := row[3].(*tree.DEnum); ok {
 				lease.prefix = ed.PhysicalRep
-			} else if bd, ok := row[4].(*tree.DBytes); ok {
+			} else if bd, ok := row[3].(*tree.DBytes); ok {
 				lease.prefix = []byte((*bd))
-			}
-			if len(row) >= 6 && lease.prefix == nil {
-				if bd, ok := row[5].(*tree.DBytes); ok {
-					lease.prefix = []byte((*bd))
-				}
 			}
 			if err := m.stopper.RunAsyncTaskEx(
 				ctx,
