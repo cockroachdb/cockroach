@@ -1494,19 +1494,19 @@ func (r *testRunner) postTestAssertions(
 		validationNode := 0
 		for _, s := range statuses {
 			if s.Err != nil {
-				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
+				t.L().Printf("n%d: %s error=%s", s.Node, s.URL, s.Err)
 				continue
 			}
 
 			if s.Status != http.StatusOK {
-				t.L().Printf("n%d:/health?ready=1 status=%d body=%s", s.Node, s.Status, s.Body)
+				t.L().Printf("n%d: %s status=%d body=%s", s.Node, s.URL, s.Status, s.Body)
 				continue
 			}
 
 			if validationNode == 0 {
 				validationNode = s.Node // NB: s.Node is never zero
 			}
-			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
+			t.L().Printf("n%d: %s status=200 ok", s.Node, s.URL)
 		}
 
 		// We avoid trying to do this when t.Failed() (and in particular when there
