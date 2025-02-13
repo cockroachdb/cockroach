@@ -197,10 +197,6 @@ func (s *StatsCollector) ShouldSampleNewStatement(
 		// statement.
 		return false
 	}
-	previouslySampled := s.flushTarget.StatementSampled(fingerprint, implicitTxn, database)
-	if previouslySampled {
-		return false
-	}
 	return s.flushTarget.TrySetStatementSampled(fingerprint, implicitTxn, database)
 }
 
