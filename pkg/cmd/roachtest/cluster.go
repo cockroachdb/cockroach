@@ -1501,14 +1501,18 @@ func selectedNodesOrDefault(
 
 type HealthStatusResult struct {
 	Node   int
+	URL    string
 	Status int
 	Body   []byte
 	Err    error
 }
 
-func newHealthStatusResult(node int, status int, body []byte, err error) *HealthStatusResult {
+func newHealthStatusResult(
+	node int, url string, status int, body []byte, err error,
+) *HealthStatusResult {
 	return &HealthStatusResult{
 		Node:   node,
+		URL:    url,
 		Status: status,
 		Body:   body,
 		Err:    err,
@@ -1538,13 +1542,13 @@ func (c *clusterImpl) HealthStatus(
 		url := fmt.Sprintf(`%s://%s/health?ready=1`, protocol, adminAddrs[nodeIndex])
 		resp, err := client.Get(ctx, url)
 		if err != nil {
-			return newHealthStatusResult(node, 0, nil, err)
+			return newHealthStatusResult(node, url, 0, nil, err)
 		}
 
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
 
-		return newHealthStatusResult(node, resp.StatusCode, body, err)
+		return newHealthStatusResult(node, url, resp.StatusCode, body, err)
 	}
 
 	results := make([]*HealthStatusResult, nodeCount)
