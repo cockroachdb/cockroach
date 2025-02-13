@@ -101,7 +101,6 @@ stabilize 1
 ----
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/12 Commit:11
-  DEBUG called Term(12)
   2->1 MsgAppResp Term:1 Log:0/13 Commit:11
 > 1 handling Ready
   Ready MustSync=true:
