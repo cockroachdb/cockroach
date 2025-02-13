@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -53,7 +52,7 @@ func TestStandbyReadTSPollerJob(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
-	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
 	readerTenantID := stats.IngestionDetails.ReadTenantID
 	require.NotNil(t, readerTenantID)
 
@@ -257,7 +256,7 @@ func TestReaderTenantCutover(t *testing.T) {
 		srcTime := c.SrcCluster.Server(0).Clock().Now()
 		c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
-		stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+		stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
 		readerTenantID := stats.IngestionDetails.ReadTenantID
 		require.NotNil(t, readerTenantID)
 

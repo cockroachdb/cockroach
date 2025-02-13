@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -79,7 +79,8 @@ func waitForJobToHaveStatus(
 	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.State,
 ) {
 	t.Helper()
-	testutils.SucceedsWithin(t, func() error {
+	const duration = 2 * time.Minute
+	err := retry.ForDuration(duration, func() error {
 		var status string
 		db.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", jobID).Scan(&status)
 		if jobs.State(status) == jobs.StateFailed {
@@ -93,7 +94,10 @@ func waitForJobToHaveStatus(
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
-	}, 2*time.Minute)
+	})
+	if err != nil {
+		t.Fatalf("condition failed to evaluate within %s: %s", duration, err)
+	}
 }
 
 // BulkOpResponseFilter creates a blocking response filter for the responses
