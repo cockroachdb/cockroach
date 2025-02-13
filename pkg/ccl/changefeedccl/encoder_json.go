@@ -52,11 +52,11 @@ func init() {
 // to its value. Updated timestamps in rows and resolved timestamp payloads are
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
-	updatedField, mvccTimestampField, beforeField, keyInValue, topicInValue bool
+	updatedField, mvccTimestampField, beforeField, keyInValue, topicInValue,
+	sourceField, schemaField bool
 
 	envelopeType                   changefeedbase.EnvelopeType
 	enrichedEnvelopeSourceProvider *enrichedSourceProvider
-	enrichedProperties             map[changefeedbase.EnrichedProperty]struct{}
 
 	buf             bytes.Buffer
 	versionEncoder  func(ed *cdcevent.EventDescriptor, isPrev bool) *versionEncoder
@@ -105,10 +105,11 @@ func makeJSONEncoder(
 		customKeyColumn:    opts.CustomKeyColumn,
 		// In the bare envelope we don't output diff directly, it's incorporated into the
 		// projection as desired.
-		beforeField:        opts.Diff && opts.Envelope != changefeedbase.OptEnvelopeBare,
-		keyInValue:         opts.KeyInValue,
-		topicInValue:       opts.TopicInValue,
-		enrichedProperties: opts.EnrichedProperties,
+		beforeField:  opts.Diff && opts.Envelope != changefeedbase.OptEnvelopeBare,
+		keyInValue:   opts.KeyInValue,
+		topicInValue: opts.TopicInValue,
+		sourceField:  inSet(changefeedbase.EnrichedPropertySource, opts.EnrichedProperties),
+		schemaField:  inSet(changefeedbase.EnrichedPropertySchema, opts.EnrichedProperties),
 		versionEncoder: func(ed *cdcevent.EventDescriptor, isPrev bool) *versionEncoder {
 			key := jsonEncoderVersionKey{
 				CacheKey: cdcevent.CacheKey{
@@ -518,11 +519,16 @@ func deduceOp(updated, prev cdcevent.Row) enrichedEventOp {
 	return eventTypeUpdate
 }
 
+func inSet[S ~string](k S, set map[S]struct{}) bool {
+	_, ok := set[k]
+	return ok
+}
+
 func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 	var err error
 	var envelopeBuilder *json.FixedKeysObjectBuilder
-	if _, ok := e.enrichedProperties[changefeedbase.EnrichedPropertySchema]; ok {
-		// TODO(#139658): implement schema field.
+	// TODO(#139658): implement schema field.
+	if e.schemaField {
 		envelopeKeys := []string{"payload"}
 		envelopeBuilder, err = json.NewFixedKeysObjectBuilder(envelopeKeys)
 		if err != nil {
@@ -530,10 +536,12 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 		}
 	}
 
-	// TODO(#141001): only include the source if requested.
-	payloadKeys := []string{"after", "op", "ts_ns", "source"}
+	payloadKeys := []string{"after", "op", "ts_ns"}
 	if e.keyInValue {
 		payloadKeys = append(payloadKeys, "key")
+	}
+	if e.sourceField {
+		payloadKeys = append(payloadKeys, "source")
 	}
 	// TODO(#various): implement options for this envelope: before, key, topic, updated, mvcc_timestamp, ..
 	payloadBuilder, err := json.NewFixedKeysObjectBuilder(payloadKeys)
@@ -557,16 +565,19 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 		if err := payloadBuilder.Set("op", json.FromString(string(deduceOp(updated, prev)))); err != nil {
 			return nil, err
 		}
-		sourceJson, err := e.enrichedEnvelopeSourceProvider.GetJSON(updated)
-		if err != nil {
-			return nil, err
-		}
-		if err := payloadBuilder.Set("source", sourceJson); err != nil {
-			return nil, err
-		}
 
 		if e.keyInValue {
 			if err := ve.encodeKeyInValue(ctx, updated, payloadBuilder); err != nil {
+				return nil, err
+			}
+		}
+
+		if e.sourceField {
+			sourceJson, err := e.enrichedEnvelopeSourceProvider.GetJSON(updated)
+			if err != nil {
+				return nil, err
+			}
+			if err := payloadBuilder.Set("source", sourceJson); err != nil {
 				return nil, err
 			}
 		}

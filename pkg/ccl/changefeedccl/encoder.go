@@ -51,7 +51,7 @@ func getEncoder(
 	case changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts, encodeForQuery: encodeForQuery}, sourceProvider)
 	case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
-		return newConfluentAvroEncoder(opts, targets, p, sliMetrics)
+		return newConfluentAvroEncoder(opts, targets, p, sliMetrics, sourceProvider)
 	case changefeedbase.OptFormatCSV:
 		return newCSVEncoder(opts), nil
 	case changefeedbase.OptFormatParquet:

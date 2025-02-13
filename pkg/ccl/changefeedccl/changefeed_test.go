@@ -3886,7 +3886,11 @@ func TestChangefeedEnriched(t *testing.T) {
 				if _, ok := foo.(*sinklessFeed); !ok {
 					sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
 				}
-				sourceMsg := fmt.Sprintf(`, "source": {"job_id": "%d"}`, jobID)
+
+				var sourceMsg string
+				if slices.Contains(tc.enrichedProperties, "source") {
+					sourceMsg = fmt.Sprintf(`, "source": {"job_id": "%d"}`, jobID)
+				}
 
 				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"%s}`, topic, sourceMsg)
 				if slices.Contains(tc.enrichedProperties, "schema") {
@@ -3917,8 +3921,18 @@ func TestChangefeedEnrichedAvro(t *testing.T) {
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='localhost:90909'`)
 		defer closeFeed(t, foo)
 
+		var jobID int64
+		if _, ok := foo.(*sinklessFeed); !ok {
+			sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
+		}
+
+		assertionKey := `{"a":{"long":0}}`
+		assertionAfter := `"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}`
+		assertionSource := fmt.Sprintf(`"source": {"source": {"job_id": {"string": "%d"}}}`, jobID)
+
 		assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{
-			`foo: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}, "op": {"string": "c"}, "source": {"source": {"changefeed_sink": {"string": "kafka"}}}}`,
+			fmt.Sprintf(`foo: %s->{%s, "op": {"string": "c"}, %s}`,
+				assertionKey, assertionAfter, assertionSource),
 		})
 	}
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
