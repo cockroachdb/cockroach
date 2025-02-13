@@ -113,9 +113,8 @@ func TestIndexBackfillerColumns(t *testing.T) {
 					keyCols: colIDs{1},
 				},
 			},
-			expCols:     colIDs{1, 2, 3},
-			expComputed: colIDs{3},
-			expNeeded:   colIDs{1},
+			expCols:   colIDs{1, 2},
+			expNeeded: colIDs{1},
 		},
 		{
 			name: "one virtual, one computed mutation column in primary",
@@ -333,7 +332,7 @@ func TestIndexBackfillerColumns(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out, err := makeIndexBackfillColumns(
-				asColumnSlice(tc.cols), tc.src, asIndexSlice(tc.toEncode),
+				nil, asColumnSlice(tc.cols), tc.src, asIndexSlice(tc.toEncode),
 			)
 			if tc.expErr != "" {
 				require.Regexp(t, tc.expErr, err)

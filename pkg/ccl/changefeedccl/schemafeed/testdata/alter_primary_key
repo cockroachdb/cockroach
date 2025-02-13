@@ -17,13 +17,14 @@ t 2->3: Unknown
 t 3->4: Unknown
 t 4->5: Unknown
 t 5->6: Unknown
-t 6->7: PrimaryKeyChange
+t 6->7: Unknown
 t 7->8: Unknown
 t 8->9: Unknown
 t 9->10: Unknown
 t 10->11: Unknown
-t 11->12: Unknown
+t 11->12: PrimaryKeyChange
 t 12->13: Unknown
+t 13->14: Unknown
 
 exec
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k, j);
@@ -31,15 +32,16 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k, j);
 
 pop f=1
 ----
-t 13->14: Unknown
 t 14->15: Unknown
 t 15->16: Unknown
 t 16->17: Unknown
 t 17->18: Unknown
-t 18->19: PrimaryKeyChange
+t 18->19: Unknown
 t 19->20: Unknown
 t 20->21: Unknown
 t 21->22: Unknown
 t 22->23: Unknown
 t 23->24: Unknown
-t 24->25: Unknown
+t 24->25: PrimaryKeyChange
+t 25->26: Unknown
+t 26->27: Unknown
