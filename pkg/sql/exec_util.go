@@ -105,7 +105,6 @@ import (
 	tablemetadatacache_util "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -4178,17 +4177,6 @@ func DescsTxn(
 	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		return f(ctx, txn, txn.Descriptors())
 	})
-}
-
-// TestingDescsTxn is a convenience function for running a transaction on
-// descriptors when you have a serverutils.ApplicationLayerInterface.
-func TestingDescsTxn(
-	ctx context.Context,
-	s serverutils.ApplicationLayerInterface,
-	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
-) error {
-	execCfg := s.ExecutorConfig().(ExecutorConfig)
-	return DescsTxn(ctx, &execCfg, f)
 }
 
 // NewRowMetrics creates a rowinfra.Metrics struct for either internal or user

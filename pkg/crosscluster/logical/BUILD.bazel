@@ -159,6 +159,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",

@@ -127,7 +127,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv")
 	var dbDesc catalog.DatabaseDescriptor
-	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	require.NoError(t, sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		dbDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
@@ -334,7 +334,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv")
 	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv2")
 	var dbDesc catalog.DatabaseDescriptor
-	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	require.NoError(t, sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		dbDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
@@ -933,7 +933,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
-	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		tbl, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableDesc.ID)
 		if err != nil {
 			return err
@@ -1282,7 +1282,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	var tableDesc catalog.TableDescriptor
 	query = `SELECT id FROM system.namespace WHERE name = 'tbl'`
 	tdb.QueryRow(t, query).Scan(&tableID)
-	require.NoError(t, sql.TestingDescsTxn(ctx, s,
+	require.NoError(t, sqltestutils.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 			tableDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 			return err
@@ -1300,7 +1300,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	tdb.Exec(t, query)
 
 	// Assert that the index is dropped but the shard column remains after dropping the index.
-	require.NoError(t, sql.TestingDescsTxn(ctx, s,
+	require.NoError(t, sqltestutils.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 			tableDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 			return err
