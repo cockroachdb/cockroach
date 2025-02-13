@@ -303,7 +303,7 @@ func (ie *InternalExecutor) initConnEx(
 	}
 	clientComm.rowsAffectedState.numRewindsLimit = ieRowsAffectedRetryLimit.Get(&ie.s.cfg.Settings.SV)
 
-	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName)
+	applicationStats := ie.s.localSqlStats.GetApplicationStats(sd.ApplicationName)
 	sds := sessiondata.NewStack(sd)
 	defaults := SessionDefaults(map[string]string{
 		"application_name": sd.ApplicationName,
