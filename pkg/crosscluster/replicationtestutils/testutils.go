@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -445,7 +446,7 @@ func startC2CTestCluster(
 	c := testcluster.StartTestCluster(t, numNodes, params)
 
 	// TODO(casper): support adding splits when we have multiple nodes.
-	pgURL, cleanupSinkCert := sqlutils.PGUrl(t, c.Server(0).SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupSinkCert := pgurlutils.PGUrl(t, c.Server(0).SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	return c, pgURL, func() {
 		c.Stopper().Stop(ctx)
 		cleanupSinkCert()

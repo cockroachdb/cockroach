@@ -2417,6 +2417,7 @@ GO_TARGETS = [
     "//pkg/testutils/localtestcluster:localtestcluster",
     "//pkg/testutils/metrictestutils:metrictestutils",
     "//pkg/testutils/pgtest:pgtest",
+    "//pkg/testutils/pgurlutils:pgurlutils",
     "//pkg/testutils/physicalplanutils:physicalplanutils",
     "//pkg/testutils/release:release",
     "//pkg/testutils/release:release_test",

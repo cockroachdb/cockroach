@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -148,9 +149,9 @@ func TestFastFailbackWithReaderTenant(t *testing.T) {
 	sqlA := sqlutils.MakeSQLRunner(aDB)
 	sqlB := sqlutils.MakeSQLRunner(bDB)
 
-	serverAURL, cleanupURLA := sqlutils.PGUrl(t, serverA.SQLAddr(), t.Name(), url.User(username.RootUser))
+	serverAURL, cleanupURLA := pgurlutils.PGUrl(t, serverA.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupURLA()
-	serverBURL, cleanupURLB := sqlutils.PGUrl(t, serverB.SQLAddr(), t.Name(), url.User(username.RootUser))
+	serverBURL, cleanupURLB := pgurlutils.PGUrl(t, serverB.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupURLB()
 
 	for _, s := range []string{
