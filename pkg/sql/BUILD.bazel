@@ -1007,4 +1007,7 @@ disallowed_imports_test(
     "sql",
     # TODO(#81380): This should be flipped to "True".
     disallow_cdeps = False,
+    disallowed_list = [
+        "//pkg/testutils",
+    ],
 )
