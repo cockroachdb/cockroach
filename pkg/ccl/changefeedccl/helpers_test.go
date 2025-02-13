@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -694,7 +695,7 @@ func serverArgsRegion(args base.TestServerArgs) string {
 func expectNotice(
 	t *testing.T, s serverutils.ApplicationLayerInterface, sql string, expected string,
 ) {
-	url, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	base, err := pq.NewConnector(url.String())
 	if err != nil {
@@ -1008,7 +1009,7 @@ func makeFeedFactoryWithOptions(
 	pgURLForUser := func(u string, pass ...string) (url.URL, func()) {
 		t.Logf("pgURL %s %s", sinkType, u)
 		if len(pass) < 1 {
-			return sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
+			return pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
 		}
 		return url.URL{
 			Scheme: "postgres",
@@ -1059,7 +1060,7 @@ func makeFeedFactoryWithOptions(
 		pgURLForUserSinkless := func(u string, pass ...string) (url.URL, func()) {
 			t.Logf("pgURL %s %s", sinkType, u)
 			if len(pass) < 1 {
-				sink, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
+				sink, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
 				sink.Path = "d"
 				return sink, cleanup
 			}

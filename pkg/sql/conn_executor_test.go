@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -125,7 +126,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(
+		pgURL, cleanup := pgurlutils.PGUrl(
 			t, s.AdvSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
@@ -1018,7 +1019,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	// transaction state evolves appropriately.
 
 	// Use pgx so that we can introspect error codes returned from cockroach.
-	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "", url.User("root"))
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "", url.User("root"))
 	defer cleanup()
 	conf, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -1684,7 +1685,7 @@ func TestInjectRetryErrors(t *testing.T) {
 
 		// Choose a small results_buffer_size and make sure the statement retry
 		// does not occur.
-		pgURL, cleanupFn := sqlutils.PGUrl(
+		pgURL, cleanupFn := pgurlutils.PGUrl(
 			t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 		defer cleanupFn()
 		q := pgURL.Query()

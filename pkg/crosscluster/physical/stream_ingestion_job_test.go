@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -54,7 +55,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	sysSQL := sqlutils.MakeSQLRunner(db)
 	sysSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
-	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srv.SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	srcPgURL, cleanupSink := pgurlutils.PGUrl(t, srv.SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)

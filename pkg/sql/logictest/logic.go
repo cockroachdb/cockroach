@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1248,7 +1249,7 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 			addr = t.tenantAddrs[nodeIdx]
 		}
 		var cleanupFunc func()
-		pgURL, cleanupFunc = sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
+		pgURL, cleanupFunc = pgurlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
 		t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, cleanupFunc)
 	}
 	pgURL.Path = "test"

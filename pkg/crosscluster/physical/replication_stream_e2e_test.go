@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -64,7 +65,7 @@ func TestPCRPrivs(t *testing.T) {
 	c.DestSysSQL.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
 	c.SrcSysSQL.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser+"2"))
 	testuser := sqlutils.MakeSQLRunner(c.DestSysServer.SQLConn(t, serverutils.User(username.TestUser)))
-	srcURL, cleanupSinkCert := sqlutils.PGUrl(t, c.SrcSysServer.AdvSQLAddr(), t.Name(), url.User(username.TestUser+"2"))
+	srcURL, cleanupSinkCert := pgurlutils.PGUrl(t, c.SrcSysServer.AdvSQLAddr(), t.Name(), url.User(username.TestUser+"2"))
 	defer cleanupSinkCert()
 
 	streamReplStmt := fmt.Sprintf("CREATE TENANT %s FROM REPLICATION OF %s ON '%s'",

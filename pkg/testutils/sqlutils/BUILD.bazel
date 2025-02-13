@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "inject.go",
         "parse.go",
-        "pg_url.go",
         "pretty.go",
         "rows.go",
         "scrub.go",
@@ -20,8 +19,6 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/security/certnames",
-        "//pkg/security/securitytest",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
@@ -31,7 +28,6 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
-        "//pkg/util/fileutil",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",

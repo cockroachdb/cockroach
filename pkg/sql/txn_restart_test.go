@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -453,7 +454,7 @@ func TestTxnAutoRetry(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestTxnAutoRetry", url.User(username.RootUser))
+		pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "TestTxnAutoRetry", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -632,7 +633,7 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestAbortedTxnOnlyRetriedOnce", url.User(username.RootUser))
+		pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "TestAbortedTxnOnlyRetriedOnce", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -788,7 +789,7 @@ func TestTxnUserRestart(t *testing.T) {
 				s, sqlDB, _ := serverutils.StartServer(t, params)
 				defer s.Stopper().Stop(context.Background())
 				{
-					pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestTxnUserRestart", url.User(username.RootUser))
+					pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "TestTxnUserRestart", url.User(username.RootUser))
 					defer cleanup()
 					if err := aborter.Init(pgURL); err != nil {
 						t.Fatal(err)
@@ -904,7 +905,7 @@ func TestErrorOnCommitFinalizesTxn(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestErrorOnCommitFinalizesTxn", url.User(username.RootUser))
+		pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "TestErrorOnCommitFinalizesTxn", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -991,7 +992,7 @@ func TestRollbackInRestartWait(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestRollbackInRestartWait", url.User(username.RootUser))
+		pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "TestRollbackInRestartWait", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
