@@ -251,8 +251,7 @@ func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, me
 }
 
 func (sb *statisticsBuilder) clear() {
-	sb.evalCtx = nil
-	sb.md = nil
+	*sb = statisticsBuilder{}
 }
 
 // colStatCols returns the set of columns which may be looked up in
