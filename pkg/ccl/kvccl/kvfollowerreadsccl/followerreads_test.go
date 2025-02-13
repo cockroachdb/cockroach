@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -890,7 +891,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n4.Exec(t, historicalQuery.Load().(string))
 	// As a sanity check, verify that this was not a follower read.
 	rec := <-recCh
-	require.False(t, kv.OnlyFollowerReads(rec), "query was served through follower reads: %s", rec)
+	require.False(t, kvtestutils.OnlyFollowerReads(rec), "query was served through follower reads: %s", rec)
 	// Check that the cache was properly updated.
 	entry, err = n4Cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.NoError(t, err)
@@ -917,7 +918,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	rec = <-recCh
 
 	// Look at the trace and check that we've served a follower read.
-	require.True(t, kv.OnlyFollowerReads(rec), "query was not served through follower reads: %s", rec)
+	require.True(t, kvtestutils.OnlyFollowerReads(rec), "query was not served through follower reads: %s", rec)
 
 	// Check that the follower read metric was incremented.
 	var followerReadsCountAfter int64
@@ -963,7 +964,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	// Sanity check that the plan was distributed.
 	require.True(t, strings.Contains(rec.String(), "creating DistSQL plan with isLocal=false"))
 	// Look at the trace and check that we've served a follower read.
-	require.True(t, kv.OnlyFollowerReads(rec), "query was not served through follower reads: %s", rec)
+	require.True(t, kvtestutils.OnlyFollowerReads(rec), "query was not served through follower reads: %s", rec)
 	// Verify that we didn't produce the "misplanned ranges" metadata that would
 	// purge the non-stale entries from the range cache on n4.
 	require.False(t, strings.Contains(rec.String(), "clearing entries overlapping"))

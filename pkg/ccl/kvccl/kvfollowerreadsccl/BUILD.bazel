@@ -59,6 +59,7 @@ go_test(
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvtestutils",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/securityassets",
