@@ -140,6 +140,7 @@ type MemoryStorage struct {
 	// run on the raft goroutine, but Append() is run on an application
 	// goroutine.
 	sync.Mutex
+	Logger raftlogger.Logger // may be nil
 
 	hardState pb.HardState
 	snapshot  pb.Snapshot
@@ -195,6 +196,9 @@ func (ms *MemoryStorage) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 
 // Term implements the Storage interface.
 func (ms *MemoryStorage) Term(i uint64) (uint64, error) {
+	if ms.Logger != nil {
+		ms.Logger.Debugf("called Term(%d)", i)
+	}
 	ms.Lock()
 	defer ms.Unlock()
 	ms.callStats.term++
