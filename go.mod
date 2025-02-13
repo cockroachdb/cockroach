@@ -212,7 +212,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
 	github.com/otan/gopgkrb5 v1.0.3
-	github.com/petermattis/goid v0.0.0-20211229010228-4d14c490ee36
+	github.com/petermattis/goid v0.0.0-20250211185408-f2b9d978cd7a
 	github.com/pierrec/lz4/v4 v4.1.21
 	github.com/pierrre/geohash v1.0.0
 	github.com/pires/go-proxyproto v0.7.0
