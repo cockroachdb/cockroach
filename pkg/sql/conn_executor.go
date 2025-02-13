@@ -4171,10 +4171,14 @@ func (ex *connExecutor) waitForTxnJobs() error {
 			}
 			jobList.WriteString(j.String())
 		}
-		if err := ex.planner.noticeSender.SendNotice(ex.ctxHolder.connCtx,
-			pgnotice.Newf("The statement has timed out, but the following "+
-				"background jobs have been created and will continue running: %s.",
-				jobList.String())); err != nil {
+		if err := ex.planner.noticeSender.SendNotice(
+			ex.ctxHolder.connCtx,
+			pgnotice.Newf(
+				"The statement has timed out, but the following "+
+					"background jobs have been created and will continue running: %s.",
+				jobList.String()),
+			false, /* immediateFlush */
+		); err != nil {
 			return err
 		}
 	}

@@ -6,6 +6,7 @@
 package sql_test
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
@@ -876,7 +877,7 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var retryCount int64
+	var attemptCount atomic.Int64
 	const numToRetry = 2 // only fail on the first two attempts
 	filter := newDynamicRequestFilter()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -910,7 +911,7 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 			if err != nil || tableID != fooTableId {
 				return nil
 			}
-			if atomic.AddInt64(&retryCount, 1) <= numToRetry {
+			if attemptCount.Add(1) <= numToRetry {
 				return kvpb.NewErrorWithTxn(
 					kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected retry error"), ba.Txn,
 				)
@@ -920,13 +921,72 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 	})
 
 	testDB.Exec(t, "INSERT INTO bar VALUES(2); BEGIN; INSERT INTO foo VALUES(1); COMMIT;")
-	require.Equal(t, numToRetry+1, int(retryCount))
+	require.EqualValues(t, numToRetry+1, attemptCount.Load())
 
 	var x int
 	testDB.QueryRow(t, "select * from foo").Scan(&x)
 	require.Equal(t, 1, x)
 	testDB.QueryRow(t, "select * from bar").Scan(&x)
 	require.Equal(t, 2, x)
+}
+
+// TestRetriableErrorAutoCommitBeforeDDL injects a retriable error while
+// executing a schema change after that schema change caused the transaction to
+// autocommit. In this scenario, the schema change should automatically be
+// retried.
+func TestRetriableErrorAutoCommitBeforeDDL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var attemptCount atomic.Int64
+	const numToRetry = 2 // only fail on the first two attempts
+	filter := newDynamicRequestFilter()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: filter.filter,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+	codec := s.ApplicationLayer().Codec()
+
+	sqlDB.SetMaxOpenConns(1)
+	conn, err := sqlDB.Conn(context.Background())
+	require.NoError(t, err)
+	testDB := sqlutils.MakeSQLRunner(conn)
+
+	var fooTableId uint32
+	testDB.Exec(t, "SET enable_implicit_transaction_for_batch_statements = true")
+	testDB.Exec(t, "SET autocommit_before_ddl = true")
+	testDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+	testDB.QueryRow(t, "SELECT 'foo'::regclass::oid").Scan(&fooTableId)
+
+	// Inject an error that will happen during execution.
+	filter.setFilter(func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		if ba.Txn == nil {
+			return nil
+		}
+		if req, ok := ba.GetArg(kvpb.ConditionalPut); ok {
+			put := req.(*kvpb.ConditionalPutRequest)
+			if bytes.HasPrefix(put.Key, codec.DescMetadataKey(fooTableId)) {
+				if attemptCount.Load() <= numToRetry {
+					attemptCount.Add(1)
+					return kvpb.NewErrorWithTxn(
+						kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected retry error"), ba.Txn,
+					)
+				}
+			}
+		}
+		return nil
+	})
+
+	testDB.Exec(t, "INSERT INTO foo VALUES(1); ALTER TABLE foo ADD COLUMN b INT NULL DEFAULT -2; INSERT INTO foo VALUES(2);")
+	require.EqualValues(t, numToRetry+1, attemptCount.Load())
+
+	var b int
+	testDB.QueryRow(t, "SELECT b FROM foo WHERE a = 2").Scan(&b)
+	require.Equal(t, -2, b)
 }
 
 // This test ensures that when in an explicit transaction and statement
