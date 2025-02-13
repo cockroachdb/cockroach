@@ -492,9 +492,9 @@ func TestReplicaStringAndSafeFormat(t *testing.T) {
 	// String.
 	assert.Equal(t, "[n1,s2,r3/4:{a-b}]", r.String())
 	// Redactable string.
-	assert.EqualValues(t, "[n1,s2,r3/4:‹{a-b}›]", redact.Sprint(r))
+	assert.EqualValues(t, "[n1,s2,r3/4:{‹a›-‹b›}]", redact.Sprint(r))
 	// Redacted string.
-	assert.EqualValues(t, "[n1,s2,r3/4:‹×›]", redact.Sprint(r).Redact())
+	assert.EqualValues(t, "[n1,s2,r3/4:{‹×›-‹×›}]", redact.Sprint(r).Redact())
 }
 
 // TestReplicaContains verifies that the range uses Key.Address() in
