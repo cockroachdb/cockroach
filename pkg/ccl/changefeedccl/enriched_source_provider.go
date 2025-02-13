@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/linkedin/goavro/v2"
 )
 
 type enrichedSourceProviderOpts struct {
@@ -29,15 +30,33 @@ type enrichedSourceProvider struct {
 func newEnrichedSourceProvider(
 	opts changefeedbase.EncodingOptions, sourceData enrichedSourceData,
 ) *enrichedSourceProvider {
-	return &enrichedSourceProvider{sourceData: sourceData, opts: enrichedSourceProviderOpts{
-		mvccTimestamp: opts.MVCCTimestamps,
-		updated:       opts.UpdatedTimestamps,
-	}}
+	return &enrichedSourceProvider{
+		sourceData: sourceData,
+		opts: enrichedSourceProviderOpts{
+			mvccTimestamp: opts.MVCCTimestamps,
+			updated:       opts.UpdatedTimestamps,
+		},
+	}
 }
 
-func (p *enrichedSourceProvider) Schema() *avro.DataRecord {
-	// TODO(#139655): Implement this.
-	return nil
+func (p *enrichedSourceProvider) avroSourceFunction(row cdcevent.Row) (map[string]any, error) {
+	return map[string]any{
+		"job_id": goavro.Union(avro.SchemaTypeString, p.sourceData.jobId),
+	}, nil
+}
+
+func (p *enrichedSourceProvider) getAvroFields() []*avro.SchemaField {
+	return []*avro.SchemaField{
+		{Name: "job_id", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
+	}
+}
+
+func (p *enrichedSourceProvider) Schema() (*avro.FunctionalRecord, error) {
+	rec, err := avro.NewFunctionalRecord("source", "" /* namespace */, p.getAvroFields(), p.avroSourceFunction)
+	if err != nil {
+		return nil, err
+	}
+	return rec, nil
 }
 
 func (p *enrichedSourceProvider) GetJSON(row cdcevent.Row) (json.JSON, error) {
@@ -55,8 +74,12 @@ func (p *enrichedSourceProvider) GetJSON(row cdcevent.Row) (json.JSON, error) {
 	return b.Build()
 }
 
-func (p *enrichedSourceProvider) GetAvro(row cdcevent.Row) ([]byte, error) {
-	// TODO(#139655): Implement this.
-
-	return nil, nil
+func (p *enrichedSourceProvider) GetAvro(
+	row cdcevent.Row, schemaPrefix string,
+) (*avro.FunctionalRecord, error) {
+	sourceDataSchema, err := avro.NewFunctionalRecord("source", schemaPrefix, p.getAvroFields(), p.avroSourceFunction)
+	if err != nil {
+		return nil, err
+	}
+	return sourceDataSchema, nil
 }
