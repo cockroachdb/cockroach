@@ -134,6 +134,9 @@ func (r *RoachtestHTTPClient) addCookies(ctx context.Context, cookieUrl string) 
 	if !r.cluster.IsSecure() {
 		return nil
 	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	// If we haven't extracted the sessionID yet, do so.
 	if r.sessionID == "" {
 		id, err := getSessionID(ctx, r.cluster, r.l, r.cluster.All(), r.virtualClusterName)
@@ -169,8 +172,6 @@ func (r *RoachtestHTTPClient) addCookies(ctx context.Context, cookieUrl string) 
 // SetCookies is a helper that checks if a client.CookieJar exists and creates
 // one if it doesn't. It then sets the provided cookies through CookieJar.SetCookies.
 func (r *RoachtestHTTPClient) SetCookies(u *url.URL, cookies []*http.Cookie) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.client.Jar == nil {
 		jar, err := cookiejar.New(nil)
 		if err != nil {
