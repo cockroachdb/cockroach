@@ -307,20 +307,20 @@ func init() {
 		lookupJoin *memo.LookupJoinExpr,
 		required *physical.Required,
 		optimizer interface{},
-	) (physicalDistribution physical.Distribution) {
+	) physical.Distribution {
 		if optimizer == nil {
-			return physicalDistribution
+			return physical.Distribution{}
 		}
 		o, ok := optimizer.(*Optimizer)
 		if !ok || o.mem == nil || !o.mem.IsOptimized() {
-			return physicalDistribution
+			return physical.Distribution{}
 		}
 		if o.evalCtx == nil {
-			return physicalDistribution
+			return physical.Distribution{}
 		}
-		_, physicalDistribution = distribution.BuildLookupJoinLookupTableDistribution(
+		_, d := distribution.BuildLookupJoinLookupTableDistribution(
 			o.ctx, o.evalCtx, o.mem, lookupJoin, required, o.MaybeGetBestCostRelation,
 		)
-		return physicalDistribution
+		return d
 	}
 }
