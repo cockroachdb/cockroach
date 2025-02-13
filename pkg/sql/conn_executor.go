@@ -333,9 +333,12 @@ type Server struct {
 
 	cfg *ExecutorConfig
 
-	// sqlStats tracks per-application statistics for all applications on each
-	// node. Newly collected statistics flow into sqlStats.
+	// sqlStats provides the mechanisms for writing sql stats to system tables.
 	sqlStats *persistedsqlstats.PersistedSQLStats
+
+	// localSqlStats tracks per-application statistics for all applications on each
+	// node. Newly collected statistics flow into localSqlStats.
+	localSqlStats *sslocal.SQLStats
 
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
@@ -471,6 +474,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		InternalMetrics:         makeMetrics(true /* internal */, &cfg.Settings.SV),
 		ServerMetrics:           serverMetrics,
 		pool:                    pool,
+		localSqlStats:           memSQLStats,
 		reportedStats:           reportedSQLStats,
 		reportedStatsController: reportedSQLStatsController,
 		insights:                insightsProvider,
@@ -696,6 +700,11 @@ func (s *Server) GetSQLStatsProvider() *persistedsqlstats.PersistedSQLStats {
 	return s.sqlStats
 }
 
+// GetLocalSQLStatsProvider returns the in-memory provider for the sqlstats subsystem.
+func (s *Server) GetLocalSQLStatsProvider() *sslocal.SQLStats {
+	return s.localSqlStats
+}
+
 // GetReportedSQLStatsController returns the sqlstats.Controller for the current
 // sql.Server's reported SQL Stats.
 func (s *Server) GetReportedSQLStatsController() *sslocal.Controller {
@@ -713,7 +722,7 @@ func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 func (s *Server) GetScrubbedStmtStats(
 	ctx context.Context,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.sqlStats.GetLocalMemProvider(), math.MaxInt32, true)
+	return s.getScrubbedStmtStats(ctx, s.localSqlStats, math.MaxInt32, true)
 }
 
 // Avoid lint errors.
@@ -729,7 +738,7 @@ func (s *Server) GetUnscrubbedStmtStats(
 		stmtStats = append(stmtStats, *stat)
 		return nil
 	}
-	err := s.sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
+	err := s.localSqlStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -748,7 +757,7 @@ func (s *Server) GetUnscrubbedTxnStats(
 		txnStats = append(txnStats, *stat)
 		return nil
 	}
-	err := s.sqlStats.GetLocalMemProvider().IterateTransactionStats(ctx, sqlstats.IteratorOptions{}, txnStatsVisitor)
+	err := s.localSqlStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{}, txnStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -813,7 +822,7 @@ func (s *Server) getScrubbedStmtStats(
 // GetStmtStatsLastReset returns the time at which the statement statistics were
 // last cleared.
 func (s *Server) GetStmtStatsLastReset() time.Time {
-	return s.sqlStats.GetLastReset()
+	return s.localSqlStats.GetLastReset()
 }
 
 // GetExecutorConfig returns this server's executor config.
@@ -879,7 +888,7 @@ func (s *Server) SetupConn(
 		clientComm,
 		memMetrics,
 		&s.Metrics,
-		s.sqlStats.GetApplicationStats(sd.ApplicationName),
+		s.localSqlStats.GetApplicationStats(sd.ApplicationName),
 		sessionID,
 		false, /* underOuterTxn */
 		nil,   /* postSetupFn */
@@ -1212,13 +1221,13 @@ func (s *Server) newConnExecutor(
 		applicationStats,
 		writer,
 		ex.phaseTimes,
-		s.sqlStats.GetCounters(),
+		s.localSqlStats.GetCounters(),
 		underOuterTxn,
 		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
-		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName)
+		ex.applicationStats = ex.server.localSqlStats.GetApplicationStats(newName)
 	}
 
 	ex.extraTxnState.underOuterTxn = underOuterTxn
@@ -3813,6 +3822,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		jobs:                 ex.extraTxnState.jobs,
 		validateDbZoneConfig: &ex.extraTxnState.validateDbZoneConfig,
 		statsProvider:        ex.server.sqlStats,
+		localStatsProvider:   ex.server.localSqlStats,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}

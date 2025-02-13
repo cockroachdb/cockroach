@@ -935,7 +935,7 @@ func (r *testRunner) runWorker(
 				// than using rand:
 				// 1. The cluster setting RangefeedUseBufferedSender validation will fail
 				// if buildutil.CrdbTestBuild tag is not set.
-				// 2. There is a 50% chance that the cockraoch binary used in roachtests
+				// 2. There is a 50% chance that the cockroach binary used in roachtests
 				// includes the buildutil.CrdbTestBuild tag. And runtime assertion is
 				// enabled if and only if cockroach binaries used in roachtests include
 				// the buildutil.CrdbTestBuild tag.
