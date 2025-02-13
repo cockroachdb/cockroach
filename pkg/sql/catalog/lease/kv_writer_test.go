@@ -66,7 +66,7 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	schema := strings.Replace(systemschema.LeaseTableSchema_V24_1,
+	schema := strings.Replace(systemschema.LeaseTableSchema,
 		"exclude_data_from_backup = true",
 		"exclude_data_from_backup = false",
 		1)
