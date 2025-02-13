@@ -168,6 +168,8 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 			}
 			return d.Expected
 		})
+		require.Equalf(t, 1, numTestStatementsObserved,
+			"one test should exist")
 	})
 }
 
