@@ -284,6 +284,10 @@ message PutRequest {
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
   bool blind = 4;
+  // MustAcquireExclusiveLock, if set, indicates that a lock with the strength
+  // no lower than "exclusive" needs to be acquired on the key, even if it
+  // doesn't exist.
+  bool must_acquire_exclusive_lock = 5;
 }
 
 // A PutResponse is the return value from the Put() method.
@@ -425,6 +429,10 @@ message IncrementResponse {
 // A DeleteRequest is the argument to the Delete() method.
 message DeleteRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // MustAcquireExclusiveLock, if set, indicates that a lock with the strength
+  // no lower than "exclusive" needs to be acquired on the key, even if it
+  // doesn't exist.
+  bool must_acquire_exclusive_lock = 2;
 }
 
 // A DeleteResponse is the return value from the Delete() method.
