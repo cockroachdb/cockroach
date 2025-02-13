@@ -1476,7 +1476,6 @@ func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfi
 
 // reconcileJobStateWithLocalState ensures that the job progress information
 // is consistent with the state present in the local state.
-// TODO(#137692): SetCheckpoint should take in old and new checkpoints proto.
 func reconcileJobStateWithLocalState(
 	ctx context.Context, jobID jobspb.JobID, localState *cachedState, execCfg *sql.ExecutorConfig,
 ) error {
@@ -1534,7 +1533,7 @@ func reconcileJobStateWithLocalState(
 
 	// Update checkpoint.
 	updateHW := highWater.Less(sf.Frontier())
-	updateSpanCheckpoint := len(checkpoint.Spans) > 0
+	updateSpanCheckpoint := !checkpoint.IsEmpty()
 
 	if updateHW || updateSpanCheckpoint {
 		if updateHW {

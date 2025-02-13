@@ -2385,7 +2385,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// Should eventually checkpoint all spans around the lagging span
 	testutils.SucceedsSoon(t, func() error {
 		progress := loadProgress()
-		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && !p.Checkpoint.Timestamp.IsEmpty() {
+		if loadCheckpoint(t, progress) != nil {
 			return nil
 		}
 		return errors.New("waiting for checkpoint")
@@ -2400,10 +2400,10 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	progress := loadProgress()
 	require.True(t, progress.GetHighWater().IsEmpty() || *progress.GetHighWater() == cursor,
 		"expected empty highwater or %s,  found %s", cursor, progress.GetHighWater())
-	require.NotNil(t, progress.GetChangefeed().Checkpoint)
-	require.Less(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
-	checkpointTS := progress.GetChangefeed().Checkpoint.Timestamp
-	require.True(t, cursor.LessEq(checkpointTS))
+	spanLevelCheckpoint := loadCheckpoint(t, progress)
+	require.NotNil(t, spanLevelCheckpoint)
+	minCheckpointTS := spanLevelCheckpoint.MinTimestamp()
+	require.True(t, cursor.LessEq(minCheckpointTS))
 
 	var incorrectCheckpointErr error
 	knobs.FeedKnobs.OnRangeFeedStart = func(spans []kvcoord.SpanTimePair) {
@@ -2419,8 +2419,8 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 					setErr(sp, cursor)
 				}
 			} else {
-				if !sp.StartAfter.Equal(checkpointTS) {
-					setErr(sp, checkpointTS)
+				if !sp.StartAfter.Equal(minCheckpointTS) {
+					setErr(sp, minCheckpointTS)
 				}
 			}
 		}
@@ -2573,13 +2573,14 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 			// Check if we've set a checkpoint yet
 			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+			if spanLevelCheckpoint := loadCheckpoint(t, progress); spanLevelCheckpoint != nil {
+				minCheckpointTS := spanLevelCheckpoint.MinTimestamp()
 				// Checkpoint timestamp should be the timestamp of the spans from the backfill
-				if !p.Checkpoint.Timestamp.Equal(backfillTimestamp.Next()) {
+				if !minCheckpointTS.Equal(backfillTimestamp.Next()) {
 					return false, changefeedbase.WithTerminalError(
-						errors.AssertionFailedf("expected checkpoint timestamp %s, found %s", backfillTimestamp, p.Checkpoint.Timestamp))
+						errors.AssertionFailedf("expected checkpoint timestamp %s, found %s", backfillTimestamp, minCheckpointTS))
 				}
-				initialCheckpoint.Add(p.Checkpoint.Spans...)
+				initialCheckpoint = makeSpanGroupFromCheckpoint(t, spanLevelCheckpoint)
 				atomic.StoreInt32(&foundCheckpoint, 1)
 			}
 
@@ -2639,10 +2640,8 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 			// Once we've set a checkpoint that covers new spans, record it
 			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil {
-				var currentCheckpoint roachpb.SpanGroup
-				currentCheckpoint.Add(p.Checkpoint.Spans...)
-
+			if spanLevelCheckpoint := loadCheckpoint(t, progress); spanLevelCheckpoint != nil {
+				currentCheckpoint := makeSpanGroupFromCheckpoint(t, spanLevelCheckpoint)
 				// Ensure that the second checkpoint both contains all spans in the first checkpoint as well as new spans
 				if currentCheckpoint.Encloses(initialCheckpoint.Slice()...) && !initialCheckpoint.Encloses(currentCheckpoint.Slice()...) {
 					secondCheckpoint = currentCheckpoint
@@ -2699,8 +2698,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		// checkpoint should eventually be gone once backfill completes.
 		testutils.SucceedsSoon(t, func() error {
 			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-				t.Logf("non-empty checkpoint: %s", progress.GetChangefeed().Checkpoint.Spans)
+			if loadCheckpoint(t, progress) != nil {
 				return errors.New("checkpoint still non-empty")
 			}
 			return nil
@@ -7550,7 +7548,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// Wait for non-nil checkpoint.
 		testutils.SucceedsSoon(t, func() error {
 			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+			if loadCheckpoint(t, progress) != nil {
 				return nil
 			}
 			return errors.New("waiting for checkpoint")
@@ -7564,10 +7562,9 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		noHighWater := h == nil || h.IsEmpty()
 		require.True(t, noHighWater)
 
-		jobCheckpoint := progress.GetChangefeed().Checkpoint
-		require.Less(t, 0, len(jobCheckpoint.Spans))
-		var checkpointSpanGroup roachpb.SpanGroup
-		checkpointSpanGroup.Add(jobCheckpoint.Spans...)
+		spanLevelCheckpoint := loadCheckpoint(t, progress)
+		require.NotNil(t, spanLevelCheckpoint)
+		checkpointSpanGroup := makeSpanGroupFromCheckpoint(t, spanLevelCheckpoint)
 
 		// Collect spans we attempt to resolve after when we resume.
 		var resolved []roachpb.Span
@@ -7589,12 +7586,11 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Verify that the resumed job has restored the progress from the checkpoint
 		// to the change frontier.
-		timestampSpansMap := checkpoint.ConvertLegacyCheckpoint(jobCheckpoint, hlc.Timestamp{}, hlc.Timestamp{})
-		expectedFrontier, err := resolvedspan.NewCoordinatorFrontier(jobCheckpoint.Timestamp, *h, tableSpan)
+		expectedFrontier, err := span.MakeFrontier(tableSpan)
 		if err != nil {
 			t.Fatal(err)
 		}
-		assert.NoError(t, checkpoint.Restore(expectedFrontier, timestampSpansMap))
+		assert.NoError(t, checkpoint.Restore(expectedFrontier, spanLevelCheckpoint))
 		expectedFrontierStr := expectedFrontier.String()
 		testutils.SucceedsSoon(t, func() error {
 			if s := actualFrontierStr.Load(); s != nil {
@@ -7616,7 +7612,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// At this point, highwater mark should be set, and previous checkpoint should be gone.
 		progress = loadProgress()
 		require.NotNil(t, progress.GetChangefeed())
-		require.Equal(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
+		require.Nil(t, loadCheckpoint(t, progress))
 
 		// Verify that none of the resolved spans after resume were checkpointed.
 		for _, sp := range resolved {

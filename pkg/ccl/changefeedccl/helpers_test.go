@@ -734,8 +734,8 @@ func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Reg
 	for r := retry.Start(jobRecordRetryOpts); ; {
 		t.Log("waiting for checkpoint")
 		progress := loadProgress(t, jf, jr)
-		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-			t.Logf("read checkpoint: %#v", p.Checkpoint)
+		if p := progress.GetChangefeed(); p != nil && !p.SpanLevelCheckpoint.IsEmpty() {
+			t.Logf("read checkpoint: %#v", p.SpanLevelCheckpoint)
 			return
 		}
 		if !r.Next() {
@@ -770,6 +770,34 @@ func loadProgress(
 		t.Errorf("tried to load progress for job %v but it has reached terminal status %s with error %s", job, job.State(), jobFeed.FetchTerminalJobErr())
 	}
 	return job.Progress()
+}
+
+// loadCheckpoint loads the span-level checkpoint from the job progress.
+func loadCheckpoint(t *testing.T, progress jobspb.Progress) *jobspb.TimestampSpansMap {
+	t.Helper()
+	changefeedProgress := progress.GetChangefeed()
+	if changefeedProgress == nil {
+		return nil
+	}
+	spanLevelCheckpoint := changefeedProgress.SpanLevelCheckpoint
+	if spanLevelCheckpoint.IsEmpty() {
+		return nil
+	}
+	t.Logf("found checkpoint: %#v", spanLevelCheckpoint)
+	return spanLevelCheckpoint
+}
+
+// makeSpanGroupFromCheckpoint makes a span group containing all the spans
+// contained in a span-level checkpoint.
+func makeSpanGroupFromCheckpoint(
+	t *testing.T, checkpoint *jobspb.TimestampSpansMap,
+) roachpb.SpanGroup {
+	t.Helper()
+	var spanGroup roachpb.SpanGroup
+	for _, sp := range checkpoint.All() {
+		spanGroup.Add(sp...)
+	}
+	return spanGroup
 }
 
 func feed(
