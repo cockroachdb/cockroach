@@ -142,6 +142,7 @@ func (n *noopPutter) CPutWithOriginTimestamp(
 ) {
 }
 func (n *noopPutter) Put(key, value interface{})                                {}
+func (n *noopPutter) PutMustAcquireExclusiveLock(key, value interface{})        {}
 func (n *noopPutter) Del(key ...interface{})                                    {}
 func (n *noopPutter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte)         {}
 func (n *noopPutter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {}

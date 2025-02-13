@@ -607,7 +607,7 @@ func buildRowKVs(
 	p := &capturePutter{}
 	var pm row.PartialIndexUpdateHelper
 	for _, d := range datums {
-		if err := inserter.InsertRow(context.Background(), p, d, pm, nil, false, true); err != nil {
+		if err := inserter.InsertRow(context.Background(), p, d, pm, nil, row.CPutOp, true /* traceKV */); err != nil {
 			return kvs{}, err
 		}
 	}
@@ -718,6 +718,10 @@ func (c *capturePutter) Put(key, value interface{}) {
 	c.kvs.keys = append(c.kvs.keys, copyBytes(*k))
 	v := value.(*roachpb.Value)
 	c.kvs.values = append(c.kvs.values, copyBytes(v.RawBytes))
+}
+
+func (c *capturePutter) PutMustAcquireExclusiveLock(key, value interface{}) {
+	colexecerror.InternalError(errors.New("unimplemented"))
 }
 
 func (c *capturePutter) Del(key ...interface{}) {

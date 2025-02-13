@@ -362,7 +362,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				},
 			}
 			tableSpan := table.TableSpan(localPlanner.EvalContext().Codec)
-			request.Add(kvpb.NewDeleteRange(tableSpan.Key, tableSpan.EndKey, false))
+			request.Add(kvpb.NewDeleteRange(tableSpan.Key, tableSpan.EndKey, false /* returnKeys */))
 			if _, err := localPlanner.execCfg.DB.NonTransactionalSender().Send(ctx, &request); err != nil {
 				return err.GoError()
 			}
