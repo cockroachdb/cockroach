@@ -964,6 +964,14 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           <p>
             The 50th latency percentile for sampled {contentModifier} executions
             with this fingerprint.
+            <br />
+            <br />
+            <strong>Warning:</strong> the data source for latency percentiles is
+            different from the source for other execution statistics. These
+            percentiles are not calculated from the same set of executions as
+            the other columns and can be inconsistent. The data is provided for
+            informational purposes here and is not expected to be consistent
+            with max, min, or average latency that is also presented.
           </p>
         }
       >
@@ -990,6 +998,14 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           <p>
             The 90th latency percentile for sampled {contentModifier} executions
             with this fingerprint.
+            <br />
+            <br />
+            <strong>Warning:</strong> the data source for latency percentiles is
+            different from the source for other execution statistics. These
+            percentiles are not calculated from the same set of executions as
+            the other columns and can be inconsistent. The data is provided for
+            informational purposes here and is not expected to be consistent
+            with max, min, or average latency that is also presented.
           </p>
         }
       >
@@ -1016,6 +1032,14 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           <p>
             The 99th latency percentile for sampled {contentModifier} executions
             with this fingerprint.
+            <br />
+            <br />
+            <strong>Warning:</strong> the data source for latency percentiles is
+            different from the source for other execution statistics. These
+            percentiles are not calculated from the same set of executions as
+            the other columns and can be inconsistent. The data is provided for
+            informational purposes here and is not expected to be consistent
+            with max, min, or average latency that is also presented.
           </p>
         }
       >
