@@ -1770,6 +1770,10 @@ func (ief *InternalDB) KV() *kv.DB {
 	return ief.db
 }
 
+func (ief *InternalDB) Server() *Server {
+	return ief.server
+}
+
 // NewInternalDB returns a new InternalDB.
 func NewInternalDB(s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor) *InternalDB {
 	return &InternalDB{
