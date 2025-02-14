@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,7 +45,7 @@ func TestSessionMigration(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		openConnFunc := func() *pgx.Conn {
-			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+			pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
 				s.AdvSQLAddr(),
 				"StartServer", /* prefix */
 				url.User(username.RootUser),
@@ -73,7 +74,7 @@ func TestSessionMigration(t *testing.T) {
 		require.NoError(t, err)
 
 		openUserConnFunc := func(user string) *pgx.Conn {
-			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+			pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
 				s.AdvSQLAddr(),
 				"StartServer", /* prefix */
 				url.User(user),

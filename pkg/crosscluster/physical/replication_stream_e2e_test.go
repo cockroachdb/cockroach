@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -64,7 +65,7 @@ func TestPCRPrivs(t *testing.T) {
 	c.DestSysSQL.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
 	c.SrcSysSQL.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser+"2"))
 	testuser := sqlutils.MakeSQLRunner(c.DestSysServer.SQLConn(t, serverutils.User(username.TestUser)))
-	srcURL, cleanupSinkCert := sqlutils.PGUrl(t, c.SrcSysServer.AdvSQLAddr(), t.Name(), url.User(username.TestUser+"2"))
+	srcURL, cleanupSinkCert := pgurlutils.PGUrl(t, c.SrcSysServer.AdvSQLAddr(), t.Name(), url.User(username.TestUser+"2"))
 	defer cleanupSinkCert()
 
 	streamReplStmt := fmt.Sprintf("CREATE TENANT %s FROM REPLICATION OF %s ON '%s'",
@@ -99,7 +100,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
-	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
 
 	require.NotNil(t, stats.ReplicationLagInfo)
 	require.True(t, srcTime.LessEq(stats.ReplicationLagInfo.MinIngestedTimestamp))
@@ -214,7 +215,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	// Pause ingestion.
 	c.DestSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
 	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	pausedCheckpoint := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID).
+	pausedCheckpoint := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID).
 		ReplicationLagInfo.MinIngestedTimestamp
 	// Check we paused at a timestamp greater than the previously reached high watermark
 	require.True(t, srcTime.LessEq(pausedCheckpoint))
@@ -225,7 +226,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	// to src cluster checkpoints events, the job high watermark may change.
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, pausedCheckpoint,
-		replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL,
+		replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL,
 			ingestionJobID).ReplicationLagInfo.MinIngestedTimestamp)
 
 	// Resume ingestion.
@@ -273,7 +274,7 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	require.Equal(t, 2, ingestionStarts)
 
 	// Check we didn't make any progress.
-	require.Nil(t, replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL,
+	require.Nil(t, replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL,
 		ingestionJobID).ReplicationLagInfo)
 
 	// Resume ingestion.
@@ -1499,7 +1500,7 @@ func TestReplicationJobWithReaderTenant(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
-	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
 	require.NotNil(t, stats.IngestionDetails.ReadTenantID)
 
 	var (

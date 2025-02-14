@@ -37,9 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -204,7 +204,7 @@ func TestDataDriven(t *testing.T) {
 
 								s := srv.ApplicationLayer()
 
-								url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+								url, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 								defer cleanup()
 								var sqlConnCtx clisqlclient.Context
 								conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -271,7 +271,7 @@ func TestCopyFromTransaction(t *testing.T) {
 		// of the COPY can be lost, which can then cause the COPY to fail.
 		kvcoord.PipelinedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 
-		url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
+		url, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 		defer cleanup()
 		var sqlConnCtx clisqlclient.Context
 
@@ -418,7 +418,7 @@ func TestCopyFromTimeout(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := pgurlutils.PGUrl(
 		t,
 		s.AdvSQLAddr(),
 		"TestCopyFromTimeout",
@@ -484,7 +484,7 @@ func TestShowQueriesIncludesCopy(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := pgurlutils.PGUrl(
 		t,
 		srv.ApplicationLayer().AdvSQLAddr(),
 		"TestShowQueriesIncludesCopy",
@@ -638,7 +638,7 @@ func TestTinyRows(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
-	url, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := pgurlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -801,7 +801,7 @@ func BenchmarkCopyCSVEndToEnd(b *testing.B) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	pgURL, cleanup, err := sqlutils.PGUrlE(
+	pgURL, cleanup, err := pgurlutils.PGUrlE(
 		s.AdvSQLAddr(),
 		"BenchmarkCopyEndToEnd", /* prefix */
 		url.User(username.RootUser),

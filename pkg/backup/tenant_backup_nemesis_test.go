@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -172,7 +173,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	backupDone := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+		pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
 			tenant10.AdvSQLAddr(), "workload-worker" /* prefix */, url.User(username.RootUser))
 		if err != nil {
 			return err
@@ -202,7 +203,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 		}
 	})
 
-	hostURL, cleanup, err := sqlutils.PGUrlE(
+	hostURL, cleanup, err := pgurlutils.PGUrlE(
 		tc.SystemLayer(0).AdvSQLAddr(), "backup-nemesis", url.User(username.RootUser))
 	require.NoError(t, err)
 	defer cleanup()
