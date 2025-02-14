@@ -461,7 +461,7 @@ func (md *Metadata) CheckDependencies(
 		// code path below.
 		upToDate, err = md.leaseObjectsInMetaData(ctx, optCatalog)
 		if err == nil {
-			return upToDate, err
+			return upToDate, nil
 		}
 	}
 
