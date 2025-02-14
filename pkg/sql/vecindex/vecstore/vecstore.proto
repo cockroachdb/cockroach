@@ -20,9 +20,10 @@ message ChildKey {
   // PartitionKey references a child partition in the next lower level of the
   // K-means tree. This field is only set in branch/root partitions.
   uint64 partition_key = 1 [(gogoproto.casttype) = "PartitionKey"];
-  // PrimaryKey is the primary key of the row in the primary index that stores
-  // the original full-size vector. This field is only set in leaf partitions.
-  bytes primary_key = 2 [(gogoproto.casttype) = "PrimaryKey"];
+  // KeyBytes references a row in the primary index that stores the original
+  // full-size vector. Its format is store-dependent and typically contains part
+  // or all of the row's primary key. This field is only set in leaf partitions.
+  bytes key_bytes = 2 [(gogoproto.casttype) = "KeyBytes"];
 }
 
 // CVStats track coefficient of variation statistics that measure the "spread"
@@ -69,8 +70,8 @@ message PartitionProto {
   uint64 level = 5 [(gogoproto.casttype) = "Level"];
 }
 
-// Vector serializes an original, full-size vector and its primary key.
+// Vector serializes an original, full-size vector and its key bytes.
 message VectorProto {
-  bytes primary_key = 1 [(gogoproto.casttype) = "PrimaryKey"];
+  bytes key_bytes = 1 [(gogoproto.casttype) = "KeyBytes"];
   repeated float vector = 2;
 }

@@ -22,35 +22,35 @@ func TestSearchResult(t *testing.T) {
 		ErrorBound:           0.5,
 		CentroidDistance:     10,
 		ParentPartitionKey:   100,
-		ChildKey:             ChildKey{PrimaryKey: []byte{10}},
+		ChildKey:             ChildKey{KeyBytes: []byte{10}},
 	}
 	r2 := SearchResult{
 		QuerySquaredDistance: 2,
 		ErrorBound:           0,
 		CentroidDistance:     20,
 		ParentPartitionKey:   200,
-		ChildKey:             ChildKey{PrimaryKey: []byte{20}},
+		ChildKey:             ChildKey{KeyBytes: []byte{20}},
 	}
 	r3 := SearchResult{
 		QuerySquaredDistance: 2,
 		ErrorBound:           1,
 		CentroidDistance:     20,
 		ParentPartitionKey:   200,
-		ChildKey:             ChildKey{PrimaryKey: []byte{30}},
+		ChildKey:             ChildKey{KeyBytes: []byte{30}},
 	}
 	r4 := SearchResult{
 		QuerySquaredDistance: 2,
 		ErrorBound:           1,
 		CentroidDistance:     30,
 		ParentPartitionKey:   300,
-		ChildKey:             ChildKey{PrimaryKey: []byte{40}},
+		ChildKey:             ChildKey{KeyBytes: []byte{40}},
 	}
 	r5 := SearchResult{
 		QuerySquaredDistance: 4,
 		ErrorBound:           1,
 		CentroidDistance:     30,
 		ParentPartitionKey:   300,
-		ChildKey:             ChildKey{PrimaryKey: []byte{40}},
+		ChildKey:             ChildKey{KeyBytes: []byte{40}},
 	}
 
 	// MaybeCloser.
@@ -101,13 +101,13 @@ func TestSearchSet(t *testing.T) {
 
 	// Exceed max results, outside of error bounds.
 	result1 := SearchResult{
-		QuerySquaredDistance: 3, ErrorBound: 0.5, CentroidDistance: 10, ParentPartitionKey: 100, ChildKey: ChildKey{PrimaryKey: []byte{10}}}
+		QuerySquaredDistance: 3, ErrorBound: 0.5, CentroidDistance: 10, ParentPartitionKey: 100, ChildKey: ChildKey{KeyBytes: []byte{10}}}
 	result2 := SearchResult{
-		QuerySquaredDistance: 6, ErrorBound: 1, CentroidDistance: 20, ParentPartitionKey: 200, ChildKey: ChildKey{PrimaryKey: []byte{20}}}
+		QuerySquaredDistance: 6, ErrorBound: 1, CentroidDistance: 20, ParentPartitionKey: 200, ChildKey: ChildKey{KeyBytes: []byte{20}}}
 	result3 := SearchResult{
-		QuerySquaredDistance: 1, ErrorBound: 0.5, CentroidDistance: 30, ParentPartitionKey: 300, ChildKey: ChildKey{PrimaryKey: []byte{30}}}
+		QuerySquaredDistance: 1, ErrorBound: 0.5, CentroidDistance: 30, ParentPartitionKey: 300, ChildKey: ChildKey{KeyBytes: []byte{30}}}
 	result4 := SearchResult{
-		QuerySquaredDistance: 4, ErrorBound: 0.5, CentroidDistance: 40, ParentPartitionKey: 400, ChildKey: ChildKey{PrimaryKey: []byte{40}}}
+		QuerySquaredDistance: 4, ErrorBound: 0.5, CentroidDistance: 40, ParentPartitionKey: 400, ChildKey: ChildKey{KeyBytes: []byte{40}}}
 	searchSet.Add(&result1)
 	searchSet.Add(&result2)
 	searchSet.Add(&result3)
@@ -116,9 +116,9 @@ func TestSearchSet(t *testing.T) {
 
 	// Exceed max results, but within error bounds.
 	result5 := SearchResult{
-		QuerySquaredDistance: 6, ErrorBound: 1.5, CentroidDistance: 50, ParentPartitionKey: 500, ChildKey: ChildKey{PrimaryKey: []byte{50}}}
+		QuerySquaredDistance: 6, ErrorBound: 1.5, CentroidDistance: 50, ParentPartitionKey: 500, ChildKey: ChildKey{KeyBytes: []byte{50}}}
 	result6 := SearchResult{
-		QuerySquaredDistance: 5, ErrorBound: 1, CentroidDistance: 60, ParentPartitionKey: 600, ChildKey: ChildKey{PrimaryKey: []byte{60}}}
+		QuerySquaredDistance: 5, ErrorBound: 1, CentroidDistance: 60, ParentPartitionKey: 600, ChildKey: ChildKey{KeyBytes: []byte{60}}}
 	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
 	require.Equal(t, SearchResults{result3, result1, result4, result6, result5}, searchSet.PopResults())
 
@@ -129,12 +129,12 @@ func TestSearchSet(t *testing.T) {
 
 	// Add better results that invalidate farther candidates.
 	result7 := SearchResult{
-		QuerySquaredDistance: 4, ErrorBound: 1.5, CentroidDistance: 70, ParentPartitionKey: 700, ChildKey: ChildKey{PrimaryKey: []byte{70}}}
+		QuerySquaredDistance: 4, ErrorBound: 1.5, CentroidDistance: 70, ParentPartitionKey: 700, ChildKey: ChildKey{KeyBytes: []byte{70}}}
 	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
 	require.Equal(t, SearchResults{result3, result1, result4, result7, result6, result5}, searchSet.PopResults())
 
 	result8 := SearchResult{
-		QuerySquaredDistance: 0.5, ErrorBound: 0.5, CentroidDistance: 80, ParentPartitionKey: 800, ChildKey: ChildKey{PrimaryKey: []byte{80}}}
+		QuerySquaredDistance: 0.5, ErrorBound: 0.5, CentroidDistance: 80, ParentPartitionKey: 800, ChildKey: ChildKey{KeyBytes: []byte{80}}}
 	searchSet.AddAll(SearchResults{result1, result2, result3, result4})
 	searchSet.AddAll(SearchResults{result5, result6, result7, result8})
 	require.Equal(t, SearchResults{result8, result3, result1, result4, result7}, searchSet.PopResults())
