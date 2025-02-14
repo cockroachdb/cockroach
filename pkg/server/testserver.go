@@ -1265,6 +1265,30 @@ func (t *testTenant) DeploymentMode() serverutils.DeploymentMode {
 	return t.deploymentMode
 }
 
+// GrantTenantCapabilities is part of the serverutils.TenantControlInterface.
+func (ts *testServer) GrantTenantCapabilities(
+	ctx context.Context, tenID roachpb.TenantID, targetCaps map[tenantcapabilities.ID]string,
+) error {
+	conn, err := ts.SQLConnE()
+	if err != nil {
+		return err
+	}
+
+	var parts []string
+	for k, v := range targetCaps {
+		parts = append(parts, k.String()+"="+v)
+	}
+	capabilities := strings.Join(parts, ",")
+
+	if _, err = conn.Exec(fmt.Sprintf(`ALTER TENANT [$1] GRANT CAPABILITY %s`, capabilities),
+		tenID.ToUint64(),
+	); err != nil {
+		return err
+	}
+
+	return ts.WaitForTenantCapabilities(ctx, tenID, targetCaps, "")
+}
+
 // WaitForTenantCapabilities is part of the serverutils.TenantControlInterface.
 func (ts *testServer) WaitForTenantCapabilities(
 	ctx context.Context,

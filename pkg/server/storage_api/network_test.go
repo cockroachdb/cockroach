@@ -7,7 +7,6 @@ package storage_api_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -34,16 +33,10 @@ func TestNetworkConnectivity(t *testing.T) {
 
 	s0 := testCluster.Server(0)
 
-	if s0.TenantController().StartedDefaultTestTenant() {
-		_, err := s0.SystemLayer().SQLConn(t).Exec(
-			`ALTER TENANT [$1] GRANT CAPABILITY can_debug_process=true`,
-			serverutils.TestTenantID().ToUint64(),
-		)
-		require.NoError(t, err)
-
-		serverutils.WaitForTenantCapabilities(t, s0, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanDebugProcess: "true",
-		}, "")
+	if s0.DeploymentMode().IsExternal() {
+		testCluster.GrantTenantCapabilities(
+			ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilities.ID]string{tenantcapabilities.CanDebugProcess: "true"})
 	}
 
 	ts := s0.ApplicationLayer()
@@ -71,7 +64,7 @@ func TestNetworkConnectivity(t *testing.T) {
 			return err
 		}
 		require.Equal(t, len(resp.Connections), numNodes-1)
-		fmt.Printf("got status: %s", resp.Connections[s0.StorageLayer().NodeID()].Peers[stoppedNodeID].Status.String())
+		t.Logf("got status: %s\n", resp.Connections[s0.StorageLayer().NodeID()].Peers[stoppedNodeID].Status.String())
 		if resp.Connections[s0.StorageLayer().NodeID()].Peers[stoppedNodeID].Status != serverpb.NetworkConnectivityResponse_ERROR {
 			return errors.New("waiting for connection state to be changed.")
 		}

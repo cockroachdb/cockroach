@@ -594,13 +594,10 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	if srv := tc.Server(0); srv.TenantController().StartedDefaultTestTenant() {
-		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
-		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
-		require.NoError(t, err)
-		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanAdminRelocateRange: "true",
-		}, "")
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(
+			ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"})
 	}
 
 	db := tc.ServerConn(0)
