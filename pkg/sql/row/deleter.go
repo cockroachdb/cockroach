@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -103,18 +102,19 @@ func MakeDeleter(
 // with the given values.
 func (rd *Deleter) DeleteRow(
 	ctx context.Context,
-	b *kv.Batch,
+	batch *kv.Batch,
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
 	oth *OriginTimestampCPutHelper,
 	traceKV bool,
 ) error {
+	b := &KVBatchAdapter{Batch: batch}
 
 	// Delete the row from any secondary indices.
-	for i := range rd.Helper.Indexes {
+	for i, index := range rd.Helper.Indexes {
 		// If the index ID exists in the set of indexes to ignore, do not
 		// attempt to delete from the index.
-		if pm.IgnoreForDel.Contains(int(rd.Helper.Indexes[i].GetID())) {
+		if pm.IgnoreForDel.Contains(int(index.GetID())) {
 			continue
 		}
 
@@ -123,7 +123,7 @@ func (rd *Deleter) DeleteRow(
 			ctx,
 			rd.Helper.Codec,
 			rd.Helper.TableDesc,
-			rd.Helper.Indexes[i],
+			index,
 			rd.FetchColIDtoRowIndex,
 			values,
 			rowenc.EmptyVectorIndexEncodingHelper,
@@ -132,8 +132,15 @@ func (rd *Deleter) DeleteRow(
 		if err != nil {
 			return err
 		}
+		// TODO(yuzefovich): don't acquire the lock if we already locked this
+		// secondary index during the initial scan.
+		// TODO(yuzefovich): consider not acquiring the locks for non-unique
+		// indexes at all.
+		const needsLock = true
 		for _, e := range entries {
-			if err := rd.Helper.deleteIndexEntry(ctx, b, rd.Helper.Indexes[i], rd.Helper.secIndexValDirs[i], &e, traceKV); err != nil {
+			if err = rd.Helper.deleteIndexEntry(
+				ctx, b, index, &e.Key, needsLock, traceKV, rd.Helper.secIndexValDirs[i],
+			); err != nil {
 				return err
 			}
 		}
@@ -169,12 +176,12 @@ func (rd *Deleter) DeleteRow(
 					expValue = prevValue.TagAndDataBytes()
 				}
 			}
-			oth.DelWithCPut(ctx, &KVBatchAdapter{b}, &rd.key, expValue, traceKV)
+			oth.DelWithCPut(ctx, b, &rd.key, expValue, traceKV)
 		} else {
-			if traceKV {
-				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.primIndexValDirs, rd.key))
-			}
-			b.Del(&rd.key)
+			// TODO(yuzefovich): don't acquire the lock if we already locked the
+			// primary during the initial scan.
+			const needsLock = true
+			delFn(ctx, b, &rd.key, needsLock, traceKV, rd.Helper.primIndexValDirs)
 		}
 
 		rd.key = nil
