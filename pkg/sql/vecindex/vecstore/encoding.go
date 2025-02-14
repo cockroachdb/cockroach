@@ -59,9 +59,9 @@ func EncodedPartitionKeyLen(key PartitionKey) int {
 // slice is expected to be the prefix shared between all KV entries for a
 // partition.
 func EncodeChildKey(appendTo []byte, key ChildKey) []byte {
-	if key.PrimaryKey != nil {
+	if key.KeyBytes != nil {
 		// The primary key is already in encoded form.
-		return append(appendTo, key.PrimaryKey...)
+		return append(appendTo, key.KeyBytes...)
 	}
 	return EncodePartitionKey(appendTo, key.PartitionKey)
 }
@@ -72,7 +72,7 @@ func DecodePartitionMetadata(encMetadata []byte) (level Level, centroid vector.T
 	if err != nil {
 		return 0, nil, err
 	}
-	centroid, err = vector.Decode(encMetadata)
+	_, centroid, err = vector.Decode(encMetadata)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -81,19 +81,21 @@ func DecodePartitionMetadata(encMetadata []byte) (level Level, centroid vector.T
 
 // DecodeRaBitQVectorToSet decodes a RaBitQ vector entry into the given
 // RaBitQuantizedVectorSet. The vector set must have been initialized with the
-// correct number of dimensions.
-func DecodeRaBitQVectorToSet(encVector []byte, vectorSet *quantize.RaBitQuantizedVectorSet) error {
+// correct number of dimensions. It returns the remainder of the input buffer.
+func DecodeRaBitQVectorToSet(
+	encVector []byte, vectorSet *quantize.RaBitQuantizedVectorSet,
+) ([]byte, error) {
 	encVector, codeCount, err := encoding.DecodeUint32Ascending(encVector)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	encVector, centroidDistance, err := encoding.DecodeUntaggedFloat32Value(encVector)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	encVector, dotProduct, err := encoding.DecodeUntaggedFloat32Value(encVector)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	vectorSet.CodeCounts = append(vectorSet.CodeCounts, codeCount)
 	vectorSet.CentroidDistances = append(vectorSet.CentroidDistances, centroidDistance)
@@ -103,31 +105,31 @@ func DecodeRaBitQVectorToSet(encVector []byte, vectorSet *quantize.RaBitQuantize
 		var codeWord uint64
 		encVector, codeWord, err = encoding.DecodeUint64Ascending(encVector)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		vectorSet.Codes.Data = append(vectorSet.Codes.Data, codeWord)
 	}
 	vectorSet.Codes.Count++
-	return nil
+	return encVector, nil
 }
 
 // DecodeUnquantizedVectorToSet decodes a full vector entry into the given
 // UnQuantizedVectorSet. The vector set must have been initialized with the
-// correct number of dimensions.
+// correct number of dimensions. It returns the remainder of the input buffer.
 func DecodeUnquantizedVectorToSet(
 	encVector []byte, vectorSet *quantize.UnQuantizedVectorSet,
-) error {
+) ([]byte, error) {
 	encVector, centroidDistance, err := encoding.DecodeUntaggedFloat32Value(encVector)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	v, err := vector.Decode(encVector)
+	encVector, v, err := vector.Decode(encVector)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	vectorSet.CentroidDistances = append(vectorSet.CentroidDistances, centroidDistance)
 	vectorSet.Vectors.Add(v)
-	return nil
+	return encVector, nil
 }
 
 // DecodeChildKey decodes a child key from the given byte slice.
@@ -136,7 +138,7 @@ func DecodeChildKey(encChildKey []byte, level Level) (ChildKey, error) {
 	if level == LeafLevel {
 		// Leaf vectors point to the primary index. The primary key is already in
 		// encoded form, so just use it as-is.
-		return ChildKey{PrimaryKey: encChildKey}, nil
+		return ChildKey{KeyBytes: encChildKey}, nil
 	} else {
 		// Non-leaf vectors point to the partition key.
 		_, childPartitionKey, err := encoding.DecodeUvarintAscending(encChildKey)

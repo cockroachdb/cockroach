@@ -56,65 +56,77 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 					// Build the partition.
 					quantizedSet := quantizer.Quantize(ctx, set)
 					childKeys := make([]ChildKey, set.Count)
+					valueBytes := make([]ValueBytes, set.Count)
 					for i := range childKeys {
 						if level == LeafLevel {
 							pkSize := rnd.Intn(32) + 1
-							childKeys[i] = ChildKey{PrimaryKey: randutil.RandBytes(rnd, pkSize)}
+							childKeys[i] = ChildKey{KeyBytes: randutil.RandBytes(rnd, pkSize)}
 						} else {
 							childKeys[i] = ChildKey{PartitionKey: PartitionKey(rnd.Uint64())}
 						}
+						valueBytes[i] = randutil.RandBytes(rnd, 10)
 					}
-					originalPartition := NewPartition(quantizer, quantizedSet, childKeys, level)
+					originalPartition := NewPartition(quantizer, quantizedSet, childKeys, valueBytes, level)
 
 					// Encode the partition.
 					encMetadata, err := EncodePartitionMetadata(level, quantizedSet.GetCentroid())
 					require.NoError(t, err)
-					encVectors := make([][]byte, set.Count)
-					encChildren := make([][]byte, len(childKeys))
+
+					// Create a single buffer containing all vectors.
+					var buf []byte
 					for i := range set.Count {
 						switch quantizedSet := quantizedSet.(type) {
 						case *quantize.UnQuantizedVectorSet:
-							encVectors[i], err = EncodeUnquantizedVector([]byte(nil),
+							buf, err = EncodeUnquantizedVector(buf,
 								quantizedSet.GetCentroidDistances()[i], set.At(i),
 							)
 							require.NoError(t, err)
 						case *quantize.RaBitQuantizedVectorSet:
-							encVectors[i] = EncodeRaBitQVector([]byte(nil),
+							buf = EncodeRaBitQVector(buf,
 								quantizedSet.CodeCounts[i], quantizedSet.CentroidDistances[i],
 								quantizedSet.DotProducts[i], quantizedSet.Codes.At(i),
 							)
 						}
-						encChildren[i] = EncodeChildKey([]byte(nil), childKeys[i])
 					}
+
+					// Add some trailing data that should not be processed.
+					trailingData := randutil.RandBytes(rnd, rnd.Intn(32))
+					if trailingData == nil {
+						trailingData = []byte{}
+					}
+					buf = append(buf, trailingData...)
 
 					// Decode the encoded partition.
 					decodedLevel, decodedCentroid, err := DecodePartitionMetadata(encMetadata)
 					require.NoError(t, err)
-					decodedChildKeys := make([]ChildKey, len(encVectors))
 					var decodedSet quantize.QuantizedVectorSet
+					remainder := buf
+
 					switch quantizedSet.(type) {
 					case *quantize.UnQuantizedVectorSet:
-						decodedSet = quantizer.NewQuantizedVectorSet(len(encVectors), decodedCentroid)
-						for i := range encVectors {
-							err = DecodeUnquantizedVectorToSet(
-								encVectors[i], decodedSet.(*quantize.UnQuantizedVectorSet),
+						decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedCentroid)
+						for range set.Count {
+							remainder, err = DecodeUnquantizedVectorToSet(
+								remainder, decodedSet.(*quantize.UnQuantizedVectorSet),
 							)
 							require.NoError(t, err)
 						}
+						// Verify remaining bytes match trailing data
+						require.Equal(t, trailingData, remainder)
 					case *quantize.RaBitQuantizedVectorSet:
-						decodedSet = quantizer.NewQuantizedVectorSet(len(encVectors), decodedCentroid)
-						for i := range encVectors {
-							err = DecodeRaBitQVectorToSet(
-								encVectors[i], decodedSet.(*quantize.RaBitQuantizedVectorSet),
+						decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedCentroid)
+						for range set.Count {
+							remainder, err = DecodeRaBitQVectorToSet(
+								remainder, decodedSet.(*quantize.RaBitQuantizedVectorSet),
 							)
 							require.NoError(t, err)
 						}
+						// Verify remaining bytes match trailing data
+						require.Equal(t, trailingData, remainder)
 					}
-					for i := range encChildren {
-						decodedChildKeys[i], err = DecodeChildKey(encChildren[i], decodedLevel)
-						require.NoError(t, err)
-					}
-					decodedPartition := NewPartition(quantizer, decodedSet, decodedChildKeys, decodedLevel)
+
+					decodedPartition := NewPartition(
+						quantizer, decodedSet, childKeys, valueBytes, decodedLevel)
 					testingAssertPartitionsEqual(t, originalPartition, decodedPartition)
 				})
 			}
@@ -126,6 +138,7 @@ func testingAssertPartitionsEqual(t *testing.T, l, r *Partition) {
 	q1, q2 := l.quantizedSet, r.quantizedSet
 	require.Equal(t, l.level, r.level, "levels do not match")
 	require.Equal(t, l.ChildKeys(), r.ChildKeys(), "childKeys do not match")
+	require.Equal(t, l.ValueBytes(), r.ValueBytes(), "valueBytes do not match")
 	require.Equal(t, q1.GetCentroid(), q2.GetCentroid(), "centroids do not match")
 	require.Equal(t, q1.GetCount(), q2.GetCount(), "counts do not match")
 	require.Equal(t, q1.GetCentroidDistances(), q2.GetCentroidDistances(), "distances do not match")

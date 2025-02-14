@@ -274,7 +274,7 @@ func (vi *VectorIndex) Close() {
 }
 
 // Insert adds a new vector with the given primary key to the index. This is
-// called within the scope of a transaction so that the index does not appear to
+// called within the scope of a transaction so that index does not appear to
 // change during the insert.
 //
 // NOTE: This can result in two vectors with the same primary key being inserted
@@ -283,7 +283,7 @@ func (vi *VectorIndex) Close() {
 // Delete will find the old vector. Vector index methods handle this rare case
 // by checking for duplicates when returning search results.
 func (vi *VectorIndex) Insert(
-	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.PrimaryKey,
+	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.KeyBytes,
 ) error {
 	// Potentially throttle insert operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
@@ -299,8 +299,8 @@ func (vi *VectorIndex) Insert(
 	parentSearchCtx.Randomized = vi.randomizeVector(vector, tempRandomized)
 
 	// Insert the vector into the secondary index.
-	childKey := vecstore.ChildKey{PrimaryKey: key}
-	return vi.insertHelper(&parentSearchCtx, childKey)
+	childKey := vecstore.ChildKey{KeyBytes: key}
+	return vi.insertHelper(&parentSearchCtx, childKey, vecstore.ValueBytes{})
 }
 
 // Delete attempts to remove a vector from the index, given its value and
@@ -312,7 +312,7 @@ func (vi *VectorIndex) Insert(
 // handle this rare case by checking for duplicates when returning search
 // results.
 func (vi *VectorIndex) Delete(
-	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.PrimaryKey,
+	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.KeyBytes,
 ) error {
 	result, err := vi.SearchForDelete(ctx, txn, vector, key)
 	if err != nil {
@@ -400,7 +400,7 @@ func (vi *VectorIndex) SearchForInsert(
 // nil if the vector cannot be found. This is useful for callers that directly
 // delete KV rows rather than using this library to do it.
 func (vi *VectorIndex) SearchForDelete(
-	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.PrimaryKey,
+	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.KeyBytes,
 ) (*vecstore.SearchResult, error) {
 	// Potentially throttle operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
@@ -500,7 +500,7 @@ func (vi *VectorIndex) setupInsertContext(
 // adds the vector to that partition. This is an internal helper method that can
 // be used by callers once they have set up a search context.
 func (vi *VectorIndex) insertHelper(
-	parentSearchCtx *searchContext, childKey vecstore.ChildKey,
+	parentSearchCtx *searchContext, childKey vecstore.ChildKey, valueBytes vecstore.ValueBytes,
 ) error {
 	result, err := vi.searchForInsertHelper(parentSearchCtx)
 	if err != nil {
@@ -509,9 +509,9 @@ func (vi *VectorIndex) insertHelper(
 	parentPartitionKey := result.ParentPartitionKey
 	partitionKey := result.ChildKey.PartitionKey
 	err = vi.addToPartition(parentSearchCtx.Ctx, parentSearchCtx.Txn, parentPartitionKey,
-		partitionKey, parentSearchCtx.Randomized, childKey)
+		partitionKey, parentSearchCtx.Randomized, childKey, valueBytes)
 	if errors.Is(err, vecstore.ErrRestartOperation) {
-		return vi.insertHelper(parentSearchCtx, childKey)
+		return vi.insertHelper(parentSearchCtx, childKey, valueBytes)
 	}
 	return err
 }
@@ -544,8 +544,9 @@ func (vi *VectorIndex) addToPartition(
 	partitionKey vecstore.PartitionKey,
 	vector vector.T,
 	childKey vecstore.ChildKey,
+	valueBytes vecstore.ValueBytes,
 ) error {
-	metadata, err := txn.AddToPartition(ctx, partitionKey, vector, childKey)
+	metadata, err := txn.AddToPartition(ctx, partitionKey, vector, childKey, valueBytes)
 	if err != nil {
 		return errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
@@ -775,14 +776,14 @@ func (vi *VectorIndex) pruneDuplicates(candidates []vecstore.SearchResult) []vec
 		return candidates
 	}
 
-	if candidates[0].ChildKey.PrimaryKey == nil {
+	if candidates[0].ChildKey.KeyBytes == nil {
 		// Only leaf partitions can have duplicates.
 		return candidates
 	}
 
 	dups := make(map[string]bool, len(candidates))
 	for i := 0; i < len(candidates); i++ {
-		key := candidates[i].ChildKey.PrimaryKey
+		key := candidates[i].ChildKey.KeyBytes
 		if _, ok := dups[string(key)]; ok {
 			// Found duplicate, so remove it by replacing it with the last
 			// candidate.
@@ -864,7 +865,7 @@ func (vi *VectorIndex) getRerankVectors(
 		if candidates[i].Vector == nil {
 			// Vector was deleted, so add fixup to delete it.
 			vi.fixups.AddDeleteVector(
-				searchCtx.Ctx, candidates[i].ParentPartitionKey, candidates[i].ChildKey.PrimaryKey)
+				searchCtx.Ctx, candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
 
 			// Move the last candidate to the current position and reduce size
 			// of slice by one.
@@ -925,7 +926,7 @@ func (vi *VectorIndex) Format(
 	// Write formatted bytes to this buffer.
 	var buf bytes.Buffer
 
-	writePrimaryKey := func(key vecstore.PrimaryKey) {
+	writePrimaryKey := func(key vecstore.KeyBytes) {
 		if options.PrimaryKeyStrings {
 			buf.WriteString(string(key))
 		} else {
@@ -978,7 +979,7 @@ func (vi *VectorIndex) Format(
 				}
 				buf.WriteString(parentPrefix)
 				buf.WriteString("• ")
-				writePrimaryKey(childKey.PrimaryKey)
+				writePrimaryKey(childKey.KeyBytes)
 				if refs[0].Vector != nil {
 					buf.WriteByte(' ')
 					writeVector(&buf, refs[0].Vector, 4)
