@@ -36,6 +36,8 @@ type Updater struct {
 	UpdateColIDtoRowIndex catalog.TableColMap
 	primaryKeyColChange   bool
 
+	secondaryLockedForDelete catalog.Index
+
 	// rd and ri are used when the update this Updater is created for modifies
 	// the primary key of the table. In that case, rows must be deleted and
 	// re-added instead of merely updated, since the keys are changing.
@@ -77,6 +79,7 @@ func MakeUpdater(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	uniqueWithTombstoneIndexes []catalog.Index,
+	deleteLockedIndexes []catalog.Index,
 	updateCols []catalog.Column,
 	requestedCols []catalog.Column,
 	updateType rowUpdaterType,
@@ -162,22 +165,29 @@ func MakeUpdater(
 		deleteOnlyHelper = &rh
 	}
 
+	var secondaryLockedForDelete catalog.Index
+	for _, index := range deleteLockedIndexes {
+		if !index.Primary() {
+			secondaryLockedForDelete = index
+		}
+	}
 	ru := Updater{
-		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, uniqueWithTombstoneIndexes, sv, internal, metrics),
-		DeleteHelper:          deleteOnlyHelper,
-		FetchCols:             requestedCols,
-		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),
-		UpdateCols:            updateCols,
-		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
-		primaryKeyColChange:   primaryKeyColChange,
-		oldIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
-		newIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
+		Helper:                   NewRowHelper(codec, tableDesc, includeIndexes, uniqueWithTombstoneIndexes, sv, internal, metrics),
+		DeleteHelper:             deleteOnlyHelper,
+		FetchCols:                requestedCols,
+		FetchColIDtoRowIndex:     ColIDtoRowIndexFromCols(requestedCols),
+		UpdateCols:               updateCols,
+		UpdateColIDtoRowIndex:    updateColIDtoRowIndex,
+		primaryKeyColChange:      primaryKeyColChange,
+		secondaryLockedForDelete: secondaryLockedForDelete,
+		oldIndexEntries:          make([][]rowenc.IndexEntry, len(includeIndexes)),
+		newIndexEntries:          make([][]rowenc.IndexEntry, len(includeIndexes)),
 	}
 
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
 		var err error
-		ru.rd = MakeDeleter(codec, tableDesc, nil /* lockedIndexes */, requestedCols, sv, internal, metrics)
+		ru.rd = MakeDeleter(codec, tableDesc, deleteLockedIndexes, requestedCols, sv, internal, metrics)
 		if ru.ri, err = MakeInserter(
 			ctx, txn, codec, tableDesc, uniqueWithTombstoneIndexes, requestedCols, alloc, sv, internal, metrics,
 		); err != nil {
@@ -379,8 +389,9 @@ func (ru *Updater) UpdateRow(
 	// in the new and old values.
 	var writtenIndexes intsets.Fast
 	for i, index := range ru.Helper.Indexes {
-		// TODO(yuzefovich): think about this.
-		const needsLock = true
+		// TODO(yuzefovich): consider not acquiring the locks for non-unique
+		// indexes at all.
+		needsLock := ru.secondaryLockedForDelete == nil || ru.secondaryLockedForDelete.GetID() != index.GetID()
 		if index.GetType() == idxtype.FORWARD {
 			oldIdx, newIdx := 0, 0
 			oldEntries, newEntries := ru.oldIndexEntries[i], ru.newIndexEntries[i]
@@ -526,8 +537,9 @@ func (ru *Updater) UpdateRow(
 		// For determinism, add the entries for the secondary indexes in the same
 		// order as they appear in the helper.
 		for _, index := range ru.DeleteHelper.Indexes {
-			// TODO(yuzefovich): think about this.
-			const needsLock = true
+			// TODO(yuzefovich): consider not acquiring the locks for non-unique
+			// indexes at all.
+			needsLock := ru.secondaryLockedForDelete == nil || ru.secondaryLockedForDelete.GetID() != index.GetID()
 			deletedSecondaryIndexEntries, ok := deleteOldSecondaryIndexEntries[index]
 
 			if ok {

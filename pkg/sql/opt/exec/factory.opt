@@ -542,6 +542,9 @@ define Update {
     Passthrough colinfo.ResultColumns
     UniqueWithTombstonesIndexes cat.IndexOrdinals
 
+    # TODO: comment.
+    LockedIndexes cat.IndexOrdinals
+
     # If set, the operator will commit the transaction as part of its execution.
     AutoCommit bool
 }
@@ -582,6 +585,9 @@ define Upsert {
     ReturnCols exec.TableColumnOrdinalSet
     Checks exec.CheckOrdinalSet
     UniqueWithTombstonesIndexes cat.IndexOrdinals
+
+    # TODO: comment.
+    LockedIndexes cat.IndexOrdinals
 
     # If set, the operator will commit the transaction as part of its execution.
     # This is false when executing inside an explicit transaction, or there are
