@@ -1540,6 +1540,57 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 	}
 }
 
+func TestDrainSqlStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	appName := "drain_stats_app"
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	conn1 := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	conn2 := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
+	conn3 := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	for _, conn := range []*sqlutils.SQLRunner{conn1, conn2, conn3} {
+		conn.Exec(t, fmt.Sprintf("SET application_name = '%s'", appName))
+		conn.Exec(t, "SELECT 1")
+	}
+
+	statusServer := testCluster.Server(0).GetStatusClient(t)
+	resp, err := statusServer.DrainSqlStats(ctx, &serverpb.DrainSqlStatsRequest{})
+	require.NoError(t, err)
+	checkFingerprintCount(t, resp)
+	stmts, txns := filterStatementStatsByAppName(resp.Statements, resp.Transactions, appName)
+	require.Len(t, stmts, 1)
+	require.Equal(t, int64(3), stmts[0].Stats.Count)
+	require.Equal(t, "SELECT _", stmts[0].Key.Query)
+	require.Len(t, txns, 1)
+	require.Equal(t, int64(3), txns[0].Stats.Count)
+	require.Len(t, txns[0].StatementFingerprintIDs, 1)
+	require.Equal(t, stmts[0].ID, txns[0].StatementFingerprintIDs[0])
+
+	// Check that the stats are cleared.
+	resp, err = statusServer.DrainSqlStats(ctx, &serverpb.DrainSqlStatsRequest{})
+	require.NoError(t, err)
+	stmts, txns = filterStatementStatsByAppName(resp.Statements, resp.Transactions, appName)
+	require.Empty(t, stmts)
+	require.Empty(t, txns)
+}
+
+func TestDrainSqlStatsPermissionDenied(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer ts.Stopper().Stop(ctx)
+	response := serverpb.DrainStatsResponse{}
+	err := srvtestutils.GetStatusJSONProtoWithAdminOption(ts, "drainsqlstats", &response, false)
+	require.Empty(t, response)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "user does not have admin role")
+}
+
 func createStmtFetchMode(
 	sort serverpb.StatsSortOptions,
 ) *serverpb.CombinedStatementsStatsRequest_FetchMode {
@@ -1859,4 +1910,45 @@ VALUES (
 		float64(statement.Stats.Count) * statement.Stats.ServiceLat.Mean,
 	}
 	db.Exec(t, query, args...)
+}
+
+func filterStatementStatsByAppName(
+	statements []appstatspb.CollectedStatementStatistics,
+	transactions []appstatspb.CollectedTransactionStatistics,
+	appName string,
+) ([]appstatspb.CollectedStatementStatistics, []appstatspb.CollectedTransactionStatistics) {
+	var filteredStatements []appstatspb.CollectedStatementStatistics
+	var filteredTransactions []appstatspb.CollectedTransactionStatistics
+
+	for _, stmt := range statements {
+		if stmt.Key.App == appName {
+			filteredStatements = append(filteredStatements, stmt)
+		}
+	}
+
+	for _, txn := range transactions {
+		if txn.App == appName {
+			filteredTransactions = append(filteredTransactions, txn)
+		}
+	}
+
+	return filteredStatements, filteredTransactions
+}
+
+func checkFingerprintCount(t *testing.T, resp *serverpb.DrainStatsResponse) {
+	stmtFingerprints := make(map[appstatspb.StmtFingerprintID]struct{})
+	txnFingerprints := make(map[appstatspb.TransactionFingerprintID]struct{})
+	for _, stmt := range resp.Statements {
+		if _, ok := stmtFingerprints[stmt.ID]; !ok {
+			stmtFingerprints[stmt.ID] = struct{}{}
+		}
+	}
+
+	for _, txn := range resp.Transactions {
+		if _, ok := txnFingerprints[txn.TransactionFingerprintID]; !ok {
+			txnFingerprints[txn.TransactionFingerprintID] = struct{}{}
+		}
+	}
+	actualFpCount := len(stmtFingerprints) + len(txnFingerprints)
+	require.Equal(t, resp.FingerprintCount, int64(actualFpCount))
 }
