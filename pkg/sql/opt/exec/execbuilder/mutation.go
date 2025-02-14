@@ -762,7 +762,7 @@ func ordinalSetFromColList(colList opt.OptionalColList) intsets.Fast {
 // the result.
 func (b *Builder) mutationOutputColMap(mutation memo.RelExpr) colOrdMap {
 	private := mutation.Private().(*memo.MutationPrivate)
-	tab := mutation.Memo().Metadata().Table(private.Table)
+	tab := b.mem.Metadata().Table(private.Table)
 	outCols := mutation.Relational().OutputCols
 
 	colMap := b.colOrdsAlloc.Alloc()
@@ -1132,13 +1132,15 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 		return 0, nil
 
 	case *memo.UpdateExpr:
-		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t.Input, t.Table), nil
+		md := b.mem.Metadata()
+		return shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table), nil
 
 	case *memo.UpsertExpr:
 		return shouldApplyImplicitLockingToUpsertInput(t), nil
 
 	case *memo.DeleteExpr:
-		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t.Input, t.Table), nil
+		md := b.mem.Metadata()
+		return shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table), nil
 
 	default:
 		return 0, errors.AssertionFailedf("unexpected mutation expression %T", t)
@@ -1172,7 +1174,7 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 // UPDATEs and DELETEs happen to have exactly the same matching pattern, so we
 // reuse this function for both.
 func shouldApplyImplicitLockingToUpdateOrDeleteInput(
-	input memo.RelExpr, tabID opt.TableID,
+	md *opt.Metadata, input memo.RelExpr, tabID opt.TableID,
 ) opt.TableID {
 	// Try to match the mutation's input expression against the pattern:
 	//
@@ -1191,7 +1193,6 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 		if innerJoin, ok := t.Input.(*memo.LookupJoinExpr); ok && innerJoin.Table == t.Table {
 			t = innerJoin
 		}
-		md := input.Memo().Metadata()
 		mutStableID := md.Table(tabID).ID()
 		lookupStableID := md.Table(t.Table).ID()
 		// Only lock rows read in the lookup join if the lookup table is the

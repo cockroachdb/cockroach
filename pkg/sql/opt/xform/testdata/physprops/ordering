@@ -686,7 +686,7 @@ memo (optimized, ~4KB, required=[presentation: info:7])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality
 ----
-memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +7])
+memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2)
@@ -725,7 +725,7 @@ memo (optimized, ~7KB, required=[presentation: y:2] [ordering: +8])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality, x
 ----
-memo (optimized, ~9KB, required=[presentation: y:2] [ordering: +7])
+memo (optimized, ~8KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2)
@@ -779,7 +779,7 @@ memo (optimized, ~7KB, required=[presentation: y:2] [ordering: +7])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality DESC
 ----
-memo (optimized, ~6KB, required=[presentation: y:2] [ordering: -7])
+memo (optimized, ~5KB, required=[presentation: y:2] [ordering: -7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: -7]
  │    │    ├── best: (sort G1)

@@ -231,26 +231,27 @@ const (
 type statisticsBuilder struct {
 	ctx                   context.Context
 	evalCtx               *eval.Context
+	mem                   *Memo
 	md                    *opt.Metadata
 	checkInputMinRowCount float64
 	minRowCount           float64
 }
 
-func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, md *opt.Metadata) {
+func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, mem *Memo) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*sb = statisticsBuilder{
 		ctx:                   ctx,
 		evalCtx:               evalCtx,
-		md:                    md,
+		mem:                   mem,
+		md:                    mem.Metadata(),
 		checkInputMinRowCount: evalCtx.SessionData().OptimizerCheckInputMinRowCount,
 		minRowCount:           evalCtx.SessionData().OptimizerMinRowCount,
 	}
 }
 
 func (sb *statisticsBuilder) clear() {
-	sb.evalCtx = nil
-	sb.md = nil
+	*sb = statisticsBuilder{}
 }
 
 // colStatCols returns the set of columns which may be looked up in
@@ -1173,10 +1174,10 @@ func (sb *statisticsBuilder) colStatProject(
 				if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
 					!s.VirtualCols.Empty() {
 					element := sb.factorOutVirtualCols(
-						item.Element, &item.scalar.Shared, s.VirtualCols, prj.Memo(),
+						item.Element, &item.scalar.Shared, s.VirtualCols, sb.mem,
 					).(opt.ScalarExpr)
 					if element != item.Element {
-						newItem := constructProjectionsItem(element, item.Col, prj.Memo())
+						newItem := constructProjectionsItem(element, item.Col, sb.mem)
 						item = &newItem
 					}
 				}
@@ -3219,7 +3220,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
-		withoutOn := e.Memo().MemoizeLookupJoin(t.Input, nil /* on */, lookupJoinPrivate)
+		withoutOn := sb.mem.MemoizeLookupJoin(t.Input, nil /* on */, lookupJoinPrivate)
 		return withoutOn.Relational().Statistics().RowCount
 
 	case *InvertedJoinExpr:
@@ -3243,7 +3244,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
-		withoutOn := e.Memo().MemoizeInvertedJoin(t.Input, nil /* on */, invertedJoinPrivate)
+		withoutOn := sb.mem.MemoizeInvertedJoin(t.Input, nil /* on */, invertedJoinPrivate)
 		return withoutOn.Relational().Statistics().RowCount
 
 	case *MergeJoinExpr:
@@ -3267,7 +3268,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
-		withoutOn := e.Memo().MemoizeMergeJoin(t.Left, t.Right, nil /* on */, mergeJoinPrivate)
+		withoutOn := sb.mem.MemoizeMergeJoin(t.Left, t.Right, nil /* on */, mergeJoinPrivate)
 		return withoutOn.Relational().Statistics().RowCount
 
 	default:
@@ -3286,13 +3287,13 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		// The number of rows processed for semi and anti joins is closer to the
 		// number of output rows for an equivalent inner join.
 		case *SemiJoinExpr:
-			e = e.Memo().MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
+			e = sb.mem.MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
 		case *SemiJoinApplyExpr:
-			e = e.Memo().MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+			e = sb.mem.MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
 		case *AntiJoinExpr:
-			e = e.Memo().MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
+			e = sb.mem.MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
 		case *AntiJoinApplyExpr:
-			e = e.Memo().MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+			e = sb.mem.MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
 
 		default:
 			if len(on) == len(*filters) {
@@ -3302,17 +3303,17 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 			switch t := e.(type) {
 			case *InnerJoinExpr:
-				e = e.Memo().MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
+				e = sb.mem.MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			case *InnerJoinApplyExpr:
-				e = e.Memo().MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+				e = sb.mem.MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
 			case *LeftJoinExpr:
-				e = e.Memo().MemoizeLeftJoin(t.Left, t.Right, on, &t.JoinPrivate)
+				e = sb.mem.MemoizeLeftJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			case *LeftJoinApplyExpr:
-				e = e.Memo().MemoizeLeftJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+				e = sb.mem.MemoizeLeftJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
 			case *RightJoinExpr:
-				e = e.Memo().MemoizeRightJoin(t.Left, t.Right, on, &t.JoinPrivate)
+				e = sb.mem.MemoizeRightJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			case *FullJoinExpr:
-				e = e.Memo().MemoizeFullJoin(t.Left, t.Right, on, &t.JoinPrivate)
+				e = sb.mem.MemoizeFullJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			default:
 				panic(errors.AssertionFailedf("join type %v not handled", redact.Safe(e.Op())))
 			}
@@ -3488,10 +3489,10 @@ func (sb *statisticsBuilder) applyFiltersItem(
 	if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
 		!relProps.Statistics().VirtualCols.Empty() {
 		cond := sb.factorOutVirtualCols(
-			filter.Condition, &filter.scalar.Shared, relProps.Statistics().VirtualCols, e.Memo(),
+			filter.Condition, &filter.scalar.Shared, relProps.Statistics().VirtualCols, sb.mem,
 		).(opt.ScalarExpr)
 		if cond != filter.Condition {
-			newFilter := constructFiltersItem(cond, e.Memo())
+			newFilter := constructFiltersItem(cond, sb.mem)
 			filter = &newFilter
 		}
 	}
@@ -4673,11 +4674,11 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 			// is able to build column equivalencies.
 			switch disjuncts[i].(type) {
 			case *EqExpr, *AndExpr:
-				if andFilters, ok = addEqExprConjuncts(disjuncts[i], andFilters, e.Memo()); !ok {
+				if andFilters, ok = addEqExprConjuncts(disjuncts[i], andFilters, sb.mem); !ok {
 					unapplied.unknown++
 					continue
 				}
-				e.Memo().logPropsBuilder.addFiltersToFuncDep(andFilters, &filtersFD)
+				sb.mem.logPropsBuilder.addFiltersToFuncDep(andFilters, &filtersFD)
 			default:
 				unapplied.unknown++
 				ok = false
@@ -5067,9 +5068,11 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 
 // RequestColStat causes a column statistic to be calculated on the relational
 // expression. This is used for testing.
-func RequestColStat(ctx context.Context, evalCtx *eval.Context, e RelExpr, cols opt.ColSet) {
+func RequestColStat(
+	ctx context.Context, evalCtx *eval.Context, mem *Memo, e RelExpr, cols opt.ColSet,
+) {
 	var sb statisticsBuilder
-	sb.init(ctx, evalCtx, e.Memo().Metadata())
+	sb.init(ctx, evalCtx, mem)
 	sb.colStat(cols, e)
 }
 
