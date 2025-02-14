@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -95,80 +94,6 @@ var WaitForInitialVersion = settings.RegisterBoolSetting(settings.ApplicationLev
 	"sql.catalog.descriptor_wait_for_initial_version.enabled",
 	"enables waiting for the initial version of a descriptor",
 	true)
-
-//go:generate stringer -type=SessionBasedLeasingMode
-type SessionBasedLeasingMode int64
-
-const (
-	// SessionBasedLeasingAuto automatically pick a leasing mode
-	// based on the current version.
-	SessionBasedLeasingAuto SessionBasedLeasingMode = iota
-	// SessionBasedLeasingOff expiry based leasing is being used.
-	SessionBasedLeasingOff
-	// SessionBasedDualWrite expiry based and session based leasing are
-	// active concurrently, and both tables must be consulted schema changes.
-	SessionBasedDualWrite
-	// SessionBasedDrain expiry based leases will not be granted or renewed.
-	// Valid pre-existing leases that are expiry based will still be respected.
-	SessionBasedDrain
-	// SessionBasedOnly session based leases are only active, and schema
-	// changes only need to consult this table.
-	SessionBasedOnly
-)
-
-var (
-	// SessionBasedLeasingModeByName maps session based leasing modes from name
-	// to enum values.
-	SessionBasedLeasingModeByName = map[string]SessionBasedLeasingMode{
-		"auto":       SessionBasedLeasingAuto,
-		"off":        SessionBasedLeasingOff,
-		"dual_write": SessionBasedDualWrite,
-		"drain":      SessionBasedDrain,
-		"session":    SessionBasedOnly,
-	}
-)
-
-// LeaseEnableSessionBasedLeasing used to enable / disable support for
-// session based leasing.
-var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
-	settings.ApplicationLevel,
-	"sql.catalog.experimental_use_session_based_leasing",
-	"enables session based leasing for internal testing.",
-	"auto",
-	map[SessionBasedLeasingMode]string{
-		SessionBasedLeasingAuto: "auto",
-		SessionBasedLeasingOff:  "off",
-		SessionBasedDualWrite:   "dual_write",
-		SessionBasedDrain:       "drain",
-		SessionBasedOnly:        "session",
-	},
-)
-
-// sessionBasedLeasingModeActive determines if the current mode at least meets
-// the required minimum.
-func (m *Manager) sessionBasedLeasingModeAtLeast(
-	ctx context.Context, minimumMode SessionBasedLeasingMode,
-) bool {
-	return m.getSessionBasedLeasingMode(ctx) >= minimumMode
-}
-
-func readSessionBasedLeasingMode(
-	ctx context.Context, settings *cluster.Settings,
-) SessionBasedLeasingMode {
-	// When leasing mode is set to OFF we will use the version to determine what
-	// mode we are executing in.
-	settingMode := LeaseEnableSessionBasedLeasing.Get(&settings.SV)
-	if settingMode == SessionBasedLeasingAuto {
-		return SessionBasedOnly
-	} else {
-		return settingMode
-	}
-}
-
-// getSessionBasedLeasingMode returns the current session based leasing mode.
-func (m *Manager) getSessionBasedLeasingMode(ctx context.Context) SessionBasedLeasingMode {
-	return readSessionBasedLeasingMode(ctx, m.settings)
-}
 
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
@@ -916,7 +841,6 @@ func acquireNodeLease(
 ) (bool, error) {
 	start := timeutil.Now()
 	log.VEventf(ctx, 2, "acquiring lease for descriptor %d...", id)
-	var toRelease *storedLease
 	future, didAcquire := m.storage.group.DoChan(ctx,
 		strconv.Itoa(int(id)),
 		singleflight.DoOpts{
@@ -928,28 +852,23 @@ func acquireNodeLease(
 				return nil, errors.New("cannot acquire lease when draining")
 			}
 			newest := m.findNewest(id)
-			var minExpiration hlc.Timestamp
-			var lastLease *storedLease
+			var currentVersion descpb.DescriptorVersion
 			if newest != nil {
-				minExpiration = newest.getExpiration(ctx)
-				lastLease = newest.getStoredLease()
+				currentVersion = newest.GetVersion()
 			}
-			// A session will be populated within the leasing infrastructure only when
-			// session based leasing is enabled. This session will be stored both inside
-			// the leases table and descriptor version states in memory, and can be
-			// consulted for the expiry depending on the mode
-			// (see SessionBasedLeasingMode).
-			var session sqlliveness.Session
-			if m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDualWrite) {
-				var err error
-				session, err = m.storage.livenessProvider.Session(ctx)
-				if err != nil {
-					return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
-				}
+			// A session will always be populated, since we use session based leasing.
+			session, err := m.storage.livenessProvider.Session(ctx)
+			if err != nil {
+				return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
 			}
-			desc, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, session, id, lastLease)
+			desc, regionPrefix, err := m.storage.acquire(ctx, session, id, currentVersion)
 			if err != nil {
 				return nil, err
+			}
+			// If a nil descriptor is returned, then the latest version has already
+			// been leased. So, nothing needs to be done here.
+			if desc == nil {
+				return true, nil
 			}
 			t := m.findDescriptorState(id, false /* create */)
 			if t == nil {
@@ -959,15 +878,12 @@ func acquireNodeLease(
 			t.mu.takenOffline = false
 			defer t.mu.Unlock()
 			var newDescVersionState *descriptorVersionState
-			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration, session, regionPrefix)
+			newDescVersionState, err = t.upsertLeaseLocked(ctx, desc, session, regionPrefix)
 			if err != nil {
 				return nil, err
 			}
 			if newDescVersionState != nil {
 				m.names.insert(ctx, newDescVersionState)
-			}
-			if toRelease != nil {
-				releaseLease(ctx, toRelease, m)
 			}
 			return true, nil
 		})
@@ -1066,20 +982,16 @@ func purgeOldVersions(
 				leaseToExpire.mu.Lock()
 				defer leaseToExpire.mu.Unlock()
 				defer m.mu.Unlock()
-				// In dual-write mode there will already be an expiration set,
-				// so we don't need to modify it if it's valid.
-				if leaseToExpire.mu.expiration.Less(m.storage.db.KV().Clock().Now()) {
-					// Expire any active old versions into the future based on the lease
-					// duration. If the session lifetime had been longer then use
-					// that. We will only expire later into the future, then what
-					// was previously observed, since transactions may have already
-					// picked this time. If the lease duration is zero, then we are
-					// looking at instant expiration for testing.
-					leaseDuration := LeaseDuration.Get(&m.storage.settings.SV)
-					leaseToExpire.mu.expiration = m.storage.db.KV().Clock().Now().AddDuration(leaseDuration)
-					if sessionExpiry := leaseToExpire.mu.session.Expiration(); leaseDuration > 0 && leaseToExpire.mu.expiration.Less(sessionExpiry) {
-						leaseToExpire.mu.expiration = sessionExpiry
-					}
+				// Expire any active old versions into the future based on the lease
+				// duration. If the session lifetime had been longer then use
+				// that. We will only expire later into the future, then what
+				// was previously observed, since transactions may have already
+				// picked this time. If the lease duration is zero, then we are
+				// looking at instant expiration for testing.
+				leaseDuration := LeaseDuration.Get(&m.storage.settings.SV)
+				leaseToExpire.mu.expiration = m.storage.db.KV().Clock().Now().AddDuration(leaseDuration)
+				if sessionExpiry := leaseToExpire.mu.session.Expiration(); leaseDuration > 0 && leaseToExpire.mu.expiration.Less(sessionExpiry) {
+					leaseToExpire.mu.expiration = sessionExpiry
 				}
 				leaseToExpire.mu.session = nil
 				if leaseToExpire.mu.lease != nil {
@@ -1288,8 +1200,7 @@ func NewLeaseManager(
 	lm.leaseGeneration.Swap(1) // Start off with 1 as the initial value.
 	lm.storage.regionPrefix = &atomic.Value{}
 	lm.storage.regionPrefix.Store(enum.One)
-	lm.storage.sessionBasedLeasingMode = lm
-	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher, lm)
+	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher)
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
 	lm.waitForInit = make(chan struct{})
@@ -1382,19 +1293,9 @@ func (m *Manager) AcquireByName(
 		return desc, nil
 	}
 	// Check if we have cached an ID for this name.
-	descVersion, expiration := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
+	descVersion, _ := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
 	if descVersion != nil {
 		if descVersion.GetModificationTime().LessEq(timestamp) {
-			// If this lease is nearly expired, ensure a renewal is queued.
-			durationUntilExpiry := time.Duration(expiration.WallTime - timestamp.WallTime)
-			if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
-				if t := m.findDescriptorState(descVersion.GetID(), false /* create */); t != nil {
-					if err := t.maybeQueueLeaseRenewal(
-						ctx, m, descVersion); err != nil {
-						return nil, err
-					}
-				}
-			}
 			return validateDescriptorForReturn(descVersion)
 		}
 		// m.names.get() incremented the refcount, we decrement it to get a new
@@ -1551,17 +1452,8 @@ func (m *Manager) Acquire(
 ) (LeasedDescriptor, error) {
 	for {
 		t := m.findDescriptorState(id, true /*create*/)
-		desc, latest, err := t.findForTimestamp(ctx, timestamp)
+		desc, _, err := t.findForTimestamp(ctx, timestamp)
 		if err == nil {
-			// If the latest lease is nearly expired, ensure a renewal is queued.
-			if latest {
-				durationUntilExpiry := time.Duration(desc.getExpiration(ctx).WallTime - timestamp.WallTime)
-				if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
-					if err := t.maybeQueueLeaseRenewal(ctx, m, desc); err != nil {
-						return nil, err
-					}
-				}
-			}
 			return desc, nil
 		}
 		switch {
@@ -1700,17 +1592,6 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 				// descriptors.
 				if desc == nil {
 					continue
-				}
-
-				// If the lease table is updated, and we are in dual write,
-				// then it's a sign to refresh all leases.
-				if desc.GetID() == keys.LeaseTableID && (m.getSessionBasedLeasingMode(ctx) == SessionBasedDualWrite ||
-					m.getSessionBasedLeasingMode(ctx) == SessionBasedDrain) {
-					select {
-					case m.refreshAllLeases <- struct{}{}:
-					case <-ctx.Done():
-					case <-s.ShouldQuiesce():
-					}
 				}
 
 				if evFunc := m.testingKnobs.TestingDescriptorUpdateEvent; evFunc != nil {
@@ -1952,15 +1833,13 @@ func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) 
 // range feed progress / recovery, and supporting legacy expiry
 // based leases.
 func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
-	renewalsDisabled := false
+	// The refresh loop is used to clean up leases that have expired (because of
+	// a new version), and track range feed availability. This will run based on
+	// the lease duration, but will still periodically run if the duration is zero.
 	getRefreshTimerDuration := func() time.Duration {
 		if LeaseDuration.Get(&m.storage.settings.SV) <= 0 {
-			// Session based leasing still needs a refresh loop to expire
-			// leases, so we will execute that without any renewals.
-			renewalsDisabled = true
 			return 200 * time.Millisecond
 		} else {
-			renewalsDisabled = false
 			return m.storage.jitteredLeaseDuration()
 		}
 	}
@@ -2010,14 +1889,6 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 
 				// Clean up session based leases that have expired.
 				m.cleanupExpiredSessionLeases(ctx)
-
-				// Refreshing leases is enabled unless we are past the drain mode,
-				// after which no expiry based leases should be created or updated.
-				// Existing ones can still be queried by schema changes.
-				if !m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDrain) &&
-					!renewalsDisabled {
-					m.refreshSomeLeases(ctx, false /*refreshAll*/)
-				}
 			}
 		}
 	})
@@ -2026,12 +1897,6 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 // handleRangeFeedAvailability detects if there is any availability issue
 // with the range feed and attempts restarts.
 func (m *Manager) handleRangeFeedAvailability(ctx context.Context) {
-	// Range feed availability checks can be skipped until session based
-	// leasing is active.
-	if !m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDrain) {
-		return
-	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -2219,13 +2084,9 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
 
-		// Read orphaned leases, and join against the internal session
-		// table in case we have dual written leases.
-		query := `
-SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.version), l.expiration, s."session_id", l.crdb_region, s.crdb_region FROM
-	 system.public.lease as l FULL OUTER JOIN "".crdb_internal.kv_session_based_leases as s ON l."nodeID"=s."sql_instance_id" AND
-	  l."descID"=s."desc_id" AND l.version=s.version
-		WHERE COALESCE(l."nodeID", s."sql_instance_id") =%d
+		// Read orphaned leases from the system.lease table.
+		query := `SELECT s."desc_id",  s.version, s."session_id", s.crdb_region FROM system.lease as s 
+		WHERE s."sql_instance_id"=%d
 `
 		sqlQuery := fmt.Sprintf(query, instanceID)
 
@@ -2238,13 +2099,11 @@ SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.vers
 				if err := txn.KV().SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: timeThreshold}); err != nil {
 					return err
 				}
-				return txn.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V23_2()}, func() error {
-					var err error
-					rows, err = txn.QueryBuffered(
-						ctx, "read orphaned leases", txn.KV(), sqlQuery,
-					)
-					return err
-				})
+				var err error
+				rows, err = txn.QueryBuffered(
+					ctx, "read orphaned leases", txn.KV(), sqlQuery,
+				)
+				return err
 			})
 		}); err != nil {
 			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
@@ -2260,22 +2119,13 @@ SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.vers
 				id:      descpb.ID(tree.MustBeDInt(row[0])),
 				version: int(tree.MustBeDInt(row[1])),
 			}
-			// Session based leases will not have a timestamp.
 			if row[2] != tree.DNull {
-				lease.expiration = tree.MustBeDTimestamp(row[2])
+				lease.sessionID = []byte(tree.MustBeDBytes(row[2]))
 			}
-			if row[3] != tree.DNull {
-				lease.sessionID = []byte(tree.MustBeDBytes(row[3]))
-			}
-			if ed, ok := row[4].(*tree.DEnum); ok {
+			if ed, ok := row[3].(*tree.DEnum); ok {
 				lease.prefix = ed.PhysicalRep
-			} else if bd, ok := row[4].(*tree.DBytes); ok {
+			} else if bd, ok := row[3].(*tree.DBytes); ok {
 				lease.prefix = []byte((*bd))
-			}
-			if len(row) >= 6 && lease.prefix == nil {
-				if bd, ok := row[5].(*tree.DBytes); ok {
-					lease.prefix = []byte((*bd))
-				}
 			}
 			if err := m.stopper.RunAsyncTaskEx(
 				ctx,
