@@ -901,8 +901,8 @@ Scan /Table/115/{1-2} lock Exclusive (Block, Unreplicated)
 fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>
 fetched: /tu/tu_pkey/1/b:cf=1 -> 2
 fetched: /tu/tu_pkey/1/c/d:cf=2 -> /4/4
-Del /Table/115/1/1/1/1
-Del /Table/115/1/1/2/1
+Del (locking) /Table/115/1/1/1/1
+Del (locking) /Table/115/1/1/2/1
 fast path completed
 rows affected: 1
 
