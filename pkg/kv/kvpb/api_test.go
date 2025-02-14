@@ -306,7 +306,7 @@ func TestContentionEvent_SafeFormat(t *testing.T) {
 		Key:     roachpb.Key("foo"),
 		TxnMeta: enginepb.TxnMeta{ID: uuid.FromStringOrNil("51b5ef6a-f18f-4e85-bc3f-c44e33f2bb27"), CoordinatorNodeID: 6},
 	}
-	const exp = redact.RedactableString(`conflicted with ‹51b5ef6a-f18f-4e85-bc3f-c44e33f2bb27› on ‹"foo"› for 0.000s`)
+	const exp = redact.RedactableString(`conflicted with 51b5ef6a-f18f-4e85-bc3f-c44e33f2bb27 on ‹"foo"› for 0.000s`)
 	require.Equal(t, exp, redact.Sprint(ce))
 }
 
