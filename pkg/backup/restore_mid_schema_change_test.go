@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -238,7 +239,7 @@ func restoreMidSchemaChange(
 		dir, dirCleanupFn := testutils.TempDir(t)
 		params := base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				ExternalIODir: dir,
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 				Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			},
 		}

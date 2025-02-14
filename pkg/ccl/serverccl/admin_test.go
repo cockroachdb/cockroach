@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -121,7 +122,8 @@ func TestAdminAPIJobs(t *testing.T) {
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Fails with the default test tenant. Tracked with #76378.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     dir})
+		StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
+	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 

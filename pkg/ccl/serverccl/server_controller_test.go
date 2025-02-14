@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -68,15 +69,15 @@ func TestSharedProcessTenantNodeLocalAccess(t *testing.T) {
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
-				ExternalIODir:     dirs[0],
+				StorageConfig:     storagepb.NodeConfig{ExternalIODir: dirs[0]},
 			},
 			1: {
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
-				ExternalIODir:     dirs[1],
+				StorageConfig:     storagepb.NodeConfig{ExternalIODir: dirs[1]},
 			},
 			2: {
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
-				ExternalIODir:     dirs[2],
+				StorageConfig:     storagepb.NodeConfig{ExternalIODir: dirs[2]},
 			},
 		},
 	})

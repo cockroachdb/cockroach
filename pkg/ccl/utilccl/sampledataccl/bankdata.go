@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -29,7 +30,10 @@ func toBackup(
 ) (*Backup, error) {
 	// TODO(dan): Get rid of the `t testing.TB` parameter and this `TestServer`.
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: externalIODir})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: externalIODir},
+	},
+	)
 	defer s.Stopper().Stop(ctx)
 	if _, err := db.Exec(`CREATE DATABASE data`); err != nil {
 		return nil, err

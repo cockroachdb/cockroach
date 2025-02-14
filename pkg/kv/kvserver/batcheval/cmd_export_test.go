@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -53,7 +54,7 @@ func TestExportCmd(t *testing.T) {
 	defer dirCleanupFn()
 	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109429),
-		ExternalIODir:     dir,
+		StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer srv.Stopper().Stop(ctx)
 	ts := srv.ApplicationLayer()

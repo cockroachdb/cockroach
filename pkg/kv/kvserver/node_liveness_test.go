@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -160,12 +161,9 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 			ReplicationMode:     base.ReplicationManual,
 			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
-				StoreSpecs: []base.StoreSpec{
-					{
-						InMemory:    true,
-						StickyVFSID: "1",
-					},
-				},
+				StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+					{InMemory: true, StickyVFSID: "1"},
+				}},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
@@ -468,11 +466,8 @@ func TestNodeLivenessRestart(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -838,11 +833,8 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -1179,11 +1171,8 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+				{InMemory: true, StickyVFSID: strconv.FormatInt(int64(i), 10)}},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{

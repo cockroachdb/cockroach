@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -23,36 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/vfs"
 )
 
 // newPlanStore creates a plan store inside the first store's directory or
 // inside a vfs for the first store if in memory configuration is used.
 // This function will respect sticky in-memory configuration of test clusters.
-func newPlanStore(cfg Config) (loqrecovery.PlanStore, error) {
-	spec := cfg.Stores.Specs[0]
-	fs := vfs.Default
-	path := spec.Path
-	if spec.InMemory {
-		path = ""
-		if spec.StickyVFSID != "" {
-			if cfg.TestingKnobs.Server == nil {
-				return loqrecovery.PlanStore{}, errors.AssertionFailedf("Could not create a sticky " +
-					"engine no server knobs available to get a registry. " +
-					"Please use Knobs.Server.StickyVFSRegistry to provide one.")
-			}
-			knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
-			if knobs.StickyVFSRegistry == nil {
-				return loqrecovery.PlanStore{}, errors.Errorf("Could not create a sticky " +
-					"engine no registry available. Please use " +
-					"Knobs.Server.StickyVFSRegistry to provide one.")
-			}
-			fs = knobs.StickyVFSRegistry.Get(spec.StickyVFSID)
-		} else {
-			fs = vfs.NewMem()
-		}
-	}
-	return loqrecovery.NewPlanStore(path, fs), nil
+func newPlanStore(cfg Config, env *fs.Env) (loqrecovery.PlanStore, error) {
+	return loqrecovery.NewPlanStore(env.Dir, env), nil
 }
 
 func logPendingLossOfQuorumRecoveryEvents(ctx context.Context, stores *kvserver.Stores) {

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -97,10 +98,9 @@ func TestShowRangesMultipleStores(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Locality:   roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "1"}}},
-				StoreSpecs: []base.StoreSpec{base.DefaultTestStoreSpec, base.DefaultTestStoreSpec},
+				Locality:    roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "1"}}},
+				StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{base.DefaultTestStoreSpec, base.DefaultTestStoreSpec}},
 			},
-
 			ReplicationMode: base.ReplicationAuto,
 		},
 	)
@@ -108,15 +108,15 @@ func TestShowRangesMultipleStores(t *testing.T) {
 	// NodeID=2, StoreID=3,4
 	tc.AddAndStartServer(t,
 		base.TestServerArgs{
-			Locality:   roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "2"}}},
-			StoreSpecs: []base.StoreSpec{base.DefaultTestStoreSpec, base.DefaultTestStoreSpec},
+			Locality:    roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "2"}}},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{base.DefaultTestStoreSpec, base.DefaultTestStoreSpec}},
 		},
 	)
 	// NodeID=3, StoreID=5,6
 	tc.AddAndStartServer(t,
 		base.TestServerArgs{
-			Locality:   roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "3"}}},
-			StoreSpecs: []base.StoreSpec{base.DefaultTestStoreSpec, base.DefaultTestStoreSpec},
+			Locality:    roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "3"}}},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{base.DefaultTestStoreSpec, base.DefaultTestStoreSpec}},
 		},
 	)
 	assert.NoError(t, tc.WaitForFullReplication())

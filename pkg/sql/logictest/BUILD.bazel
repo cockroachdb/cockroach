@@ -81,6 +81,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlstats",
         "//pkg/sql/stats",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/floatcmp",

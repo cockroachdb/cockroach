@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -163,7 +164,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Locality = params.Locality
 	cfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	cfg.DisableSQLServer = params.DisableSQLServer
-	cfg.ExternalIODir = params.ExternalIODir
+	cfg.StorageConfig = params.StorageConfig
 	if params.TraceDir != "" {
 		if err := initTraceDir(params.TraceDir); err == nil {
 			cfg.InflightTraceDirName = params.TraceDir
@@ -249,14 +250,14 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
-	if len(params.StoreSpecs) == 0 {
-		params.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
+	if len(params.StoreConfig.Stores) == 0 {
+		params.StoreConfig.Stores = []storagepb.StoreSpec{base.DefaultTestStoreSpec}
 	}
 	// Validate the store specs.
-	for _, storeSpec := range params.StoreSpecs {
+	for _, storeSpec := range params.StoreConfig.Stores {
 		if storeSpec.InMemory {
-			if storeSpec.Size.Percent > 0 {
-				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
+			if storeSpec.Properties.Percent > 0 {
+				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %v", storeSpec))
 			}
 		} else {
 			// The default store spec is in-memory, so if this one is on-disk then
@@ -281,7 +282,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			}
 		}
 	}
-	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
+
+	cfg.StorageConfig = params.StoreConfig
 	if params.TempStorageConfig.InMemory || params.TempStorageConfig.Path != "" {
 		cfg.TempStorageConfig = params.TempStorageConfig
 		cfg.TempStorageConfig.Settings = st
@@ -566,7 +568,7 @@ func (ts *testServer) TestingKnobs() *base.TestingKnobs {
 
 // ExternalIODir is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) ExternalIODir() string {
-	return ts.cfg.ExternalIODir
+	return ts.cfg.StorageConfig.ExternalIODir
 }
 
 // SQLServerInternal is part of the serverutils.ApplicationLayerInterface.
@@ -613,7 +615,7 @@ func (ts *testServer) startDefaultTestTenant(
 		MemoryPoolSize:            ts.params.SQLMemoryPoolSize,
 		TempStorageConfig:         &tempStorageConfig,
 		Locality:                  ts.params.Locality,
-		ExternalIODir:             ts.params.ExternalIODir,
+		StorageConfig:             ts.params.StorageConfig,
 		ExternalIODirConfig:       ts.params.ExternalIODirConfig,
 		ForceInsecure:             ts.Insecure(),
 		UseDatabase:               ts.params.UseDatabase,
@@ -758,7 +760,7 @@ func (ts *testServer) grantDefaultTenantCapabilities(
 	// cases, we only set the nodelocal storage capability if the caller has
 	// configured an ExternalIODir since nodelocal storage only works with that
 	// configured.
-	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
+	shouldGrantNodelocalCap := ts.params.StorageConfig.ExternalIODir != ""
 	if shouldGrantNodelocalCap {
 		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
 			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", tenantID.ToUint64())
@@ -954,7 +956,7 @@ func (t *testTenant) RPCAddr() string {
 
 // ExternalIODir is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) ExternalIODir() string {
-	return t.Cfg.ExternalIODir
+	return t.Cfg.StorageConfig.ExternalIODir
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
@@ -1716,7 +1718,7 @@ func (ts *testServer) StartTenant(
 	baseCfg.CPUProfileDirName = ts.Cfg.BaseConfig.CPUProfileDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 	baseCfg.ExternalIODirConfig = params.ExternalIODirConfig
-	baseCfg.ExternalIODir = params.ExternalIODir
+	baseCfg.StorageConfig = params.StorageConfig
 
 	// Grant the tenant the default capabilities.
 	if err := ts.grantDefaultTenantCapabilities(ctx, params.TenantID, params.SkipTenantCheck); err != nil {
@@ -2410,10 +2412,12 @@ var TestServerFactory = testServerFactoryImpl{}
 // MakeRangeTestServerargs is part of the rangetestutils.TestServerFactory interface.
 func (testServerFactoryImpl) MakeRangeTestServerArgs() base.TestServerArgs {
 	return base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec,
+		StoreConfig: storagepb.NodeConfig{
+			Stores: []storagepb.StoreSpec{
+				base.DefaultTestStoreSpec,
+				base.DefaultTestStoreSpec,
+				base.DefaultTestStoreSpec,
+			},
 		},
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{

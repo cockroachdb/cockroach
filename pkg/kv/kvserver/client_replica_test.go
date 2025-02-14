@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -2209,12 +2210,9 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 			ReplicationMode:     base.ReplicationManual,
 			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
-				StoreSpecs: []base.StoreSpec{
-					{
-						InMemory:    true,
-						StickyVFSID: "1",
-					},
-				},
+				StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+					{InMemory: true, StickyVFSID: "1"},
+				}},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						WallClock:         manual,
@@ -4692,12 +4690,9 @@ func TestTenantID(t *testing.T) {
 	// fail sometimes when using secure connections.
 	stickySpecTestServerArgs := base.TestServerArgs{
 		Insecure: true,
-		StoreSpecs: []base.StoreSpec{
-			{
-				InMemory:    true,
-				StickyVFSID: "1",
-			},
-		},
+		StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+			{InMemory: true, StickyVFSID: "1"},
+		}},
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				StickyVFSRegistry: stickyVFSRegistry,

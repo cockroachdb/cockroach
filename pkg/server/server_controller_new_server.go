@@ -190,8 +190,8 @@ func makeSharedProcessTenantServerConfig(
 	//
 	// First, determine if there's a disk store or whether we will
 	// use an in-memory store.
-	candidateSpec := kvServerCfg.Stores.Specs[0]
-	for _, storeSpec := range kvServerCfg.Stores.Specs {
+	candidateSpec := kvServerCfg.StorageConfig.Stores[0]
+	for _, storeSpec := range kvServerCfg.StorageConfig.Stores {
 		if storeSpec.InMemory {
 			continue
 		}
@@ -313,10 +313,10 @@ func makeSharedProcessTenantServerConfig(
 		useStore := tempStorageCfg.Spec
 		// TODO(knz): Make tempDir configurable.
 		tempDir := useStore.Path
-		if tempStorageCfg.Path, err = fs.CreateTempDir(tempDir, TempDirPrefix, stopper); err != nil {
-			return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
-		}
 		if useStore.Path != "" {
+			if tempStorageCfg.Path, err = fs.CreateTempDir(tempDir, TempDirPrefix, stopper); err != nil {
+				return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
+			}
 			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
 			if err := fs.RecordTempDir(recordPath, tempStorageCfg.Path); err != nil {
 				return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not record temp dir")
@@ -327,7 +327,9 @@ func makeSharedProcessTenantServerConfig(
 	sqlCfg = MakeSQLConfig(tenantID, tempStorageCfg)
 	baseCfg.ExternalIODirConfig = kvServerCfg.BaseConfig.ExternalIODirConfig
 
-	baseCfg.ExternalIODir = kvServerCfg.BaseConfig.ExternalIODir
+	// TODO(baptist): Validate if the entire storage config should be copied or
+	// if some needs to be stripped out as we add more to StorageConfig.
+	baseCfg.StorageConfig = kvServerCfg.StorageConfig
 
 	// Use the internal connector instead of the network.
 	// See: https://github.com/cockroachdb/cockroach/issues/84591

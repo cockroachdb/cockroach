@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package base
+package storagepb
 
 import (
 	"bytes"
@@ -15,8 +15,6 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -50,12 +48,6 @@ func GetAbsoluteFSPath(fieldName string, p string) (string, error) {
 	return ret, nil
 }
 
-// ProvisionedRateSpec is an optional part of the StoreSpec.
-type ProvisionedRateSpec struct {
-	// ProvisionedBandwidth is the bandwidth provisioned for this store in bytes/s.
-	ProvisionedBandwidth int64
-}
-
 func newStoreProvisionedRateSpec(
 	field redact.SafeString, value string,
 ) (ProvisionedRateSpec, error) {
@@ -86,32 +78,7 @@ func newStoreProvisionedRateSpec(
 		return ProvisionedRateSpec{},
 			errors.Errorf("%s field is trying to set bandwidth to 0", field)
 	}
-	return ProvisionedRateSpec{ProvisionedBandwidth: bandwidth}, nil
-}
-
-// StoreSpec contains the details that can be specified in the cli pertaining
-// to the --store flag.
-type StoreSpec struct {
-	Path        string
-	Size        storagepb.SizeSpec
-	BallastSize *storagepb.SizeSpec
-	InMemory    bool
-	Attributes  roachpb.Attributes
-	// StickyVFSID is a unique identifier associated with a given store which
-	// will preserve the in-memory virtual file system (VFS) even after the
-	// storage engine has been closed. This only applies to in-memory storage
-	// engine.
-	StickyVFSID string
-	// PebbleOptions contains Pebble-specific options in the same format as a
-	// Pebble OPTIONS file. For example:
-	// [Options]
-	// delete_range_flush_delay=2s
-	// flush_split_bytes=4096
-	PebbleOptions string
-	// EncryptionOptions is set if encryption is enabled.
-	EncryptionOptions *storagepb.EncryptionOptions
-	// ProvisionedRateSpec is optional.
-	ProvisionedRateSpec ProvisionedRateSpec
+	return ProvisionedRateSpec{Bandwidth: bandwidth}, nil
 }
 
 // String returns a fully parsable version of the store spec.
@@ -124,20 +91,20 @@ func (ss StoreSpec) String() string {
 	if ss.InMemory {
 		fmt.Fprint(&buffer, "type=mem,")
 	}
-	if ss.Size.Capacity > 0 {
-		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.Capacity))
+	if ss.Properties.Capacity > 0 {
+		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Properties.Capacity))
 	}
-	if ss.Size.Percent > 0 {
-		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Size.Percent))
+	if ss.Properties.Percent > 0 {
+		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Properties.Percent))
 	}
-	if ss.BallastSize != nil {
-		if ss.BallastSize.Capacity > 0 {
-			fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.Capacity))
-		}
-		if ss.BallastSize.Percent > 0 {
-			fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent))
-		}
+	//	if ss.Ballast != nil {
+	if ss.Ballast.Capacity > 0 {
+		fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.Ballast.Capacity))
 	}
+	if ss.Ballast.Percent > 0 {
+		fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.Ballast.Percent))
+	}
+	//	}
 	if len(ss.Attributes.Attrs) > 0 {
 		fmt.Fprint(&buffer, "attrs=")
 		for i, attr := range ss.Attributes.Attrs {
@@ -148,15 +115,15 @@ func (ss StoreSpec) String() string {
 		}
 		fmt.Fprintf(&buffer, ",")
 	}
-	if len(ss.PebbleOptions) > 0 {
-		optsStr := strings.Replace(ss.PebbleOptions, "\n", " ", -1)
+	if len(ss.Options) > 0 {
+		optsStr := strings.Replace(ss.Options, "\n", " ", -1)
 		fmt.Fprint(&buffer, "pebble=")
 		fmt.Fprint(&buffer, optsStr)
 		fmt.Fprint(&buffer, ",")
 	}
-	if ss.ProvisionedRateSpec.ProvisionedBandwidth > 0 {
+	if ss.Provisioned.Bandwidth > 0 {
 		fmt.Fprintf(&buffer, "provisioned-rate=bandwidth=%s/s,",
-			humanizeutil.IBytes(ss.ProvisionedRateSpec.ProvisionedBandwidth))
+			humanizeutil.IBytes(ss.Provisioned.Bandwidth))
 	}
 	// Trim the extra comma from the end if it exists.
 	if l := buffer.Len(); l > 0 {
@@ -167,7 +134,7 @@ func (ss StoreSpec) String() string {
 
 // IsEncrypted returns whether the StoreSpec has encryption enabled.
 func (ss StoreSpec) IsEncrypted() bool {
-	return ss.EncryptionOptions != nil
+	return ss.Encryption != nil
 }
 
 // NewStoreSpec parses the string passed into a --store flag and returns a
@@ -226,17 +193,21 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 
 		switch field {
 		case pathField:
-			ss.Path = value
+			var err error
+			ss.Path, err = GetAbsoluteFSPath(pathField, value)
+			if err != nil {
+				return StoreSpec{}, err
+			}
 		case "size":
 			var err error
 			var minBytesAllowed int64 = MinimumStoreSize
 			var minPercent float64 = 1
 			var maxPercent float64 = 100
-			ss.Size, err = storagepb.NewSizeSpec(
+			ss.Properties, err = NewSizeSpec(
 				"store",
 				value,
-				&storagepb.IntInterval{Min: &minBytesAllowed},
-				&storagepb.FloatInterval{Min: &minPercent, Max: &maxPercent},
+				&IntInterval{Min: &minBytesAllowed},
+				&FloatInterval{Min: &minPercent, Max: &maxPercent},
 			)
 			if err != nil {
 				return StoreSpec{}, err
@@ -245,16 +216,16 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			var minBytesAllowed int64
 			var minPercent float64 = 0
 			var maxPercent float64 = 50
-			ballastSize, err := storagepb.NewSizeSpec(
+			ballastSize, err := NewSizeSpec(
 				"ballast",
 				value,
-				&storagepb.IntInterval{Min: &minBytesAllowed},
-				&storagepb.FloatInterval{Min: &minPercent, Max: &maxPercent},
+				&IntInterval{Min: &minBytesAllowed},
+				&FloatInterval{Min: &minPercent, Max: &maxPercent},
 			)
 			if err != nil {
 				return StoreSpec{}, err
 			}
-			ss.BallastSize = &ballastSize
+			ss.Ballast = ballastSize
 		case "attrs":
 			// Check to make sure there are no duplicate attributes.
 			attrMap := make(map[string]struct{})
@@ -309,13 +280,13 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			if err := opts.Parse(buf.String(), nil); err != nil {
 				return StoreSpec{}, err
 			}
-			ss.PebbleOptions = buf.String()
+			ss.Options = buf.String()
 		case "provisioned-rate":
 			rateSpec, err := newStoreProvisionedRateSpec("provisioned-rate", value)
 			if err != nil {
 				return StoreSpec{}, err
 			}
-			ss.ProvisionedRateSpec = rateSpec
+			ss.Provisioned = rateSpec
 
 		default:
 			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
@@ -326,11 +297,8 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		if ss.Path != "" {
 			return StoreSpec{}, fmt.Errorf("path specified for in memory store")
 		}
-		if ss.Size.Percent == 0 && ss.Size.Capacity == 0 {
+		if ss.Properties.Percent == 0 && ss.Properties.Capacity == 0 {
 			return StoreSpec{}, fmt.Errorf("size must be specified for an in memory store")
-		}
-		if ss.BallastSize != nil {
-			return StoreSpec{}, fmt.Errorf("ballast-size specified for in memory store")
 		}
 	} else if ss.Path == "" {
 		return StoreSpec{}, fmt.Errorf("no path specified")
@@ -386,7 +354,7 @@ func PreventedStartupFile(dir string) string {
 // These files typically request operator intervention after a
 // corruption event by preventing the affected node(s) from starting
 // back up.
-func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
+func (nc *NodeConfig) PriorCriticalAlertError() (err error) {
 	addError := func(newErr error) {
 		if err == nil {
 			err = errors.New("startup forbidden by prior critical alert")
@@ -396,7 +364,7 @@ func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
 		// (combined errors only show up via %+v).
 		err = errors.WithDetailf(err, "%v", newErr)
 	}
-	for _, ss := range ssl.Specs {
+	for _, ss := range nc.Stores {
 		path := ss.PreventedStartupFile()
 		if path == "" {
 			continue
@@ -449,9 +417,7 @@ func (ssl *StoreSpecList) Set(value string) error {
 // for matching paths in the StoreSpecList and WAL failover config. Any
 // unmatched EncryptionSpec causes an error.
 func PopulateWithEncryptionOpts(
-	storeSpecs StoreSpecList,
-	walFailoverConfig *storagepb.WALFailover,
-	encryptionSpecs storagepb.EncryptionSpecList,
+	storeSpecs StoreSpecList, walFailoverConfig WALFailover, encryptionSpecs EncryptionSpecList,
 ) error {
 	for _, es := range encryptionSpecs.Specs {
 		var found bool
@@ -461,17 +427,17 @@ func PopulateWithEncryptionOpts(
 			}
 
 			// Found a matching path.
-			if storeSpecs.Specs[i].EncryptionOptions != nil {
+			if storeSpecs.Specs[i].Encryption != nil {
 				return fmt.Errorf("store with path %s already has an encryption setting",
 					storeSpecs.Specs[i].Path)
 			}
 
-			storeSpecs.Specs[i].EncryptionOptions = &es.Options
+			storeSpecs.Specs[i].Encryption = &es.Options
 			found = true
 			break
 		}
 
-		for _, externalPath := range [2]storagepb.ExternalPath{walFailoverConfig.Path, walFailoverConfig.PrevPath} {
+		for _, externalPath := range [2]ExternalPath{walFailoverConfig.Path, walFailoverConfig.PrevPath} {
 			if !externalPath.IsSet() || !es.PathMatches(externalPath.Path) {
 				continue
 			}

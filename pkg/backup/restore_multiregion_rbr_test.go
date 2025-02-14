@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -59,7 +60,7 @@ func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
 
 	sqlTC := testcluster.StartTestCluster(
 		t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-			ExternalIODir:     dir,
+			StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),

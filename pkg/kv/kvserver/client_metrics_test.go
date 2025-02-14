@@ -52,7 +52,7 @@ func checkGauge(t *testing.T, id string, g gaugeValuer, e int64) {
 func verifyStatsOnServers(
 	t *testing.T,
 	tc *testcluster.TestCluster,
-	specs map[int]base.StoreSpec,
+	specs map[int]storagepb.StoreSpec,
 	stickyRegistry fs.StickyRegistry,
 	storeIdxSlice ...int,
 ) {
@@ -247,19 +247,19 @@ func TestStoreMetrics(t *testing.T) {
 	const numServers int = 3
 	stickyVFSRegistry := fs.NewStickyRegistry()
 	stickyServerArgs := make(map[int]base.TestServerArgs)
-	specs := make(map[int]base.StoreSpec)
+	specs := make(map[int]storagepb.StoreSpec)
 	for i := 0; i < numServers; i++ {
-		spec := base.StoreSpec{
+		spec := storagepb.StoreSpec{
 			InMemory:    true,
 			StickyVFSID: strconv.FormatInt(int64(i), 10),
 			// Specify a size to trigger the BlockCache in Pebble.
-			Size: storagepb.SizeSpec{
+			Properties: storagepb.SizeSpec{
 				Capacity: 512 << 20, /* 512 MiB */
 			},
 		}
 		stickyServerArgs[i] = base.TestServerArgs{
-			CacheSize:  2 << 20, /* 2 MiB */
-			StoreSpecs: []base.StoreSpec{spec},
+			CacheSize:   2 << 20, /* 2 MiB */
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{spec}},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: stickyVFSRegistry,

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -59,7 +60,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	tc := testcluster.StartTestCluster(t, nodes,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				ExternalIODir: dir,
+				StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 			},
 		},
 	)
@@ -153,7 +154,7 @@ func TestExportNullWithEmptyNullAs(t *testing.T) {
 	defer cleanup()
 
 	tc := testcluster.StartTestCluster(
-		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}}})
 	defer tc.Stopper().Stop(ctx)
 
 	conn := tc.Conns[0]
@@ -246,7 +247,7 @@ func TestExportJoin(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}})
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -272,7 +273,7 @@ func TestExportOrder(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}})
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -293,7 +294,7 @@ func TestExportUniqueness(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}})
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -322,7 +323,7 @@ func TestExportUserDefinedTypes(t *testing.T) {
 	defer cleanup()
 
 	tc := testcluster.StartTestCluster(
-		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}}})
 	defer tc.Stopper().Stop(ctx)
 
 	conn := tc.Conns[0]
@@ -376,7 +377,7 @@ func TestExportOrderCompressed(t *testing.T) {
 		}
 	}
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}})
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -406,7 +407,7 @@ func TestExportShow(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}})
 	defer srv.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -428,7 +429,7 @@ func TestExportVectorized(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}})
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -444,7 +445,7 @@ func TestExportFeatureFlag(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}})
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -465,7 +466,7 @@ func TestExportPrivileges(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}})
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE USER testuser`)
@@ -511,7 +512,7 @@ func TestExportTargetFileSizeSetting(t *testing.T) {
 	defer cleanup()
 
 	tc := testcluster.StartTestCluster(
-		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: dir}}})
 	defer tc.Stopper().Stop(ctx)
 
 	conn := tc.Conns[0]

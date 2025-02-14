@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -161,7 +162,7 @@ func TestImportPGDump(t *testing.T) {
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	tc := serverutils.StartCluster(
-		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{StorageConfig: storagepb.NodeConfig{ExternalIODir: baseDir}}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)

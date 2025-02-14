@@ -23,6 +23,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register ExternalStorage providers.
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -41,7 +42,7 @@ func TestGCPKMSExternalConnection(t *testing.T) {
 	defer dirCleanupFn()
 
 	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer ts.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -167,7 +168,7 @@ func TestGCPKMSExternalConnectionAssumeRole(t *testing.T) {
 	defer dirCleanupFn()
 
 	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer ts.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -293,7 +294,7 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 	defer dirCleanupFn()
 
 	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer ts.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -441,7 +442,7 @@ func TestGCPExternalConnection(t *testing.T) {
 	defer dirCleanupFn()
 
 	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 	})
 	defer ts.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)

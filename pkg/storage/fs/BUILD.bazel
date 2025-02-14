@@ -15,7 +15,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/fs",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/cli/exit",
         "//pkg/settings",
         "//pkg/storage/disk",
@@ -50,7 +49,6 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":fs"],
     deps = [
-        "//pkg/base",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
