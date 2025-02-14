@@ -492,7 +492,11 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 	//
 	// TODO(mgartner): The ordering may need to be preserved in the
 	// SubqueryPrivate for SETOF UDFs.
-	stmt := udfp.Def.Body[0]
+	var cpy ReplaceFunc
+	cpy = func(e opt.Expr) opt.Expr {
+		return c.f.CopyAndReplaceDefault(e, cpy)
+	}
+	stmt := cpy(udfp.Def.Body[0])
 	returnColID := udfp.Def.BodyProps[0].Presentation[0].ID
 	res := c.f.ConstructSubquery(
 		c.f.ConstructProject(
