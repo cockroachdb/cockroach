@@ -209,7 +209,6 @@ func (m *Outbox) flush(ctx context.Context) error {
 		sendErr = pgerror.Wrap(sendErr, pgcode.InternalConnectionFailure, "outbox communication error")
 		// Make sure the stream is not used any more.
 		m.stream = nil
-		log.Dev.VWarningf(ctx, 1, "Outbox flush error: %s", sendErr)
 	} else {
 		log.VEvent(ctx, 2, "Outbox flushed")
 	}
@@ -469,8 +468,9 @@ func (m *Outbox) Err() error {
 
 // HandleStreamErr is a utility method used to handle an error when calling
 // a method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is
-// called, for all other errors flowCtxCancel is. The given error is logged with
-// the associated opName.
+// called, for all other errors flowCtxCancel is called and the error is
+// logged at WARNING level (since it cannot be sent back via the broken
+// stream).
 func HandleStreamErr(
 	ctx context.Context,
 	opName redact.SafeString,
@@ -481,7 +481,9 @@ func HandleStreamErr(
 		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
 		outboxCtxCancel()
 	} else {
-		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		// We cannot send the error back via the broken stream, so we resort to
+		// logging it.
+		log.Dev.Warningf(ctx, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
 		flowCtxCancel()
 	}
 }
