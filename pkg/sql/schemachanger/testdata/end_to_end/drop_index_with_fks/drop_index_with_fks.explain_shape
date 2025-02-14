@@ -2,7 +2,7 @@
 CREATE TABLE t (i INT PRIMARY KEY, j INT, m INT);
 CREATE TABLE k (i INT PRIMARY KEY, j INT, m INT);
 CREATE UNIQUE INDEX idx ON t(j, i) USING HASH;
-CREATE UNIQUE INDEX idx2 ON k(j, i) USING HASH;
+CREATE UNIQUE INDEX idx2 ON k(j, i);
 INSERT INTO t VALUES (-1, -1), (-2, -2), (-3, -3);
 INSERT INTO k VALUES (-1, -1), (-2, -2), (-3, -3);
 CREATE TABLE t_ref(i INT PRIMARY KEY,
@@ -17,4 +17,4 @@ CREATE TABLE t_ref(i INT PRIMARY KEY,
 EXPLAIN (DDL, SHAPE) DROP INDEX idx CASCADE;
 ----
 Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE;
- └── execute 3 system table mutations transactions
+ └── execute 4 system table mutations transactions

@@ -16,7 +16,7 @@ CREATE TABLE t_ref(i INT PRIMARY KEY,
 
 # Intentionally, only add $stageKey+[1,2] into t, and
 # $stageKey+[0,1] into k to detect when the FK is officially
-# disabled. Beofre the first stage we expect it to be enabled
+# disabled. Before the first stage we expect it to be enabled
 # here.
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
 INSERT INTO t (i, j) VALUES($stageKey+1, $stageKey+1);
@@ -38,22 +38,26 @@ INSERT INTO t_ref (i, j) VALUES($stageKey, $stageKey);
 ----
 
 
-
 # Each insert will be injected twice per stage for t and
 # k.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
 SELECT count(*)=($successfulStageCount*2)+3 FROM t;
 SELECT count(*)=($successfulStageCount*2)+3 FROM k;
-SELECT count(*)=3 FROM t_ref;
 ----
 true
 
 # For t_ref the first stage will only get a single insert.
 # The second stage can get two inserts, because the foreign
 # key ref is disabled.
-stage-query phase=PostCommitNonRevertiblePhase stage=2
-SELECT count(*)=3 FROM t_ref;
----
+stage-query phase=PostCommitNonRevertiblePhase stage=1
+SELECT count(*)=$successfulStageCount FROM t_ref;
+----
+true
+
+# First stage only had one insert, all others will have 2 inserts.
+stage-query phase=PostCommitNonRevertiblePhase stage=2:
+SELECT count(*)=(($successfulStageCount-1)*2)+1 FROM t_ref;
+----
 true
 
 test
