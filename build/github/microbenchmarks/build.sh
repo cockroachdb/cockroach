@@ -33,4 +33,4 @@ bazel build "//${TEST_PKG}:tests_test" \
 
 # Copy to GCS
 bazel_bin=$(bazel info bazel-bin --config=crosslinux)
-gcloud storage cp "${bazel_bin}/pkg/sql/tests/${pkg_last}_test_/${pkg_last}_test" "${output_url}/${pkg_bin}"
+gcloud storage cp -n "${bazel_bin}/pkg/sql/tests/${pkg_last}_test_/${pkg_last}_test" "${output_url}/${pkg_bin}"
