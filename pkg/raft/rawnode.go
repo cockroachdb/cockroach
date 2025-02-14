@@ -290,6 +290,7 @@ func (rn *RawNode) Ready() Ready {
 	}
 	r.msgsAfterAppend = nil
 
+	r.stateChanged = false
 	return rd
 }
 
@@ -512,7 +513,7 @@ func (rn *RawNode) HasReady() bool {
 	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
 		return true
 	}
-	return false
+	return rn.raft.stateChanged
 }
 
 // Advance notifies the RawNode that the application has applied all the updates

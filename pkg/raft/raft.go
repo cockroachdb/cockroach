@@ -443,6 +443,15 @@ type raft struct {
 	// StoreLiveness support from a majority quorum.
 	testingDisablePreCampaignStoreLivenessCheck bool
 
+	// stateChanged is a "dirty bit" set to true when the raft state is changed in
+	// a way that requires the upper layer to observe a Ready signal. Reset to
+	// false when Ready is obtained.
+	//
+	// At the moment, it is only set when the state changes in a way that is not
+	// already registered as "Ready". For example, when the leader's replication
+	// flow to any peer changes state (e.g. switches to/from StateReplicate).
+	stateChanged bool
+
 	tick func()
 	step stepFunc
 
@@ -1395,16 +1404,19 @@ func (r *raft) becomeLeader() {
 func (r *raft) becomeProbe(pr *tracker.Progress) {
 	r.metrics.FlowsEnteredStateProbe.Inc(1)
 	pr.BecomeProbe()
+	r.stateChanged = true
 }
 
 func (r *raft) becomeReplicate(pr *tracker.Progress) {
 	r.metrics.FlowsEnteredStateReplicate.Inc(1)
 	pr.BecomeReplicate()
+	r.stateChanged = true
 }
 
 func (r *raft) becomeSnapshot(pr *tracker.Progress, index uint64) {
 	r.metrics.FlowsEnteredStateSnapshot.Inc(1)
 	pr.BecomeSnapshot(index)
+	r.stateChanged = true
 }
 
 func (r *raft) hup(t CampaignType) {
