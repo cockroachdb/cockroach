@@ -78,6 +78,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

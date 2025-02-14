@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,7 +90,7 @@ func BenchmarkTCPHLineItem(b *testing.B) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
-	url, cleanup := sqlutils.PGUrl(b, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := pgurlutils.PGUrl(b, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())

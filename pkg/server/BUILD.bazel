@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "server",
@@ -287,9 +288,8 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/storage/storagepb",
-        "//pkg/testutils",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/ts",
         "//pkg/ts/catalog",
         "//pkg/ui",
@@ -558,6 +558,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/listenerutil",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -709,4 +710,11 @@ go_test(
         ],
         "//conditions:default": [],
     }),
+)
+
+disallowed_imports_test(
+    "server",
+    disallowed_list = [
+        "//pkg/testutils",
+    ],
 )

@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/bench/rttanalysis"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 )
 
 const numNodes = 4
@@ -37,7 +37,7 @@ var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(f
 	if _, err := db.Exec("GRANT admin TO testuser"); err != nil {
 		tb.Fatal(err)
 	}
-	url, testuserCleanup := sqlutils.PGUrl(
+	url, testuserCleanup := pgurlutils.PGUrl(
 		tb, cluster.Server(0).ApplicationLayer().AdvSQLAddr(), "rttanalysisccl", url.User("testuser"),
 	)
 	conn, err := gosql.Open("postgres", url.String())

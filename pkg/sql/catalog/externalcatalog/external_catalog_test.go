@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -67,7 +68,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	require.NoError(t, err)
 
 	extractCatalog := func(tableNames ...string) (catalog externalpb.ExternalCatalog, err error) {
-		err = sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		err = sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			opName := redact.SafeString("extractCatalog")
 			planner, close := sql.NewInternalPlanner(
 				opName,
@@ -88,7 +89,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	getDatabaseSchemaIDs := func(database string) (descpb.ID, descpb.ID) {
 		var parentID descpb.ID
 		var schemaID descpb.ID
-		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		require.NoError(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, database)
 			require.NoError(t, err)
 			parentID = dbDesc.GetID()
@@ -106,14 +107,14 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 		require.Equal(t, 2, len(ingestableCatalog.Tables))
 
 		var written externalpb.ExternalCatalog
-		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		require.NoError(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			written, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
 			return err
 		}))
 		require.Equal(t, 2, len(written.Tables))
 		sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}})
 
-		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		require.NoError(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			return DropIngestedExternalCatalog(ctx, &execCfg, sqlUser, written, txn, srv.JobRegistry().(*jobs.Registry), col, "test gc")
 		}))
 		var res int
@@ -144,7 +145,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 		// since these are deprecated. So, any attempt to write these should hit
 		// an error.
 		require.ErrorContains(t,
-			sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, udtCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
 				return err
 			}),
@@ -159,14 +160,14 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 		sqlDB.Exec(t, "CREATE TABLE db1.sc1.tab3 (a INT PRIMARY KEY, b INT REFERENCES db1.sc1.tab2(a))")
 		sadCatalog, err := extractCatalog("db1.sc1.tab3")
 		require.NoError(t, err)
-		require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		require.ErrorContains(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
 			return err
 		}), "invalid outbound foreign key")
 
 		anotherSadCatalog, err := extractCatalog("db1.sc1.tab2")
 		require.NoError(t, err)
-		require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		require.ErrorContains(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, anotherSadCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
 			return err
 		}), "invalid inbound foreign key")

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -756,7 +757,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()
 
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
+	pgURL, cleanupGoDB := pgurlutils.PGUrl(
 		t, ts.AdvSQLAddr(), "StartServer", url.User(username.RootUser))
 	defer cleanupGoDB()
 	c, err := pgx.Connect(ctx, pgURL.String())

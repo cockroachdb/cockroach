@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -532,12 +531,12 @@ func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
 	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	// The ingestion job on cluster A has a pts on cluster B.
-	producerJobIDB := replicationutils.GetProducerJobIDFromLDRJob(t, dbA, jobAID)
-	replicationutils.WaitForPTSProtection(t, ctx, dbB, s, producerJobIDB, now)
+	producerJobIDB := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbA, jobAID)
+	replicationtestutils.WaitForPTSProtection(t, ctx, dbB, s, producerJobIDB, now)
 
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
-	producerJobIDA := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
-	replicationutils.WaitForPTSProtection(t, ctx, dbA, s, producerJobIDA, now)
+	producerJobIDA := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
+	replicationtestutils.WaitForPTSProtection(t, ctx, dbA, s, producerJobIDA, now)
 }
 
 // TestLogicalStreamIngestionCancelUpdatesProducerJob tests whether
@@ -561,13 +560,13 @@ func TestLogicalStreamIngestionCancelUpdatesProducerJob(t *testing.T) {
 
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
 
-	producerJobID := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
+	producerJobID := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
 	jobutils.WaitForJobToRun(t, dbA, producerJobID)
 
 	dbB.Exec(t, "CANCEL JOB $1", jobBID)
 	jobutils.WaitForJobToCancel(t, dbB, jobBID)
 	jobutils.WaitForJobToFail(t, dbA, producerJobID)
-	replicationutils.WaitForPTSProtectionToNotExist(t, ctx, dbA, s, producerJobID)
+	replicationtestutils.WaitForPTSProtectionToNotExist(t, ctx, dbA, s, producerJobID)
 }
 
 func TestRestoreFromLDR(t *testing.T) {
@@ -1217,7 +1216,7 @@ func TestHeartbeatCancel(t *testing.T) {
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
-	prodAID := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
+	prodAID := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
 
 	// Cancel the producer job and wait for the hearbeat to pick up that the stream is inactive
 	t.Logf("canceling replication producer %s", prodAID)
@@ -2495,7 +2494,7 @@ func TestFailDestAfterSourceFailure(t *testing.T) {
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
 	dbB.Exec(t, "PAUSE JOB $1", jobBID)
 
-	producerJobID := replicationutils.GetProducerJobIDFromLDRJob(t, dbA, jobBID)
+	producerJobID := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbA, jobBID)
 	dbA.Exec(t, "CANCEL JOB $1", producerJobID)
 	jobutils.WaitForJobToCancel(t, dbA, producerJobID)
 

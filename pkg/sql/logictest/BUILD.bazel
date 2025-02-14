@@ -84,6 +84,7 @@ go_library(
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/floatcmp",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/physicalplanutils",
         "//pkg/testutils/release",
         "//pkg/testutils/serverutils",

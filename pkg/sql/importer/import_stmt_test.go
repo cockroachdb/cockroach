@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -2089,7 +2090,8 @@ func TestFailedImportGC(t *testing.T) {
 	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
 	tableID := descpb.ID(dbID + 2)
 	var td catalog.TableDescriptor
-	if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	if err := sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		td, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
@@ -2536,7 +2538,7 @@ func TestImportCSVStmt(t *testing.T) {
 	t.Run("RBAC-SuperUser", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE USER testuser`)
 		sqlDB.Exec(t, `GRANT admin TO testuser`)
-		pgURL, cleanupFunc := sqlutils.PGUrl(
+		pgURL, cleanupFunc := pgurlutils.PGUrl(
 			t, tc.ApplicationLayer(0).AdvSQLAddr(), "TestImportPrivileges-testuser",
 			url.User("testuser"),
 		)
@@ -2780,7 +2782,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	rootDB := sqlutils.MakeSQLRunner(conn)
 
 	rootDB.Exec(t, `CREATE USER testuser`)
-	pgURL, cleanupFunc := sqlutils.PGUrl(
+	pgURL, cleanupFunc := pgurlutils.PGUrl(
 		t, tc.ApplicationLayer(0).AdvSQLAddr(), "TestImportPrivileges-testuser",
 		url.User("testuser"),
 	)
@@ -5212,7 +5214,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 	// Create non-root user.
 	rootDB.Exec(t, `CREATE USER testuser`)
 	rootDB.Exec(t, `ALTER ROLE testuser CONTROLJOB`)
-	pgURL, cleanupFunc := sqlutils.PGUrl(
+	pgURL, cleanupFunc := pgurlutils.PGUrl(
 		t, tc.ApplicationLayer(0).AdvSQLAddr(), "TestImportPrivileges-testuser",
 		url.User("testuser"),
 	)
@@ -6403,6 +6405,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
+		execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
 		beforeImport, err := tree.MakeDTimestampTZ(tc.Server(0).Clock().Now().GoTime(), time.Millisecond)
@@ -6470,7 +6473,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 		for _, schemaID := range schemaIDs {
 			// Expect that the schema descriptor is deleted.
-			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			if err := sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, schemaID)
 				if pgerror.GetPGCode(err) == pgcode.InvalidSchemaName {
 					return nil
@@ -6486,7 +6489,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 		for _, tableID := range tableIDs {
 			// Expect that the table descriptor is deleted.
-			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			if err := sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 				if !testutils.IsError(err, "descriptor not found") {
 					return err

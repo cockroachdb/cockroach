@@ -539,7 +539,6 @@ go_library(
         "//pkg/sql/vtable",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/testutils/serverutils",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
         "//pkg/util",
@@ -907,6 +906,7 @@ go_test(
         "//pkg/testutils/jobutils",
         "//pkg/testutils/kvclientutils",
         "//pkg/testutils/pgtest",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -1008,4 +1008,7 @@ disallowed_imports_test(
     "sql",
     # TODO(#81380): This should be flipped to "True".
     disallow_cdeps = False,
+    disallowed_list = [
+        "//pkg/testutils",
+    ],
 )

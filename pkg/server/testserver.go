@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1293,7 +1292,7 @@ func (ts *testServer) WaitForTenantCapabilities(
 	// the closed timestamp interval required to see new updates.
 	ts.tenantCapabilitiesWatcher.TestingRestart()
 
-	return testutils.SucceedsSoonError(func() error {
+	wrappedFn := func() error {
 		capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(tenID)
 		if !found {
 			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
@@ -1307,7 +1306,8 @@ func (ts *testServer) WaitForTenantCapabilities(
 		}
 
 		return nil
-	})
+	}
+	return retry.ForDuration(200*time.Second, wrappedFn)
 }
 
 // StartSharedProcessTenant is part of the serverutils.TenantControlInterface.

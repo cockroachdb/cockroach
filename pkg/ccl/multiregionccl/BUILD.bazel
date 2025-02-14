@@ -96,6 +96,7 @@ go_test(
         "//pkg/sql/sqltestutils",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/serverutils/regionlatency",
         "//pkg/testutils/skip",

@@ -120,6 +120,7 @@ go_test(
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",

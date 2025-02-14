@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -121,7 +122,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 
 	var myTableDesc *tabledesc.Mutable
 	var myOtherTableDesc *tabledesc.Mutable
-	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		myImm, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, myTableID)
 		if err != nil {
 			return err
@@ -261,7 +262,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 		}
 	}
 
-	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		myImm, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, myTableID)
 		if err != nil {
 			if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {

@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "logical",
@@ -128,7 +129,6 @@ go_test(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/storageccl",
         "//pkg/crosscluster/replicationtestutils",
-        "//pkg/crosscluster/replicationutils",
         "//pkg/crosscluster/streamclient",
         "//pkg/crosscluster/streamclient/randclient",
         "//pkg/jobs",
@@ -159,6 +159,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
@@ -184,5 +185,12 @@ go_test(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    "logical",
+    disallowed_list = [
+        "//pkg/testutils",
     ],
 )
