@@ -6,6 +6,10 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
 env:
   HEAD: ${{ github.event.pull_request.head.sha }}
   BUCKET: "cockroach-microbench-ci"
