@@ -884,6 +884,7 @@ func createLabels(v vm.VM, job string, insecure bool) map[string]string {
 		"host_public_ip": v.PublicIP,
 		"project":        v.Project,
 		"zone":           v.Zone,
+		"provider":       v.Provider,
 		"job":            job,
 	}
 	match := regionRegEx.FindStringSubmatch(v.Zone)
