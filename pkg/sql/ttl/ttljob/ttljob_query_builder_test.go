@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -488,4 +489,61 @@ func testHistogram() *aggmetric.Histogram {
 	return aggmetric.MakeBuilder().Histogram(metric.HistogramOptions{
 		SigFigs: 1,
 	}).AddChild()
+}
+
+// BenchmarkTTLExpiration will benchmark the performance of queries that mimic
+// the different kinds of TTL expiration expressions.
+func BenchmarkTTLExpiration(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.ExecMultiple(b,
+		"create database db1",
+		"create table db1.t1 (created_at timestamptz, expired_at timestamptz)",
+	)
+	// We are ingesting data. But we pick a timestamp so that the queries we do
+	// below don't return any rows. We don't want the process of returning rows
+	// to throw off the benchmark.
+	const numRows = 250000
+	for i := 0; i < numRows; i++ {
+		tdb.Exec(b,
+			fmt.Sprintf("insert into db1.t1 values (now(), now() + interval '%d seconds' +  interval '10 months')", i))
+	}
+
+	for _, tc := range []struct {
+		desc  string
+		query string
+	}{
+		{
+			desc: "query=tz_conv",
+			// This is the query that is very similar to what we only supported with
+			// TTL expressions up until 23.2
+			query: "select * from db1.t1 where (created_at AT TIME ZONE 'utc' + INTERVAL '6 months') AT TIME ZONE 'utc' > expired_at",
+		},
+		{
+			desc: "query=interval_math",
+			// In version 23.2, support was added for TTL expressions that use
+			// TIMESTAMPTZ + INTERVAL. This improvement eliminates the need to
+			// convert the time into a specific time zone, as was previously
+			// required.
+			query: "select * from db1.t1 where created_at + interval '6 months' > expired_at",
+		},
+	} {
+		// Execute the query once outside the timings to prime any caches.
+		tdb.Exec(b, tc.query)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			b.Run(tc.desc, func(b *testing.B) {
+				// Execute the query on the table. The actual results are irrelevant, as there
+				// shouldn't be any rows. We're only interested in measuring the execution time.
+				tdb.Exec(b, tc.query)
+			})
+		}
+		b.StopTimer()
+	}
 }
