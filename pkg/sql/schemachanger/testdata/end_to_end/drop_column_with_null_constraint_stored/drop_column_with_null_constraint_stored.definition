@@ -1,5 +1,5 @@
 setup
-create table t (i int primary key, j int not null);
+create table t (i int primary key, j int not null AS (i +32) STORED);
 ----
 
 # The column j is public with the constraint enforced through
