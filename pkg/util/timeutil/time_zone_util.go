@@ -67,8 +67,11 @@ func TimeZoneStringToLocation(
 	// ParseTimeZoneOffset uses strconv.ParseFloat, which returns an error when
 	// parsing fails that is expensive to construct. We first check if the string
 	// contains any non-numeric characters to see if we can skip attempting to
-	// parse it as a timezone offset.
-	containsNonNumeric := strings.ContainsAny(locStr, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/")
+	// parse it as a timezone offset. `/` is also checked since that character
+	// appears in most timezone names. Since UTC is the most commonly used
+	// timezone, we also check for that explicitly to avoid calling ContainsAny if
+	// possible.
+	containsNonNumeric := strings.EqualFold(locStr, "utc") || strings.ContainsAny(locStr, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/")
 	if !containsNonNumeric {
 		offset, _, parsed := ParseTimeZoneOffset(locStr, std)
 		if parsed {
