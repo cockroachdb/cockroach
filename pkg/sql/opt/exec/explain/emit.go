@@ -704,11 +704,19 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 		e.emitLockingPolicy(a.Params.Locking)
 
+		if val, ok := n.annotations[exec.PolicyInfoID]; ok {
+			e.emitPolicies(ob, a.Table, val.(*exec.RLSPoliciesApplied))
+		}
+
 	case valuesOp:
 		a := n.args.(*valuesArgs)
-		// Don't emit anything for the "norows" and "emptyrow" cases.
+		// Don't emit anything, except policy info, for the "norows" and "emptyrow" cases.
 		if len(a.Rows) > 0 && (len(a.Rows) > 1 || len(a.Columns) > 0) {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Columns))
+		} else if len(a.Rows) == 0 {
+			if val, ok := n.annotations[exec.PolicyInfoID]; ok {
+				e.emitPolicies(ob, nil, val.(*exec.RLSPoliciesApplied))
+			}
 		}
 
 	case filterOp:
@@ -1343,6 +1351,32 @@ func (e *emitter) emitJoinAttributes(
 		}
 	}
 	e.ob.Expr("pred", extraOnCond, appendColumns(leftCols, rightCols...))
+}
+
+func (e *emitter) emitPolicies(
+	ob *OutputBuilder, table cat.Table, applied *exec.RLSPoliciesApplied,
+) {
+	if !ob.flags.ShowPolicyInfo {
+		return
+	}
+
+	if applied.PoliciesSkippedForRole {
+		ob.AddField("policies", "exempt for role")
+	} else if applied.Policies.Len() == 0 {
+		ob.AddField("policies", "row-level security enabled, no policies applied.")
+	} else {
+		var sb strings.Builder
+		for i := 0; i < table.PolicyCount(tree.PolicyTypePermissive); i++ {
+			policy := table.Policy(tree.PolicyTypePermissive, i)
+			if applied.Policies.Contains(policy.ID) {
+				if sb.Len() > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(policy.Name.Normalize())
+			}
+		}
+		ob.AddField("policies", sb.String())
+	}
 }
 
 func printColumns(inputCols colinfo.ResultColumns) string {

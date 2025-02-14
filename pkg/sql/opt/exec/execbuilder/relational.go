@@ -378,6 +378,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	}
 
 	b.maybeAnnotateWithEstimates(ep.root, e)
+	b.maybeAnnotatePolicyInfo(ep.root, e)
 
 	if saveTableName != "" {
 		// The output columns do not change in applySaveTable.
@@ -439,6 +440,57 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 			}
 		}
 		ef.AnnotateNode(node, exec.EstimatedStatsID, &val)
+	}
+}
+
+// maybeAnnotatePolicyInfo checks if we are building against an
+// ExplainFactory and annotates the node with row-level security policy
+// information.
+func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
+	if ef, ok := b.factory.(exec.ExplainFactory); ok {
+		rlsMeta := b.mem.Metadata().GetRLSMeta()
+		// RLS is lazily initialized, and only when it comes across a RLS enabled
+		// table.
+		if !rlsMeta.IsInitialized {
+			return
+		}
+		// Helper to annotate a node for the given table ID.
+		annotateNodeForTable := func(tabID opt.TableID) {
+			// Pull out the policy information for the table the node was built for.
+			policies, found := rlsMeta.PoliciesApplied[tabID]
+			if found {
+				val := exec.RLSPoliciesApplied{
+					PoliciesSkippedForRole: rlsMeta.HasAdminRole,
+					Policies:               policies,
+				}
+				ef.AnnotateNode(node, exec.PolicyInfoID, &val)
+			}
+		}
+		switch e := e.(type) {
+		case *memo.ValuesExpr:
+			// Normally, since policies apply to specific tables, we annotate when we
+			// come across a scan of a single table. We need to annotate a "norows"
+			// value as this can be emitted when scanning a table and RLS forced all
+			// rows to be filtered out because none of the policies applied.
+			if len(e.Rows) == 0 && rlsMeta.NoPoliciesApplied {
+				ef.AnnotateNode(node, exec.PolicyInfoID, &exec.RLSPoliciesApplied{})
+			}
+		case *memo.ScanExpr:
+			annotateNodeForTable(e.Table)
+		case *memo.LookupJoinExpr:
+			annotateNodeForTable(e.Table)
+		case *memo.ZigzagJoinExpr:
+			annotateNodeForTable(e.LeftTable)
+			annotateNodeForTable(e.RightTable)
+		case *memo.InvertedJoinExpr:
+			annotateNodeForTable(e.Table)
+		case *memo.PlaceholderScanExpr:
+			annotateNodeForTable(e.Table)
+		case *memo.IndexJoinExpr:
+			annotateNodeForTable(e.Table)
+		case *memo.VectorSearchExpr:
+			annotateNodeForTable(e.Table)
+		}
 	}
 }
 
