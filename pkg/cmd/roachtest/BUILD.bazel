@@ -49,6 +49,7 @@ go_library(
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
+        "//pkg/roachprod/promhelperclient",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/gce",
         "//pkg/testutils/skip",
