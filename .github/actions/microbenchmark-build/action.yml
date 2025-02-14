@@ -23,8 +23,7 @@ runs:
     - run: |
         echo "FETCH_DEPTH=$(( ${{ github.event.pull_request.commits }} + 1 ))" >> "${GITHUB_ENV}"
       shell: bash
-    - name: Checkout revision with limited depth
-      if: inputs.ref == 'base'
+    - name: Checkout revision with required depth
       uses: actions/checkout@v4
       with:
         ref: ${{ github.event.pull_request.head.sha }}
@@ -38,7 +37,7 @@ runs:
         MERGE_BASE=$(git rev-parse HEAD~${NUM_COMMITS})
         echo "merge_base=$MERGE_BASE" >> "$GITHUB_OUTPUT"
       shell: bash
-    - name: Checkout build commit
+    - name: Checkout base if needed
       if: inputs.ref == 'base'
       uses: actions/checkout@v4
       with:
@@ -48,11 +47,9 @@ runs:
       shell: bash
       env:
         TEST_PKG: ${{ inputs.pkg }}
-    - name: Checkout Head # required for post job cleanup (if still on the base ref)
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.pull_request.head.sha || github.ref }}
+    - name: Checkout # required for post job cleanup (if still on the base ref)
       if: inputs.ref == 'base'
+      uses: actions/checkout@v4
     - name: Clean up
       run: ./build/github/cleanup-engflow-keys.sh
       shell: bash
