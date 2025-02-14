@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -185,6 +186,13 @@ func (o *Outbox) workloadType() workloadid.WorkloadType {
 		return o.flowCtx.EvalCtx.WorkloadType
 	}
 	return workloadid.WorkloadTypeUnknown
+}
+
+func (o *Outbox) cfgStopper() *stop.Stopper {
+	if o.flowCtx != nil && o.flowCtx.Cfg != nil {
+		return o.flowCtx.Cfg.Stopper
+	}
+	return nil
 }
 
 // Run starts an outbox by connecting to the provided node and pushing
@@ -347,7 +355,7 @@ func (o *Outbox) sendBatches(
 				err := stream.Send(o.scratch.msg)
 				sendCleanup()
 				if err != nil {
-					flowinfra.HandleStreamErr(ctx, "Send (streaming metadata)", err, flowCtxCancel, outboxCtxCancel)
+					flowinfra.HandleStreamErr(ctx, "Send (streaming metadata)", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 					return
 				}
 				continue
@@ -397,7 +405,7 @@ func (o *Outbox) sendBatches(
 			err = stream.Send(o.scratch.msg)
 			sendCleanup()
 			if err != nil {
-				flowinfra.HandleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
+				flowinfra.HandleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 				return
 			}
 		}
@@ -490,7 +498,7 @@ func (o *Outbox) runWithStream(
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
-				flowinfra.HandleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, outboxCtxCancel)
+				flowinfra.HandleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 				break
 			}
 			switch {
@@ -514,14 +522,14 @@ func (o *Outbox) runWithStream(
 		}
 		o.moveToDraining(ctx, reason)
 		if err := o.sendDrainedMetadata(ctx, stream, errToSend); err != nil {
-			flowinfra.HandleStreamErr(ctx, "Send (draining metadata)", err, flowCtxCancel, outboxCtxCancel)
+			flowinfra.HandleStreamErr(ctx, "Send (draining metadata)", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream
 			// is unusable.
 			// The receiver goroutine will read from the stream until any error
 			// is returned (most likely an io.EOF).
 			if err := stream.CloseSend(); err != nil {
-				flowinfra.HandleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
+				flowinfra.HandleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel, o.cfgStopper())
 			}
 		}
 	}
