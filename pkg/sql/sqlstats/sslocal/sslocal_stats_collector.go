@@ -43,11 +43,11 @@ type StatsCollector struct {
 	insightsWriter *insights.ConcurrentBufferIngester
 
 	// phaseTimes tracks session-level phase times.
-	phaseTimes *sessionphase.Times
+	phaseTimes sessionphase.Times
 
 	// previousPhaseTimes tracks the session-level phase times for the previous
 	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
-	previousPhaseTimes *sessionphase.Times
+	previousPhaseTimes sessionphase.Times
 
 	// sendInsights is true if we should send statement and transaction stats to
 	// the insights system for the current transaction. This value is reset for
@@ -96,7 +96,7 @@ func NewStatsCollector(
 		flushTarget:                      appStats,
 		currentTransactionStatementStats: currentTransactionStatementStats,
 		insightsWriter:                   insights,
-		phaseTimes:                       phaseTime.Clone(),
+		phaseTimes:                       *phaseTime,
 		uniqueServerCounts:               uniqueServerCounts,
 		st:                               st,
 		knobs:                            knobs,
@@ -115,24 +115,22 @@ func (s *StatsCollector) StatementFingerprintID() appstatspb.StmtFingerprintID {
 // PhaseTimes returns the sessionphase.Times that this StatsCollector is
 // currently tracking.
 func (s *StatsCollector) PhaseTimes() *sessionphase.Times {
-	return s.phaseTimes
+	return &s.phaseTimes
 }
 
 // PreviousPhaseTimes returns the sessionphase.Times that this StatsCollector
 // was previously tracking before being Reset.
 func (s *StatsCollector) PreviousPhaseTimes() *sessionphase.Times {
-	return s.previousPhaseTimes
+	return &s.previousPhaseTimes
 }
 
 // Reset resets the StatsCollector with a new flushTarget and a new copy
 // of the sessionphase.Times.
 func (s *StatsCollector) Reset(appStats *ssmemstorage.Container, phaseTime *sessionphase.Times) {
-	previousPhaseTime := s.phaseTimes
 	s.flushTarget = appStats
-
-	s.previousPhaseTimes = previousPhaseTime
-	s.phaseTimes = phaseTime.Clone()
 	s.stmtFingerprintID = 0
+	s.previousPhaseTimes = s.phaseTimes
+	s.phaseTimes = *phaseTime
 }
 
 // Close frees any local memory used by the stats collector and
