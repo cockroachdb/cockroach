@@ -389,9 +389,7 @@ func (ru *Updater) UpdateRow(
 	// in the new and old values.
 	var writtenIndexes intsets.Fast
 	for i, index := range ru.Helper.Indexes {
-		// TODO(yuzefovich): consider not acquiring the locks for non-unique
-		// indexes at all.
-		needsLock := ru.secondaryLockedForDelete == nil || ru.secondaryLockedForDelete.GetID() != index.GetID()
+		alreadyLocked := ru.secondaryLockedForDelete != nil && ru.secondaryLockedForDelete.GetID() == index.GetID()
 		if index.GetType() == idxtype.FORWARD {
 			oldIdx, newIdx := 0, 0
 			oldEntries, newEntries := ru.oldIndexEntries[i], ru.newIndexEntries[i]
@@ -418,7 +416,7 @@ func (ru *Updater) UpdateRow(
 					newIdx++
 					var sameKey bool
 					if !bytes.Equal(oldEntry.Key, newEntry.Key) {
-						if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, needsLock, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
+						if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, alreadyLocked, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
 							return nil, err
 						}
 					} else if !newEntry.Value.EqualTagAndData(oldEntry.Value) {
@@ -450,7 +448,7 @@ func (ru *Updater) UpdateRow(
 					}
 					// In this case, the index has a k/v for a family that does not exist in
 					// the new set of k/v's for the row. So, we need to delete the old k/v.
-					if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, needsLock, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
+					if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, alreadyLocked, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
 						return nil, err
 					}
 					oldIdx++
@@ -481,7 +479,7 @@ func (ru *Updater) UpdateRow(
 				// the new set of k/v's or 2) the index is a partial index and
 				// the new row values do not match the partial index predicate.
 				oldEntry := &oldEntries[oldIdx]
-				if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, needsLock, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
+				if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, alreadyLocked, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
 					return nil, err
 				}
 				oldIdx++
@@ -506,7 +504,7 @@ func (ru *Updater) UpdateRow(
 		} else {
 			// Remove all inverted index entries, and re-add them.
 			for j := range ru.oldIndexEntries[i] {
-				if err = ru.Helper.deleteIndexEntry(ctx, b, index, &ru.oldIndexEntries[i][j].Key, needsLock, traceKV, nil /* valDirs */); err != nil {
+				if err = ru.Helper.deleteIndexEntry(ctx, b, index, &ru.oldIndexEntries[i][j].Key, alreadyLocked, traceKV, nil /* valDirs */); err != nil {
 					return nil, err
 				}
 			}
@@ -537,14 +535,12 @@ func (ru *Updater) UpdateRow(
 		// For determinism, add the entries for the secondary indexes in the same
 		// order as they appear in the helper.
 		for _, index := range ru.DeleteHelper.Indexes {
-			// TODO(yuzefovich): consider not acquiring the locks for non-unique
-			// indexes at all.
-			needsLock := ru.secondaryLockedForDelete == nil || ru.secondaryLockedForDelete.GetID() != index.GetID()
+			alreadyLocked := ru.secondaryLockedForDelete != nil && ru.secondaryLockedForDelete.GetID() == index.GetID()
 			deletedSecondaryIndexEntries, ok := deleteOldSecondaryIndexEntries[index]
 
 			if ok {
 				for _, deletedSecondaryIndexEntry := range deletedSecondaryIndexEntries {
-					if err = ru.DeleteHelper.deleteIndexEntry(ctx, b, index, &deletedSecondaryIndexEntry.Key, needsLock, traceKV, nil /* valDirs */); err != nil {
+					if err = ru.DeleteHelper.deleteIndexEntry(ctx, b, index, &deletedSecondaryIndexEntry.Key, alreadyLocked, traceKV, nil /* valDirs */); err != nil {
 						return nil, err
 					}
 				}
