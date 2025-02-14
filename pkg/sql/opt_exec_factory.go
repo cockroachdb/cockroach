@@ -1573,10 +1573,6 @@ func (ef *execFactory) ConstructUpdate(
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
 	fetchCols := makeColList(table, fetchColOrdSet)
-
-	// Add each column to update as a sourceSlot. The CBO only uses scalarSlot,
-	// since it compiles tuples and subqueries into a simple sequence of target
-	// columns.
 	updateCols := makeColList(table, updateColOrdSet)
 
 	// Create the table updater, which does the bulk of the work.
@@ -1768,10 +1764,7 @@ func (ef *execFactory) ConstructDelete(
 	tabDesc := table.(*optTable).desc
 	fetchCols := makeColList(table, fetchColOrdSet)
 
-	// Create the table deleter, which does the bulk of the work. In the HP,
-	// the deleter derives the columns that need to be fetched. By contrast, the
-	// CBO will have already determined the set of fetch columns, and passes
-	// those sets into the deleter (which will basically be a no-op).
+	// Create the table deleter, which does the bulk of the work.
 	internal := ef.planner.SessionData().Internal
 	rd := row.MakeDeleter(
 		ef.planner.ExecCfg().Codec,

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -31,14 +32,20 @@ func (b *Builder) buildMutationInput(
 		return execPlan{}, colOrdMap{}, err
 	}
 	if toLock != 0 {
-		if b.forceForUpdateLocking.Contains(int(toLock)) {
-			return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
-				"unexpectedly found table %v in forceForUpdateLocking set", toLock,
-			)
+		if b.forceForUpdateLocking != 0 {
+			if b.evalCtx.SessionData().BufferedWritesEnabled || buildutil.CrdbTestBuild {
+				// We currently don't expect this to happen, so we return an
+				// assertion failure in test builds. Additionally, we will rely
+				// on forceForUpdateLocking set properly when buffered writes
+				// are enabled for correctness.
+				return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+					"unexpectedly already locked %d, also want to lock %d", b.forceForUpdateLocking, toLock,
+				)
+			}
 		}
-		b.forceForUpdateLocking.Add(int(toLock))
+		b.forceForUpdateLocking = toLock
 		defer func() {
-			b.forceForUpdateLocking.Remove(int(toLock))
+			b.forceForUpdateLocking = 0
 		}()
 	}
 

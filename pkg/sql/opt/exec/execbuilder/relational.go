@@ -3165,7 +3165,7 @@ func (b *Builder) buildZigzagJoin(
 }
 
 func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
-	if b.forceForUpdateLocking.Contains(int(toLock)) {
+	if b.forceForUpdateLocking == toLock {
 		locking = locking.Max(forUpdateLocking)
 	}
 	if locking.IsLocking() {
