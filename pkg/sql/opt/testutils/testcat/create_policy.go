@@ -32,7 +32,7 @@ func (tc *Catalog) CreatePolicy(n *tree.CreatePolicy) {
 		panic(errors.Newf(`policy %q already exists on table %q`, n.PolicyName, ts.Name()))
 	}
 
-	policy := cat.Policy{Name: n.PolicyName}
+	policy := cat.Policy{Name: n.PolicyName, ID: ts.nextPolicyID}
 	switch n.Cmd {
 	case tree.PolicyCommandAll, tree.PolicyCommandDefault:
 		policy.Command = catpb.PolicyCommand_ALL
@@ -67,4 +67,5 @@ func (tc *Catalog) CreatePolicy(n *tree.CreatePolicy) {
 	default:
 		ts.policies.Restrictive = append(ts.policies.Restrictive, policy)
 	}
+	ts.nextPolicyID++
 }
