@@ -186,6 +186,9 @@ type LogStore struct {
 	Settings    *cluster.Settings
 	Metrics     Metrics
 
+	// p4 termCache
+	TermCache *raft.TermCache
+
 	DisableSyncLogWriteToss bool // for testing only
 }
 
@@ -392,6 +395,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// to be durable and a stable portion for entries that are known to be
 	// durable.
 	s.EntryCache.Add(s.RangeID, m.Entries, true /* truncate */)
+	_ = s.TermCache.ScanAppend(m.Entries)
 
 	return state, nil
 }
@@ -608,7 +612,19 @@ func LoadTerm(
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	index kvpb.RaftIndex,
+	tc *raft.TermCache,
 ) (kvpb.RaftTerm, error) {
+	found := false
+
+	term, err := tc.Term(uint64(index))
+	if err == nil {
+		found = true
+	}
+
+	if found {
+		return kvpb.RaftTerm(term), nil
+	}
+
 	entry, found := eCache.Get(rangeID, index)
 	if found {
 		return kvpb.RaftTerm(entry.Term), nil
