@@ -56,7 +56,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	leftCols := leftEq.ToSet()
 	// NOTE: leftCols cannot be mutated after this point because it is used as a
 	// key to cache the restricted orderings in left's logical properties.
-	orders := ordering.DeriveRestrictedInterestingOrderings(left, leftCols).Copy()
+	orders := ordering.DeriveRestrictedInterestingOrderings(c.e.mem, left, leftCols).Copy()
 
 	var mustGenerateMergeJoin bool
 	leftFDs := &left.Relational().FuncDeps
@@ -69,7 +69,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData().ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
-		rightOrders := ordering.DeriveInterestingOrderings(right).Copy()
+		rightOrders := ordering.DeriveInterestingOrderings(c.e.mem, right).Copy()
 		rightOrders.RestrictToCols(rightEq.ToSet(), &right.Relational().FuncDeps)
 		orders = append(orders, rightOrders...)
 
@@ -368,7 +368,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	c.cb.Init(
 		c.e.ctx,
 		c.e.f,
-		c.e.mem.Metadata(),
+		md,
 		c.e.evalCtx,
 		scanPrivate.Table,
 		inputProps.OutputCols,
@@ -396,8 +396,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			scanPrivate2 = &scanExpr.ScanPrivate
 			// The scan should already exist in the memo. We need to look it up so we
 			// have a `ScanExpr` with properties fully populated.
-			input2 = scanExpr.Memo().MemoizeScan(scanPrivate)
-			tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate2.Table)
+			input2 = c.e.mem.MemoizeScan(scanPrivate)
+			tabMeta := md.TableMeta(scanPrivate2.Table)
 			indexCols2 = tabMeta.IndexColumns(scanPrivate2.Index)
 			onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols, lookupIsKey2 =
 				c.GetEquijoinStrictKeyCols(on, scanPrivate2, input2)
@@ -1908,7 +1908,9 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
 func (c *CustomFuncs) LookupsAreLocal(
 	lookupJoinExpr *memo.LookupJoinExpr, required *physical.Required,
 ) bool {
-	_, provided := distribution.BuildLookupJoinLookupTableDistribution(c.e.ctx, c.e.f.EvalContext(), lookupJoinExpr, required, c.e.o.MaybeGetBestCostRelation)
+	_, provided := distribution.BuildLookupJoinLookupTableDistribution(
+		c.e.ctx, c.e.f.EvalContext(), c.e.mem, lookupJoinExpr, required, c.e.o.MaybeGetBestCostRelation,
+	)
 	if provided.Any() || len(provided.Regions) != 1 {
 		return false
 	}

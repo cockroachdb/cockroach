@@ -13,9 +13,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func scanCanProvideOrdering(
+	mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
+) bool {
 	ok, _ := ScanPrivateCanProvide(
-		expr.Memo().Metadata(),
+		mem.Metadata(),
 		&expr.(*memo.ScanExpr).ScanPrivate,
 		required,
 	)
@@ -26,9 +28,9 @@ func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) b
 // in order to satisfy the required ordering. If either direction is ok (e.g. no
 // required ordering), reutrns false. The scan must be able to satisfy the
 // required ordering, according to ScanCanProvideOrdering.
-func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
+func ScanIsReverse(mem *memo.Memo, scan *memo.ScanExpr, required *props.OrderingChoice) bool {
 	ok, reverse := ScanPrivateCanProvide(
-		scan.Memo().Metadata(),
+		mem.Metadata(),
 		&scan.ScanPrivate,
 		required,
 	)
@@ -113,14 +115,16 @@ func ScanPrivateCanProvide(
 	return true, direction == rev
 }
 
-func scanBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+func scanBuildProvided(
+	mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
+) opt.Ordering {
 	scan := expr.(*memo.ScanExpr)
-	md := scan.Memo().Metadata()
+	md := mem.Metadata()
 	index := md.Table(scan.Table).Index(scan.Index)
 	fds := &scan.Relational().FuncDeps
 
 	// We need to know the direction of the scan.
-	reverse := ScanIsReverse(scan, required)
+	reverse := ScanIsReverse(mem, scan, required)
 
 	// We generate the longest ordering that this scan can provide, then we trim
 	// it. This is the longest prefix of index columns that are output by the scan

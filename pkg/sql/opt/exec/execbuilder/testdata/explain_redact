@@ -678,7 +678,7 @@ upsert bc
 query T
 EXPLAIN (OPT, MEMO, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
-memo (optimized, ~37KB, required=[presentation: info:25] [distribution: test])
+memo (optimized, ~36KB, required=[presentation: info:25] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:25] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1117,7 +1117,7 @@ update ab
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
 ----
-memo (optimized, ~15KB, required=[presentation: info:15] [distribution: test])
+memo (optimized, ~14KB, required=[presentation: info:15] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:15] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1355,7 +1355,7 @@ update e
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
 ----
-memo (optimized, ~18KB, required=[presentation: info:17] [distribution: test])
+memo (optimized, ~17KB, required=[presentation: info:17] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:17] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1686,7 +1686,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
 ----
-memo (optimized, ~13KB, required=[presentation: info:7] [distribution: test])
+memo (optimized, ~12KB, required=[presentation: info:7] [distribution: test])
  ├── G1: (explain G2 [presentation: b:1,c:2] [distribution: test])
  │    └── [presentation: info:7] [distribution: test]
  │         ├── best: (explain G2="[presentation: b:1,c:2] [distribution: test]" [presentation: b:1,c:2] [distribution: test])
@@ -2435,7 +2435,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
-memo (optimized, ~29KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~28KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [presentation: b:1,c:2,f:7] [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[presentation: b:1,c:2,f:7] [distribution: test]" [presentation: b:1,c:2,f:7] [distribution: test])

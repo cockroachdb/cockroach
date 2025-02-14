@@ -71,7 +71,6 @@ go_test(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/exec",
-        "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/opttester",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/sem/eval",

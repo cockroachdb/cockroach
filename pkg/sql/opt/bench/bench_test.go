@@ -864,7 +864,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 			tb.Fatalf("%v", err)
 		}
 	} else {
-		if _, _, err := h.optimizer.TryPlaceholderFastPath(); err != nil {
+		if _, err := h.optimizer.TryPlaceholderFastPath(); err != nil {
 			tb.Fatalf("%v", err)
 		}
 	}

@@ -527,7 +527,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	}
 
 	// If the memo has placeholders, first try the placeholder fast path.
-	_, ok, err := opc.optimizer.TryPlaceholderFastPath()
+	ok, err := opc.optimizer.TryPlaceholderFastPath()
 	if err != nil {
 		return nil, memoTypeUnknown, err
 	}
@@ -1031,6 +1031,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	f := opc.optimizer.Factory()
 	f.FoldingControl().AllowStableFolds()
 	f.CopyAndReplace(
+		savedMemo,
 		savedMemo.RootExpr().(memo.RelExpr),
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
@@ -1051,6 +1052,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	// optimal plan to determine index recommendations.
 	opc.optimizer.Init(ctx, f.EvalContext(), opc.catalog)
 	f.CopyAndReplace(
+		savedMemo,
 		savedMemo.RootExpr().(memo.RelExpr),
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
@@ -1075,6 +1077,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	opc.optimizer.Init(origCtx, f.EvalContext(), opc.catalog)
 	savedMemo.Metadata().UpdateTableMeta(origCtx, f.EvalContext(), optTables)
 	f.CopyAndReplace(
+		savedMemo,
 		savedMemo.RootExpr().(memo.RelExpr),
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
