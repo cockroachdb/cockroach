@@ -34,6 +34,8 @@ upsert descriptor #104
   +    roleNames:
   +    - public
   +    type: PERMISSIVE
+  +    usingColumnIds:
+  +    - 1
   +    usingExpr: tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID
      primaryIndex:
        constraintId: 1
@@ -61,6 +63,8 @@ upsert descriptor #104
   +    roleNames:
   +    - public
   +    type: PERMISSIVE
+  +    usingColumnIds:
+  +    - 1
   +    usingExpr: tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID
      primaryIndex:
        constraintId: 1
