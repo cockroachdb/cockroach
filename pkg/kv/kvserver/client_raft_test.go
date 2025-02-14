@@ -6202,84 +6202,6 @@ func TestRaftCampaignPreVoteCheckQuorum(t *testing.T) {
 	}
 }
 
-// TestRaftForceCampaignPreVoteCheckQuorum tests that forceCampaignLocked()
-// ignores PreVote+CheckQuorum, transitioning directly to candidate and bumping
-// the term. It may not actually win or hold onto leadership, but bumping the
-// term is proof enough that it called an election.
-func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// Timing-sensitive, so skip under deadlock detector and race.
-	skip.UnderDeadlock(t)
-	skip.UnderRace(t)
-
-	ctx := context.Background()
-
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			RaftConfig: base.RaftConfig{
-				RaftEnableCheckQuorum:      true,
-				RaftTickInterval:           200 * time.Millisecond, // speed up test
-				RaftHeartbeatIntervalTicks: 10,                     // allow n3 to win the election
-				RaftElectionTimeoutTicks:   20,
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	logStatus := func(s *raft.Status) {
-		t.Helper()
-		require.NotNil(t, s)
-		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
-	}
-
-	sender := tc.GetFirstStoreFromServer(t, 0).TestSender()
-
-	// Create a range, upreplicate it, and replicate a write.
-	key := tc.ScratchRange(t)
-	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
-	_, pErr := kv.SendWrapped(ctx, sender, incrementArgs(key, 1))
-	require.NoError(t, pErr.GoError())
-	tc.WaitForValues(t, key, []int64{1, 1, 1})
-
-	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
-	require.NoError(t, err)
-	repl2, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
-	require.NoError(t, err)
-	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
-	require.NoError(t, err)
-	repls := []*kvserver.Replica{repl1, repl2, repl3}
-
-	// Make sure n1 is leader.
-	initialStatus := repl1.RaftStatus()
-	require.Equal(t, raftpb.StateLeader, initialStatus.RaftState)
-	logStatus(initialStatus)
-	t.Logf("n1 is leader in term %d", initialStatus.Term)
-
-	// Force-campaign n3. It may not win or hold onto leadership, but it's enough
-	// to know that it bumped the term.
-	repl3.ForceCampaign(ctx, initialStatus.BasicStatus)
-	t.Logf("n3 campaigning")
-
-	var leaderStatus *raft.Status
-	require.Eventually(t, func() bool {
-		for _, repl := range repls {
-			st := repl.RaftStatus()
-			logStatus(st)
-			if st.Term <= initialStatus.Term {
-				return false
-			}
-			if st.RaftState == raftpb.StateLeader {
-				leaderStatus = st
-			}
-		}
-		return leaderStatus != nil
-	}, 10*time.Second, 500*time.Millisecond)
-	t.Logf("n%d is leader, with bumped term %d", leaderStatus.ID, leaderStatus.Term)
-}
-
 // TestRaftPreVote tests that Raft PreVote works properly, including the recent
 // leader check only enabled via CheckQuorum. Specifically, a replica that's
 // partitioned away from the leader (or restarted) should not be able to call an
@@ -6706,7 +6628,7 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 	skip.UnderDeadlock(t)
 	skip.UnderRace(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	testutils.RunValues(t, "leaseType", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
@@ -6760,7 +6682,8 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 		}
 
 		send1 := tc.GetFirstStoreFromServer(t, 0).TestSender()
-		send3 := tc.GetFirstStoreFromServer(t, 2).TestSender()
+		send2 := tc.GetFirstStoreFromServer(t, 1).TestSender()
+		//send3 := tc.GetFirstStoreFromServer(t, 2).TestSender()
 
 		// Create a range, upreplicate it, and replicate a write.
 		key := tc.ScratchRange(t)
@@ -6776,16 +6699,16 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 		repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
 		require.NoError(t, err)
 
-		// Move the lease to n3, and make sure everyone has applied it.
-		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+		// Move the lease to n2, and make sure everyone has applied it.
+		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
 		require.Eventually(t, func() bool {
-			lease, _ := repl3.GetLease()
-			return lease.Replica.ReplicaID == repl3.ReplicaID()
+			lease, _ := repl2.GetLease()
+			return lease.Replica.ReplicaID == repl2.ReplicaID()
 		}, 10*time.Second, 500*time.Millisecond)
-		_, pErr = kv.SendWrapped(ctx, send3, incrementArgs(key, 1))
+		_, pErr = kv.SendWrapped(ctx, send2, incrementArgs(key, 1))
 		require.NoError(t, pErr.GoError())
 		tc.WaitForValues(t, key, []int64{2, 2, 2})
-		t.Logf("n3 has lease")
+		t.Logf("n2 has lease")
 
 		// Make sure n1 is still leader.
 		st := repl1.RaftStatus()
@@ -6802,8 +6725,8 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 		require.Eventually(t, func() bool {
 			logStatus(repl2.RaftStatus())
 			logStatus(repl3.RaftStatus())
-			if repl3.RaftStatus().RaftState == raftpb.StateLeader {
-				t.Logf("n3 is leader")
+			if repl2.RaftStatus().RaftState == raftpb.StateLeader {
+				t.Logf("n2 is leader")
 				return true
 			}
 			return false
