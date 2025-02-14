@@ -2272,6 +2272,13 @@ not occurring.
 		Measurement: "Writes",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaBackpressuredBelowLatching = metric.Metadata{
+		Name: "requests.backpressure.below_latching",
+		Help: `Number of backpressured writes that we decided to backpressure below latching.
+`,
+		Measurement: "Writes",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// AddSSTable metrics.
 	metaAddSSTableProposals = metric.Metadata{
@@ -2952,6 +2959,7 @@ type StoreMetrics struct {
 
 	// Backpressure counts.
 	BackpressuredOnSplitRequests *metric.Gauge
+	BackpressuredBelowLatching   *metric.Counter
 
 	// AddSSTable stats: how many AddSSTable commands were proposed and how many
 	// were applied? How many applications required writing a copy?
@@ -3720,6 +3728,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Backpressure counters.
 		BackpressuredOnSplitRequests: metric.NewGauge(metaBackpressuredOnSplitRequests),
+		BackpressuredBelowLatching:   metric.NewCounter(metaBackpressuredBelowLatching),
 
 		// AddSSTable proposal + applications counters.
 		AddSSTableProposals:           metric.NewCounter(metaAddSSTableProposals),
