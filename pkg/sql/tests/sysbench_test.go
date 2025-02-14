@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -949,6 +950,9 @@ func runSysbenchInner(
 	rng := rand.New(rand.NewSource(seed))
 
 	for next() {
+		if rng.Intn(3) == 0 {
+			time.Sleep(1 * time.Microsecond)
+		}
 		if err := opFn(s, rng); err != nil {
 			if errs == nil {
 				b.Fatal(err)
