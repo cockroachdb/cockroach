@@ -939,7 +939,10 @@ func (r *testRunner) runWorker(
 				// includes the buildutil.CrdbTestBuild tag. And runtime assertion is
 				// enabled if and only if cockroach binaries used in roachtests include
 				// the buildutil.CrdbTestBuild tag.
-				useBufferedSender := roachtestutil.UsingRuntimeAssertions(t)
+				// N.B. some tests, e.g. the mixed version tests, do not use the Cockroach
+				// harness for invoking the binary and upload their own. We must also opt
+				// those out as we do not know if they are CrdbTestBuild binaries.
+				useBufferedSender := roachtestutil.UsingRuntimeAssertions(t) && !t.spec.Suites.Contains(registry.MixedVersion)
 				if useBufferedSender {
 					c.clusterSettings["kv.rangefeed.buffered_sender.enabled"] = "true"
 				}
