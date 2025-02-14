@@ -59,6 +59,9 @@ func (i KVInserter) Del(key ...interface{}) {
 	// empty).
 }
 
+// DelMustAcquireExclusiveLock is not implemented.
+func (i KVInserter) DelMustAcquireExclusiveLock(key ...interface{}) {}
+
 // Put method of the row.Putter interface.
 func (i KVInserter) Put(key, value interface{}) {
 	i(roachpb.KeyValue{

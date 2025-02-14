@@ -11,7 +11,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -443,30 +442,51 @@ var deleteEncoding protoutil.Message = &rowencpb.IndexValueWrapper{
 	Deleted: true,
 }
 
+func delFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	needsLock bool,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
+) {
+	if needsLock {
+		if traceKV {
+			if keyEncodingDirs != nil {
+				log.VEventf(ctx, 2, "Del (locking) %s", keys.PrettyPrint(keyEncodingDirs, *key))
+			} else {
+				log.VEventf(ctx, 2, "Del (locking) %s", *key)
+			}
+		}
+		b.DelMustAcquireExclusiveLock(key)
+	} else {
+		if traceKV {
+			if keyEncodingDirs != nil {
+				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(keyEncodingDirs, *key))
+			} else {
+				log.VEventf(ctx, 2, "Del %s", *key)
+			}
+		}
+		b.Del(key)
+	}
+}
+
 func (rh *RowHelper) deleteIndexEntry(
 	ctx context.Context,
-	batch *kv.Batch,
+	b Putter,
 	index catalog.Index,
-	valDirs []encoding.Direction,
-	entry *rowenc.IndexEntry,
+	key *roachpb.Key,
+	needsLock bool,
 	traceKV bool,
+	valDirs []encoding.Direction,
 ) error {
 	if index.UseDeletePreservingEncoding() {
 		if traceKV {
-			log.VEventf(ctx, 2, "Put (delete) %s", entry.Key)
+			log.VEventf(ctx, 2, "Put (delete) %s", *key)
 		}
-
-		batch.Put(entry.Key, deleteEncoding)
+		b.Put(key, deleteEncoding)
 	} else {
-		if traceKV {
-			if valDirs != nil {
-				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(valDirs, entry.Key))
-			} else {
-				log.VEventf(ctx, 2, "Del %s", entry.Key)
-			}
-		}
-
-		batch.Del(entry.Key)
+		delFn(ctx, b, key, needsLock, traceKV, valDirs)
 	}
 	return nil
 }

@@ -3038,7 +3038,9 @@ func (t *logicTest) processSubtest(
 								} else {
 									sb.WriteString("OR ")
 								}
-								sb.WriteString(fmt.Sprintf("message like '%s %s%%' ", c, f))
+								// % wildcard between command and prefix is for
+								// optional '(locking)' substring.
+								sb.WriteString(fmt.Sprintf("message LIKE '%s %%%s%%' ", c, f))
 							}
 						}
 						return sb.String()
