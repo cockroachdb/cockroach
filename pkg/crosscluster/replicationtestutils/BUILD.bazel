@@ -40,6 +40,7 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/storage",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",

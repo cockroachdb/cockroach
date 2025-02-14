@@ -94,9 +94,8 @@ type TestServerArgs struct {
 	// field on the server.Config struct.
 	ExternalIODirConfig ExternalIODirConfig
 
-	// ExternalIODir is used to initialize the same-named field on
-	// the server.Config struct.
-	ExternalIODir string
+	// StorageConfig is used to initialize storage related fields.
+	StorageConfig storagepb.NodeConfig
 
 	// Fields copied to the server.Config.
 	Insecure                    bool
@@ -584,9 +583,9 @@ type TestTenantArgs struct {
 	// field on the server.Config struct.
 	ExternalIODirConfig ExternalIODirConfig
 
-	// ExternalIODir is used to initialize the same-named field on
+	// StorageConfig is used to initialize the same-named field on
 	// the server.Config struct.
-	ExternalIODir string
+	StorageConfig storagepb.NodeConfig
 
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running

@@ -581,7 +581,7 @@ func init() {
 		// percentage refers to becomes known.
 		cliflagcfg.VarFlag(f, &startCtx.diskTempStorageSizeValue, cliflags.SQLTempStorage)
 		cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
-		cliflagcfg.StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
+		cliflagcfg.StringFlag(f, &serverCfg.StorageConfig.ExternalIODir, cliflags.ExternalIODir)
 
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
@@ -1410,25 +1410,8 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 		}
 		serverCfg.StorageConfig.WALFailover.PrevPath.Path = absPath
 	}
-
-	// Configure the external I/O directory.
-	if !fs.Changed(cliflags.ExternalIODir.Name) {
-		// Try to find a directory from the store configuration.
-		for _, ss := range serverCfg.Stores.Specs {
-			if ss.InMemory {
-				continue
-			}
-			startCtx.externalIODir = filepath.Join(ss.Path, "extern")
-			break
-		}
-	}
-	if startCtx.externalIODir != "" {
-		// Make the directory name absolute.
-		var err error
-		startCtx.externalIODir, err = base.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
-		if err != nil {
-			return err
-		}
+	if err := populateExternalIODir(fs); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1514,3 +1497,35 @@ func populateStoreSpecsEncryption() error {
 // package rather than the cliccl package to defeat the duplicate envvar
 // registration logic.
 func RegisterFlags(f func()) { f() }
+
+// populateExternalIODir initializes the externalIODir based on either the user
+// specified value or one of the directories from the stores.
+func populateExternalIODir(fs *pflag.FlagSet) error {
+	// Configure the external I/O directory. If the user manually configured the
+	// external IO dir, convert it to an absolute path, otherwise base it on the
+	// store specs.
+	if fs.Changed(cliflags.ExternalIODir.Name) {
+		if serverCfg.StorageConfig.ExternalIODir != "" {
+			absPath, err := base.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, serverCfg.StorageConfig.ExternalIODir)
+			if err != nil {
+				return err
+			}
+			serverCfg.StorageConfig.ExternalIODir = absPath
+		}
+	} else {
+		// Try to find a directory from the store configuration.
+		for _, ss := range serverCfg.Stores.Specs {
+			if ss.InMemory {
+				continue
+			}
+			// TODO: Do we need the abs here?
+			absPath, err := filepath.Abs(filepath.Join(ss.Path, "extern"))
+			if err != nil {
+				return err
+			}
+			serverCfg.StorageConfig.ExternalIODir = absPath
+			break
+		}
+	}
+	return nil
+}

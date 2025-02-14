@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -51,7 +52,7 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 			// with #76378.
 			DefaultTestTenant: base.TODOTestTenantDisabled,
 			UseDatabase:       "rand",
-			ExternalIODir:     dir,
+			StorageConfig:     storagepb.NodeConfig{ExternalIODir: dir},
 		},
 	}
 	const localFoo = "nodelocal://1/foo/"

@@ -117,8 +117,8 @@ func TestExternalIODirSpec(t *testing.T) {
 			t.Error(err)
 			continue
 		}
-		if startCtx.externalIODir != c.expected {
-			t.Errorf("%d: expected:\n%q\ngot:\n%s", i, c.expected, startCtx.externalIODir)
+		if serverCfg.StorageConfig.ExternalIODir != c.expected {
+			t.Errorf("%d: expected:\n%q\ngot:\n%s", i, c.expected, serverCfg.StorageConfig.ExternalIODir)
 		}
 	}
 }

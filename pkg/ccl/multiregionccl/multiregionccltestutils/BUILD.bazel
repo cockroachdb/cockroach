@@ -10,6 +10,7 @@ go_library(
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/storage/storagepb",
         "//pkg/testutils/testcluster",
         "@com_github_cockroachdb_errors//:errors",
     ],

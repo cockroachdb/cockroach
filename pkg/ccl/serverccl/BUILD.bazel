@@ -73,6 +73,7 @@ go_test(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sqlinstance/instancestorage",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
