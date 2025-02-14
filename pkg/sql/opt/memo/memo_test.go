@@ -628,7 +628,7 @@ func TestMemoIsStale(t *testing.T) {
 	notStale()
 
 	// User changes (with RLS)
-	o.Memo().Metadata().SetRLSEnabled(evalCtx.SessionData().User(), true /* admin */)
+	o.Memo().Metadata().SetRLSEnabled(evalCtx.SessionData().User(), true /* admin */, 1 /* tableID */)
 	notStale()
 	evalCtx.SessionData().UserProto = newUser
 	stale()

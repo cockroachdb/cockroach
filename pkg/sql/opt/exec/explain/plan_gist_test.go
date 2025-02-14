@@ -65,7 +65,7 @@ func plan(ot *opttester.OptTester, t *testing.T) string {
 	if explainPlan == nil {
 		t.Fatal("Couldn't ExecBuild memo, use a logictest instead?")
 	}
-	flags := explain.Flags{HideValues: true, Deflake: explain.DeflakeAll, OnlyShape: true}
+	flags := explain.Flags{HideValues: true, Deflake: explain.DeflakeAll, OnlyShape: true, ShowPolicyInfo: true}
 	ob := explain.NewOutputBuilder(flags)
 	err = explain.Emit(context.Background(), &eval.Context{}, explainPlan.(*explain.Plan), ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" }, false /* createPostQueryPlanIfMissing */)
 	if err != nil {
@@ -76,7 +76,7 @@ func plan(ot *opttester.OptTester, t *testing.T) string {
 	return str
 }
 
-func TestPlanGistBuilder(t *testing.T) {
+func TestExplainBuilder(t *testing.T) {
 	catalog := testcat.New()
 	testGists := func(t *testing.T, d *datadriven.TestData) string {
 		ot := opttester.New(catalog, d.Input)
@@ -107,10 +107,13 @@ func TestPlanGistBuilder(t *testing.T) {
 		}
 	}
 	// RFC: should I move this to opt_tester?
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "gists"), testGists)
-	// Reset the catalog for the next test.
-	catalog = testcat.New()
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "gists_tpce"), testGists)
+	for _, testfile := range []string{"gists", "gists_tpce", "row_level_security"} {
+		t.Run(testfile, func(t *testing.T) {
+			datadriven.RunTest(t, datapathutils.TestDataPath(t, testfile), testGists)
+			// Reset the catalog for the next test.
+			catalog = testcat.New()
+		})
+	}
 }
 
 func TestPlanGistHashEquivalency(t *testing.T) {

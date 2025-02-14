@@ -506,12 +506,16 @@ func BenchmarkTTLExpiration(b *testing.B) {
 		"create table db1.t1 (created_at timestamptz, expired_at timestamptz)",
 	)
 	// We are ingesting data. But we pick a timestamp so that the queries we do
-	// below don't return any rows. We don't want the process of returning rows
-	// to throw off the benchmark.
+	// below don't return any rows. We don't want the process of returning rows to
+	// throw off the benchmark. We insert rows in batches to speed up the test
+	// setup.
 	const numRows = 250000
-	for i := 0; i < numRows; i++ {
-		tdb.Exec(b,
-			fmt.Sprintf("insert into db1.t1 values (now(), now() + interval '%d seconds' +  interval '10 months')", i))
+	const batchSize = 10000
+	for i := 0; i < numRows; i += batchSize {
+		tdb.Exec(b, fmt.Sprintf(`
+        INSERT INTO db1.t1 (created_at, expired_at)
+        SELECT now(), now() + interval '10 months' + generate_series(%d, %d) * interval '1 second'
+    `, i, i+batchSize-1))
 	}
 
 	for _, tc := range []struct {
@@ -536,14 +540,15 @@ func BenchmarkTTLExpiration(b *testing.B) {
 		// Execute the query once outside the timings to prime any caches.
 		tdb.Exec(b, tc.query)
 
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			b.Run(tc.desc, func(b *testing.B) {
+		b.Run(tc.desc, func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				// Execute the query on the table. The actual results are irrelevant, as there
 				// shouldn't be any rows. We're only interested in measuring the execution time.
 				tdb.Exec(b, tc.query)
-			})
-		}
-		b.StopTimer()
+			}
+			b.StopTimer()
+		})
+
 	}
 }

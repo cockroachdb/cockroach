@@ -854,8 +854,9 @@ type Table struct {
 
 	homeRegion string
 
-	rlsEnabled bool
-	policies   cat.Policies
+	rlsEnabled   bool
+	policies     cat.Policies
+	nextPolicyID descpb.PolicyID
 }
 
 var _ cat.Table = &Table{}
