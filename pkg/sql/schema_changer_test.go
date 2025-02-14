@@ -2772,8 +2772,8 @@ CREATE TABLE t.test (
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION]
         WHERE
-		message LIKE 'Del %[1]s%%' OR
-                message LIKE 'Put (delete) %[1]s%%'
+		message LIKE 'Del %%%[1]s%%' OR
+                message LIKE 'Put (delete)%% %[1]s%%'
         ORDER BY message;`, tablePrefixStr))
 	if err != nil {
 		t.Fatal(err)
@@ -2781,18 +2781,18 @@ CREATE TABLE t.test (
 
 	expected = []string{
 		// Primary index should see this delete.
-		fmt.Sprintf("Del %s/1/1/0", tablePrefixStr),
-		fmt.Sprintf("Del %s/1/1/1/1", tablePrefixStr),
-		fmt.Sprintf("Del %s/1/1/2/1", tablePrefixStr),
-		fmt.Sprintf("Del %s/1/1/3/1", tablePrefixStr),
-		fmt.Sprintf("Del %s/1/1/4/1", tablePrefixStr),
+		fmt.Sprintf("Del (locking) %s/1/1/0", tablePrefixStr),
+		fmt.Sprintf("Del (locking) %s/1/1/1/1", tablePrefixStr),
+		fmt.Sprintf("Del (locking) %s/1/1/2/1", tablePrefixStr),
+		fmt.Sprintf("Del (locking) %s/1/1/3/1", tablePrefixStr),
+		fmt.Sprintf("Del (locking) %s/1/1/4/1", tablePrefixStr),
 
 		// The temporary indexes are delete-preserving -- they
 		// should see the delete and issue Puts.
-		fmt.Sprintf("Put (delete) %s/5/2/0", tablePrefixStr),
-		fmt.Sprintf("Put (delete) %s/5/2/2/1", tablePrefixStr),
-		fmt.Sprintf("Put (delete) %s/5/2/3/1", tablePrefixStr),
-		fmt.Sprintf("Put (delete) %s/5/2/4/1", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/0", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/2/1", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/3/1", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/4/1", tablePrefixStr),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
@@ -2804,7 +2804,7 @@ CREATE TABLE t.test (
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 		message LIKE 'Put %[1]s/%%' OR
-		message LIKE 'Del %[1]s/%%' OR
+		message LIKE 'Del %%%[1]s/%%' OR
 		message LIKE 'CPut %[1]s/%%';`, tablePrefixStr))
 	if err != nil {
 		t.Fatal(err)
@@ -2828,7 +2828,7 @@ CREATE TABLE t.test (
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 		message LIKE 'Put %[1]s/%%' OR
-		message LIKE 'Del %[1]s/%%' OR
+		message LIKE 'Del %%%[1]s/%%' OR
 		message LIKE 'CPut %[1]s/2%%';`, tablePrefixStr))
 	if err != nil {
 		t.Fatal(err)
@@ -2836,9 +2836,9 @@ CREATE TABLE t.test (
 
 	expected = []string{
 
-		fmt.Sprintf("Del %s/1/1/2/1", tablePrefixStr),
+		fmt.Sprintf("Del (locking) %s/1/1/2/1", tablePrefixStr),
 		fmt.Sprintf("Put %s/1/1/3/1 -> /INT/5", tablePrefixStr),
-		fmt.Sprintf("Del %s/1/1/4/1", tablePrefixStr),
+		fmt.Sprintf("Del (locking) %s/1/1/4/1", tablePrefixStr),
 		// The temporary index sees a Put in all families even though
 		// only some are changing. This is expected.
 		fmt.Sprintf("Put %s/5/3/0 -> /BYTES/0x0a030a1302", tablePrefixStr),

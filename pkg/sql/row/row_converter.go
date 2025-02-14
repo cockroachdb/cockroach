@@ -57,6 +57,12 @@ func (i KVInserter) Del(key ...interface{}) {
 	// exist and the imported column family 0 will conflict (and the IMPORT INTO
 	// will fail) or the row does not exist (and thus the column families are all
 	// empty).
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+// DelMustAcquireExclusiveLock is not implemented.
+func (i KVInserter) DelMustAcquireExclusiveLock(key ...interface{}) {
+	panic(errors.AssertionFailedf("unimplemented"))
 }
 
 // Put method of the row.Putter interface.
@@ -67,16 +73,29 @@ func (i KVInserter) Put(key, value interface{}) {
 	})
 }
 
-func (c KVInserter) PutMustAcquireExclusiveLock(key, value interface{}) {}
+func (c KVInserter) PutMustAcquireExclusiveLock(key, value interface{}) {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
 func (c KVInserter) CPutWithOriginTimestamp(
 	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
 ) {
+	panic(errors.AssertionFailedf("unimplemented"))
 }
-func (c KVInserter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte)         {}
-func (c KVInserter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte)        {}
-func (c KVInserter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {}
-func (c KVInserter) PutBytes(kys []roachpb.Key, values [][]byte)               {}
-func (c KVInserter) PutTuples(kys []roachpb.Key, values [][]byte)              {}
+func (c KVInserter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte) {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+func (c KVInserter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte) {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+func (c KVInserter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+func (c KVInserter) PutBytes(kys []roachpb.Key, values [][]byte) {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+func (c KVInserter) PutTuples(kys []roachpb.Key, values [][]byte) {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
 
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default
 // expressions, verifies non-nullable columns, and checks column widths.
