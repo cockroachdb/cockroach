@@ -536,14 +536,15 @@ func BenchmarkTTLExpiration(b *testing.B) {
 		// Execute the query once outside the timings to prime any caches.
 		tdb.Exec(b, tc.query)
 
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			b.Run(tc.desc, func(b *testing.B) {
+		b.Run(tc.desc, func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				// Execute the query on the table. The actual results are irrelevant, as there
 				// shouldn't be any rows. We're only interested in measuring the execution time.
 				tdb.Exec(b, tc.query)
-			})
-		}
-		b.StopTimer()
+			}
+			b.StopTimer()
+		})
+
 	}
 }
