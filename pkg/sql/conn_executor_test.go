@@ -1424,46 +1424,6 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 
 		locked(func() { require.True(t, mu.txnDeadline.Less(fs.Expiration())) })
 	})
-
-	t.Run("single_tenant_ignore_session_expiry", func(t *testing.T) {
-		// In this test, we check that the session expiry is ignored in a single-tenant
-		// environment. To verify this, we deliberately set the session duration to be
-		// less than the lease duration while overriding the cluster sqlliveness.Session.
-		// On multi-tenant environments, the session expiry will override the lease duration
-		// while setting a transaction deadline. However, in a single tenant environment,
-		// the session expiry should be ignored.
-		// Open a DB connection on the server and not the tenant to test that the session
-		// expiry is ignored outside of the multi-tenant environment.
-		dbConn := s.SystemLayer().SQLConn(t)
-		defer dbConn.Close()
-		// Set up a dummy database and table to write into for the test.
-		if _, err := dbConn.Exec(`CREATE DATABASE t1;
-	CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
-	`); err != nil {
-			t.Fatal(err)
-		}
-
-		// Inject an already expired session to observe that it has no effect.
-		fs := &fakeSession{
-			ExpTS: s.Clock().Now().Add(-time.Minute.Nanoseconds(), 0),
-		}
-		defer setClientSessionOverride(fs)()
-		txn, err := dbConn.Begin()
-		if err != nil {
-			t.Fatal(err)
-		}
-		txnID := getTxnID(t, txn)
-		locked(func() { mu.txnID = txnID })
-		_, err = txn.ExecContext(ctx, "INSERT INTO t1.test(k, v) VALUES (1, 'abc')")
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = txn.Commit()
-		require.NoError(t, err)
-
-		// Confirm that the txnDeadline is not equal to the session expiration.
-		locked(func() { require.True(t, fs.Expiration().Less(mu.txnDeadline)) })
-	})
 }
 
 func TestShowLastQueryStatistics(t *testing.T) {

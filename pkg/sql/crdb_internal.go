@@ -1776,34 +1776,26 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 	},
 }
 
-var crdbInternalSessionBasedLeases = virtualSchemaTable{
+var crdbInternalSessionBasedLeases = virtualSchemaView{
 	schema: `
-CREATE TABLE crdb_internal.kv_session_based_leases (
-  desc_id         INT8,
-  version         INT8,
-  sql_instance_id INT8,
-  session_id      BYTES NOT NULL,
-  crdb_region     BYTES NOT NULL
+CREATE VIEW crdb_internal.kv_session_based_leases (
+  desc_id,
+  version, 
+  sql_instance_id,
+  session_id, 
+  crdb_region
+) AS (
+	SELECT desc_id, version, sql_instance_id, session_id, crdb_region 
+	FROM system.lease
 );
 `,
-	comment: `reads from the internal session based leases table (before the table format is converted)`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
-		return p.InternalSQLTxn().WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable()},
-			func() error {
-				rows, err := p.InternalSQLTxn().QueryBuffered(
-					ctx, "query-leases", p.Txn(),
-					"SELECT desc_id, version, sql_instance_id, session_id, crdb_region FROM system.lease",
-				)
-				if err != nil {
-					return err
-				}
-				for _, d := range rows {
-					if err := addRow(d...); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
+	comment: `reads from the internal session based leases table`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "desc_id", Typ: types.Int},
+		{Name: "version", Typ: types.Int},
+		{Name: "sql_instance_id", Typ: types.Int},
+		{Name: "session_id", Typ: types.Bytes},
+		{Name: "crdb_region", Typ: types.Bytes},
 	},
 }
 
