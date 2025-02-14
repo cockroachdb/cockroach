@@ -57,6 +57,8 @@ curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/cros
 echo '5f79da0a9e580bc0a869ca32c2e5a21990676ec567aabf54ccc1dec4c3f2c827 x86_64-unknown-linux-gnu.tar.gz' | sha256sum -c -
 curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20230906-034412/x86_64-w64-mingw32.tar.gz -o x86_64-w64-mingw32.tar.gz
 echo '94e64e0e8de05706dfd5ab2f1fee6e7f75280e35b09b5628980805d27939b418 x86_64-w64-mingw32.tar.gz' | sha256sum -c -
+curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20230906-034412/s390x-ibm-linux-gnu.tar.gz -o s390x-ibm-linux-gnu.tar.gz
+echo '027d7d3b89d0c9745243610b9c12aa26f5605884b058934645cb344927228dab s390x-ibm-linux-gnu.tar.gz' | sha256sum -c -
 echo *.tar.gz | xargs -n1 tar -xzf
 rm *.tar.gz
 
@@ -67,7 +69,7 @@ cd go
 git checkout $GOCOMMIT
 cd ..
 
-CONFIGS="linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64"
+CONFIGS="linux_amd64 linux_arm64 linux_s390x darwin_amd64 darwin_arm64 windows_amd64"
 
 for CONFIG in $CONFIGS; do
     case $CONFIG in
@@ -78,6 +80,10 @@ for CONFIG in $CONFIGS; do
         linux_arm64)
             CC_FOR_TARGET=/x-tools/aarch64-unknown-linux-gnu/bin/aarch64-unknown-linux-gnu-cc
             CXX_FOR_TARGET=/x-tools/aarch64-unknown-linux-gnu/bin/aarch64-unknown-linux-gnu-c++
+            ;;
+        linux_s390x)
+            CC_FOR_TARGET=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-cc
+            CXX_FOR_TARGET=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-c++
         ;;
         darwin_amd64)
             CC_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/x86_64-apple-darwin21.2-cc

@@ -167,13 +167,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.22.8.darwin-amd64.tar.gz", "5d1013d773f76c3cdc974b9afc20033595a2a334774e453be725e7c058e370be"),
-        "darwin_arm64": ("go1.22.8.darwin-arm64.tar.gz", "304a9d6bfcc5999d47b06f44f79c650173e078251a7adcdb46ba908b22bc4209"),
-        "linux_amd64": ("go1.22.8.linux-amd64.tar.gz", "ccc2e994241e6677a07e36aea2b1b3ca942fda2aafeedea6ada47e0e9f566f7b"),
-        "linux_arm64": ("go1.22.8.linux-arm64.tar.gz", "0c49cab48ff13355d346bc8aee5960491c5489120eb7bcd424dab5d341fb12c6"),
-        "windows_amd64": ("go1.22.8.windows-amd64.tar.gz", "a09ee8a15eae361f673e88bf645c4af8e119ddf9d48d4d9104802bece3818216"),
+        "darwin_amd64": ("go1.22.8.darwin-amd64.tar.gz", "7ff85f9ce9d4927fa8ac682f0b38107776d1ccfa801e3069a944bab69e31b453"),
+        "darwin_arm64": ("go1.22.8.darwin-arm64.tar.gz", "cb3c233b8e889c5f48edaf0be54ce98b287a44de7473de48a1cf6f4598fa7bf1"),
+        "linux_amd64": ("go1.22.8.linux-amd64.tar.gz", "d5830d065e0650108d429902f0e7e7c0b2514811da0b93270f43633e7a10b18f"),
+        "linux_arm64": ("go1.22.8.linux-arm64.tar.gz", "209dd81bcf115f338f4c8b378a96455e7fc2aec7a0a6f33d14f22beb81d8b682"),
+        "linux_s390x": ("go1.22.8.linux-s390x.tar.gz", "65aa1f666781103129779f8658e7076d3f4fbaf245baaeadd15db0bfa72e3e79"),
+        "windows_amd64": ("go1.22.8.windows-amd64.tar.gz", "d78207ee04c0d4868af32139a1af5035ac7a9f3db107ac32cdfb2b0b5e62a3b6"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20241105-184020/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250214-212839/{}"],
     version = "1.22.8",
 )
 
@@ -653,8 +654,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.22.8fips.linux-amd64.tar.gz", "c6b2028471b77f106f6989b098ef9f31d7c17e964c742f1e38445d364d632784"),
+        "linux_amd64": ("go1.22.8fips.linux-amd64.tar.gz", "4d9b9c4193a7648472d80b1f571e9c553aa8615fa1369ac5557365ad0f8ca03a"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20241105-184020/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250214-212839/{}"],
     version = "1.22.8fips",
 )
