@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -106,10 +105,13 @@ type Builder struct {
 
 	allowInsertFastPath bool
 
-	// forceForUpdateLocking is a set of opt catalog table IDs that serve as input
-	// for mutation operators, and should be locked using forUpdateLocking to
-	// reduce query retries.
-	forceForUpdateLocking intsets.Fast
+	// forceForUpdateLocking, if set, is the table ID of the table being mutated
+	// that should be locked using forUpdateLocking in mutation's input
+	// operators to reduce query retries. In other words, it allows us to apply
+	// the implicit locking during the initial scan of the mutation. It will
+	// only be set if we are guaranteed to never scan data that won't be
+	// mutated.
+	forceForUpdateLocking opt.TableID
 
 	// planLazySubqueries is true if the builder should plan subqueries that are
 	// lazily evaluated as routines instead of a subquery which is evaluated

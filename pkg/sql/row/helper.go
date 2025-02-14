@@ -471,7 +471,7 @@ func (rh *RowHelper) deleteIndexEntry(
 	return nil
 }
 
-// OriginTimetampCPutHelper is used by callers of Inserter, Updater,
+// OriginTimestampCPutHelper is used by callers of Inserter, Updater,
 // and Deleter when the caller wants updates to the primary key to be
 // constructed using ConditionalPutRequests with the OriginTimestamp
 // option set.

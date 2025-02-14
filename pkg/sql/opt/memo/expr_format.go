@@ -453,7 +453,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			partialIndexPredicates := tab.PartialIndexPredicatesUnsafe()
 			if partialIndexPredicates != nil {
 				c := tp.Child("partial index predicates")
-				indexOrds := make([]cat.IndexOrdinal, 0, len(partialIndexPredicates))
+				indexOrds := make(cat.IndexOrdinals, 0, len(partialIndexPredicates))
 				for ord := range partialIndexPredicates {
 					indexOrds = append(indexOrds, ord)
 				}

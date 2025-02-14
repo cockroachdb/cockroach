@@ -249,6 +249,8 @@ func (twb *txnWriteBuffer) closeLocked() {}
 //
 // 1. Blind writes (Put/Delete requests) are stripped from the batch and
 // buffered locally.
+// 2. Point reads (Get requests) are served from the buffer and stripped from the
+// batch iff the key has seen a buffered write.
 //
 // TODO(arul): Augment this comment as these expand.
 func (twb *txnWriteBuffer) applyTransformations(
@@ -296,11 +298,78 @@ func (twb *txnWriteBuffer) applyTransformations(
 			})
 			twb.addToBuffer(t.Key, roachpb.Value{}, t.Sequence)
 
+		case *kvpb.GetRequest:
+			// If the key is in the buffer, we must serve the read from the buffer.
+			val, served := twb.maybeServeRead(t.Key, t.Sequence)
+			if served {
+				log.VEventf(ctx, 2, "serving %s on key %s from the buffer", t.Method(), t.Key)
+				var ru kvpb.ResponseUnion
+				getResp := &kvpb.GetResponse{}
+				if val.IsPresent() {
+					getResp.Value = val
+				}
+				ru.MustSetInner(getResp)
+				ts = append(ts, transformation{
+					stripped: true,
+					index:    i,
+					resp:     ru,
+				})
+				// We've constructed a response that we'll stitch together with the
+				// result on the response path; eschew sending the request to the KV
+				// layer.
+				//
+				// TODO(arul): if this is a locking Get request, we can't omit the KV
+				// request. At least, not unless we know a lock is already present on
+				// the key.
+				//
+				// TODO(arul): if the ReturnRawMVCCValues flag is set, we'll need to
+				// flush the buffer.
+				continue
+			}
+			// Wasn't served locally; send the request to the KV layer.
+			baRemote.Requests = append(baRemote.Requests, ru)
+
 		default:
 			baRemote.Requests = append(baRemote.Requests, ru)
 		}
 	}
 	return baRemote, ts
+}
+
+// maybeServeRead serves the supplied read request from the buffer if a write or
+// deletion tombstone on the key is present in the buffer. Additionally, a
+// boolean indicating whether the read request was served or not is also
+// returned.
+func (twb *txnWriteBuffer) maybeServeRead(
+	key roachpb.Key, seq enginepb.TxnSeq,
+) (*roachpb.Value, bool) {
+	it := twb.buffer.MakeIter()
+	seek := &twb.bufferSeek
+	seek.key = key
+
+	it.FirstOverlap(seek)
+	if it.Valid() {
+		bufferedVals := it.Cur().vals
+		// In the common case, we're reading the most recently buffered write. That
+		// is, the sequence number we're reading at is greater than or equal to the
+		// sequence number of the last write that was buffered. The list of buffered
+		// values is stored in ascending order; we can therefore start iterating
+		// from the end of the slice. In the common case, there won't be much
+		// "iteration" happening here.
+		//
+		// TODO(arul): explore adding special treatment for the common case and
+		// using a binary search here instead.
+		for i := len(bufferedVals) - 1; i >= 0; i-- {
+			if seq >= bufferedVals[i].seq {
+				return bufferedVals[i].valPtr(), true
+			}
+		}
+		// We've iterated through the buffer, but it seems like our sequence number
+		// is smaller than any buffered write performed by our transaction. We can't
+		// serve the read locally.
+		return nil, false
+	}
+	return nil, false
 }
 
 // mergeResponsesWithTransformations merges responses from the KV layer with the
@@ -463,16 +532,30 @@ func (twb *txnWriteBuffer) testingBufferedWritesAsSlice() []bufferedWrite {
 // track intermediate values in the buffer to support read-your-own-writes and
 // savepoint rollbacks.
 type bufferedWrite struct {
-	id     uint64
-	key    roachpb.Key
-	endKey roachpb.Key     // used in btree iteration
-	vals   []bufferedValue // sorted in increasing sequence number order
+	id  uint64
+	key roachpb.Key
+	// TODO(arul): explore the possibility of using a b-tree which doesn't use an
+	// endKey as a comparator. We could then remove this unnecessary field here,
+	// and also in the keyLocks struct.
+	endKey roachpb.Key // used in btree iteration
+	// TODO(arul): instead of this slice, consider adding a small (fixed size,
+	// maybe 1) array instead.
+	vals []bufferedValue // sorted in increasing sequence number order
 }
 
 // bufferedValue is a value written to a key at a given sequence number.
 type bufferedValue struct {
 	val roachpb.Value
 	seq enginepb.TxnSeq
+}
+
+// valPtr returns a pointer to the buffered value.
+func (bv *bufferedValue) valPtr() *roachpb.Value {
+	// TODO(arul): add a knob to return a pointer into the buffer instead of
+	// creating a copy. As long as the caller doesn't modify the value we should
+	// be fine; just have them opt into it.
+	valCpy := bv.val
+	return &valCpy
 }
 
 //go:generate ../../../util/interval/generic/gen.sh *bufferedWrite kvcoord
