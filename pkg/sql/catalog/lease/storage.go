@@ -234,6 +234,11 @@ func (s storage) acquire(
 		case err != nil:
 			return nil, nil, err
 		}
+		// If a new lease was not acquired, then there is no other work to be
+		// done.
+		if desc == nil {
+			return nil, nil, nil
+		}
 		log.VEventf(ctx, 2, "storage acquired lease %v", desc)
 		if s.testingKnobs.LeaseAcquiredEvent != nil {
 			s.testingKnobs.LeaseAcquiredEvent(desc, err)
