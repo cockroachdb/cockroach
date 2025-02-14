@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -219,12 +221,18 @@ type BaseConfig struct {
 	// do nontrivial work.
 	ReadyFn func(waitForInit bool)
 
-	// Stores is specified to enable durable key-value storage.
-	Stores base.StoreSpecList
+	// Stores is specified to enable durable key-value storage. It should not be
+	// used directly as it may not be populated. Use BootstrapConfig instead.
+	// TODO: Remove direct access of this. Use BootstrapConfig or Engines
+	// directly.
+	Stores storagepb.StoreSpecList
 
 	// StorageConfig is the configuration of storage based on the Stores,
 	// WALFailover and SharedStorage and BootstrapMount.
 	StorageConfig storagepb.NodeConfig
+
+	// BootstrapMount store is the location of a JSON StorageConfig file on disk.
+	BootstrapMount string
 
 	EarlyBootExternalStorageAccessor *cloud.EarlyBootExternalStorageAccessor
 	// ExternalIODirConfig is used to configure external storage
@@ -269,15 +277,12 @@ type BaseConfig struct {
 
 	// CidrLookup is used to look up the tag name for a given IP address.
 	CidrLookup *cidr.Lookup
-
-	// ExternalIODir is the local file path under which remotely-initiated
-	// operations that can specify node-local I/O paths (such as BACKUP, RESTORE
-	// or IMPORT) can access files.
-	ExternalIODir string
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
-func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer, storeSpec base.StoreSpec) BaseConfig {
+func MakeBaseConfig(
+	st *cluster.Settings, tr *tracing.Tracer, storeSpec storagepb.StoreSpec,
+) BaseConfig {
 	if tr == nil {
 		panic("nil Tracer")
 	}
@@ -290,7 +295,7 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer, storeSpec base.Sto
 // SetDefaults resets the values in BaseConfig but while preserving
 // the Config reference. Enables running tests multiple times.
 func (cfg *BaseConfig) SetDefaults(
-	st *cluster.Settings, tr *tracing.Tracer, storeSpec base.StoreSpec,
+	st *cluster.Settings, tr *tracing.Tracer, storeSpec storagepb.StoreSpec,
 ) {
 	baseCfg := cfg.Config
 	*cfg = BaseConfig{Config: baseCfg}
@@ -311,8 +316,8 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	cfg.StorageConfig.WALFailover = storagepb.WALFailover{}
 	cfg.TestingInsecureWebAccess = disableWebLogin
-	cfg.Stores = base.StoreSpecList{
-		Specs: []base.StoreSpec{storeSpec},
+	cfg.Stores = storagepb.StoreSpecList{
+		Specs: []storagepb.StoreSpec{storeSpec},
 	}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID
@@ -617,6 +622,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 // multiple times.
 func (cfg *Config) SetDefaults(ctx context.Context, st *cluster.Settings) {
 	storeSpec, tempStorageCfg := makeStorageCfg(ctx, st)
+	cfg.StorageConfig = storagepb.NodeConfig{}
 	cfg.SQLConfig.SetDefaults(tempStorageCfg)
 	cfg.KVConfig.SetDefaults()
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
@@ -625,14 +631,15 @@ func (cfg *Config) SetDefaults(ctx context.Context, st *cluster.Settings) {
 
 func makeStorageCfg(
 	ctx context.Context, st *cluster.Settings,
-) (base.StoreSpec, base.TempStorageConfig) {
-	storeSpec, err := base.NewStoreSpec(DefaultStorePath)
+) (storagepb.StoreSpec, base.TempStorageConfig) {
+	path, err := filepath.Abs(DefaultStorePath)
 	if err != nil {
 		panic(err)
 	}
+	store := storagepb.StoreSpec{Path: path}
 	tempStorageCfg := base.TempStorageConfigFromEnv(
-		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
-	return storeSpec, tempStorageCfg
+		ctx, st, store, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
+	return store, tempStorageCfg
 }
 
 // String implements the fmt.Stringer interface.
@@ -692,29 +699,91 @@ func (e *Engines) Close() {
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
-	var engines Engines
-	defer engines.Close()
-
 	if cfg.enginesCreated {
 		return Engines{}, errors.Errorf("engines already created")
 	}
 	cfg.enginesCreated = true
 
+	engines, err := createEnginesInternal(
+		ctx,
+		cfg.StorageConfig,
+		&cfg.TestingKnobs,
+		cfg.DiskWriteStats,
+		cfg.CacheSize,
+		cfg.EarlyBootExternalStorageAccessor,
+		cfg.DiskMonitorManager,
+		cfg.Settings,
+	)
+	if err != nil {
+		return Engines{}, err
+	}
+
+	// Validate all the existing configs before writing out the new ones.
+	for _, eng := range engines {
+		storeConfig, found, err := eng.(*storage.Pebble).LoadNodeStoreConfig()
+		if err != nil {
+			return Engines{}, err
+		}
+		// If the store doesn't have a persisted store config we don't attempt
+		// to validate it. This allows the option of manually deleting the store
+		// config files on all the stores to "force" an incompatible change
+		// through.
+		if !found {
+			continue
+		}
+		if err := storage.IsCompatible(cfg.StorageConfig, storeConfig); err != nil {
+			return Engines{}, errors.Wrapf(err, "failure on %s", eng.Env().Dir)
+		}
+	}
+
+	// Store the new config to each store if there wasn't a previous config.
+	if len(cfg.StorageConfig.Stores) > 0 {
+		for _, eng := range engines {
+			err = eng.(*storage.Pebble).PersistNodeStoreConfig(ctx, cfg.StorageConfig)
+			if err != nil {
+				fmt.Printf("Different error %+v", err)
+				return Engines{}, err
+			}
+		}
+	}
+	return engines, nil
+}
+
+// createEnginesInternal creates Engines based on the specs in cfg.Stores.
+func createEnginesInternal(
+	ctx context.Context,
+	cfg storagepb.NodeConfig,
+	testingKnobs *base.TestingKnobs,
+	diskWriteStats disk.WriteStatsManager,
+	cacheSize int64,
+	earlyBootAccessor *cloud.EarlyBootExternalStorageAccessor,
+	diskMonitorManager *disk.MonitorManager,
+	settings *cluster.Settings,
+) (Engines, error) {
+	var engines Engines
+
+	storeKnobs := &kvserver.StoreTestingKnobs{}
+	if s := testingKnobs.Store; s != nil {
+		storeKnobs = s.(*kvserver.StoreTestingKnobs)
+	}
+
 	var details []redact.RedactableString
 	detail := func(msg redact.RedactableString) {
 		details = append(details, msg)
 	}
-	detail(redact.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
-	pebbleCache := pebble.NewCache(cfg.CacheSize)
+	detail(redact.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cacheSize)))
+	pebbleCache := pebble.NewCache(cacheSize)
 	defer pebbleCache.Unref()
 
 	var sharedStorage cloud.ExternalStorage
-	if cfg.StorageConfig.SharedStorage.URI != "" {
+	// FIXME: Which user is used for external storage:
+	var externalStorageUser username.SQLUsername // cfg.User
+	if cfg.SharedStorage.URI != "" {
 		var err error
 		// Note that we don't pass an io interceptor here. Instead, we record shared
 		// storage metrics on a per-store basis; see storage.Metrics.
-		sharedStorage, err = cloud.ExternalStorageFromURI(ctx, cfg.StorageConfig.SharedStorage.URI,
-			base.ExternalIODirConfig{}, cfg.Settings, nil, cfg.User, nil,
+		sharedStorage, err = cloud.ExternalStorageFromURI(ctx, cfg.SharedStorage.URI,
+			base.ExternalIODirConfig{}, settings, nil, externalStorageUser, nil,
 			nil, cloud.NilMetrics)
 		if err != nil {
 			return nil, err
@@ -722,8 +791,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 
 	var physicalStores int
-	for _, spec := range cfg.Stores.Specs {
-		if !spec.InMemory {
+	for _, spec := range cfg.Stores {
+		if !spec.InMemory && spec.State != storagepb.StoreState_REMOVED {
 			physicalStores++
 		}
 	}
@@ -742,32 +811,37 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		fileCache = pebble.NewFileCache(runtime.GOMAXPROCS(0), totalFileLimit)
 	}
 
-	var storeKnobs kvserver.StoreTestingKnobs
 	var stickyRegistry fs.StickyRegistry
-	if s := cfg.TestingKnobs.Store; s != nil {
-		storeKnobs = *s.(*kvserver.StoreTestingKnobs)
-	}
-	if cfg.TestingKnobs.Server != nil {
-		serverKnobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+	if testingKnobs != nil && testingKnobs.Server != nil {
+		serverKnobs := testingKnobs.Server.(*TestingKnobs)
 		stickyRegistry = serverKnobs.StickyVFSRegistry
 	}
 
-	storeEnvs, err := fs.InitEnvsFromStoreSpecs(ctx, cfg.Stores.Specs, fs.ReadWrite, stickyRegistry, cfg.DiskWriteStats)
-	if err != nil {
-		return Engines{}, err
-	}
+	storeEnvs := make(fs.Envs, len(cfg.Stores))
 	defer storeEnvs.CloseAll()
+	for i, spec := range cfg.Stores {
+		var err error
+		storeEnvs[i], err = fs.InitEnvFromStoreSpec(ctx, spec, fs.ReadWrite, stickyRegistry, diskWriteStats)
+		if err != nil {
+			return Engines{}, err
+		}
+	}
 
-	walFailoverConfig := storage.WALFailover(cfg.StorageConfig.WALFailover, storeEnvs, vfs.Default, cfg.DiskWriteStats)
+	walFailoverConfig := storage.WALFailover(cfg.WALFailover, storeEnvs, vfs.Default, diskWriteStats)
 
-	for i, spec := range cfg.Stores.Specs {
+	for i, spec := range cfg.Stores {
+		if spec.State == storagepb.StoreState_REMOVED {
+			log.Eventf(ctx, "skipping removed store %+v", spec)
+			continue
+		}
 		log.Eventf(ctx, "initializing %+v", spec)
 
 		storageConfigOpts := []storage.ConfigOption{
 			walFailoverConfig,
 			storage.Attributes(spec.Attributes),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
-			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
+			// TODO: Should this only include the physical stores?
+			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores)),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
 			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
@@ -775,73 +849,72 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		addCfgOpt := func(opt storage.ConfigOption) {
 			storageConfigOpts = append(storageConfigOpts, opt)
 		}
+		addCfgOpt(storage.RemoteStorageFactory(earlyBootAccessor))
 
 		if spec.InMemory {
-			var sizeInBytes = spec.Size.Capacity
-			if spec.Size.Percent > 0 {
+			var sizeInBytes = spec.Properties.Capacity
+			/* FIXME:
+			if spec.Properties.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
 				if err != nil {
 					return Engines{}, errors.Errorf("could not retrieve system memory")
 				}
-				sizeInBytes = int64(float64(sysMem) * spec.Size.Percent / 100)
+				sizeInBytes = int64(float64(sysMem) * spec.Properties.Percent / 100)
 			}
-			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < base.MinimumStoreSize {
+			*/
+			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < storagepb.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
+					spec.Properties.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(storagepb.MinimumStoreSize))
 			}
 			addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
-			addCfgOpt(storage.CacheSize(cfg.CacheSize))
-			addCfgOpt(storage.RemoteStorageFactory(cfg.EarlyBootExternalStorageAccessor))
+			addCfgOpt(storage.CacheSize(cacheSize))
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
+			path := spec.Path
+
 			// NB: We've already initialized an *fs.Env backed by the real
 			// physical filesystem. This initialization will create the
 			// data directory if it didn't already exist.
-			du, err := storeEnvs[i].UnencryptedFS.GetDiskUsage(spec.Path)
+			du, err := storeEnvs[i].UnencryptedFS.GetDiskUsage(path)
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "retrieving disk usage")
 			}
-			var sizeInBytes = spec.Size.Capacity
-			if spec.Size.Percent > 0 {
-				sizeInBytes = int64(float64(du.TotalBytes) * spec.Size.Percent / 100)
+			sizeInBytes := spec.Properties.Capacity
+			if spec.Properties.Percent > 0 {
+				sizeInBytes = int64(float64(du.TotalBytes) * spec.Properties.Percent / 100)
 			}
-			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < base.MinimumStoreSize {
+			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < storagepb.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
+					spec.Properties.Percent, path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(storagepb.MinimumStoreSize))
 			}
-			monitor, err := cfg.DiskMonitorManager.Monitor(spec.Path)
+			monitor, err := diskMonitorManager.Monitor(path)
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "creating disk monitor")
 			}
 
-			statsCollector, err := cfg.DiskWriteStats.GetOrCreateCollector(spec.Path)
+			statsCollector, err := diskWriteStats.GetOrCreateCollector(path)
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "retrieving stats collector")
 			}
 			addCfgOpt(storage.DiskWriteStatsCollector(statsCollector))
 
-			if spec.Size.Percent > 0 {
-				detail(redact.Sprintf("store %d: max size %s (calculated from %.2f percent of total), max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), spec.Size.Percent, openFileLimitPerStore))
-				addCfgOpt(storage.MaxSizePercent(spec.Size.Percent / 100))
-			} else {
-				detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-				addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
-			}
-			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du)))
+			detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
+			addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
+			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec.Ballast, du)))
 			addCfgOpt(storage.Caches(pebbleCache, fileCache))
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
 			addCfgOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
 			addCfgOpt(storage.MaxWriterConcurrency(2))
-			addCfgOpt(storage.RemoteStorageFactory(cfg.EarlyBootExternalStorageAccessor))
-			if sharedStorage != nil {
+			if cfg.SharedStorage.URI != "" {
 				addCfgOpt(storage.SharedStorage(sharedStorage))
-				addCfgOpt(storage.SecondaryCache(storage.SecondaryCacheBytes(cfg.StorageConfig.SharedStorage.Cache, du)))
+				addCfgOpt(storage.SecondaryCache(storage.SecondaryCacheBytes(cfg.SharedStorage.Cache, du)))
 			}
+
 			addCfgOpt(storage.DiskMonitor(monitor))
 			// If the spec contains Pebble options, set those too.
-			if spec.PebbleOptions != "" {
-				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
+			if spec.Options != "" {
+				addCfgOpt(storage.PebbleOptions(spec.Options, &pebble.ParseHooks{
 					NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
 						switch name {
 						case "none":
@@ -854,7 +927,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}))
 			}
 		}
-		eng, err := storage.Open(ctx, storeEnvs[i], cfg.Settings, storageConfigOpts...)
+		eng, err := storage.Open(ctx, storeEnvs[i], settings, storageConfigOpts...)
 		if err != nil {
 			return Engines{}, err
 		}

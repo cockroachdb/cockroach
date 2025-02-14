@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,10 +33,7 @@ func TestStatusEngineStatsJson(t *testing.T) {
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110020),
-
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
+		StoreConfig:       storagepb.NodeConfig{Stores: []storagepb.StoreSpec{{Path: dir}}},
 	})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()

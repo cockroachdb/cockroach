@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1455,7 +1456,7 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 
 	defer initCLIDefaults()
 
-	expectedDefaultDir, err := base.GetAbsoluteFSPath("", "cockroach-data-tenant-9")
+	expectedDefaultDir, err := storagepb.GetAbsoluteFSPath("", "cockroach-data-tenant-9")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1489,10 +1490,10 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 			err := mtStartSQLCmd.PersistentPreRunE(mtStartSQLCmd, td.args)
 			if td.expectedErr == "" {
 				require.NoError(t, err)
-				assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
+				assert.Equal(t, td.storePath, serverCfg.StorageConfig.Stores[0].Path)
 				for _, s := range serverCfg.Stores.Specs {
-					assert.Zero(t, s.BallastSize.Capacity)
-					assert.Zero(t, s.BallastSize.Percent)
+					assert.Zero(t, s.Ballast.Capacity)
+					assert.Zero(t, s.Ballast.Percent)
 				}
 			} else {
 				require.EqualError(t, err, td.expectedErr)

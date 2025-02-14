@@ -1096,6 +1096,13 @@ See the storage.wal_failover.unhealthy_op_threshold cluster setting.
 		Description: "Deprecated: only present for backward compatibility.",
 	}
 
+	BootstrapMount = FlagInfo{
+		Name: "bootstrap",
+		Description: `
+		Root directory of one store's mount point. This is used to find the server store configuration and load the store.
+		`,
+	}
+
 	SecondaryCache = FlagInfo{
 		Name: "experimental-secondary-cache",
 		Description: `

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -93,7 +94,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	args := base.TestServerArgs{
 		Locality:      roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "of-france"}}},
 		Settings:      cluster.MakeClusterSettings(),
-		ExternalIODir: dir,
+		StorageConfig: storagepb.NodeConfig{ExternalIODir: dir},
 		// Some scheduled backup tests fail when run within a tenant. More
 		// investigation is required. Tracked with #76378.
 		DefaultTestTenant: base.TODOTestTenantDisabled,

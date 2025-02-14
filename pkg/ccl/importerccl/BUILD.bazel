@@ -32,6 +32,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/importer",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",

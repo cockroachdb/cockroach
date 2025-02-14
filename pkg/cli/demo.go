@@ -217,11 +217,6 @@ func runDemoInternal(
 		log.Warningf,
 		log.Ops.Shoutf,
 		func(ctx context.Context) (*stop.Stopper, error) {
-			// Override the default server store spec.
-			//
-			// This is needed because the logging setup code peeks into this to
-			// decide how to enable logging.
-			serverCfg.Stores.Specs = nil
 			return setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 		},
 		func(ctx context.Context, ac serverpb.AdminClient) error {

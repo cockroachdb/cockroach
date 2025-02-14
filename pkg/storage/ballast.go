@@ -6,7 +6,6 @@
 package storage
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -28,7 +27,7 @@ var ballastsEnabled bool = envutil.EnvOrDefaultBool("COCKROACH_AUTO_BALLAST", tr
 //
 // If the current on-disk ballast does not match the configured ballast size
 // in spec, IsDiskFull will resize the file if available capacity allows.
-func IsDiskFull(fs vfs.FS, spec base.StoreSpec) (bool, error) {
+func IsDiskFull(fs vfs.FS, spec storagepb.StoreSpec) (bool, error) {
 	if spec.InMemory {
 		return false, nil
 	}
@@ -44,7 +43,7 @@ func IsDiskFull(fs vfs.FS, spec base.StoreSpec) (bool, error) {
 		} else {
 			path = parentPath
 		}
-		diskUsage, err = fs.GetDiskUsage(path)
+		diskUsage, err = fs.GetDiskUsage(spec.Path)
 	}
 	if err != nil {
 		return false, errors.Wrapf(err, "retrieving disk usage: %s", spec.Path)
@@ -56,14 +55,14 @@ func IsDiskFull(fs vfs.FS, spec base.StoreSpec) (bool, error) {
 	// we need to create or grow the ballast but are unable because
 	// there's insufficient disk space, it'll be resized by the periodic
 	// capacity calculations when the conditions are met.
-	desiredSizeBytes := BallastSizeBytes(spec, diskUsage)
-	ballastPath := base.EmergencyBallastFile(fs.PathJoin, spec.Path)
+	desiredSizeBytes := BallastSizeBytes(spec.Ballast, diskUsage)
+	ballastPath := storagepb.EmergencyBallastFile(fs.PathJoin, path)
 	if resized, err := maybeEstablishBallast(fs, ballastPath, desiredSizeBytes, diskUsage); err != nil {
 		return false, err
 	} else if resized {
 		diskUsage, err = fs.GetDiskUsage(path)
 		if err != nil {
-			return false, errors.Wrapf(err, "retrieving disk usage: %s", spec.Path)
+			return false, errors.Wrapf(err, "retrieving disk usage: %s", path)
 		}
 	}
 
@@ -82,11 +81,12 @@ func IsDiskFull(fs vfs.FS, spec base.StoreSpec) (bool, error) {
 // the disk's total capacity), the store spec's size is used. Otherwise,
 // BallastSizeBytes returns 1GiB or 1% of total capacity, whichever is
 // smaller.
-func BallastSizeBytes(spec base.StoreSpec, diskUsage vfs.DiskUsage) int64 {
-	if spec.BallastSize != nil {
-		v := spec.BallastSize.Capacity
-		if spec.BallastSize.Percent != 0 {
-			v = int64(float64(diskUsage.TotalBytes) * spec.BallastSize.Percent / 100)
+func BallastSizeBytes(ballastSpec storagepb.SizeSpec, diskUsage vfs.DiskUsage) int64 {
+	// TODO: How should we handle the case where the user explicitly chooses a 0 size.
+	if ballastSpec.Capacity != 0 || ballastSpec.Percent != 0 {
+		v := ballastSpec.Capacity
+		if ballastSpec.Percent != 0 {
+			v = int64(float64(diskUsage.TotalBytes) * ballastSpec.Percent / 100)
 		}
 		return v
 	}

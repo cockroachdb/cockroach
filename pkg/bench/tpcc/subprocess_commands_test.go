@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -58,7 +59,7 @@ var (
 
 		defer log.Scope(t).Close(t)
 		srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{{Path: storeDir}},
+			StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{{Path: storeDir}}},
 		})
 		defer srv.Stopper().Stop(ctx)
 

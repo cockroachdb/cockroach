@@ -251,7 +251,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 func getDefaultLogDirFromStores() (dir *string, ambiguousLogDirs bool) {
 	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store.
-	for _, spec := range serverCfg.Stores.Specs {
+	for _, spec := range serverCfg.StorageConfig.Stores {
 		if spec.InMemory {
 			continue
 		}

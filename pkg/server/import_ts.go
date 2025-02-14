@@ -97,7 +97,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 	// to complexities detailed below. Additionally, we allow it only on a fresh
 	// single-node single-store cluster and we also guard against join flags even
 	// though there shouldn't be any.
-	if !s.InitialStart() || len(s.cfg.JoinList) > 0 || len(s.cfg.Stores.Specs) != 1 {
+	if !s.InitialStart() || len(s.cfg.JoinList) > 0 || len(s.cfg.StorageConfig.Stores) != 1 {
 		return errors.New("cannot import timeseries into an existing cluster or a multi-{store,node} cluster")
 	}
 

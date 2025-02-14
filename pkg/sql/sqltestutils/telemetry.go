@@ -144,7 +144,7 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 				OverrideReportingURL: &diagSrvURL,
 			},
 		}
-		v.ExternalIODir = tempExternalIODir
+		v.StorageConfig.ExternalIODir = tempExternalIODir
 		mapServerArgs[i] = v
 	}
 	tt.cluster = serverutils.StartCluster(

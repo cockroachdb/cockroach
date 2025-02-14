@@ -9,7 +9,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -32,11 +31,11 @@ func TestStickyVFS(t *testing.T) {
 		registry  = fs.NewStickyRegistry()
 	)
 
-	spec1 := base.StoreSpec{
+	spec1 := storagepb.StoreSpec{
 		InMemory:    true,
 		StickyVFSID: "engine1",
 		Attributes:  attrs,
-		Size:        storagepb.SizeSpec{Capacity: storeSize},
+		Properties:  storagepb.SizeSpec{Capacity: storeSize},
 	}
 	fs1 := registry.Get(spec1.StickyVFSID)
 	env, err := fs.InitEnvFromStoreSpec(ctx, spec1, fs.ReadWrite, registry, nil /* statsCollector */)

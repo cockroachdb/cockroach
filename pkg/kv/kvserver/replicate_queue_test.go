@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -194,15 +195,15 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	const leaseRebalanceThreshold = 0.01
 
 	const useDisk = false // for debugging purposes
-	spec := func(node int, store int) base.StoreSpec {
+	spec := func(node int, store int) storagepb.StoreSpec {
 		return base.DefaultTestStoreSpec
 	}
 	if useDisk {
 		td, err := os.MkdirTemp("", "test")
 		require.NoError(t, err)
 		t.Logf("store dirs in %s", td)
-		spec = func(node int, store int) base.StoreSpec {
-			return base.StoreSpec{
+		spec = func(node int, store int) storagepb.StoreSpec {
+			return storagepb.StoreSpec{
 				Path: filepath.Join(td, fmt.Sprintf("n%ds%d", node, store)),
 			}
 		}
@@ -231,9 +232,11 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 					ScanMinIdleTime: time.Millisecond,
 					ScanMaxIdleTime: time.Millisecond,
 				}
-				perNode.StoreSpecs = make([]base.StoreSpec, testCase.storesPerNode)
-				for idx := range perNode.StoreSpecs {
-					perNode.StoreSpecs[idx] = spec(i+1, idx+1)
+				perNode.StoreConfig = storagepb.NodeConfig{
+					Stores: make([]storagepb.StoreSpec, testCase.storesPerNode),
+				}
+				for idx := range perNode.StoreConfig.Stores {
+					perNode.StoreConfig.Stores[idx] = spec(i+1, idx+1)
 				}
 				args.ServerArgsPerNode[i] = perNode
 			}
@@ -1950,21 +1953,21 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
 				ScanMaxIdleTime: time.Millisecond,
-				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n1"}},
-				}},
+				StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n1"}}}},
+				},
 			},
 			1: {
 				ScanMaxIdleTime: time.Millisecond,
-				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n2"}},
-				}},
+				StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n2"}}}},
+				},
 			},
 			2: {
 				ScanMaxIdleTime: time.Millisecond,
-				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n3"}},
-				}},
+				StoreConfig: storagepb.NodeConfig{Stores: []storagepb.StoreSpec{
+					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n3"}}}},
+				},
 			},
 		},
 	}

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,32 +28,32 @@ func TestBallastSizeBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		base.StoreSpec
+		storagepb.SizeSpec
 		totalBytes uint64
 		want       int64
 	}{
 		{
-			StoreSpec:  base.StoreSpec{},
+			SizeSpec:   storagepb.SizeSpec{},
 			totalBytes: 500 << 30, // 500 GiB
 			want:       1 << 30,   // 1 GiB
 		},
 		{
-			StoreSpec:  base.StoreSpec{},
+			SizeSpec:   storagepb.SizeSpec{},
 			totalBytes: 25 << 30,  // 25 GiB
 			want:       256 << 20, // 256 MiB
 		},
 		{
-			StoreSpec:  base.StoreSpec{BallastSize: &storagepb.SizeSpec{Capacity: 1 << 30 /* 1 GiB */}},
+			SizeSpec:   storagepb.SizeSpec{Capacity: 1 << 30 /* 1 GiB */},
 			totalBytes: 25 << 30, // 25 GiB
 			want:       1 << 30,  // 1 GiB
 		},
 		{
-			StoreSpec:  base.StoreSpec{BallastSize: &storagepb.SizeSpec{Percent: 20}},
+			SizeSpec:   storagepb.SizeSpec{Percent: 20},
 			totalBytes: 25 << 30, // 25 GiB
 			want:       5 << 30,  // 5 GiB
 		},
 		{
-			StoreSpec:  base.StoreSpec{BallastSize: &storagepb.SizeSpec{Percent: 20}},
+			SizeSpec:   storagepb.SizeSpec{Percent: 20},
 			totalBytes: 500 << 30, // 500 GiB
 			want:       100 << 30, // 100 GiB
 		},
@@ -62,7 +61,7 @@ func TestBallastSizeBytes(t *testing.T) {
 
 	for _, tc := range testCases {
 		du := vfs.DiskUsage{TotalBytes: tc.totalBytes}
-		got := BallastSizeBytes(tc.StoreSpec, du)
+		got := BallastSizeBytes(tc.SizeSpec, du)
 		require.Equal(t, tc.want, got)
 	}
 
@@ -75,7 +74,7 @@ func TestIsDiskFull(t *testing.T) {
 	// TODO(jackson): This test could be adapted to use a MemFS if we add
 	// Truncate to vfs.FS.
 
-	setup := func(t *testing.T, spec *base.StoreSpec, ballastSize int64, du ...vfs.DiskUsage) (vfs.FS, func()) {
+	setup := func(t *testing.T, spec *storagepb.StoreSpec, ballastSize int64, du ...vfs.DiskUsage) (vfs.FS, func()) {
 		dir, dirCleanupFn := testutils.TempDir(t)
 		fs := mockDiskUsageFS{
 			FS:         vfs.Default,
@@ -84,7 +83,7 @@ func TestIsDiskFull(t *testing.T) {
 		spec.Path = dir
 
 		if ballastSize > 0 {
-			path := base.EmergencyBallastFile(fs.PathJoin, spec.Path)
+			path := storagepb.EmergencyBallastFile(fs.PathJoin, spec.Path)
 			require.NoError(t, fs.MkdirAll(fs.PathDir(path), 0755))
 			err := sysutil.ResizeLargeFile(path, ballastSize)
 			fmt.Printf("Created ballast at %s\n", path)
@@ -94,10 +93,9 @@ func TestIsDiskFull(t *testing.T) {
 	}
 
 	t.Run("default ballast, full disk", func(t *testing.T) {
-		spec := base.StoreSpec{
+		spec := storagepb.StoreSpec{
 			// NB: A missing ballast size defaults to Min(1GiB, 1% of
 			// total) = 1GiB, which is greater than available bytes.
-			BallastSize: nil,
 		}
 		fs, cleanup := setup(t, &spec, 0 /* ballastSize */, vfs.DiskUsage{
 			AvailBytes: (1 << 28), // 256 MiB
@@ -109,10 +107,9 @@ func TestIsDiskFull(t *testing.T) {
 		require.True(t, got)
 	})
 	t.Run("default ballast, plenty of space", func(t *testing.T) {
-		spec := base.StoreSpec{
+		spec := storagepb.StoreSpec{
 			// NB: A missing ballast size defaults to Min(1GiB, 1% of
-			// total) = 1GiB which is greater than available bytes.
-			BallastSize: nil,
+			// total) = 1GiB, which is greater than available bytes.
 		}
 		fs, cleanup := setup(t, &spec, 0 /* ballastSize */, vfs.DiskUsage{
 			AvailBytes: 25 << 30,  // 25 GiB
@@ -124,8 +121,8 @@ func TestIsDiskFull(t *testing.T) {
 		require.False(t, got)
 	})
 	t.Run("truncating ballast frees enough space", func(t *testing.T) {
-		spec := base.StoreSpec{
-			BallastSize: &storagepb.SizeSpec{Capacity: 1024},
+		spec := storagepb.StoreSpec{
+			Ballast: storagepb.SizeSpec{Capacity: 1024},
 		}
 		// Provide two disk usages. The second one will be returned
 		// post-truncation.
@@ -138,13 +135,13 @@ func TestIsDiskFull(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, got)
 		// The ballast should've been truncated.
-		fi, err := fs.Stat(base.EmergencyBallastFile(fs.PathJoin, spec.Path))
+		fi, err := fs.Stat(storagepb.EmergencyBallastFile(fs.PathJoin, spec.Path))
 		require.NoError(t, err)
 		require.Equal(t, int64(1024), fi.Size())
 	})
 	t.Run("configured ballast, plenty of space", func(t *testing.T) {
-		spec := base.StoreSpec{
-			BallastSize: &storagepb.SizeSpec{Capacity: 5 << 30 /* 5 GiB */},
+		spec := storagepb.StoreSpec{
+			Ballast: storagepb.SizeSpec{Capacity: 5 << 30 /* 5 GiB */},
 		}
 		fs, cleanup := setup(t, &spec, 0 /* ballastSize */, vfs.DiskUsage{
 			AvailBytes: 25 << 30,  // 25 GiB

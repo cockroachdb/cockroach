@@ -297,10 +297,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 	stopper.AddCloser(&engines)
 
+	firstStoreEnv := engines[0].Env()
+
 	// Loss of quorum recovery store is created and pending plan is applied to
 	// engines as soon as engines are created and before any data is read in a
 	// way similar to offline engine content patching.
-	planStore, err := newPlanStore(cfg)
+	planStore, err := newPlanStore(cfg, firstStoreEnv)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create loss of quorum plan store")
 	}
@@ -967,7 +969,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 
 	// Create blob service for inter-node file sharing.
-	blobService, err := blobs.NewBlobService(cfg.ExternalIODir)
+	blobService, err := blobs.NewBlobService(cfg.StorageConfig.ExternalIODir)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating blob service")
 	}
@@ -1622,7 +1624,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	}.Iter()
 
 	encryptedStore := false
-	for _, storeSpec := range s.cfg.Stores.Specs {
+	for _, storeSpec := range s.cfg.StorageConfig.Stores {
 		if storeSpec.InMemory {
 			continue
 		}
@@ -1632,6 +1634,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 		for name, val := range listenerFiles {
 			file := filepath.Join(storeSpec.Path, name)
+			// TODO(storage): Write using eng.Env().Create()
 			if err := os.WriteFile(file, []byte(val), 0644); err != nil {
 				return errors.Wrapf(err, "failed to write %s", file)
 			}
@@ -1954,7 +1957,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// uses the disk stats map we're initializing.
 	var pmp admission.PebbleMetricsProvider
 	if pmp, err = s.node.registerEnginesForDiskStatsMap(
-		s.cfg.Stores.Specs, s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
+		s.cfg.StorageConfig.Stores, s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
 
@@ -2078,7 +2081,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.sqlServer.execCfg.InternalDB.CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
 		nil, /* TenantExternalIORecorder */
 		s.appRegistry,
-		s.cfg.ExternalIODir,
+		s.cfg.StorageConfig.ExternalIODir,
 	)
 
 	if err := s.runIdempontentSQLForInitType(ctx, state.initType); err != nil {

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -58,7 +59,7 @@ var serverHTTPAddr, serverHTTPPort string
 var serverHTTPAdvertiseAddr, serverHTTPAdvertisePort string
 var localityAdvertiseHosts localityList
 var startBackground bool
-var storeSpecs base.StoreSpecList
+var storeSpecs storagepb.StoreSpecList
 var goMemLimit int64
 var tenantIDFile string
 var localityFile string
@@ -90,7 +91,7 @@ func initPreFlagsDefaults() {
 
 	startBackground = false
 
-	storeSpecs = base.StoreSpecList{}
+	storeSpecs = storagepb.StoreSpecList{}
 
 	goMemLimit = 0
 
@@ -431,7 +432,11 @@ func init() {
 
 		// Add a new pre-run command to match encryption specs to store specs.
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
-			return populateStoreSpecsEncryption()
+			return storagepb.PopulateWithEncryptionOpts(
+				serverCfg.Stores,
+				serverCfg.StorageConfig.WALFailover,
+				encryptionSpecs,
+			)
 		})
 	}
 
@@ -525,6 +530,7 @@ func init() {
 		cliflagcfg.StringFlag(f, &deprecatedStorageEngine, cliflags.StorageEngine)
 		_ = pf.MarkHidden(cliflags.StorageEngine.Name)
 
+		cliflagcfg.StringFlag(f, &serverCfg.BootstrapMount, cliflags.BootstrapMount)
 		cliflagcfg.VarFlag(f, &serverCfg.StorageConfig.WALFailover, cliflags.WALFailover)
 		// TODO(storage): Consider combining the uri and cache manual settings.
 		// Alternatively remove the ability to configure shared storage without
@@ -581,7 +587,7 @@ func init() {
 		// percentage refers to becomes known.
 		cliflagcfg.VarFlag(f, &startCtx.diskTempStorageSizeValue, cliflags.SQLTempStorage)
 		cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
-		cliflagcfg.StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
+		cliflagcfg.StringFlag(f, &serverCfg.StorageConfig.ExternalIODir, cliflags.ExternalIODir)
 
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
@@ -1379,56 +1385,27 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	if fs.Changed(cliflags.Store.Name) {
 		serverCfg.Stores = storeSpecs
 	}
-	// Convert all the store paths to absolute paths. We want this to
-	// ensure canonical directories across invocations; and also to
-	// benefit from the check in GetAbsoluteFSPath() that the user
-	// didn't mistakenly assume a heading '~' would get translated by
-	// CockroachDB. (The shell should be responsible for that.)
-	for i, ss := range serverCfg.Stores.Specs {
-		if ss.InMemory {
-			continue
-		}
-		absPath, err := base.GetAbsoluteFSPath("path", ss.Path)
-		if err != nil {
-			return err
-		}
-		ss.Path = absPath
-		serverCfg.Stores.Specs[i] = ss
+	if err := populateStorageConfigStores(); err != nil {
+		return err
 	}
 
 	if serverCfg.StorageConfig.WALFailover.Path.IsSet() {
-		absPath, err := base.GetAbsoluteFSPath("wal-failover.path", serverCfg.StorageConfig.WALFailover.Path.Path)
+		absPath, err := storagepb.GetAbsoluteFSPath("wal-failover.path", serverCfg.StorageConfig.WALFailover.Path.Path)
 		if err != nil {
 			return err
 		}
 		serverCfg.StorageConfig.WALFailover.Path.Path = absPath
 	}
 	if serverCfg.StorageConfig.WALFailover.PrevPath.IsSet() {
-		absPath, err := base.GetAbsoluteFSPath("wal-failover.prev_path", serverCfg.StorageConfig.WALFailover.PrevPath.Path)
+		absPath, err := storagepb.GetAbsoluteFSPath("wal-failover.prev_path", serverCfg.StorageConfig.WALFailover.PrevPath.Path)
 		if err != nil {
 			return err
 		}
 		serverCfg.StorageConfig.WALFailover.PrevPath.Path = absPath
 	}
 
-	// Configure the external I/O directory.
-	if !fs.Changed(cliflags.ExternalIODir.Name) {
-		// Try to find a directory from the store configuration.
-		for _, ss := range serverCfg.Stores.Specs {
-			if ss.InMemory {
-				continue
-			}
-			startCtx.externalIODir = filepath.Join(ss.Path, "extern")
-			break
-		}
-	}
-	if startCtx.externalIODir != "" {
-		// Make the directory name absolute.
-		var err error
-		startCtx.externalIODir, err = base.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
-		if err != nil {
-			return err
-		}
+	if err := populateExternalIODir(fs); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1462,6 +1439,7 @@ func extraClientFlagInit() error {
 	return nil
 }
 
+// FIXME: This is modifying the storage config after it is set up.
 func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 	// Override default store for mt to use a per tenant store directory.
 	fs := cliflagcfg.FlagSetForCmd(cmd)
@@ -1481,32 +1459,9 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		// configs are initialized when start is executed and temp dirs inherit
 		// path from first store.
 		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
-		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
-	}
-
-	// In standalone SQL servers, we do not generate a ballast file,
-	// unless a ballast size was specified explicitly by the user.
-	for i := range serverCfg.Stores.Specs {
-		spec := &serverCfg.Stores.Specs[i]
-		if spec.BallastSize == nil {
-			// Only override if there was no ballast size specified to start
-			// with.
-			zero := storagepb.SizeSpec{Capacity: 0, Percent: 0}
-			spec.BallastSize = &zero
-		}
+		serverCfg.StorageConfig.Stores[0].Path += "-tenant-" + tenantID
 	}
 	return nil
-}
-
-// populateStoreSpecsEncryption is a PreRun hook that matches store encryption
-// specs with the parsed stores and populates some fields in the StoreSpec and
-// WAL failover config.
-func populateStoreSpecsEncryption() error {
-	return base.PopulateWithEncryptionOpts(
-		GetServerCfgStores(),
-		GetWALFailoverConfig(),
-		encryptionSpecs,
-	)
 }
 
 // RegisterFlags exists so that other packages can register flags using the
@@ -1514,3 +1469,65 @@ func populateStoreSpecsEncryption() error {
 // package rather than the cliccl package to defeat the duplicate envvar
 // registration logic.
 func RegisterFlags(f func()) { f() }
+
+// populateExternalIODir initializes the externalIODir based on either the user
+// specified value or one of the directories from the stores.
+func populateExternalIODir(fs *pflag.FlagSet) error {
+	// Configure the external I/O directory. If the user manually configured the
+	// external IO dir, convert it to an absolute path, otherwise base it on the
+	// store specs.
+	if fs.Changed(cliflags.ExternalIODir.Name) {
+		if serverCfg.StorageConfig.ExternalIODir != "" {
+			absPath, err := storagepb.GetAbsoluteFSPath(cliflags.ExternalIODir.Name, serverCfg.StorageConfig.ExternalIODir)
+			if err != nil {
+				return err
+			}
+			serverCfg.StorageConfig.ExternalIODir = absPath
+		}
+	} else {
+		// Try to find a directory from the store configuration.
+		for _, ss := range serverCfg.StorageConfig.Stores {
+			if ss.InMemory {
+				continue
+			}
+			// TODO: Do we need the abs here?
+			absPath, err := filepath.Abs(filepath.Join(ss.Path, "extern"))
+			if err != nil {
+				return err
+			}
+			serverCfg.StorageConfig.ExternalIODir = absPath
+			break
+		}
+	}
+	return nil
+}
+
+func populateStorageConfigStores() error {
+	// The stores should not be set yet since we are going to override them.
+	if len(serverCfg.StorageConfig.Stores) > 0 {
+		panic(serverCfg.StorageConfig.Stores)
+	}
+
+	for _, spec := range serverCfg.Stores.Specs {
+		serverCfg.StorageConfig.Stores = append(serverCfg.StorageConfig.Stores, spec)
+	}
+	// Prevent anyone from using the store specs, we have pulled all the
+	// information out of it already.
+	serverCfg.Stores.Specs = nil
+
+	// If a bootstrap mount is set, load the config based on it and ignore any
+	// other settings that conflict with it.
+	if serverCfg.BootstrapMount != "" {
+		config, exists, err := storage.LoadNodeStoreConfig(serverCfg.BootstrapMount)
+		if err != nil {
+			return errors.Wrap(err, "problem retrieving existing config")
+		}
+		if exists {
+			// TODO: Handle the case where the config and bootstrap config are
+			// incompatible. This should be rare.
+			serverCfg.StorageConfig = config
+		}
+	}
+
+	return nil
+}

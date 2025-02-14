@@ -75,6 +75,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql/lexbase",
         "//pkg/sql/scanner",
+        "//pkg/storage/storagepb",
         "//pkg/testutils/serverutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",

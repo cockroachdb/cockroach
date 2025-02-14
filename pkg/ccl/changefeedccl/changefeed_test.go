@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -6622,7 +6623,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 			DefaultTestTenant: base.TODOTestTenantDisabled,
 			UseDatabase:       "test",
 			Knobs:             knobs,
-			ExternalIODir:     sinkDir,
+			StorageConfig:     storagepb.NodeConfig{ExternalIODir: sinkDir},
 		}})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -6768,7 +6769,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			ExternalIODir: opts.externalIODir,
+			StorageConfig: storagepb.NodeConfig{ExternalIODir: opts.externalIODir},
 		}
 	}
 
@@ -6931,7 +6932,7 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 					StickyVFSRegistry: stickyVFSRegistry,
 				},
 			},
-			ExternalIODir: opts.externalIODir,
+			StorageConfig: storagepb.NodeConfig{ExternalIODir: opts.externalIODir},
 			UseDatabase:   "d",
 		}
 	}
@@ -7025,7 +7026,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			ExternalIODir: opts.externalIODir,
+			StorageConfig: storagepb.NodeConfig{ExternalIODir: opts.externalIODir},
 			UseDatabase:   "d",
 		}
 	}
@@ -9469,7 +9470,7 @@ func TestChangefeedExecLocality(t *testing.T) {
 	}
 	for i := 0; i < nodes; i++ {
 		args.ServerArgsPerNode[i] = base.TestServerArgs{
-			ExternalIODir: path.Join(dir, str(i)),
+			StorageConfig: storagepb.NodeConfig{ExternalIODir: path.Join(dir, str(i))},
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "x", Value: str(i / 2)}, {Key: "y", Value: str(i % 2)}}},
 		}

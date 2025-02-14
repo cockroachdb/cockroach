@@ -579,7 +579,7 @@ func TestRestoreFromLDR(t *testing.T) {
 	dataDir, dirCleanupFunc := testutils.TempDir(t)
 	defer dirCleanupFunc()
 	args := testClusterBaseClusterArgs
-	args.ServerArgs.ExternalIODir = dataDir
+	args.ServerArgs.StorageConfig.ExternalIODir = dataDir
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, args, 1)
 	defer server.Stopper().Stop(ctx)
 
@@ -609,7 +609,7 @@ func TestImportIntoLDR(t *testing.T) {
 	dataDir, dirCleanupFunc := testutils.TempDir(t)
 	defer dirCleanupFunc()
 	args := testClusterBaseClusterArgs
-	args.ServerArgs.ExternalIODir = dataDir
+	args.ServerArgs.StorageConfig.ExternalIODir = dataDir
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, args, 1)
 	defer server.Stopper().Stop(ctx)
 
