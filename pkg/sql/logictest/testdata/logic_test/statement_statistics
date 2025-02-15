@@ -207,7 +207,7 @@ SET application_name = 'implicit_txn_test'
 statement ok
 BEGIN; SELECT x FROM test where y=1; COMMIT;
 
-# Upgraded implicit txn.
+# Upgraded implicit txn. All statements should be in explicit txn.
 statement ok
 select 1; BEGIN; select 1; select 1; COMMIT
 
@@ -231,7 +231,6 @@ ORDER BY key, implicit_txn;
 ----
 key                             implicit_txn
 SELECT _                        false
-SELECT _                        true
 SELECT x FROM test WHERE y = _  false
 SELECT x FROM test WHERE y = _  false
 SELECT x FROM test WHERE y = _  true
