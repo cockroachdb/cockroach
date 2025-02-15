@@ -27,6 +27,13 @@ type Deleter struct {
 	FetchCols []catalog.Column
 	// FetchColIDtoRowIndex must be kept in sync with FetchCols.
 	FetchColIDtoRowIndex catalog.TableColMap
+	// primaryLocked, if true, indicates that no lock is needed when deleting
+	// from the primary index because the caller already acquired it.
+	primaryLocked bool
+	// secondaryLocked, if set, indicates that no lock is needed when deleting
+	// from this secondary index because the caller already acquired it.
+	secondaryLocked catalog.Index
+
 	// For allocation avoidance.
 	key         roachpb.Key
 	rawValueBuf []byte
@@ -39,9 +46,16 @@ type Deleter struct {
 // requestedCols is non-nil, then only the requested columns are included in
 // FetchCols; otherwise, all columns that are part of the key of any index
 // (either primary or secondary) are included in FetchCols.
+//
+// lockedIndexes describes the set of indexes such that any keys that might be
+// deleted from the index had already locks acquired on them. In other words,
+// the caller guarantees that the deleter has exclusive access to the keys in
+// these indexes. It is assumed that at most one secondary index is already
+// locked.
 func MakeDeleter(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
+	lockedIndexes []catalog.Index,
 	requestedCols []catalog.Column,
 	sv *settings.Values,
 	internal bool,
@@ -89,10 +103,24 @@ func MakeDeleter(
 		}
 	}
 
+	var primaryLocked bool
+	var secondaryLocked catalog.Index
+	for _, index := range lockedIndexes {
+		if index.Primary() {
+			primaryLocked = true
+		} else {
+			secondaryLocked = index
+		}
+	}
+	if len(lockedIndexes) > 1 && !primaryLocked {
+		panic(errors.AssertionFailedf("locked at least two secondary indexes in the initial scan: %v", lockedIndexes))
+	}
 	rd := Deleter{
 		Helper:               NewRowHelper(codec, tableDesc, indexes, nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
+		primaryLocked:        primaryLocked,
+		secondaryLocked:      secondaryLocked,
 	}
 
 	return rd
@@ -131,11 +159,9 @@ func (rd *Deleter) DeleteRow(
 		if err != nil {
 			return err
 		}
-		// TODO(yuzefovich): don't acquire the lock if we already locked this
-		// secondary index during the initial scan.
 		// TODO(yuzefovich): consider not acquiring the locks for non-unique
 		// indexes at all.
-		const needsLock = true
+		needsLock := rd.secondaryLocked == nil || rd.secondaryLocked.GetID() != index.GetID()
 		for _, e := range entries {
 			if err = rd.Helper.deleteIndexEntry(
 				ctx, b, index, &e.Key, needsLock, traceKV, rd.Helper.secIndexValDirs[i],
@@ -177,10 +203,7 @@ func (rd *Deleter) DeleteRow(
 			}
 			oth.DelWithCPut(ctx, b, &rd.key, expValue, traceKV)
 		} else {
-			// TODO(yuzefovich): don't acquire the lock if we already locked the
-			// primary during the initial scan.
-			const needsLock = true
-			delFn(ctx, b, &rd.key, needsLock, traceKV, rd.Helper.primIndexValDirs)
+			delFn(ctx, b, &rd.key, !rd.primaryLocked /* needsLock */, traceKV, rd.Helper.primIndexValDirs)
 		}
 
 		rd.key = nil
