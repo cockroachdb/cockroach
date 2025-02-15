@@ -159,9 +159,7 @@ func (rd *Deleter) DeleteRow(
 		if err != nil {
 			return err
 		}
-		// TODO(yuzefovich): consider not acquiring the locks for non-unique
-		// indexes at all.
-		needsLock := rd.secondaryLocked == nil || rd.secondaryLocked.GetID() != index.GetID()
+		needsLock := index.IsUnique() && (rd.secondaryLocked == nil || rd.secondaryLocked.GetID() != index.GetID())
 		for _, e := range entries {
 			if err = rd.Helper.deleteIndexEntry(
 				ctx, b, index, &e.Key, needsLock, traceKV, rd.Helper.secIndexValDirs[i],
