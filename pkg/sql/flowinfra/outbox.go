@@ -100,7 +100,7 @@ func NewOutbox(
 	isGatewayNode bool,
 ) *Outbox {
 	m := &Outbox{flowCtx: flowCtx, processorID: processorID, sqlInstanceID: sqlInstanceID}
-	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
+	m.encoder.SetHeaderFields(flowCtx.ID, streamID, flowCtx.NodeID.SQLInstanceID())
 	m.streamID = streamID
 	m.numOutboxes = numOutboxes
 	m.isGatewayNode = isGatewayNode
