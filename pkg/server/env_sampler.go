@@ -39,27 +39,23 @@ type sampleEnvironmentCfg struct {
 // when appropriate, creates goroutine and/or heap dumps.
 func startSampleEnvironment(
 	ctx context.Context,
-	settings *cluster.Settings,
+	srvCfg *BaseConfig,
 	stopper *stop.Stopper,
-	goroutineDumpDirName string,
-	heapProfileDirName string,
-	cpuProfileDirName string,
 	runtimeSampler *status.RuntimeStatSampler,
 	sessionRegistry *sql.SessionRegistry,
 	rootMemMonitor *mon.BytesMonitor,
-	testingKnobs base.TestingKnobs,
 ) error {
 	metricsSampleInterval := base.DefaultMetricsSampleInterval
-	if p, ok := testingKnobs.Server.(*TestingKnobs); ok && p.EnvironmentSampleInterval != time.Duration(0) {
+	if p, ok := srvCfg.TestingKnobs.Server.(*TestingKnobs); ok && p.EnvironmentSampleInterval != time.Duration(0) {
 		metricsSampleInterval = p.EnvironmentSampleInterval
 	}
 	cfg := sampleEnvironmentCfg{
-		st:                   settings,
+		st:                   srvCfg.Settings,
 		stopper:              stopper,
 		minSampleInterval:    metricsSampleInterval,
-		goroutineDumpDirName: goroutineDumpDirName,
-		heapProfileDirName:   heapProfileDirName,
-		cpuProfileDirName:    cpuProfileDirName,
+		goroutineDumpDirName: srvCfg.GoroutineDumpDirName,
+		heapProfileDirName:   srvCfg.HeapProfileDirName,
+		cpuProfileDirName:    srvCfg.CPUProfileDirName,
 		runtime:              runtimeSampler,
 		sessionRegistry:      sessionRegistry,
 		rootMemMonitor:       rootMemMonitor,
