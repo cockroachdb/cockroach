@@ -9,11 +9,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -395,12 +397,44 @@ func (dsp *DistSQLPlanner) setupFlows(
 	statementSQL string,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.gatewaySQLInstanceID
-	_, ok := flows[thisNodeID]
+	thisNodeSpec, ok := flows[thisNodeID]
 	if !ok {
 		return nil, nil, errors.AssertionFailedf("missing gateway flow")
 	}
 	if localState.IsLocal && len(flows) != 1 {
 		return nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
+	}
+
+	if buildutil.CrdbTestBuild && len(flows) > 1 {
+		// Ensure that we don't have memory aliasing of some fields between the
+		// local flow and the remote ones. At the time of writing only
+		// TableReaderSpec.Spans is known to be problematic.
+		gatewayFlowSpans := make(map[uintptr]int32)
+		for _, p := range thisNodeSpec.Processors {
+			if tr := p.Core.TableReader; tr != nil {
+				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+				ptr := (*reflect.SliceHeader)(unsafe.Pointer(&tr.Spans))
+				gatewayFlowSpans[ptr.Data] = p.ProcessorID
+			}
+		}
+		for sqlInstanceID, flow := range flows {
+			if sqlInstanceID == thisNodeID {
+				continue
+			}
+			for _, p := range flow.Processors {
+				if tr := p.Core.TableReader; tr != nil {
+					//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+					ptr := (*reflect.SliceHeader)(unsafe.Pointer(&tr.Spans))
+					if procID, found := gatewayFlowSpans[ptr.Data]; found {
+						return nil, nil, errors.AssertionFailedf(
+							"found TableReaderSpec.Spans memory aliasing between local and remote flows\n"+
+								"statement: %s, local proc ID %d, remote proc ID %d\n%v",
+							statementSQL, procID, p.ProcessorID, flows,
+						)
+					}
+				}
+			}
+		}
 	}
 
 	const setupFlowRequestStmtMaxLength = 500
@@ -461,7 +495,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	}
 
 	// First, set up the flow on this node.
-	setupReq.Flow = *flows[thisNodeID]
+	setupReq.Flow = *thisNodeSpec
 	var batchReceiver execinfra.BatchReceiver
 	if recv.batchWriter != nil {
 		// Use the DistSQLReceiver as an execinfra.BatchReceiver only if the
