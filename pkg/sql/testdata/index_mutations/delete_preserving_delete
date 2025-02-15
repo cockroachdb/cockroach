@@ -23,7 +23,7 @@ DELETE FROM ti WHERE a = 1
 ----
 Scan /Table/106/1/1/0 lock Exclusive (Block, Unreplicated)
 Put (delete) (locking) /Table/106/2/2/100/1/0
-Del (locking) /Table/106/1/1/0
+Del /Table/106/1/1/0
 
 # ---------------------------------------------------------
 # Partial Index With Delete Preserving Encoding
@@ -50,7 +50,7 @@ kvtrace
 DELETE FROM tpi WHERE a = 1
 ----
 Scan /Table/107/1/1/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/107/1/1/0
+Del /Table/107/1/1/0
 
 # Delete a row that matches the partial index.
 kvtrace
@@ -58,7 +58,7 @@ DELETE FROM tpi WHERE a = 3
 ----
 Scan /Table/107/1/3/0 lock Exclusive (Block, Unreplicated)
 Put (delete) (locking) /Table/107/2/"foo"/3/0
-Del (locking) /Table/107/1/3/0
+Del /Table/107/1/3/0
 
 # ---------------------------------------------------------
 # Expression Index With Delete Preserving Encoding
@@ -115,7 +115,7 @@ Put (delete) (locking) /Table/109/2/NULL/1/0
 Put (delete) (locking) /Table/109/2/1/1/0
 Put (delete) (locking) /Table/109/2/2/1/0
 Put (delete) (locking) /Table/109/2/3/1/0
-Del (locking) /Table/109/1/1/0
+Del /Table/109/1/1/0
 
 # ---------------------------------------------------------
 # Multicolumn Inverted Index With Delete Preserving Encoding
@@ -144,4 +144,4 @@ DELETE FROM tmi WHERE a = 1
 Scan /Table/110/1/1/0 lock Exclusive (Block, Unreplicated)
 Put (delete) (locking) /Table/110/2/2/"a"/"foo"/1/0
 Put (delete) (locking) /Table/110/2/2/"b"/"bar"/1/0
-Del (locking) /Table/110/1/1/0
+Del /Table/110/1/1/0

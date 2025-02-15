@@ -177,7 +177,7 @@ func MakeUpdater(
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
 		var err error
-		ru.rd = MakeDeleter(codec, tableDesc, requestedCols, sv, internal, metrics)
+		ru.rd = MakeDeleter(codec, tableDesc, nil /* lockedIndexes */, requestedCols, sv, internal, metrics)
 		if ru.ri, err = MakeInserter(
 			ctx, txn, codec, tableDesc, uniqueWithTombstoneIndexes, requestedCols, alloc, sv, internal, metrics,
 		); err != nil {
