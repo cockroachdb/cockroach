@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -18,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
 
@@ -140,4 +143,29 @@ func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMe
 	// TODO(mw5h): Implement MergeStats. We're not panicking here because some tested
 	// functionality needs to call this function but does not depend on the results.
 	return nil
+}
+
+// WrapTxn wraps the passed KV transaction in a vecstore.Txn. This allows vector
+// search operations to be performed in an existing transaction.
+func (s *Store) WrapTxn(txn *kv.Txn) cspann.Txn {
+	return newTxn(s, txn)
+}
+
+// QuantizeAndEncode returns the quantized and encoded form of the given vector.
+// It expects that the vector has already been randomized.
+//
+// TODO(drewk): move this to a wrapper Index struct. Ideally, this would also
+// allow us to re-use an existing workspace.
+func (s *Store) QuantizeAndEncode(
+	partition cspann.PartitionKey, centroid, randomizedVec vector.T,
+) (quantized []byte, err error) {
+	// Quantize and encode the randomized vector.
+	var quantizer quantize.Quantizer
+	if partition == cspann.RootKey {
+		quantizer = s.rootQuantizer
+	} else {
+		quantizer = s.quantizer
+	}
+	codec := newStoreCodec(quantizer)
+	return codec.encodeVector(&workspace.T{}, randomizedVec, centroid)
 }
