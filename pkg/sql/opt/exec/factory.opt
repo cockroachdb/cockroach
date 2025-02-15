@@ -624,6 +624,10 @@ define Delete {
     ReturnCols exec.TableColumnOrdinalSet
     Passthrough colinfo.ResultColumns
 
+    # If set, the input has already acquired the locks on the specified indexes
+    # on all keys that might be deleted from that index.
+    LockedIndexes cat.IndexOrdinals
+
     # If set, the operator will commit the transaction as part of its execution.
     # This is false when executing inside an explicit transaction, or there are
     # multiple mutations in a statement, or the output of the mutation is

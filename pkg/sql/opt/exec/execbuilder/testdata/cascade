@@ -242,7 +242,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'Scan%delete_me%'
 ----
 Scan /Table/118/1/"delete_me"/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/118/1/"delete_me"/0
+Del /Table/118/1/"delete_me"/0
 executing cascade for constraint b1_delete_set_null_fkey
 executing cascade for constraint b2_delete_set_null_fkey
 executing cascade for constraint b3_delete_set_null_fkey
@@ -535,7 +535,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'Scan%delete_me%'
 ----
 Scan /Table/140/1/"delete_me"/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/140/1/"delete_me"/0
+Del /Table/140/1/"delete_me"/0
 executing cascade for constraint b1_delete_set_default_fkey
 executing cascade for constraint b2_delete_set_default_fkey
 executing cascade for constraint b3_delete_set_default_fkey
@@ -805,7 +805,7 @@ query T kvtrace(Del,Scan)
 DELETE FROM parent WHERE x = 1
 ----
 Scan /Table/162/1/1/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/162/1/1/0
+Del /Table/162/1/1/0
 Scan /Table/163/{1-2}
 Del (locking) /Table/163/1/1/0
 Del (locking) /Table/163/1/2/0
