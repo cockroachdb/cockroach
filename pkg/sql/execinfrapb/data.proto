@@ -217,6 +217,10 @@ message ProducerHeader {
   optional int32 stream_id = 2 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "StreamID",
     (gogoproto.casttype) = "StreamID"];
+
+  // The SQLInstanceID of the producer. Used for debugging.
+  optional int32 producer = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
 }
 
 // ProducerData is a message that can be sent multiple times as part of a stream

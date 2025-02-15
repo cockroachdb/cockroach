@@ -8,6 +8,7 @@ package flowinfra
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -65,9 +66,12 @@ func (se *StreamEncoder) HasHeaderBeenSent() bool {
 }
 
 // SetHeaderFields sets the header fields.
-func (se *StreamEncoder) SetHeaderFields(flowID execinfrapb.FlowID, streamID execinfrapb.StreamID) {
+func (se *StreamEncoder) SetHeaderFields(
+	flowID execinfrapb.FlowID, streamID execinfrapb.StreamID, producer base.SQLInstanceID,
+) {
 	se.msgHdr.FlowID = flowID
 	se.msgHdr.StreamID = streamID
+	se.msgHdr.Producer = producer
 }
 
 // Init initializes the encoder.
