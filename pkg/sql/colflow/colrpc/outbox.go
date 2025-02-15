@@ -269,7 +269,13 @@ func (o *Outbox) Run(
 		log.VEvent(ctx, 2, "Outbox sending header")
 		// Send header message to establish the remote server (consumer).
 		if err = stream.Send(
-			&execinfrapb.ProducerMessage{Header: &execinfrapb.ProducerHeader{FlowID: o.flowCtx.ID, StreamID: streamID}},
+			&execinfrapb.ProducerMessage{
+				Header: &execinfrapb.ProducerHeader{
+					FlowID:   o.flowCtx.ID,
+					StreamID: streamID,
+					Producer: o.flowCtx.NodeID.SQLInstanceID(),
+				},
+			},
 		); err != nil {
 			log.Dev.VWarningf(ctx, 1, "Outbox Send header error, distributed query will fail: %+v", err)
 			return err
