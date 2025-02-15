@@ -19,6 +19,7 @@ insert t
  ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:11
  └── vector-mutation-search t@t_v_idx,vector
       ├── columns: column1:6!null v_cast:8!null w_default:9 vector_index_put_partition1:10 vector_index_put_quantized_vec1:11
+      ├── index put
       ├── query vector column: v_cast:8
       ├── partition col: vector_index_put_partition1:10
       ├── quantized vector col: vector_index_put_quantized_vec1:11
@@ -49,13 +50,15 @@ update t
  ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:15
  └── vector-mutation-search t@t_v_idx,vector
       ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:12!null vector_index_del_partition1:13 vector_index_put_partition1:14 vector_index_put_quantized_vec1:15
+      ├── index put
       ├── query vector column: v_cast:12
       ├── partition col: vector_index_put_partition1:14
       ├── quantized vector col: vector_index_put_quantized_vec1:15
       └── vector-mutation-search t@t_v_idx,vector
            ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:12!null vector_index_del_partition1:13
+           ├── index del
            ├── query vector column: v:7
-           ├── primary key columns: (6)
+           ├── suffix key columns: [6]
            ├── partition col: vector_index_del_partition1:13
            └── project
                 ├── columns: v_cast:12!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
@@ -83,8 +86,9 @@ delete t
  ├── vector index del partition columns: vector_index_del_partition1:11
  └── vector-mutation-search t@t_v_idx,vector
       ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 vector_index_del_partition1:11
+      ├── index del
       ├── query vector column: v:7
-      ├── primary key columns: (6)
+      ├── suffix key columns: [6]
       ├── partition col: vector_index_del_partition1:11
       └── select
            ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
@@ -114,13 +118,15 @@ upsert t
  ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:18
  └── vector-mutation-search t@t_v_idx,vector
       ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 upsert_x:15 vector_index_del_partition1:16 vector_index_put_partition1:17 vector_index_put_quantized_vec1:18
+      ├── index put
       ├── query vector column: v_cast:8
       ├── partition col: vector_index_put_partition1:17
       ├── quantized vector col: vector_index_put_quantized_vec1:18
       └── vector-mutation-search t@t_v_idx,vector
            ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 upsert_x:15 vector_index_del_partition1:16
+           ├── index del
            ├── query vector column: v:11
-           ├── primary key columns: (10)
+           ├── suffix key columns: [10]
            ├── partition col: vector_index_del_partition1:16
            └── project
                 ├── columns: upsert_x:15 column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14
@@ -175,13 +181,15 @@ upsert t
  ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:22
  └── vector-mutation-search t@t_v_idx,vector
       ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 v_cast:16!null upsert_x:17 upsert_v:18!null upsert_w:19 vector_index_del_partition1:20 vector_index_put_partition1:21 vector_index_put_quantized_vec1:22
+      ├── index put
       ├── query vector column: upsert_v:18
       ├── partition col: vector_index_put_partition1:21
       ├── quantized vector col: vector_index_put_quantized_vec1:22
       └── vector-mutation-search t@t_v_idx,vector
            ├── columns: column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 v_cast:16!null upsert_x:17 upsert_v:18!null upsert_w:19 vector_index_del_partition1:20
+           ├── index del
            ├── query vector column: v:11
-           ├── primary key columns: (10)
+           ├── suffix key columns: [10]
            ├── partition col: vector_index_del_partition1:20
            └── project
                 ├── columns: upsert_x:17 upsert_v:18!null upsert_w:19 column1:6!null v_cast:8!null w_default:9 x:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 v_cast:16!null
@@ -246,11 +254,13 @@ insert t
  ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:12 vector_index_put_quantized_vec2:14
  └── vector-mutation-search t@t_w_idx,vector
       ├── columns: column1:6!null v_cast:9!null w_cast:10!null vector_index_put_partition1:11 vector_index_put_quantized_vec1:12 vector_index_put_partition2:13 vector_index_put_quantized_vec2:14
+      ├── index put
       ├── query vector column: w_cast:10
       ├── partition col: vector_index_put_partition2:13
       ├── quantized vector col: vector_index_put_quantized_vec2:14
       └── vector-mutation-search t@t_v_idx,vector
            ├── columns: column1:6!null v_cast:9!null w_cast:10!null vector_index_put_partition1:11 vector_index_put_quantized_vec1:12
+           ├── index put
            ├── query vector column: v_cast:9
            ├── partition col: vector_index_put_partition1:11
            ├── quantized vector col: vector_index_put_quantized_vec1:12
@@ -280,23 +290,27 @@ update t
  ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:17 vector_index_put_quantized_vec2:20
  └── vector-mutation-search t@t_w_idx,vector
       ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:13!null w_cast:14!null vector_index_del_partition1:15 vector_index_put_partition1:16 vector_index_put_quantized_vec1:17 vector_index_del_partition2:18 vector_index_put_partition2:19 vector_index_put_quantized_vec2:20
+      ├── index put
       ├── query vector column: w_cast:14
       ├── partition col: vector_index_put_partition2:19
       ├── quantized vector col: vector_index_put_quantized_vec2:20
       └── vector-mutation-search t@t_w_idx,vector
            ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:13!null w_cast:14!null vector_index_del_partition1:15 vector_index_put_partition1:16 vector_index_put_quantized_vec1:17 vector_index_del_partition2:18
+           ├── index del
            ├── query vector column: w:8
-           ├── primary key columns: (6)
+           ├── suffix key columns: [6]
            ├── partition col: vector_index_del_partition2:18
            └── vector-mutation-search t@t_v_idx,vector
                 ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:13!null w_cast:14!null vector_index_del_partition1:15 vector_index_put_partition1:16 vector_index_put_quantized_vec1:17
+                ├── index put
                 ├── query vector column: v_cast:13
                 ├── partition col: vector_index_put_partition1:16
                 ├── quantized vector col: vector_index_put_quantized_vec1:17
                 └── vector-mutation-search t@t_v_idx,vector
                      ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 v_cast:13!null w_cast:14!null vector_index_del_partition1:15
+                     ├── index del
                      ├── query vector column: v:7
-                     ├── primary key columns: (6)
+                     ├── suffix key columns: [6]
                      ├── partition col: vector_index_del_partition1:15
                      └── project
                           ├── columns: v_cast:13!null w_cast:14!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
@@ -327,13 +341,15 @@ delete t
  ├── vector index del partition columns: vector_index_del_partition1:11 vector_index_del_partition2:12
  └── vector-mutation-search t@t_w_idx,vector
       ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 vector_index_del_partition1:11 vector_index_del_partition2:12
+      ├── index del
       ├── query vector column: w:8
-      ├── primary key columns: (6)
+      ├── suffix key columns: [6]
       ├── partition col: vector_index_del_partition2:12
       └── vector-mutation-search t@t_v_idx,vector
            ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 vector_index_del_partition1:11
+           ├── index del
            ├── query vector column: v:7
-           ├── primary key columns: (6)
+           ├── suffix key columns: [6]
            ├── partition col: vector_index_del_partition1:11
            └── select
                 ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10
@@ -363,23 +379,27 @@ upsert t
  ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:19 vector_index_put_quantized_vec2:22
  └── vector-mutation-search t@t_w_idx,vector
       ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_x:16 vector_index_del_partition1:17 vector_index_put_partition1:18 vector_index_put_quantized_vec1:19 vector_index_del_partition2:20 vector_index_put_partition2:21 vector_index_put_quantized_vec2:22
+      ├── index put
       ├── query vector column: w_cast:10
       ├── partition col: vector_index_put_partition2:21
       ├── quantized vector col: vector_index_put_quantized_vec2:22
       └── vector-mutation-search t@t_w_idx,vector
            ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_x:16 vector_index_del_partition1:17 vector_index_put_partition1:18 vector_index_put_quantized_vec1:19 vector_index_del_partition2:20
+           ├── index del
            ├── query vector column: w:13
-           ├── primary key columns: (11)
+           ├── suffix key columns: [11]
            ├── partition col: vector_index_del_partition2:20
            └── vector-mutation-search t@t_v_idx,vector
                 ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_x:16 vector_index_del_partition1:17 vector_index_put_partition1:18 vector_index_put_quantized_vec1:19
+                ├── index put
                 ├── query vector column: v_cast:9
                 ├── partition col: vector_index_put_partition1:18
                 ├── quantized vector col: vector_index_put_quantized_vec1:19
                 └── vector-mutation-search t@t_v_idx,vector
                      ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_x:16 vector_index_del_partition1:17
+                     ├── index del
                      ├── query vector column: v:12
-                     ├── primary key columns: (11)
+                     ├── suffix key columns: [11]
                      ├── partition col: vector_index_del_partition1:17
                      └── project
                           ├── columns: upsert_x:16 column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15
@@ -433,23 +453,27 @@ upsert t
  ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:25 vector_index_put_quantized_vec2:28
  └── vector-mutation-search t@t_w_idx,vector
       ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null upsert_x:20 upsert_v:21!null upsert_w:22!null vector_index_del_partition1:23 vector_index_put_partition1:24 vector_index_put_quantized_vec1:25 vector_index_del_partition2:26 vector_index_put_partition2:27 vector_index_put_quantized_vec2:28
+      ├── index put
       ├── query vector column: upsert_w:22
       ├── partition col: vector_index_put_partition2:27
       ├── quantized vector col: vector_index_put_quantized_vec2:28
       └── vector-mutation-search t@t_w_idx,vector
            ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null upsert_x:20 upsert_v:21!null upsert_w:22!null vector_index_del_partition1:23 vector_index_put_partition1:24 vector_index_put_quantized_vec1:25 vector_index_del_partition2:26
+           ├── index del
            ├── query vector column: w:13
-           ├── primary key columns: (11)
+           ├── suffix key columns: [11]
            ├── partition col: vector_index_del_partition2:26
            └── vector-mutation-search t@t_v_idx,vector
                 ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null upsert_x:20 upsert_v:21!null upsert_w:22!null vector_index_del_partition1:23 vector_index_put_partition1:24 vector_index_put_quantized_vec1:25
+                ├── index put
                 ├── query vector column: upsert_v:21
                 ├── partition col: vector_index_put_partition1:24
                 ├── quantized vector col: vector_index_put_quantized_vec1:25
                 └── vector-mutation-search t@t_v_idx,vector
                      ├── columns: column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null upsert_x:20 upsert_v:21!null upsert_w:22!null vector_index_del_partition1:23
+                     ├── index del
                      ├── query vector column: v:12
-                     ├── primary key columns: (11)
+                     ├── suffix key columns: [11]
                      ├── partition col: vector_index_del_partition1:23
                      └── project
                           ├── columns: upsert_x:20 upsert_v:21!null upsert_w:22!null column1:6!null v_cast:9!null w_cast:10!null x:11 v:12 w:13 crdb_internal_mvcc_timestamp:14 tableoid:15 v_cast:18!null w_cast:19!null
@@ -512,13 +536,15 @@ update t
  ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:16
  └── vector-mutation-search t@t_v_idx,vector
       ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 x_new:11!null v_cast:13!null vector_index_del_partition1:14 vector_index_put_partition1:15 vector_index_put_quantized_vec1:16
+      ├── index put
       ├── query vector column: v_cast:13
       ├── partition col: vector_index_put_partition1:15
       ├── quantized vector col: vector_index_put_quantized_vec1:16
       └── vector-mutation-search t@t_v_idx,vector
            ├── columns: x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 x_new:11!null v_cast:13!null vector_index_del_partition1:14
+           ├── index del
            ├── query vector column: v:7
-           ├── primary key columns: (6)
+           ├── suffix key columns: [6]
            ├── partition col: vector_index_del_partition1:14
            └── project
                 ├── columns: v_cast:13!null x:6!null v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 x_new:11!null

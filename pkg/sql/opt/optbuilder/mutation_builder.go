@@ -1075,18 +1075,6 @@ func (mb *mutationBuilder) projectVectorIndexColsForDelete() {
 // vectorIndexDelPartitionColIDs fields for more information.
 func (mb *mutationBuilder) projectVectorIndexColsImpl(delete bool) {
 	if vectorIndexCount(mb.tab) > 0 {
-		var pkCols opt.ColSet
-		getPKCols := func() opt.ColSet {
-			if !pkCols.Empty() {
-				return pkCols
-			}
-			primaryIndex := mb.tab.Index(cat.PrimaryIndex)
-			for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-				col := primaryIndex.Column(i)
-				pkCols.Add(mb.fetchColIDs[col.Ordinal()])
-			}
-			return pkCols
-		}
 		getPutCol := func(colOrd int) opt.ColumnID {
 			if mb.upsertColIDs[colOrd] != 0 {
 				// If set, the upsert column will have the new value for the column
@@ -1125,22 +1113,24 @@ func (mb *mutationBuilder) projectVectorIndexColsImpl(delete bool) {
 			}
 			vectorColOrd := index.VectorColumn().Ordinal()
 			if delCol := getDelCol(vectorColOrd); delCol != 0 {
+				const isIndexPut = false
 				partitionCol := addCol(fmt.Sprintf("vector_index_del_partition%d", idxOrd+1), types.Int)
-				outCols := mb.outScope.colSet()
-				outCols.Add(partitionCol)
+				suffixStart := index.PrefixColumnCount() + 1
+				suffixCols := make(opt.ColList, 0, index.KeyColumnCount()-suffixStart)
+				for colOrd := suffixStart; colOrd < index.KeyColumnCount(); colOrd++ {
+					suffixCols = append(suffixCols, mb.fetchColIDs[index.Column(colOrd).Ordinal()])
+				}
 				mb.outScope.expr = mb.buildVectorMutationSearch(
-					mb.outScope.expr, index, delCol, partitionCol, 0 /* encVectorCol */, getPKCols(),
+					mb.outScope.expr, index, delCol, partitionCol, 0 /* encVectorCol */, suffixCols, isIndexPut,
 				)
 				mb.vectorIndexDelPartitionColIDs[idxOrd] = partitionCol
 			}
 			if putCol := getPutCol(vectorColOrd); putCol != 0 {
+				const isIndexPut = true
 				partitionCol := addCol(fmt.Sprintf("vector_index_put_partition%d", idxOrd+1), types.Int)
 				quantizedVecCol := addCol(fmt.Sprintf("vector_index_put_quantized_vec%d", idxOrd+1), types.Bytes)
-				outCols := mb.outScope.colSet()
-				outCols.Add(partitionCol)
-				outCols.Add(quantizedVecCol)
 				mb.outScope.expr = mb.buildVectorMutationSearch(
-					mb.outScope.expr, index, putCol, partitionCol, quantizedVecCol, opt.ColSet{}, /* pkCols */
+					mb.outScope.expr, index, putCol, partitionCol, quantizedVecCol, nil /* suffixCols */, isIndexPut,
 				)
 				mb.vectorIndexPutPartitionColIDs[idxOrd] = partitionCol
 				mb.vectorIndexPutQuantizedVecColIDs[idxOrd] = quantizedVecCol
@@ -1160,15 +1150,17 @@ func (mb *mutationBuilder) buildVectorMutationSearch(
 	input memo.RelExpr,
 	index cat.Index,
 	queryVectorCol, partitionCol, quantizedVecCol opt.ColumnID,
-	pkCols opt.ColSet,
+	suffixCols opt.ColList,
+	isIndexPut bool,
 ) memo.RelExpr {
 	private := memo.VectorMutationSearchPrivate{
 		Table:              mb.tabID,
 		Index:              index.Ordinal(),
 		QueryVectorCol:     queryVectorCol,
-		PrimaryKeyCols:     pkCols,
+		SuffixKeyCols:      suffixCols,
 		PartitionCol:       partitionCol,
 		QuantizedVectorCol: quantizedVecCol,
+		IsIndexPut:         isIndexPut,
 	}
 	return mb.b.factory.ConstructVectorMutationSearch(input, &private)
 }

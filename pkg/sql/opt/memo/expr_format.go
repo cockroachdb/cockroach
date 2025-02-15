@@ -764,12 +764,17 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
 
 	case *VectorMutationSearchExpr:
+		if t.IsIndexPut {
+			tp.Childf("index put")
+		} else {
+			tp.Childf("index del")
+		}
 		if len(t.PrefixKeyCols) > 0 {
 			tp.Childf("prefix key columns: %v", t.PrefixKeyCols)
 		}
 		tp.Childf("query vector column: %s", f.ColumnString(t.QueryVectorCol))
-		if !t.PrimaryKeyCols.Empty() {
-			tp.Childf("primary key columns: %v", t.PrimaryKeyCols)
+		if len(t.SuffixKeyCols) > 0 {
+			tp.Childf("suffix key columns: %v", t.SuffixKeyCols)
 		}
 		tp.Childf("partition col: %s", f.ColumnString(t.PartitionCol))
 		if t.QuantizedVectorCol != 0 {
