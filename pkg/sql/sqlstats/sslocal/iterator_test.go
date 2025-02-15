@@ -50,7 +50,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 	fingerprintIDs := make(map[appstatspb.StmtFingerprintID]struct{})
 	require.NoError(t,
 		sqlStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
-			func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+			func(statistics *appstatspb.CollectedStatementStatistics) error {
 				fingerprintIDs[statistics.ID] = struct{}{}
 				return nil
 			}))
@@ -60,7 +60,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 			sqlStats.IterateStatementStats(
 				ctx,
 				sqlstats.IteratorOptions{},
-				func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+				func(statistics *appstatspb.CollectedStatementStatistics) error {
 					require.NotNil(t, statistics)
 					// If we are running our test case, we reset the SQL Stats. The iterator
 					// should gracefully handle that.
@@ -80,7 +80,6 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 				ctx,
 				sqlstats.IteratorOptions{},
 				func(
-					ctx context.Context,
 					statistics *appstatspb.CollectedTransactionStatistics,
 				) error {
 					require.NotNil(t, statistics)

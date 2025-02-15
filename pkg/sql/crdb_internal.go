@@ -2012,7 +2012,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		localSqlStats := p.extendedEvalCtx.localStatsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
-		statementVisitor := func(_ context.Context, stats *appstatspb.CollectedStatementStatistics) error {
+		statementVisitor := func(stats *appstatspb.CollectedStatementStatistics) error {
 			errString := tree.DNull
 			if shouldRedactError {
 				errString = alloc.NewDString(tree.DString("<redacted>"))
@@ -2237,7 +2237,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 
 		var alloc tree.DatumAlloc
 
-		transactionVisitor := func(_ context.Context, stats *appstatspb.CollectedTransactionStatistics) error {
+		transactionVisitor := func(stats *appstatspb.CollectedTransactionStatistics) error {
 			stmtFingerprintIDsDatum := tree.NewDArray(types.String)
 			for _, stmtFingerprintID := range stats.StatementFingerprintIDs {
 				if err := stmtFingerprintIDsDatum.Append(alloc.NewDString(tree.DString(strconv.FormatUint(uint64(stmtFingerprintID), 10)))); err != nil {
@@ -7156,7 +7156,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 			return memSQLStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
-			}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+			}, func(statistics *appstatspb.CollectedStatementStatistics) error {
 
 				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
 				if err != nil {
@@ -7582,9 +7582,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 			return memSQLStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
-			}, func(
-				ctx context.Context,
-				statistics *appstatspb.CollectedTransactionStatistics) error {
+			}, func(statistics *appstatspb.CollectedTransactionStatistics) error {
 
 				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
 				if err != nil {

@@ -156,7 +156,7 @@ func (s *Container) IterateStatementStats(
 	iter := s.StmtStatsIterator(options)
 
 	for iter.Next() {
-		if err := visitor(ctx, iter.Cur()); err != nil {
+		if err := visitor(iter.Cur()); err != nil {
 			return err
 		}
 	}
@@ -171,7 +171,7 @@ func (s *Container) IterateTransactionStats(
 
 	for iter.Next() {
 		stats := iter.Cur()
-		if err := visitor(ctx, stats); err != nil {
+		if err := visitor(stats); err != nil {
 			return err
 		}
 	}
@@ -650,7 +650,7 @@ func (s *Container) MergeApplicationStatementStats(
 	if err := other.IterateStatementStats(
 		ctx,
 		sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+		func(statistics *appstatspb.CollectedStatementStatistics) error {
 			statistics.Key.TransactionFingerprintID = transactionFingerprintID
 			key := stmtKey{
 				sampledPlanKey: sampledPlanKey{
