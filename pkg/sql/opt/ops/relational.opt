@@ -1439,6 +1439,11 @@ define RecursiveCTEPrivate {
 # distances to the query vector, and applies the NN limit.
 [Relational, Telemetry]
 define VectorSearch {
+    # PrefixVals is set iff the vector index has a prefix of non-vector columns.
+    # It contains a list of constant values or placeholders that map 1-1 to the
+    # prefix columns.
+    PrefixVals ScalarListExpr
+
     # QueryVector is the scalar query vector. It is either a constant or a
     # placeholder.
     QueryVector ScalarExpr
@@ -1458,12 +1463,6 @@ define VectorSearchPrivate {
     # Cols is the set of columns produced by the vector search operator. This
     # is currently always the set of primary key columns.
     Cols ColSet
-
-    # PrefixConstraint is set iff the vector index has a prefix of non-vector
-    # columns. It contains one or more spans that each constrain every prefix
-    # column to a single value. The vector search will be conducted within each
-    # span independently.
-    PrefixConstraint Constraint
 
     # TargetNeighborCount is the number of nearest neighbors to search for.
     # The set of candidates returning will generally be larger than this number.
