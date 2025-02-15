@@ -758,15 +758,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
 		// Begin recording runtime statistics.
 		if err := startSampleEnvironment(workersCtx,
-			s.ClusterSettings(),
+			s.sqlServer.cfg,
 			s.stopper,
-			s.sqlServer.cfg.GoroutineDumpDirName,
-			s.sqlServer.cfg.HeapProfileDirName,
-			s.sqlServer.cfg.CPUProfileDirName,
 			s.runtime,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
-			s.cfg.TestingKnobs,
 		); err != nil {
 			return err
 		}
