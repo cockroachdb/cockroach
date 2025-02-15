@@ -2137,9 +2137,6 @@ func (dsp *DistSQLPlanner) convertOrdering(
 func initTableReaderSpecTemplate(
 	n *scanNode, codec keys.SQLCodec,
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
-	if n.isCheck {
-		return nil, execinfrapb.PostProcessSpec{}, errors.AssertionFailedf("isCheck no longer supported")
-	}
 	colIDs := make([]descpb.ColumnID, len(n.cols))
 	for i := range n.cols {
 		colIDs[i] = n.cols[i].GetID()
