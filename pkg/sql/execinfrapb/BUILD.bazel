@@ -33,6 +33,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/normalize",
         "//pkg/sql/sem/tree",
@@ -48,6 +49,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
+        "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
