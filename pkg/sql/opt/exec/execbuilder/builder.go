@@ -113,6 +113,11 @@ type Builder struct {
 	// mutated.
 	forceForUpdateLocking opt.TableID
 
+	// toLockIndexesScratch is used as a scratch space to accumulate ordinals of
+	// indexes that will be locked on the table from forceForUpdateLocking. At
+	// the moment, we can lock at most two indexes.
+	toLockIndexesScratch [2]cat.IndexOrdinal
+
 	// planLazySubqueries is true if the builder should plan subqueries that are
 	// lazily evaluated as routines instead of a subquery which is evaluated
 	// eagerly before the main query. This is required in cases that cannot be

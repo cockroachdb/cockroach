@@ -527,7 +527,7 @@ EXECUTE p(1)
 Scan /Table/114/1/1/0 lock Exclusive (Block, Unreplicated)
 Del (locking) /Table/114/2/10/1/0
 Del (locking) /Table/114/3/100/1/0
-Del (locking) /Table/114/1/1/0
+Del /Table/114/1/1/0
 
 statement ok
 DEALLOCATE p
@@ -601,9 +601,9 @@ EXECUTE p(10)
 ----
 Scan /Table/114/2/1{0-1} lock Exclusive (Block, Unreplicated)
 Scan /Table/114/1/1/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/114/2/10/1/0
+Del /Table/114/2/10/1/0
 Del (locking) /Table/114/3/100/1/0
-Del (locking) /Table/114/1/1/0
+Del /Table/114/1/1/0
 
 statement ok
 CREATE TABLE t139160 (
@@ -642,7 +642,7 @@ DELETE FROM t139160 WHERE k = 1
 Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
 Del (locking) /Table/115/2/2/1/0
 Del (locking) /Table/115/3/3/0
-Del (locking) /Table/115/1/1/0
+Del /Table/115/1/1/0
 
 # Only secondary index is scanned and locked.
 statement ok
@@ -668,7 +668,7 @@ query T kvtrace
 DELETE FROM t139160 WHERE i = 2
 ----
 Scan /Table/115/2/{2-3} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/115/2/2/1/0
+Del /Table/115/2/2/1/0
 Del (locking) /Table/115/3/3/0
 Del (locking) /Table/115/1/1/0
 
@@ -701,9 +701,9 @@ DELETE FROM t139160 WHERE i = 2 RETURNING v
 ----
 Scan /Table/115/2/{2-3} lock Exclusive (Block, Unreplicated)
 Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/115/2/2/1/0
+Del /Table/115/2/2/1/0
 Del (locking) /Table/115/3/3/0
-Del (locking) /Table/115/1/1/0
+Del /Table/115/1/1/0
 
 statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4);
