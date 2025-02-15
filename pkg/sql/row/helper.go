@@ -486,6 +486,8 @@ func (rh *RowHelper) deleteIndexEntry(
 		}
 		b.Put(key, deleteEncoding)
 	} else {
+		// TODO(yuzefovich): consider not acquiring the locks for non-unique
+		// indexes at all.
 		delFn(ctx, b, key, needsLock, traceKV, valDirs)
 	}
 	return nil
