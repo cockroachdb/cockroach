@@ -746,21 +746,6 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *VectorSearchExpr:
-		if c := t.PrefixConstraint; c != nil {
-			if c.IsContradiction() {
-				tp.Childf("prefix constraint: contradiction")
-			} else if c.Spans.Count() == 1 {
-				tp.Childf(
-					"prefix constraint: %s: %s", c.Columns.String(),
-					cat.MaybeMarkRedactable(c.Spans.Get(0).String(), f.RedactableValues),
-				)
-			} else {
-				n := tp.Childf("prefix constraint: %s", c.Columns.String())
-				for i := 0; i < c.Spans.Count(); i++ {
-					n.Child(cat.MaybeMarkRedactable(c.Spans.Get(i).String(), f.RedactableValues))
-				}
-			}
-		}
 		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
 
 	case *VectorMutationSearchExpr:
