@@ -1877,6 +1877,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// Begin recording runtime statistics.
 	if err := startSampleEnvironment(workersCtx,
 		&s.cfg.BaseConfig,
+		s.cfg.CacheSize,
 		s.stopper,
 		s.runtime,
 		s.status.sessionRegistry,
