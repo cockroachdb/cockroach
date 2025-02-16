@@ -340,7 +340,18 @@ var diskMetricsIgnoredDevices = envutil.EnvOrDefaultString("COCKROACH_DISK_METRI
 // allocated uint: bytes allocated by application
 // total     uint: total bytes requested from system
 // error           : any issues fetching stats. This should be a warning only.
-var getCgoMemStats func(context.Context) (uint, uint, error)
+var getCgoMemStats func(context.Context) (cGoAlloc uint, cGoTotal uint, _ error)
+
+// cgoMemMaybePurge checks if the current jemalloc overhead (relative to
+// cgoAllocMem or cgoTargetMem, whichever is higher) is above overheadPercent;
+// if it is, a purge of all arenas is performed. We perform at most a purge per
+// minPeriod.
+var cgoMemMaybePurge func(
+	ctx context.Context,
+	cgoAllocMem, cgoTotalMem, cgoTargetMem uint64,
+	overheadPercent int,
+	minPeriod time.Duration,
+)
 
 // Distribution of individual GC-related stop-the-world pause
 // latencies. This is the time from deciding to stop the world
@@ -776,6 +787,21 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 	return &CGoMemStats{
 		CGoAllocatedBytes: uint64(cgoAllocated),
 		CGoTotalBytes:     uint64(cgoTotal),
+	}
+}
+
+// CGoMemMaybePurge checks if the current allocator overhead (relative to
+// cgoAllocMem or cgoTargetMem, whichever is higher) is above overheadPercent;
+// if it is, a purge of all arenas is performed. We perform at most a purge per
+// minPeriod.
+func CGoMemMaybePurge(
+	ctx context.Context,
+	cgoAllocMem, cgoTotalMem, cgoTargetMem uint64,
+	overheadPercent int,
+	minPeriod time.Duration,
+) {
+	if cgoMemMaybePurge != nil {
+		cgoMemMaybePurge(ctx, cgoAllocMem, cgoTotalMem, cgoTargetMem, overheadPercent, minPeriod)
 	}
 }
 

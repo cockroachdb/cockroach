@@ -7,6 +7,19 @@
 
 package status
 
+import (
+	"context"
+	"math"
+	"reflect"
+	"strings"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/crlib/crtime"
+	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
+)
+
 // #cgo CPPFLAGS: -DJEMALLOC_NO_DEMANGLE
 // #cgo LDFLAGS: -ljemalloc
 // #cgo dragonfly freebsd LDFLAGS: -lm
@@ -66,27 +79,27 @@ package status
 //   }
 //   return 0;
 // }
+//
+// #define STRINGIFY_HELPER(x) #x
+// #define STRINGIFY(x) STRINGIFY_HELPER(x)
+//
+// int jemalloc_purge() {
+//  return je_mallctl("arena." STRINGIFY(MALLCTL_ARENAS_ALL) ".purge", NULL, 0, NULL, 0);
+// }
 import "C"
-
-import (
-	"context"
-	"math"
-	"reflect"
-	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/redact"
-	"github.com/dustin/go-humanize"
-)
 
 func init() {
 	if getCgoMemStats != nil {
 		panic("getCgoMemStats is already set")
 	}
 	getCgoMemStats = getJemallocStats
+	if cgoMemMaybePurge != nil {
+		panic("cgoMemMaybePurge is already set")
+	}
+	cgoMemMaybePurge = jemallocMaybePurge
 }
 
-func getJemallocStats(ctx context.Context) (uint, uint, error) {
+func getJemallocStats(ctx context.Context) (cgoAlloc uint, cgoTotal uint, _ error) {
 	var js C.JemallocStats
 	// TODO(marc): should we panic here? Failure on fetching the stats may be a problem.
 	if _, err := C.jemalloc_get_stats(&js); err != nil {
@@ -132,4 +145,50 @@ func getJemallocStats(ctx context.Context) (uint, uint, error) {
 func allocateMemory() {
 	// Empirically, 8KiB is not enough, but 16KiB is except for ppc64le, where 256KiB is needed.
 	C.malloc(256 << 10)
+}
+
+var lastPurgeTime crtime.AtomicMono
+
+// jemallocMaybePurge checks if the current jemalloc overhead (relative to
+// cgoAllocMem or cgoTargetMem, whichever is higher) is above overheadPercent;
+// if it is, a purge of all arenas is performed. We perform at most a purge per
+// minPeriod.
+func jemallocMaybePurge(
+	ctx context.Context,
+	cgoAllocMem, cgoTotalMem, cgoTargetMem uint64,
+	overheadPercent int,
+	minPeriod time.Duration,
+) {
+	// We take the max between cgoAllocMem and cgoTargetMem because we only care about
+	// the overhead compared to the target peak usage.
+	//
+	// We don't use just cgoAllocMem because when a lot of memory is freed
+	// (because of an eviction), the overhead spikes up high momentarily
+	// (goAllocMem goes down and goTotalMem takes a while to go down). We only
+	// care about overhead above the target usage.
+	//
+	// We don't use just cgoTargetMem because we don't want to purge unnecessarily
+	// if we actually allocate more memory than our target (e.g. because of
+	// internal fragmentation).
+	target := max(cgoAllocMem, cgoTargetMem)
+	if cgoTotalMem*100 <= target*uint64(100+overheadPercent) {
+		return
+	}
+	lastPurge := lastPurgeTime.Load()
+	thisPurge := crtime.NowMono()
+	if lastPurge != 0 && thisPurge.Sub(lastPurge) < minPeriod {
+		// We purged too recently.
+		return
+	}
+	if !lastPurgeTime.CompareAndSwap(lastPurge, thisPurge) {
+		// Another goroutine just purged. This should only happen in tests where we
+		// have multiple servers running in the same process.
+		return
+	}
+	res, err := C.jemalloc_purge()
+	if err != nil || res != 0 {
+		log.Warningf(ctx, "jemalloc purging failed: %v (res=%d)", err, int(res))
+	} else {
+		log.Infof(ctx, "jemalloc arenas purged (took %s)", thisPurge.Elapsed())
+	}
 }

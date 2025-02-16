@@ -759,6 +759,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		// Begin recording runtime statistics.
 		if err := startSampleEnvironment(workersCtx,
 			s.sqlServer.cfg,
+			0, /* pebbleCacheSize */
 			s.stopper,
 			s.runtime,
 			s.tenantStatus.sessionRegistry,
