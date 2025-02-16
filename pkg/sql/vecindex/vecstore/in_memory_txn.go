@@ -209,7 +209,7 @@ func (tx *inMemoryTxn) GetPartitionMetadata(
 func (tx *inMemoryTxn) AddToPartition(
 	ctx context.Context,
 	partitionKey PartitionKey,
-	vector vector.T,
+	vec vector.T,
 	childKey ChildKey,
 	valueBytes ValueBytes,
 ) (PartitionMetadata, error) {
@@ -235,7 +235,7 @@ func (tx *inMemoryTxn) AddToPartition(
 
 	// Add the vector to the partition.
 	partition := inMemPartition.lock.partition
-	if partition.Add(ctx, vector, childKey, valueBytes) {
+	if partition.Add(ctx, vec, childKey, valueBytes) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.store.reportPartitionSizeLocked(partition.Count())
