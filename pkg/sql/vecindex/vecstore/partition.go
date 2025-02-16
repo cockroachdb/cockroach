@@ -183,7 +183,7 @@ func (p *Partition) Search(
 // Add quantizes the given vector as part of this partition. If a vector with
 // the same key is already in the partition, update its value and return false.
 func (p *Partition) Add(
-	ctx context.Context, vector vector.T, childKey ChildKey, valueBytes ValueBytes,
+	ctx context.Context, vec vector.T, childKey ChildKey, valueBytes ValueBytes,
 ) bool {
 	offset := p.Find(childKey)
 	if offset != -1 {
@@ -191,7 +191,7 @@ func (p *Partition) Add(
 		p.ReplaceWithLast(offset)
 	}
 
-	vectorSet := vector.AsSet()
+	vectorSet := vec.AsSet()
 	p.quantizer.QuantizeInSet(ctx, p.quantizedSet, vectorSet)
 	p.childKeys = append(p.childKeys, childKey)
 	p.valueBytes = append(p.valueBytes, valueBytes)

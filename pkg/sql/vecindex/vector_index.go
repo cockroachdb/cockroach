@@ -283,7 +283,7 @@ func (vi *VectorIndex) Close() {
 // Delete will find the old vector. Vector index methods handle this rare case
 // by checking for duplicates when returning search results.
 func (vi *VectorIndex) Insert(
-	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.KeyBytes,
+	ctx context.Context, txn vecstore.Txn, vec vector.T, key vecstore.KeyBytes,
 ) error {
 	// Potentially throttle insert operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
@@ -291,12 +291,12 @@ func (vi *VectorIndex) Insert(
 	}
 
 	var parentSearchCtx searchContext
-	vi.setupInsertContext(ctx, txn, vector, &parentSearchCtx)
+	vi.setupInsertContext(ctx, txn, vec, &parentSearchCtx)
 
 	// Randomize the vector.
 	tempRandomized := parentSearchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
 	defer parentSearchCtx.Workspace.FreeVector(tempRandomized)
-	parentSearchCtx.Randomized = vi.randomizeVector(vector, tempRandomized)
+	parentSearchCtx.Randomized = vi.randomizeVector(vec, tempRandomized)
 
 	// Insert the vector into the secondary index.
 	childKey := vecstore.ChildKey{KeyBytes: key}
@@ -312,9 +312,9 @@ func (vi *VectorIndex) Insert(
 // handle this rare case by checking for duplicates when returning search
 // results.
 func (vi *VectorIndex) Delete(
-	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.KeyBytes,
+	ctx context.Context, txn vecstore.Txn, vec vector.T, key vecstore.KeyBytes,
 ) error {
-	result, err := vi.SearchForDelete(ctx, txn, vector, key)
+	result, err := vi.SearchForDelete(ctx, txn, vec, key)
 	if err != nil {
 		return err
 	}
@@ -334,13 +334,13 @@ func (vi *VectorIndex) Delete(
 func (vi *VectorIndex) Search(
 	ctx context.Context,
 	txn vecstore.Txn,
-	queryVector vector.T,
+	vec vector.T,
 	searchSet *vecstore.SearchSet,
 	options SearchOptions,
 ) error {
 	searchCtx := searchContext{
 		Txn:      txn,
-		Original: queryVector,
+		Original: vec,
 		Level:    vecstore.LeafLevel,
 		Options:  options,
 	}
@@ -349,7 +349,7 @@ func (vi *VectorIndex) Search(
 	// Randomize the vector.
 	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
 	defer searchCtx.Workspace.FreeVector(tempRandomized)
-	searchCtx.Randomized = vi.randomizeVector(queryVector, tempRandomized)
+	searchCtx.Randomized = vi.randomizeVector(vec, tempRandomized)
 
 	return vi.searchHelper(&searchCtx, searchSet)
 }
@@ -360,7 +360,7 @@ func (vi *VectorIndex) Search(
 // This is useful for callers that directly insert KV rows rather than using
 // this library to do it.
 func (vi *VectorIndex) SearchForInsert(
-	ctx context.Context, txn vecstore.Txn, vector vector.T,
+	ctx context.Context, txn vecstore.Txn, vec vector.T,
 ) (*vecstore.SearchResult, error) {
 	// Potentially throttle operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
@@ -368,12 +368,12 @@ func (vi *VectorIndex) SearchForInsert(
 	}
 
 	var parentSearchCtx searchContext
-	vi.setupInsertContext(ctx, txn, vector, &parentSearchCtx)
+	vi.setupInsertContext(ctx, txn, vec, &parentSearchCtx)
 
 	// Randomize the vector.
 	tempRandomized := parentSearchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
 	defer parentSearchCtx.Workspace.FreeVector(tempRandomized)
-	parentSearchCtx.Randomized = vi.randomizeVector(vector, tempRandomized)
+	parentSearchCtx.Randomized = vi.randomizeVector(vec, tempRandomized)
 
 	result, err := vi.searchForInsertHelper(&parentSearchCtx)
 	if err != nil {
@@ -400,7 +400,7 @@ func (vi *VectorIndex) SearchForInsert(
 // nil if the vector cannot be found. This is useful for callers that directly
 // delete KV rows rather than using this library to do it.
 func (vi *VectorIndex) SearchForDelete(
-	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.KeyBytes,
+	ctx context.Context, txn vecstore.Txn, vec vector.T, key vecstore.KeyBytes,
 ) (*vecstore.SearchResult, error) {
 	// Potentially throttle operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
@@ -409,7 +409,7 @@ func (vi *VectorIndex) SearchForDelete(
 
 	searchCtx := searchContext{
 		Txn:      txn,
-		Original: vector,
+		Original: vec,
 		Level:    vecstore.LeafLevel,
 		Options: SearchOptions{
 			SkipRerank:  vi.options.DisableErrorBounds,
@@ -421,7 +421,7 @@ func (vi *VectorIndex) SearchForDelete(
 	// Randomize the vector.
 	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
 	defer searchCtx.Workspace.FreeVector(tempRandomized)
-	searchCtx.Randomized = vi.randomizeVector(vector, tempRandomized)
+	searchCtx.Randomized = vi.randomizeVector(vec, tempRandomized)
 
 	searchCtx.tempSearchSet = vecstore.SearchSet{MaxResults: 1, MatchKey: key}
 
@@ -479,13 +479,13 @@ func (vi *VectorIndex) ForceMerge(
 // the closest centroid to the query vector. The partition in which to insert
 // the vector is at the parent of of the leaf level.
 func (vi *VectorIndex) setupInsertContext(
-	ctx context.Context, txn vecstore.Txn, vector vector.T, parentSearchCtx *searchContext,
+	ctx context.Context, txn vecstore.Txn, vec vector.T, parentSearchCtx *searchContext,
 ) {
 	// Perform the search using quantized vectors rather than full vectors (i.e.
 	// skip reranking).
 	*parentSearchCtx = searchContext{
 		Txn:      txn,
-		Original: vector,
+		Original: vec,
 		Level:    vecstore.SecondLevel,
 		Options: SearchOptions{
 			BaseBeamSize: vi.options.BaseBeamSize,
@@ -542,11 +542,11 @@ func (vi *VectorIndex) addToPartition(
 	txn vecstore.Txn,
 	parentPartitionKey vecstore.PartitionKey,
 	partitionKey vecstore.PartitionKey,
-	vector vector.T,
+	vec vector.T,
 	childKey vecstore.ChildKey,
 	valueBytes vecstore.ValueBytes,
 ) error {
-	metadata, err := txn.AddToPartition(ctx, partitionKey, vector, childKey, valueBytes)
+	metadata, err := txn.AddToPartition(ctx, partitionKey, vec, childKey, valueBytes)
 	if err != nil {
 		return errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
@@ -1031,20 +1031,20 @@ func formatFloat(value float32, prec int) string {
 
 // writeVector formats the given vector like "(1, 2, ..., 9, 10)" and writes it
 // to the given buffer, using the specified precision.
-func writeVector(buf *bytes.Buffer, vector vector.T, prec int) {
+func writeVector(buf *bytes.Buffer, vec vector.T, prec int) {
 	buf.WriteString("(")
-	if len(vector) > 4 {
+	if len(vec) > 4 {
 		// Show first 2 numbers, '...', and last 2 numbers.
-		buf.WriteString(formatFloat(vector[0], prec))
+		buf.WriteString(formatFloat(vec[0], prec))
 		buf.WriteString(", ")
-		buf.WriteString(formatFloat(vector[1], prec))
+		buf.WriteString(formatFloat(vec[1], prec))
 		buf.WriteString(", ..., ")
-		buf.WriteString(formatFloat(vector[len(vector)-2], prec))
+		buf.WriteString(formatFloat(vec[len(vec)-2], prec))
 		buf.WriteString(", ")
-		buf.WriteString(formatFloat(vector[len(vector)-1], prec))
+		buf.WriteString(formatFloat(vec[len(vec)-1], prec))
 	} else {
 		// Show all numbers if there are 4 or fewer.
-		for i, val := range vector {
+		for i, val := range vec {
 			if i != 0 {
 				buf.WriteString(", ")
 			}
