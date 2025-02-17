@@ -14,10 +14,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	aload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
 
@@ -390,6 +393,32 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 
 	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{
+			Store: &StoreTestingKnobs{
+				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+					TestingPostEvalFilter: func(args kvserverbase.FilterArgs) *kvpb.Error {
+						if !args.Req.Header().Span().Overlaps(roachpb.Span{
+							Key: keys.ScratchRangeMin, EndKey: keys.ScratchRangeMax,
+						}) {
+							return nil
+						}
+
+						buf := logtags.FromContext(args.Ctx)
+						if buf != nil {
+							buf = &logtags.Buffer{}
+						}
+						if reflect.TypeOf(args.Req) == reflect.TypeOf(&kvpb.AddSSTableRequest{}) {
+							t.Logf("evaluated [logtags=%s: %T", buf, args.Req)
+						} else {
+							// Something unknown we likely did not expect.
+							t.Logf("evaluated [logtags=%s]: %T on %s: %s %+v",
+								buf, args.Req, args.Req.Header().Span(), args.Req, args.Hdr)
+						}
+						return nil
+					},
+				},
+			},
+		}},
 	})
 
 	defer tc.Stopper().Stop(ctx)
@@ -469,7 +498,8 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 	// artificially inflating measurement due to consistency checking.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
 
-	for _, testCase := range testCases {
+	for i, testCase := range testCases {
+		t.Logf("test #%d", i+1)
 		// Reset the request counts to 0 before sending to clear previous requests.
 		repl.loadStats.Reset()
 
