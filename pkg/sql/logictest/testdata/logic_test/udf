@@ -979,3 +979,28 @@ LIMIT
 	3:::INT8;
 
 subtest end
+
+# Regression test for #104009.
+statement ok
+CREATE TABLE ab104009(a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TABLE cd104009(c INT PRIMARY KEY, d INT)
+
+statement ok
+CREATE TABLE e104009(e INT PRIMARY KEY)
+
+statement ok
+CREATE FUNCTION f(o INT) RETURNS STRING STABLE LANGUAGE SQL AS $$
+  SELECT a
+  FROM ab104009
+  JOIN cd104009 ON a = c
+  JOIN e104009 ON b = e
+  WHERE b = $1
+$$
+
+statement ok
+PREPARE p AS SELECT f($1::REGCLASS::INT)
+
+statement ok
+EXECUTE p(10)
