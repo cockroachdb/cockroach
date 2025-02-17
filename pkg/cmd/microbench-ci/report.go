@@ -9,6 +9,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"sort"
@@ -58,6 +59,10 @@ func (c *CompareResult) generateSummaryData(
 	for metricName, entry := range c.MetricMap {
 		benchmark := entry.BenchmarkEntries[c.EntryName]
 		cc := entry.ComputeComparison(c.EntryName, string(Old), string(New))
+		if cc == nil {
+			log.Printf("WARN: no comparison found for benchmark metric %q:%q", c.EntryName, metricName)
+			continue
+		}
 		threshold := c.Benchmark.Thresholds[metricName] * 100.0
 		status := statusTemplateFunc(c.status(metricName))
 		oldSum := benchmark.Summaries[string(Old)]
