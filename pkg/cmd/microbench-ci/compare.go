@@ -43,6 +43,9 @@ func (c *CompareResult) status(metricName string) Status {
 		return NoChange
 	}
 	cc := entry.ComputeComparison(c.EntryName, string(Old), string(New))
+	if cc == nil {
+		return NoChange
+	}
 	status := NoChange
 	threshold := c.Benchmark.Thresholds[metricName] * 100.0
 	if cc.Delta*float64(entry.Better) > 0 {
