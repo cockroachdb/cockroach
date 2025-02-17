@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -251,12 +250,7 @@ func FormatLSMStats(stats map[roachpb.StoreID]string) string {
 }
 
 // RegisterEngines setups up debug engine endpoints for the known storage engines.
-func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engine) error {
-	if len(specs) != len(engines) {
-		// TODO(yevgeniy): Consider adding accessors to storage.Engine to get their path.
-		return errors.New("number of store specs must match number of engines")
-	}
-
+func (ds *Server) RegisterEngines(engines []storage.Engine) error {
 	ds.mux.HandleFunc("/debug/lsm", func(w http.ResponseWriter, req *http.Request) {
 		stats, err := GetLSMStats(engines)
 		if err != nil {
@@ -265,18 +259,18 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 		fmt.Fprint(w, FormatLSMStats(stats))
 	})
 
-	for i := 0; i < len(specs); i++ {
-		if specs[i].InMemory {
+	for _, eng := range engines {
+		dir := eng.Env().Dir
+		if dir == "" {
 			// TODO(yevgeniy): Add plumbing to support LSM visualization for in memory engines.
 			continue
 		}
 
-		storeID, err := engines[i].GetStoreID()
+		storeID, err := eng.GetStoreID()
 		if err != nil {
 			return err
 		}
 
-		dir := specs[i].Path
 		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm-viz/%d", storeID),
 			func(w http.ResponseWriter, req *http.Request) {
 				if err := analyzeLSM(dir, w); err != nil {

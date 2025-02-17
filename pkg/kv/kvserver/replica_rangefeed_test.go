@@ -385,7 +385,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	expSSTSpan := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("r")}
 
 	_, _, _, pErr = store1.DB().AddSSTableAtBatchTimestamp(ctx, roachpb.Key("b"), roachpb.Key("r"), sstFile.Data(),
-		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
+		false /* disallowConflicts */, hlc.Timestamp{}, nil, /* stats */
 		false /* ingestAsWrites */, ts6)
 	require.Nil(t, pErr)
 
@@ -412,7 +412,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	require.NoError(t, sstWriter.Finish())
 
 	_, _, _, pErr = store1.DB().AddSSTableAtBatchTimestamp(ctx, roachpb.Key("b"), roachpb.Key("r"), sstFile.Data(),
-		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
+		false /* disallowConflicts */, hlc.Timestamp{}, nil, /* stats */
 		true /* ingestAsWrites */, ts7)
 	require.Nil(t, pErr)
 

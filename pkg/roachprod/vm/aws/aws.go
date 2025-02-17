@@ -1309,7 +1309,14 @@ func (p *Provider) runInstance(
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(name, extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
+	filename, err := writeStartupScript(
+		name,
+		extraMountOpts,
+		opts.SSDOpts.FileSystem,
+		providerOpts.UseMultipleDisks,
+		opts.Arch == string(vm.ArchFIPS),
+		providerOpts.RemoteUserName,
+	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}

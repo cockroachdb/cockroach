@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -141,7 +142,7 @@ func NewInMemoryStore(dims int, seed int64) *InMemoryStore {
 	// Create empty root partition.
 	var empty vector.Set
 	quantizer := quantize.NewUnQuantizer(dims)
-	quantizedSet := quantizer.Quantize(context.Background(), &empty)
+	quantizedSet := quantizer.Quantize(context.Background(), empty)
 	inMemPartition := &inMemoryPartition{
 		key: RootKey,
 	}
@@ -292,7 +293,7 @@ func (s *InMemoryStore) MergeStats(ctx context.Context, stats *IndexStats, skipM
 // InsertVector inserts a new full-size vector into the in-memory store,
 // associated with the given primary key. This mimics inserting a vector into
 // the primary index, and is used during testing and benchmarking.
-func (s *InMemoryStore) InsertVector(key PrimaryKey, vector vector.T) {
+func (s *InMemoryStore) InsertVector(key KeyBytes, vector vector.T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -302,7 +303,7 @@ func (s *InMemoryStore) InsertVector(key PrimaryKey, vector vector.T) {
 // DeleteVector deletes the vector associated with the given primary key from
 // the in-memory store. This mimics deleting a vector from the primary index,
 // and is used during testing and benchmarking.
-func (s *InMemoryStore) DeleteVector(key PrimaryKey) {
+func (s *InMemoryStore) DeleteVector(key KeyBytes) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -311,7 +312,7 @@ func (s *InMemoryStore) DeleteVector(key PrimaryKey) {
 
 // GetVector returns a single vector from the store, by its primary key. This
 // is used for testing.
-func (s *InMemoryStore) GetVector(key PrimaryKey) vector.T {
+func (s *InMemoryStore) GetVector(key KeyBytes) vector.T {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -326,7 +327,7 @@ func (s *InMemoryStore) GetAllVectors() []VectorWithKey {
 
 	refs := make([]VectorWithKey, 0, len(s.mu.vectors))
 	for key, vec := range s.mu.vectors {
-		refs = append(refs, VectorWithKey{Key: ChildKey{PrimaryKey: PrimaryKey(key)}, Vector: vec})
+		refs = append(refs, VectorWithKey{Key: ChildKey{KeyBytes: KeyBytes(key)}, Vector: vec})
 	}
 	return refs
 }
@@ -342,8 +343,7 @@ func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
 	}
 
 	storeProto := StoreProto{
-		Dims:       s.dims,
-		Seed:       s.seed,
+		Config:     vecpb.Config{Dims: int32(s.dims), Seed: s.seed},
 		Partitions: make([]PartitionProto, 0, len(s.mu.partitions)),
 		NextKey:    s.mu.nextKey,
 		Vectors:    make([]VectorProto, 0, len(s.mu.vectors)),
@@ -376,7 +376,7 @@ func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
 
 	// Remap vectors to protobufs.
 	for key, vector := range s.mu.vectors {
-		vectorWithKey := VectorProto{PrimaryKey: []byte(key), Vector: vector}
+		vectorWithKey := VectorProto{KeyBytes: []byte(key), Vector: vector}
 		storeProto.Vectors = append(storeProto.Vectors, vectorWithKey)
 	}
 
@@ -395,8 +395,8 @@ func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 
 	// Construct the InMemoryStore object.
 	inMemStore := &InMemoryStore{
-		dims: storeProto.Dims,
-		seed: storeProto.Seed,
+		dims: int(storeProto.Config.Dims),
+		seed: storeProto.Config.Seed,
 	}
 	inMemStore.mu.clock = 2
 	inMemStore.mu.partitions = make(map[PartitionKey]*inMemoryPartition, len(storeProto.Partitions))
@@ -405,8 +405,8 @@ func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 	inMemStore.mu.stats = storeProto.Stats
 	inMemStore.mu.pending.Init()
 
-	raBitQuantizer := quantize.NewRaBitQuantizer(storeProto.Dims, storeProto.Seed)
-	unquantizer := quantize.NewUnQuantizer(storeProto.Dims)
+	raBitQuantizer := quantize.NewRaBitQuantizer(int(storeProto.Config.Dims), storeProto.Config.Seed)
+	unquantizer := quantize.NewUnQuantizer(int(storeProto.Config.Dims))
 
 	// Construct the Partition objects.
 	for i := range storeProto.Partitions {
@@ -438,7 +438,7 @@ func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 	// Insert vectors into the in-memory store.
 	for i := range storeProto.Vectors {
 		vectorProto := storeProto.Vectors[i]
-		inMemStore.mu.vectors[string(vectorProto.PrimaryKey)] = vectorProto.Vector
+		inMemStore.mu.vectors[string(vectorProto.KeyBytes)] = vectorProto.Vector
 	}
 
 	return inMemStore, nil

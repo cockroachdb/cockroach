@@ -202,13 +202,13 @@ func (fw *fixupWorker) splitPartition(
 				partitionKey, parentPartitionKey)
 		}
 
-		count, err := fw.index.removeFromPartition(ctx, txn, parentPartitionKey, childKey)
+		metadata, err := fw.index.removeFromPartition(ctx, txn, parentPartitionKey, childKey)
 		if err != nil {
 			return errors.Wrapf(err, "removing splitting partition %d from its parent %d",
 				partitionKey, parentPartitionKey)
 		}
 
-		if count != 0 {
+		if metadata.Count != 0 {
 			// Move any vectors to sibling partitions that have closer centroids.
 			// Lazily get parent vectors only if they're actually needed.
 			var parentVectors vector.Set
@@ -267,17 +267,18 @@ func (fw *fixupWorker) splitPartition(
 	if parentPartition == nil {
 		// Add a new level to the tree by setting a new root partition that points
 		// to the two new partitions.
-		centroids := vector.MakeSet(fw.index.rootQuantizer.GetRandomDims())
+		centroids := vector.MakeSet(fw.index.rootQuantizer.GetDims())
 		centroids.EnsureCapacity(2)
 		centroids.Add(leftSplit.Partition.Centroid())
 		centroids.Add(rightSplit.Partition.Centroid())
-		quantizedSet := fw.index.rootQuantizer.Quantize(ctx, &centroids)
+		quantizedSet := fw.index.rootQuantizer.Quantize(ctx, centroids)
 		childKeys := []vecstore.ChildKey{
 			{PartitionKey: leftPartitionKey},
 			{PartitionKey: rightPartitionKey},
 		}
+		valueBytes := make([]vecstore.ValueBytes, 2)
 		rootPartition := vecstore.NewPartition(
-			fw.index.rootQuantizer, quantizedSet, childKeys, partition.Level()+1)
+			fw.index.rootQuantizer, quantizedSet, childKeys, valueBytes, partition.Level()+1)
 		if err = txn.SetRootPartition(ctx, rootPartition); err != nil {
 			return errors.Wrapf(err, "setting new root for split of partition %d", partitionKey)
 		}
@@ -293,14 +294,14 @@ func (fw *fixupWorker) splitPartition(
 
 		searchCtx.Randomized = leftSplit.Partition.Centroid()
 		childKey := vecstore.ChildKey{PartitionKey: leftPartitionKey}
-		err = fw.index.insertHelper(searchCtx, childKey)
+		err = fw.index.insertHelper(searchCtx, childKey, vecstore.ValueBytes{})
 		if err != nil {
 			return errors.Wrapf(err, "inserting left partition for split of partition %d", partitionKey)
 		}
 
 		searchCtx.Randomized = rightSplit.Partition.Centroid()
 		childKey = vecstore.ChildKey{PartitionKey: rightPartitionKey}
-		err = fw.index.insertHelper(searchCtx, childKey)
+		err = fw.index.insertHelper(searchCtx, childKey, vecstore.ValueBytes{})
 		if err != nil {
 			return errors.Wrapf(err, "inserting right partition for split of partition %d", partitionKey)
 		}
@@ -330,8 +331,9 @@ func (fw *fixupWorker) splitPartitionData(
 	// Copy centroid distances and child keys so they can be split.
 	centroidDistances := slices.Clone(splitPartition.QuantizedSet().GetCentroidDistances())
 	childKeys := slices.Clone(splitPartition.ChildKeys())
+	valueBytes := slices.Clone(splitPartition.ValueBytes())
 
-	tempVector := fw.workspace.AllocFloats(fw.index.quantizer.GetRandomDims())
+	tempVector := fw.workspace.AllocFloats(fw.index.quantizer.GetDims())
 	defer fw.workspace.FreeFloats(tempVector)
 
 	// Any left offsets that point beyond the end of the left list indicate that
@@ -364,10 +366,11 @@ func (fw *fixupWorker) splitPartitionData(
 		copy(rightToLeft, leftToRight)
 		copy(leftToRight, tempVector)
 
-		// Swap centroid distances and child keys.
+		// Swap centroid distances, child keys, and value bytes.
 		centroidDistances[left], centroidDistances[right] =
 			centroidDistances[right], centroidDistances[left]
 		childKeys[left], childKeys[right] = childKeys[right], childKeys[left]
+		valueBytes[left], valueBytes[right] = valueBytes[right], valueBytes[left]
 
 		li--
 		ri++
@@ -378,13 +381,15 @@ func (fw *fixupWorker) splitPartitionData(
 
 	leftCentroidDistances := centroidDistances[:len(leftOffsets):len(leftOffsets)]
 	leftChildKeys := childKeys[:len(leftOffsets):len(leftOffsets)]
+	leftValueBytes := valueBytes[:len(leftOffsets):len(leftOffsets)]
 	leftSplit.Init(ctx, fw.index.quantizer, leftVectorSet,
-		leftCentroidDistances, leftChildKeys, splitPartition.Level())
+		leftCentroidDistances, leftChildKeys, leftValueBytes, splitPartition.Level())
 
 	rightCentroidDistances := centroidDistances[len(leftOffsets):]
 	rightChildKeys := childKeys[len(leftOffsets):]
+	rightValueBytes := valueBytes[len(leftOffsets):]
 	rightSplit.Init(ctx, fw.index.quantizer, rightVectorSet,
-		rightCentroidDistances, rightChildKeys, splitPartition.Level())
+		rightCentroidDistances, rightChildKeys, rightValueBytes, splitPartition.Level())
 
 	return leftSplit, rightSplit
 }
@@ -446,7 +451,9 @@ func (fw *fixupWorker) moveVectorsToSiblings(
 		// Found a sibling child partition that's closer, so insert the vector
 		// there instead.
 		childKey := split.Partition.ChildKeys()[i]
-		_, err = fw.index.addToPartition(ctx, txn, parentPartitionKey, siblingPartitionKey, vector, childKey)
+		valueBytes := split.Partition.ValueBytes()[i]
+		err = fw.index.addToPartition(
+			ctx, txn, parentPartitionKey, siblingPartitionKey, vector, childKey, valueBytes)
 		if err != nil {
 			return errors.Wrapf(err, "moving vector to partition %d", siblingPartitionKey)
 		}
@@ -490,7 +497,7 @@ func (fw *fixupWorker) linkNearbyVectors(
 		return err
 	}
 
-	tempVector := fw.workspace.AllocVector(fw.index.quantizer.GetRandomDims())
+	tempVector := fw.workspace.AllocVector(fw.index.quantizer.GetDims())
 	defer fw.workspace.FreeVector(tempVector)
 
 	// Filter the results.
@@ -510,21 +517,23 @@ func (fw *fixupWorker) linkNearbyVectors(
 		// Leaf vectors from the primary index need to be randomized.
 		vector := result.Vector
 		if partition.Level() == vecstore.LeafLevel {
-			fw.index.quantizer.RandomizeVector(ctx, vector, tempVector, false /* invert */)
+			fw.index.randomizeVector(vector, tempVector)
 			vector = tempVector
 		}
 
 		// Remove the vector from the other partition.
-		count, err := fw.index.removeFromPartition(ctx, txn, result.ParentPartitionKey, result.ChildKey)
+		metadata, err := fw.index.removeFromPartition(
+			ctx, txn, result.ParentPartitionKey, result.ChildKey)
 		if err != nil {
 			return err
 		}
-		if count == 0 && partition.Level() > vecstore.LeafLevel {
+		if metadata.Count == 0 && partition.Level() > vecstore.LeafLevel {
 			// Removing the vector will result in an empty non-leaf partition, which
 			// is not allowed, as the K-means tree would not be fully balanced. Add
 			// the vector back to the partition. This is a very rare case and that
 			// partition is likely to be merged away regardless.
-			_, err = txn.AddToPartition(ctx, result.ParentPartitionKey, vector, result.ChildKey)
+			_, err = txn.AddToPartition(
+				ctx, result.ParentPartitionKey, vector, result.ChildKey, result.ValueBytes)
 			if err != nil {
 				return err
 			}
@@ -532,7 +541,7 @@ func (fw *fixupWorker) linkNearbyVectors(
 		}
 
 		// Add the vector to the split partition.
-		partition.Add(ctx, vector, result.ChildKey)
+		partition.Add(ctx, vector, result.ChildKey, result.ValueBytes)
 	}
 
 	return nil
@@ -579,9 +588,10 @@ func (fw *fixupWorker) mergePartition(
 		if parentPartitionKey != vecstore.RootKey {
 			return errors.AssertionFailedf("only root partition can have zero vectors")
 		}
-		quantizedSet := fw.index.rootQuantizer.Quantize(ctx, &vectors)
+		quantizedSet := fw.index.rootQuantizer.Quantize(ctx, vectors)
 		rootPartition := vecstore.NewPartition(
-			fw.index.rootQuantizer, quantizedSet, partition.ChildKeys(), partition.Level())
+			fw.index.rootQuantizer, quantizedSet, partition.ChildKeys(),
+			partition.ValueBytes(), partition.Level())
 		if err = txn.SetRootPartition(ctx, rootPartition); err != nil {
 			return errors.Wrapf(err, "setting new root for merge of partition %d", partitionKey)
 		}
@@ -612,9 +622,10 @@ func (fw *fixupWorker) mergePartition(
 	}
 
 	childKeys := partition.ChildKeys()
+	valueBytes := partition.ValueBytes()
 	for i := range childKeys {
 		fw.searchCtx.Randomized = vectors.At(i)
-		err = fw.index.insertHelper(&fw.searchCtx, childKeys[i])
+		err = fw.index.insertHelper(&fw.searchCtx, childKeys[i], valueBytes[i])
 		if err != nil {
 			return errors.Wrapf(err, "inserting vector from merged partition %d", partitionKey)
 		}
@@ -626,7 +637,7 @@ func (fw *fixupWorker) mergePartition(
 // deleteVector deletes a vector from the store that has had its primary key
 // deleted in the primary index, but was never deleted from the secondary index.
 func (fw *fixupWorker) deleteVector(
-	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.PrimaryKey,
+	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.KeyBytes,
 ) (err error) {
 	// Run the deletion within a transaction.
 	txn, err := fw.index.store.Begin(ctx)
@@ -646,7 +657,7 @@ func (fw *fixupWorker) deleteVector(
 	// Verify that the vector is still missing from the primary index. This guards
 	// against a race condition where a row is created and deleted repeatedly with
 	// the same primary key.
-	childKey := vecstore.ChildKey{PrimaryKey: vectorKey}
+	childKey := vecstore.ChildKey{KeyBytes: vectorKey}
 	fw.tempVectorsWithKeys = ensureSliceLen(fw.tempVectorsWithKeys, 1)
 	fw.tempVectorsWithKeys[0] = vecstore.VectorWithKey{Key: childKey}
 	if err = txn.GetFullVectors(ctx, fw.tempVectorsWithKeys); err != nil {
@@ -699,13 +710,12 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 		i--
 	}
 
-	vectors := vector.MakeSet(fw.index.quantizer.GetRandomDims())
+	vectors := vector.MakeSet(fw.index.quantizer.GetDims())
 	vectors.AddUndefined(len(fw.tempVectorsWithKeys))
 	for i := range fw.tempVectorsWithKeys {
 		// Leaf vectors from the primary index need to be randomized.
 		if partition.Level() == vecstore.LeafLevel {
-			fw.index.quantizer.RandomizeVector(
-				ctx, fw.tempVectorsWithKeys[i].Vector, vectors.At(i), false /* invert */)
+			fw.index.randomizeVector(fw.tempVectorsWithKeys[i].Vector, vectors.At(i))
 		} else {
 			copy(vectors.At(i), fw.tempVectorsWithKeys[i].Vector)
 		}

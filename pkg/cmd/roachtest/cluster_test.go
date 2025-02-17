@@ -77,6 +77,10 @@ func (t testWrapper) GetRunId() string {
 	return "mock-run-id"
 }
 
+func (t testWrapper) Owner() string {
+	return "mock-owner"
+}
+
 func (t testWrapper) ExportOpenmetrics() bool {
 	return false
 }

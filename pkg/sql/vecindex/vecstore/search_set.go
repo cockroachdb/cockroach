@@ -46,8 +46,13 @@ type SearchResult struct {
 	// partition, or the key of its partition if it's in a root/branch partition.
 	ChildKey ChildKey
 	// Vector is the original, full-size data vector. This is nil by default,
-	// and is only set after an optional reranking step.
+	// and is only set when SearchOptions.SkipRerank is false or
+	// SearchOptions.ReturnVectors is true.
 	Vector vector.T
+	// ValueBytes are the opaque bytes stored alongside the quantized vector.
+	// Depending on the store, this could be empty, or it could contain
+	// information associated with the vector, such as STORING columns.
+	ValueBytes []byte
 }
 
 // MaybeCloser returns true if this result's data vector may be closer (or the
@@ -160,18 +165,21 @@ func (ss *SearchStats) Add(other *SearchStats) {
 // vector. Candidates are repeatedly added via the Add methods and the Pop
 // methods return a sorted list of the best candidates.
 type SearchSet struct {
-	// MaxResults is the maximum number of candidates that will be returned by
-	// PopResults.
+	// MaxResults specifies the max number of search results to return. Although
+	// these are the best results, the search process may retrieve additional
+	// candidates for reranking and statistics (up to MaxExtraResults) that are
+	// within the error threshold of being among the best results.
 	MaxResults int
 
-	// MaxExtraResults is the maximum number of candidates that will be returned
-	// by PopExtraResults. These results are within the error threshold of being
-	// among the best results.
+	// MaxExtraResults is the maximum number of additional candidates (beyond
+	// MaxResults) that will be returned by the search process for reranking and
+	// statistics. These results are within the error threshold of being among the
+	// the best results.
 	MaxExtraResults int
 
 	// MatchKey, if non-nil, filters out all search candidates that do not have
 	// a matching primary key.
-	MatchKey PrimaryKey
+	MatchKey KeyBytes
 
 	// Stats tracks useful information about the search, such as how many vectors
 	// and partitions were scanned.
@@ -185,7 +193,7 @@ type SearchSet struct {
 // Add includes a new candidate in the search set. If set limits have been
 // reached, then the candidate with the farthest distance will be discarded.
 func (ss *SearchSet) Add(candidate *SearchResult) {
-	if ss.MatchKey != nil && !bytes.Equal(ss.MatchKey, candidate.ChildKey.PrimaryKey) {
+	if ss.MatchKey != nil && !bytes.Equal(ss.MatchKey, candidate.ChildKey.KeyBytes) {
 		// Filter out candidates without a matching primary key.
 		return
 	}

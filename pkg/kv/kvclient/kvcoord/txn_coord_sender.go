@@ -317,9 +317,6 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		riGen.ds = ds
 	}
-	tc.interceptorAlloc.txnWriteBuffer = txnWriteBuffer{
-		enabled: BufferedWritesEnabled.Get(&tcf.st.SV),
-	}
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
 		st:                       tcf.st,
 		riGen:                    riGen,
@@ -508,7 +505,8 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
+	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() &&
+		!tc.interceptorAlloc.txnWriteBuffer.hasBufferedWrites() {
 		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
 
@@ -1156,6 +1154,27 @@ func (tc *TxnCoordSender) SetOmitInRangefeeds() {
 		panic("cannot change OmitInRangefeeds of a running transaction")
 	}
 	tc.mu.txn.OmitInRangefeeds = true
+}
+
+// SetBufferedWritesEnabled is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) SetBufferedWritesEnabled(enabled bool) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.active && enabled && !tc.interceptorAlloc.txnWriteBuffer.enabled {
+		panic("cannot enable buffered writes on a running transaction")
+	}
+	tc.interceptorAlloc.txnWriteBuffer.enabled = enabled
+	// TODO(yuzefovich): flush the buffer when going from "enabled" to
+	// "disabled".
+}
+
+// BufferedWritesEnabled is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) BufferedWritesEnabled() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	return tc.interceptorAlloc.txnWriteBuffer.enabled
 }
 
 // String is part of the kv.TxnSender interface.

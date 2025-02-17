@@ -102,20 +102,20 @@ RETURNING id;
 `
 	// Disallow clean up of claimed jobs
 	jobs.CancellationsUpdateLimitSetting.Override(ctx, &s.ClusterSettings().SV, 0)
-	terminalStatuses := []jobs.Status{jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed}
-	terminalIDs := make([]jobspb.JobID, len(terminalStatuses))
-	terminalClaims := make([][]byte, len(terminalStatuses))
+	terminalStates := []jobs.State{jobs.StateSucceeded, jobs.StateCanceled, jobs.StateFailed}
+	terminalIDs := make([]jobspb.JobID, len(terminalStates))
+	terminalClaims := make([][]byte, len(terminalStates))
 	mkSessionID := func() []byte {
 		sessionID, err := slstorage.MakeSessionID([]byte("us"), uuid.MakeV4())
 		require.NoError(t, err)
 		return []byte(sessionID)
 	}
-	for i, s := range terminalStatuses {
+	for i, s := range terminalStates {
 		terminalClaims[i] = mkSessionID() // bogus claim
 		tdb.QueryRow(t, insertQuery, s, terminalClaims[i], 42).Scan(&terminalIDs[i])
 	}
 	var nonTerminalID jobspb.JobID
-	tdb.QueryRow(t, insertQuery, jobs.StatusRunning, mkSessionID(), 42).Scan(&nonTerminalID)
+	tdb.QueryRow(t, insertQuery, jobs.StateRunning, mkSessionID(), 42).Scan(&nonTerminalID)
 
 	checkClaimEqual := func(id jobspb.JobID, exp []byte) error {
 		const getClaimQuery = `SELECT claim_session_id FROM system.jobs WHERE id = $1`
@@ -378,7 +378,7 @@ func TestGCDurationControl(t *testing.T) {
 		_, err := registry.CreateJobWithTxn(ctx, jobs.Record{
 			// Job does not accept an empty Details field, so arbitrarily provide
 			// ImportDetails.
-			Details:  jobspb.ImportDetails{},
+			Details:  jobspb.ImportDetails{Walltime: 1},
 			Progress: jobspb.ImportProgress{},
 			Username: username.TestUserName(),
 		}, id, txn)
@@ -391,8 +391,22 @@ func TestGCDurationControl(t *testing.T) {
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	existsQuery := fmt.Sprintf("SELECT count(*) = 1 FROM system.jobs WHERE id = %d", id)
+	infoExistsQuery := fmt.Sprintf("SELECT count(*) > 0 FROM system.job_info WHERE job_id = %d", id)
+	messageExistsQuery := fmt.Sprintf("SELECT count(*) > 0 FROM system.job_message WHERE job_id = %d", id)
+	statusExistsQuery := fmt.Sprintf("SELECT count(*) > 0 FROM system.job_status WHERE job_id = %d", id)
+	progressExistsQuery := fmt.Sprintf("SELECT count(*) > 0 FROM system.job_progress WHERE job_id = %d", id)
+	progressHistoryExistsQuery := fmt.Sprintf("SELECT count(*) > 0 FROM system.job_progress_history WHERE job_id = %d", id)
+
 	// Make sure the job exists even though it has completed.
 	tdb.CheckQueryResults(t, existsQuery, [][]string{{"true"}})
+	tdb.CheckQueryResults(t, infoExistsQuery, [][]string{{"true"}})
+	tdb.CheckQueryResults(t, messageExistsQuery, [][]string{{"true"}})
+
+	// Also add some bogus rows to other job tables to test gc.
+	tdb.Exec(t, fmt.Sprintf("INSERT INTO system.job_status (job_id, status) VALUES (%d, 'bogus')", id))
+	tdb.Exec(t, fmt.Sprintf("INSERT INTO system.job_progress (job_id, fraction) VALUES (%d, 0.5)", id))
+	tdb.Exec(t, fmt.Sprintf("INSERT INTO system.job_progress_history (job_id, fraction) VALUES (%d, 0.5)", id))
+
 	// Shorten the GC interval to try deleting the job.
 	tdb.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '5ms'", jobs.GcIntervalSettingKey))
 	// Wait for GC to run at least once.
@@ -412,6 +426,11 @@ func TestGCDurationControl(t *testing.T) {
 	tdb.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '1ms'", jobs.RetentionTimeSettingKey))
 	// Wait for the job to be deleted.
 	tdb.CheckQueryResultsRetry(t, existsQuery, [][]string{{"false"}})
+	tdb.CheckQueryResultsRetry(t, infoExistsQuery, [][]string{{"false"}})
+	tdb.CheckQueryResultsRetry(t, messageExistsQuery, [][]string{{"false"}})
+	tdb.CheckQueryResultsRetry(t, statusExistsQuery, [][]string{{"false"}})
+	tdb.CheckQueryResultsRetry(t, progressExistsQuery, [][]string{{"false"}})
+	tdb.CheckQueryResultsRetry(t, progressHistoryExistsQuery, [][]string{{"false"}})
 }
 
 // TestWaitWithRetryableError tests retryable errors when querying

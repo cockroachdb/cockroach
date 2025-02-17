@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -171,6 +172,7 @@ func TestColdStartLatency(t *testing.T) {
 		} else {
 			stmts = []string{`
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER DATABASE system PRIMARY REGION "us-east1";
 ALTER DATABASE system ADD REGION "us-west1";
 ALTER DATABASE system ADD REGION "europe-west1";
@@ -317,7 +319,7 @@ COMMIT;`}
 		})
 		require.NoError(t, err)
 		defer tenant.AppStopper().Stop(ctx)
-		pgURL, cleanup, err := sqlutils.PGUrlWithOptionalClientCertsE(
+		pgURL, cleanup, err := pgurlutils.PGUrlWithOptionalClientCertsE(
 			tenant.AdvSQLAddr(), "tenantdata", url.UserPassword("foo", password),
 			false, "", // withClientCerts
 		)

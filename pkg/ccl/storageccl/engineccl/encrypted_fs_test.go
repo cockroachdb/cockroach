@@ -252,7 +252,7 @@ func TestPebbleEncryption(t *testing.T) {
 			base.StoreSpec{
 				InMemory:          true,
 				Attributes:        roachpb.Attributes{},
-				Size:              base.SizeSpec{InBytes: 512 << 20},
+				Size:              storagepb.SizeSpec{Capacity: 512 << 20},
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
@@ -301,7 +301,7 @@ func TestPebbleEncryption(t *testing.T) {
 			base.StoreSpec{
 				InMemory:          true,
 				Attributes:        roachpb.Attributes{},
-				Size:              base.SizeSpec{InBytes: 512 << 20},
+				Size:              storagepb.SizeSpec{Capacity: 512 << 20},
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
@@ -389,7 +389,7 @@ func TestPebbleEncryption2(t *testing.T) {
 			base.StoreSpec{
 				InMemory:          true,
 				Attributes:        roachpb.Attributes{},
-				Size:              base.SizeSpec{InBytes: 512 << 20},
+				Size:              storagepb.SizeSpec{Capacity: 512 << 20},
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},

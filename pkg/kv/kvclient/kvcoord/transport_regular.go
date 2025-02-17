@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build !race
-// +build !race
 
 package kvcoord
 

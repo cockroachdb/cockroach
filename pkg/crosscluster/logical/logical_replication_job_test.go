@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -532,12 +531,12 @@ func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
 	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	// The ingestion job on cluster A has a pts on cluster B.
-	producerJobIDB := replicationutils.GetProducerJobIDFromLDRJob(t, dbA, jobAID)
-	replicationutils.WaitForPTSProtection(t, ctx, dbB, s, producerJobIDB, now)
+	producerJobIDB := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbA, jobAID)
+	replicationtestutils.WaitForPTSProtection(t, ctx, dbB, s, producerJobIDB, now)
 
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
-	producerJobIDA := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
-	replicationutils.WaitForPTSProtection(t, ctx, dbA, s, producerJobIDA, now)
+	producerJobIDA := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
+	replicationtestutils.WaitForPTSProtection(t, ctx, dbA, s, producerJobIDA, now)
 }
 
 // TestLogicalStreamIngestionCancelUpdatesProducerJob tests whether
@@ -561,13 +560,13 @@ func TestLogicalStreamIngestionCancelUpdatesProducerJob(t *testing.T) {
 
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
 
-	producerJobID := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
+	producerJobID := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
 	jobutils.WaitForJobToRun(t, dbA, producerJobID)
 
 	dbB.Exec(t, "CANCEL JOB $1", jobBID)
 	jobutils.WaitForJobToCancel(t, dbB, jobBID)
 	jobutils.WaitForJobToFail(t, dbA, producerJobID)
-	replicationutils.WaitForPTSProtectionToNotExist(t, ctx, dbA, s, producerJobID)
+	replicationtestutils.WaitForPTSProtectionToNotExist(t, ctx, dbA, s, producerJobID)
 }
 
 func TestRestoreFromLDR(t *testing.T) {
@@ -1217,7 +1216,7 @@ func TestHeartbeatCancel(t *testing.T) {
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
-	prodAID := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
+	prodAID := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
 
 	// Cancel the producer job and wait for the hearbeat to pick up that the stream is inactive
 	t.Logf("canceling replication producer %s", prodAID)
@@ -1867,7 +1866,7 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 
 		expectedJobID := jobIDs[rowIdx]
 		require.Equal(t, expectedJobID, jobID)
-		require.Equal(t, jobs.StatusRunning, jobs.Status(status))
+		require.Equal(t, jobs.StateRunning, jobs.State(status))
 
 		if expectedJobID == jobAID {
 			require.Equal(t, pq.StringArray{"a.public.tab"}, targets)
@@ -1953,7 +1952,7 @@ func TestUserPrivileges(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -1966,7 +1965,8 @@ func TestUserPrivileges(t *testing.T) {
 	testuser2 := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser+"2"), serverutils.DBName("a")))
 
 	var jobAID jobspb.JobID
-	testuser2.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	createStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
+	testuser2.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
 
 	t.Run("view-control-job", func(t *testing.T) {
 		showJobStmt := "select job_id from [SHOW JOBS] where job_id=$1"
@@ -2006,11 +2006,17 @@ func TestUserPrivileges(t *testing.T) {
 		testuser.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBaseWithSchema, "testschema", "tab"))
 	})
 
-	t.Run("replication", func(t *testing.T) {
-		createWithUDFStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'testschema.repl_apply'"
-		testuser.ExpectErr(t, "user testuser does not have REPLICATION system privilege", createWithUDFStmt, dbBURL.String())
+	t.Run("replication-dest", func(t *testing.T) {
+		testuser.ExpectErr(t, "user testuser does not have REPLICATION system privilege", createStmt, dbBURL.String())
 		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser))
-		testuser.QueryRow(t, createWithUDFStmt, dbBURL.String()).Scan(&jobAID)
+		testuser.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
+	})
+	t.Run("replication-src", func(t *testing.T) {
+		dbB.Exec(t, "CREATE USER testuser3")
+		dbBURL2 := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"), serverutils.User(username.TestUser+"3"))
+		testuser.ExpectErr(t, "user testuser3 does not have REPLICATION system privilege", createStmt, dbBURL2.String())
+		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"3"))
+		testuser.QueryRow(t, createStmt, dbBURL2.String()).Scan(&jobAID)
 	})
 }
 
@@ -2488,7 +2494,7 @@ func TestFailDestAfterSourceFailure(t *testing.T) {
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
 	dbB.Exec(t, "PAUSE JOB $1", jobBID)
 
-	producerJobID := replicationutils.GetProducerJobIDFromLDRJob(t, dbA, jobBID)
+	producerJobID := replicationtestutils.GetProducerJobIDFromLDRJob(t, dbA, jobBID)
 	dbA.Exec(t, "CANCEL JOB $1", producerJobID)
 	jobutils.WaitForJobToCancel(t, dbA, producerJobID)
 

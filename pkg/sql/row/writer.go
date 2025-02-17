@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,10 +61,8 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 }
 
 // prepareInsertOrUpdateBatch constructs a KV batch that inserts or
-// updates a row in KV.
+// updates a row in KV in the primary index.
 //   - batch is the KV batch where commands should be appended.
-//   - putFn is the functions that can append Put/CPut commands to the batch.
-//     (must be adapted depending on whether 'overwrite' is set)
 //   - helper is the rowHelper that knows about the table being modified.
 //   - primaryIndexKey is the PK prefix for the current row.
 //   - fetchedCols is the list of schema columns that have been fetched
@@ -78,7 +77,7 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 //   - rawValueBuf must be a scratch byte array. This must be reinitialized
 //     to an empty slice on each call but can be preserved at its current
 //     capacity to avoid allocations. The function returns the slice.
-//   - overwrite must be set to true for UPDATE and UPSERT.
+//   - kvOp indicates which KV write operation should be used.
 //   - traceKV is to be set to log the KV operations added to the batch.
 func prepareInsertOrUpdateBatch(
 	ctx context.Context,
@@ -92,10 +91,10 @@ func prepareInsertOrUpdateBatch(
 	kvKey *roachpb.Key,
 	kvValue *roachpb.Value,
 	rawValueBuf []byte,
-	putFn func(ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool),
 	oth *OriginTimestampCPutHelper,
 	oldValues []tree.Datum,
-	overwrite, traceKV bool,
+	kvOp KVInsertOp,
+	traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
 	// TODO(ssd): We don't currently support multiple column
@@ -105,6 +104,19 @@ func prepareInsertOrUpdateBatch(
 	// we error if we ever see such writes.
 	if oth.IsSet() && len(families) > 1 {
 		return nil, errors.AssertionFailedf("OriginTimestampCPutHelper is not yet testing with multi-column family writes")
+	}
+	var putFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, []encoding.Direction)
+	var overwrite bool
+	switch kvOp {
+	case CPutOp:
+		putFn = insertCPutFn
+		overwrite = false
+	case PutOp:
+		putFn = insertPutFn
+		overwrite = true
+	case PutMustAcquireExclusiveLockOp:
+		putFn = insertPutMustAcquireExclusiveLockFn
+		overwrite = true
 	}
 
 	for i := range families {
@@ -188,7 +200,7 @@ func prepareInsertOrUpdateBatch(
 				} else if overwrite {
 					// If the new family contains a NULL value, then we must
 					// delete any pre-existing row.
-					insertDelFn(ctx, batch, kvKey, traceKV)
+					insertDelFn(ctx, batch, kvKey, traceKV, helper.primIndexValDirs)
 				}
 			} else {
 				// We only output non-NULL values. Non-existent column keys are
@@ -201,7 +213,7 @@ func prepareInsertOrUpdateBatch(
 				if oth.IsSet() {
 					oth.CPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV)
 				} else {
-					putFn(ctx, batch, kvKey, &marshaled, traceKV)
+					putFn(ctx, batch, kvKey, &marshaled, traceKV, helper.primIndexValDirs)
 				}
 			}
 
@@ -249,7 +261,7 @@ func prepareInsertOrUpdateBatch(
 			} else if overwrite {
 				// The family might have already existed but every column in it is being
 				// set to NULL, so delete it.
-				insertDelFn(ctx, batch, kvKey, traceKV)
+				insertDelFn(ctx, batch, kvKey, traceKV, helper.primIndexValDirs)
 			}
 		} else {
 			// Copy the contents of rawValueBuf into the roachpb.Value. This is
@@ -262,7 +274,7 @@ func prepareInsertOrUpdateBatch(
 			if oth.IsSet() {
 				oth.CPutFn(ctx, batch, kvKey, kvValue, expBytes, traceKV)
 			} else {
-				putFn(ctx, batch, kvKey, kvValue, traceKV)
+				putFn(ctx, batch, kvKey, kvValue, traceKV, helper.primIndexValDirs)
 			}
 		}
 

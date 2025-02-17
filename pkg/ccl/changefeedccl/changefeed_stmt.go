@@ -603,8 +603,9 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, err
 	}
+	sourceProvider := newEnrichedSourceProvider(encodingOpts, enrichedSourceData{jobId: jobID.String()})
 	if _, err := getEncoder(ctx, encodingOpts, AllTargets(details), details.Select != "",
-		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil); err != nil {
+		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil, sourceProvider); err != nil {
 		return nil, err
 	}
 
@@ -959,9 +960,28 @@ func validateSink(
 	if err != nil {
 		return err
 	}
+	sinkTy := canarySink.getConcreteType()
 	if err := canarySink.Close(); err != nil {
 		return err
 	}
+
+	// envelope=enriched is only allowed for non-query feeds and certain sinks.
+	if details.Opts[changefeedbase.OptEnvelope] == string(changefeedbase.OptEnvelopeEnriched) {
+		if details.Select != `` {
+			return errors.Newf("envelope=%s is incompatible with SELECT statement", changefeedbase.OptEnvelopeEnriched)
+		}
+		allowedSinkTypes := map[sinkType]struct{}{
+			sinkTypeNull:           {},
+			sinkTypePubsub:         {},
+			sinkTypeKafka:          {},
+			sinkTypeWebhook:        {},
+			sinkTypeSinklessBuffer: {},
+		}
+		if _, ok := allowedSinkTypes[sinkTy]; !ok {
+			return errors.Newf("envelope=%s is incompatible with %s sink", changefeedbase.OptEnvelopeEnriched, sinkTy)
+		}
+	}
+
 	// If there's no projection we may need to force some options to ensure messages
 	// have enough information.
 	if details.Select == `` {
@@ -1456,6 +1476,7 @@ func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfi
 
 // reconcileJobStateWithLocalState ensures that the job progress information
 // is consistent with the state present in the local state.
+// TODO(#137692): SetCheckpoint should take in old and new checkpoints proto.
 func reconcileJobStateWithLocalState(
 	ctx context.Context, jobID jobspb.JobID, localState *cachedState, execCfg *sql.ExecutorConfig,
 ) error {

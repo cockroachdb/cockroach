@@ -33,30 +33,34 @@ import (
 func TestStartSpanAlwaysTrace(t *testing.T) {
 	// Regression test: if tracing is on, don't erroneously return a noopSpan
 	// due to optimizations in StartSpan.
+	var nilSpan *Span
 	tr := NewTracer()
 	tr._useNetTrace = 1
 	require.True(t, tr.AlwaysTrace())
-	nilMeta := tr.noopSpan.Meta()
+	nilMeta := nilSpan.Meta()
 	require.True(t, nilMeta.Empty())
 	sp := tr.StartSpan("foo", WithRemoteParentFromSpanMeta(nilMeta))
 	require.False(t, sp.IsVerbose()) // parent was not verbose, so neither is sp
-	require.False(t, sp.IsNoop())
+	require.NotNil(t, sp)
 	sp.Finish()
-	sp = tr.StartSpan("foo", WithParent(tr.noopSpan))
+	sp = tr.StartSpan("foo", WithParent(nil))
 	require.False(t, sp.IsVerbose()) // parent was not verbose
-	require.False(t, sp.IsNoop())
+	require.NotNil(t, sp)
 	sp.Finish()
 }
 
 func TestTracingOffRecording(t *testing.T) {
 	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
+	// Noop spans are nil.
 	noop1 := tr.StartSpan("noop")
-	require.True(t, noop1.IsNoop())
+	require.Nil(t, noop1)
 
+	// Recording using a nil span is a no-op.
 	noop1.Record("hello")
 
+	// Starting a child span of a nil span is a no-op.
 	noop2 := tr.StartSpan("noop2", WithParent(noop1), WithDetachedRecording())
-	require.True(t, noop2.IsNoop())
+	require.Nil(t, noop2)
 
 	// Noop span returns Empty recording.
 	require.Nil(t, noop1.GetRecording(tracingpb.RecordingVerbose))
@@ -76,8 +80,8 @@ func TestTracerRecording(t *testing.T) {
 	require.Nil(t, sNonRecording.FinishAndGetConfiguredRecording())
 
 	s1 := tr.StartSpan("a", WithRecording(tracingpb.RecordingStructured))
-	if s1.IsNoop() {
-		t.Error("recording Span should not be noop")
+	if s1 == nil {
+		t.Error("recording Span should not be nil")
 	}
 	if s1.IsVerbose() {
 		t.Error("WithRecording(RecordingStructured) should not be verbose")
@@ -106,7 +110,7 @@ func TestTracerRecording(t *testing.T) {
 
 	// Real parent --> real child.
 	real3 := tr.StartSpan("noop3", WithRemoteParentFromSpanMeta(s1.Meta()))
-	if real3.IsNoop() {
+	if real3 == nil {
 		t.Error("expected real child Span")
 	}
 	real3.Finish()
@@ -304,12 +308,10 @@ func TestTracerInjectExtractNoop(t *testing.T) {
 	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 	tr2 := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 
-	// Verify that noop spans become noop spans on the remote side.
+	// Verify that noop (nil) spans become noop spans on the remote side.
 
 	noop1 := tr.StartSpan("noop")
-	if !noop1.IsNoop() {
-		t.Fatalf("expected noop Span: %+v", noop1)
-	}
+	require.Nilf(t, noop1, "expected nil Span: %+v", noop1)
 	carrier := MetadataCarrier{metadata.MD{}}
 	tr.InjectMetaInto(noop1.Meta(), carrier)
 	if len(carrier.MD) != 0 {
@@ -324,9 +326,7 @@ func TestTracerInjectExtractNoop(t *testing.T) {
 		t.Errorf("expected no-op span meta: %v", wireSpanMeta)
 	}
 	noop2 := tr2.StartSpan("remote op", WithRemoteParentFromSpanMeta(wireSpanMeta))
-	if !noop2.IsNoop() {
-		t.Fatalf("expected noop Span: %+v", noop2)
-	}
+	require.Nilf(t, noop2, "expected nil Span: %+v", noop2)
 	noop1.Finish()
 	noop2.Finish()
 }
@@ -638,24 +638,25 @@ func TestSpanRecordingFinished(t *testing.T) {
 	require.Len(t, spanOpsWithFinished, 0)
 }
 
-// Test that the noop span can be used after finish.
+// Test that the noop (nil) span can be used after finish.
 func TestNoopSpanFinish(t *testing.T) {
 	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
+	var sp *Span
 	sp1 := tr.StartSpan("noop")
 	sp2 := tr.StartSpan("noop")
-	require.Equal(t, tr.noopSpan, sp1)
-	require.Equal(t, tr.noopSpan, sp2)
+	require.Equal(t, sp1, sp)
+	require.Equal(t, sp2, sp)
 	sp1.Finish()
 	sp2.Record("dummy")
 	sp2.Finish()
 }
 
-// Test that a span constructed with a no-op span behaves like a root span - it
+// Test that a span constructed with a nil span behaves like a root span - it
 // is present in the active spans registry.
 func TestSpanWithNoopParentIsInActiveSpans(t *testing.T) {
 	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 	noop := tr.StartSpan("noop")
-	require.True(t, noop.IsNoop())
+	require.Nil(t, noop)
 	root := tr.StartSpan("foo", WithParent(noop), WithForceRealSpan())
 	defer root.Finish()
 	require.Len(t, tr.activeSpansRegistry.mu.m, 1)
@@ -774,43 +775,22 @@ span: test
 	require.Equal(t, rec1, rec2)
 }
 
-// Check that it is illegal to create a child with a different Tracer than the
-// parent.
+// Check that it is illegal to create a child with a different Tracer than the parent.
+// Note that if the parent is a sterile span, it'll be replaced with a nil span,
+// meaning its tracer won't be available at the time we are creatiing the span, so
+// this assertion doesn't apply for sterile spans. Note also we intend to remove
+// the concept of a sterile span shortly.
 func TestChildNeedsSameTracerAsParent(t *testing.T) {
-	type testCase struct {
-		sterileParent bool
-		noopParent    bool
-	}
-	for _, tc := range []testCase{
-		{},
-		{sterileParent: true},
-		{noopParent: true},
-	} {
-		t.Run("", func(t *testing.T) {
-			tr1 := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
-			tr2 := NewTracer()
+	t.Run("", func(t *testing.T) {
+		tr1 := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
+		tr2 := NewTracer()
 
-			var opt []SpanOption
-			if tc.sterileParent {
-				opt = append(opt, WithSterile())
-			}
-			if !tc.noopParent {
-				opt = append(opt, WithForceRealSpan())
-			}
-			parent := tr1.StartSpan("parent", opt...)
-			defer parent.Finish()
-			if tc.noopParent {
-				require.True(t, parent.IsNoop())
-			}
-			if tc.sterileParent {
-				require.True(t, parent.IsSterile())
-			}
-
-			require.Panics(t, func() {
-				tr2.StartSpan("child", WithParent(parent))
-			})
+		parent := tr1.StartSpan("parent", WithForceRealSpan())
+		defer parent.Finish()
+		require.Panics(t, func() {
+			tr2.StartSpan("child", WithParent(parent))
 		})
-	}
+	})
 }
 
 // TestSpanReuse checks that spans are reused through the Tracer's pool, instead
@@ -922,17 +902,17 @@ func TestTracerClusterSettings(t *testing.T) {
 
 	tr := NewTracerWithOpt(ctx, WithClusterSettings(&sv))
 	sp := tr.StartSpan("test")
-	require.False(t, sp.IsNoop())
+	require.NotNil(t, sp)
 	sp.Finish()
 
 	EnableActiveSpansRegistry.Override(ctx, &sv, false)
 	sp = tr.StartSpan("test")
-	require.True(t, sp.IsNoop())
+	require.Nil(t, sp)
 	sp.Finish()
 
 	EnableActiveSpansRegistry.Override(ctx, &sv, true)
 	sp = tr.StartSpan("test")
-	require.False(t, sp.IsNoop())
+	require.NotNil(t, sp)
 	sp.Finish()
 }
 

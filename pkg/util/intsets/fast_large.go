@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build fast_int_set_large
-// +build fast_int_set_large
 
 package intsets
 

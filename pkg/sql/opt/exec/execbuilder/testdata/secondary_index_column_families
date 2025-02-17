@@ -89,9 +89,9 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 message LIKE 'fetched: /t1/nonuniqueidxstoring/%'
 ----
-fetched: /t1/nonuniqueidxstoring/1/1 -> <undecoded>
-fetched: /t1/nonuniqueidxstoring/1/1/z -> /1
-fetched: /t1/nonuniqueidxstoring/1/1/a/b -> /1/1
+fetched: /t1/nonuniqueidxstoring/1/1:cf=0 -> <undecoded>
+fetched: /t1/nonuniqueidxstoring/1/1/z:cf=2 -> /1
+fetched: /t1/nonuniqueidxstoring/1/1/a/b:cf=3 -> /1/1
 
 query IIIII
 SET TRACING=on,kv,results;
@@ -104,9 +104,9 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 message LIKE 'fetched: /t1/uniqueidxstoring/%'
 ----
-fetched: /t1/uniqueidxstoring/1 -> /1
-fetched: /t1/uniqueidxstoring/1/z -> /1
-fetched: /t1/uniqueidxstoring/1/a/b -> /1/1
+fetched: /t1/uniqueidxstoring/1:cf=0 -> /1
+fetched: /t1/uniqueidxstoring/1/z:cf=2 -> /1
+fetched: /t1/uniqueidxstoring/1/a/b:cf=3 -> /1/1
 
 
 #Test some specific behavior with nulls on unique indexes.
@@ -127,15 +127,15 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 message LIKE 'fetched: /t1/uniqueidxstoring/%'
 ORDER BY message
 ----
-fetched: /t1/uniqueidxstoring/1 -> /1
-fetched: /t1/uniqueidxstoring/1/a/b -> /1/1
-fetched: /t1/uniqueidxstoring/1/z -> /1
-fetched: /t1/uniqueidxstoring/NULL -> /3
-fetched: /t1/uniqueidxstoring/NULL -> /4
-fetched: /t1/uniqueidxstoring/NULL/a/b -> /3/3
-fetched: /t1/uniqueidxstoring/NULL/a/b -> /4/4
-fetched: /t1/uniqueidxstoring/NULL/z -> /3
-fetched: /t1/uniqueidxstoring/NULL/z -> /4
+fetched: /t1/uniqueidxstoring/1/a/b:cf=3 -> /1/1
+fetched: /t1/uniqueidxstoring/1/z:cf=2 -> /1
+fetched: /t1/uniqueidxstoring/1:cf=0 -> /1
+fetched: /t1/uniqueidxstoring/NULL/a/b:cf=3 -> /3/3
+fetched: /t1/uniqueidxstoring/NULL/a/b:cf=3 -> /4/4
+fetched: /t1/uniqueidxstoring/NULL/z:cf=2 -> /3
+fetched: /t1/uniqueidxstoring/NULL/z:cf=2 -> /4
+fetched: /t1/uniqueidxstoring/NULL:cf=0 -> /3
+fetched: /t1/uniqueidxstoring/NULL:cf=0 -> /4
 
 # Ensure that updates delete and insert all K/V pairs for each index.
 # Note: we don't use kvtrace query type here because it is clearer to
@@ -329,11 +329,11 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 message LIKE 'fetched%'
 ORDER BY message
 ----
-fetched: /t/i/2/1 -> <undecoded>
-fetched: /t/i/2/1/w -> /3
-fetched: /t/i/5/4 -> <undecoded>
-fetched: /t/i/5/4/z -> /6
-fetched: /t/i/9/8 -> <undecoded>
+fetched: /t/i/2/1/w:cf=3 -> /3
+fetched: /t/i/2/1:cf=0 -> <undecoded>
+fetched: /t/i/5/4/z:cf=2 -> /6
+fetched: /t/i/5/4:cf=0 -> <undecoded>
+fetched: /t/i/9/8:cf=0 -> <undecoded>
 
 statement ok
 DROP TABLE IF EXISTS t;

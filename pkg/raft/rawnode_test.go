@@ -432,9 +432,10 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	require.Zero(t, rawNode.raft.pendingConfIndex)
 
 	// Move the RawNode along. It should not leave joint because it's follower.
-	rd := rawNode.readyWithoutAccept()
-	// Check that the right ConfChange comes out.
+	rd := rawNode.Ready()
+	t.Log(DescribeReady(rd, nil))
 	require.Empty(t, rd.Entries)
+	rawNode.Advance(rd)
 
 	// Make it leader again. It should leave joint automatically after moving apply index.
 	rawNode.Campaign()
@@ -994,28 +995,17 @@ func BenchmarkStatus(b *testing.B) {
 }
 
 func TestRawNodeConsumeReady(t *testing.T) {
-	// Check that readyWithoutAccept() does not call acceptReady (which resets
-	// the messages) but Ready() does.
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 3, 1, s)
 	m1 := pb.Message{Context: []byte("foo")}
 	m2 := pb.Message{Context: []byte("bar")}
 
-	// Inject first message, make sure it's visible via readyWithoutAccept.
+	// Inject first message, and make sure it moves from RawNode to Ready.
 	rn.raft.msgs = append(rn.raft.msgs, m1)
-	rd := rn.readyWithoutAccept()
-	require.Len(t, rd.Messages, 1)
-	require.Equal(t, m1, rd.Messages[0])
-	require.Len(t, rn.raft.msgs, 1)
-	require.Equal(t, m1, rn.raft.msgs[0])
-
-	// Now call Ready() which should move the message into the Ready (as opposed
-	// to leaving it in both places).
-	rd = rn.Ready()
+	rd := rn.Ready()
 	require.Empty(t, rn.raft.msgs)
 	require.Len(t, rd.Messages, 1)
 	require.Equal(t, m1, rd.Messages[0])
-
 	// Add a message to raft to make sure that Advance() doesn't drop it.
 	rn.raft.msgs = append(rn.raft.msgs, m2)
 	rn.Advance(rd)

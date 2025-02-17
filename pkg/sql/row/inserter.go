@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -77,42 +78,63 @@ func CheckPrimaryKeyColumns(tableDesc catalog.TableDescriptor, colMap catalog.Ta
 // insertCPutFn is used by insertRow when conflicts (i.e. the key already exists)
 // should generate errors.
 func insertCPutFn(
-	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
 ) {
-	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
-	// client.Batch wrapper instead of inlining it everywhere.
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", *key, value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", keys.PrettyPrint(keyEncodingDirs, *key), value.PrettyPrint())
 	}
 	b.CPut(key, value, nil /* expValue */)
 }
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 func insertPutFn(
-	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", *key, value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", keys.PrettyPrint(keyEncodingDirs, *key), value.PrettyPrint())
 	}
 	b.Put(key, value)
 }
 
-// insertDelFn is used by insertRow to delete existing rows.
-func insertDelFn(ctx context.Context, b Putter, key *roachpb.Key, traceKV bool) {
-	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "Del %s", *key)
-	}
-	b.Del(key)
-}
-
-// insertInvertedPutFn is used by insertRow when conflicts should be ignored.
-func insertInvertedPutFn(
-	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+// insertPutMustAcquireExclusiveLockFn is used by insertRow when conflicts
+// should be ignored while ensuring that an exclusive lock is acquired on the
+// key.
+func insertPutMustAcquireExclusiveLockFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", *key, value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "Put (locking) %s -> %s", keys.PrettyPrint(keyEncodingDirs, *key), value.PrettyPrint())
 	}
-	b.CPut(key, value, nil /* expValue */)
+	b.PutMustAcquireExclusiveLock(key, value)
+}
+
+// insertDelFn is used by insertRow to delete existing rows.
+func insertDelFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
+) {
+	if traceKV {
+		log.VEventfDepth(ctx, 1, 2, "Del %s", keys.PrettyPrint(keyEncodingDirs, *key))
+	}
+	b.Del(key)
 }
 
 func writeTombstones(
@@ -138,6 +160,23 @@ func writeTombstones(
 	return nil
 }
 
+// KVInsertOp prescribes which KV operation should be used when inserting a SQL
+// row.
+type KVInsertOp byte
+
+const (
+	// CPutOp prescribes usage of the CPut operation and also indicates that the
+	// row **should not** be overwritten.
+	CPutOp KVInsertOp = iota
+	// PutOp prescribes usage of the Put operation and also indicates that the
+	// row **should** be overwritten.
+	PutOp
+	// PutMustAcquireExclusiveLockOp prescribes usage of the Put operation while
+	// ensuring that an exclusive lock is acquired and also indicates that the
+	// row **should** be overwritten.
+	PutMustAcquireExclusiveLockOp
+)
+
 // InsertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
 func (ri *Inserter) InsertRow(
@@ -146,16 +185,11 @@ func (ri *Inserter) InsertRow(
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
 	oth *OriginTimestampCPutHelper,
-	overwrite bool,
+	kvOp KVInsertOp,
 	traceKV bool,
 ) error {
 	if len(values) != len(ri.InsertCols) {
 		return errors.Errorf("got %d values but expected %d", len(values), len(ri.InsertCols))
-	}
-
-	putFn := insertCPutFn
-	if overwrite {
-		putFn = insertPutFn
 	}
 
 	// We don't want to insert any empty k/v's, so set includeEmpty to false.
@@ -182,7 +216,7 @@ func (ri *Inserter) InsertRow(
 		&ri.Helper, primaryIndexKey, ri.InsertCols,
 		values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex,
-		&ri.key, &ri.value, ri.valueBuf, putFn, oth, nil, overwrite, traceKV)
+		&ri.key, &ri.value, ri.valueBuf, oth, nil /* oldValues */, kvOp, traceKV)
 	if err != nil {
 		return err
 	}
@@ -190,8 +224,6 @@ func (ri *Inserter) InsertRow(
 	if err := writeTombstones(ctx, &ri.Helper, ri.Helper.TableDesc.GetPrimaryIndex(), b, ri.InsertColIDtoRowIndex, values, traceKV); err != nil {
 		return err
 	}
-
-	putFn = insertInvertedPutFn
 
 	// For determinism, add the entries for the secondary indexes in the same
 	// order as they appear in the helper.
@@ -203,9 +235,9 @@ func (ri *Inserter) InsertRow(
 
 				if ri.Helper.Indexes[idx].ForcePut() {
 					// See the comment on (catalog.Index).ForcePut() for more details.
-					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV)
+					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
 				} else {
-					putFn(ctx, b, &e.Key, &e.Value, traceKV)
+					insertCPutFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
 				}
 			}
 

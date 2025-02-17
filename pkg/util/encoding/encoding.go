@@ -3305,6 +3305,26 @@ func isValidAndPrintableRune(r rune) bool {
 	return r != utf8.RuneError && unicode.IsPrint(r)
 }
 
+// PrettyPrintJSONValueEncoded returns a string representation of the encoded
+// JSON object. It is injected from util/json to avoid an import cycle.
+var PrettyPrintJSONValueEncoded func([]byte) (string, error)
+
+var prettyPrintJSONValueEncodedNilErr = errors.New("PrettyPrintJSONValueEncoded is not injected")
+
+// PrettyPrintArrayValueEncoded returns a string representation of the encoded
+// array object if possible. It is injected from rowenc/valueside to avoid an
+// import cycle.
+var PrettyPrintArrayValueEncoded func([]byte) (string, error)
+
+var prettyPrintArrayValueEncodedNilErr = errors.New("PrettyPrintArrayValueEncoded is not injected")
+
+// PrettyPrintTupleValueEncoded returns a string representation of the encoded
+// tuple object if possible. It is injected from rowenc/valueside to avoid an
+// import cycle.
+var PrettyPrintTupleValueEncoded func([]byte) ([]byte, string, error)
+
+var prettyPrintTupleValueEncodedNilErr = errors.New("PrettyPrintTupleValueEncoded is not injected")
+
 // PrettyPrintValueEncoded returns a string representation of the first
 // decodable value in the provided byte slice, along with the remaining byte
 // slice after decoding.
@@ -3400,6 +3420,40 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, ipAddr.String(), nil
+	case JSON:
+		b = b[dataOffset:]
+		var data []byte
+		b, data, err = DecodeUntaggedBytesValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		if PrettyPrintJSONValueEncoded == nil {
+			return b, "", prettyPrintJSONValueEncodedNilErr
+		}
+		var s string
+		s, err = PrettyPrintJSONValueEncoded(data)
+		return b, s, err
+	case Array:
+		b = b[dataOffset:]
+		var data []byte
+		b, data, err = DecodeUntaggedBytesValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		if PrettyPrintArrayValueEncoded == nil {
+			return b, "", prettyPrintArrayValueEncodedNilErr
+		}
+		var s string
+		s, err = PrettyPrintArrayValueEncoded(data)
+		return b, s, err
+	case Tuple:
+		b = b[dataOffset:]
+		if PrettyPrintTupleValueEncoded == nil {
+			return b, "", prettyPrintTupleValueEncodedNilErr
+		}
+		var s string
+		b, s, err = PrettyPrintTupleValueEncoded(b)
+		return b, s, err
 	default:
 		return b, "", errors.Errorf("unknown type %s", typ)
 	}

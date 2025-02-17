@@ -44,18 +44,17 @@ func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
 	if ctx == noCtx {
 		return noCtx, sp
 	}
-	// NB: we check sp != nil explicitly because some callers want to remove a
-	// Span from a Context, and thus pass nil.
-	if sp != nil && sp.IsNoop() {
-		// If the context originally had the noop span, and we would now be wrapping
-		// the noop span in it again, we don't have to wrap at all and can save an
+	// NB: Some callers want to remove a Span from a Context, and thus pass nil.
+	if sp == nil {
+		// If the context originally had the nil span, and we would now be wrapping
+		// the nil span in it again, we don't have to wrap at all and can save an
 		// allocation.
 		//
 		// Note that applying this optimization for a nontrivial ctxSp would
 		// constitute a bug: A real, non-recording span might later start recording.
 		// Besides, the caller expects to get their own span, and will .Finish() it,
 		// leading to an extra, premature call to Finish().
-		if ctxSp := SpanFromContext(ctx); ctxSp != nil && ctxSp.IsNoop() {
+		if ctxSp := SpanFromContext(ctx); ctxSp == nil {
 			return ctx, sp
 		}
 	}

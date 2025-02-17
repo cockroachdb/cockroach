@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -403,12 +404,20 @@ func RunNemesis(
 			// queries that could hang decreases.
 			sqlsmith.DisableCrossJoins(),
 			sqlsmith.SimpleDatums(),
+			// We rely on cluster_logical_timestamp() builtin which is only
+			// supported under the serializable isolation.
+			sqlsmith.DisableIsolationChange(),
 		)
 		defer queryGen.Close()
 		const numInserts = 100
+		time := timeutil.Now()
 		for i := 0; i < numInserts; i++ {
 			query := queryGen.Generate()
-			if _, err := db.Exec(query); err != nil {
+			log.Infof(ctx, "Executing query: %s", query)
+			_, err := db.Exec(query)
+			log.Infof(ctx, "Time taken to execute last query: %s", timeutil.Since(time))
+			time = timeutil.Now()
+			if err != nil {
 				log.Infof(ctx, "Skipping query %s because error %s", query, err)
 				continue
 			}

@@ -830,7 +830,6 @@ func (r *testRunner) runWorker(
 			buildVersion:           binaryVersion,
 			artifactsDir:           testArtifactsDir,
 			artifactsSpec:          artifactsSpec,
-			l:                      testL,
 			versionsBinaryOverride: topt.versionsBinaryOverride,
 			skipInit:               topt.skipInit,
 			debug:                  clustersOpt.debugMode.IsDebug(),
@@ -838,6 +837,7 @@ func (r *testRunner) runWorker(
 			exportOpenmetrics:      topt.exportOpenMetrics,
 			runID:                  generateRunID(clustersOpt),
 		}
+		t.ReplaceL(testL)
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
 		// handleClusterCreationFailure can be called when the `err` given
@@ -930,6 +930,21 @@ func (r *testRunner) runWorker(
 					t.Fatalf("unknown lease type %s", leases)
 				}
 
+				// 50% chance of enabling the rangefeed buffered sender. Disabled by
+				// default. This is the reason we check for run time assertions rather
+				// than using rand:
+				// 1. The cluster setting RangefeedUseBufferedSender validation will fail
+				// if buildutil.CrdbTestBuild tag is not set.
+				// 2. There is a 50% chance that the cockroach binary used in roachtests
+				// includes the buildutil.CrdbTestBuild tag. And runtime assertion is
+				// enabled if and only if cockroach binaries used in roachtests include
+				// the buildutil.CrdbTestBuild tag.
+				useBufferedSender := roachtestutil.UsingRuntimeAssertions(t)
+				if useBufferedSender {
+					c.clusterSettings["kv.rangefeed.buffered_sender.enabled"] = "true"
+				}
+				c.status(fmt.Sprintf("metamorphically using buffered sender: %t", useBufferedSender))
+				t.AddParam("metamorphicBufferedSender", fmt.Sprint(useBufferedSender))
 				c.goCoverDir = t.GoCoverArtifactsDir()
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
@@ -1164,6 +1179,9 @@ func (r *testRunner) runTest(
 					// Note that this error message is referred for test selection in
 					// pkg/cmd/roachtest/testselector/snowflake_query.sql.
 					failureMsg = fmt.Sprintf("VMs preempted during the test run: %s\n\n**Other Failures:**\n%s", preemptedVMNames, failureMsg)
+					// Reset the failures as a timeout may have suppressed failures, but we
+					// want to propagate the preemption error and avoid creating an issue.
+					t.resetFailures()
 					t.Error(vmPreemptionError(preemptedVMNames))
 				}
 				hostErrorVMNames := getHostErrorVMNames(ctx, c, l)
@@ -1491,19 +1509,19 @@ func (r *testRunner) postTestAssertions(
 		validationNode := 0
 		for _, s := range statuses {
 			if s.Err != nil {
-				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
+				t.L().Printf("n%d: %s error=%s", s.Node, s.URL, s.Err)
 				continue
 			}
 
 			if s.Status != http.StatusOK {
-				t.L().Printf("n%d:/health?ready=1 status=%d body=%s", s.Node, s.Status, s.Body)
+				t.L().Printf("n%d: %s status=%d body=%s", s.Node, s.URL, s.Status, s.Body)
 				continue
 			}
 
 			if validationNode == 0 {
 				validationNode = s.Node // NB: s.Node is never zero
 			}
-			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
+			t.L().Printf("n%d: %s status=200 ok", s.Node, s.URL)
 		}
 
 		// We avoid trying to do this when t.Failed() (and in particular when there
@@ -2171,11 +2189,15 @@ func monitorForPreemptedVMs(ctx context.Context, t test.Test, c cluster.Cluster,
 					continue
 				}
 
-				// If we find any preemptions, fail the test. Note that we will recheck for
-				// preemptions in post failure processing, which will correctly assign this
-				// failure as an infra flake.
+				// If we find any preemptions, fail the test. Note that while we will recheck for
+				// preemptions in post failure processing, we need to mark the test as a preemption
+				// failure here in case the recheck says there were no preemptions.
 				if len(preemptedVMs) != 0 {
-					t.Errorf("monitorForPreemptedVMs: Preempted VMs detected: %s", preemptedVMs)
+					var vmNames []string
+					for _, preemptedVM := range preemptedVMs {
+						vmNames = append(vmNames, preemptedVM.Name)
+					}
+					t.Errorf("monitorForPreemptedVMs detected VM Preemptions: %s", vmPreemptionError(getVMNames(vmNames)))
 				}
 			}
 		}

@@ -81,6 +81,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
@@ -1129,7 +1130,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	fullDir := getLatestFullDir(t, sqlDB, collectionDir)
 
 	sqlDB.Exec(t, `BACKUP TABLE bank INTO LATEST IN $1`, collectionDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobspb.TypeBackup, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobspb.TypeBackup, jobs.StateSucceeded, jobs.Record{
 		Username: username.RootUserName(),
 		Description: fmt.Sprintf(
 			`BACKUP TABLE bank INTO '%s' IN '%s'`, fullDir, sanitizedCollectionDir+"redacted"),
@@ -1144,7 +1145,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	sqlDB.Exec(t, `RESTORE TABLE bank FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb')`, collectionDir)
 
-	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StateSucceeded, jobs.Record{
 		Username: username.RootUserName(),
 		Description: fmt.Sprintf(
 			`RESTORE TABLE bank FROM '%s' IN '%sredacted' WITH OPTIONS (into_db = 'restoredb')`,
@@ -1229,7 +1230,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			fullDir := getLatestFullDir(t, sqlDB, backupLoc1)
 
 			// Verify the BACKUP job description is sanitized.
-			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StatusSucceeded,
+			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StateSucceeded,
 				jobs.Record{
 					Username: username.RootUserName(),
 					Description: fmt.Sprintf(
@@ -1249,7 +1250,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 
 			// Verify the RESTORE job description is sanitized.
-			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StateSucceeded, jobs.Record{
 				Username: username.RootUserName(),
 				Description: fmt.Sprintf(
 					`RESTORE TABLE data.bank FROM '%s' IN '%s' WITH OPTIONS (%s, into_db = 'restoredb')`,
@@ -1683,7 +1684,7 @@ func createAndWaitForJob(
 	var jobID jobspb.JobID
 	db.QueryRow(
 		t, `INSERT INTO system.jobs (created, status) VALUES ($1, $2) RETURNING id`,
-		timeutil.FromUnixMicros(now), jobs.StatusRunning,
+		timeutil.FromUnixMicros(now), jobs.StateRunning,
 	).Scan(&jobID)
 	db.Exec(
 		t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`, jobID, jobs.GetLegacyPayloadKey(), payload,
@@ -5087,7 +5088,7 @@ func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id jobspb.J
 		var unused int64
 		return tc.ServerConn(0).QueryRow(
 			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
-			id, jobs.StatusSucceeded).Scan(&unused)
+			id, jobs.StateSucceeded).Scan(&unused)
 	})
 }
 
@@ -8661,7 +8662,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 	var unused interface{}
 	sqlDB.QueryRow(t, restoreQuery).Scan(&jobID, &unused, &unused, &unused)
 
-	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
+	expectedStatus := []string{string(jobs.StateSucceeded), string(jobs.StateRunning)}
 	expectedRecoveryEvent := eventpb.RecoveryEvent{
 		RecoveryType: restoreJobEventType,
 		NumRows:      int64(3),
@@ -8680,8 +8681,8 @@ func TestRestoreJobEventLogging(t *testing.T) {
 	row.Scan(&jobID)
 
 	expectedStatus = []string{
-		string(jobs.StatusFailed), string(jobs.StatusReverting),
-		string(jobs.StatusRunning),
+		string(jobs.StateFailed), string(jobs.StateReverting),
+		string(jobs.StateRunning),
 	}
 	expectedRecoveryEvent = eventpb.RecoveryEvent{
 		RecoveryType: restoreJobEventType,
@@ -10481,7 +10482,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 			EventType: "recovery_event",
 		},
 		RecoveryType: backupJobEventType,
-		ResultStatus: string(jobs.StatusSucceeded),
+		ResultStatus: string(jobs.StateSucceeded),
 	}
 
 	requireRecoveryEvent(t, beforeBackup.UnixNano(), backupEventType, expectedBackupEvent)
@@ -10516,7 +10517,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 			EventType: "recovery_event",
 		},
 		RecoveryType: restoreJobEventType,
-		ResultStatus: string(jobs.StatusSucceeded),
+		ResultStatus: string(jobs.StateSucceeded),
 	}
 
 	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreEventType, expectedRestoreEvent)
@@ -10534,7 +10535,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 			EventType: "recovery_event",
 		},
 		RecoveryType: restoreJobEventType,
-		ResultStatus: string(jobs.StatusFailed),
+		ResultStatus: string(jobs.StateFailed),
 		ErrorText:    redact.Sprintf("testing injected failure: %s", "sensitive text"),
 	}
 	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreJobEventType, expectedRestoreFailEvent)
@@ -10710,7 +10711,7 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err := strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err = sqltestutils.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 104, int(dbDesc.GetID()))
@@ -10762,7 +10763,7 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err = strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err = sqltestutils.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1_new")
 		require.NoError(t, err)
 		require.Equal(t, 112, int(dbDesc.GetID()))
@@ -10870,7 +10871,7 @@ $$;
 		require.Equal(t, 1, len(rows[0]))
 		udfID, err := strconv.Atoi(rows[0][0])
 		require.NoError(t, err)
-		err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		err = sqltestutils.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 			require.NoError(t, err)
 			require.Equal(t, 104, int(dbDesc.GetID()))
@@ -10926,7 +10927,7 @@ $$;
 		require.NoError(t, err)
 
 		const startingDescID = 123
-		err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		err = sqltestutils.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 			require.NoError(t, err)
 			require.Equal(t, startingDescID, int(dbDesc.GetID()))
@@ -11086,6 +11087,7 @@ func TestBackupRestoreForeignKeys(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE DATABASE test`)
 	sqlDB.Exec(t, `SET database = test`)
+	sqlDB.Exec(t, `SET autocommit_before_ddl = false`)
 	sqlDB.Exec(t, `
 CREATE TABLE circular (k INT8 PRIMARY KEY, selfid INT8 UNIQUE);
 ALTER TABLE circular ADD CONSTRAINT self_fk FOREIGN KEY (selfid) REFERENCES circular (selfid);
@@ -11093,6 +11095,7 @@ CREATE TABLE parent (k INT8 PRIMARY KEY, j INT8 UNIQUE);
 CREATE TABLE child (k INT8 PRIMARY KEY, parent_i INT8 REFERENCES parent, parent_j INT8 REFERENCES parent (j));
 CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 `)
+	sqlDB.Exec(t, `RESET autocommit_before_ddl`)
 
 	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, localFoo)
 

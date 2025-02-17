@@ -535,10 +535,10 @@ go_library(
         "//pkg/sql/tablemetadatacache/util",
         "//pkg/sql/ttl/ttlbase",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex",
         "//pkg/sql/vtable",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/testutils/serverutils",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
         "//pkg/util",
@@ -600,6 +600,7 @@ go_library(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/tsearch",
         "//pkg/util/uint128",
+        "//pkg/util/unique",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_crlib//crtime",
@@ -905,6 +906,7 @@ go_test(
         "//pkg/testutils/jobutils",
         "//pkg/testutils/kvclientutils",
         "//pkg/testutils/pgtest",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -1006,4 +1008,7 @@ disallowed_imports_test(
     "sql",
     # TODO(#81380): This should be flipped to "True".
     disallow_cdeps = False,
+    disallowed_list = [
+        "//pkg/testutils",
+    ],
 )

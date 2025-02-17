@@ -191,6 +191,9 @@ func newWorker(
 	}
 	for i := range w.txs {
 		var err error
+		if config.txInfos[i].weight == 0 {
+			continue
+		}
 		w.txs[i], err = config.txInfos[i].constructor(ctx, config, mcp)
 		if err != nil {
 			return nil, err

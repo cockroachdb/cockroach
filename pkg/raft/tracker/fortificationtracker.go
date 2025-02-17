@@ -102,7 +102,6 @@ type FortificationTracker struct {
 	// allocations on every call to ComputeLeadSupportUntil. It stores the
 	// SupportFrom expiration timestamps for the voters, which are then used to
 	// calculate the LeadSupportUntil.
-	supportExpMap map[pb.PeerID]hlc.Timestamp
 }
 
 // NewFortificationTracker initializes a FortificationTracker.
@@ -115,7 +114,6 @@ func NewFortificationTracker(
 		fortification: map[pb.PeerID]pb.Epoch{},
 		votersSupport: map[pb.PeerID]bool{},
 		logger:        logger,
-		supportExpMap: map[pb.PeerID]hlc.Timestamp{},
 	}
 	return &st
 }
@@ -212,21 +210,35 @@ func (ft *FortificationTracker) ComputeLeadSupportUntil(state pb.StateType) {
 		return
 	}
 
-	clear(ft.supportExpMap)
-	ft.config.Voters.Visit(func(id pb.PeerID) {
-		if supportEpoch, ok := ft.fortification[id]; ok {
-			curEpoch, curExp := ft.storeLiveness.SupportFrom(id)
-			// NB: We can't assert that supportEpoch <= curEpoch because there may be
-			// a race between a successful MsgFortifyLeaderResp and the store liveness
-			// heartbeat response that lets the leader know the follower's store is
-			// supporting the leader's store at the epoch in the MsgFortifyLeaderResp
-			// message.
-			if curEpoch == supportEpoch {
-				ft.supportExpMap[id] = curExp
-			}
-		}
-	})
-	ft.computedLeadSupportUntil = ft.config.Voters.LeadSupportExpiration(ft.supportExpMap)
+	// Use an on-stack slice whenever n <= 7 (otherwise we alloc). The assumption
+	// is that running with a replication factor of >7 is rare, and in cases in
+	// which it happens, performance is less of a concern (it's not like
+	// performance implications of an allocation here are drastic).
+	//
+	// We prevent the slice from escaping to the heap by allocating here and
+	// having PopulateMajorityConfigSupport() to populate it in place.
+	n := len(ft.config.Voters[0])
+	var stkC0 [7]hlc.Timestamp
+	var supportC0 []hlc.Timestamp
+	if len(stkC0) >= n {
+		supportC0 = stkC0[:n]
+	} else {
+		supportC0 = make([]hlc.Timestamp, n)
+	}
+	ft.PopulateMajorityConfigSupport(ft.config.Voters[0], supportC0)
+
+	// Do the same thing for the second majority config.
+	n = len(ft.config.Voters[1])
+	var stkC1 [7]hlc.Timestamp
+	var supportC1 []hlc.Timestamp
+	if len(stkC1) >= n {
+		supportC1 = stkC1[:n]
+	} else {
+		supportC1 = make([]hlc.Timestamp, n)
+	}
+	ft.PopulateMajorityConfigSupport(ft.config.Voters[1], supportC1)
+
+	ft.computedLeadSupportUntil = ft.config.Voters.LeadSupportExpiration(supportC0, supportC1)
 
 	// Forward the leaderMaxSupported to avoid regressions when the configuration
 	// changes.
@@ -393,6 +405,46 @@ func (ft *FortificationTracker) QuorumSupported() bool {
 	})
 
 	return ft.config.Voters.VoteResult(ft.votersSupport) == quorum.VoteWon
+}
+
+// PopulateMajorityConfigSupport receives a majority config and a slice of the
+// same majority config size. It populates the slice with the support
+// expiration.
+//
+// If a peer has not fortified the leader, or if we have no entry for it in
+// StoreLiveness, or if the epoch isn't supported in StoreLiveness, the output
+// support slice will have an empty timestamp entry for that peer.
+//
+// This function expects the slice to be cleared, of the same size as the
+// majority config.
+func (ft *FortificationTracker) PopulateMajorityConfigSupport(
+	majorityConfig quorum.MajorityConfig, support []hlc.Timestamp,
+) {
+	if len(support) != len(majorityConfig) {
+		panic("received a support slice of different size than the majority config")
+	}
+
+	n := len(support)
+	i := n - 1
+	for id := range majorityConfig {
+		if supportEpoch, ok := ft.fortification[id]; ok {
+			curEpoch, curExp := ft.storeLiveness.SupportFrom(id)
+			// NB: We can't assert that supportEpoch <= curEpoch because there may be
+			// a race between a successful MsgFortifyLeaderResp and the store liveness
+			// heartbeat response that lets the leader know the follower's store is
+			// supporting the leader's store at the epoch in the MsgFortifyLeaderResp
+			// message.
+			if curEpoch == supportEpoch {
+				// Fill the slice with Timestamps for peers in the configuration. Any
+				// unused slots will be left as empty Timestamps for our calculation.
+				// We fill from the right (since typically, callers will want to sort
+				// this slice, which means that zeros will end up on the left after
+				// sorting anyway).
+				support[i] = curExp
+				i--
+			}
+		}
+	}
 }
 
 // Term returns the leadership term for which the tracker is/was tracking

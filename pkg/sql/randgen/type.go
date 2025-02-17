@@ -128,6 +128,12 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 			return types.MakeArray(RandTupleFromSlice(rng, typs))
 		}
 	case types.TupleFamily:
+		// In 50% of cases generate a new tuple type based on the given slice;
+		// in other 50% just use the provided tuple type (if it's not a wildcard
+		// type).
+		if rng.Intn(2) == 0 && !typ.Identical(types.AnyTuple) {
+			return typ
+		}
 		return RandTupleFromSlice(rng, typs)
 	}
 	return typ

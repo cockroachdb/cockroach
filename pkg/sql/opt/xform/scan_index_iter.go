@@ -307,8 +307,9 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 				isCovering = true
 
 				// Build a projection only for constant columns not in the
-				// index.
-				constCols = constCols.Difference(indexCols)
+				// index and produced by the original scan.
+				constCols.DifferenceWith(indexCols)
+				constCols.IntersectionWith(it.scanPrivate.Cols)
 				constProj = it.buildConstProjectionsFromPredicate(predFilters, constCols)
 			}
 		}
@@ -363,15 +364,14 @@ func (it *scanIndexIter) filtersImplyPredicate(
 // the given filters and of types that do not have composite encodings.
 func (it *scanIndexIter) extractConstNonCompositeColumns(f memo.FiltersExpr) opt.ColSet {
 	constCols := memo.ExtractConstColumns(it.e.ctx, f, it.evalCtx)
-	var constNonCompositeCols opt.ColSet
 	for col, ok := constCols.Next(0); ok; col, ok = constCols.Next(col + 1) {
 		ord := it.tabMeta.MetaID.ColumnOrdinal(col)
 		typ := it.tabMeta.Table.Column(ord).DatumType()
-		if !colinfo.CanHaveCompositeKeyEncoding(typ) {
-			constNonCompositeCols.Add(col)
+		if colinfo.CanHaveCompositeKeyEncoding(typ) {
+			constCols.Remove(col)
 		}
 	}
-	return constNonCompositeCols
+	return constCols
 }
 
 // buildConstProjectionsFromPredicate builds a ProjectionsExpr that projects

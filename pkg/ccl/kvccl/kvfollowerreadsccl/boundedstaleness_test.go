@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -248,7 +248,7 @@ func (bse *boundedStalenessEvents) onStmtTrace(nodeIdx int, rec tracingpb.Record
 					operation:    spans[sp.ParentSpanID].Operation,
 					nodeIdx:      nodeIdx,
 					localRead:    tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg),
-					followerRead: kv.OnlyFollowerReads(rec),
+					followerRead: kvtestutils.OnlyFollowerReads(rec),
 					remoteLeaseholderRead: tracing.LogsContainMsg(sp, "[NotLeaseHolderError] lease held by different store;") &&
 						tracing.LogsContainMsg(sp, "trying next peer"),
 				})

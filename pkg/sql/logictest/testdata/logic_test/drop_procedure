@@ -51,6 +51,9 @@ DROP PROCEDURE IF EXISTS p_not_existing
 statement error pgcode 42883 pq: unknown procedure: p_not_existing\(\)
 DROP PROCEDURE p_not_existing
 
+statement ok
+SET autocommit_before_ddl = false
+
 # Dropping a procedure twice should fail.
 statement error pgcode 42883 pq: procedure p_test_drop\(\) does not exist
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -60,6 +63,9 @@ COMMIT;
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
 
 statement error pgcode 42883 function p_test_drop\(\) does not exist
 DROP FUNCTION p_test_drop

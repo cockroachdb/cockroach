@@ -2047,6 +2047,7 @@ subtest upsert_into
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 query II rowsort
 SELECT * FROM xy;
@@ -3214,8 +3215,10 @@ NOTICE: i: 1
 NOTICE: i: 2
 NOTICE: i: 3
 
-statement error pgcode 22P02 pq: could not parse \"foo\" as type int: strconv.ParseInt: parsing \"foo\": invalid syntax
+statement ok
 DROP FUNCTION f;
+
+statement error pgcode 22P02 pq: could not parse \"foo\" as type int: strconv.ParseInt: parsing \"foo\": invalid syntax
 CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
   BEGIN
     FOR i IN 1..'foo' LOOP
@@ -3227,7 +3230,6 @@ $$;
 
 # Case with parameterized bounds and step size.
 statement ok
-DROP FUNCTION f;
 CREATE FUNCTION f(lower INT, upper INT, step INT) RETURNS INT LANGUAGE PLpgSQL AS $$
   BEGIN
     FOR i IN lower..upper BY step LOOP

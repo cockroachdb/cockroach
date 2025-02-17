@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
@@ -58,8 +59,7 @@ type Config struct {
 	Codec               keys.SQLCodec
 	Clock               *hlc.Clock
 	Spans               []roachpb.Span
-	CheckpointSpans     []roachpb.Span
-	CheckpointTimestamp hlc.Timestamp
+	SpanLevelCheckpoint *jobspb.TimestampSpansMap
 	Targets             changefeedbase.Targets
 	Writer              kvevent.Writer
 	Metrics             *kvevent.Metrics
@@ -129,7 +129,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	g := ctxgroup.WithContext(ctx)
 	f := newKVFeed(
-		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
+		cfg.Writer, cfg.Spans, cfg.SpanLevelCheckpoint,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
 		cfg.WithFrontierQuantize,
@@ -254,8 +254,7 @@ func (e schemaChangeDetectedError) Error() string {
 
 type kvFeed struct {
 	spans                []roachpb.Span
-	checkpoint           []roachpb.Span
-	checkpointTimestamp  hlc.Timestamp
+	spanLevelCheckpoint  *jobspb.TimestampSpansMap
 	withFrontierQuantize time.Duration
 	withDiff             bool
 	withFiltering        bool
@@ -286,8 +285,7 @@ type kvFeed struct {
 func newKVFeed(
 	writer kvevent.Writer,
 	spans []roachpb.Span,
-	checkpoint []roachpb.Span,
-	checkpointTimestamp hlc.Timestamp,
+	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
 	withInitialBackfill, withDiff, withFiltering bool,
@@ -307,8 +305,7 @@ func newKVFeed(
 	return &kvFeed{
 		writer:               writer,
 		spans:                spans,
-		checkpoint:           checkpoint,
-		checkpointTimestamp:  checkpointTimestamp,
+		spanLevelCheckpoint:  spanLevelCheckpoint,
 		withInitialBackfill:  withInitialBackfill,
 		withDiff:             withDiff,
 		withFiltering:        withFiltering,
@@ -391,8 +388,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 
 		// Clear out checkpoint after the initial scan or rangefeed.
 		if initialScan {
-			f.checkpoint = nil
-			f.checkpointTimestamp = hlc.Timestamp{}
+			f.spanLevelCheckpoint = nil
 		}
 
 		boundaryTS := rangeFeedResumeFrontier.Frontier()
@@ -465,10 +461,14 @@ func isPrimaryKeyChange(
 
 // filterCheckpointSpans filters spans which have already been completed,
 // and returns the list of spans that still need to be done.
-func filterCheckpointSpans(spans []roachpb.Span, completed []roachpb.Span) []roachpb.Span {
+func filterCheckpointSpans(
+	spans []roachpb.Span, checkpoint *jobspb.TimestampSpansMap,
+) []roachpb.Span {
 	var sg roachpb.SpanGroup
 	sg.Add(spans...)
-	sg.Sub(completed...)
+	for _, sp := range checkpoint.ToGoMap() {
+		sg.Sub(sp...)
+	}
 	return sg.Slice()
 }
 
@@ -544,7 +544,7 @@ func (f *kvFeed) scanIfShould(
 
 	// If we have initial checkpoint information specified, filter out
 	// spans which we no longer need to scan.
-	spansToBackfill := filterCheckpointSpans(spansToScan, f.checkpoint)
+	spansToBackfill := filterCheckpointSpans(spansToScan, f.spanLevelCheckpoint)
 	if len(spansToBackfill) == 0 {
 		return spansToScan, scanTime, nil
 	}
@@ -592,11 +592,9 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 	}()
 
 	// We have catchup scan checkpoint.  Advance frontier.
-	if startFrom.Less(f.checkpointTimestamp) {
-		for _, s := range f.checkpoint {
-			if _, err := resumeFrontier.Forward(s, f.checkpointTimestamp); err != nil {
-				return err
-			}
+	if f.spanLevelCheckpoint != nil {
+		if err := checkpoint.Restore(resumeFrontier, f.spanLevelCheckpoint); err != nil {
+			return err
 		}
 	}
 

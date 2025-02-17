@@ -6063,7 +6063,8 @@ func MVCCCheckForAcquireLock(
 func MVCCAcquireLock(
 	ctx context.Context,
 	rw ReadWriter,
-	txn *roachpb.Transaction,
+	txn *enginepb.TxnMeta,
+	ignoredSeqNums []enginepb.IgnoredSeqNumRange,
 	str lock.Strength,
 	key roachpb.Key,
 	ms *enginepb.MVCCStats,
@@ -6135,7 +6136,7 @@ func MVCCAcquireLock(
 				"cannot acquire lock with strength %s at seq number %d, "+
 					"already held at higher seq number %d",
 				str.String(), txn.Sequence, foundLock.Txn.Sequence)
-		} else if enginepb.TxnSeqIsIgnored(foundLock.Txn.Sequence, txn.IgnoredSeqNums) {
+		} else if enginepb.TxnSeqIsIgnored(foundLock.Txn.Sequence, ignoredSeqNums) {
 			// Acquiring at same epoch and new sequence number after
 			// previous sequence number was rolled back.
 			//
@@ -6161,7 +6162,7 @@ func MVCCAcquireLock(
 				// can still avoid reacquisition.
 				inHistoryNotRolledBack := false
 				for _, e := range foundLock.IntentHistory {
-					if !enginepb.TxnSeqIsIgnored(e.Sequence, txn.IgnoredSeqNums) {
+					if !enginepb.TxnSeqIsIgnored(e.Sequence, ignoredSeqNums) {
 						inHistoryNotRolledBack = true
 						break
 					}
@@ -6194,7 +6195,7 @@ func MVCCAcquireLock(
 	defer buf.release()
 
 	newMeta := &buf.newMeta
-	newMeta.Txn = &txn.TxnMeta
+	newMeta.Txn = txn
 	newMeta.Timestamp = txn.WriteTimestamp.ToLegacyTimestamp()
 	keyBytes, valBytes, err := buf.putLockMeta(rw, key, str, newMeta, rolledBack)
 	if err != nil {

@@ -42,14 +42,14 @@ func (j *Job) Reverted(ctx context.Context, err error) error {
 // Paused is a helper to the paused state.
 func (j *Job) Paused(ctx context.Context) error {
 	return j.NoTxn().Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusPaused {
+		if md.State == StatePaused {
 			// Already paused - do nothing.
 			return nil
 		}
-		if md.Status != StatusPauseRequested {
-			return errors.Newf("job with status %s cannot be set to paused", md.Status)
+		if md.State != StatePauseRequested {
+			return errors.Newf("job with state %s cannot be set to paused", md.State)
 		}
-		ju.UpdateStatus(StatusPaused)
+		ju.UpdateState(StatePaused)
 		return nil
 	})
 }
@@ -66,9 +66,9 @@ func (j *Job) Succeeded(ctx context.Context) error {
 	return j.NoTxn().succeeded(ctx, nil /* fn */)
 }
 
-// TestingCurrentStatus returns the current job status from the jobs table or error.
-func (j *Job) TestingCurrentStatus(ctx context.Context) (Status, error) {
-	var statusString tree.DString
+// TestingCurrentState returns the current job state from the jobs table or error.
+func (j *Job) TestingCurrentState(ctx context.Context) (State, error) {
+	var stateString tree.DString
 	const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
 	row, err := j.registry.db.Executor().QueryRow(ctx, "job-status", nil, selectStmt, j.ID())
 	if err != nil {
@@ -78,8 +78,8 @@ func (j *Job) TestingCurrentStatus(ctx context.Context) (Status, error) {
 		return "", errors.Errorf("job %d: not found in system.jobs", j.ID())
 	}
 
-	statusString = tree.MustBeDString(row[0])
-	return Status(statusString), nil
+	stateString = tree.MustBeDString(row[0])
+	return State(stateString), nil
 }
 
 const (

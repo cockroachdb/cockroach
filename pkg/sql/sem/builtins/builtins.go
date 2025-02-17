@@ -27,7 +27,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -96,6 +95,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -198,6 +198,15 @@ func init() {
 		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
+
+var CompactBackups func(
+	ctx context.Context,
+	exCtx interface{},
+	collectionURI, incrLoc []string,
+	fullBackupPath string,
+	encryptionOpts jobspb.BackupEncryptionOptions,
+	start, end hlc.Timestamp,
+) error
 
 // builtins contains the built-in functions indexed by name.
 //
@@ -383,7 +392,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.Any},
+			Types:      tree.VariadicType{VarType: types.AnyElement},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
@@ -1945,7 +1954,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
@@ -1983,7 +1992,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			CalledOnNullInput: true,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
@@ -2127,9 +2136,9 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDInt(GenerateUniqueInt(
-					ProcessUniqueID(evalCtx.NodeID.SQLInstanceID()),
-				)), nil
+				return tree.NewDInt(tree.DInt(unique.GenerateUniqueInt(
+					unique.ProcessUniqueID(evalCtx.NodeID.SQLInstanceID()),
+				))), nil
 			},
 			Info: "Returns a unique ID used by CockroachDB to generate unique row IDs if a " +
 				"Primary Key isn't defined for the table. The value is a combination of the " +
@@ -2148,8 +2157,9 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				v := GenerateUniqueUnorderedID(evalCtx.NodeID.SQLInstanceID())
-				return tree.NewDInt(v), nil
+				instanceID := unique.ProcessUniqueID(evalCtx.NodeID.SQLInstanceID())
+				v := unique.GenerateUniqueUnorderedID(instanceID)
+				return tree.NewDInt(tree.DInt(v)), nil
 			},
 			Info: "Returns a unique ID. The value is a combination of the " +
 				"insert timestamp (bit-reversed) and the ID of the node executing the statement, which " +
@@ -4428,7 +4438,7 @@ value if you rely on the HLC for accuracy.`,
 			// Note that datums_to_bytes(a) == datums_to_bytes(b) iff (a IS NOT DISTINCT FROM b)
 			Info: "Converts datums into key-encoded bytes. " +
 				"Supports NULLs and all data types which may be used in index keys",
-			Types:      tree.VariadicType{VarType: types.Any},
+			Types:      tree.VariadicType{VarType: types.AnyElement},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var out []byte
@@ -5293,7 +5303,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Types: tree.ParamTypes{
 				{Name: "table_id", Typ: types.Int},
 				{Name: "index_id", Typ: types.Int},
-				{Name: "row_tuple", Typ: types.Any},
+				{Name: "row_tuple", Typ: types.AnyElement},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6561,8 +6571,8 @@ SELECT
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{Name: "val", Typ: types.Any},
-				{Name: "type", Typ: types.Any},
+				{Name: "val", Typ: types.AnyElement},
+				{Name: "type", Typ: types.AnyElement},
 			},
 			ReturnType: tree.IdentityReturnType(1),
 			FnWithExprs: eval.FnWithExprsOverload(func(
@@ -7161,7 +7171,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.Any,
+				VarType: types.AnyElement,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7184,7 +7194,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.Any,
+				VarType: types.AnyElement,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -8774,7 +8784,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				{Name: "name", Typ: types.RefCursor},
 				{Name: "direction", Typ: types.Int},
 				{Name: "count", Typ: types.Int},
-				{Name: "resultTypes", Typ: types.Any},
+				{Name: "resultTypes", Typ: types.AnyElement},
 			},
 			ReturnType: tree.IdentityReturnType(3),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -8950,6 +8960,52 @@ WHERE object_id = table_descriptor_id
 			},
 			Info:       "Returns whether the given type OID is indexable.",
 			Volatility: volatility.Stable,
+		},
+	),
+	"crdb_internal.backup_compaction": makeBuiltin(
+		tree.FunctionProperties{Undocumented: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "collection_uri", Typ: types.StringArray},
+				{Name: "full_backup_path", Typ: types.String},
+				{Name: "encryption_opts", Typ: types.Bytes},
+				{Name: "start_time", Typ: types.Decimal},
+				{Name: "end_time", Typ: types.Decimal},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if CompactBackups == nil {
+					return nil, errors.Newf("missing CompactBackups")
+				}
+				ary := *tree.MustBeDArray(args[0])
+				collectionURI, ok := darrayToStringSlice(ary)
+				if !ok {
+					return nil, errors.Newf("expected array value, got %T", args[0])
+				}
+				var encryption jobspb.BackupEncryptionOptions
+				encryptionBytes := []byte(tree.MustBeDBytes(args[2]))
+				if len(encryptionBytes) == 0 {
+					encryption = jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_None}
+				} else if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(args[2])), &encryption); err != nil {
+					return nil, err
+				}
+				fullPath := string(tree.MustBeDString(args[1]))
+				start := tree.MustBeDDecimal(args[3])
+				startTs, err := hlc.DecimalToHLC(&start.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				end := tree.MustBeDDecimal(args[4])
+				endTs, err := hlc.DecimalToHLC(&end.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, CompactBackups(
+					ctx, evalCtx.JobExecContext, collectionURI, nil, fullPath, encryption, startTs, endTs,
+				)
+			},
+			Info:       "Compacts the chain of incremental backups described by the start and end times.",
+			Volatility: volatility.Volatile,
 		},
 	),
 }
@@ -9135,7 +9191,7 @@ func makeSubStringImpls() builtinDefinition {
 
 var formatImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 	tree.Overload{
-		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
+		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.AnyElement},
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			if args[0] == tree.DNull {
@@ -9846,7 +9902,7 @@ func jsonProps() tree.FunctionProperties {
 }
 
 var jsonBuildObjectImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.Any},
+	Types:      tree.VariadicType{VarType: types.AnyElement},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		if len(args)%2 != 0 {
@@ -9889,7 +9945,7 @@ var jsonBuildObjectImpl = tree.Overload{
 }
 
 var toJSONImpl = tree.Overload{
-	Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
+	Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		return toJSONObject(evalCtx, args[0])
@@ -9924,7 +9980,7 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 )
 
 var jsonBuildArrayImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.Any},
+	Types:      tree.VariadicType{VarType: types.AnyElement},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))
@@ -10643,89 +10699,6 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 		after = len(runes)
 	}
 	return tree.NewDString(string(runes[:pos]) + to + string(runes[after:])), nil
-}
-
-// GenerateUniqueUnorderedID creates a unique int64 composed of the current time
-// at a 10-microsecond granularity and the instance-id. The top-bit is left
-// empty so that negative values are not returned. The 48 bits following after
-// represent the reversed timestamp and then 15 bits of the node id.
-func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
-	orig := uint64(GenerateUniqueInt(ProcessUniqueID(instanceID)))
-	uniqueUnorderedID := mapToUnorderedUniqueInt(orig)
-	return tree.DInt(uniqueUnorderedID)
-}
-
-// mapToUnorderedUniqueInt is used by GenerateUniqueUnorderedID to convert a
-// serial unique uint64 to an unordered unique int64. It accomplishes this by
-// reversing the timestamp portion of the unique ID. This bit manipulation
-// should preserve the number of 1-bits.
-func mapToUnorderedUniqueInt(uniqueInt uint64) uint64 {
-	// val is [0][48 bits of ts][15 bits of node id]
-	ts := uniqueInt & builtinconstants.UniqueIntTimestampMask
-	nodeID := uniqueInt & builtinconstants.UniqueIntNodeIDMask
-	reversedTS := bits.Reverse64(ts<<builtinconstants.UniqueIntLeadingZeroBits) << builtinconstants.UniqueIntNodeIDBits
-	unorderedUniqueInt := reversedTS | nodeID
-	return unorderedUniqueInt
-}
-
-// ProcessUniqueID is an ID which is unique to this process in the cluster.
-// It is used to generate unique integer keys via GenerateUniqueInt. Generally
-// it is the node ID of a system tenant or the sql instance ID of a secondary
-// tenant.
-//
-// Note that for its uniqueness property to hold, the value must use no more
-// than 15 bits. Nothing enforces this for node IDs, but, in practice, they
-// do not generally get to be more than 16k unless nodes are being added and
-// removed frequently. In order to eliminate this bug, we ought to use the
-// leased SQLInstanceID instead of the NodeID to generate these unique integers
-// in all cases.
-type ProcessUniqueID int32
-
-// GenerateUniqueInt creates a unique int composed of the current time at a
-// 10-microsecond granularity and the instance-id. The instance-id is stored in the
-// lower 15 bits of the returned value and the timestamp is stored in the upper
-// 48 bits. The top-bit is left empty so that negative values are not returned.
-// The 48-bit timestamp field provides for 89 years of timestamps. We use a
-// custom epoch (Jan 1, 2015) in order to utilize the entire timestamp range.
-//
-// Note that GenerateUniqueInt() imposes a limit on instance IDs while
-// generateUniqueBytes() does not.
-//
-// TODO(pmattis): Do we have to worry about persisting the milliseconds value
-// periodically to avoid the clock ever going backwards (e.g. due to NTP
-// adjustment)?
-func GenerateUniqueInt(instanceID ProcessUniqueID) tree.DInt {
-	const precision = uint64(10 * time.Microsecond)
-
-	// TODO(andrei): For tenants we need to validate that the current time is
-	// within the validity of the sqlliveness session to which the instanceID is
-	// bound. Without this validation, two different nodes might be calling this
-	// function with the same instanceID at the same time, and both would generate
-	// the same unique int. See #90459.
-	nowNanos := timeutil.Now().UnixNano()
-	// Paranoia: nowNanos should never be less than uniqueIntEpoch.
-	if nowNanos < uniqueIntEpoch {
-		nowNanos = uniqueIntEpoch
-	}
-	timestamp := uint64(nowNanos-uniqueIntEpoch) / precision
-
-	uniqueIntState.Lock()
-	if timestamp <= uniqueIntState.timestamp {
-		timestamp = uniqueIntState.timestamp + 1
-	}
-	uniqueIntState.timestamp = timestamp
-	uniqueIntState.Unlock()
-
-	return GenerateUniqueID(int32(instanceID), timestamp)
-}
-
-// GenerateUniqueID encapsulates the logic to generate a unique number from
-// a nodeID and timestamp.
-func GenerateUniqueID(instanceID int32, timestamp uint64) tree.DInt {
-	// We xor in the instanceID so that instanceIDs larger than 32K will flip bits
-	// in the timestamp portion of the final value instead of always setting them.
-	id := (timestamp << builtinconstants.UniqueIntNodeIDBits) ^ uint64(instanceID)
-	return tree.DInt(id)
 }
 
 func cardinality(arr *tree.DArray) tree.Datum {

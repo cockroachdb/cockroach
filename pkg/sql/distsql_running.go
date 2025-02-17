@@ -9,11 +9,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -395,7 +397,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	statementSQL string,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.gatewaySQLInstanceID
-	_, ok := flows[thisNodeID]
+	thisNodeSpec, ok := flows[thisNodeID]
 	if !ok {
 		return nil, nil, errors.AssertionFailedf("missing gateway flow")
 	}
@@ -403,17 +405,54 @@ func (dsp *DistSQLPlanner) setupFlows(
 		return nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
 	}
 
+	if buildutil.CrdbTestBuild && len(flows) > 1 {
+		// Ensure that we don't have memory aliasing of some fields between the
+		// local flow and the remote ones. At the time of writing only
+		// TableReaderSpec.Spans is known to be problematic.
+		gatewayFlowSpans := make(map[uintptr]int32)
+		for _, p := range thisNodeSpec.Processors {
+			if tr := p.Core.TableReader; tr != nil {
+				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+				ptr := (*reflect.SliceHeader)(unsafe.Pointer(&tr.Spans))
+				gatewayFlowSpans[ptr.Data] = p.ProcessorID
+			}
+		}
+		for sqlInstanceID, flow := range flows {
+			if sqlInstanceID == thisNodeID {
+				continue
+			}
+			for _, p := range flow.Processors {
+				if tr := p.Core.TableReader; tr != nil {
+					//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+					ptr := (*reflect.SliceHeader)(unsafe.Pointer(&tr.Spans))
+					if procID, found := gatewayFlowSpans[ptr.Data]; found {
+						return nil, nil, errors.AssertionFailedf(
+							"found TableReaderSpec.Spans memory aliasing between local and remote flows\n"+
+								"statement: %s, local proc ID %d, remote proc ID %d\n%v",
+							statementSQL, procID, p.ProcessorID, flows,
+						)
+					}
+				}
+			}
+		}
+	}
+
 	const setupFlowRequestStmtMaxLength = 500
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	execVersion := execversion.V24_3
-	if dsp.st.Version.IsActive(ctx, clusterversion.V25_1) {
-		execVersion = execversion.V25_1
+	var v execversion.V
+	switch {
+	case dsp.st.Version.IsActive(ctx, clusterversion.V25_2):
+		v = execversion.V25_2
+	case dsp.st.Version.IsActive(ctx, clusterversion.V25_1):
+		v = execversion.V25_1
+	default:
+		v = execversion.V24_3
 	}
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
-		Version:           execVersion,
+		Version:           v,
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
@@ -456,7 +495,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	}
 
 	// First, set up the flow on this node.
-	setupReq.Flow = *flows[thisNodeID]
+	setupReq.Flow = *thisNodeSpec
 	var batchReceiver execinfra.BatchReceiver
 	if recv.batchWriter != nil {
 		// Use the DistSQLReceiver as an execinfra.BatchReceiver only if the
@@ -490,7 +529,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// issued (either by the current goroutine directly or delegated to the
 	// DistSQL workers).
 	var numIssuedRequests int
-	if sp := tracing.SpanFromContext(origCtx); sp != nil && !sp.IsNoop() {
+	if sp := tracing.SpanFromContext(origCtx); sp != nil {
 		setupReq.TraceInfo = sp.Meta().ToProto()
 	}
 	resultChan := make(chan runnerResult, len(flows)-1)
@@ -675,7 +714,8 @@ func (dsp *DistSQLPlanner) Run(
 	evalCtx *extendedEvalContext,
 	finishedSetupFn func(localFlow flowinfra.Flow),
 ) {
-	flows := plan.GenerateFlowSpecs()
+	// Ignore the cleanup function since we will release each spec separately.
+	flows, _ := plan.GenerateFlowSpecs()
 	gatewayFlowSpec, ok := flows[dsp.gatewaySQLInstanceID]
 	if !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))

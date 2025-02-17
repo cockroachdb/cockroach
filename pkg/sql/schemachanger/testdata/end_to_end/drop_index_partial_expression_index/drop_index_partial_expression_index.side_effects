@@ -60,6 +60,7 @@ upsert descriptor #104
   -    partitioning: {}
   -    predicate: i > 0:::INT8
   -    sharded: {}
+  -    vecConfig: {}
   -    version: 3
   +  indexes: []
      modificationTime: {}
@@ -84,6 +85,7 @@ upsert descriptor #104
   +      partitioning: {}
   +      predicate: i > 0:::INT8
   +      sharded: {}
+  +      vecConfig: {}
   +      version: 3
   +    mutationId: 2
   +    state: WRITE_ONLY
@@ -178,6 +180,7 @@ upsert descriptor #104
   -    partitioning: {}
   -    predicate: i > 0:::INT8
   -    sharded: {}
+  -    vecConfig: {}
   -    version: 3
   +  indexes: []
      modificationTime: {}
@@ -202,6 +205,7 @@ upsert descriptor #104
   +      partitioning: {}
   +      predicate: i > 0:::INT8
   +      sharded: {}
+  +      vecConfig: {}
   +      version: 3
   +    mutationId: 2
   +    state: WRITE_ONLY
@@ -245,6 +249,7 @@ upsert descriptor #104
          partitioning: {}
   -      predicate: i > 0:::INT8
          sharded: {}
+         vecConfig: {}
          version: 3
        mutationId: 2
   -    state: WRITE_ONLY
@@ -323,6 +328,7 @@ upsert descriptor #104
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded: {}
+  -      vecConfig: {}
   -      version: 3
   -    mutationId: 2
   -    state: DELETE_ONLY

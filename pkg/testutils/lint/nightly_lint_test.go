@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build lint && nightly
-// +build lint,nightly
 
 package lint
 

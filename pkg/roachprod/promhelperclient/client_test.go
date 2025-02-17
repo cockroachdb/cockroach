@@ -46,15 +46,20 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 			}, nil
 		}
 		err := c.UpdatePrometheusTargets(ctx, "c1", false,
-			map[int]*NodeInfo{1: {Target: "n1"}}, true, l)
+			map[int][]*NodeInfo{1: {{Target: "n1"}}}, true, l)
 		require.NotNil(t, err)
 		require.Equal(t, fmt.Sprintf(ErrorMessage, 400, getUrl(promUrl, "c1"), "failed"), err.Error())
 	})
 	t.Run("UpdatePrometheusTargets succeeds", func(t *testing.T) {
-		nodeInfos := map[int]*NodeInfo{1: {Target: "n1"}, 3: {
-			Target:       "n3",
-			CustomLabels: map[string]string{"custom": "label"},
-		}}
+		nodeInfos := map[int][]*NodeInfo{
+			1: {{
+				Target: "n1",
+			}},
+			3: {{
+				Target:       "n3",
+				CustomLabels: map[string]string{"custom": "label"},
+			}},
+		}
 		c.httpPut = func(ctx context.Context, url string, h *http.Header, body io.Reader) (
 			resp *http.Response, err error) {
 			require.Equal(t, getUrl(promUrl, "c1"), url)
@@ -66,10 +71,10 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 			require.Len(t, configs, 2)
 			for _, c := range configs {
 				if c.Targets[0] == "n1" {
-					require.Empty(t, nodeInfos[1].CustomLabels)
+					require.Empty(t, nodeInfos[1][0].CustomLabels)
 				} else {
 					require.Equal(t, "n3", c.Targets[0])
-					for k, v := range nodeInfos[3].CustomLabels {
+					for k, v := range nodeInfos[3][0].CustomLabels {
 						require.Equal(t, v, c.Labels[k])
 					}
 				}

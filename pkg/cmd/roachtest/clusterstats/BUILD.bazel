@@ -17,7 +17,6 @@ go_library(
         "//pkg/cmd/roachprod/grafana",  #keep
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
-        "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/test",
         # Required for generated mocks
         "//pkg/roachprod",  #keep
@@ -35,7 +34,7 @@ go_library(
         "@com_github_prometheus_client_golang//api",
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
-        "@org_golang_x_exp//maps",
+        "//pkg/cmd/roachtest/roachtestutil",
     ],
 )
 

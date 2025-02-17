@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build !windows && !freebsd && !dragonfly
-// +build !windows,!freebsd,!dragonfly
 
 package server
 

@@ -16,6 +16,9 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (100, 500.5, 'stuff' COLLATE en_US, 600.6, '12:12:12')
 
+statement ok
+SET autocommit_before_ddl = false
+
 # Drop all columns except "a" and perform interesting operations.
 statement ok
 BEGIN;

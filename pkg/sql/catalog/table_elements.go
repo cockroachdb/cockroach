@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -174,6 +175,7 @@ type Index interface {
 	GetPredicate() string
 	GetType() idxtype.T
 	GetGeoConfig() geopb.Config
+	GetVecConfig() vecpb.Config
 	GetVersion() descpb.IndexDescriptorVersion
 	GetEncodingType() catenumpb.IndexDescriptorEncodingType
 
@@ -222,6 +224,18 @@ type Index interface {
 	// InvertedColumnKind returns the kind of the inverted column of the inverted
 	// index.
 	InvertedColumnKind() catpb.InvertedIndexColumnKind
+
+	// VectorColumnName returns the name of the vector column of the vector
+	// index.
+	//
+	// Panics if the index is not a vector index.
+	VectorColumnName() string
+
+	// VectorColumnID returns the ColumnID of the vector column of the vector
+	// index.
+	//
+	// Panics if the index is not a vector index.
+	VectorColumnID() descpb.ColumnID
 
 	NumPrimaryStoredColumns() int
 	NumSecondaryStoredColumns() int
@@ -766,6 +780,11 @@ func ForEachPartialIndex(desc TableDescriptor, f func(idx Index) error) error {
 	return forEachIndex(desc.PartialIndexes(), f)
 }
 
+// ForEachVectorIndex is like ForEachIndex over VectorIndexes().
+func ForEachVectorIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.VectorIndexes(), f)
+}
+
 // ForEachNonPrimaryIndex is like ForEachIndex over
 // NonPrimaryIndexes().
 func ForEachNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
@@ -832,10 +851,16 @@ func FindNonDropIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.NonDropIndexes(), test)
 }
 
-// FindPartialIndex returns the first index in PartialIndex() for which test
+// FindPartialIndex returns the first index in PartialIndexes() for which test
 // returns true.
 func FindPartialIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.PartialIndexes(), test)
+}
+
+// FindVectorIndex returns the first index in VectorIndexes() for which test
+// returns true.
+func FindVectorIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.VectorIndexes(), test)
 }
 
 // FindPublicNonPrimaryIndex returns the first index in PublicNonPrimaryIndex()

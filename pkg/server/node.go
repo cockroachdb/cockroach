@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -77,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1726,7 +1726,7 @@ func (n *Node) batchInternal(
 	// To avoid log spam for now we only log the trace if the request was an
 	// ExportRequest.
 	if pErr != nil && ctx.Err() != nil && args.IsSingleExportRequest() {
-		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
+		if sp := tracing.SpanFromContext(ctx); sp != nil {
 			recording := sp.GetConfiguredRecording()
 			if recording.Len() != 0 {
 				log.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
@@ -2058,7 +2058,7 @@ func setupSpanForIncomingRPC(
 			tracing.WithServerSpanKind)
 	}
 
-	if newSpan != nil && !newSpan.IsNoop() {
+	if newSpan != nil {
 		newSpan.SetLazyTag("request", ba.ShallowCopy())
 	}
 	return ctx, spanForRequest{
@@ -2210,8 +2210,8 @@ func makePerConsumerScanLimiter(
 // defaultRangefeedConsumerID returns a random ConsumerID. Used by
 // MuxRangeFeed calls where the user hasn't specified a consumer ID.
 func (n *Node) defaultRangefeedConsumerID() int64 {
-	return int64(builtins.GenerateUniqueInt(
-		builtins.ProcessUniqueID(n.execCfg.NodeInfo.NodeID.SQLInstanceID())))
+	return unique.GenerateUniqueInt(
+		unique.ProcessUniqueID(n.execCfg.NodeInfo.NodeID.SQLInstanceID()))
 }
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
@@ -2267,6 +2267,9 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			tags = tags.Add("r", req.RangeID)
 			tags = tags.Add("sm", req.Replica.StoreID)
 			tags = tags.Add("sid", req.StreamID)
+			if req.ConsumerID != 0 {
+				tags = tags.Add("cid", req.ConsumerID)
+			}
 			streamCtx := logtags.AddTags(ctx, tags)
 
 			streamSink := sm.NewStream(req.StreamID, req.RangeID)

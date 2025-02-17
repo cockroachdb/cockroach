@@ -2902,7 +2902,7 @@ alter_primary_region_super_region_override                 off                 N
 always_distribute_full_scans                               off                 NULL      NULL        NULL        string
 application_name                                           ·                   NULL      NULL        NULL        string
 authentication_method                                      cert-password       NULL      NULL        NULL        string
-autocommit_before_ddl                                      off                 NULL      NULL        NULL        string
+autocommit_before_ddl                                      on                  NULL      NULL        NULL        string
 avoid_buffering                                            off                 NULL      NULL        NULL        string
 avoid_full_table_scans_in_mutations                        on                  NULL      NULL        NULL        string
 backslash_quote                                            safe_encoding       NULL      NULL        NULL        string
@@ -2983,6 +2983,7 @@ is_superuser                                               on                  N
 join_reader_index_join_strategy_batch_size                 4.0 MiB             NULL      NULL        NULL        string
 join_reader_no_ordering_strategy_batch_size                2.0 MiB             NULL      NULL        NULL        string
 join_reader_ordering_strategy_batch_size                   100 KiB             NULL      NULL        NULL        string
+kv_transaction_buffered_writes_enabled                     off                 NULL      NULL        NULL        string
 large_full_scan_rows                                       0                   NULL      NULL        NULL        string
 lc_collate                                                 C.UTF-8             NULL      NULL        NULL        string
 lc_ctype                                                   C.UTF-8             NULL      NULL        NULL        string
@@ -3005,8 +3006,11 @@ null_ordered_last                                          off                 N
 on_update_rehome_row_enabled                               on                  NULL      NULL        NULL        string
 opt_split_scan_limit                                       2048                NULL      NULL        NULL        string
 optimizer_always_use_histograms                            on                  NULL      NULL        NULL        string
+optimizer_check_input_min_row_count                        1                   NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
+optimizer_min_row_count                                    0                   NULL      NULL        NULL        string
+optimizer_prefer_bounded_cardinality                       off                 NULL      NULL        NULL        string
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL      NULL        NULL        string
 optimizer_push_limit_into_project_filtered_scan            on                  NULL      NULL        NULL        string
 optimizer_push_offset_into_index_join                      on                  NULL      NULL        NULL        string
@@ -3107,7 +3111,7 @@ alter_primary_region_super_region_override                 off                 N
 always_distribute_full_scans                               off                 NULL  user     NULL      off                 off
 application_name                                           ·                   NULL  user     NULL      ·                   ·
 authentication_method                                      cert-password       NULL  user     NULL      cert-password       cert-password
-autocommit_before_ddl                                      off                 NULL  user     NULL      off                 off
+autocommit_before_ddl                                      on                  NULL  user     NULL      on                  on
 avoid_buffering                                            off                 NULL  user     NULL      off                 off
 avoid_full_table_scans_in_mutations                        on                  NULL  user     NULL      on                  on
 backslash_quote                                            safe_encoding       NULL  user     NULL      safe_encoding       safe_encoding
@@ -3188,6 +3192,7 @@ is_superuser                                               on                  N
 join_reader_index_join_strategy_batch_size                 4.0 MiB             NULL  user     NULL      4.0 MiB             4.0 MiB
 join_reader_no_ordering_strategy_batch_size                2.0 MiB             NULL  user     NULL      2.0 MiB             2.0 MiB
 join_reader_ordering_strategy_batch_size                   100 KiB             NULL  user     NULL      100 KiB             100 KiB
+kv_transaction_buffered_writes_enabled                     off                 NULL  user     NULL      off                 off
 large_full_scan_rows                                       0                   NULL  user     NULL      0                   0
 lc_collate                                                 C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
 lc_ctype                                                   C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
@@ -3210,8 +3215,11 @@ null_ordered_last                                          off                 N
 on_update_rehome_row_enabled                               on                  NULL  user     NULL      on                  on
 opt_split_scan_limit                                       2048                NULL  user     NULL      2048                2048
 optimizer_always_use_histograms                            on                  NULL  user     NULL      on                  on
+optimizer_check_input_min_row_count                        1                   NULL  user     NULL      1                   1
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
+optimizer_min_row_count                                    0                   NULL  user     NULL      0                   0
+optimizer_prefer_bounded_cardinality                       off                 NULL  user     NULL      off                 off
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL  user     NULL      on                  on
 optimizer_push_limit_into_project_filtered_scan            on                  NULL  user     NULL      on                  on
 optimizer_push_offset_into_index_join                      on                  NULL  user     NULL      on                  on
@@ -3390,6 +3398,7 @@ is_superuser                                               NULL    NULL     NULL
 join_reader_index_join_strategy_batch_size                 NULL    NULL     NULL     NULL        NULL
 join_reader_no_ordering_strategy_batch_size                NULL    NULL     NULL     NULL        NULL
 join_reader_ordering_strategy_batch_size                   NULL    NULL     NULL     NULL        NULL
+kv_transaction_buffered_writes_enabled                     NULL    NULL     NULL     NULL        NULL
 large_full_scan_rows                                       NULL    NULL     NULL     NULL        NULL
 lc_collate                                                 NULL    NULL     NULL     NULL        NULL
 lc_ctype                                                   NULL    NULL     NULL     NULL        NULL
@@ -3414,8 +3423,11 @@ on_update_rehome_row_enabled                               NULL    NULL     NULL
 opt_split_scan_limit                                       NULL    NULL     NULL     NULL        NULL
 optimizer                                                  NULL    NULL     NULL     NULL        NULL
 optimizer_always_use_histograms                            NULL    NULL     NULL     NULL        NULL
+optimizer_check_input_min_row_count                        NULL    NULL     NULL     NULL        NULL
 optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
+optimizer_min_row_count                                    NULL    NULL     NULL     NULL        NULL
+optimizer_prefer_bounded_cardinality                       NULL    NULL     NULL     NULL        NULL
 optimizer_prove_implication_with_virtual_computed_columns  NULL    NULL     NULL     NULL        NULL
 optimizer_push_limit_into_project_filtered_scan            NULL    NULL     NULL     NULL        NULL
 optimizer_push_offset_into_index_join                      NULL    NULL     NULL     NULL        NULL
@@ -4053,6 +4065,32 @@ geospatial_table_pkey  CREATE UNIQUE INDEX geospatial_table_pkey ON test.public.
 idxa                   CREATE INDEX idxa ON test.public.geospatial_table USING gin (a)
 idxb                   CREATE INDEX idxb ON test.public.geospatial_table USING gin (b)
 
+subtest vector
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE TABLE vector_table (
+  id UUID PRIMARY KEY,
+  a vector(3),
+  VECTOR INDEX idxa (a)
+)
+
+statement ok
+CREATE VECTOR INDEX idxb ON vector_table (a)
+
+query TT colnames
+SELECT indexname, indexdef
+FROM pg_catalog.pg_indexes
+WHERE tablename = 'vector_table'
+ORDER BY indexname
+----
+indexname          indexdef
+idxa               CREATE INDEX idxa ON test.public.vector_table USING cspann (a)
+idxb               CREATE INDEX idxb ON test.public.vector_table USING cspann (a)
+vector_table_pkey  CREATE UNIQUE INDEX vector_table_pkey ON test.public.vector_table USING btree (id ASC)
+
 subtest partial_index
 
 statement ok
@@ -4126,13 +4164,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-173  173  jt
+174  174  jt
 
 query ITT rowsort
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1    NULL  NULL
-173  173   jt
+174  174   jt
 
 subtest regression_49207
 statement ok
@@ -4678,7 +4716,7 @@ WHERE usename IN ('testuser1', 'testuser2')
 ORDER BY usename
 ----
 usename    usecreatedb  useconfig
-testuser1  true         {timezone=America/Los_Angeles,application_name=a}
+testuser1  false        NULL
 testuser2  false        NULL
 
 query TBTBBT colnames
@@ -4687,10 +4725,10 @@ FROM pg_roles
 WHERE rolname IN ('testuser1', 'testuser2', 'testrole1')
 ORDER BY rolname
 ----
-rolname    rolcreatedb  rolconfig                                          rolinherit  rolcanlogin  rolvaliduntil
-testrole1  false        NULL                                               true        false        NULL
-testuser1  true         {timezone=America/Los_Angeles,application_name=a}  true        true         NULL
-testuser2  false        NULL                                               true        true         3022-01-01 00:00:00 +0000 UTC
+rolname    rolcreatedb  rolconfig  rolinherit  rolcanlogin  rolvaliduntil
+testrole1  false        NULL       true        false        NULL
+testuser1  false        NULL       true        true         NULL
+testuser2  false        NULL       true        true         NULL
 
 query TBBBBT colnames
 SELECT rolname, rolcreatedb, rolcreaterole, rolinherit, rolcanlogin, rolvaliduntil
@@ -4701,8 +4739,8 @@ ORDER BY rolname
 rolname    rolcreatedb  rolcreaterole  rolinherit  rolcanlogin  rolvaliduntil
 root       true         true           true        true         NULL
 testrole1  false        false          true        false        NULL
-testuser1  true         false          true        true         NULL
-testuser2  false        true           true        true         3022-01-01 00:00:00 +0000 UTC
+testuser1  false        false          true        true         NULL
+testuser2  false        false          true        true         NULL
 
 # Testing users that have admin role
 
@@ -4791,7 +4829,7 @@ JOIN pg_class ON pg_statistic_ext.stxrelid = pg_class.oid
 ----
 relname  stxname  stxnamespace  stxowner  stxstattarget  stxkeys  stxkind
 stxtbl   stxobj   105           NULL      -1             {2,3}    {d}
-stxtbl2  stxobj2  195           NULL      -1             {1,3}    {d}
+stxtbl2  stxobj2  196           NULL      -1             {1,3}    {d}
 stx      NULL     105           NULL      -1             {2}      {d}
 stx      NULL     105           NULL      -1             {1}      {d}
 
@@ -5307,7 +5345,7 @@ query TO colnames,rowsort
 SELECT typname, typrelid FROM pg_catalog.pg_type WHERE typrelid = 'u'::regtype::oid;
 ----
 typname  typrelid
-u        100207
+u        100208
 
 query TOO colnames,rowsort
 SELECT typname, typrelid, typarray FROM pg_catalog.pg_type WHERE oid = 'u[]'::regtype::oid;

@@ -1295,7 +1295,7 @@ func makeLegacyJobsTableRows(
 			// Convert the job into datums, where protobufs will be intentionally,
 			// marshalled.
 			id = tree.NewDInt(tree.DInt(job.JobID))
-			status = tree.NewDString(string(jobs.StatusPending))
+			status = tree.NewDString(string(jobs.StatePending))
 			created = tree.MustMakeDTimestampTZ(timeutil.Unix(0, p.txn.ReadTimestamp().WallTime), time.Microsecond)
 			progressBytes, payloadBytes, err = getPayloadAndProgressFromJobsRecord(p, job)
 			if err != nil {
@@ -1380,9 +1380,9 @@ func makeLegacyJobsTableRows(
 				}
 
 				if s, ok := status.(*tree.DString); ok {
-					if jobs.Status(*s) == jobs.StatusRunning && len(progress.RunningStatus) > 0 {
+					if jobs.State(*s) == jobs.StateRunning && len(progress.RunningStatus) > 0 {
 						runningStatus = tree.NewDString(progress.RunningStatus)
-					} else if jobs.Status(*s) == jobs.StatusPaused && payload != nil && payload.PauseReason != "" {
+					} else if jobs.State(*s) == jobs.StatePaused && payload != nil && payload.PauseReason != "" {
 						errorStr = tree.NewDString(fmt.Sprintf("%s: %s", jobs.PauseRequestExplained, payload.PauseReason))
 					}
 				}
@@ -1554,7 +1554,7 @@ LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
 				tree.NewDString(payloadType.String()),
 				tree.NewDString(job.Description),
 				tree.NewDString(job.Username.Normalized()),
-				tree.NewDString(string(jobs.StatusPending)),
+				tree.NewDString(string(jobs.StatePending)),
 				tree.DNull,
 				tree.MustMakeDTimestampTZ(p.txn.ReadTimestamp().GoTime(), time.Microsecond),
 				tree.DNull,
@@ -1776,34 +1776,26 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 	},
 }
 
-var crdbInternalSessionBasedLeases = virtualSchemaTable{
+var crdbInternalSessionBasedLeases = virtualSchemaView{
 	schema: `
-CREATE TABLE crdb_internal.kv_session_based_leases (
-  desc_id         INT8,
-  version         INT8,
-  sql_instance_id INT8,
-  session_id      BYTES NOT NULL,
-  crdb_region     BYTES NOT NULL
+CREATE VIEW crdb_internal.kv_session_based_leases (
+  desc_id,
+  version, 
+  sql_instance_id,
+  session_id, 
+  crdb_region
+) AS (
+	SELECT desc_id, version, sql_instance_id, session_id, crdb_region 
+	FROM system.lease
 );
 `,
-	comment: `reads from the internal session based leases table (before the table format is converted)`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
-		return p.InternalSQLTxn().WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable()},
-			func() error {
-				rows, err := p.InternalSQLTxn().QueryBuffered(
-					ctx, "query-leases", p.Txn(),
-					"SELECT desc_id, version, sql_instance_id, session_id, crdb_region FROM system.lease",
-				)
-				if err != nil {
-					return err
-				}
-				for _, d := range rows {
-					if err := addRow(d...); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
+	comment: `reads from the internal session based leases table`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "desc_id", Typ: types.Int},
+		{Name: "version", Typ: types.Int},
+		{Name: "sql_instance_id", Typ: types.Int},
+		{Name: "session_id", Typ: types.Bytes},
+		{Name: "crdb_region", Typ: types.Bytes},
 	},
 }
 
@@ -2017,7 +2009,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		}
 
 		var alloc tree.DatumAlloc
-		sqlStats := p.extendedEvalCtx.statsProvider
+		localSqlStats := p.extendedEvalCtx.localStatsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		statementVisitor := func(_ context.Context, stats *appstatspb.CollectedStatementStatistics) error {
@@ -2159,7 +2151,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return nil
 		}
 
-		return sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, sqlstats.IteratorOptions{
+		return localSqlStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{
 			SortedAppNames: true,
 			SortedKey:      true,
 		}, statementVisitor)
@@ -2240,7 +2232,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
-		sqlStats := p.extendedEvalCtx.statsProvider
+		localMemSqlStats := p.extendedEvalCtx.localStatsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		var alloc tree.DatumAlloc
@@ -2317,7 +2309,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return nil
 		}
 
-		return sqlStats.GetLocalMemProvider().IterateTransactionStats(ctx, sqlstats.IteratorOptions{
+		return localMemSqlStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{
 			SortedAppNames: true,
 			SortedKey:      true,
 		}, transactionVisitor)
@@ -2342,7 +2334,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			return err
 		}
 
-		sqlStats := p.extendedEvalCtx.statsProvider
+		localMemSqlStats := p.extendedEvalCtx.localStatsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		appTxnStatsVisitor := func(appName string, stats *appstatspb.TxnStats) error {
@@ -2357,7 +2349,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			)
 		}
 
-		return sqlStats.IterateAggregatedTransactionStats(ctx, sqlstats.IteratorOptions{
+		return localMemSqlStats.IterateAggregatedTransactionStats(ctx, sqlstats.IteratorOptions{
 			SortedAppNames: true,
 		}, appTxnStatsVisitor)
 	},
@@ -5016,7 +5008,7 @@ CREATE TABLE crdb_internal.zones (
 
 			var table catalog.TableDescriptor
 			if zs.Database != "" {
-				database, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Database(ctx, descpb.ID(id))
+				database, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Database(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
@@ -5026,7 +5018,7 @@ CREATE TABLE crdb_internal.zones (
 					continue
 				}
 			} else if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
-				tableEntry, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutDropped().Get().Table(ctx, descpb.ID(id))
+				tableEntry, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Table(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
@@ -6197,7 +6189,7 @@ func (m marshaledJobMetadataMap) GetJobMetadata(
 	if ujm.status == nil {
 		return nil, errors.New("missing status")
 	}
-	md.Status = jobs.Status(*ujm.status)
+	md.State = jobs.State(*ujm.status)
 	md.Payload, err = jobs.UnmarshalPayload(ujm.payloadBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "corrupt payload bytes")

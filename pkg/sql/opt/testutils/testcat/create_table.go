@@ -87,6 +87,8 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		tab.homeRegion = string(stmt.Locality.TableRegion)
 	}
 
+	tab.nextPolicyID = 1
+
 	if isRbr && stmt.PartitionByTable == nil {
 		// Build the table as LOCALITY REGIONAL BY ROW.
 		tab.multiRegion = true
@@ -1391,7 +1393,7 @@ func (ti *Index) partitionByListExprToDatums(
 	d := make(tree.Datums, len(vals))
 	for i := range vals {
 		c := tree.CastExpr{Expr: vals[i], Type: ti.Columns[i].DatumType()}
-		cTyped, err := c.TypeCheck(ctx, semaCtx, types.Any)
+		cTyped, err := c.TypeCheck(ctx, semaCtx, types.AnyElement)
 		if err != nil {
 			panic(err)
 		}

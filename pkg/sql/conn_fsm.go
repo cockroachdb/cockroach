@@ -117,9 +117,10 @@ type eventTxnStartPayload struct {
 	historicalTimestamp *hlc.Timestamp
 	// qualityOfService denotes the user-level admission queue priority to use for
 	// any new Txn started using this payload.
-	qualityOfService sessiondatapb.QoSLevel
-	isoLevel         isolation.Level
-	omitInRangefeeds bool
+	qualityOfService      sessiondatapb.QoSLevel
+	isoLevel              isolation.Level
+	omitInRangefeeds      bool
+	bufferedWritesEnabled bool
 }
 
 // makeEventTxnStartPayload creates an eventTxnStartPayload.
@@ -132,16 +133,18 @@ func makeEventTxnStartPayload(
 	qualityOfService sessiondatapb.QoSLevel,
 	isoLevel isolation.Level,
 	omitInRangefeeds bool,
+	bufferedWritesEnabled bool,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
-		pri:                 pri,
-		readOnly:            readOnly,
-		txnSQLTimestamp:     txnSQLTimestamp,
-		historicalTimestamp: historicalTimestamp,
-		tranCtx:             tranCtx,
-		qualityOfService:    qualityOfService,
-		isoLevel:            isoLevel,
-		omitInRangefeeds:    omitInRangefeeds,
+		pri:                   pri,
+		readOnly:              readOnly,
+		txnSQLTimestamp:       txnSQLTimestamp,
+		historicalTimestamp:   historicalTimestamp,
+		tranCtx:               tranCtx,
+		qualityOfService:      qualityOfService,
+		isoLevel:              isoLevel,
+		omitInRangefeeds:      omitInRangefeeds,
+		bufferedWritesEnabled: bufferedWritesEnabled,
 	}
 }
 
@@ -590,6 +593,7 @@ func noTxnToOpen(args fsm.Args) error {
 		payload.qualityOfService,
 		payload.isoLevel,
 		payload.omitInRangefeeds,
+		payload.bufferedWritesEnabled,
 	)
 	ts.setAdvanceInfo(
 		advCode,

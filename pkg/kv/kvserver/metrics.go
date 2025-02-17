@@ -90,6 +90,12 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAsleepCount = metric.Metadata{
+		Name:        "replicas.asleep",
+		Help:        "Number of asleep replicas. Similarly to quiesced replicas, asleep replicas do not tick in Raft.",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaUninitializedCount = metric.Metadata{
 		Name:        "replicas.uninitialized",
 		Help:        "Number of uninitialized replicas, this does not include uninitialized replicas that can lie dormant in a persistent state.",
@@ -2614,6 +2620,7 @@ type StoreMetrics struct {
 	RaftLeaderInvalidLeaseCount   *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
+	AsleepCount                   *metric.Gauge
 	UninitializedCount            *metric.Gauge
 	RaftFlowStateCounts           [tracker.StateCount]*metric.Gauge
 
@@ -3317,6 +3324,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLeaderInvalidLeaseCount:   metric.NewGauge(metaRaftLeaderInvalidLeaseCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
+		AsleepCount:                   metric.NewGauge(metaAsleepCount),
 		UninitializedCount:            metric.NewGauge(metaUninitializedCount),
 		RaftFlowStateCounts:           raftFlowStateGaugeSlice(),
 

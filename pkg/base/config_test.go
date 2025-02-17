@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -217,7 +218,7 @@ func TestWALFailoverConfigRoundtrip(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "wal-failover-config"), func(t *testing.T, d *datadriven.TestData) string {
 		var buf bytes.Buffer
 		for _, l := range strings.Split(d.Input, "\n") {
-			var cfg base.WALFailoverConfig
+			var cfg storagepb.WALFailover
 			if err := cfg.Set(l); err != nil {
 				fmt.Fprintf(&buf, "err: %s\n", err)
 				continue

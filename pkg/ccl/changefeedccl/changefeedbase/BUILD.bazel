@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "avro.go",
         "errors.go",
+        "name.go",
         "options.go",
         "settings.go",
         "sink_url.go",
@@ -33,6 +34,7 @@ go_test(
     srcs = [
         "errors_test.go",
         "main_test.go",
+        "name_test.go",
         "options_test.go",
     ],
     embed = [":changefeedbase"],

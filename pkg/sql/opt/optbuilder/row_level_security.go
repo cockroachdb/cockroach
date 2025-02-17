@@ -27,10 +27,11 @@ func (b *Builder) addRowLevelSecurityFilter(
 	}
 
 	// Admin users are exempt from any RLS filtering.
-	isAdmin, err := b.catalog.HasAdminRole(b.ctx)
+	isAdmin, err := b.catalog.UserHasAdminRole(b.ctx, b.checkPrivilegeUser)
 	if err != nil {
 		panic(err)
 	}
+	b.factory.Metadata().SetRLSEnabled(b.checkPrivilegeUser, isAdmin, tabMeta.MetaID)
 	if isAdmin {
 		return
 	}
@@ -46,6 +47,7 @@ func (b *Builder) addRowLevelSecurityFilter(
 func (b *Builder) buildRowLevelSecurityUsingExpression(
 	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
 ) opt.ScalarExpr {
+	var policiesUsed opt.PolicyIDSet
 	for i := 0; i < tabMeta.Table.PolicyCount(tree.PolicyTypePermissive); i++ {
 		policy := tabMeta.Table.Policy(tree.PolicyTypePermissive, i)
 
@@ -56,19 +58,22 @@ func (b *Builder) buildRowLevelSecurityUsingExpression(
 		if strExpr == "" {
 			continue
 		}
+		policiesUsed.Add(policy.ID)
 		parsedExpr, err := parser.ParseExpr(strExpr)
 		if err != nil {
 			panic(err)
 		}
-		typedExpr := tableScope.resolveType(parsedExpr, types.Any)
+		typedExpr := tableScope.resolveType(parsedExpr, types.AnyElement)
 		scalar := b.buildScalar(typedExpr, tableScope, nil, nil, nil)
 		// TODO(136742): Apply multiple RLS policies.
+		b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed)
 		return scalar
 	}
 
 	// TODO(136742): Add support for restrictive policies.
 
 	// If no permissive policies apply, filter out all rows by adding a "false" expression.
+	b.factory.Metadata().GetRLSMeta().NoPoliciesApplied = true
 	return memo.FalseSingleton
 }
 

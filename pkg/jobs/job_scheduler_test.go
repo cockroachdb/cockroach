@@ -72,9 +72,9 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 
 					// Lets add few fake runs for this schedule, including terminal and
 					// non terminal states.
-					for _, status := range []Status{
-						StatusRunning, StatusFailed, StatusCanceled, StatusSucceeded, StatusPaused} {
-						_ = addFakeJob(t, h, j.ScheduleID(), status, txn)
+					for _, state := range []State{
+						StateRunning, StateFailed, StateCanceled, StateSucceeded, StatePaused} {
+						_ = addFakeJob(t, h, j.ScheduleID(), state, txn)
 					}
 					return nil
 				}))
@@ -129,8 +129,8 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 
 					// Let's add few fake runs for this schedule which are in every
 					// terminal state.
-					for _, status := range []Status{StatusFailed, StatusCanceled, StatusSucceeded} {
-						_ = addFakeJob(t, h, j.ScheduleID(), status, txn)
+					for _, state := range []State{StateFailed, StateCanceled, StateSucceeded} {
+						_ = addFakeJob(t, h, j.ScheduleID(), state, txn)
 					}
 					return nil
 				}))
@@ -249,7 +249,7 @@ func (n *recordScheduleExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus Status,
+	jobState State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
@@ -476,7 +476,7 @@ func (e *returnErrorExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus Status,
+	jobState State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
@@ -650,7 +650,7 @@ func (e *txnConflictExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus Status,
+	jobStatus State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
@@ -766,7 +766,7 @@ func (e *blockUntilCancelledExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus Status,
+	jobState State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,

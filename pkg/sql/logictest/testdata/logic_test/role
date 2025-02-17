@@ -183,7 +183,11 @@ GRANT testrole TO testuser WITH ADMIN OPTION
 
 statement ok
 CREATE ROLE child_role;
+
+statement ok
 GRANT testrole to child_role;
+
+statement ok
 GRANT testuser TO child_role;
 
 query TTB colnames,rowsort

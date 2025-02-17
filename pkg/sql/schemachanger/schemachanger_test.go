@@ -376,7 +376,7 @@ CREATE SEQUENCE db.sq1;
 SELECT job_id FROM [SHOW JOBS]
 WHERE 
 	job_type = 'SCHEMA CHANGE' AND 
-	status = $1`, jobs.StatusRunning)
+	status = $1`, jobs.StateRunning)
 			if err != nil {
 				t.Fatalf("unexpected error querying rows %s", err)
 			}

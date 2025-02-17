@@ -784,7 +784,7 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 
 	validateSample := func(fingerprint string, implicitTxn bool, expectedPreviouslySampledState bool) {
 
-		previouslySampled := appStats.ShouldSample(
+		previouslySampled := appStats.StatementSampled(
 			fingerprint,
 			implicitTxn,
 			dbName,

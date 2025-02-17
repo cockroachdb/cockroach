@@ -158,7 +158,7 @@ func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 		for i := 0; i < len(vs.DotProducts); i++ {
 			vs.DotProducts[i] = math.Pi
 		}
-		// RaBitQCodeSet.Clear takes care of scribbling memory for vs.Codes
+		// RaBitQCodeSet.Clear takes care of scribbling memory for vs.Codes.
 	}
 
 	copy(vs.Centroid, centroid)

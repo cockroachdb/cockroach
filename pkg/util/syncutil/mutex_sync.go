@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build !deadlock && !race
-// +build !deadlock,!race
 
 package syncutil
 

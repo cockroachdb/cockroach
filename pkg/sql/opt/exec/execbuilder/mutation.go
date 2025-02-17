@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -31,14 +32,20 @@ func (b *Builder) buildMutationInput(
 		return execPlan{}, colOrdMap{}, err
 	}
 	if toLock != 0 {
-		if b.forceForUpdateLocking.Contains(int(toLock)) {
-			return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
-				"unexpectedly found table %v in forceForUpdateLocking set", toLock,
-			)
+		if b.forceForUpdateLocking != 0 {
+			if b.evalCtx.SessionData().BufferedWritesEnabled || buildutil.CrdbTestBuild {
+				// We currently don't expect this to happen, so we return an
+				// assertion failure in test builds. Additionally, we will rely
+				// on forceForUpdateLocking set properly when buffered writes
+				// are enabled for correctness.
+				return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+					"unexpectedly already locked %d, also want to lock %d", b.forceForUpdateLocking, toLock,
+				)
+			}
 		}
-		b.forceForUpdateLocking.Add(int(toLock))
+		b.forceForUpdateLocking = toLock
 		defer func() {
-			b.forceForUpdateLocking.Remove(int(toLock))
+			b.forceForUpdateLocking = 0
 		}()
 	}
 
@@ -102,7 +109,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
 	colList := appendColsWhenPresent(
 		ins.InsertCols, ins.CheckCols, ins.PartialIndexPutCols,
-		ins.VectorIndexPutPartitionCols, ins.VectorIndexPutCentroidCols,
+		ins.VectorIndexPutPartitionCols, ins.VectorIndexPutQuantizedVecCols,
 	)
 	input, _, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
@@ -335,7 +342,7 @@ func (b *Builder) tryBuildFastPathInsert(
 
 	colList := appendColsWhenPresent(
 		ins.InsertCols, ins.CheckCols, ins.PartialIndexPutCols,
-		ins.VectorIndexDelPartitionCols, ins.VectorIndexPutCentroidCols,
+		ins.VectorIndexDelPartitionCols, ins.VectorIndexPutQuantizedVecCols,
 	)
 	rows, err := b.buildValuesRows(values)
 	if err != nil {
@@ -415,7 +422,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 	colList := appendColsWhenPresent(
 		upd.FetchCols, upd.UpdateCols, neededPassThroughCols, upd.CheckCols,
 		upd.PartialIndexPutCols, upd.PartialIndexDelCols,
-		upd.VectorIndexPutPartitionCols, upd.VectorIndexPutCentroidCols,
+		upd.VectorIndexPutPartitionCols, upd.VectorIndexPutQuantizedVecCols,
 		upd.VectorIndexDelPartitionCols,
 	)
 
@@ -489,7 +496,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	colList := appendColsWhenPresent(
 		ups.InsertCols, ups.FetchCols, ups.UpdateCols, opt.OptionalColList{ups.CanaryCol},
 		ups.CheckCols, ups.PartialIndexPutCols, ups.PartialIndexDelCols,
-		ups.VectorIndexPutPartitionCols, ups.VectorIndexPutCentroidCols,
+		ups.VectorIndexPutPartitionCols, ups.VectorIndexPutQuantizedVecCols,
 		ups.VectorIndexDelPartitionCols,
 	)
 
@@ -762,7 +769,7 @@ func ordinalSetFromColList(colList opt.OptionalColList) intsets.Fast {
 // the result.
 func (b *Builder) mutationOutputColMap(mutation memo.RelExpr) colOrdMap {
 	private := mutation.Private().(*memo.MutationPrivate)
-	tab := mutation.Memo().Metadata().Table(private.Table)
+	tab := b.mem.Metadata().Table(private.Table)
 	outCols := mutation.Relational().OutputCols
 
 	colMap := b.colOrdsAlloc.Alloc()
@@ -1132,13 +1139,15 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 		return 0, nil
 
 	case *memo.UpdateExpr:
-		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t.Input, t.Table), nil
+		md := b.mem.Metadata()
+		return shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table), nil
 
 	case *memo.UpsertExpr:
 		return shouldApplyImplicitLockingToUpsertInput(t), nil
 
 	case *memo.DeleteExpr:
-		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t.Input, t.Table), nil
+		md := b.mem.Metadata()
+		return shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table), nil
 
 	default:
 		return 0, errors.AssertionFailedf("unexpected mutation expression %T", t)
@@ -1172,7 +1181,7 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 // UPDATEs and DELETEs happen to have exactly the same matching pattern, so we
 // reuse this function for both.
 func shouldApplyImplicitLockingToUpdateOrDeleteInput(
-	input memo.RelExpr, tabID opt.TableID,
+	md *opt.Metadata, input memo.RelExpr, tabID opt.TableID,
 ) opt.TableID {
 	// Try to match the mutation's input expression against the pattern:
 	//
@@ -1191,7 +1200,6 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 		if innerJoin, ok := t.Input.(*memo.LookupJoinExpr); ok && innerJoin.Table == t.Table {
 			t = innerJoin
 		}
-		md := input.Memo().Metadata()
 		mutStableID := md.Table(tabID).ID()
 		lookupStableID := md.Table(t.Table).ID()
 		// Only lock rows read in the lookup join if the lookup table is the

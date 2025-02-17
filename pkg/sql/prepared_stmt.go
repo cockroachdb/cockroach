@@ -164,6 +164,11 @@ func (p *planCosts) NumCustom() int {
 
 // AvgCustom returns the average cost of all the custom plan costs in planCosts.
 // If there are no custom plan costs, it returns 0.
+//
+// TODO(mgartner): Figure out how this should incorporate cost flags. Some of
+// them, like UnboundedCardinality, are only set if session settings are set.
+// When those session settings change, do we need to clear and recompute the
+// average cost of custom plans?
 func (p *planCosts) AvgCustom() memo.Cost {
 	if p.custom.length == 0 {
 		return memo.Cost{C: 0}

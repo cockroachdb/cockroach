@@ -1206,6 +1206,11 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	var vc tree.SelectStatement
 	if c.copyFastPath {
 		if c.vectorized {
+			if buildutil.CrdbTestBuild {
+				if c.txnOpt.txn.BufferedWritesEnabled() {
+					return errors.AssertionFailedf("buffered writes should have been disabled for COPY")
+				}
+			}
 			b := tree.VectorRows{Batch: c.batch}
 			vc = &tree.LiteralValuesClause{Rows: &b}
 		} else {

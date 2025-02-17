@@ -57,7 +57,7 @@ import (
 func TestDeletePreservingIndexEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	mergeFinished := make(chan struct{})
 	completeSchemaChange := make(chan struct{})
 	errorChan := make(chan error, 1)
@@ -99,7 +99,7 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 		<-mergeFinished
 
 		// Find the descriptor for the temporary index mutation.
-		codec := keys.SystemSQLCodec
+		codec := server.Codec()
 		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 		var index *descpb.IndexDescriptor
 		for _, i := range tableDesc.Mutations {
@@ -120,7 +120,7 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 		end := kvDB.Clock().Now()
 
 		// Grab the revision histories for the index.
-		prefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.ID)
+		prefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.ID)
 		prefixEnd := append(prefix, []byte("\xff")...)
 
 		revisionsCh := make(chan []backup.VersionedValues)
@@ -244,7 +244,7 @@ func TestDeletePreservingIndexEncodingUsesNormalDeletesInDeleteOnly(t *testing.T
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -259,7 +259,7 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (b);
 `
 	_, err := sqlDB.Exec(setupSQL)
 	require.NoError(t, err)
-	codec := server.ExecutorConfig().(sql.ExecutorConfig).Codec
+	codec := server.Codec()
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "t", "test")
 
 	// Move index to DELETE_ONLY. The following delete should not
@@ -309,7 +309,7 @@ func TestDeletePreservingIndexEncodingWithEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -327,7 +327,7 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (y) STORING (z, a);
 `
 	_, err := sqlDB.Exec(setupSQL)
 	require.NoError(t, err)
-	codec := server.ExecutorConfig().(sql.ExecutorConfig).Codec
+	codec := server.Codec()
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "t", "test")
 	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", func(idx *descpb.IndexDescriptor) error {
 		// Here, we make this index look like the temporary
@@ -513,7 +513,7 @@ func TestMergeProcessor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 
 	type TestCase struct {
 		name                   string
@@ -618,7 +618,7 @@ func TestMergeProcessor(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		codec := keys.SystemSQLCodec
+		codec := server.Codec()
 		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 		settings := server.ClusterSettings()
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
@@ -694,7 +694,7 @@ func TestMergeProcessor(t *testing.T) {
 			}
 
 			require.Equal(t, test.dstContentsBeforeMerge,
-				datumSliceToStrMatrix(fetchIndex(ctx, t, txn.KV(), mut, test.dstIndex)))
+				datumSliceToStrMatrix(fetchIndex(ctx, t, txn.KV(), codec, mut, test.dstIndex)))
 
 			return nil
 		}))
@@ -724,7 +724,7 @@ func TestMergeProcessor(t *testing.T) {
 			}
 
 			require.Equal(t, test.dstContentsAfterMerge,
-				datumSliceToStrMatrix(fetchIndex(ctx, t, txn.KV(), mut, test.dstIndex)))
+				datumSliceToStrMatrix(fetchIndex(ctx, t, txn.KV(), codec, mut, test.dstIndex)))
 			return nil
 		}))
 	}
@@ -740,7 +740,12 @@ func TestMergeProcessor(t *testing.T) {
 // as datums. The datums will correspond to each of the columns stored in the
 // index, ordered by column ID.
 func fetchIndex(
-	ctx context.Context, t *testing.T, txn *kv.Txn, table *tabledesc.Mutable, indexName string,
+	ctx context.Context,
+	t *testing.T,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	table *tabledesc.Mutable,
+	indexName string,
 ) []tree.Datums {
 	t.Helper()
 	var fetcher row.Fetcher
@@ -776,9 +781,9 @@ func fetchIndex(
 	}
 
 	var spec fetchpb.IndexFetchSpec
-	require.NoError(t, rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, table, idx, columns))
+	require.NoError(t, rowenc.InitIndexFetchSpec(&spec, codec, table, idx, columns))
 
-	spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, idx.GetID())}
+	spans := []roachpb.Span{table.IndexSpan(codec, idx.GetID())}
 	const reverse = false
 	require.NoError(t, fetcher.Init(
 		ctx,

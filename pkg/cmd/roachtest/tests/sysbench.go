@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -380,7 +379,7 @@ func exportSysbenchResults(
 		"rows-per-table": fmt.Sprintf("%d", opts.rowsPerTable),
 		"use-postgres":   fmt.Sprintf("%t", opts.usePostgres),
 	}
-	labelString := clusterstats.GetOpenmetricsLabelString(t, c, labels)
+	labelString := roachtestutil.GetOpenmetricsLabelString(t, c, labels)
 	openmetricsMap := make(map[string][]openmetricsValues)
 	tick := func(fields []string, qpsByType []string) error {
 		snapshotTick := sysbenchMetrics{
@@ -478,7 +477,7 @@ func getOpenmetricsBytes(openmetricsMap map[string][]openmetricsValues, labelStr
 	metricsBuf := bytes.NewBuffer([]byte{})
 	for key, values := range openmetricsMap {
 		metricName := util.SanitizeMetricName(key)
-		metricsBuf.WriteString(clusterstats.GetOpenmetricsGaugeType(metricName))
+		metricsBuf.WriteString(roachtestutil.GetOpenmetricsGaugeType(metricName))
 		for _, value := range values {
 			metricsBuf.WriteString(fmt.Sprintf("%s{%s} %s %d\n", metricName, labelString, value.Value, value.Time))
 		}

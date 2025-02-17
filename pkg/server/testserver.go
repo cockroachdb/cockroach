@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -910,6 +909,9 @@ type testTenant struct {
 	// pgPreServer handles SQL connections prior to routing them to a
 	// specific tenant.
 	pgPreServer *pgwire.PreServeConnHandler
+	// deploymentMode specifies the tenant's deployment mode.
+	// Allowed values: ExternalProcess or SharedProcess.
+	deploymentMode serverutils.DeploymentMode
 }
 
 var _ serverutils.ApplicationLayerInterface = &testTenant{}
@@ -1258,6 +1260,11 @@ func (t *testTenant) SettingsWatcher() interface{} {
 	return t.sql.settingsWatcher
 }
 
+// DeploymentMode is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) DeploymentMode() serverutils.DeploymentMode {
+	return t.deploymentMode
+}
+
 // WaitForTenantCapabilities is part of the serverutils.TenantControlInterface.
 func (ts *testServer) WaitForTenantCapabilities(
 	ctx context.Context,
@@ -1285,7 +1292,7 @@ func (ts *testServer) WaitForTenantCapabilities(
 	// the closed timestamp interval required to see new updates.
 	ts.tenantCapabilitiesWatcher.TestingRestart()
 
-	return testutils.SucceedsSoonError(func() error {
+	wrappedFn := func() error {
 		capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(tenID)
 		if !found {
 			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
@@ -1299,7 +1306,8 @@ func (ts *testServer) WaitForTenantCapabilities(
 		}
 
 		return nil
-	})
+	}
+	return retry.ForDuration(200*time.Second, wrappedFn)
 }
 
 // StartSharedProcessTenant is part of the serverutils.TenantControlInterface.
@@ -1415,6 +1423,7 @@ func (ts *testServer) StartSharedProcessTenant(
 		pgL:            sqlServerWrapper.loopbackPgL,
 		httpTestServer: hts,
 		drain:          sqlServerWrapper.drainServer,
+		deploymentMode: serverutils.SharedProcess,
 	}
 
 	sqlDB, err := ts.SQLConnE(serverutils.DBName("cluster:" + string(args.TenantName) + "/" + args.UseDatabase))
@@ -1791,6 +1800,7 @@ func (ts *testServer) StartTenant(
 		http:           sw.http,
 		drain:          sw.drainServer,
 		pgL:            sw.loopbackPgL,
+		deploymentMode: serverutils.ExternalProcess,
 	}, err
 }
 
@@ -1918,6 +1928,11 @@ func (ts *testServer) MustGetSQLNetworkCounter(name string) int64 {
 		reg.AddMetricStruct(m)
 	}
 	return mustGetSQLCounterForRegistry(reg, name)
+}
+
+// DeploymentMode is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) DeploymentMode() serverutils.DeploymentMode {
+	return serverutils.SingleTenant
 }
 
 // Locality is part of the serverutils.ApplicationLayerInterface.

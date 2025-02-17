@@ -88,13 +88,12 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 			return err
 		}))
 
-		// Ideally we should be able to query `crdb_internal.invalid_object` but it
-		// does not do enough validation. Instead we'll just observe the issue that
-		// the parent descriptor cannot be found.
-		_, err := db.Exec(
-			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
-			descID)
-		require.Regexp(t, fmt.Sprintf(`pq: relation "foo" \(%d\): referenced database ID %d: referenced descriptor not found`, descID, parentID), err)
+		// Verify that the table is now invalid, since the parent descriptor cannot
+		// be found.
+		var errorStr string
+		err := db.QueryRow("SELECT error FROM \"\".crdb_internal.invalid_objects WHERE id = $1", descID).Scan(&errorStr)
+		require.NoError(t, err)
+		require.Contains(t, errorStr, fmt.Sprintf(`relation "foo" (%d): referenced database ID %d: referenced descriptor not found`, descID, parentID))
 
 		// In this case, we're treating the injected descriptor as having no data
 		// so we can clean it up by just deleting the erroneous descriptor and
@@ -148,13 +147,12 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 			return err
 		}))
 
-		// Ideally we should be able to query `crdb_internal.invalid_objects` but it
-		// does not do enough validation. Instead we'll just observe the issue that
-		// the parent descriptor cannot be found.
-		_, err := db.Exec(
-			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
-			descID)
-		require.Regexp(t, fmt.Sprintf(`pq: relation "foo" \(%d\): referenced database ID %d: referenced descriptor not found`, descID, parentID), err)
+		// Verify that the table is now invalid, since the parent descriptor cannot
+		// be found.
+		var errorStr string
+		err := db.QueryRow("SELECT error FROM \"\".crdb_internal.invalid_objects WHERE id = $1", descID).Scan(&errorStr)
+		require.NoError(t, err)
+		require.Contains(t, errorStr, fmt.Sprintf(`relation "foo" (%d): referenced database ID %d: referenced descriptor not found`, descID, parentID))
 
 		// In this case, we're going to inject a parent database
 		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {

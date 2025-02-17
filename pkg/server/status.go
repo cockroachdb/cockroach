@@ -2545,6 +2545,7 @@ func (s *systemStatusServer) rangesHelper(
 				Value: tier.Value,
 			})
 		}
+		quiescentOrAsleep := metrics.Quiescent || metrics.Asleep
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     convertRaftStatus(raftStatus),
@@ -2569,7 +2570,7 @@ func (s *systemStatusServer) rangesHelper(
 				Underreplicated:        metrics.Underreplicated,
 				Overreplicated:         metrics.Overreplicated,
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
-				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
+				QuiescentEqualsTicking: raftStatus != nil && quiescentOrAsleep == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
 				RangeTooLarge:          metrics.RangeTooLarge,
 				CircuitBreakerError:    len(state.CircuitBreakerError) > 0,
@@ -3530,7 +3531,7 @@ func (s *statusServer) CancelQuery(
 // endpoint is rate-limited by a semaphore.
 func (s *statusServer) CancelQueryByKey(
 	ctx context.Context, req *serverpb.CancelQueryByKeyRequest,
-) (resp *serverpb.CancelQueryByKeyResponse, retErr error) {
+) (*serverpb.CancelQueryByKeyResponse, error) {
 	local := req.SQLInstanceID == s.sqlServer.SQLInstanceID()
 
 	// Acquiring the semaphore here helps protect both the source and destination
@@ -3548,39 +3549,40 @@ func (s *statusServer) CancelQueryByKey(
 	if err != nil {
 		return nil, status.Errorf(codes.ResourceExhausted, "exceeded rate limit of pgwire cancellation requests")
 	}
-	defer func() {
-		// If we acquired the semaphore but the cancellation request failed, then
-		// hold on to the semaphore for longer. This helps mitigate a DoS attack
-		// of random cancellation requests.
-		if err != nil || (resp != nil && !resp.Canceled) {
-			time.Sleep(1 * time.Second)
-		}
-		alloc.Release()
-	}()
+	defer alloc.Release()
 
-	if local {
-		cancelQueryKey := req.CancelQueryKey
-		session, ok := s.sessionRegistry.GetSessionByCancelKey(cancelQueryKey)
-		if !ok {
+	resp, retErr := func() (*serverpb.CancelQueryByKeyResponse, error) {
+		if local {
+			cancelQueryKey := req.CancelQueryKey
+			session, ok := s.sessionRegistry.GetSessionByCancelKey(cancelQueryKey)
+			if !ok {
+				return &serverpb.CancelQueryByKeyResponse{
+					Error: fmt.Sprintf("session for cancel key %d not found", cancelQueryKey),
+				}, nil
+			}
+
+			isCanceled := session.CancelActiveQueries()
 			return &serverpb.CancelQueryByKeyResponse{
-				Error: fmt.Sprintf("session for cancel key %d not found", cancelQueryKey),
+				Canceled: isCanceled,
 			}, nil
 		}
 
-		isCanceled := session.CancelActiveQueries()
-		return &serverpb.CancelQueryByKeyResponse{
-			Canceled: isCanceled,
-		}, nil
+		// This request needs to be forwarded to another node.
+		ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+		ctx = s.AnnotateCtx(ctx)
+		client, err := s.dialNode(ctx, roachpb.NodeID(req.SQLInstanceID))
+		if err != nil {
+			return nil, err
+		}
+		return client.CancelQueryByKey(ctx, req)
+	}()
+	// If the cancellation request failed, then hold on to the semaphore for
+	// longer. This helps mitigate a DoS attack of random cancellation requests.
+	if retErr != nil || (resp != nil && !resp.Canceled) {
+		time.Sleep(1 * time.Second)
 	}
 
-	// This request needs to be forwarded to another node.
-	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
-	ctx = s.AnnotateCtx(ctx)
-	client, err := s.dialNode(ctx, roachpb.NodeID(req.SQLInstanceID))
-	if err != nil {
-		return nil, err
-	}
-	return client.CancelQueryByKey(ctx, req)
+	return resp, retErr
 }
 
 // ListContentionEvents returns a list of contention events on all nodes in the

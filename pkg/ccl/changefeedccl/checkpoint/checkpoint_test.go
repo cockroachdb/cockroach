@@ -164,6 +164,169 @@ func TestCheckpointMake(t *testing.T) {
 	}
 }
 
+func TestCheckpointRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(wt int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: wt}
+	}
+
+	for name, tc := range map[string]struct {
+		trackedSpans              roachpb.Spans
+		initialHighWater          hlc.Timestamp
+		checkpointToRestore       *jobspb.TimestampSpansMap
+		expectedCheckpointedSpans checkpointSpans
+		expectedError             string
+	}{
+		"restoring checkpoint with single timestamp": {
+			trackedSpans:     roachpb.Spans{{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}},
+			initialHighWater: ts(1),
+			checkpointToRestore: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+				ts(2): {{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+			}),
+			expectedCheckpointedSpans: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(2)},
+				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(2)},
+			},
+		},
+		"restoring checkpoint with multiple timestamps": {
+			trackedSpans:     roachpb.Spans{{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}},
+			initialHighWater: ts(0),
+			checkpointToRestore: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+				ts(2): {{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+				ts(1): {{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}},
+			}),
+			expectedCheckpointedSpans: checkpointSpans{
+				{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}, ts: ts(2)},
+				{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}, ts: ts(2)},
+				{span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}, ts: ts(1)},
+			},
+		},
+		"restoring checkpoint containing empty timestamp (developer error)": {
+			trackedSpans:     roachpb.Spans{{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}},
+			initialHighWater: ts(0),
+			checkpointToRestore: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+				ts(2): {{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+				ts(0): {{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}},
+			}),
+			expectedError: "checkpoint timestamp is empty",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			actualFrontier, err := span.MakeFrontierAt(tc.initialHighWater, tc.trackedSpans...)
+			require.NoError(t, err)
+			err = checkpoint.Restore(actualFrontier, tc.checkpointToRestore)
+			if tc.expectedError != "" {
+				require.ErrorContains(t, err, tc.expectedError)
+				return
+			}
+			require.NoError(t, err)
+
+			actualFrontierSpans := checkpointSpans{}
+			actualFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+				actualFrontierSpans = append(actualFrontierSpans, checkpointSpan{span: sp, ts: ts})
+				return span.ContinueMatch
+			})
+
+			expectedFrontierSpans := checkpointSpans{}
+			expectedFrontier, err := span.MakeFrontierAt(tc.initialHighWater, tc.trackedSpans...)
+			require.NoError(t, err)
+			for _, s := range tc.expectedCheckpointedSpans {
+				_, err = expectedFrontier.Forward(s.span, s.ts)
+				require.NoError(t, err)
+			}
+			expectedFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+				expectedFrontierSpans = append(expectedFrontierSpans, checkpointSpan{span: sp, ts: ts})
+				return span.ContinueMatch
+			})
+			require.Equal(t, expectedFrontierSpans, actualFrontierSpans)
+		})
+	}
+}
+
+func TestConvertLegacyCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for name, tc := range map[string]struct {
+		//lint:ignore SA1019 deprecated usage
+		legacyCheckpoint *jobspb.ChangefeedProgress_Checkpoint
+		statementTime    hlc.Timestamp
+		initialHighWater hlc.Timestamp
+		expected         *jobspb.TimestampSpansMap
+	}{
+		"nil legacy checkpoint": {
+			legacyCheckpoint: nil,
+			expected:         nil,
+		},
+		"zero legacy checkpoint": {
+			//lint:ignore SA1019 deprecated usage
+			legacyCheckpoint: &jobspb.ChangefeedProgress_Checkpoint{},
+			expected:         nil,
+		},
+		"legacy checkpoint with empty timestamp and empty initial highwater": {
+			//lint:ignore SA1019 deprecated usage
+			legacyCheckpoint: &jobspb.ChangefeedProgress_Checkpoint{
+				Spans: roachpb.Spans{
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				},
+			},
+			statementTime: hlc.Timestamp{WallTime: 50},
+			expected: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+				{WallTime: 50}: {
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				},
+			}),
+		},
+		"legacy checkpoint with empty timestamp and non-empty initial highwater": {
+			//lint:ignore SA1019 deprecated usage
+			legacyCheckpoint: &jobspb.ChangefeedProgress_Checkpoint{
+				Spans: roachpb.Spans{
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				},
+			},
+			statementTime:    hlc.Timestamp{WallTime: 50},
+			initialHighWater: hlc.Timestamp{WallTime: 100},
+			expected: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+				hlc.Timestamp{WallTime: 100}.Next(): {
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				},
+			}),
+		},
+		"legacy checkpoint with non-empty timestamp": {
+			//lint:ignore SA1019 deprecated usage
+			legacyCheckpoint: &jobspb.ChangefeedProgress_Checkpoint{
+				Spans: roachpb.Spans{
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				},
+				Timestamp: hlc.Timestamp{WallTime: 200},
+			},
+			statementTime:    hlc.Timestamp{WallTime: 50},
+			initialHighWater: hlc.Timestamp{WallTime: 100},
+			expected: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+				{WallTime: 200}: {
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				},
+			}),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			actual := checkpoint.ConvertLegacyCheckpoint(tc.legacyCheckpoint, tc.statementTime, tc.initialHighWater)
+			require.Equal(t, tc.expected, actual)
+		})
+	}
+}
+
 // TestCheckpointCatchupTime generates 100 random non-overlapping spans with random
 // timestamps within a minute of each other and turns them into checkpoint
 // spans. It then does some sanity checks. It also compares the total

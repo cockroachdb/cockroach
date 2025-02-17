@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
@@ -518,8 +519,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Codec:                cfg.Codec,
 		Clock:                cfg.DB.KV().Clock(),
 		Spans:                spans,
-		CheckpointSpans:      ca.spec.Checkpoint.Spans,
-		CheckpointTimestamp:  ca.spec.Checkpoint.Timestamp,
+		SpanLevelCheckpoint:  ca.spec.SpanLevelCheckpoint,
 		Targets:              AllTargets(ca.spec.Feed),
 		Metrics:              &ca.metrics.KVFeedMetrics,
 		MM:                   memMon,
@@ -559,6 +559,37 @@ func makeKVFeedMonitoringCfg(
 	}, nil
 }
 
+// getInitialHighWaterAndSpans returns the initial highwater and spans the
+// aggregator is responsible for watching based on ca.spec. InitialHighWater is
+// the minimal resolved timestamps of all InitialResolved timestamps.
+func (ca *changeAggregator) getInitialHighWaterAndSpans() (hlc.Timestamp, []roachpb.Span) {
+	if ca.spec.InitialHighWater != nil {
+		spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+		for _, watch := range ca.spec.Watches {
+			spans = append(spans, watch.Span)
+		}
+		return *ca.spec.InitialHighWater, spans
+	} else {
+		// Keep initialHighWater as the minimum of all InitialResolved timestamps.
+		// If there are any zero InitialResolved timestamps, initial scan is
+		// ongoing. If there are no zero InitialResolved timestamps, initial scan
+		// is not required.
+		var initialHighWater hlc.Timestamp
+		spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+		for i, watch := range ca.spec.Watches {
+			spans = append(spans, watch.Span)
+			if i == 0 {
+				initialHighWater = watch.InitialResolved
+				continue
+			}
+			if watch.InitialResolved.Less(initialHighWater) {
+				initialHighWater = watch.InitialResolved
+			}
+		}
+		return initialHighWater, spans
+	}
+}
+
 // setupSpans is called on start to extract the spans for this changefeed as a
 // slice and creates a span frontier with the initial resolved timestamps. This
 // SpanFrontier only tracks the spans being watched on this node. There is a
@@ -566,48 +597,37 @@ func makeKVFeedMonitoringCfg(
 // used to filter out some previously emitted rows, and by the cloudStorageSink
 // to name its output files in lexicographically monotonic fashion.
 func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err error) {
-	var initialHighWater hlc.Timestamp
-	spans = make([]roachpb.Span, 0, len(ca.spec.Watches))
-
-	// Keep initialHighWater as the minimum of all InitialResolved timestamps.
-	// If there are any zero InitialResolved timestamps, initial scan is
-	// ongoing. If there are no zero InitialResolved timestamps, initial scan
-	// is not required.
-	for i, watch := range ca.spec.Watches {
-		spans = append(spans, watch.Span)
-		if i == 0 {
-			initialHighWater = watch.InitialResolved
-			continue
-		}
-		if watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
-	}
-
+	initialHighWater, spans := ca.getInitialHighWaterAndSpans()
 	ca.frontier, err = resolvedspan.NewAggregatorFrontier(ca.spec.Feed.StatementTime, initialHighWater, spans...)
 	if err != nil {
 		return nil, err
 	}
 
-	checkpointedSpanTs := ca.spec.Checkpoint.Timestamp
-
-	// Checkpoint records from 21.2 were used only for backfills and did not store
-	// the timestamp, since in a backfill it must either be the StatementTime for
-	// an initial backfill, or right after the high-water for schema backfills.
-	if checkpointedSpanTs.IsEmpty() {
-		if initialHighWater.IsEmpty() {
-			checkpointedSpanTs = ca.spec.Feed.StatementTime
-		} else {
-			checkpointedSpanTs = initialHighWater.Next()
+	// Convert the legacy checkpoint to the new span-level checkpoint so that we
+	// can ignore it from this point on.
+	if !ca.spec.Checkpoint.IsZero() {
+		if ca.spec.SpanLevelCheckpoint != nil {
+			return nil, errors.New("both legacy and current checkpoint set on change aggregator spec")
 		}
+
+		// This conversion undoes an unnecessary conversion when the spec
+		// was created in the first place.
+		//lint:ignore SA1019 deprecated usage
+		legacyCheckpoint := &jobspb.ChangefeedProgress_Checkpoint{
+			Spans:     ca.spec.Checkpoint.Spans,
+			Timestamp: ca.spec.Checkpoint.Timestamp,
+		}
+		statementTime := ca.spec.Feed.StatementTime
+		ca.spec.SpanLevelCheckpoint = checkpoint.ConvertLegacyCheckpoint(legacyCheckpoint, statementTime, initialHighWater)
+		ca.spec.Checkpoint.Reset()
 	}
+
 	// Checkpointed spans are spans that were above the highwater mark, and we
 	// must preserve that information in the frontier for future checkpointing.
-	for _, checkpointedSpan := range ca.spec.Checkpoint.Spans {
-		if _, err := ca.frontier.Forward(checkpointedSpan, checkpointedSpanTs); err != nil {
-			return nil, err
-		}
+	if err := checkpoint.Restore(ca.frontier, ca.spec.SpanLevelCheckpoint); err != nil {
+		return nil, err
 	}
+
 	return spans, nil
 }
 
@@ -1227,9 +1247,11 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
+	sourceProvider := newEnrichedSourceProvider(encodingOpts, enrichedSourceData{jobId: cf.spec.JobID.String()})
 	if cf.encoder, err = getEncoder(
 		ctx, encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
 		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMetrics,
+		sourceProvider,
 	); err != nil {
 		return nil, err
 	}
@@ -1763,6 +1785,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 	}
 
 	cf.localState.SetHighwater(frontier)
+	// TODO(#137692): SetCheckpoint should take in old and new checkpoints proto.
 	cf.localState.SetCheckpoint(checkpoint)
 
 	return true, nil

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -261,7 +262,7 @@ func makeTestKafkaSink(
 ) (s *kafkaSink, cleanup func()) {
 	targets := makeChangefeedTargets(targetNames...)
 	topics, err := MakeTopicNamer(targets,
-		WithPrefix(topicPrefix), WithSingleName(topicNameOverride), WithSanitizeFn(SQLNameToKafkaName))
+		WithPrefix(topicPrefix), WithSingleName(topicNameOverride), WithSanitizeFn(changefeedbase.SQLNameToKafkaName))
 	require.NoError(t, err)
 
 	s = &kafkaSink{
@@ -487,7 +488,7 @@ func TestSQLSink(t *testing.T) {
 	// TODO(herko): When the issue relating to this test is fixed, update this
 	// to use PGUrl on the server interface instead.
 	// See: https://github.com/cockroachdb/cockroach/issues/112863
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgURL.Path = `d`
 

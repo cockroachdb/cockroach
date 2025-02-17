@@ -339,7 +339,7 @@ SELECT id, status, payload, progress FROM system.jobs
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
 		md := jobs.JobMetadata{}
 		md.ID = jobspb.JobID(vals[0].(int64))
-		md.Status = jobs.Status(vals[1].(string))
+		md.State = jobs.State(vals[1].(string))
 		md.Payload = &jobspb.Payload{}
 		if err := protoutil.Unmarshal(vals[2].([]byte), md.Payload); err != nil {
 			return err
@@ -506,7 +506,7 @@ func fromZipDir(
 		if err := slurp(zipDirPath, "crdb_internal.system_jobs.txt", func(row string) error {
 			fields := strings.Fields(row)
 			md := jobs.JobMetadata{}
-			md.Status = jobs.Status(fields[1])
+			md.State = jobs.State(fields[1])
 
 			id, err := strconv.Atoi(fields[0])
 			if err != nil {
@@ -554,7 +554,7 @@ func fromZipDir(
 		}
 		for _, job := range jobsTableJSON {
 			row := jobs.JobMetadata{
-				Status: jobs.Status(job.Status),
+				State: jobs.State(job.Status),
 			}
 			id, err := strconv.ParseInt(job.ID, 10, 64)
 			if len(job.ID) > 0 && err != nil {

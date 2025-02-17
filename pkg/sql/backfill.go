@@ -1143,7 +1143,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 				if err := sc.job.WithTxn(txn).FractionProgressed(
 					ctx, jobs.FractionUpdater(fractionCompleted),
 				); err != nil {
-					return jobs.SimplifyInvalidStatusError(err)
+					return jobs.SimplifyInvalidStateError(err)
 				}
 			}
 			return nil
@@ -1471,6 +1471,11 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 			forwardIndexes = append(forwardIndexes, idx)
 		case idxtype.INVERTED:
 			invertedIndexes = append(invertedIndexes, idx)
+		case idxtype.VECTOR:
+			// TODO(drewk): consider whether we can perform useful validation for
+			// vector indexes.
+		default:
+			return errors.AssertionFailedf("unknown index type %d", idx.GetType())
 		}
 	}
 	if len(forwardIndexes) == 0 && len(invertedIndexes) == 0 {

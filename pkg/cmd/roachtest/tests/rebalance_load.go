@@ -32,7 +32,7 @@ import (
 const (
 	// storeToRangeFactor is the number of ranges to create per store in the
 	// cluster.
-	storeToRangeFactor = 5
+	storeToRangeFactor = 10
 	// meanCPUTolerance is the tolerance applied when checking normalized (0-100)
 	// CPU percent utilization of stores against the mean. In multi-store tests,
 	// the same CPU utilization will be reported for stores on the same node. The

@@ -8161,7 +8161,10 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	cfg.RaftTickInterval = time.Hour
 	// Disable pre-campaign store liveness checks because we're disabling ticking
 	// above, and we don't want the first election attempt to guaranteed fail.
-	cfg.TestingDisablePreCampaignStoreLivenessCheck = true
+	cfg.TestingKnobs.RaftTestingKnobs = &raft.TestingKnobs{
+		DisablePreCampaignStoreLivenessCheck: true,
+	}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -9318,10 +9321,11 @@ func TestReplicaMetrics(t *testing.T) {
 			spanConfig := cfg.DefaultSpanConfig
 			spanConfig.NumReplicas = c.replicas
 
-			// Alternate between quiescent and non-quiescent replicas to test the
-			// quiescent metric.
+			// Alternate between quiescent/asleep and non-quiescent/awake replicas to
+			// test the quiescent metric.
 			c.expected.Quiescent = i%2 == 0
-			c.expected.Ticking = !c.expected.Quiescent
+			c.expected.Asleep = i%3 == 0
+			c.expected.Ticking = !c.expected.Quiescent && !c.expected.Asleep
 			metrics := calcReplicaMetrics(calcReplicaMetricsInput{
 				raftCfg:            &cfg.RaftConfig,
 				conf:               spanConfig,
@@ -9330,6 +9334,7 @@ func TestReplicaMetrics(t *testing.T) {
 				raftStatus:         c.raftStatus,
 				storeID:            c.storeID,
 				quiescent:          c.expected.Quiescent,
+				asleep:             c.expected.Asleep,
 				ticking:            c.expected.Ticking,
 				raftLogSize:        c.raftLogSize,
 				raftLogSizeTrusted: true,

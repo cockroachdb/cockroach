@@ -1,4 +1,7 @@
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CLOSE ALL
 
 statement ok
@@ -722,3 +725,6 @@ FETCH 1 FROM a
 statement ok
 SET statement_timeout = 0;
 COMMIT
+
+statement ok
+RESET autocommit_before_ddl

@@ -217,6 +217,7 @@ type replicateTPCC struct {
 	duration       time.Duration
 	repairOrderIDs bool
 	tolerateErrors bool
+	readOnly       bool
 }
 
 func (tpcc replicateTPCC) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
@@ -233,6 +234,7 @@ func (tpcc replicateTPCC) sourceRunCmd(tenantName string, nodes option.NodeListO
 		MaybeFlag(tpcc.duration > 0, "duration", tpcc.duration).
 		MaybeOption(tpcc.tolerateErrors, "tolerate-errors").
 		MaybeOption(tpcc.repairOrderIDs, "repair-order-ids").
+		MaybeFlag(tpcc.readOnly, "mix", "newOrder=0,payment=0,orderStatus=1,delivery=0,stockLevel=1").
 		Arg("{pgurl%s:%s}", nodes, tenantName).
 		WithEqualsSyntax()
 	return cmd.String()
@@ -776,14 +778,14 @@ func (rd *replicationDriver) stopReplicationStream(
 			return res.Err()
 		}
 		require.NoError(rd.t, res.Scan(&status, &payloadBytes))
-		if jobs.Status(status) == jobs.StatusFailed {
+		if jobs.State(status) == jobs.StateFailed {
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
 				rd.t.Fatalf("job failed: %s", payload.Error)
 			}
 			rd.t.Fatalf("job failed")
 		}
-		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+		if e, a := jobs.StateSucceeded, jobs.State(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
@@ -1170,6 +1172,7 @@ func registerClusterToCluster(r registry.Registry) {
 			pdSize:    1000,
 
 			workload:           replicateTPCC{warehouses: 1000, tolerateErrors: true},
+			withReaderWorkload: replicateTPCC{warehouses: 500, readOnly: true, tolerateErrors: true},
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
@@ -1549,7 +1552,7 @@ func getPhase(rd *replicationDriver, dstJobID jobspb.JobID) c2cPhase {
 	var jobStatus string
 	rd.setup.dst.sysSQL.QueryRow(rd.t, `SELECT status FROM [SHOW JOB $1]`,
 		dstJobID).Scan(&jobStatus)
-	require.Equal(rd.t, jobs.StatusRunning, jobs.Status(jobStatus))
+	require.Equal(rd.t, jobs.StateRunning, jobs.State(jobStatus))
 
 	streamIngestProgress := getJobProgress(rd.t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
 

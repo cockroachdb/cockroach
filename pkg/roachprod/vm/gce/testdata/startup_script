@@ -1,0 +1,305 @@
+echo
+----
+----
+#!/usr/bin/env bash
+# Script for setting up a GCE machine for roachprod use.
+
+function setup_disks() {
+	first_setup=$1
+
+
+
+	use_multiple_disks=''
+
+	mount_prefix="/mnt/data"
+
+	# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
+	# then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
+	# RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
+	# Scenarios:
+	#   (local SSD = 0, Persistent Disk - 1) - no RAID'ing and Persistent Disk mounted
+	#   (local SSD = 1, Persistent Disk - 0) - no RAID'ing and local SSD mounted
+	#   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted
+	#   (local SSD > 1, Persistent Disk = 0) - local SSDs selected for RAID'ing
+	#   (local SSD >= 0, Persistent Disk > 1) - network disks selected for RAID'ing
+	local_or_persistent=()
+	disks=()
+
+
+	apt-get update -q
+	apt-get install -yq zfsutils-linux
+
+
+	# N.B. we assume 0th disk is the boot disk.
+	if [ "$(ls /dev/disk/by-id/google-persistent-disk-[1-9]|wc -l)" -gt "0" ]; then
+		local_or_persistent=$(ls /dev/disk/by-id/google-persistent-disk-[1-9])
+		echo "Using only persistent disks: ${local_or_persistent[@]}"
+	else
+		local_or_persistent=$(ls /dev/disk/by-id/google-local-*)
+		echo "Using only local disks: ${local_or_persistent[@]}"
+	fi
+
+	for l in ${local_or_persistent}; do
+		d=$(readlink -f $l)
+		mounted="no"
+
+		# Check if the disk is already part of a zpool or mounted; skip if so.
+		if (zpool list -v -P | grep -q ${d}) || (mount | grep -q ${d}); then
+			mounted="yes"
+		fi
+
+		if [ "$mounted" == "no" ]; then
+			disks+=("${d}")
+			echo "Disk ${d} not mounted, need to mount..."
+		else
+			echo "Disk ${d} already mounted, skipping..."
+		fi
+	done
+
+	if [ "${#disks[@]}" -eq "0" ]; then
+		mountpoint="${mount_prefix}1"
+		echo "No disks mounted, creating ${mountpoint}"
+		mkdir -p ${mountpoint}
+		chmod 777 ${mountpoint}
+	elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+		disknum=1
+		for disk in "${disks[@]}"
+		do
+			mountpoint="${mount_prefix}${disknum}"
+			disknum=$((disknum + 1 ))
+			echo "Mounting ${disk} at ${mountpoint}"
+			mkdir -p ${mountpoint}
+
+			zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
+			# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+
+			chmod 777 ${mountpoint}
+		done
+	else
+		mountpoint="${mount_prefix}1"
+		echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
+		mkdir -p ${mountpoint}
+
+		zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
+		# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+
+		chmod 777 ${mountpoint}
+	fi
+
+	# Print the block device and FS usage output. This is useful for debugging.
+	lsblk
+	df -h
+
+	zpool list
+
+
+	mkdir -p /mnt/data1/cores
+	chmod a+w /mnt/data1/cores
+
+	sudo touch /mnt/data1/.roachprod-initialized
+}
+
+
+
+# ensure any failure fails the entire script
+set -eux
+
+# Redirect output to stdout/err and a log file
+exec &> >(tee -a /var/log/roachprod_startup.log)
+
+# Log the startup of the script with a timestamp
+echo "startup script starting: $(date -u)"
+
+if [ -e /mnt/data1/.roachprod-initialized ]; then
+	echo "Already initialized, exiting."
+	exit 0
+fi
+
+
+
+sudo apt-get update -q
+sudo apt-get install -qy --no-install-recommends mdadm
+
+
+sudo -u ubuntu bash -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+sudo -u ubuntu bash -c 'echo "dummy public key" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+
+if [ -e /.roachprod-initialized ]; then
+  echo "OS already initialized, only initializing disks."
+  # Initialize disks, but don't write fstab entries again.
+  setup_disks false
+  exit 0
+fi
+
+# Initialize disks and write fstab entries.
+setup_disks true
+
+
+
+# increase the default maximum number of open file descriptors for
+# root and non-root users. Load generators running a lot of concurrent
+# workers bump into this often.
+sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf'
+
+
+
+# N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
+# jepsen uses /usr/sbin, we create a symlink.
+# See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
+# FIPS is still on Ubuntu 20.04 however, so don't create if using FIPS.
+
+sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
+
+
+
+
+# Send TCP keepalives every minute since GCE will terminate idle connections
+# after 10m. Note that keepalives still need to be requested by the application
+# with the SO_KEEPALIVE socket option.
+cat <<EOF > /etc/sysctl.d/99-roachprod-tcp-keepalive.conf
+net.ipv4.tcp_keepalive_time=60
+net.ipv4.tcp_keepalive_intvl=60
+net.ipv4.tcp_keepalive_probes=5
+EOF
+
+sysctl --system  # reload sysctl settings
+
+
+
+# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
+systemctl stop unattended-upgrades
+sudo rm -rf /var/log/unattended-upgrades
+apt-get purge -y unattended-upgrades
+
+
+systemctl stop cron
+systemctl mask cron
+
+
+
+
+sudo apt-get install -qy chrony
+
+# Override the chrony config. In particular,
+# log aggressively when clock is adjusted (0.01s)
+# and exclusively use google's time servers.
+sudo cat <<EOF > /etc/chrony/chrony.conf
+keyfile /etc/chrony/chrony.keys
+commandkey 1
+driftfile /var/lib/chrony/chrony.drift
+log tracking measurements statistics
+logdir /var/log/chrony
+maxupdateskew 100.0
+dumponexit
+dumpdir /var/lib/chrony
+logchange 0.01
+hwclockfile /etc/adjtime
+rtcsync
+server metadata.google.internal prefer iburst
+makestep 0.1 3
+EOF
+
+sudo /etc/init.d/chrony restart
+sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
+
+
+
+for timer in apt-daily-upgrade.timer apt-daily.timer e2scrub_all.timer fstrim.timer man-db.timer e2scrub_all.timer ; do
+	systemctl mask $timer
+done
+
+for service in apport.service atd.service; do
+	if systemctl is-active --quiet $service; then
+		systemctl stop $service
+	fi
+	systemctl mask $service
+done
+
+
+
+# Enable core dumps, do this last, something above resets /proc/sys/kernel/core_pattern
+# to just "core".
+cat <<EOF > /etc/security/limits.d/core_unlimited.conf
+* soft core unlimited
+* hard core unlimited
+root soft core unlimited
+root hard core unlimited
+EOF
+
+cat <<'EOF' > /bin/gzip_core.sh
+#!/bin/sh
+exec /bin/gzip -f - > /mnt/data1/cores/core.$1.$2.$3.$4.gz
+EOF
+chmod +x /bin/gzip_core.sh
+
+CORE_PATTERN="|/bin/gzip_core.sh %e %p %h %t"
+echo "$CORE_PATTERN" > /proc/sys/kernel/core_pattern
+sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
+sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
+echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
+
+sysctl --system  # reload sysctl settings
+
+
+
+# set hostname according to the name used by roachprod. There's host
+# validation logic that relies on this -- see comment on cluster_synced.go
+
+
+
+
+
+
+
+
+# sshguard can prevent frequent ssh connections to the same host. Disable it.
+if systemctl is-active --quiet sshguard; then
+	systemctl stop sshguard
+fi
+systemctl mask sshguard
+
+# increase the number of concurrent unauthenticated connections to the sshd
+# daemon. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Load_Balancing.
+# By default, only 10 unauthenticated connections are permitted before sshd
+# starts randomly dropping connections.
+sudo sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
+
+# Crank up the logging for issues such as:
+# https://github.com/cockroachdb/cockroach/issues/36929
+sudo sed -i'' 's/LogLevel.*$/LogLevel DEBUG3/' /etc/ssh/sshd_config
+
+# FIPS is still on Ubuntu 20.04 however, so don't enable if using FIPS.
+
+sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
+
+
+sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
+
+sudo service sshd restart
+sudo service ssh restart
+
+
+
+# Add and start node_exporter, only authorize scrapping from internal network.
+export ARCH=$(dpkg --print-architecture)
+export DEFAULT_USER_HOME="/home/$(id -nu 1000)"
+mkdir -p ${DEFAULT_USER_HOME}/node_exporter && curl -fsSL \
+	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-1.2.2.linux-${ARCH}.tar.gz |
+	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/node_exporter \
+	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter
+
+sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,prometheus.testeng.crdb.io -p tcp --dport 9100 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 9100 -j DROP
+(
+	chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter && \
+	cd ${DEFAULT_USER_HOME}/node_exporter && \
+	sudo systemd-run --unit node_exporter --same-dir \
+		./node_exporter --collector.systemd --collector.interrupts --collector.processes \
+		--web.listen-address=":9100" \
+		--web.telemetry-path="/metrics"
+)
+
+
+sudo touch /.roachprod-initialized
+----
+----

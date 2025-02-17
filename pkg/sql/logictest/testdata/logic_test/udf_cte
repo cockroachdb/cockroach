@@ -121,3 +121,42 @@ query T
 SELECT f();
 ----
 {10,20,30,40}
+
+subtest regression_138273
+
+statement ok
+CREATE SEQUENCE seq_1;
+
+# Verify that the function can be successfully created with a CTE inside a
+# scalar expression.
+statement ok
+CREATE FUNCTION f138273_1() RETURNS TIMESTAMP LANGUAGE PLpgSQL AS $$
+  DECLARE
+    decl TIMESTAMP;
+  BEGIN
+    WHILE false LOOP
+      IF true THEN
+      ELSIF EXISTS (WITH cte(col) AS (SELECT * FROM (VALUES (currval('seq_1'))) AS foo) SELECT 1 FROM cte) THEN
+        RETURN decl;
+      END IF;
+    END LOOP;
+  END;
+$$;
+
+# Test a similar function that actually executes the CTE.
+statement ok
+CREATE FUNCTION f138273_2() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT nextval('seq_1');
+    WHILE EXISTS (WITH cte(col) AS (SELECT * FROM (VALUES (currval('seq_1'))) AS foo) SELECT 1 FROM cte) LOOP
+      RETURN currval('seq_1');
+    END LOOP;
+  END;
+$$;
+
+query I
+SELECT f138273_2();
+----
+1
+
+subtest end

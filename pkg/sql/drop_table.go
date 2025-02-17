@@ -278,7 +278,7 @@ func (p *planner) dropTableImpl(
 	for i := range tableDesc.Triggers {
 		trigger := &tableDesc.Triggers[i]
 		for _, id := range trigger.DependsOn {
-			if err := p.removeTriggerBackReference(ctx, tableDesc, id); err != nil {
+			if err := p.removeTriggerBackReference(ctx, tableDesc, id, trigger.Name); err != nil {
 				return droppedViews, err
 			}
 		}
@@ -452,20 +452,20 @@ func (p *planner) markTableMutationJobsSuccessful(
 		if err := mutationJob.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
-			status := md.Status
+			status := md.State
 			switch status {
-			case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
+			case jobs.StateSucceeded, jobs.StateCanceled, jobs.StateFailed, jobs.StateRevertFailed:
 				log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
 				return nil
-			case jobs.StatusRunning, jobs.StatusPending:
-				status = jobs.StatusSucceeded
+			case jobs.StateRunning, jobs.StatePending:
+				status = jobs.StateSucceeded
 			default:
 				// We shouldn't mark jobs as succeeded if they're not in a state where
 				// they're eligible to ever succeed, so mark them as failed.
-				status = jobs.StatusFailed
+				status = jobs.StateFailed
 			}
 			log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
-			ju.UpdateStatus(status)
+			ju.UpdateState(status)
 			return nil
 		}); err != nil {
 			return errors.Wrap(err, "updating mutation job for dropped table")
@@ -672,7 +672,7 @@ func removeFKBackReferenceFromTable(
 // removeTriggerBackReference removes the trigger back reference for the
 // referenced table with the given ID.
 func (p *planner) removeTriggerBackReference(
-	ctx context.Context, tableDesc *tabledesc.Mutable, refID descpb.ID,
+	ctx context.Context, tableDesc *tabledesc.Mutable, refID descpb.ID, triggerName string,
 ) error {
 	var refTableDesc *tabledesc.Mutable
 	// We don't want to lookup/edit a second copy of the same table.
@@ -690,7 +690,18 @@ func (p *planner) removeTriggerBackReference(
 		return nil
 	}
 	refTableDesc.DependedOnBy = removeMatchingReferences(refTableDesc.DependedOnBy, tableDesc.ID)
-	return nil
+
+	name, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+	refName, err := p.getQualifiedTableName(ctx, refTableDesc)
+	if err != nil {
+		return err
+	}
+	jobDesc := fmt.Sprintf("updating table %q after removing trigger %q from table %q",
+		refName.FQString(), triggerName, name.FQString())
+	return p.writeSchemaChange(ctx, refTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
 // removeMatchingReferences removes all refs from the provided slice that

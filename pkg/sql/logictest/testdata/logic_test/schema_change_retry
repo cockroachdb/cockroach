@@ -5,9 +5,12 @@
 
 # Prevent transaction refreshes so we encounter the necessary
 # TransactionRetryError below.
-
 statement ok
 SET CLUSTER SETTING kv.transaction.max_refresh_spans_bytes = 0;
+
+# Disable autocommit behavior for schema changes.
+statement ok
+SET autocommit_before_ddl = false
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;

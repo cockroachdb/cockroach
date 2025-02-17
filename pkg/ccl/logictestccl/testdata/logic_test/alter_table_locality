@@ -460,6 +460,7 @@ ALTER TABLE created_as_global DROP COLUMN crdb_region
 
 statement error cannot perform a locality change on created_as_global with other schema changes on created_as_global in the same transaction
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE created_as_global ADD COLUMN c INT;
 ALTER TABLE created_as_global SET LOCALITY REGIONAL BY ROW
 
@@ -647,6 +648,7 @@ ALTER TABLE created_as_global ALTER COLUMN cr SET NOT NULL
 
 statement error cannot perform a locality change on created_as_global with other schema changes on created_as_global in the same transaction
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE created_as_global ADD COLUMN c INT;
 ALTER TABLE created_as_global SET LOCALITY REGIONAL BY ROW AS "cr"
 

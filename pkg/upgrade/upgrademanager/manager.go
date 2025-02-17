@@ -768,7 +768,7 @@ WITH
 running_migration_jobs AS (
     SELECT id, status
     FROM system.jobs
-    WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
+    WHERE status IN ` + jobs.NonTerminalStateTupleString + `
     AND job_type = 'MIGRATION'
 ),
 payloads AS (
@@ -800,8 +800,8 @@ func (m *Manager) getRunningMigrationJob(
 	if err != nil {
 		return false, 0, err
 	}
-	parseRow := func(row tree.Datums) (id jobspb.JobID, status jobs.Status) {
-		return jobspb.JobID(*row[0].(*tree.DInt)), jobs.Status(*row[1].(*tree.DString))
+	parseRow := func(row tree.Datums) (id jobspb.JobID, status jobs.State) {
+		return jobspb.JobID(*row[0].(*tree.DInt)), jobs.State(*row[1].(*tree.DString))
 	}
 	switch len(rows) {
 	case 0:
@@ -828,7 +828,14 @@ func (m *Manager) getRunningMigrationJob(
 
 func (m *Manager) listBetween(from roachpb.Version, to roachpb.Version) []roachpb.Version {
 	if m.knobs.ListBetweenOverride != nil {
-		return m.knobs.ListBetweenOverride(from, to)
+		result := m.knobs.ListBetweenOverride(from, to)
+		// Sanity check result to catch invalid overrides.
+		for _, v := range result {
+			if v.LessEq(from) || to.Less(v) {
+				panic(fmt.Sprintf("ListBetweenOverride(%s, %s) returned invalid version %s", from, to, v))
+			}
+		}
+		return result
 	}
 	return clusterversion.ListBetween(from, to)
 }

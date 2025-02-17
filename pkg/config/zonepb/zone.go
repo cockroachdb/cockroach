@@ -1450,3 +1450,27 @@ func validateNoRepeatKeysInConstraints(constraints []Constraint) error {
 	}
 	return nil
 }
+
+// ReplaceMinMaxValVisitor replaces occurrences of the unqualified
+// identifiers "minvalue" and "maxvalue" in the partitioning
+// (sub-)exprs by the symbolic values tree.PartitionMinVal and
+// tree.PartitionMaxVal.
+type ReplaceMinMaxValVisitor struct{}
+
+var _ tree.Visitor = &ReplaceMinMaxValVisitor{}
+
+// VisitPre satisfies the tree.Visitor interface.
+func (v ReplaceMinMaxValVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if t, ok := expr.(*tree.UnresolvedName); ok && t.NumParts == 1 {
+		switch t.Parts[0] {
+		case "minvalue":
+			return false, tree.PartitionMinVal{}
+		case "maxvalue":
+			return false, tree.PartitionMaxVal{}
+		}
+	}
+	return true, expr
+}
+
+// VisitPost satisfies the Visitor interface.
+func (ReplaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }

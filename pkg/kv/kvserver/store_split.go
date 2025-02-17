@@ -304,11 +304,11 @@ func (s *Store) SplitRange(
 	defer s.mu.Unlock()
 	leftRepl.setDescRaftMuLocked(ctx, newLeftDesc)
 
-	// Clear the LHS lock and txn wait-queues, to redirect to the RHS if
+	// Clear or split the LHS lock and txn wait-queues, to redirect to the RHS if
 	// appropriate. We do this after setDescWithoutProcessUpdate to ensure
 	// that no pre-split commands are inserted into the wait-queues after we
 	// clear them.
-	leftRepl.concMgr.OnRangeSplit()
+	locksToAcquireOnRHS := leftRepl.concMgr.OnRangeSplit(roachpb.Key(rightDesc.StartKey))
 
 	if rightReplOrNil == nil {
 		// There is no RHS replica, so (heuristically) halve the load stats for the
@@ -318,6 +318,13 @@ func (s *Store) SplitRange(
 		return nil
 	}
 	rightRepl := rightReplOrNil
+
+	// Acquire unreplicated locks on the RHS. We expect locksToAcquireOnRHS to be
+	// empty if UnreplicatedLockReliabilityUpgrade is false.
+	log.VInfof(ctx, 2, "acquiring %d locks on the RHS", len(locksToAcquireOnRHS))
+	for _, l := range locksToAcquireOnRHS {
+		rightRepl.concMgr.OnLockAcquired(ctx, &l)
+	}
 
 	// Split the replica load of the LHS evenly (50:50) with the RHS. NB: this
 	// ignores the split point, and makes as simplifying assumption that

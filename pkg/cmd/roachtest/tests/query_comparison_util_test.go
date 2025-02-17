@@ -148,6 +148,14 @@ func TestUnsortedMatricesDiff(t *testing.T) {
 			exactMatch:  false,
 			approxMatch: true,
 		},
+		{
+			name:        "multi row 0 in array matches -0 in array, lib/pq type name",
+			colTypes:    []string{"_FLOAT4"}, // this is how []FLOAT4 is named in lib/pq driver
+			t1:          [][]string{{"NULL"}, {"{-1}"}, {"{-0}"}, {"{0}"}, {"{NaN}"}},
+			t2:          [][]string{{"NULL"}, {"{-1}"}, {"{0}"}, {"{0}"}, {"{NaN}"}},
+			exactMatch:  false,
+			approxMatch: true,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

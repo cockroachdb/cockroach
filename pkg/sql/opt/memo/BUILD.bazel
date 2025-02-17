@@ -83,6 +83,7 @@ go_test(
     embed = [":memo"],
     deps = [
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",

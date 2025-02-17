@@ -58,7 +58,7 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 	// Some queries may be retried under stress.
 	skip.UnderRace(t, "results inconsistent under stress")
 
-	sc := log.ScopeWithoutShowLogs(t)
+	sc := log.Scope(t)
 	defer sc.Close(t)
 
 	appName := "telemetry-logging-datadriven"

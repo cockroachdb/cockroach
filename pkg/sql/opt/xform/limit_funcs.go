@@ -347,7 +347,7 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 		input := sb.BuildNewExpr()
 		// Use the overlapping indexes and requiredOrdering ordering.
 		newPrivate := *tp
-		grp.Memo().AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
+		c.e.mem.AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
 	})
 }
 
@@ -406,7 +406,7 @@ func getPrefixFromOrdering(
 func (c *CustomFuncs) GeneratePartialOrderTopK(
 	grp memo.RelExpr, required *physical.Required, input memo.RelExpr, private *memo.TopKPrivate,
 ) {
-	orders := ordering.DeriveInterestingOrderings(input)
+	orders := ordering.DeriveInterestingOrderings(c.e.mem, input)
 	intraOrd := private.Ordering
 	for _, ord := range orders {
 		newOrd, fullPrefix, found := getPrefixFromOrdering(ord.ToOrdering(), intraOrd, input, func(id opt.ColumnID) bool {
@@ -422,7 +422,7 @@ func (c *CustomFuncs) GeneratePartialOrderTopK(
 		newPrivate := *private
 		newPrivate.PartialOrdering = newOrd
 
-		grp.Memo().AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
+		c.e.mem.AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
 	}
 }
 
@@ -457,7 +457,7 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 	grp memo.RelExpr,
 	_ *physical.Required,
 	sp *memo.ScanPrivate,
-	outCols opt.ColSet,
+	passthrough opt.ColSet,
 	vectorCol, distanceCol opt.ColumnID,
 	distanceExpr, queryVector opt.ScalarExpr,
 	limit tree.Datum,
@@ -487,12 +487,12 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 		// Add an index join to get the rest of the columns. The index join is
 		// always necessary because the vector column is not projected by the
 		// VectorSearch operator.
-		indexJoinPrivate := memo.IndexJoinPrivate{Table: sp.Table, Cols: outCols}
+		indexJoinPrivate := memo.IndexJoinPrivate{Table: sp.Table, Cols: sp.Cols}
 		vectorSearch = c.e.f.ConstructIndexJoin(vectorSearch, &indexJoinPrivate)
 
 		// Project the distance column.
 		projections := memo.ProjectionsExpr{c.e.f.ConstructProjectionsItem(distanceExpr, distanceCol)}
-		vectorSearch = c.e.f.ConstructProject(vectorSearch, projections, outCols)
+		vectorSearch = c.e.f.ConstructProject(vectorSearch, projections, passthrough)
 
 		// Build a top-k operator ordering by the distance column and limited by the
 		// NN count to obtain the final result.

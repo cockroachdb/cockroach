@@ -25,11 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -118,10 +118,10 @@ func incrementSequenceHelper(
 
 	var val int64
 	if seqOpts.Virtual {
-		rowid := builtins.GenerateUniqueInt(
-			builtins.ProcessUniqueID(p.EvalContext().NodeID.SQLInstanceID()),
+		rowid := unique.GenerateUniqueInt(
+			unique.ProcessUniqueID(p.EvalContext().NodeID.SQLInstanceID()),
 		)
-		val = int64(rowid)
+		val = rowid
 	} else {
 		val, err = p.incrementSequenceUsingCache(ctx, descriptor)
 	}

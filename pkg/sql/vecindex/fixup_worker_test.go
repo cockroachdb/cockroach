@@ -27,10 +27,10 @@ func TestSplitPartitionData(t *testing.T) {
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 	quantizer := quantize.NewRaBitQuantizer(2, 42)
 	store := vecstore.NewInMemoryStore(2, 42)
-	options := VectorIndexOptions{Seed: 42}
+	options := VectorIndexOptions{IsDeterministic: true}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	index, err := NewVectorIndex(ctx, store, quantizer, &options, stopper)
+	index, err := NewVectorIndex(ctx, store, quantizer, 42, &options, stopper)
 	require.NoError(t, err)
 	worker := NewFixupWorker(&index.fixups)
 
@@ -43,19 +43,22 @@ func TestSplitPartitionData(t *testing.T) {
 		5, 5,
 		6, 6,
 	}, 2)
-	quantizedSet := quantizer.Quantize(ctx, &vectors)
+	quantizedSet := quantizer.Quantize(ctx, vectors)
 
 	splitPartition := vecstore.NewPartition(
 		quantizer,
 		quantizedSet,
 		[]vecstore.ChildKey{
-			{PrimaryKey: vecstore.PrimaryKey("vec1")},
-			{PrimaryKey: vecstore.PrimaryKey("vec2")},
-			{PrimaryKey: vecstore.PrimaryKey("vec3")},
-			{PrimaryKey: vecstore.PrimaryKey("vec4")},
-			{PrimaryKey: vecstore.PrimaryKey("vec5")},
-			{PrimaryKey: vecstore.PrimaryKey("vec6")},
-			{PrimaryKey: vecstore.PrimaryKey("vec7")},
+			{KeyBytes: vecstore.KeyBytes("vec1")},
+			{KeyBytes: vecstore.KeyBytes("vec2")},
+			{KeyBytes: vecstore.KeyBytes("vec3")},
+			{KeyBytes: vecstore.KeyBytes("vec4")},
+			{KeyBytes: vecstore.KeyBytes("vec5")},
+			{KeyBytes: vecstore.KeyBytes("vec6")},
+			{KeyBytes: vecstore.KeyBytes("vec7")},
+		},
+		[]vecstore.ValueBytes{
+			{1, 2}, {3, 4}, {5, 6}, {7, 8}, {9, 10}, {11, 12}, {13, 14},
 		},
 		1)
 
@@ -76,6 +79,7 @@ func TestSplitPartitionData(t *testing.T) {
 			require.Equal(t, 0, cmp)
 			require.Equal(t, oldCentroidDistances[offset], split.OldCentroidDistances[i])
 			require.Equal(t, splitPartition.ChildKeys()[offset], split.Partition.ChildKeys()[i])
+			require.Equal(t, splitPartition.ValueBytes()[offset], split.Partition.ValueBytes()[i])
 
 			// Validate centroid distances.
 			expectedDistance := num32.L2Distance(centroid, split.Vectors.At(i))
@@ -137,7 +141,7 @@ func TestSplitPartitionData(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			tempVectors := vector.MakeSet(2)
-			tempVectors.AddSet(&vectors)
+			tempVectors.AddSet(vectors)
 			leftSplit, rightSplit := worker.splitPartitionData(
 				ctx, splitPartition, tempVectors, tc.leftOffsets, tc.rightOffsets)
 

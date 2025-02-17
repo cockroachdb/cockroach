@@ -262,10 +262,10 @@ func (f *Factory) EvalContext() *eval.Context {
 }
 
 // CopyAndReplace builds this factory's memo by constructing a copy of a subtree
-// that is part of another memo. That memo's metadata is copied to this
-// factory's memo so that tables and columns referenced by the copied memo can
-// keep the same ids. The copied subtree becomes the root of the destination
-// memo, having the given physical properties.
+// that is part of another memo. fromMemo's metadata is copied to this factory's
+// memo so that tables and columns referenced by the copied memo can keep the
+// same ids. The copied subtree becomes the root of the destination memo, having
+// the given physical properties.
 //
 // The "replace" callback function allows the caller to override the default
 // traversal and cloning behavior with custom logic. It is called for each node
@@ -288,18 +288,18 @@ func (f *Factory) EvalContext() *eval.Context {
 //	  return f.CopyAndReplaceDefault(e, replaceFn)
 //	}
 //
-//	f.CopyAndReplace(from, fromProps, replaceFn)
+//	f.CopyAndReplace(fromMemo, from, fromProps, replaceFn)
 //
 // NOTE: Callers must take care to always create brand new copies of non-
 // singleton source nodes rather than referencing existing nodes. The source
 // memo should always be treated as immutable, and the destination memo must be
 // completely independent of it once CopyAndReplace has completed.
 func (f *Factory) CopyAndReplace(
-	from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
+	fromMemo *memo.Memo, from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
 ) {
 	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 
-	f.CopyMetadataFrom(from.Memo())
+	f.CopyMetadataFrom(fromMemo)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
@@ -394,7 +394,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 		}
 		return f.CopyAndReplaceDefault(e, replaceFn)
 	}
-	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
+	f.CopyAndReplace(from, from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
 
 	return nil
 }

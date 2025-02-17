@@ -6,19 +6,16 @@
 package roachtestutil
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -26,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -69,100 +65,6 @@ func Every(n time.Duration) EveryN {
 // ShouldLog returns whether it's been more than N time since the last event.
 func (e *EveryN) ShouldLog() bool {
 	return e.ShouldProcess(timeutil.Now())
-}
-
-// GetWorkloadHistogramArgs creates a histogram flag string based on the roachtest to pass to workload binary
-// This is used to make use of t.ExportOpenmetrics() method and create appropriate exporter
-func GetWorkloadHistogramArgs(t test.Test, c cluster.Cluster, labels map[string]string) string {
-	var histogramArgs string
-	if t.ExportOpenmetrics() {
-		// Add openmetrics related labels and arguments
-		histogramArgs = fmt.Sprintf(" --histogram-export-format='openmetrics' --histograms=%s/%s --openmetrics-labels='%s'",
-			t.PerfArtifactsDir(), GetBenchmarkMetricsFileName(t), clusterstats.GetOpenmetricsLabelString(t, c, labels))
-	} else {
-		// Since default is json, no need to add --histogram-export-format flag in this case and also the labels
-		histogramArgs = fmt.Sprintf(" --histograms=%s/%s", t.PerfArtifactsDir(), GetBenchmarkMetricsFileName(t))
-	}
-
-	return histogramArgs
-}
-
-// GetBenchmarkMetricsFileName returns the file name to store the benchmark output
-func GetBenchmarkMetricsFileName(t test.Test) string {
-	if t.ExportOpenmetrics() {
-		return "stats.om"
-	}
-
-	return "stats.json"
-}
-
-// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters with no labels
-func CreateWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Exporter {
-	return CreateWorkloadHistogramExporterWithLabels(t, c, nil)
-}
-
-// CreateWorkloadHistogramExporterWithLabels creates a exporter.Exporter based on the roachtest parameters with additional labels
-func CreateWorkloadHistogramExporterWithLabels(
-	t test.Test, c cluster.Cluster, labelMap map[string]string,
-) exporter.Exporter {
-	var metricsExporter exporter.Exporter
-	if t.ExportOpenmetrics() {
-		labels := clusterstats.GetOpenmetricsLabelMap(t, c, labelMap)
-		openMetricsExporter := &exporter.OpenMetricsExporter{}
-		openMetricsExporter.SetLabels(&labels)
-		metricsExporter = openMetricsExporter
-
-	} else {
-		metricsExporter = &exporter.HdrJsonExporter{}
-	}
-
-	return metricsExporter
-}
-
-// UploadPerfStats creates stats file from buffer in the node
-func UploadPerfStats(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	perfBuf *bytes.Buffer,
-	node option.NodeListOption,
-	fileNamePrefix string,
-) error {
-
-	if perfBuf == nil {
-		return errors.New("perf buffer is nil")
-	}
-	destinationFileName := fmt.Sprintf("%s%s", fileNamePrefix, GetBenchmarkMetricsFileName(t))
-	// Upload the perf artifacts to any one of the nodes so that the test
-	// runner copies it into an appropriate directory path.
-	dest := filepath.Join(t.PerfArtifactsDir(), destinationFileName)
-	if err := c.RunE(ctx, option.WithNodes(node), "mkdir -p "+filepath.Dir(dest)); err != nil {
-		return err
-	}
-	if err := c.PutString(ctx, perfBuf.String(), dest, 0755, node); err != nil {
-		return err
-	}
-	return nil
-}
-
-// CloseExporter closes the exporter and also upload the metrics artifacts to a stats file in the node
-func CloseExporter(
-	ctx context.Context,
-	exporter exporter.Exporter,
-	t test.Test,
-	c cluster.Cluster,
-	perfBuf *bytes.Buffer,
-	node option.NodeListOption,
-	fileNamePrefix string,
-) {
-	if err := exporter.Close(func() error {
-		if err := UploadPerfStats(ctx, t, c, perfBuf, node, fileNamePrefix); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		t.Errorf("failed to export perf stats: %v", err)
-	}
 }
 
 // WaitForSQLReady waits until the corresponding node's SQL subsystem is fully initialized and ready

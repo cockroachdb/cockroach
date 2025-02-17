@@ -205,11 +205,6 @@ func (ex *connExecutor) recordStatementSummary(
 
 	stmtFingerprintID, err :=
 		ex.statsCollector.RecordStatement(ctx, recordedStmtStatsKey, recordedStmtStats)
-
-	// TODO(xinhaoz): This can be set directly within statsCollector once
-	// https://github.com/cockroachdb/cockroach/pull/123698 is merged.
-	ex.statsCollector.SetStatementFingerprintID(stmtFingerprintID)
-
 	if err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "failed to record statement: %s", err)
@@ -235,13 +230,6 @@ func (ex *connExecutor) recordStatementSummary(
 		if queryLevelStats.ContentionTime > 0 {
 			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.ContendedQueriesCount.Inc(1)
 			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.CumulativeContentionNanos.Inc(queryLevelStats.ContentionTime.Nanoseconds())
-		}
-
-		err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, *queryLevelStats)
-		if err != nil {
-			if log.V(2 /* level */) {
-				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
-			}
 		}
 	}
 
@@ -306,12 +294,6 @@ func (ex *connExecutor) recordStatementLatencyMetrics(
 
 		m.StatementFingerprintCount.Add([]byte(stmt.StmtNoConstants))
 
-		labels := map[string]string{}
-		if detailedLatencyMetrics.Get(&ex.server.cfg.Settings.SV) {
-			labels = map[string]string{
-				detailedLatencyMetricLabel: stmt.StmtNoConstants,
-			}
-		}
 		if flags.IsDistributed() {
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
@@ -325,7 +307,12 @@ func (ex *connExecutor) recordStatementLatencyMetrics(
 			}
 		}
 		if shouldIncludeInLatencyMetrics {
-			m.SQLExecLatencyDetail.Observe(labels, float64(runLatRaw.Nanoseconds()))
+			if detailedLatencyMetrics.Get(&ex.server.cfg.Settings.SV) {
+				labels := map[string]string{
+					detailedLatencyMetricLabel: stmt.StmtNoConstants,
+				}
+				m.SQLExecLatencyDetail.Observe(labels, float64(runLatRaw.Nanoseconds()))
+			}
 			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
 			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 		}

@@ -11,7 +11,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -26,64 +25,45 @@ var (
 	// ErrFingerprintLimitReached is returned from the Container when we have
 	// more fingerprints than the limit specified in the cluster setting.
 	ErrFingerprintLimitReached = errors.New("sql stats fingerprint limit reached")
-
-	// ErrExecStatsFingerprintFlushed is returned from the Container when the
-	// stats object for the fingerprint has been flushed to system table before
-	// the appstatspb.ExecStats can be recorded.
-	ErrExecStatsFingerprintFlushed = errors.New("stmtStats flushed before execution stats can be recorded")
 )
 
 var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 
 // RecordStatement saves per-statement statistics.
 //
-// samplePlanDescription can be nil, as these are only sampled periodically
-// per unique fingerprint.
-// RecordStatement always returns a valid stmtFingerprintID corresponding to the given
-// stmt regardless of whether the statement is actually recorded or not.
-//
 // If the statement is not actually recorded due to either:
 // 1. the memory budget has been exceeded
 // 2. the unique statement fingerprint limit has been exceeded
-// and error is being returned.
+// an error is returned.
 // Note: This error is only related to the operation of recording the statement
 // statistics into in-memory structs. It is unrelated to the stmtErr in the
 // arguments.
 func (s *Container) RecordStatement(
 	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
-) (appstatspb.StmtFingerprintID, error) {
-	createIfNonExistent := true
-	// If the statement is below the latency threshold, or stats aren't being
-	// recorded we don't need to create an entry in the stmts map for it. We do
-	// still need stmtFingerprintID for transaction level metrics tracking.
+) error {
 	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.StmtStatsEnable.Get(&s.st.SV) || (t > 0 && t.Seconds() >= value.ServiceLatencySec) {
-		createIfNonExistent = false
+		return nil
+	}
+
+	statementKey := stmtKey{
+		sampledPlanKey: sampledPlanKey{
+			stmtNoConstants: key.Query,
+			implicitTxn:     key.ImplicitTxn,
+			database:        key.Database,
+		},
+		planHash:                 key.PlanHash,
+		transactionFingerprintID: key.TransactionFingerprintID,
 	}
 
 	// Get the statistics object.
-	stats, statementKey, stmtFingerprintID, created, throttled := s.getStatsForStmt(
-		key.Query,
-		key.ImplicitTxn,
-		key.Database,
-		key.PlanHash,
-		key.TransactionFingerprintID,
-		createIfNonExistent,
-	)
+	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, value.FingerprintID)
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
 	// record anything and abort the operation.
 	if throttled {
-		return stmtFingerprintID, ErrFingerprintLimitReached
-	}
-
-	// This statement was below the latency threshold or sql stats aren't being
-	// recorded. Either way, we don't need to record anything in the stats object
-	// for this statement, though we do need to return the statement fingerprint ID for
-	// transaction level metrics collection.
-	if !createIfNonExistent {
-		return stmtFingerprintID, nil
+		return ErrFingerprintLimitReached
 	}
 
 	// Collect the per-statement statisticstats.
@@ -119,6 +99,7 @@ func (s *Container) RecordStatement(
 	if value.ExecStats != nil {
 		stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
 		stats.mu.data.UsedFollowerRead = stats.mu.data.UsedFollowerRead || value.ExecStats.UsedFollowerRead
+		stats.recordExecStatsLocked(*value.ExecStats)
 	}
 	stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, []string{value.PlanGist})
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
@@ -137,15 +118,15 @@ func (s *Container) RecordStatement(
 	//  tracing is a thing.
 	stats.mu.vectorized = key.Vec
 	stats.mu.distSQLUsed = key.DistSQL
-	stats.mu.fullScan = key.FullScan
-	stats.mu.database = key.Database
+	stats.mu.fullScan = value.FullScan
+	stats.mu.database = value.Database
 	stats.mu.querySummary = key.QuerySummary
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey
 		estimatedMemoryAllocBytes := stats.sizeUnsafeLocked() + statementKey.size() + 8
 
-		// We also account for the memory used for s.sampledPlanMetadataCache.
+		// We also account for the memory used for s.sampledStatementCache.
 		// timestamp size + key size + hash.
 		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
 		s.mu.Lock()
@@ -153,47 +134,51 @@ func (s *Container) RecordStatement(
 
 		// If the monitor is nil, we do not track memory usage.
 		if s.mu.acc.Monitor() == nil {
-			return stats.ID, nil
+			return nil
 		}
 
 		// We attempt to account for all the memory we used. If we have exceeded our
 		// memory budget, delete the entry that we just created and report the error.
 		if err := s.mu.acc.Grow(ctx, estimatedMemoryAllocBytes); err != nil {
 			delete(s.mu.stmts, statementKey)
-			return stats.ID, ErrMemoryPressure
+			return ErrMemoryPressure
 		}
 	}
 
-	return stats.ID, nil
-}
-
-func (s *Container) RecordStatementExecStats(
-	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
-) error {
-	stmtStats, _, _, _, _ :=
-		s.getStatsForStmt(
-			key.Query,
-			key.ImplicitTxn,
-			key.Database,
-			key.PlanHash,
-			key.TransactionFingerprintID,
-			false, /* createIfNotExists */
-		)
-	if stmtStats == nil {
-		return ErrExecStatsFingerprintFlushed
-	}
-	stmtStats.recordExecStats(stats)
 	return nil
 }
 
-// ShouldSample implements sqlstats.Writer interface.
-func (s *Container) ShouldSample(fingerprint string, implicitTxn bool, database string) bool {
-	_, previouslySampled := s.getLogicalPlanLastSampled(sampledPlanKey{
+// StatementSampled returns true if the statement with the given fingerprint
+// exists in the sampled statement cache.
+func (s *Container) StatementSampled(fingerprint string, implicitTxn bool, database string) bool {
+	key := sampledPlanKey{
 		stmtNoConstants: fingerprint,
 		implicitTxn:     implicitTxn,
 		database:        database,
-	})
-	return previouslySampled
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.mu.sampledStatementCache[key]
+	return ok
+}
+
+// TrySetStatementSampled attempts to add the statement to the sampled
+// statement cache. If the statement is already in the cache, it returns false.
+func (s *Container) TrySetStatementSampled(
+	fingerprint string, implicitTxn bool, database string,
+) bool {
+	key := sampledPlanKey{
+		stmtNoConstants: fingerprint,
+		implicitTxn:     implicitTxn,
+		database:        database,
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.mu.sampledStatementCache[key]; ok {
+		return false
+	}
+	s.mu.sampledStatementCache[key] = struct{}{}
+	return true
 }
 
 // RecordTransaction saves per-transaction statistics.
@@ -202,20 +187,8 @@ func (s *Container) RecordTransaction(
 ) error {
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
 
-	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
-	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
-		return nil
-	}
-	// Do not collect transaction statistics if the stats collection latency
-	// threshold is set, since our transaction UI relies on having stats for every
-	// statement in the transaction.
-	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
-	if t > 0 {
-		return nil
-	}
-
 	// Get the statistics object.
-	stats, created, throttled := s.getStatsForTxnWithKey(key, value.StatementFingerprintIDs, true /* createIfNonexistent */)
+	stats, created, throttled := s.tryCreateStatsForTxnWithKey(key, value.StatementFingerprintIDs)
 
 	if throttled {
 		return ErrFingerprintLimitReached

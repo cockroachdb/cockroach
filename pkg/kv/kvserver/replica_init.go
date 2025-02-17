@@ -352,6 +352,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		&raftLogger{ctx: ctx},
 		(*replicaRLockedStoreLiveness)(r),
 		r.store.raftMetrics,
+		r.store.TestingKnobs().RaftTestingKnobs,
 	))
 	if err != nil {
 		return err

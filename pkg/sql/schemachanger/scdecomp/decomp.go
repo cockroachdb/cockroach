@@ -649,6 +649,10 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 		if geoConfig := idx.GetGeoConfig(); !geoConfig.IsEmpty() {
 			index.GeoConfig = protoutil.Clone(&geoConfig).(*geopb.Config)
 		}
+		if index.Type == idxtype.VECTOR {
+			vecConfig := idx.GetVecConfig()
+			index.VecConfig = &vecConfig
+		}
 		for i, c := range cpy.KeyColumnIDs {
 			invertedKind := catpb.InvertedIndexColumnKind_DEFAULT
 			if index.Type == idxtype.INVERTED && c == idx.InvertedColumnID() {

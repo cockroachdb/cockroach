@@ -69,9 +69,9 @@ func TestChildKey(t *testing.T) {
 
 	childKey1 := ChildKey{PartitionKey: 10}
 	childKey2 := ChildKey{PartitionKey: 20}
-	childKey3 := ChildKey{PrimaryKey: []byte{1, 2, 3}}
-	childKey4 := ChildKey{PrimaryKey: []byte{1, 10, 3}}
-	childKey5 := ChildKey{PartitionKey: 10, PrimaryKey: []byte{1, 10, 3}}
+	childKey3 := ChildKey{KeyBytes: []byte{1, 2, 3}}
+	childKey4 := ChildKey{KeyBytes: []byte{1, 10, 3}}
+	childKey5 := ChildKey{PartitionKey: 10, KeyBytes: []byte{1, 10, 3}}
 
 	// Equal method.
 	require.True(t, childKey1.Equal(childKey1))

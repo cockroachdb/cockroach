@@ -457,7 +457,7 @@ func waitForDownloadJob(
 			if err := conn.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1`).Scan(&status); err != nil {
 				return downloadJobEndTimeLowerBound, err
 			}
-			if status == string(jobs.StatusSucceeded) {
+			if status == string(jobs.StateSucceeded) {
 				var externalBytes uint64
 				if err := conn.QueryRow(jobutils.GetExternalBytesForConnectedTenant).Scan(&externalBytes); err != nil {
 					return downloadJobEndTimeLowerBound, errors.Wrapf(err, "could not get external bytes")
@@ -470,7 +470,7 @@ func waitForDownloadJob(
 				time.Sleep(postDownloadDelay)
 				downloadJobEndTimeLowerBound = timeutil.Now().Add(-pollingInterval).Add(-postDownloadDelay)
 				return downloadJobEndTimeLowerBound, nil
-			} else if status == string(jobs.StatusRunning) {
+			} else if status == string(jobs.StateRunning) {
 				l.Printf("Download job still running")
 			} else {
 				return downloadJobEndTimeLowerBound, errors.Newf("job unexpectedly found in %s state", status)

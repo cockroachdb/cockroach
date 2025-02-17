@@ -352,8 +352,8 @@ COMMIT;
 	"PlanGist": "Ais=",
 	"SkippedQueries": 7,
 	"Statement": "CREATE USER craig",
-	"StatementFingerprintID": "4157831042514459868",
-	"StmtPosInTxn": 3,
+	"StatementFingerprintID": "4157831042514459856",
+	"StmtPosInTxn": 1,
 	"Tag": "CREATE ROLE",
 	"User": "root"
 }
@@ -364,8 +364,8 @@ COMMIT;
 	"EventType": "sampled_query",
 	"PlanGist": "Ais=",
 	"Statement": "GRANT admin TO craig",
-	"StatementFingerprintID": "9654126880073528913",
-	"StmtPosInTxn": 4,
+	"StatementFingerprintID": "9654126880073528925",
+	"StmtPosInTxn": 1,
 	"Tag": "GRANT",
 	"User": "root"
 }
