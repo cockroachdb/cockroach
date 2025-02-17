@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -24,6 +25,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestExcludeAggregateMetrics(t *testing.T) {
+	r := metric.NewRegistry()
+	counter := NewCounter(metric.Metadata{Name: "counter"}, "child_label")
+	counter.AddChild("xyz")
+	r.AddMetric(counter)
+
+	// Don't include child metrics, so only report the aggregate.
+	// Flipping the includeAggregateMetrics flag should have no effect.
+	testutils.RunTrueAndFalse(t, "includeChildMetrics=false,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
+		pe := metric.MakePrometheusExporter()
+		pe.ScrapeRegistry(r, false, includeAggregateMetrics)
+		families, err := pe.Gather()
+		require.NoError(t, err)
+		require.Equal(t, 1, len(families))
+		require.Equal(t, "counter", families[0].GetName())
+		require.Equal(t, 1, len(families[0].GetMetric()))
+		require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel()))
+	})
+
+	testutils.RunTrueAndFalse(t, "includeChildMetrics=true,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
+		pe := metric.MakePrometheusExporter()
+		pe.ScrapeRegistry(r, true, includeAggregateMetrics)
+		families, err := pe.Gather()
+		require.NoError(t, err)
+		require.Equal(t, 1, len(families))
+		require.Equal(t, "counter", families[0].GetName())
+		var labelPair *prometheusgo.LabelPair
+		if includeAggregateMetrics {
+			require.Equal(t, 2, len(families[0].GetMetric()))
+			require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel()))
+			require.Equal(t, 1, len(families[0].GetMetric()[1].GetLabel()))
+			labelPair = families[0].GetMetric()[1].GetLabel()[0]
+		} else {
+			require.Equal(t, 1, len(families[0].GetMetric()))
+			require.Equal(t, 1, len(families[0].GetMetric()[0].GetLabel()))
+			labelPair = families[0].GetMetric()[0].GetLabel()[0]
+		}
+		require.Equal(t, "child_label", *labelPair.Name)
+		require.Equal(t, "xyz", *labelPair.Value)
+	})
+}
+
 func TestAggMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -32,7 +75,7 @@ func TestAggMetric(t *testing.T) {
 		var in bytes.Buffer
 		ex := metric.MakePrometheusExporter()
 		scrape := func(ex *metric.PrometheusExporter) {
-			ex.ScrapeRegistry(r, true /* includeChildMetrics */)
+			ex.ScrapeRegistry(r, true /* includeChildMetrics */, true)
 		}
 		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
 		var lines []string

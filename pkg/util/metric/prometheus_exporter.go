@@ -81,7 +81,9 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 // family map, holding on only to the scraped data (which is no longer
 // connected to the registry and metrics within) when returning from the
 // call. It creates new families as needed.
-func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMetrics bool) {
+func (pm *PrometheusExporter) ScrapeRegistry(
+	registry *Registry, includeChildMetrics bool, includeAggregateMetrics bool,
+) {
 	labels := registry.GetLabels()
 	f := func(name string, v interface{}) {
 		switch prom := v.(type) {
@@ -99,19 +101,23 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMet
 			m := prom.ToPrometheusMetric()
 			// Set registry and metric labels.
 			m.Label = append(labels, prom.GetLabels()...)
-
 			family := pm.findOrCreateFamily(prom)
-			family.Metric = append(family.Metric, m)
 
-			// Deal with metrics which have children which are exposed to
-			// prometheus if we should.
+			// Based on cluster settings may report just the parent, or just the children, or the parent
+			// and the children.
 			promIter, ok := v.(PrometheusIterable)
-			if !ok || !includeChildMetrics {
+			if ok && includeChildMetrics {
+				if includeAggregateMetrics {
+					family.Metric = append(family.Metric, m)
+				}
+				promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
+					family.Metric = append(family.Metric, metric)
+				})
 				return
 			}
-			promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
-				family.Metric = append(family.Metric, metric)
-			})
+
+			// No child metrics.
+			family.Metric = append(family.Metric, m)
 
 		default:
 			log.Infof(context.Background(), "metric %s is not compatible with any prometheus metric type", name)
