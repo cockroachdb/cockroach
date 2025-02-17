@@ -8,6 +8,7 @@ package sql_test
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // TestStatsWithLowTTL simulates a CREATE STATISTICS run that takes longer than
@@ -229,5 +231,44 @@ func BenchmarkAnalyze(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		sqlRunner.Exec(b, `ANALYZE t`)
+	}
+}
+
+func TestAutoPartialStatsJobDescription(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Enable automatic statistics collection.
+	sqlRunner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true;`)
+
+	// Create a test table.
+	sqlRunner.Exec(t, `CREATE TABLE test (id INT PRIMARY KEY, value INT);`)
+
+	// Insert data to trigger auto stats collection.
+	sqlRunner.Exec(t, `INSERT INTO test VALUES (1, 100), (2, 200), (3, 300);`)
+
+	// Wait for auto stats jobs to complete.
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		sqlRunner.QueryRow(t, `SELECT count(*) FROM system.jobs WHERE job_type = 'AUTO CREATE PARTIAL STATS'`).Scan(&count)
+		if count == 0 {
+			return errors.New("expected at least one AUTO CREATE PARTIAL STATS job")
+		}
+		return nil
+	})
+
+	// Verify job description.
+	var description string
+	sqlRunner.QueryRow(t, `SELECT description FROM system.jobs WHERE job_type = 'AUTO CREATE PARTIAL STATS'`).Scan(&description)
+
+	expectedDescription := "Partial statistics update for test"
+	if !strings.Contains(description, expectedDescription) {
+		t.Errorf("expected description to contain: %s, got: %s", expectedDescription, description)
 	}
 }
