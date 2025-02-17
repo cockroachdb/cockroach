@@ -74,10 +74,10 @@ type TestServerInterface interface {
 	// the .TenantController() method.
 	TenantControlInterface
 
-	// ApplicationLayer returns the interface to the application layer that is
-	// exercised by the test. Depending on how the test server is started
-	// and (optionally) randomization, this can be either the SQL layer
-	// of a virtual cluster or that of the system interface.
+	// ApplicationLayer returns the interface to the application layer used
+	// in testing. If the server starts with tenancy enabled under the default
+	// tenant option, this refers to the SQL layer of the virtual cluster.
+	// Otherwise, in single-tenant mode, it refers to the system layer.
 	ApplicationLayer() ApplicationLayerInterface
 
 	// SystemLayer returns the interface to the application layer
@@ -129,6 +129,17 @@ type TestServerController interface {
 	// or config profile.
 	RunInitialSQL(ctx context.Context, startSingleNode bool, adminUser, adminPassword string) error
 }
+
+// DeploymentMode defines the mode of the underlying test server or tenant,
+// which can be single-tenant (system-only), shared-process, or
+// external-process.
+type DeploymentMode uint8
+
+const (
+	SingleTenant DeploymentMode = iota
+	SharedProcess
+	ExternalProcess
+)
 
 // ApplicationLayerInterface defines accessors to the application
 // layer of a test server. Tests written against this interface are
@@ -451,6 +462,11 @@ type ApplicationLayerInterface interface {
 
 	// DistSQLPlanningNodeID returns the NodeID to use by the DistSQL span resolver.
 	DistSQLPlanningNodeID() roachpb.NodeID
+
+	// DeploymentMode returns the deployment mode of the underlying server or
+	// tenant, which can be single-tenant (system-only), shared-process, or
+	// external-process.
+	DeploymentMode() DeploymentMode
 }
 
 // TenantControlInterface defines the API of a test server that can

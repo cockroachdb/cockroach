@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -355,6 +355,13 @@ func registerKV(r registry.Registry) {
 			tags["weekly"] = struct{}{}
 		}
 
+		var skipPostValidations registry.PostValidation
+		if opts.blockSize == 1<<16 {
+			// Large block size variations may timeout waiting for replica divergence
+			// post-test validation due to high write volume, see #141007.
+			skipPostValidations = registry.PostValidationReplicaDivergence
+		}
+
 		r.Add(registry.TestSpec{
 			Name:      strings.Join(nameParts, "/"),
 			Owner:     owner,
@@ -363,9 +370,10 @@ func registerKV(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
-			CompatibleClouds:  clouds,
-			Suites:            suites,
-			EncryptionSupport: encryption,
+			CompatibleClouds:    clouds,
+			Suites:              suites,
+			EncryptionSupport:   encryption,
+			SkipPostValidations: skipPostValidations,
 		})
 	}
 }
@@ -916,7 +924,7 @@ func registerKVRangeLookups(r registry.Registry) {
 							EXPERIMENTAL_RELOCATE
 								SELECT ARRAY[$1, $2, $3], CAST(floor(random() * 9223372036854775808) AS INT)
 						`, newReplicas[0]+1, newReplicas[1]+1, newReplicas[2]+1)
-						if err != nil && !pgerror.IsSQLRetryableError(err) && !kv.IsExpectedRelocateError(err) {
+						if err != nil && !pgerror.IsSQLRetryableError(err) && !kvtestutils.IsExpectedRelocateError(err) {
 							return err
 						}
 					default:

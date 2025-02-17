@@ -129,3 +129,103 @@ insert xyz
            │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
            └── filters
                 └── false [type=bool, constraints=(contradiction; tight)]
+
+exec-ddl
+CREATE TABLE p137547 (
+  region STRING,
+  id STRING,
+  i INT,
+  s STRING,
+  PRIMARY KEY (region, id),
+  UNIQUE INDEX (region, i)
+)
+----
+
+exec-ddl
+CREATE TABLE c137547 (
+  region STRING,
+  id STRING,
+  p_id STRING,
+  PRIMARY KEY (region, id),
+  FOREIGN KEY (region, p_id) REFERENCES p137547 (region, id)
+)
+----
+
+exec-ddl
+ALTER TABLE p137547 INJECT STATISTICS '[
+  {
+    "avg_size": 1500,
+    "columns": ["s"],
+    "created_at": "2024-11-29 16:18:00.835616",
+    "distinct_count": 14000000,
+    "null_count": 0,
+    "row_count": 14000000
+  }
+]';
+----
+
+# Regression test for #137547. Estimate that the FK check WithScan produces at
+# least 1 row to avoid a lookup into the secondary index of p137547 using just
+# the region column.
+opt locality=(region=us)
+INSERT INTO c137547 VALUES ('us', 'foo', 'foo') ON CONFLICT DO NOTHING
+----
+insert c137547
+ ├── arbiter indexes: c137547_pkey
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => c137547.region:1
+ │    ├── column2:7 => c137547.id:2
+ │    └── column3:8 => c137547.p_id:3
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── distribution: us
+ ├── anti-join (cross)
+ │    ├── columns: column1:6(string!null) column2:7(string!null) column3:8(string!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── stats: [rows=1e-10, distinct(6)=1e-10, null(6)=0, distinct(8)=1e-10, null(8)=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(6-8)
+ │    ├── distribution: us
+ │    ├── values
+ │    │    ├── columns: column1:6(string!null) column2:7(string!null) column3:8(string!null)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1, distinct(6)=1, null(6)=0, distinct(8)=1, null(8)=0]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(6-8)
+ │    │    ├── distribution: us
+ │    │    └── ('us', 'foo', 'foo') [type=tuple{string, string, string}]
+ │    ├── scan c137547
+ │    │    ├── columns: c137547.region:9(string!null) c137547.id:10(string!null)
+ │    │    ├── constraint: /9/10: [/'us'/'foo' - /'us'/'foo']
+ │    │    ├── flags: avoid-full-scan
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── stats: [rows=0.91, distinct(9)=0.91, null(9)=0, distinct(10)=0.91, null(10)=0, distinct(9,10)=0.91, null(9,10)=0]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(9,10)
+ │    │    └── distribution: us
+ │    └── filters (true)
+ └── f-k-checks
+      └── f-k-checks-item: c137547(region,p_id) -> p137547(region,id)
+           └── anti-join (lookup p137547)
+                ├── columns: region:14(string!null) p_id:15(string!null)
+                ├── key columns: [14 15] = [16 17]
+                ├── lookup columns are key
+                ├── cardinality: [0 - 1]
+                ├── stats: [rows=1e-10]
+                ├── key: ()
+                ├── fd: ()-->(14,15)
+                ├── distribution: us
+                ├── with-scan &1
+                │    ├── columns: region:14(string!null) p_id:15(string!null)
+                │    ├── mapping:
+                │    │    ├──  column1:6(string) => region:14(string)
+                │    │    └──  column3:8(string) => p_id:15(string)
+                │    ├── cardinality: [0 - 1]
+                │    ├── stats: [rows=1, distinct(14)=1e-10, null(14)=0, distinct(15)=1e-10, null(15)=0]
+                │    ├── key: ()
+                │    ├── fd: ()-->(14,15)
+                │    └── distribution: us
+                └── filters (true)

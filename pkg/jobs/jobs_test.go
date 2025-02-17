@@ -80,15 +80,15 @@ type expectation struct {
 	Error             string
 }
 
-func (expected *expectation) verify(id jobspb.JobID, expectedStatus jobs.Status) error {
-	var statusString string
+func (expected *expectation) verify(id jobspb.JobID, expectedState jobs.State) error {
+	var stateString string
 	var created time.Time
 	var payloadBytes []byte
 	var progressBytes []byte
 	if err := expected.DB.QueryRow(
 		`SELECT status, created, payload, progress FROM crdb_internal.system_jobs WHERE id = $1`, id,
 	).Scan(
-		&statusString, &created, &payloadBytes, &progressBytes,
+		&stateString, &created, &payloadBytes, &progressBytes,
 	); err != nil {
 		return err
 	}
@@ -118,9 +118,9 @@ func (expected *expectation) verify(id jobspb.JobID, expectedStatus jobs.Status)
 	}
 
 	// Verify internally-managed fields.
-	status := jobs.Status(statusString)
-	if e, a := expectedStatus, status; e != a {
-		return errors.Errorf("expected status %v, got %v", e, a)
+	state := jobs.State(stateString)
+	if e, a := expectedState, state; e != a {
+		return errors.Errorf("expected state %v, got %v", e, a)
 	}
 	if e, a := expected.Type, payload.Type(); e != a {
 		return errors.Errorf("expected type %v, got type %v", e, a)
@@ -130,10 +130,10 @@ func (expected *expectation) verify(id jobspb.JobID, expectedStatus jobs.Status)
 	}
 
 	started := timeutil.FromUnixMicros(payload.StartedMicros)
-	if started.Equal(timeutil.UnixEpoch) && status == jobs.StatusSucceeded {
+	if started.Equal(timeutil.UnixEpoch) && state == jobs.StateSucceeded {
 		return errors.Errorf("started time is empty but job claims to be successful")
 	}
-	if status == jobs.StatusRunning || status == jobs.StatusPauseRequested {
+	if state == jobs.StateRunning || state == jobs.StatePauseRequested {
 		return nil
 	}
 
@@ -352,7 +352,7 @@ func (rts *registryTestSuite) tearDown() {
 	}
 }
 
-func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
+func (rts *registryTestSuite) check(t *testing.T, expectedState jobs.State) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
 		rts.mu.Lock()
@@ -360,35 +360,35 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 		if diff := cmp.Diff(rts.mu.e, rts.mu.a); diff != "" {
 			return errors.Errorf("unexpected diff: %s", diff)
 		}
-		if expectedStatus == "" {
+		if expectedState == "" {
 			return nil
 		}
-		st, err := rts.job.TestingCurrentStatus(rts.ctx)
+		st, err := rts.job.TestingCurrentState(rts.ctx)
 		if err != nil {
 			return err
 		}
-		if expectedStatus != st {
-			return errors.Errorf("expected job status: %s but got: %s", expectedStatus, st)
+		if expectedState != st {
+			return errors.Errorf("expected job state: %s but got: %s", expectedState, st)
 		}
 		return nil
 	})
 }
 
-func (rts *registryTestSuite) checkStatusChangeLog(
-	t *testing.T, expectedNewStatus jobs.Status, expectedPrevStatus jobs.Status, expectedError string,
+func (rts *registryTestSuite) checkStateChangeLog(
+	t *testing.T, expectedNewState jobs.State, expectedPrevState jobs.State, expectedError string,
 ) {
 	testutils.SucceedsSoon(t, func() error {
 		logs := rts.statusChangeLogSpy.GetUnreadLogs(logpb.Channel_OPS)
 		for i, jobEventsLog := range logs {
 			if jobEventsLog.JobID == int64(rts.job.ID()) &&
-				jobEventsLog.PreviousStatus == string(expectedPrevStatus) &&
-				jobEventsLog.NewStatus == string(expectedNewStatus) &&
+				jobEventsLog.PreviousStatus == string(expectedPrevState) &&
+				jobEventsLog.NewStatus == string(expectedNewState) &&
 				strings.Contains(jobEventsLog.Error, expectedError) {
 				rts.statusChangeLogSpy.SetLastNLogsAsUnread(logpb.Channel_OPS, len(logs)-i+1)
 				return nil
 			}
 		}
-		return errors.Errorf("expected log for status change from %s to %s", expectedPrevStatus, expectedNewStatus)
+		return errors.Errorf("expected log for state change from %s to %s", expectedPrevState, expectedNewState)
 	})
 }
 
@@ -413,13 +413,13 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
-		rts.check(t, jobs.StatusSucceeded)
-		rts.checkStatusChangeLog(t, jobs.StatusSucceeded, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateSucceeded)
+		rts.checkStateChangeLog(t, jobs.StateSucceeded, jobs.StateRunning, "")
 		t.Log("Done")
 	})
 
@@ -435,15 +435,15 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.job = j
 
 		rts.mu.e.ResumeStart = true
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 
 		rts.resumeCheckCh <- struct{}{}
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
-		rts.check(t, jobs.StatusSucceeded)
-		rts.checkStatusChangeLog(t, jobs.StatusSucceeded, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateSucceeded)
+		rts.checkStateChangeLog(t, jobs.StateSucceeded, jobs.StateRunning, "")
 	})
 
 	t.Run("pause running", func(t *testing.T) {
@@ -459,30 +459,30 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", j.ID())
-		rts.check(t, jobs.StatusPaused)
-		rts.checkStatusChangeLog(t, jobs.StatusPauseRequested, jobs.StatusRunning, "")
-		rts.checkStatusChangeLog(t, jobs.StatusPaused, jobs.StatusPauseRequested, "")
+		rts.check(t, jobs.StatePaused)
+		rts.checkStateChangeLog(t, jobs.StatePauseRequested, jobs.StateRunning, "")
+		rts.checkStateChangeLog(t, jobs.StatePaused, jobs.StatePauseRequested, "")
 
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", j.ID())
-		rts.check(t, jobs.StatusPaused)
+		rts.check(t, jobs.StatePaused)
 
 		rts.sqlDB.Exec(t, "RESUME JOB $1", j.ID())
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusPaused, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StatePaused, "")
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
+		rts.check(t, jobs.StateRunning)
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 
 		rts.mu.e.Success = true
-		rts.check(t, jobs.StatusSucceeded)
-		rts.checkStatusChangeLog(t, jobs.StatusSucceeded, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateSucceeded)
+		rts.checkStateChangeLog(t, jobs.StateSucceeded, jobs.StateRunning, "")
 	})
 
 	t.Run("pause reverting", func(t *testing.T) {
@@ -498,36 +498,36 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 
 		// Make Resume fail.
 		rts.resumeCh <- errors.New("resume failed")
 		rts.mu.e.ResumeExit++
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateReverting)
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StateRunning, "")
 
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", j.ID())
-		rts.check(t, jobs.StatusPaused)
-		rts.checkStatusChangeLog(t, jobs.StatusPauseRequested, jobs.StatusReverting, "")
-		rts.checkStatusChangeLog(t, jobs.StatusPaused, jobs.StatusPauseRequested, "")
+		rts.check(t, jobs.StatePaused)
+		rts.checkStateChangeLog(t, jobs.StatePauseRequested, jobs.StateReverting, "")
+		rts.checkStateChangeLog(t, jobs.StatePaused, jobs.StatePauseRequested, "")
 
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", j.ID())
-		rts.check(t, jobs.StatusPaused)
+		rts.check(t, jobs.StatePaused)
 
 		rts.sqlDB.Exec(t, "RESUME JOB $1", j.ID())
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusPaused, "")
+		rts.check(t, jobs.StateReverting)
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StatePaused, "")
 		close(rts.failOrCancelCheckCh)
 
 		rts.failOrCancelCh <- nil
 		close(rts.failOrCancelCh)
 		rts.mu.e.OnFailOrCancelExit = true
-		rts.check(t, jobs.StatusFailed)
-		rts.checkStatusChangeLog(t, jobs.StatusFailed, jobs.StatusReverting, "")
+		rts.check(t, jobs.StateFailed)
+		rts.checkStateChangeLog(t, jobs.StateFailed, jobs.StateReverting, "")
 	})
 
 	t.Run("cancel running", func(t *testing.T) {
@@ -542,14 +542,14 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 
 		rts.sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
 		rts.mu.e.OnFailOrCancelStart = true
-		rts.check(t, jobs.StatusReverting)
-		rts.checkStatusChangeLog(t, jobs.StatusCancelRequested, jobs.StatusRunning, "")
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusCancelRequested, "")
+		rts.check(t, jobs.StateReverting)
+		rts.checkStateChangeLog(t, jobs.StateCancelRequested, jobs.StateRunning, "")
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StateCancelRequested, "")
 
 		rts.failOrCancelCheckCh <- struct{}{}
 		close(rts.failOrCancelCheckCh)
@@ -557,8 +557,8 @@ func TestRegistryLifecycle(t *testing.T) {
 		close(rts.failOrCancelCh)
 		rts.mu.e.OnFailOrCancelExit = true
 
-		rts.check(t, jobs.StatusCanceled)
-		rts.checkStatusChangeLog(t, jobs.StatusCanceled, jobs.StatusReverting, "")
+		rts.check(t, jobs.StateCanceled)
+		rts.checkStateChangeLog(t, jobs.StateCanceled, jobs.StateReverting, "")
 	})
 
 	t.Run("cancel reverting", func(t *testing.T) {
@@ -573,17 +573,17 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 
 		rts.sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
 		rts.mu.e.OnFailOrCancelStart = true
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 
-		rts.sqlDB.ExpectErr(t, "status reverting cannot be requested to be canceled", "CANCEL JOB $1", j.ID())
-		rts.check(t, jobs.StatusReverting)
-		rts.checkStatusChangeLog(t, jobs.StatusCancelRequested, jobs.StatusRunning, "")
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusCancelRequested, "")
+		rts.sqlDB.ExpectErr(t, "state reverting cannot be requested to be canceled", "CANCEL JOB $1", j.ID())
+		rts.check(t, jobs.StateReverting)
+		rts.checkStateChangeLog(t, jobs.StateCancelRequested, jobs.StateRunning, "")
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StateCancelRequested, "")
 
 		close(rts.failOrCancelCheckCh)
 		close(rts.failOrCancelCh)
@@ -602,27 +602,27 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", j.ID())
-		rts.check(t, jobs.StatusPaused)
-		rts.checkStatusChangeLog(t, jobs.StatusPauseRequested, jobs.StatusRunning, "")
-		rts.checkStatusChangeLog(t, jobs.StatusPaused, jobs.StatusPauseRequested, "")
+		rts.check(t, jobs.StatePaused)
+		rts.checkStateChangeLog(t, jobs.StatePauseRequested, jobs.StateRunning, "")
+		rts.checkStateChangeLog(t, jobs.StatePaused, jobs.StatePauseRequested, "")
 
 		rts.sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
 		close(rts.failOrCancelCheckCh)
-		rts.check(t, jobs.StatusReverting)
-		rts.checkStatusChangeLog(t, jobs.StatusCancelRequested, jobs.StatusPaused, "")
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusCancelRequested, "")
+		rts.check(t, jobs.StateReverting)
+		rts.checkStateChangeLog(t, jobs.StateCancelRequested, jobs.StatePaused, "")
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StateCancelRequested, "")
 
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit = true
 		close(rts.failOrCancelCh)
-		rts.check(t, jobs.StatusCanceled)
-		rts.checkStatusChangeLog(t, jobs.StatusCanceled, jobs.StatusReverting, "")
+		rts.check(t, jobs.StateCanceled)
+		rts.checkStateChangeLog(t, jobs.StateCanceled, jobs.StateReverting, "")
 	})
 
 	t.Run("cancel pause reverting", func(t *testing.T) {
@@ -638,35 +638,35 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 
 		// Make Resume fail.
 		rts.resumeCh <- errors.New("resume failed")
 		rts.mu.e.ResumeExit++
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateReverting)
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StateRunning, "")
 
 		rts.sqlDB.Exec(t, "PAUSE JOB $1", j.ID())
-		rts.check(t, jobs.StatusPaused)
-		rts.checkStatusChangeLog(t, jobs.StatusPauseRequested, jobs.StatusReverting, "")
+		rts.check(t, jobs.StatePaused)
+		rts.checkStateChangeLog(t, jobs.StatePauseRequested, jobs.StateReverting, "")
 
 		rts.sqlDB.ExpectErr(t, "paused and has non-nil FinalResumeError .* resume failed", "CANCEL JOB $1", j.ID())
-		rts.check(t, jobs.StatusPaused)
+		rts.check(t, jobs.StatePaused)
 
 		rts.sqlDB.Exec(t, "RESUME JOB $1", j.ID())
 		rts.failOrCancelCheckCh <- struct{}{}
 		close(rts.failOrCancelCheckCh)
-		rts.check(t, jobs.StatusReverting)
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusPaused, "")
+		rts.check(t, jobs.StateReverting)
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StatePaused, "")
 
 		rts.failOrCancelCh <- nil
 		close(rts.failOrCancelCh)
 		rts.mu.e.OnFailOrCancelExit = true
-		rts.check(t, jobs.StatusFailed)
-		rts.checkStatusChangeLog(t, jobs.StatusFailed, jobs.StatusReverting, "")
+		rts.check(t, jobs.StateFailed)
+		rts.checkStateChangeLog(t, jobs.StateFailed, jobs.StateReverting, "")
 	})
 
 	// Verify that pause and cancel in a rollback do nothing.
@@ -682,7 +682,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
+		rts.check(t, jobs.StateRunning)
 		rts.sqlDB.MaxTxnRetries = 10
 		// Rollback a CANCEL.
 		{
@@ -701,7 +701,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			}
 			rts.progressCh <- struct{}{}
 			rts.resumeCheckCh <- struct{}{}
-			rts.check(t, jobs.StatusRunning)
+			rts.check(t, jobs.StateRunning)
 		}
 		// Rollback a PAUSE.
 		{
@@ -717,7 +717,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			}
 			rts.progressCh <- struct{}{}
 			rts.resumeCheckCh <- struct{}{}
-			rts.check(t, jobs.StatusRunning)
+			rts.check(t, jobs.StateRunning)
 		}
 		// Now pause it for reals.
 		{
@@ -730,7 +730,7 @@ func TestRegistryLifecycle(t *testing.T) {
 				rts.check(t, "")
 				return nil
 			})
-			rts.check(t, jobs.StatusPaused)
+			rts.check(t, jobs.StatePaused)
 		}
 		// Rollback a RESUME.
 		{
@@ -744,7 +744,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			if err := txn.Rollback(); err != nil {
 				t.Fatal(err)
 			}
-			rts.check(t, jobs.StatusPaused)
+			rts.check(t, jobs.StatePaused)
 		}
 		// Commit a RESUME.
 		{
@@ -759,12 +759,12 @@ func TestRegistryLifecycle(t *testing.T) {
 			})
 		}
 		rts.mu.e.ResumeStart = true
-		rts.check(t, jobs.StatusRunning)
+		rts.check(t, jobs.StateRunning)
 		rts.resumeCheckCh <- struct{}{}
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
-		rts.check(t, jobs.StatusSucceeded)
+		rts.check(t, jobs.StateSucceeded)
 	})
 
 	t.Run("failed running", func(t *testing.T) {
@@ -779,8 +779,8 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.job = j
 
 		rts.mu.e.ResumeStart = true
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 
 		rts.resumeCheckCh <- struct{}{}
 		rts.resumeCh <- errors.New("resume failed")
@@ -788,14 +788,14 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
 		close(rts.failOrCancelCheckCh)
-		rts.check(t, jobs.StatusReverting)
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateReverting)
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StateRunning, "")
 
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit = true
 		close(rts.failOrCancelCh)
-		rts.check(t, jobs.StatusFailed)
-		rts.checkStatusChangeLog(t, jobs.StatusFailed, jobs.StatusReverting, "")
+		rts.check(t, jobs.StateFailed)
+		rts.checkStateChangeLog(t, jobs.StateFailed, jobs.StateReverting, "")
 	})
 
 	// Attempt to mark success, but fail, but fail that also.
@@ -804,7 +804,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		var injectFailures atomic.Bool
 		rts := registryTestSuite{beforeUpdate: func(orig, updated jobs.JobMetadata) error {
 			// Fail marking succeeded.
-			if updated.Status == jobs.StatusSucceeded && injectFailures.Load() {
+			if updated.State == jobs.StateSucceeded && injectFailures.Load() {
 				triedToMarkSucceeded.Store(true)
 				return errors.New("injected failure at marking as succeeded")
 			}
@@ -822,8 +822,8 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 		// Let the resumer complete without error.
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
@@ -832,7 +832,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		// The job is retried as we failed to mark the job successful.
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
+		rts.check(t, jobs.StateRunning)
 		// Fail the resumer to transition to reverting state.
 		rts.resumeCh <- errors.New("injected error in resume")
 		rts.mu.e.ResumeExit++
@@ -844,7 +844,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
 		require.True(t, triedToMarkSucceeded.Load())
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 		rts.failOrCancelCh <- errors.New("injected failure while blocked in reverting")
 		rts.mu.e.OnFailOrCancelExit = true
 
@@ -853,20 +853,20 @@ func TestRegistryLifecycle(t *testing.T) {
 		// Second retry.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 		rts.failOrCancelCh <- errors.New("injected failure while blocked in reverting")
 		rts.mu.e.OnFailOrCancelExit = true
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusRunning, "injected error in resume")
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StateRunning, "injected error in resume")
 
 		// The job will stay in reverting state. Let it fail to exit the test.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 		close(rts.failOrCancelCh)
 		rts.mu.e.OnFailOrCancelExit = true
 
-		rts.check(t, jobs.StatusFailed)
-		rts.checkStatusChangeLog(t, jobs.StatusFailed, jobs.StatusReverting, "injected error in resume")
+		rts.check(t, jobs.StateFailed)
+		rts.checkStateChangeLog(t, jobs.StateFailed, jobs.StateReverting, "injected error in resume")
 	})
 	// Succeed the job but inject an error actually marking the jobs successful.
 	// This could happen due to a transient network error or something like that.
@@ -880,7 +880,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		var failed atomic.Value
 		failed.Store(false)
 		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
-			if updated.Status == jobs.StatusSucceeded && !failed.Load().(bool) {
+			if updated.State == jobs.StateSucceeded && !failed.Load().(bool) {
 				failed.Store(true)
 				return errors.New("boom")
 			}
@@ -896,8 +896,8 @@ func TestRegistryLifecycle(t *testing.T) {
 		// Make sure the job hits the error when it attempts to succeed.
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 		rts.resumeCh <- nil
 		testutils.SucceedsSoon(t, func() error {
 			if !failed.Load().(bool) {
@@ -912,8 +912,8 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.resumeCh <- nil
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
-		rts.check(t, jobs.StatusSucceeded)
-		rts.checkStatusChangeLog(t, jobs.StatusSucceeded, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateSucceeded)
+		rts.checkStateChangeLog(t, jobs.StateSucceeded, jobs.StateRunning, "")
 	})
 
 	// Fail the job, but also fail to mark it failed.
@@ -924,7 +924,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			if triedToMarkFailed.Load().(bool) == true {
 				return nil
 			}
-			if updated.Status == jobs.StatusFailed {
+			if updated.State == jobs.StateFailed {
 				triedToMarkFailed.Store(true)
 				return errors.New("injected error while marking as failed")
 			}
@@ -942,16 +942,16 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
-		rts.checkStatusChangeLog(t, jobs.StatusRunning, jobs.StatusRunning, "")
+		rts.check(t, jobs.StateRunning)
+		rts.checkStateChangeLog(t, jobs.StateRunning, jobs.StateRunning, "")
 
 		rts.resumeCh <- errors.New("resume failed")
 		rts.mu.e.ResumeExit++
 
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
-		rts.checkStatusChangeLog(t, jobs.StatusReverting, jobs.StatusRunning, "resume failed")
+		rts.check(t, jobs.StateReverting)
+		rts.checkStateChangeLog(t, jobs.StateReverting, jobs.StateRunning, "resume failed")
 		// The job is now in state reverting and will never resume again.
 		// Let revert complete without error so that the job is attempted to mark as failed.
 		rts.failOrCancelCh <- nil
@@ -960,13 +960,13 @@ func TestRegistryLifecycle(t *testing.T) {
 		// We failed to mark the jobs as failed, resulting in the job to be retried.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 		require.True(t, triedToMarkFailed.Load().(bool))
 		// Let the job complete to exit the test.
 		close(rts.failOrCancelCh)
 		rts.mu.e.OnFailOrCancelExit = true
-		rts.check(t, jobs.StatusFailed)
-		rts.checkStatusChangeLog(t, jobs.StatusFailed, jobs.StatusReverting, "resume failed")
+		rts.check(t, jobs.StateFailed)
+		rts.checkStateChangeLog(t, jobs.StateFailed, jobs.StateReverting, "resume failed")
 	})
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
 		ctx := context.Background()
@@ -988,10 +988,10 @@ func TestRegistryLifecycle(t *testing.T) {
 
 			rts.mu.e.ResumeStart = true
 			rts.resumeCheckCh <- struct{}{}
-			rts.check(t, jobs.StatusRunning)
+			rts.check(t, jobs.StateRunning)
 
 			rts.sqlDB.Exec(t, "PAUSE JOB $1", j.ID())
-			rts.check(t, jobs.StatusPaused)
+			rts.check(t, jobs.StatePaused)
 
 			<-completeCh
 			checkTraceFiles(ctx, t, expectedNumFiles, j.ID(), rts.s)
@@ -1000,12 +1000,12 @@ func TestRegistryLifecycle(t *testing.T) {
 
 			rts.mu.e.ResumeStart = true
 			rts.resumeCheckCh <- struct{}{}
-			rts.check(t, jobs.StatusRunning)
+			rts.check(t, jobs.StateRunning)
 			rts.resumeCh <- nil
 			rts.mu.e.ResumeExit++
 
 			rts.mu.e.Success = true
-			rts.check(t, jobs.StatusSucceeded)
+			rts.check(t, jobs.StateSucceeded)
 
 			<-completeCh
 			checkTraceFiles(ctx, t, expectedNumFiles+2, j.ID(), rts.s)
@@ -1034,17 +1034,17 @@ func TestRegistryLifecycle(t *testing.T) {
 
 			rts.mu.e.ResumeStart = true
 			rts.resumeCheckCh <- struct{}{}
-			rts.check(t, jobs.StatusRunning)
+			rts.check(t, jobs.StateRunning)
 
 			rts.resumeCh <- errors.New("boom")
 			rts.mu.e.ResumeExit++
 			rts.mu.e.OnFailOrCancelStart = true
 			rts.failOrCancelCheckCh <- struct{}{}
-			rts.check(t, jobs.StatusReverting)
+			rts.check(t, jobs.StateReverting)
 
 			rts.failOrCancelCh <- nil
 			rts.mu.e.OnFailOrCancelExit = true
-			rts.check(t, jobs.StatusFailed)
+			rts.check(t, jobs.StateFailed)
 
 			<-completeCh
 			checkTraceFiles(ctx, t, expectedNumFiles, j.ID(), rts.s)
@@ -1071,7 +1071,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		expectedJobID.Store(int64(j.ID()))
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
+		rts.check(t, jobs.StateRunning)
 
 		rts.sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
 
@@ -1079,7 +1079,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		checkTraceFiles(rts.ctx, t, 2, j.ID(), rts.s)
 
 		rts.mu.e.OnFailOrCancelStart = true
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 
 		rts.failOrCancelCheckCh <- struct{}{}
 		close(rts.failOrCancelCheckCh)
@@ -1087,7 +1087,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		close(rts.failOrCancelCh)
 		rts.mu.e.OnFailOrCancelExit = true
 
-		rts.check(t, jobs.StatusCanceled)
+		rts.check(t, jobs.StateCanceled)
 
 		<-completeCh
 	})
@@ -1229,14 +1229,14 @@ func TestJobLifecycle(t *testing.T) {
 			Progress:      jobspb.RestoreProgress{},
 		})
 
-		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
+		if err := woodyExp.verify(woodyJob.ID(), jobs.StateRunning); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := woodyJob.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
+		if err := woodyExp.verify(woodyJob.ID(), jobs.StateRunning); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1254,7 +1254,7 @@ func TestJobLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			woodyExp.FractionCompleted = f.expected
-			if err := woodyExp.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
+			if err := woodyExp.verify(woodyJob.ID(), jobs.StateRunning); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1267,14 +1267,14 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		woodyExp.Record.Progress = jobspb.RestoreProgress{HighWater: roachpb.Key("mariana")}
-		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
+		if err := woodyExp.verify(woodyJob.ID(), jobs.StateRunning); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := woodyJob.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusSucceeded); err != nil {
+		if err := woodyExp.verify(woodyJob.ID(), jobs.StateSucceeded); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1296,14 +1296,14 @@ func TestJobLifecycle(t *testing.T) {
 		}
 		buzzJob, err := registry.CreateAdoptableJobWithTxn(ctx, buzzRecord, registry.MakeJobID(), nil /* txn */)
 		require.NoError(t, err)
-		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusRunning); err != nil {
+		if err := buzzExp.verify(buzzJob.ID(), jobs.StateRunning); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := buzzJob.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusRunning); err != nil {
+		if err := buzzExp.verify(buzzJob.ID(), jobs.StateRunning); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1311,19 +1311,19 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		buzzExp.FractionCompleted = .42
-		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusRunning); err != nil {
+		if err := buzzExp.verify(buzzJob.ID(), jobs.StateRunning); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := buzzJob.Failed(ctx, errors.New("Buzz Lightyear can't fly")); err != nil {
 			t.Fatal(err)
 		}
-		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusFailed); err != nil {
+		if err := buzzExp.verify(buzzJob.ID(), jobs.StateFailed); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Buzz didn't corrupt Woody.
-		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusSucceeded); err != nil {
+		if err := woodyExp.verify(woodyJob.ID(), jobs.StateSucceeded); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1337,7 +1337,7 @@ func TestJobLifecycle(t *testing.T) {
 			Progress:      jobspb.RestoreProgress{},
 		})
 
-		if err := sidExp.verify(sidJob.ID(), jobs.StatusRunning); err != nil {
+		if err := sidExp.verify(sidJob.ID(), jobs.StateRunning); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1345,15 +1345,15 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		sidExp.Error = "Sid is a total failure"
-		if err := sidExp.verify(sidJob.ID(), jobs.StatusFailed); err != nil {
+		if err := sidExp.verify(sidJob.ID(), jobs.StateFailed); err != nil {
 			t.Fatal(err)
 		}
 
 		// Ensure that logging Sid didn't corrupt Woody or Buzz.
-		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusSucceeded); err != nil {
+		if err := woodyExp.verify(woodyJob.ID(), jobs.StateSucceeded); err != nil {
 			t.Fatal(err)
 		}
-		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusFailed); err != nil {
+		if err := buzzExp.verify(buzzJob.ID(), jobs.StateFailed); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -1368,7 +1368,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := job.Succeeded(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := exp.verify(job.ID(), jobs.StatusSucceeded); err != nil {
+			if err := exp.verify(job.ID(), jobs.StateSucceeded); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -1380,7 +1380,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := job.Failed(ctx, boom); err != nil {
 				t.Fatal(err)
 			}
-			if err := exp.verify(job.ID(), jobs.StatusFailed); err != nil {
+			if err := exp.verify(job.ID(), jobs.StateFailed); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -1419,7 +1419,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := job.Failed(ctx, err); err != nil {
 				t.Fatal(err)
 			}
-			if err := exp.verify(job.ID(), jobs.StatusFailed); err != nil {
+			if err := exp.verify(job.ID(), jobs.StateFailed); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -1435,7 +1435,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Paused(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := exp.verify(job.ID(), jobs.StatusPaused); err != nil {
+		if err := exp.verify(job.ID(), jobs.StatePaused); err != nil {
 			t.Fatal(err)
 		}
 		if err := registry.Unpause(ctx, nil, job.ID()); err != nil {
@@ -1445,7 +1445,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := registry.Unpause(ctx, nil, job.ID()); err != nil {
 			t.Fatal(err)
 		}
-		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
+		if err := exp.verify(job.ID(), jobs.StateRunning); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1464,7 +1464,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := job.NoTxn().CancelRequested(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := exp.verify(job.ID(), jobs.StatusCancelRequested); err != nil {
+			if err := exp.verify(job.ID(), jobs.StateCancelRequested); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1477,7 +1477,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
 				t.Fatal(err)
 			}
-			if err := exp.verify(job.ID(), jobs.StatusCancelRequested); err != nil {
+			if err := exp.verify(job.ID(), jobs.StateCancelRequested); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1493,7 +1493,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
 				t.Fatal(err)
 			}
-			if err := exp.verify(job.ID(), jobs.StatusCancelRequested); err != nil {
+			if err := exp.verify(job.ID(), jobs.StateCancelRequested); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1503,7 +1503,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := job.Succeeded(ctx); err != nil {
 				t.Fatal(err)
 			}
-			expectedErr := "job with status succeeded cannot be requested to be canceled"
+			expectedErr := "job with state succeeded cannot be requested to be canceled"
 			if err := registry.CancelRequested(ctx, nil, job.ID()); !testutils.IsError(err, expectedErr) {
 				t.Fatalf("expected '%s', but got '%s'", expectedErr, err)
 			}
@@ -1517,7 +1517,7 @@ func TestJobLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := registry.Unpause(ctx, nil, job.ID()); !testutils.IsError(err, "cannot be resumed") {
-				t.Errorf("got unexpected status '%v'", err)
+				t.Errorf("got unexpected state '%v'", err)
 			}
 		}
 
@@ -1526,7 +1526,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := job.Succeeded(ctx); err != nil {
 				t.Fatal(err)
 			}
-			expectedErr := fmt.Sprintf("job with status %s cannot be resumed", jobs.StatusSucceeded)
+			expectedErr := fmt.Sprintf("job with state %s cannot be resumed", jobs.StateSucceeded)
 			if err := registry.Unpause(ctx, nil, job.ID()); !testutils.IsError(err, expectedErr) {
 				t.Errorf("expected '%s', but got '%v'", expectedErr, err)
 			}
@@ -1655,61 +1655,61 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		exp.FractionCompleted = 1.0
-		if err := exp.verify(job.ID(), jobs.StatusSucceeded); err != nil {
+		if err := exp.verify(job.ID(), jobs.StateSucceeded); err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	updateClaimStmt := `UPDATE system.jobs SET claim_session_id = $1 WHERE id = $2`
-	updateStatusStmt := `UPDATE system.jobs SET status = $1 WHERE id = $2`
+	updateStateStmt := `UPDATE system.jobs SET status = $1 WHERE id = $2`
 
 	t.Run("set details works", func(t *testing.T) {
 		job, exp := createDefaultJob()
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+		require.NoError(t, exp.verify(job.ID(), jobs.StateRunning))
 		newDetails := jobspb.ImportDetails{URIs: []string{"new"}}
 		exp.Record.Details = newDetails
 		require.NoError(t, job.NoTxn().SetDetails(ctx, newDetails))
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+		require.NoError(t, exp.verify(job.ID(), jobs.StateRunning))
 		require.NoError(t, job.NoTxn().SetDetails(ctx, newDetails))
 
 		// Now change job's session id and check that updates are rejected.
 		_, err := exp.DB.Exec(updateClaimStmt, "!@#!@$!$@#", job.ID())
 		require.NoError(t, err)
 		require.Error(t, job.NoTxn().SetDetails(ctx, newDetails))
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+		require.NoError(t, exp.verify(job.ID(), jobs.StateRunning))
 	})
 
 	t.Run("set details fails", func(t *testing.T) {
 		job, exp := createDefaultJob()
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
-		_, err := exp.DB.Exec(updateStatusStmt, jobs.StatusCancelRequested, job.ID())
+		require.NoError(t, exp.verify(job.ID(), jobs.StateRunning))
+		_, err := exp.DB.Exec(updateStateStmt, jobs.StateCancelRequested, job.ID())
 		require.NoError(t, err)
 		require.Error(t, job.NoTxn().SetDetails(ctx, jobspb.ImportDetails{URIs: []string{"new"}}))
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusCancelRequested))
+		require.NoError(t, exp.verify(job.ID(), jobs.StateCancelRequested))
 	})
 
 	t.Run("set progress works", func(t *testing.T) {
 		job, exp := createDefaultJob()
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+		require.NoError(t, exp.verify(job.ID(), jobs.StateRunning))
 		newProgress := jobspb.ImportProgress{ResumePos: []int64{42}}
 		exp.Record.Progress = newProgress
 		require.NoError(t, job.NoTxn().SetProgress(ctx, newProgress))
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+		require.NoError(t, exp.verify(job.ID(), jobs.StateRunning))
 
 		// Now change job's session id and check that updates are rejected.
 		_, err := exp.DB.Exec(updateClaimStmt, "!@#!@$!$@#", job.ID())
 		require.NoError(t, err)
 		require.Error(t, job.NoTxn().SetDetails(ctx, newProgress))
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+		require.NoError(t, exp.verify(job.ID(), jobs.StateRunning))
 	})
 
 	t.Run("set progress fails", func(t *testing.T) {
 		job, exp := createDefaultJob()
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
-		_, err := exp.DB.Exec(updateStatusStmt, jobs.StatusPauseRequested, job.ID())
+		require.NoError(t, exp.verify(job.ID(), jobs.StateRunning))
+		_, err := exp.DB.Exec(updateStateStmt, jobs.StatePauseRequested, job.ID())
 		require.NoError(t, err)
 		require.Error(t, job.NoTxn().SetProgress(ctx, jobspb.ImportProgress{ResumePos: []int64{42}}))
-		require.NoError(t, exp.verify(job.ID(), jobs.StatusPauseRequested))
+		require.NoError(t, exp.verify(job.ID(), jobs.StatePauseRequested))
 	})
 }
 
@@ -1735,7 +1735,7 @@ func TestShowJobs(t *testing.T) {
 	type row struct {
 		id                jobspb.JobID
 		typ               string
-		status            string
+		state             string
 		description       string
 		username          username.SQLUsername
 		err               string
@@ -1753,7 +1753,7 @@ func TestShowJobs(t *testing.T) {
 		{
 			id:                42,
 			typ:               "SCHEMA CHANGE",
-			status:            "superfailed",
+			state:             "superfailed",
 			description:       "failjob",
 			username:          username.MakeSQLUsernameFromPreNormalizedString("failure"),
 			err:               "boom",
@@ -1767,7 +1767,7 @@ func TestShowJobs(t *testing.T) {
 		{
 			id:          43,
 			typ:         "CHANGEFEED",
-			status:      "running",
+			state:       "running",
 			description: "persistent feed",
 			username:    username.MakeSQLUsernameFromPreNormalizedString("persistent"),
 			err:         "",
@@ -1814,7 +1814,7 @@ func TestShowJobs(t *testing.T) {
 			}
 			sqlDB.Exec(t,
 				`INSERT INTO system.jobs (id, status, job_type, owner, description, created, finished, error_msg, claim_session_id, claim_instance_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-				in.id, in.status, in.typ, in.username.Normalized(), in.description, in.created, in.finished, in.err, session.ID().UnsafeBytes(), instanceID,
+				in.id, in.state, in.typ, in.username.Normalized(), in.description, in.created, in.finished, in.err, session.ID().UnsafeBytes(), instanceID,
 			)
 			sqlDB.Exec(t, `INSERT INTO system.job_progress (job_id, written, resolved, fraction) VALUES ($1, $2, $3, $4)`, in.id, in.modified, in.highWater.AsOfSystemTime(), in.fractionCompleted)
 
@@ -1830,7 +1830,7 @@ func TestShowJobs(t *testing.T) {
       SELECT job_id, job_type, status, created, description, finished, modified,
              fraction_completed, high_water_timestamp, user_name, ifnull(error, ''), coordinator_id
         FROM crdb_internal.jobs WHERE job_id = $1`, in.id).Scan(
-				&out.id, &out.typ, &out.status, &out.created, &out.description,
+				&out.id, &out.typ, &out.state, &out.created, &out.description,
 				&out.finished, &out.modified, &maybeFractionCompleted, &decimalHighWater, &resultUsername,
 				&out.err, &out.coordinatorID,
 			)
@@ -1903,7 +1903,7 @@ func TestShowAutomaticJobs(t *testing.T) {
 	type row struct {
 		id      jobspb.JobID
 		typ     string
-		status  string
+		state   string
 		details jobspb.Details
 	}
 
@@ -1911,13 +1911,13 @@ func TestShowAutomaticJobs(t *testing.T) {
 		{
 			id:      1,
 			typ:     "CREATE STATS",
-			status:  "running",
+			state:   "running",
 			details: jobspb.CreateStatsDetails{Name: "my_stats"},
 		},
 		{
 			id:      2,
 			typ:     "AUTO CREATE STATS",
-			status:  "running",
+			state:   "running",
 			details: jobspb.CreateStatsDetails{Name: "__auto__"},
 		},
 	}
@@ -2025,8 +2025,8 @@ func TestShowJobWhenComplete(t *testing.T) {
 	defer cleanup()
 
 	type row struct {
-		id     jobspb.JobID
-		status string
+		id    jobspb.JobID
+		state string
 	}
 	var out row
 	insqlDB := s.InternalDB().(isql.DB)
@@ -2043,12 +2043,12 @@ func TestShowJobWhenComplete(t *testing.T) {
 				ctx,
 				`SELECT job_id, status
 				 FROM [SHOW JOB WHEN COMPLETE $1]`,
-				job.ID()).Scan(&out.id, &out.status); err != nil {
+				job.ID()).Scan(&out.id, &out.state); err != nil {
 				return err
 			}
-			if out.status != "canceled" {
+			if out.state != "canceled" {
 				return errors.Errorf(
-					"Expected status 'canceled' but got '%s'", out.status)
+					"Expected state 'canceled' but got '%s'", out.state)
 			}
 			if job.ID() != out.id {
 				return errors.Errorf(
@@ -2091,7 +2091,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 			}
 			var cnt int
 			for rows.Next() {
-				if err := rows.Scan(&out.id, &out.status); err != nil {
+				if err := rows.Scan(&out.id, &out.state); err != nil {
 					return err
 				}
 				cnt += 1
@@ -2100,10 +2100,10 @@ func TestShowJobWhenComplete(t *testing.T) {
 				case jobsToStart[1].ID():
 					// SHOW JOBS WHEN COMPLETE finishes only after all jobs are
 					// canceled.
-					if out.status != "canceled" {
+					if out.state != "canceled" {
 						return errors.Errorf(
-							"Expected status 'canceled' but got '%s'",
-							out.status)
+							"Expected state 'canceled' but got '%s'",
+							out.state)
 					}
 				default:
 					return errors.Errorf(
@@ -2441,9 +2441,9 @@ func TestStartableJob(t *testing.T) {
 	t.Run("Cancel", func(t *testing.T) {
 		sj := createStartableJob(t)
 		require.NoError(t, sj.Cancel(ctx))
-		status, err := sj.TestingCurrentStatus(ctx)
+		state, err := sj.TestingCurrentState(ctx)
 		require.NoError(t, err)
-		require.Equal(t, jobs.StatusCancelRequested, status)
+		require.Equal(t, jobs.StateCancelRequested, state)
 		// Start should fail since we have already called cancel on the job.
 		err = sj.Start(ctx)
 		require.Regexp(t, "cannot be started more than once", err)
@@ -2515,10 +2515,10 @@ func TestStartableJob(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			loaded, err := jr.LoadJob(ctx, sj.ID())
 			require.NoError(t, err)
-			st, err := loaded.TestingCurrentStatus(ctx)
+			st, err := loaded.TestingCurrentState(ctx)
 			require.NoError(t, err)
-			if st != jobs.StatusSucceeded {
-				return errors.Errorf("expected %s, got %s", jobs.StatusSucceeded, st)
+			if st != jobs.StateSucceeded {
+				return errors.Errorf("expected %s, got %s", jobs.StateSucceeded, st)
 			}
 			return nil
 		})
@@ -2618,11 +2618,11 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 		"started: %v, before:	%v", started, before)
 }
 
-func TestStatusSafeFormatter(t *testing.T) {
+func TestStateSafeFormatter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	redacted := string(redact.Sprint(jobs.StatusCanceled).Redact())
-	expected := string(jobs.StatusCanceled)
+	redacted := string(redact.Sprint(jobs.StateCanceled).Redact())
+	expected := string(jobs.StateCanceled)
 	require.Equal(t, expected, redacted)
 }
 
@@ -2775,11 +2775,11 @@ func TestMetrics(t *testing.T) {
 
 			var payloadBytes []byte
 			var payload jobspb.Payload
-			var status string
+			var state string
 			tdb.QueryRow(t, fmt.Sprintf("SELECT status, payload FROM (%s)",
 				jobutils.InternalSystemJobsBaseQuery), jobID).Scan(
-				&status, &payloadBytes)
-			require.Equal(t, "paused", status)
+				&state, &payloadBytes)
+			require.Equal(t, "paused", state)
 			require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
 			require.Equal(t, "for testing", payload.PauseReason)
 		}
@@ -2956,7 +2956,7 @@ func TestJobsRetry(t *testing.T) {
 		// First job run in running state.
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
+		rts.check(t, jobs.StateRunning)
 		// Make Resume fail.
 		rts.resumeCh <- errors.New("non-permanent error")
 		rts.mu.e.ResumeExit++
@@ -2964,20 +2964,20 @@ func TestJobsRetry(t *testing.T) {
 		// Job should be retried in running state.
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
+		rts.check(t, jobs.StateRunning)
 		rts.resumeCh <- jobs.MarkAsPermanentJobError(errors.New("permanent error"))
 		rts.mu.e.ResumeExit++
 
 		// Job should now revert.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit = true
 
 		close(rts.failOrCancelCh)
 		close(rts.failOrCancelCheckCh)
-		rts.check(t, jobs.StatusFailed)
+		rts.check(t, jobs.StateFailed)
 	})
 
 	t.Run("retry reverting", func(t *testing.T) {
@@ -2996,7 +2996,7 @@ func TestJobsRetry(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
+		rts.check(t, jobs.StateRunning)
 
 		// Make Resume fail.
 		rts.resumeCh <- errors.New("failing resume to revert")
@@ -3005,7 +3005,7 @@ func TestJobsRetry(t *testing.T) {
 		// Job is now reverting.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 
 		// Fail the job in reverting state without a retryable error.
 		rts.failOrCancelCh <- errors.New("failing with a non-retryable error")
@@ -3014,13 +3014,13 @@ func TestJobsRetry(t *testing.T) {
 		// Job should be retried.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit = true
 
 		close(rts.failOrCancelCh)
 		close(rts.failOrCancelCheckCh)
-		rts.check(t, jobs.StatusFailed)
+		rts.check(t, jobs.StateFailed)
 	})
 
 	t.Run("retry non-cancelable reverting", func(t *testing.T) {
@@ -3044,7 +3044,7 @@ func TestJobsRetry(t *testing.T) {
 
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusRunning)
+		rts.check(t, jobs.StateRunning)
 
 		// Make Resume fail with a permanent error.
 		rts.resumeCh <- jobs.MarkAsPermanentJobError(errors.New("permanent error"))
@@ -3053,7 +3053,7 @@ func TestJobsRetry(t *testing.T) {
 		// Job is now reverting.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 
 		// Fail the job in reverting state with a permanent error a retryable error.
 		rts.failOrCancelCh <- jobs.MarkAsPermanentJobError(errors.New("permanent error"))
@@ -3062,13 +3062,13 @@ func TestJobsRetry(t *testing.T) {
 		// Job should be retried.
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.failOrCancelCheckCh <- struct{}{}
-		rts.check(t, jobs.StatusReverting)
+		rts.check(t, jobs.StateReverting)
 		rts.failOrCancelCh <- nil
 		rts.mu.e.OnFailOrCancelExit = true
 
 		close(rts.failOrCancelCh)
 		close(rts.failOrCancelCheckCh)
-		rts.check(t, jobs.StatusFailed)
+		rts.check(t, jobs.StateFailed)
 	})
 }
 
@@ -3106,12 +3106,12 @@ func TestPausepoints(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		points   string
-		expected jobs.Status
+		expected jobs.State
 	}{
-		{"none", "", jobs.StatusSucceeded},
-		{"pausepoint-only", "test_pause_foo", jobs.StatusPaused},
-		{"other-var-only", "test_pause_bar", jobs.StatusSucceeded},
-		{"pausepoint-and-other", "test_pause_bar,test_pause_foo,test_pause_baz", jobs.StatusPaused},
+		{"none", "", jobs.StateSucceeded},
+		{"pausepoint-only", "test_pause_foo", jobs.StatePaused},
+		{"other-var-only", "test_pause_bar", jobs.StateSucceeded},
+		{"pausepoint-and-other", "test_pause_bar,test_pause_foo,test_pause_baz", jobs.StatePaused},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := sqlDB.Exec("SET CLUSTER SETTING jobs.debug.pausepoints = $1", tc.points)
@@ -3123,17 +3123,17 @@ func TestPausepoints(t *testing.T) {
 				return registry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, rec)
 			}))
 			require.NoError(t, sj.Start(ctx))
-			if tc.expected == jobs.StatusSucceeded {
+			if tc.expected == jobs.StateSucceeded {
 				require.NoError(t, sj.AwaitCompletion(ctx))
 			} else {
 				require.Error(t, sj.AwaitCompletion(ctx))
 			}
-			status, err := sj.TestingCurrentStatus(ctx)
+			state, err := sj.TestingCurrentState(ctx)
 			// Map pause-requested to paused to avoid races.
-			if status == jobs.StatusPauseRequested {
-				status = jobs.StatusPaused
+			if state == jobs.StatePauseRequested {
+				state = jobs.StatePaused
 			}
-			require.Equal(t, tc.expected, status)
+			require.Equal(t, tc.expected, state)
 			require.NoError(t, err)
 		})
 	}

@@ -805,11 +805,14 @@ func (p *Provider) createVM(
 	opts vm.CreateOpts,
 	providerOpts ProviderOpts,
 ) (machine compute.VirtualMachine, err error) {
+
 	startupArgs := azureStartupArgs{
-		RemoteUser:           remoteUser,
-		DisksInitializedFile: vm.DisksInitializedFile,
-		OSInitializedFile:    vm.OSInitializedFile,
-		StartupLogs:          vm.StartupLogs,
+		StartupArgs: vm.DefaultStartupArgs(
+			vm.WithVMName(name),
+			vm.WithSharedUser(remoteUser),
+		),
+		DiskControllerNVMe: false,
+		AttachedDiskLun:    nil,
 	}
 	useNVMe := MachineSupportsNVMe(providerOpts.MachineType)
 	if useNVMe {

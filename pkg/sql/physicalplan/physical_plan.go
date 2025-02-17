@@ -979,7 +979,14 @@ func (p *PhysicalPlan) PopulateEndpoints() {
 
 // GenerateFlowSpecs takes a plan (with populated endpoints) and generates the
 // set of FlowSpecs (one per node involved in the plan).
-func (p *PhysicalPlan) GenerateFlowSpecs() map[base.SQLInstanceID]*execinfrapb.FlowSpec {
+//
+// The returned function should be called whenever the caller is done with all
+// FlowSpecs. The caller is free to ignore it if the specs will be released
+// separately.
+func (p *PhysicalPlan) GenerateFlowSpecs() (
+	_ map[base.SQLInstanceID]*execinfrapb.FlowSpec,
+	cleanup func(map[base.SQLInstanceID]*execinfrapb.FlowSpec),
+) {
 	flowID := execinfrapb.FlowID{
 		UUID: p.FlowID,
 	}
@@ -993,7 +1000,15 @@ func (p *PhysicalPlan) GenerateFlowSpecs() map[base.SQLInstanceID]*execinfrapb.F
 		}
 		flowSpec.Processors = append(flowSpec.Processors, proc.Spec)
 	}
-	return flows
+	// Note that we don't return an anonymous function with no arguments to not
+	// incur an allocation.
+	return flows, releaseAll
+}
+
+func releaseAll(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) {
+	for _, flowSpec := range flows {
+		ReleaseFlowSpec(flowSpec)
+	}
 }
 
 // SetRowEstimates updates p according to the row estimates of left and right

@@ -405,6 +405,9 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 
 	if !canApplyConstraint {
 		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
+		// For newly created tables its possible for the execution to
+		// the unique violation error.
+		stmt.potentialExecErrors.add(pgcode.UniqueViolation)
 	} else {
 		// Otherwise there is still a possibility for an error,
 		// so add it in the potential set, since our validation query
@@ -1157,6 +1160,11 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 			{code: pgcode.FeatureNotSupported, condition: lastColInvertedIndexIsDescending},
 			{code: pgcode.FeatureNotSupported, condition: pkColUsedInInvertedIndex},
+		})
+		// Unique violations can occur at the statement phase if the table is
+		// new.
+		stmt.potentialExecErrors.addAll(codesWithConditions{
+			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
 		})
 	}
 
@@ -2476,6 +2484,9 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 		}
 		if colContainsNull {
 			og.candidateExpectedCommitErrors.add(pgcode.NotNullViolation)
+			// If the table is created within the txn, then the not null violation
+			// will be an execution error.
+			stmt.potentialExecErrors.add(pgcode.NotNullViolation)
 		}
 		// If we are running with the legacy schema changer, the not null constraint
 		// is enforced during the job phase. So it's still possible to INSERT not null
@@ -3233,6 +3244,17 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 				errRunInTxnRbkSentinel,
 			)
 		}
+
+		// Command is too large errors are allowed on DML operations since,
+		// some of the tables can be pretty wide in this test.
+		if s.queryType == OpStmtDML && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
+			strings.Contains(pgErr.Error(), "command is too large") {
+			return errors.Mark(
+				err,
+				errRunInTxnRbkSentinel,
+			)
+		}
+
 		if !s.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
 			!s.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 			return errors.Mark(

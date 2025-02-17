@@ -635,6 +635,13 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var logErr error
 	defer func() {
+		// Do not log if this is an eventTxnCommittedDueToDDL event. In that case,
+		// the transaction is committed, and the current statement is executed
+		// again.
+		if _, ok := retEv.(eventTxnCommittedDueToDDL); ok {
+			return
+		}
+
 		// If we did not dispatch to the execution engine, we need to initialize
 		// the plan here.
 		if !dispatchToExecEngine {
@@ -1620,6 +1627,13 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	dispatchToExecEngine := false
 
 	defer processCleanupFunc(func() {
+		// Do not log if this is an eventTxnCommittedDueToDDL event. In that case,
+		// the transaction is committed, and the current statement is executed
+		// again.
+		if _, ok := retEv.(eventTxnCommittedDueToDDL); ok {
+			return
+		}
+
 		// If we did not dispatch to the execution engine, we need to initialize
 		// the plan here.
 		if !dispatchToExecEngine {
@@ -2340,6 +2354,13 @@ func (ex *connExecutor) resetTransactionOnSchemaChangeRetry(ctx context.Context)
 	}
 	if omitInRangefeeds {
 		newTxn.SetOmitInRangefeeds()
+	}
+	if buildutil.CrdbTestBuild {
+		// For now, we explicitly disable buffered writes before executing DDLs.
+		// TODO(#140695): we should consider allowing this in the future.
+		if ex.state.mu.txn.BufferedWritesEnabled() {
+			return errors.AssertionFailedf("buffered writes should have been disabled on a DDL")
+		}
 	}
 	ex.state.mu.txn = newTxn
 	return nil
@@ -3160,7 +3181,7 @@ var txnSchemaChangeErr = pgerror.Newf(
 func (ex *connExecutor) makeExecPlan(
 	ctx context.Context, planner *planner,
 ) (context.Context, error) {
-	if err := ex.maybeUpgradeToSerializable(ctx, planner.stmt); err != nil {
+	if err := ex.maybeAdjustTxnForDDL(ctx, planner.stmt); err != nil {
 		return ctx, err
 	}
 
@@ -3450,6 +3471,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.QualityOfService(),
 				ex.txnIsolationLevelToKV(ctx, s.Modes.Isolation),
 				ex.omitInRangefeeds(),
+				ex.bufferedWritesEnabled(ctx),
 			)
 	case *tree.ShowCommitTimestamp:
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
@@ -3458,12 +3480,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if ex.sessionData().AutoCommitBeforeDDL {
 			// If autocommit_before_ddl is set, we allow these statements to be
 			// executed, and send a warning rather than an error.
-			if err := ex.planner.SendClientNotice(
-				ctx,
-				pgerror.WithSeverity(errNoTransactionInProgress, "WARNING"),
-			); err != nil {
-				return ex.makeErrEvent(err, ast)
-			}
+			ex.planner.BufferClientNotice(ctx, pgerror.WithSeverity(errNoTransactionInProgress, "WARNING"))
 			return nil, nil
 		}
 		return ex.makeErrEvent(errNoTransactionInProgress, ast)
@@ -3488,6 +3505,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.QualityOfService(),
 				ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 				ex.omitInRangefeeds(),
+				ex.bufferedWritesEnabled(ctx),
 			)
 	}
 }
@@ -3521,6 +3539,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			qos,
 			ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 			ex.omitInRangefeeds(),
+			ex.bufferedWritesEnabled(ctx),
 		)
 }
 
@@ -4049,6 +4068,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 		discardedStats := ex.statsCollector.EndTransaction(
 			ctx,
 			transactionFingerprintID,
+			implicit,
 		)
 		if discardedStats > 0 {
 			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(discardedStats)

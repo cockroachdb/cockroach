@@ -361,7 +361,7 @@ func deserializeExprForFormatting(
 	}
 
 	// Type-check the expression to resolve user defined types.
-	typedExpr, err := replacedExpr.TypeCheck(ctx, semaCtx, types.Any)
+	typedExpr, err := replacedExpr.TypeCheck(ctx, semaCtx, types.AnyElement)
 	if err != nil {
 		return nil, err
 	}

@@ -97,7 +97,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
@@ -123,6 +122,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/ptp"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -290,6 +290,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {
+		if true {
+			panic(err)
+		}
 		return nil, errors.Wrap(err, "failed to create engines")
 	}
 	stopper.AddCloser(&engines)
@@ -680,10 +683,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		Settings: st,
 		Knobs:    protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
-			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
+			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStateFunc(
 				jobRegistry, jobsprotectedts.Jobs,
 			),
-			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
+			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStateFunc(
 				jobRegistry, jobsprotectedts.Schedules,
 			),
 			sessionprotectedts.SessionMetaType: sessionprotectedts.MakeStatusFunc(),
@@ -840,9 +843,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	rangeLogWriter := rangelog.NewWriter(
 		keys.SystemSQLCodec,
 		func() int64 {
-			return int64(builtins.GenerateUniqueInt(
-				builtins.ProcessUniqueID(nodeIDContainer.Get()),
-			))
+			return unique.GenerateUniqueInt(
+				unique.ProcessUniqueID(nodeIDContainer.Get()),
+			)
 		},
 	)
 	eagerLeaseAcquisitionLimiter := quotapool.NewIntPool("eager-lease-acquisitions",
@@ -880,7 +883,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVMemoryMonitor:              kvMemoryMonitor,
 		RangefeedBudgetFactory:       rangeFeedBudgetFactory,
 		RaftEntriesMonitor:           raftEntriesMonitor,
-		SharedStorageEnabled:         cfg.SharedStorage != "",
+		SharedStorageEnabled:         cfg.StorageConfig.SharedStorage.URI != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
 		RangeLogWriter:               rangeLogWriter,
@@ -2100,7 +2103,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	}
 
 	// Register the engines debug endpoints.
-	if err := s.debug.RegisterEngines(s.cfg.Stores.Specs, s.engines); err != nil {
+	if err := s.debug.RegisterEngines(s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
 

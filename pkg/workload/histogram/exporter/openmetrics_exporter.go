@@ -155,7 +155,7 @@ func (o *OpenMetricsExporter) SetLabels(labels *map[string]string) {
 		labelName := util.SanitizeKey(label)
 
 		// In case the label value already has surrounding quotes, we should trim them
-		labelValue := util.SanitizeValue(strings.Trim(value, "\""))
+		labelValue := util.SanitizeValue(strings.Trim(value, `"`))
 		labelPair := &prom.LabelPair{
 			Name:  &labelName,
 			Value: &labelValue,

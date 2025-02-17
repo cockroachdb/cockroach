@@ -1223,6 +1223,9 @@ JOIN (SELECT DISTINCT ON (x) * FROM (SELECT * FROM t106371 WHERE y = 2)) b ON a.
 subtest regression_107850
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE TABLE t107850a (
   d2 DECIMAL(10, 2) NOT NULL UNIQUE
 );
@@ -1236,5 +1239,8 @@ query R
 SELECT d2 FROM t107850a JOIN t107850b ON d2 = d0
 ----
 1.00
+
+statement ok
+RESET autocommit_before_ddl
 
 subtest end

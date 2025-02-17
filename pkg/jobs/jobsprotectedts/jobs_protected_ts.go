@@ -44,9 +44,9 @@ func GetMetaType(metaType MetaType) string {
 	return metaTypes[metaType]
 }
 
-// MakeStatusFunc returns a function which determines whether the job or
+// MakeStateFunc returns a function which determines whether the job or
 // schedule implied with this value of meta should be removed by the reconciler.
-func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc {
+func MakeStateFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc {
 	switch metaType {
 	case Jobs:
 		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {
@@ -61,7 +61,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 			if err != nil {
 				return false, err
 			}
-			return j.Status().Terminal(), nil
+			return j.State().Terminal(), nil
 		}
 	case Schedules:
 		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {

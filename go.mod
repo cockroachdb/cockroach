@@ -84,7 +84,7 @@ require (
 	github.com/jackc/pgproto3/v2 v2.3.3
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/pgtype v1.14.1
-	github.com/jackc/pgx/v4 v4.18.1
+	github.com/jackc/pgx/v4 v4.18.3
 )
 
 require (
@@ -136,8 +136,8 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250122205916-76ffdc2481ff
-	github.com/cockroachdb/redact v1.1.5
+	github.com/cockroachdb/pebble v0.0.0-20250205231009-386e588a0c4f
+	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06
@@ -212,7 +212,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
 	github.com/otan/gopgkrb5 v1.0.3
-	github.com/petermattis/goid v0.0.0-20211229010228-4d14c490ee36
+	github.com/petermattis/goid v0.0.0-20250211185408-f2b9d978cd7a
 	github.com/pierrec/lz4/v4 v4.1.21
 	github.com/pierrre/geohash v1.0.0
 	github.com/pires/go-proxyproto v0.7.0

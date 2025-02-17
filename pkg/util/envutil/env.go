@@ -187,6 +187,8 @@ var safeVarRegistry = map[redact.SafeString]struct{}{
 	"GOMAXPROCS":  {},
 	"GOTRACEBACK": {},
 	"GOMEMLIMIT":  {},
+	// Jemalloc configuration override.
+	"MALLOC_CONF": {},
 	// gRPC.
 	"GRPC_GO_LOG_SEVERITY_LEVEL":  {},
 	"GRPC_GO_LOG_VERBOSITY_LEVEL": {},

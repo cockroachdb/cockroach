@@ -544,7 +544,7 @@ func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
 	ticker.adjustmentStart(true /* loaded */)
 	adjustmentChanged := false
 	for {
-		ticker.tick()
+		<-ticker.ticker.C
 		remainingTicks := ticker.remainingTicks()
 		if remainingTicks == 0 {
 			if adjustmentChanged {

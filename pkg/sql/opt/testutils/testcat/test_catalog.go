@@ -319,9 +319,14 @@ func (tc *Catalog) CheckExecutionPrivilege(
 
 // HasAdminRole is part of the cat.Catalog interface.
 func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
-	roleMembership, found := tc.users[tc.currentUser]
+	return tc.UserHasAdminRole(ctx, tc.currentUser)
+}
+
+// UserHasAdminRole is part of the cat.Catalog interface.
+func (tc *Catalog) UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error) {
+	roleMembership, found := tc.users[user]
 	if !found {
-		return false, errors.AssertionFailedf("user %q not found", tc.currentUser)
+		return false, errors.AssertionFailedf("user %q not found", user)
 	}
 	return roleMembership.isMemberOfAdminRole, nil
 }
@@ -477,7 +482,13 @@ func (tc *Catalog) GetDependencyDigest() cat.DependencyDigest {
 	tc.dependencyDigest++
 	return cat.DependencyDigest{
 		LeaseGeneration: tc.dependencyDigest,
+		CurrentUser:     tc.currentUser,
 	}
+}
+
+// LeaseByStableID does not do anything since no leasing is used here.
+func (tc *Catalog) LeaseByStableID(ctx context.Context, id cat.StableID) (uint64, error) {
+	return 1, nil
 }
 
 // ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
@@ -679,6 +690,11 @@ func (s *Schema) ID() cat.StableID {
 	return s.SchemaID
 }
 
+// Version is a part of cat.Object
+func (s *Schema) Version() uint64 {
+	return 1
+}
+
 // PostgresDescriptorID is part of the cat.Object interface.
 func (s *Schema) PostgresDescriptorID() catid.DescID {
 	return catid.DescID(s.SchemaID)
@@ -735,6 +751,11 @@ func (tv *View) String() string {
 // ID is part of the cat.DataSource interface.
 func (tv *View) ID() cat.StableID {
 	return tv.ViewID
+}
+
+// Version is a part of cat.Object
+func (tv *View) Version() uint64 {
+	return 1
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
@@ -833,8 +854,9 @@ type Table struct {
 
 	homeRegion string
 
-	rlsEnabled bool
-	policies   cat.Policies
+	rlsEnabled   bool
+	policies     cat.Policies
+	nextPolicyID descpb.PolicyID
 }
 
 var _ cat.Table = &Table{}
@@ -855,6 +877,11 @@ func (tt *Table) SetMultiRegion(val bool) {
 // ID is part of the cat.DataSource interface.
 func (tt *Table) ID() cat.StableID {
 	return tt.TabID
+}
+
+// Version is a part of cat.Object
+func (tt *Table) Version() uint64 {
+	return 1
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
@@ -1748,6 +1775,11 @@ var _ cat.Sequence = &Sequence{}
 // ID is part of the cat.DataSource interface.
 func (ts *Sequence) ID() cat.StableID {
 	return ts.SeqID
+}
+
+// Version is a part of cat.Object
+func (ts *Sequence) Version() uint64 {
+	return 1
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.

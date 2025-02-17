@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,8 +52,11 @@ func init() {
 // to its value. Updated timestamps in rows and resolved timestamp payloads are
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
-	updatedField, mvccTimestampField, beforeField, keyInValue, topicInValue bool
-	envelopeType                                                            changefeedbase.EnvelopeType
+	updatedField, mvccTimestampField, beforeField, keyInValue, topicInValue,
+	sourceField, schemaField bool
+
+	envelopeType                   changefeedbase.EnvelopeType
+	enrichedEnvelopeSourceProvider *enrichedSourceProvider
 
 	buf             bytes.Buffer
 	versionEncoder  func(ed *cdcevent.EventDescriptor, isPrev bool) *versionEncoder
@@ -65,8 +69,8 @@ var _ Encoder = &jsonEncoder{}
 func canJSONEncodeMetadata(e changefeedbase.EnvelopeType) bool {
 	// bare envelopes use the _crdb_ key to avoid collisions with column names.
 	// wrapped envelopes can put metadata at the top level because the columns
-	// are nested under the "after:" key.
-	return e == changefeedbase.OptEnvelopeBare || e == changefeedbase.OptEnvelopeWrapped
+	// are nested under the "after:" key. enriched envelopes put metadata in a ".payload.source" object
+	return e == changefeedbase.OptEnvelopeBare || e == changefeedbase.OptEnvelopeWrapped || e == changefeedbase.OptEnvelopeEnriched
 }
 
 // getCachedOrCreate returns cached object, or creates and caches new one.
@@ -90,7 +94,9 @@ type jsonEncoderOptions struct {
 	encodeForQuery bool
 }
 
-func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder, error) {
+func makeJSONEncoder(
+	ctx context.Context, opts jsonEncoderOptions, sourceProvider *enrichedSourceProvider,
+) (*jsonEncoder, error) {
 	versionCache := cache.NewUnorderedCache(cdcevent.DefaultCacheConfig)
 	e := &jsonEncoder{
 		envelopeType:       opts.Envelope,
@@ -102,6 +108,8 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 		beforeField:  opts.Diff && opts.Envelope != changefeedbase.OptEnvelopeBare,
 		keyInValue:   opts.KeyInValue,
 		topicInValue: opts.TopicInValue,
+		sourceField:  inSet(changefeedbase.EnrichedPropertySource, opts.EnrichedProperties),
+		schemaField:  inSet(changefeedbase.EnrichedPropertySchema, opts.EnrichedProperties),
 		versionEncoder: func(ed *cdcevent.EventDescriptor, isPrev bool) *versionEncoder {
 			key := jsonEncoderVersionKey{
 				CacheKey: cdcevent.CacheKey{
@@ -115,9 +123,15 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 				splitPrevRowVersion: isPrev && opts.encodeForQuery && opts.Envelope != changefeedbase.OptEnvelopeBare,
 			}
 			return getCachedOrCreate(key, versionCache, func() interface{} {
-				return &versionEncoder{encodeJSONValueNullAsObject: opts.EncodeJSONValueNullAsObject}
+				_, inclSchema := opts.EnrichedProperties[changefeedbase.EnrichedPropertySchema]
+				return &versionEncoder{
+					encodeJSONValueNullAsObject: opts.EncodeJSONValueNullAsObject,
+					encodeKeyAsObject:           opts.Envelope == changefeedbase.OptEnvelopeEnriched,
+					includeKeyObjectSchema:      inclSchema,
+				}
 			}).(*versionEncoder)
 		},
+		enrichedEnvelopeSourceProvider: sourceProvider,
 	}
 
 	if !canJSONEncodeMetadata(e.envelopeType) {
@@ -131,14 +145,21 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 		}
 	}
 
-	if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
+	switch e.envelopeType {
+	case changefeedbase.OptEnvelopeWrapped:
 		if err := e.initWrappedEnvelope(ctx); err != nil {
 			return nil, err
 		}
-	} else {
+	case changefeedbase.OptEnvelopeBare, changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeDeprecatedRow, changefeedbase.OptEnvelopeKeyOnly:
 		if err := e.initRawEnvelope(ctx); err != nil {
 			return nil, err
 		}
+	case changefeedbase.OptEnvelopeEnriched:
+		if err := e.initEnrichedEnvelope(ctx); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.AssertionFailedf(`unknown envelope type %s`, e.envelopeType)
 	}
 
 	return e, nil
@@ -146,8 +167,8 @@ func makeJSONEncoder(ctx context.Context, opts jsonEncoderOptions) (*jsonEncoder
 
 // versionEncoder memoizes version specific encoding state.
 type versionEncoder struct {
-	encodeJSONValueNullAsObject bool
-	valueBuilder                *json.FixedKeysObjectBuilder
+	encodeJSONValueNullAsObject, encodeKeyAsObject, includeKeyObjectSchema bool
+	valueBuilder                                                           *json.FixedKeysObjectBuilder
 }
 
 // EncodeKey implements the Encoder interface.
@@ -170,7 +191,41 @@ func (e *jsonEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) (enc []by
 	return e.buf.Bytes(), nil
 }
 
-func (e *versionEncoder) encodeKeyRaw(
+// encodeKeyRawAsObject encodes the key as a JSON object. if
+// includeKeyObjectSchema is true, the key is nested under the "payload" key.
+func (e *versionEncoder) encodeKeyRawAsObject(
+	ctx context.Context, it cdcevent.Iterator,
+) (json.JSON, error) {
+	var err error
+	var outerBuilder *json.FixedKeysObjectBuilder
+	kb := json.NewObjectBuilder(1)
+	if e.includeKeyObjectSchema {
+		outerBuilder, err = json.NewFixedKeysObjectBuilder([]string{"payload"})
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		v, err := e.datumToJSON(ctx, d)
+		if err != nil {
+			return err
+		}
+		kb.Add(col.Name, v)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	keyJSON := kb.Build()
+	if outerBuilder != nil {
+		if err := outerBuilder.Set("payload", keyJSON); err != nil {
+			return nil, err
+		}
+		return outerBuilder.Build()
+	}
+	return keyJSON, nil
+}
+
+func (e *versionEncoder) encodeKeyRawAsArray(
 	ctx context.Context, it cdcevent.Iterator,
 ) (json.JSON, error) {
 	kb := json.NewArrayBuilder(1)
@@ -188,14 +243,23 @@ func (e *versionEncoder) encodeKeyRaw(
 	return kb.Build(), nil
 }
 
+func (e *versionEncoder) encodeKeyRaw(
+	ctx context.Context, it cdcevent.Iterator,
+) (json.JSON, error) {
+	if e.encodeKeyAsObject {
+		return e.encodeKeyRawAsObject(ctx, it)
+	}
+	return e.encodeKeyRawAsArray(ctx, it)
+}
+
 func (e *versionEncoder) encodeKeyInValue(
 	ctx context.Context, updated cdcevent.Row, b *json.FixedKeysObjectBuilder,
 ) error {
-	keyEntries, err := e.encodeKeyRaw(ctx, updated.ForEachKeyColumn())
+	keyJSON, err := e.encodeKeyRaw(ctx, updated.ForEachKeyColumn())
 	if err != nil {
 		return err
 	}
-	return b.Set("key", keyEntries)
+	return b.Set("key", keyJSON)
 }
 
 func (e *versionEncoder) rowAsGoNative(
@@ -434,6 +498,107 @@ func (e *jsonEncoder) initWrappedEnvelope(ctx context.Context) error {
 	return nil
 }
 
+type enrichedEventOp string
+
+const (
+	eventTypeUnknown enrichedEventOp = ""
+	eventTypeCreate  enrichedEventOp = "c"
+	eventTypeUpdate  enrichedEventOp = "u"
+	eventTypeDelete  enrichedEventOp = "d"
+)
+
+// deduceOp determines the operation type of the event. The event must have been
+// produced with `diff`/`prev` set, otherwise this logic is flawed.
+func deduceOp(updated, prev cdcevent.Row) enrichedEventOp {
+	if updated.IsDeleted() {
+		return eventTypeDelete
+	}
+	if prev.IsDeleted() || !prev.IsInitialized() {
+		return eventTypeCreate
+	}
+	return eventTypeUpdate
+}
+
+func inSet[S ~string](k S, set map[S]struct{}) bool {
+	_, ok := set[k]
+	return ok
+}
+
+func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
+	var err error
+	var envelopeBuilder *json.FixedKeysObjectBuilder
+	// TODO(#139658): implement schema field.
+	if e.schemaField {
+		envelopeKeys := []string{"payload"}
+		envelopeBuilder, err = json.NewFixedKeysObjectBuilder(envelopeKeys)
+		if err != nil {
+			return err
+		}
+	}
+
+	payloadKeys := []string{"after", "op", "ts_ns"}
+	if e.keyInValue {
+		payloadKeys = append(payloadKeys, "key")
+	}
+	if e.sourceField {
+		payloadKeys = append(payloadKeys, "source")
+	}
+	// TODO(#various): implement options for this envelope: before, key, topic, updated, mvcc_timestamp, ..
+	payloadBuilder, err := json.NewFixedKeysObjectBuilder(payloadKeys)
+	if err != nil {
+		return err
+	}
+
+	const emitDeletedRowAsNull = true
+	e.envelopeEncoder = func(evCtx eventContext, updated, prev cdcevent.Row) (json.JSON, error) {
+		ve := e.versionEncoder(updated.EventDescriptor, false)
+		after, err := ve.rowAsGoNative(ctx, updated, emitDeletedRowAsNull, nil)
+		if err != nil {
+			return nil, err
+		}
+		if err := payloadBuilder.Set("after", after); err != nil {
+			return nil, err
+		}
+		if err := payloadBuilder.Set("ts_ns", json.FromInt64(timeutil.Now().UnixNano())); err != nil {
+			return nil, err
+		}
+		if err := payloadBuilder.Set("op", json.FromString(string(deduceOp(updated, prev)))); err != nil {
+			return nil, err
+		}
+
+		if e.keyInValue {
+			if err := ve.encodeKeyInValue(ctx, updated, payloadBuilder); err != nil {
+				return nil, err
+			}
+		}
+
+		if e.sourceField {
+			sourceJson, err := e.enrichedEnvelopeSourceProvider.GetJSON(updated)
+			if err != nil {
+				return nil, err
+			}
+			if err := payloadBuilder.Set("source", sourceJson); err != nil {
+				return nil, err
+			}
+		}
+
+		payload, err := payloadBuilder.Build()
+		if err != nil {
+			return nil, err
+		}
+		// If we aren't inluding a schema, we don't need to wrap this in "payload".
+		if envelopeBuilder == nil {
+			return payload, nil
+		}
+
+		if err := envelopeBuilder.Set("payload", payload); err != nil {
+			return nil, err
+		}
+		return envelopeBuilder.Build()
+	}
+	return nil
+}
+
 // EncodeValue implements the Encoder interface.
 func (e *jsonEncoder) EncodeValue(
 	ctx context.Context, evCtx eventContext, updatedRow cdcevent.Row, prevRow cdcevent.Row,
@@ -463,9 +628,11 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 		`resolved`: eval.TimestampToDecimalDatum(resolved).Decimal.String(),
 	}
 	var jsonEntries interface{}
-	if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
+	switch e.envelopeType {
+	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeEnriched:
 		jsonEntries = meta
-	} else {
+	// It doesn't seem right to me that this is the deafult, but it's the existing behaviour.
+	default:
 		jsonEntries = map[string]interface{}{
 			metaSentinel: meta,
 		}
@@ -494,10 +661,13 @@ func EncodeAsJSONChangefeedWithFlags(
 	if err != nil {
 		return nil, err
 	}
+	sourceProvider := newEnrichedSourceProvider(opts, enrichedSourceData{
+		jobId: "ccl_builtin", // This encoder is not used in the context of a real changefeed.
+	})
 	// If this function ends up needing to be optimized, cache or pool these.
 	// Nontrivial to do as an encoder generally isn't safe to call on different
 	// rows in parallel.
-	e, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts})
+	e, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts}, sourceProvider)
 	if err != nil {
 		return nil, err
 	}

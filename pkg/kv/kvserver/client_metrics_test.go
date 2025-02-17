@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -252,8 +253,8 @@ func TestStoreMetrics(t *testing.T) {
 			InMemory:    true,
 			StickyVFSID: strconv.FormatInt(int64(i), 10),
 			// Specify a size to trigger the BlockCache in Pebble.
-			Size: base.SizeSpec{
-				InBytes: 512 << 20, /* 512 MiB */
+			Size: storagepb.SizeSpec{
+				Capacity: 512 << 20, /* 512 MiB */
 			},
 		}
 		stickyServerArgs[i] = base.TestServerArgs{

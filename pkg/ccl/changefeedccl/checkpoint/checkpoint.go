@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // SpanIter is an iterator over a collection of spans.
@@ -70,4 +71,54 @@ func Make(
 	}
 
 	return cp
+}
+
+// SpanForwarder is an interface for forwarding spans to a changefeed.
+type SpanForwarder interface {
+	Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error)
+}
+
+// Restore restores the saved progress from a checkpoint to the given SpanForwarder.
+func Restore(sf SpanForwarder, checkpoint *jobspb.TimestampSpansMap) error {
+	for ts, spans := range checkpoint.ToGoMap() {
+		if ts.IsEmpty() {
+			return errors.New("checkpoint timestamp is empty")
+		}
+		for _, sp := range spans {
+			if _, err := sf.Forward(sp, ts); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// ConvertLegacyCheckpoint converts a legacy checkpoint into the current
+// checkpoint format.
+func ConvertLegacyCheckpoint(
+	//lint:ignore SA1019 deprecated usage
+	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
+	statementTime hlc.Timestamp,
+	initialHighWater hlc.Timestamp,
+) *jobspb.TimestampSpansMap {
+	if checkpoint == nil || checkpoint.IsZero() {
+		return nil
+	}
+
+	checkpointTS := checkpoint.Timestamp
+
+	// Checkpoint records from 21.2 were used only for backfills and did not store
+	// the timestamp, since in a backfill it must either be the StatementTime for
+	// an initial backfill, or right after the high-water for schema backfills.
+	if checkpointTS.IsEmpty() {
+		if initialHighWater.IsEmpty() {
+			checkpointTS = statementTime
+		} else {
+			checkpointTS = initialHighWater.Next()
+		}
+	}
+
+	return jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+		checkpointTS: checkpoint.Spans,
+	})
 }

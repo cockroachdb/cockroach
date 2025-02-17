@@ -1,0 +1,2 @@
+do_stmt ::=
+	'DO' ( ( ( 'LANGUAGE' 'PLPGSQL'  | routine_body_str ) ) ( ( ( 'LANGUAGE' 'PLPGSQL'  | routine_body_str ) ) )* )

@@ -90,7 +90,7 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 		if i%2 != 0 {
 			str = lock.Exclusive
 		}
-		require.NoError(t, MVCCAcquireLock(ctx, batch, txn1, str, roachpb.Key(key), nil, 0, 0))
+		require.NoError(t, MVCCAcquireLock(ctx, batch, &txn1.TxnMeta, txn1.IgnoredSeqNums, str, roachpb.Key(key), nil, 0, 0))
 	}
 	require.NoError(t, batch.Commit(true))
 	batch.Close()
@@ -103,7 +103,7 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 					// Provoke and check LockConflictError.
 					startKey, endKey := MVCCKey{Key: roachpb.Key(start)}, MVCCKey{Key: roachpb.Key(end)}
 					_, err := CheckSSTConflicts(ctx, sstFile.Bytes(), engine, startKey, endKey, startKey.Key, endKey.Key.Next(),
-						false /*disallowShadowing*/, hlc.Timestamp{} /*disallowShadowingBelow*/, hlc.Timestamp{} /* sstReqTS */, tc.maxLockConflicts, tc.targetLockConflictBytes, usePrefixSeek)
+						hlc.Timestamp{} /* disallowShadowingBelow */, hlc.Timestamp{} /* sstReqTS */, tc.maxLockConflicts, tc.targetLockConflictBytes, usePrefixSeek)
 					require.Error(t, err)
 					lcErr := &kvpb.LockConflictError{}
 					require.ErrorAs(t, err, &lcErr)

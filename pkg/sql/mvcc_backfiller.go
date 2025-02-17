@@ -315,7 +315,7 @@ func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error 
 		if err := imt.jobMu.job.NoTxn().FractionProgressed(
 			ctx, jobs.FractionUpdater(frac),
 		); err != nil {
-			return jobs.SimplifyInvalidStatusError(err)
+			return jobs.SimplifyInvalidStateError(err)
 		}
 	}
 	return nil

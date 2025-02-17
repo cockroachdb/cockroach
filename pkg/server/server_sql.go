@@ -111,6 +111,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -1043,6 +1044,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
+		VecIndexManager:            vecindex.NewManager(ctx, cfg.stopper, codec, cfg.internalDB),
 		RowMetrics:                 &rowMetrics,
 		InternalRowMetrics:         &internalRowMetrics,
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
@@ -1643,7 +1645,7 @@ func (s *SQLServer) preStart(
 	// care about what uses the SQL server before those migrations
 	// run.
 
-	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
+	s.leaseMgr.StartRefreshLeasesTask(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.RunBackgroundLeasingTask(ctx)
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {

@@ -14,13 +14,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -52,7 +52,7 @@ func TestStandbyReadTSPollerJob(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
-	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
 	readerTenantID := stats.IngestionDetails.ReadTenantID
 	require.NotNil(t, readerTenantID)
 
@@ -148,9 +148,9 @@ func TestFastFailbackWithReaderTenant(t *testing.T) {
 	sqlA := sqlutils.MakeSQLRunner(aDB)
 	sqlB := sqlutils.MakeSQLRunner(bDB)
 
-	serverAURL, cleanupURLA := sqlutils.PGUrl(t, serverA.SQLAddr(), t.Name(), url.User(username.RootUser))
+	serverAURL, cleanupURLA := pgurlutils.PGUrl(t, serverA.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupURLA()
-	serverBURL, cleanupURLB := sqlutils.PGUrl(t, serverB.SQLAddr(), t.Name(), url.User(username.RootUser))
+	serverBURL, cleanupURLB := pgurlutils.PGUrl(t, serverB.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupURLB()
 
 	for _, s := range []string{
@@ -256,7 +256,7 @@ func TestReaderTenantCutover(t *testing.T) {
 		srcTime := c.SrcCluster.Server(0).Clock().Now()
 		c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
-		stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+		stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
 		readerTenantID := stats.IngestionDetails.ReadTenantID
 		require.NotNil(t, readerTenantID)
 

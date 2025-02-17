@@ -1501,14 +1501,18 @@ func selectedNodesOrDefault(
 
 type HealthStatusResult struct {
 	Node   int
+	URL    string
 	Status int
 	Body   []byte
 	Err    error
 }
 
-func newHealthStatusResult(node int, status int, body []byte, err error) *HealthStatusResult {
+func newHealthStatusResult(
+	node int, url string, status int, body []byte, err error,
+) *HealthStatusResult {
 	return &HealthStatusResult{
 		Node:   node,
+		URL:    url,
 		Status: status,
 		Body:   body,
 		Err:    err,
@@ -1525,7 +1529,8 @@ func (c *clusterImpl) HealthStatus(
 		return nil, nil // unit tests
 	}
 
-	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, nodes)
+	// Make sure we run the health checks on the KV pod.
+	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, nodes, option.VirtualClusterName(install.SystemInterfaceName))
 	if err != nil {
 		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
 	}
@@ -1538,13 +1543,13 @@ func (c *clusterImpl) HealthStatus(
 		url := fmt.Sprintf(`%s://%s/health?ready=1`, protocol, adminAddrs[nodeIndex])
 		resp, err := client.Get(ctx, url)
 		if err != nil {
-			return newHealthStatusResult(node, 0, nil, err)
+			return newHealthStatusResult(node, url, 0, nil, err)
 		}
 
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
 
-		return newHealthStatusResult(node, resp.StatusCode, body, err)
+		return newHealthStatusResult(node, url, resp.StatusCode, body, err)
 	}
 
 	results := make([]*HealthStatusResult, nodeCount)
@@ -2508,7 +2513,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 	}
 	if err := roachprod.Run(
 		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
-		l.Stdout, l.Stderr, args, options.WithExpanderConfig(expanderCfg),
+		l.Stdout, l.Stderr, args, options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
 	); err != nil {
 		if err := ctx.Err(); err != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
@@ -2578,7 +2583,7 @@ func (c *clusterImpl) RunWithDetails(
 	}
 	results, err := roachprod.RunWithDetails(
 		ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "", /* processTag */
-		c.IsSecure(), args, options.WithExpanderConfig(expanderCfg),
+		c.IsSecure(), args, options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
 	)
 
 	var logFileFull string

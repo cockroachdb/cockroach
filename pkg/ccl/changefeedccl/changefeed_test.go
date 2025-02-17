@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -74,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -914,6 +916,7 @@ func TestChangefeedEnvelope(t *testing.T) {
 			defer closeFeed(t, foo)
 			assertPayloads(t, foo, []string{`foo: [1]->{"after": {"a": 1, "b": "a"}, "key": [1]}`})
 		})
+		// TODO(#139660): add envelope=enriched here
 	}
 
 	// some sinks are incompatible with envelope
@@ -1299,7 +1302,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
-			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false, changefeedbase.OptEnvelopeWrapped)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				// Skip errors that may come up during SQL execution. If the SQL query
@@ -2387,7 +2390,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	})
 
 	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
-	waitForJobStatus(sqlDB, t, jobID, jobs.StatusPaused)
+	waitForJobState(sqlDB, t, jobID, jobs.StatePaused)
 
 	// We expect highwater to be 0 (because we skipped some spans) or exactly cursor
 	// (this is mostly due to racy updates sent from aggregators to the frontier.
@@ -2422,7 +2425,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, "RESUME JOB $1", jobID)
-	waitForJobStatus(sqlDB, t, jobID, jobs.StatusRunning)
+	waitForJobState(sqlDB, t, jobID, jobs.StateRunning)
 
 	// Wait until highwater advances past cursor.
 	testutils.SucceedsSoon(t, func() error {
@@ -2434,7 +2437,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	})
 
 	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
-	waitForJobStatus(sqlDB, t, jobID, jobs.StatusPaused)
+	waitForJobState(sqlDB, t, jobID, jobs.StatePaused)
 	// Verify we didn't see incorrect timestamps when resuming.
 	require.NoError(t, incorrectCheckpointErr)
 }
@@ -2444,6 +2447,11 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(#141405): Remove this once llrbFrontier starts merging
+	// adjacent spans. The current lack of merging causes issues
+	// with the checks in this test around expected resolved spans.
+	defer span.EnableBtreeFrontier(true)()
 
 	rnd, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)
@@ -3602,15 +3610,15 @@ func TestChangefeedJobControl(t *testing.T) {
 		})
 		asUser(t, f, `adminUser`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
-			waitForJobStatus(userDB, t, currentFeed.JobID(), "paused")
+			waitForJobState(userDB, t, currentFeed.JobID(), "paused")
 		})
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "RESUME job $1", currentFeed.JobID())
-			waitForJobStatus(userDB, t, currentFeed.JobID(), "running")
+			waitForJobState(userDB, t, currentFeed.JobID(), "running")
 		})
 		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "RESUME job $1", currentFeed.JobID())
-			waitForJobStatus(userDB, t, currentFeed.JobID(), "running")
+			waitForJobState(userDB, t, currentFeed.JobID(), "running")
 		})
 		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t, "user userwithsomegrants does not have CHANGEFEED privilege on relation table_b", "PAUSE job $1", currentFeed.JobID())
@@ -3627,7 +3635,7 @@ func TestChangefeedJobControl(t *testing.T) {
 		})
 		asUser(t, f, `adminUser`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
-			waitForJobStatus(userDB, t, currentFeed.JobID(), "paused")
+			waitForJobState(userDB, t, currentFeed.JobID(), "paused")
 		})
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t, "only admins can control jobs owned by other admins", "PAUSE job $1", currentFeed.JobID())
@@ -3845,6 +3853,97 @@ func TestChangefeedBareAvro(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func TestChangefeedEnriched(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name               string
+		enrichedProperties []string
+	}{
+		{name: "solo"},
+		{name: "with schema", enrichedProperties: []string{"schema"}},
+		{name: "with source", enrichedProperties: []string{"source"}},
+		{name: "with schema and source", enrichedProperties: []string{"schema", "source"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+
+				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='%s'`,
+					strings.Join(tc.enrichedProperties, ",")))
+				defer closeFeed(t, foo)
+				// TODO(#139660): the webhook sink forces topic_in_value, but
+				// this is not supported by the enriched envelope type. We should adapt
+				// the test framework to account for this.
+				topic := "foo"
+				if _, ok := foo.(*webhookFeed); ok {
+					topic = ""
+				}
+
+				var jobID int64
+				// Fetching the jobId this way is not supported by the sinkless sink.
+				// In that case we will assert the job_id is 0, so we don't need this query.
+				if _, ok := foo.(*sinklessFeed); !ok {
+					sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
+				}
+
+				var sourceMsg string
+				if slices.Contains(tc.enrichedProperties, "source") {
+					sourceMsg = fmt.Sprintf(`, "source": {"job_id": "%d"}`, jobID)
+				}
+
+				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"%s}`, topic, sourceMsg)
+				if slices.Contains(tc.enrichedProperties, "schema") {
+					// TODO(#139658): add the schema to the key and the value here
+					msg = fmt.Sprintf(`%s: {"payload": {"a": 0}}->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"%s}}`, topic, sourceMsg)
+				}
+
+				assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{msg})
+			}
+			supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
+			for _, sink := range supportedSinks {
+				cdcTest(t, testFn, feedTestForceSink(sink))
+			}
+		})
+	}
+
+}
+
+func TestChangefeedEnrichedAvro(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='localhost:90909'`)
+		defer closeFeed(t, foo)
+
+		var jobID int64
+		if _, ok := foo.(*sinklessFeed); !ok {
+			sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
+		}
+
+		assertionKey := `{"a":{"long":0}}`
+		assertionAfter := `"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}`
+		assertionSource := fmt.Sprintf(`"source": {"source": {"job_id": {"string": "%d"}}}`, jobID)
+
+		assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{
+			fmt.Sprintf(`foo: %s->{%s, "op": {"string": "c"}, %s}`,
+				assertionKey, assertionAfter, assertionSource),
+		})
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
 func TestChangefeedExpressionUsesSerializedSessionData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3947,7 +4046,7 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 	defer cleanup()
 	s := cluster.Server(1)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgBase, err := pq.NewConnector(pgURL.String())
 	if err != nil {
@@ -4015,7 +4114,7 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	// Only pubsub v2 emits notices.
 	PubsubV2Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgBase, err := pq.NewConnector(pgURL.String())
 	if err != nil {
@@ -4133,7 +4232,7 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 		}()
 		sqlDB.CheckQueryResultsRetry(
 			t,
-			fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='IMPORT' AND status='%s'`, jobs.StatusPaused),
+			fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='IMPORT' AND status='%s'`, jobs.StatePaused),
 			[][]string{{"1"}},
 		)
 
@@ -4143,7 +4242,7 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 		sqlDB.Exec(t, `CANCEL JOB $1`, jobID)
 		sqlDB.CheckQueryResultsRetry(
 			t,
-			fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='IMPORT' AND status='%s'`, jobs.StatusCanceled),
+			fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='IMPORT' AND status='%s'`, jobs.StateCanceled),
 			[][]string{{"1"}},
 		)
 		sqlDB.CheckQueryResultsRetry(t, "SELECT count(*) FROM for_import", [][]string{{"1"}})
@@ -5095,7 +5194,7 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 		jobID := cf.(cdctest.EnterpriseTestFeed).JobID()
 		defer func() {
 			// Manually update job status to avoid closeFeed waitng for the registry to cancel it
-			sqlDB.Exec(t, `UPDATE system.jobs SET status = $1 WHERE id = $2`, jobs.StatusFailed, jobID)
+			sqlDB.Exec(t, `UPDATE system.jobs SET status = $1 WHERE id = $2`, jobs.StateFailed, jobID)
 			closeFeed(t, cf)
 		}()
 
@@ -5927,6 +6026,54 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
 		`kafka://nope`)
+
+	sqlDB.ExpectErrWithTimeout(
+		t, `envelope=enriched is incompatible with SELECT statement`,
+		`CREATE CHANGEFEED INTO 'null://' WITH envelope=enriched AS SELECT * from foo`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `envelope=enriched is only usable with format=json/avro`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH envelope=enriched, format=csv, initial_scan='only'`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		// I also would have accepted "this sink is incompatible with envelope=enriched".
+		t, `envelope=enriched is only usable with format=json/avro`,
+		`CREATE CHANGEFEED FOR foo INTO 'nodelocal://.' WITH envelope=enriched, format=parquet`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `this sink is incompatible with envelope=enriched`,
+		`CREATE CHANGEFEED FOR foo INTO 'nodelocal://.' WITH envelope=enriched`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `enriched_properties is only usable with envelope=enriched`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH enriched_properties='schema'`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `unknown enriched_properties: potato, valid values are: source, schema`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH enriched_properties='schema,potato'`,
+	)
+
+	t.Run("sinkless enriched non-json", func(t *testing.T) {
+		skip.WithIssue(t, 130949, "sinkless feed validations are subpar")
+		sqlDB.ExpectErrWithTimeout(
+			t, `some error`,
+			`CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='http://localhost:8888'`,
+		)
+	})
+
+	t.Run("enriched alters", func(t *testing.T) {
+		res := sqlDB.QueryStr(t, `CREATE CHANGEFEED FOR FOO INTO 'null://' WITH envelope=enriched`)
+		jobIDStr := res[0][0]
+		jobID, err := strconv.Atoi(jobIDStr)
+		require.NoError(t, err)
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		waitForJobState(sqlDB, t, catpb.JobID(jobID), jobs.StatePaused)
+		sqlDB.ExpectErrWithTimeout(
+			t, `envelope=enriched is only usable with format=json/avro`,
+			`ALTER CHANGEFEED $1 SET format=parquet`, jobIDStr,
+		)
+	})
+
 }
 
 func TestChangefeedDescription(t *testing.T) {
@@ -5944,7 +6091,7 @@ func TestChangefeedDescription(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, status status)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-	sink, cleanup := sqlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
+	sink, cleanup := pgurlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	sink.Scheme = changefeedbase.SinkSchemeExperimentalSQL
 	sink.Path = `d`
@@ -6087,7 +6234,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 		feedJob := foo.(cdctest.EnterpriseTestFeed)
 		sqlDB.Exec(t, `PAUSE JOB $1`, feedJob.JobID())
 		// PAUSE JOB only requests the job to be paused. Block until it's paused.
-		waitForJobStatus(sqlDB, t, feedJob.JobID(), jobs.StatusPaused)
+		waitForJobState(sqlDB, t, feedJob.JobID(), jobs.StatePaused)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
 		sqlDB.Exec(t, `RESUME JOB $1`, feedJob.JobID())
 		assertPayloads(t, foo, []string{
@@ -6754,7 +6901,8 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	defer log.Scope(t).Close(t)
 
 	// Add verbose logging to help debug future failures.
-	require.NoError(t, log.SetVModule("changefeed_processors=1"))
+	require.NoError(t, log.SetVModule("changefeed_processors=1,replica_rangefeed=2,"+
+		"replica_range_lease=3,raft=3"))
 
 	// This test requires many range splits, which can be slow under certain test
 	// conditions. Skip potentially slow tests.
@@ -6853,8 +7001,8 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	defer DiscardMessages(testFeed)()
 
 	// Ensure the changefeed is able to complete in a reasonable amount of time.
-	require.NoError(t, testFeed.(cdctest.EnterpriseTestFeed).WaitDurationForStatus(5*time.Minute, func(s jobs.Status) bool {
-		return s == jobs.StatusSucceeded
+	require.NoError(t, testFeed.(cdctest.EnterpriseTestFeed).WaitDurationForState(5*time.Minute, func(s jobs.State) bool {
+		return s == jobs.StateSucceeded
 	}))
 }
 
@@ -6961,7 +7109,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 
 		// enterprise feeds should also have the job marked failed.
 		if jobFeed, ok := feed.(cdctest.EnterpriseTestFeed); ok {
-			require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusFailed }))
+			require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool { return s == jobs.StateFailed }))
 		}
 	}
 
@@ -7173,6 +7321,8 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 			`bar: [0]->{"after": {"a": 0, "b": "initial"}}`,
 		})
 
+		_, err := s.DB.Exec("SET autocommit_before_ddl = false")
+		require.NoError(t, err)
 		require.NoError(t, crdb.ExecuteTx(context.Background(), s.DB, nil, func(tx *gosql.Tx) error {
 			for _, stmt := range []string{
 				`CREATE TABLE baz ()`,
@@ -7189,6 +7339,8 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 			}
 			return nil
 		}))
+		_, err = s.DB.Exec("RESET autocommit_before_ddl")
+		require.NoError(t, err)
 
 		expected := []string{
 			`bar: [0]->{"after": {"a": 0, "b": "updated"}}`,
@@ -7279,6 +7431,11 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 func TestChangefeedBackfillCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(#141405): Remove this once llrbFrontier starts merging
+	// adjacent spans. The current lack of merging causes issues
+	// with the checks in this test around expected resolved spans.
+	defer span.EnableBtreeFrontier(true)()
 
 	skip.UnderRace(t)
 	skip.UnderShort(t)
@@ -7766,7 +7923,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 			feedJob := foo.(cdctest.EnterpriseTestFeed)
 
 			// check for paused status on failure
-			require.NoError(t, feedJob.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusPaused }))
+			require.NoError(t, feedJob.WaitForState(func(s jobs.State) bool { return s == jobs.StatePaused }))
 
 			// Verify job progress contains paused on error status.
 			jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
@@ -7786,10 +7943,10 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 			// cancellation should still go through if option is in place
 			// to avoid race condition, check only that the job is progressing to be
 			// canceled (we don't know what stage it will be in)
-			require.NoError(t, feedJob.WaitForStatus(func(s jobs.Status) bool {
-				return s == jobs.StatusCancelRequested ||
-					s == jobs.StatusReverting ||
-					s == jobs.StatusCanceled
+			require.NoError(t, feedJob.WaitForState(func(s jobs.State) bool {
+				return s == jobs.StateCancelRequested ||
+					s == jobs.StateReverting ||
+					s == jobs.StateCanceled
 			}))
 		})
 
@@ -7809,7 +7966,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 
 			feedJob := foo.(cdctest.EnterpriseTestFeed)
 
-			require.NoError(t, feedJob.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusFailed }))
+			require.NoError(t, feedJob.WaitForState(func(s jobs.State) bool { return s == jobs.StateFailed }))
 			require.EqualError(t, feedJob.FetchTerminalJobErr(), "should fail with custom error")
 		})
 
@@ -7830,7 +7987,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 			feedJob := foo.(cdctest.EnterpriseTestFeed)
 
 			// if no option is provided, fail should be the default behavior
-			require.NoError(t, feedJob.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusFailed }))
+			require.NoError(t, feedJob.WaitForState(func(s jobs.State) bool { return s == jobs.StateFailed }))
 			require.EqualError(t, feedJob.FetchTerminalJobErr(), "should fail with custom error")
 		})
 	}
@@ -7937,8 +8094,8 @@ func TestChangefeedEndTime(t *testing.T) {
 		close(endTimeReached)
 
 		testFeed := feed.(cdctest.EnterpriseTestFeed)
-		require.NoError(t, testFeed.WaitForStatus(func(s jobs.Status) bool {
-			return s == jobs.StatusSucceeded
+		require.NoError(t, testFeed.WaitForState(func(s jobs.State) bool {
+			return s == jobs.StateSucceeded
 		}))
 	}
 
@@ -7997,8 +8154,8 @@ func TestChangefeedEndTimeWithCursor(t *testing.T) {
 		defer DiscardMessages(feed)()
 
 		testFeed := feed.(cdctest.EnterpriseTestFeed)
-		require.NoError(t, testFeed.WaitForStatus(func(s jobs.Status) bool {
-			return s == jobs.StatusSucceeded
+		require.NoError(t, testFeed.WaitForState(func(s jobs.State) bool {
+			return s == jobs.StateSucceeded
 		}))
 
 		// After changefeed completes, verify we have seen all ranges emit resolved
@@ -8057,8 +8214,8 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 				// would expect this test to flake (hopefully, with an error message
 				// that makes it clear that the unexpected event happen).
 				jobFeed := feed.(cdctest.EnterpriseTestFeed)
-				require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
-					return s == jobs.StatusSucceeded
+				require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
+					return s == jobs.StateSucceeded
 				}))
 			})
 		}
@@ -8152,8 +8309,8 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 				}(testData.expectedPayload)
 
 				jobFeed := feed.(cdctest.EnterpriseTestFeed)
-				require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
-					return s == jobs.StatusSucceeded
+				require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
+					return s == jobs.StateSucceeded
 				}))
 			})
 		}
@@ -8399,8 +8556,8 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			}
 
 			if tc.expectErr != "" {
-				require.NoError(t, feedJob.WaitForStatus(
-					func(s jobs.Status) bool { return s == jobs.StatusFailed }))
+				require.NoError(t, feedJob.WaitForState(
+					func(s jobs.State) bool { return s == jobs.StateFailed }))
 				require.Regexp(t, tc.expectErr, feedJob.FetchTerminalJobErr())
 			} else {
 				assertPayloads(t, foo, tc.payload)
@@ -8768,7 +8925,7 @@ func TestKVFeedDoesNotLeakMemoryWhenSkippingEvents(t *testing.T) {
 
 	// If everything is fine (events are ignored, but their memory allocation is released),
 	// the changefeed should terminate.  If not, we'll time out waiting for job.
-	waitForJobStatus(sqlDB, t, jobID, jobs.StatusSucceeded)
+	waitForJobState(sqlDB, t, jobID, jobs.StateSucceeded)
 
 	// No rows should have been emitted (all should have been filtered out due to end_time).
 	require.EqualValues(t, 0, atomic.LoadInt64(&sink.numRows))
@@ -8958,7 +9115,7 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH on_error=FAIL`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'next')`)
 		feedJob := foo.(cdctest.EnterpriseTestFeed)
-		require.NoError(t, feedJob.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusFailed }))
+		require.NoError(t, feedJob.WaitForState(func(s jobs.State) bool { return s == jobs.StateFailed }))
 
 		closeFeed(t, foo)
 		failLogs := waitForLogs(t, beforeCreate)
@@ -8993,7 +9150,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 					nada, expectTimeout,
 					func(ctx context.Context) error {
 						return assertPayloadsBaseErr(
-							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false)
+							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false, changefeedbase.OptEnvelopeWrapped)
 					})
 				return nil
 			}, 20*expectTimeout))
@@ -9236,7 +9393,7 @@ func TestChangefeedMetricsScopeNotice(t *testing.T) {
 	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
 	sqlDB.CheckQueryResultsRetry(
 		t,
-		fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='CHANGEFEED' AND status='%s'`, jobs.StatusPaused),
+		fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='CHANGEFEED' AND status='%s'`, jobs.StatePaused),
 		[][]string{{"1"}},
 	)
 
@@ -9989,6 +10146,9 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
 
+		// Ensure that the resolved timestamp advances at least once
+		// since the PTS lag override.
+		testutils.SucceedsSoon(t, checkHWM)
 		testutils.SucceedsSoon(t, checkHWM)
 
 		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)

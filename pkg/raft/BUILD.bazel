@@ -13,6 +13,7 @@ go_library(
         "rawnode.go",
         "status.go",
         "storage.go",
+        "testing_knobs.go",
         "types.go",
         "util.go",
     ],

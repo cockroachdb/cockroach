@@ -42,22 +42,6 @@ const (
 	ArchAMD64   = CPUArch("amd64")
 	ArchFIPS    = CPUArch("fips")
 	ArchUnknown = CPUArch("unknown")
-
-	// InitializedFile is the base name of the initialization paths defined below.
-	InitializedFile = ".roachprod-initialized"
-	// OSInitializedFile is a marker file that is created on a VM to indicate
-	// that it has been initialized at least once by the VM start-up script. This
-	// is used to avoid re-initializing a VM that has been stopped and restarted.
-	OSInitializedFile = "/" + InitializedFile
-	// DisksInitializedFile is a marker file that is created on a VM to indicate
-	// that the disks have been initialized by the VM start-up script. This is
-	// separate from OSInitializedFile, because the disks may be ephemeral and
-	// need to be re-initialized on every start. The presence of this file
-	// automatically implies the presence of OSInitializedFile.
-	DisksInitializedFile = "/mnt/data1/" + InitializedFile
-	// StartupLogs is a log file that is created on a VM to redirect startup script
-	// output logs.
-	StartupLogs = "/var/log/roachprod_startup.log"
 )
 
 // UnimplementedError is returned when a method is not implemented by a

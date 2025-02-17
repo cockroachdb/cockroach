@@ -190,13 +190,32 @@ func (tx *inMemoryTxn) DeletePartition(ctx context.Context, partitionKey Partiti
 	return nil
 }
 
-// AddToPartition implements the Txn interface.
-func (tx *inMemoryTxn) AddToPartition(
-	ctx context.Context, partitionKey PartitionKey, vector vector.T, childKey ChildKey,
-) (int, error) {
+// GetPartitionMetadata implements the Txn interface.
+func (tx *inMemoryTxn) GetPartitionMetadata(
+	ctx context.Context, partitionKey PartitionKey, forUpdate bool,
+) (PartitionMetadata, error) {
 	inMemPartition, err := tx.store.getPartition(partitionKey)
 	if err != nil {
-		return 0, err
+		return PartitionMetadata{}, err
+	}
+
+	// Acquire shared lock on the partition and get its metadata.
+	inMemPartition.lock.AcquireShared(tx.id)
+	defer inMemPartition.lock.ReleaseShared()
+	return inMemPartition.lock.partition.Metadata(), nil
+}
+
+// AddToPartition implements the Txn interface.
+func (tx *inMemoryTxn) AddToPartition(
+	ctx context.Context,
+	partitionKey PartitionKey,
+	vector vector.T,
+	childKey ChildKey,
+	valueBytes ValueBytes,
+) (PartitionMetadata, error) {
+	inMemPartition, err := tx.store.getPartition(partitionKey)
+	if err != nil {
+		return PartitionMetadata{}, err
 	}
 
 	// Acquire exclusive lock on the partition.
@@ -211,28 +230,28 @@ func (tx *inMemoryTxn) AddToPartition(
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.current = tx.store.tickLocked()
-		return 0, ErrRestartOperation
+		return PartitionMetadata{}, ErrRestartOperation
 	}
 
 	// Add the vector to the partition.
 	partition := inMemPartition.lock.partition
-	if partition.Add(ctx, vector, childKey) {
+	if partition.Add(ctx, vector, childKey, valueBytes) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.store.reportPartitionSizeLocked(partition.Count())
 	}
 
 	tx.updated = true
-	return partition.Count(), nil
+	return partition.Metadata(), nil
 }
 
 // RemoveFromPartition implements the Txn interface.
 func (tx *inMemoryTxn) RemoveFromPartition(
 	ctx context.Context, partitionKey PartitionKey, childKey ChildKey,
-) (int, error) {
+) (PartitionMetadata, error) {
 	inMemPartition, err := tx.store.getPartition(partitionKey)
 	if err != nil {
-		return 0, err
+		return PartitionMetadata{}, err
 	}
 
 	// Acquire exclusive lock on the partition.
@@ -247,7 +266,7 @@ func (tx *inMemoryTxn) RemoveFromPartition(
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.current = tx.store.tickLocked()
-		return 0, ErrRestartOperation
+		return PartitionMetadata{}, ErrRestartOperation
 	}
 
 	// Remove vector from the partition.
@@ -266,7 +285,7 @@ func (tx *inMemoryTxn) RemoveFromPartition(
 	}
 
 	tx.updated = true
-	return partition.Count(), nil
+	return partition.Metadata(), nil
 }
 
 // SearchPartitions implements the Txn interface.
@@ -326,7 +345,7 @@ func (tx *inMemoryTxn) GetFullVectors(ctx context.Context, refs []VectorWithKey)
 			// is immutable and thread-safe.
 			ref.Vector = inMemPartition.lock.partition.Centroid()
 		} else {
-			vector, ok := tx.store.mu.vectors[string(refs[i].Key.PrimaryKey)]
+			vector, ok := tx.store.mu.vectors[string(refs[i].Key.KeyBytes)]
 			if ok {
 				ref.Vector = vector
 			} else {

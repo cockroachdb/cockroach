@@ -3982,6 +3982,7 @@ is_superuser                                               on
 join_reader_index_join_strategy_batch_size                 4.0 MiB
 join_reader_no_ordering_strategy_batch_size                2.0 MiB
 join_reader_ordering_strategy_batch_size                   100 KiB
+kv_transaction_buffered_writes_enabled                     off
 large_full_scan_rows                                       0
 lc_collate                                                 C.UTF-8
 lc_ctype                                                   C.UTF-8
@@ -4005,8 +4006,11 @@ on_update_rehome_row_enabled                               on
 opt_split_scan_limit                                       2048
 optimizer                                                  on
 optimizer_always_use_histograms                            on
+optimizer_check_input_min_row_count                        1
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
+optimizer_min_row_count                                    0
+optimizer_prefer_bounded_cardinality                       off
 optimizer_prove_implication_with_virtual_computed_columns  on
 optimizer_push_limit_into_project_filtered_scan            on
 optimizer_push_offset_into_index_join                      on

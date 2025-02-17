@@ -853,6 +853,8 @@ SELECT * FROM f();
 
 statement ok
 DROP FUNCTION f;
+
+statement ok
 CREATE FUNCTION f() RETURNS two_typ LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
 
 query T
@@ -952,5 +954,28 @@ FROM
     ),
     (COALESCE(f117101(), NULL))
 );
+
+subtest end
+
+# Regression test for #137968 - do not incorrectly modify the resolved type of
+# an expression that already found a non-wildcard type.
+subtest regression_137968
+
+statement ok
+SELECT
+	tab_18298.col_30903
+FROM
+	(
+		VALUES
+			(
+				('-26 years -422 days -21:13:57.660026':::INTERVAL::INTERVAL + now():::TIMESTAMP::TIMESTAMP::TIMESTAMP)::TIMESTAMP
+			),
+			(NULL)
+	)
+		AS tab_18298 (col_30903)
+ORDER BY
+	tab_18298.col_30903 ASC
+LIMIT
+	3:::INT8;
 
 subtest end

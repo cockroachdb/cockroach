@@ -7,7 +7,6 @@ package vecstore
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -15,9 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -39,9 +38,10 @@ type persistentStoreTxn struct {
 	codec     persistentStoreCodec
 
 	// Retained allocations to prevent excessive reallocation.
-	tmpChildKeys []ChildKey
-	tmpSpans     []roachpb.Span
-	tmpSpanIDs   []int
+	tmpChildKeys  []ChildKey
+	tmpValueBytes []ValueBytes
+	tmpSpans      []roachpb.Span
+	tmpSpanIDs    []int
 }
 
 var _ Txn = (*persistentStoreTxn)(nil)
@@ -77,15 +77,16 @@ func (psc *persistentStoreCodec) getVectorSet() quantize.QuantizedVectorSet {
 	return psc.tmpVectorSet
 }
 
-// decodeVector decodes a single vector to the codec's internal vector set.
-func (psc *persistentStoreCodec) decodeVector(encodedVector []byte) error {
+// decodeVector decodes a single vector to the codec's internal vector set. It
+// returns the remainder of the input buffer.
+func (psc *persistentStoreCodec) decodeVector(encodedVector []byte) ([]byte, error) {
 	switch psc.quantizer.(type) {
 	case *quantize.UnQuantizer:
 		return DecodeUnquantizedVectorToSet(encodedVector, psc.tmpVectorSet.(*quantize.UnQuantizedVectorSet))
 	case *quantize.RaBitQuantizer:
 		return DecodeRaBitQVectorToSet(encodedVector, psc.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet))
 	}
-	return errors.Errorf("unknown quantizer type %T", psc.quantizer)
+	return nil, errors.Errorf("unknown quantizer type %T", psc.quantizer)
 }
 
 // encodeVector encodes a single vector. This method invalidates the internal
@@ -95,7 +96,7 @@ func (psc *persistentStoreCodec) encodeVector(
 ) ([]byte, error) {
 	psc.clear(1, centroid)
 	input := v.AsSet()
-	psc.quantizer.QuantizeInSet(ctx, psc.tmpVectorSet, &input)
+	psc.quantizer.QuantizeInSet(ctx, psc.tmpVectorSet, input)
 	return psc.encodeVectorFromSet(psc.tmpVectorSet, 0 /* idx */)
 }
 
@@ -182,12 +183,17 @@ func (psTxn *persistentStoreTxn) decodePartition(
 	metaKeyLen := len(result.Rows[0].Key)
 	vectorEntries := result.Rows[1:]
 
-	// Clear and ensure storage for the vector entries and child keys.
+	// Clear and ensure storage for the vector entries, child keys, and value
+	// bytes.
 	codec.clear(len(vectorEntries), centroid)
 	if cap(psTxn.tmpChildKeys) < len(vectorEntries) {
-		psTxn.tmpChildKeys = slices.Grow(psTxn.tmpChildKeys, len(vectorEntries)-cap(psTxn.tmpChildKeys))
+		psTxn.tmpChildKeys = make([]ChildKey, len(vectorEntries))
 	}
 	psTxn.tmpChildKeys = psTxn.tmpChildKeys[:len(vectorEntries)]
+	if cap(psTxn.tmpValueBytes) < len(vectorEntries) {
+		psTxn.tmpValueBytes = make([]ValueBytes, len(vectorEntries))
+	}
+	psTxn.tmpValueBytes = psTxn.tmpValueBytes[:len(vectorEntries)]
 
 	for i, entry := range vectorEntries {
 		childKey, err := DecodeChildKey(entry.Key[metaKeyLen:], level)
@@ -196,12 +202,14 @@ func (psTxn *persistentStoreTxn) decodePartition(
 		}
 		psTxn.tmpChildKeys[i] = childKey
 
-		if err = codec.decodeVector(entry.ValueBytes()); err != nil {
+		psTxn.tmpValueBytes[i], err = codec.decodeVector(entry.ValueBytes())
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	return NewPartition(codec.quantizer, codec.getVectorSet(), psTxn.tmpChildKeys, level), nil
+	return NewPartition(
+		codec.quantizer, codec.getVectorSet(), psTxn.tmpChildKeys, psTxn.tmpValueBytes, level), nil
 }
 
 // GetPartition is part of the vecstore.Txn interface. Read the partition
@@ -250,16 +258,18 @@ func (psTxn *persistentStoreTxn) insertPartition(
 
 	codec := psTxn.getCodecForPartitionKey(partitionKey)
 	childKeys := partition.ChildKeys()
+	valueBytes := partition.ValueBytes()
 	for i := 0; i < partition.quantizedSet.GetCount(); i++ {
 		// The child key gets appended to 'key' here.
 		// Cap the metadata key so that the append allocates a new slice for the child key.
 		key = key[:len(key):len(key)]
 		k := EncodeChildKey(key, childKeys[i])
-		encodedVector, err := codec.encodeVectorFromSet(partition.QuantizedSet(), i)
+		encodedValue, err := codec.encodeVectorFromSet(partition.QuantizedSet(), i)
 		if err != nil {
 			return err
 		}
-		b.Put(k, encodedVector)
+		encodedValue = append(encodedValue, valueBytes[i]...)
+		b.Put(k, encodedValue)
 	}
 
 	return psTxn.kv.Run(ctx, b)
@@ -277,8 +287,8 @@ func (psTxn *persistentStoreTxn) SetRootPartition(ctx context.Context, partition
 func (psTxn *persistentStoreTxn) InsertPartition(
 	ctx context.Context, partition *Partition,
 ) (PartitionKey, error) {
-	instanceID := psTxn.store.db.Context().NodeID.SQLInstanceID()
-	partitionID := PartitionKey(builtins.GenerateUniqueInt(builtins.ProcessUniqueID(instanceID)))
+	instanceID := psTxn.store.db.KV().Context().NodeID.SQLInstanceID()
+	partitionID := PartitionKey(unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID)))
 	return partitionID, psTxn.insertPartition(ctx, partitionID, partition)
 }
 
@@ -295,55 +305,98 @@ func (psTxn *persistentStoreTxn) DeletePartition(
 	return psTxn.kv.Run(ctx, b)
 }
 
+// GetPartitionMetadata implements the vecstore.Txn interface.
+func (psTxn *persistentStoreTxn) GetPartitionMetadata(
+	ctx context.Context, partitionKey PartitionKey, forUpdate bool,
+) (PartitionMetadata, error) {
+	// TODO(mw5h): Add to an existing batch instead of starting a new one.
+	b := psTxn.kv.NewBatch()
+
+	metadataKey := psTxn.encodePartitionKey(partitionKey)
+	if forUpdate {
+		// By acquiring a shared lock on metadata key, we prevent splits/merges of
+		// this partition from conflicting with the add operation.
+		b.GetForShare(metadataKey, psTxn.lockDurability)
+	} else {
+		b.Get(metadataKey)
+	}
+
+	// This scan is purely for returning partition cardinality.
+	b.Scan(metadataKey, metadataKey.PrefixEnd())
+
+	// Run the batch and extract the partition metadata from results.
+	if err := psTxn.kv.Run(ctx, b); err != nil {
+		return PartitionMetadata{},
+			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
+	}
+	metadata, err := getMetadataFromKVResult(&b.Results[0])
+	if err != nil {
+		return PartitionMetadata{}, err
+	}
+	metadata.Count = len(b.Results[1].Rows) - 1
+	return metadata, nil
+}
+
 // AddToPartition implements the vecstore.Txn interface.
 func (psTxn *persistentStoreTxn) AddToPartition(
-	ctx context.Context, partitionKey PartitionKey, vector vector.T, childKey ChildKey,
-) (int, error) {
+	ctx context.Context,
+	partitionKey PartitionKey,
+	vector vector.T,
+	childKey ChildKey,
+	valueBytes ValueBytes,
+) (PartitionMetadata, error) {
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := psTxn.kv.NewBatch()
 
 	metadataKey := psTxn.encodePartitionKey(partitionKey)
 
+	// By acquiring a shared lock on metadata key, we prevent splits/merges of
+	// this partition from conflicting with the add operation.
 	b.GetForShare(metadataKey, psTxn.lockDurability)
+
+	// Run the batch and extract the partition metadata from results.
 	err := psTxn.kv.Run(ctx, b)
 	if err != nil {
-		return -1, err
+		return PartitionMetadata{}, errors.Wrapf(err, "locking partition %d for add", partitionKey)
 	}
-	if len(b.Results[0].Rows) == 0 {
-		return -1, ErrPartitionNotFound
-	}
-	_, centroid, err := DecodePartitionMetadata(b.Results[0].Rows[0].ValueBytes())
+	metadata, err := getMetadataFromKVResult(&b.Results[0])
 	if err != nil {
-		return -1, err
+		return PartitionMetadata{}, err
 	}
 
-	// Cap the metadata key so that the append allocates a new slice for the child key.
+	// Cap the metadata key so that the append allocates a new slice for the
+	// child key.
 	prefix := metadataKey[:len(metadataKey):len(metadataKey)]
 	entryKey := EncodeChildKey(prefix, childKey)
 
-	codec := psTxn.getCodecForPartitionKey(partitionKey)
 	b = psTxn.kv.NewBatch()
-	encodedVector, err := codec.encodeVector(ctx, vector, centroid)
+
+	// Add the Put command to the batch.
+	codec := psTxn.getCodecForPartitionKey(partitionKey)
+	encodedValue, err := codec.encodeVector(ctx, vector, metadata.Centroid)
 	if err != nil {
-		return -1, err
+		return PartitionMetadata{}, err
 	}
-	b.Put(entryKey, encodedVector)
+	encodedValue = append(encodedValue, valueBytes...)
+	b.Put(entryKey, encodedValue)
 
 	// This scan is purely for returning partition cardinality.
 	startKey := psTxn.encodePartitionKey(partitionKey)
 	endKey := startKey.PrefixEnd()
 	b.Scan(startKey, endKey)
 
+	// Run the batch and set the metadata Count field from the results.
 	if err = psTxn.kv.Run(ctx, b); err != nil {
-		return -1, err
+		return PartitionMetadata{}, errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
-	return len(b.Results[1].Rows) - 1, nil
+	metadata.Count = len(b.Results[1].Rows) - 1
+	return metadata, nil
 }
 
 // RemoveFromPartition implements the vecstore.Txn interface.
 func (psTxn *persistentStoreTxn) RemoveFromPartition(
 	ctx context.Context, partitionKey PartitionKey, childKey ChildKey,
-) (int, error) {
+) (PartitionMetadata, error) {
 	b := psTxn.kv.NewBatch()
 
 	// Lock metadata for partition in shared mode to block concurrent fixups.
@@ -361,14 +414,21 @@ func (psTxn *persistentStoreTxn) RemoveFromPartition(
 	b.Scan(startKey, endKey)
 
 	if err := psTxn.kv.Run(ctx, b); err != nil {
-		return -1, err
+		return PartitionMetadata{}, err
 	}
 	if len(b.Results[0].Rows) == 0 {
-		return -1, ErrPartitionNotFound
+		return PartitionMetadata{}, ErrPartitionNotFound
 	}
 	// We ignore key not found for the deleted child.
 
-	return len(b.Results[2].Rows) - 1, nil
+	// Extract the partition metadata from the results.
+	metadata, err := getMetadataFromKVResult(&b.Results[0])
+	if err != nil {
+		return PartitionMetadata{},
+			errors.Wrapf(err, "removing vector from partition %d", partitionKey)
+	}
+	metadata.Count = len(b.Results[2].Rows) - 1
+	return metadata, nil
 }
 
 // SearchPartitions implements the vecstore.Txn interface.
@@ -432,9 +492,9 @@ func (psTxn *persistentStoreTxn) getFullVectorsFromPK(
 			continue
 		}
 
-		key := make(roachpb.Key, len(psTxn.store.pkPrefix)+len(ref.Key.PrimaryKey))
+		key := make(roachpb.Key, len(psTxn.store.pkPrefix)+len(ref.Key.KeyBytes))
 		copy(key, psTxn.store.pkPrefix)
-		copy(key[len(psTxn.store.pkPrefix):], ref.Key.PrimaryKey)
+		copy(key[len(psTxn.store.pkPrefix):], ref.Key.KeyBytes)
 		psTxn.tmpSpans = append(psTxn.tmpSpans, roachpb.Span{Key: key})
 		psTxn.tmpSpanIDs = append(psTxn.tmpSpanIDs, refIdx)
 	}
@@ -541,4 +601,21 @@ func (psTxn *persistentStoreTxn) encodePartitionKey(partitionKey PartitionKey) r
 	copy(keyBuffer, psTxn.store.prefix)
 	keyBuffer = EncodePartitionKey(keyBuffer, partitionKey)
 	return keyBuffer
+}
+
+// getMetadataFromKVResult extracts the K-means tree level and centroid from the
+// results of a query of the partition metadata record.
+func getMetadataFromKVResult(result *kv.Result) (PartitionMetadata, error) {
+	if len(result.Rows) == 0 {
+		return PartitionMetadata{}, ErrPartitionNotFound
+	}
+	level, centroid, err := DecodePartitionMetadata(result.Rows[0].ValueBytes())
+	if err != nil {
+		return PartitionMetadata{}, err
+	}
+	return PartitionMetadata{
+		Level:    level,
+		Centroid: centroid,
+		Count:    len(result.Rows) - 1,
+	}, nil
 }

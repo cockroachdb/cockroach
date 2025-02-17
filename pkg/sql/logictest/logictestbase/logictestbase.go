@@ -494,6 +494,16 @@ var LogicTestConfigs = []TestClusterConfig{
 		DeclarativeCorpusCollection: true,
 	},
 	{
+		// This config runs tests using 25.1 cluster version, simulating a node that
+		// is operating in a mixed-version cluster.
+		Name:                        "local-mixed-25.1",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		BootstrapVersion:            clusterversion.V25_1,
+		DisableUpgrade:              true,
+		DeclarativeCorpusCollection: true,
+	},
+	{
 		// This config runs a cluster with 3 nodes, with a separate process per
 		// node. The nodes initially start on v24.3.
 		Name:                     "cockroach-go-testserver-24.3",
@@ -588,6 +598,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"fakedist-vec-off",
 		"fakedist-disk",
 		"local-mixed-24.3",
+		"local-mixed-25.1",
 	),
 
 	// Special alias for all 5 node configs.

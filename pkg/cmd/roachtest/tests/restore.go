@@ -250,9 +250,9 @@ func registerRestore(r registry.Registry) {
 						var status string
 						err := conn.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&status)
 						require.NoError(t, err)
-						if status == string(jobs.StatusSucceeded) {
+						if status == string(jobs.StateSucceeded) {
 							isJobComplete = true
-						} else if status == string(jobs.StatusFailed) || status == string(jobs.StatusCanceled) {
+						} else if status == string(jobs.StateFailed) || status == string(jobs.StateCanceled) {
 							t.Fatalf("job unexpectedly found in %s state", status)
 						}
 					}

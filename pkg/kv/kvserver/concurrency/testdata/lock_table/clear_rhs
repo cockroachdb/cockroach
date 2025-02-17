@@ -1,0 +1,173 @@
+# This test setup is the same as clear.
+
+new-lock-table maxlocks=10000
+----
+
+# Define three transaction that we'll use below.
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-txn txn=txn2 ts=8,1 epoch=0
+----
+
+new-txn txn=txn3 ts=12,1 epoch=0
+----
+
+# txn1 acquires unreplicated exclusive locks at a and b.
+
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@b
+----
+
+scan r=req1
+----
+start-waiting: false
+
+guard-state r=req1
+----
+new: state=doneWaiting
+
+acquire r=req1 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+acquire r=req1 k=b durability=u strength=exclusive
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req1
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# In its next request, txn1 discovers a lock at c held by txn2.
+
+new-request r=req2 txn=txn1 ts=10,1 spans=none@c
+----
+
+scan r=req2
+----
+start-waiting: false
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+add-discovered r=req2 k=c txn=txn2
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,1, info: repl [Intent]
+
+# A non-transactional read comes in at a and blocks on the lock.
+
+new-request r=req3 txn=none ts=10,1 spans=none@a
+----
+
+scan r=req3
+----
+start-waiting: true
+
+guard-state r=req3
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+
+# Similarly, a non-transactional write at a arrives and blocks.
+
+new-request r=req4 txn=none ts=10,1 spans=intent@a
+----
+
+scan r=req4
+----
+start-waiting: true
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
+
+# txn3 tries to write to b which also has a lock held, so txn3 has to wait.
+
+new-request r=req5 txn=txn3 ts=12,1 spans=intent@b
+----
+
+scan r=req5
+----
+start-waiting: true
+
+guard-state r=req5
+----
+new: state=waitFor txn=txn1 key="b" held=true guard-strength=Intent
+
+print
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 3, txn: none
+   queued locking requests:
+    active: true req: 4, strength: Intent, txn: none
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,1, info: repl [Intent]
+
+# The lock on "c" is not returned because it is replicated.
+clear-ge key=b
+----
+num returned for re-acquisition: 1
+ span: b, txn: 00000000-0000-0000-0000-000000000001 epo: 0, dur: Unreplicated, str: Exclusive
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 3, txn: none
+   queued locking requests:
+    active: true req: 4, strength: Intent, txn: none
+
+
+# req3 and req4 are still waiting on a
+guard-state r=req3
+----
+old: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+
+guard-state r=req4
+----
+old: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
+
+# req5 is no longer waiting
+guard-state r=req5
+----
+new: state=doneWaiting
+
+dequeue r=req3
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 4, strength: Intent, txn: none
+
+dequeue r=req4
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]

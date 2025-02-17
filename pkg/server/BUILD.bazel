@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "server",
@@ -272,8 +273,8 @@ go_library(
         "//pkg/sql/sqlliveness/slprovider",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",
-        "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/sql/sqlstats/sslocal",
         "//pkg/sql/stats",
         "//pkg/sql/stmtdiagnostics",
         "//pkg/sql/syntheticprivilegecache",
@@ -281,13 +282,14 @@ go_library(
         "//pkg/sql/tablemetadatacache/util",
         "//pkg/sql/ttl/ttljob",
         "//pkg/sql/ttl/ttlschedule",
+        "//pkg/sql/vecindex",
         "//pkg/storage",
         "//pkg/storage/disk",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
-        "//pkg/testutils",
+        "//pkg/storage/storagepb",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/ts",
         "//pkg/ts/catalog",
         "//pkg/ui",
@@ -346,6 +348,7 @@ go_library(
         "//pkg/util/tracing/tracingui",
         "//pkg/util/tracing/zipper",
         "//pkg/util/uint128",
+        "//pkg/util/unique",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_cmux//:cmux",
@@ -551,9 +554,11 @@ go_test(
         "//pkg/storage/disk",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
+        "//pkg/storage/storagepb",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/listenerutil",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -705,4 +710,11 @@ go_test(
         ],
         "//conditions:default": [],
     }),
+)
+
+disallowed_imports_test(
+    "server",
+    disallowed_list = [
+        "//pkg/testutils",
+    ],
 )

@@ -7278,3 +7278,491 @@ project
                      │                                                                └── projections
                      │                                                                     └── const: 0 [as=stmt_return_4:31]
                      └── const: 1
+
+# Embedded SQL statements/expressions can contain CTEs.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := (WITH foo AS MATERIALIZED (SELECT random()) SELECT * FROM foo);
+  BEGIN
+    INSERT INTO kv (WITH foo AS (SELECT x, x) SELECT * FROM foo);
+    FOR i IN 1..3 LOOP
+        RAISE NOTICE 'hello';
+        x := (WITH foo AS MATERIALIZED (SELECT i + random()::INT) SELECT * FROM foo);
+        WITH foo AS (INSERT INTO kv VALUES (x, x) RETURNING k, v) INSERT INTO kv (SELECT * FROM foo);
+    END LOOP;
+    x := (WITH foo AS MATERIALIZED (SELECT random()::INT * x) SELECT * FROM foo);
+    INSERT INTO kv VALUES (x, x);
+    RETURN 0;
+  END
+$$;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:89
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:89]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_exec_1":88
+                     ├── project
+                     │    ├── columns: "_stmt_exec_1":88
+                     │    ├── barrier
+                     │    │    ├── columns: x:4
+                     │    │    └── barrier
+                     │    │         ├── columns: x:4
+                     │    │         └── project
+                     │    │              ├── columns: x:4
+                     │    │              ├── values
+                     │    │              │    └── tuple
+                     │    │              └── projections
+                     │    │                   └── subquery [as=x:4]
+                     │    │                        └── with &1 (foo)
+                     │    │                             ├── columns: column3:3
+                     │    │                             ├── materialized
+                     │    │                             ├── project
+                     │    │                             │    ├── columns: random:1
+                     │    │                             │    ├── values
+                     │    │                             │    │    └── tuple
+                     │    │                             │    └── projections
+                     │    │                             │         └── function: random [as=random:1]
+                     │    │                             └── values
+                     │    │                                  ├── columns: column3:3
+                     │    │                                  └── tuple
+                     │    │                                       └── cast: INT8
+                     │    │                                            └── subquery
+                     │    │                                                 └── max1-row
+                     │    │                                                      ├── columns: random:2
+                     │    │                                                      └── with-scan &1 (foo)
+                     │    │                                                           ├── columns: random:2
+                     │    │                                                           └── mapping:
+                     │    │                                                                └──  random:1 => random:2
+                     │    └── projections
+                     │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":88]
+                     │              ├── args
+                     │              │    └── variable: x:4
+                     │              ├── params: x:5
+                     │              └── body
+                     │                   ├── insert kv
+                     │                   │    ├── columns: <none>
+                     │                   │    ├── insert-mapping:
+                     │                   │    │    ├── x:11 => kv.k:6
+                     │                   │    │    └── x:12 => kv.v:7
+                     │                   │    └── with &2 (foo)
+                     │                   │         ├── columns: x:11 x:12
+                     │                   │         ├── project
+                     │                   │         │    ├── columns: x:10
+                     │                   │         │    ├── values
+                     │                   │         │    │    └── tuple
+                     │                   │         │    └── projections
+                     │                   │         │         └── variable: x:5 [as=x:10]
+                     │                   │         └── with-scan &2 (foo)
+                     │                   │              ├── columns: x:11 x:12
+                     │                   │              └── mapping:
+                     │                   │                   ├──  x:10 => x:11
+                     │                   │                   └──  x:10 => x:12
+                     │                   └── project
+                     │                        ├── columns: stmt_loop_6:87
+                     │                        ├── barrier
+                     │                        │    ├── columns: "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null "_loop_counter":30!null i:31!null
+                     │                        │    └── project
+                     │                        │         ├── columns: i:31!null "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null "_loop_counter":30!null
+                     │                        │         ├── project
+                     │                        │         │    ├── columns: "_loop_counter":30!null "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null
+                     │                        │         │    ├── project
+                     │                        │         │    │    ├── columns: "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null
+                     │                        │         │    │    └── barrier
+                     │                        │         │    │         ├── columns: "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null "_plpgsql_runtime_check_5":29
+                     │                        │         │    │         └── project
+                     │                        │         │    │              ├── columns: "_plpgsql_runtime_check_5":29 "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null
+                     │                        │         │    │              ├── project
+                     │                        │         │    │              │    ├── columns: "_loop_step":28!null "_loop_lower":26!null "_loop_upper":27!null
+                     │                        │         │    │              │    ├── project
+                     │                        │         │    │              │    │    ├── columns: "_loop_upper":27!null "_loop_lower":26!null
+                     │                        │         │    │              │    │    ├── project
+                     │                        │         │    │              │    │    │    ├── columns: "_loop_lower":26!null
+                     │                        │         │    │              │    │    │    ├── values
+                     │                        │         │    │              │    │    │    │    └── tuple
+                     │                        │         │    │              │    │    │    └── projections
+                     │                        │         │    │              │    │    │         └── const: 1 [as="_loop_lower":26]
+                     │                        │         │    │              │    │    └── projections
+                     │                        │         │    │              │    │         └── const: 3 [as="_loop_upper":27]
+                     │                        │         │    │              │    └── projections
+                     │                        │         │    │              │         └── const: 1 [as="_loop_step":28]
+                     │                        │         │    │              └── projections
+                     │                        │         │    │                   └── case [as="_plpgsql_runtime_check_5":29]
+                     │                        │         │    │                        ├── true
+                     │                        │         │    │                        ├── when
+                     │                        │         │    │                        │    ├── is
+                     │                        │         │    │                        │    │    ├── variable: "_loop_lower":26
+                     │                        │         │    │                        │    │    └── null
+                     │                        │         │    │                        │    └── function: crdb_internal.plpgsql_raise
+                     │                        │         │    │                        │         ├── const: 'ERROR'
+                     │                        │         │    │                        │         ├── const: 'lower bound of FOR loop cannot be null'
+                     │                        │         │    │                        │         ├── const: ''
+                     │                        │         │    │                        │         ├── const: ''
+                     │                        │         │    │                        │         └── const: '22004'
+                     │                        │         │    │                        ├── when
+                     │                        │         │    │                        │    ├── is
+                     │                        │         │    │                        │    │    ├── variable: "_loop_upper":27
+                     │                        │         │    │                        │    │    └── null
+                     │                        │         │    │                        │    └── function: crdb_internal.plpgsql_raise
+                     │                        │         │    │                        │         ├── const: 'ERROR'
+                     │                        │         │    │                        │         ├── const: 'upper bound of FOR loop cannot be null'
+                     │                        │         │    │                        │         ├── const: ''
+                     │                        │         │    │                        │         ├── const: ''
+                     │                        │         │    │                        │         └── const: '22004'
+                     │                        │         │    │                        ├── when
+                     │                        │         │    │                        │    ├── is
+                     │                        │         │    │                        │    │    ├── variable: "_loop_step":28
+                     │                        │         │    │                        │    │    └── null
+                     │                        │         │    │                        │    └── function: crdb_internal.plpgsql_raise
+                     │                        │         │    │                        │         ├── const: 'ERROR'
+                     │                        │         │    │                        │         ├── const: 'BY value of FOR loop cannot be null'
+                     │                        │         │    │                        │         ├── const: ''
+                     │                        │         │    │                        │         ├── const: ''
+                     │                        │         │    │                        │         └── const: '22004'
+                     │                        │         │    │                        ├── when
+                     │                        │         │    │                        │    ├── le
+                     │                        │         │    │                        │    │    ├── variable: "_loop_step":28
+                     │                        │         │    │                        │    │    └── const: 0
+                     │                        │         │    │                        │    └── function: crdb_internal.plpgsql_raise
+                     │                        │         │    │                        │         ├── const: 'ERROR'
+                     │                        │         │    │                        │         ├── const: 'BY value of FOR loop must be greater than zero'
+                     │                        │         │    │                        │         ├── const: ''
+                     │                        │         │    │                        │         ├── const: ''
+                     │                        │         │    │                        │         └── const: '22023'
+                     │                        │         │    │                        └── null
+                     │                        │         │    └── projections
+                     │                        │         │         └── variable: "_loop_lower":26 [as="_loop_counter":30]
+                     │                        │         └── projections
+                     │                        │              └── variable: "_loop_lower":26 [as=i:31]
+                     │                        └── projections
+                     │                             └── udf: stmt_loop_6 [as=stmt_loop_6:87]
+                     │                                  ├── tail-call
+                     │                                  ├── args
+                     │                                  │    ├── variable: x:5
+                     │                                  │    ├── variable: i:31
+                     │                                  │    ├── variable: "_loop_lower":26
+                     │                                  │    ├── variable: "_loop_upper":27
+                     │                                  │    ├── variable: "_loop_step":28
+                     │                                  │    └── variable: "_loop_counter":30
+                     │                                  ├── params: x:32 i:33 "_loop_lower":34 "_loop_upper":35 "_loop_step":36 "_loop_counter":37
+                     │                                  └── body
+                     │                                       └── project
+                     │                                            ├── columns: stmt_if_12:83
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── case [as=stmt_if_12:83]
+                     │                                                      ├── true
+                     │                                                      ├── when
+                     │                                                      │    ├── le
+                     │                                                      │    │    ├── variable: "_loop_counter":37
+                     │                                                      │    │    └── variable: "_loop_upper":35
+                     │                                                      │    └── subquery
+                     │                                                      │         ├── tail-call
+                     │                                                      │         └── project
+                     │                                                      │              ├── columns: "_stmt_raise_9":81
+                     │                                                      │              ├── values
+                     │                                                      │              │    └── tuple
+                     │                                                      │              └── projections
+                     │                                                      │                   └── udf: _stmt_raise_9 [as="_stmt_raise_9":81]
+                     │                                                      │                        ├── tail-call
+                     │                                                      │                        ├── args
+                     │                                                      │                        │    ├── variable: x:32
+                     │                                                      │                        │    ├── variable: i:33
+                     │                                                      │                        │    ├── variable: "_loop_lower":34
+                     │                                                      │                        │    ├── variable: "_loop_upper":35
+                     │                                                      │                        │    ├── variable: "_loop_step":36
+                     │                                                      │                        │    └── variable: "_loop_counter":37
+                     │                                                      │                        ├── params: x:51 i:52 "_loop_lower":53 "_loop_upper":54 "_loop_step":55 "_loop_counter":56
+                     │                                                      │                        └── body
+                     │                                                      │                             ├── project
+                     │                                                      │                             │    ├── columns: stmt_raise_10:57
+                     │                                                      │                             │    ├── values
+                     │                                                      │                             │    │    └── tuple
+                     │                                                      │                             │    └── projections
+                     │                                                      │                             │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_10:57]
+                     │                                                      │                             │              ├── const: 'NOTICE'
+                     │                                                      │                             │              ├── const: 'hello'
+                     │                                                      │                             │              ├── const: ''
+                     │                                                      │                             │              ├── const: ''
+                     │                                                      │                             │              └── const: '00000'
+                     │                                                      │                             └── project
+                     │                                                      │                                  ├── columns: "_stmt_exec_11":80
+                     │                                                      │                                  ├── barrier
+                     │                                                      │                                  │    ├── columns: x:60
+                     │                                                      │                                  │    └── barrier
+                     │                                                      │                                  │         ├── columns: x:60
+                     │                                                      │                                  │         └── project
+                     │                                                      │                                  │              ├── columns: x:60
+                     │                                                      │                                  │              ├── values
+                     │                                                      │                                  │              │    └── tuple
+                     │                                                      │                                  │              └── projections
+                     │                                                      │                                  │                   └── subquery [as=x:60]
+                     │                                                      │                                  │                        └── max1-row
+                     │                                                      │                                  │                             ├── columns: "?column?":59
+                     │                                                      │                                  │                             └── with &4 (foo)
+                     │                                                      │                                  │                                  ├── columns: "?column?":59
+                     │                                                      │                                  │                                  ├── materialized
+                     │                                                      │                                  │                                  ├── project
+                     │                                                      │                                  │                                  │    ├── columns: "?column?":58
+                     │                                                      │                                  │                                  │    ├── values
+                     │                                                      │                                  │                                  │    │    └── tuple
+                     │                                                      │                                  │                                  │    └── projections
+                     │                                                      │                                  │                                  │         └── plus [as="?column?":58]
+                     │                                                      │                                  │                                  │              ├── variable: i:52
+                     │                                                      │                                  │                                  │              └── cast: INT8
+                     │                                                      │                                  │                                  │                   └── function: random
+                     │                                                      │                                  │                                  └── with-scan &4 (foo)
+                     │                                                      │                                  │                                       ├── columns: "?column?":59
+                     │                                                      │                                  │                                       └── mapping:
+                     │                                                      │                                  │                                            └──  "?column?":58 => "?column?":59
+                     │                                                      │                                  └── projections
+                     │                                                      │                                       └── udf: _stmt_exec_11 [as="_stmt_exec_11":80]
+                     │                                                      │                                            ├── tail-call
+                     │                                                      │                                            ├── args
+                     │                                                      │                                            │    ├── variable: x:60
+                     │                                                      │                                            │    ├── variable: i:52
+                     │                                                      │                                            │    ├── variable: "_loop_lower":53
+                     │                                                      │                                            │    ├── variable: "_loop_upper":54
+                     │                                                      │                                            │    ├── variable: "_loop_step":55
+                     │                                                      │                                            │    └── variable: "_loop_counter":56
+                     │                                                      │                                            ├── params: x:61 i:62 "_loop_lower":63 "_loop_upper":64 "_loop_step":65 "_loop_counter":66
+                     │                                                      │                                            └── body
+                     │                                                      │                                                 ├── with &5 (foo)
+                     │                                                      │                                                 │    ├── insert kv
+                     │                                                      │                                                 │    │    ├── columns: kv.k:67!null kv.v:68
+                     │                                                      │                                                 │    │    ├── insert-mapping:
+                     │                                                      │                                                 │    │    │    ├── column1:71 => kv.k:67
+                     │                                                      │                                                 │    │    │    └── column2:72 => kv.v:68
+                     │                                                      │                                                 │    │    ├── return-mapping:
+                     │                                                      │                                                 │    │    │    ├── column1:71 => kv.k:67
+                     │                                                      │                                                 │    │    │    └── column2:72 => kv.v:68
+                     │                                                      │                                                 │    │    └── values
+                     │                                                      │                                                 │    │         ├── columns: column1:71 column2:72
+                     │                                                      │                                                 │    │         └── tuple
+                     │                                                      │                                                 │    │              ├── variable: x:61
+                     │                                                      │                                                 │    │              └── variable: x:61
+                     │                                                      │                                                 │    └── insert kv
+                     │                                                      │                                                 │         ├── columns: <none>
+                     │                                                      │                                                 │         ├── insert-mapping:
+                     │                                                      │                                                 │         │    ├── k:77 => kv.k:73
+                     │                                                      │                                                 │         │    └── v:78 => kv.v:74
+                     │                                                      │                                                 │         └── with-scan &5 (foo)
+                     │                                                      │                                                 │              ├── columns: k:77!null v:78
+                     │                                                      │                                                 │              └── mapping:
+                     │                                                      │                                                 │                   ├──  kv.k:67 => k:77
+                     │                                                      │                                                 │                   └──  kv.v:68 => v:78
+                     │                                                      │                                                 └── project
+                     │                                                      │                                                      ├── columns: stmt_if_8:79
+                     │                                                      │                                                      ├── values
+                     │                                                      │                                                      │    └── tuple
+                     │                                                      │                                                      └── projections
+                     │                                                      │                                                           └── udf: stmt_if_8 [as=stmt_if_8:79]
+                     │                                                      │                                                                ├── tail-call
+                     │                                                      │                                                                ├── args
+                     │                                                      │                                                                │    ├── variable: x:61
+                     │                                                      │                                                                │    ├── variable: i:62
+                     │                                                      │                                                                │    ├── variable: "_loop_lower":63
+                     │                                                      │                                                                │    ├── variable: "_loop_upper":64
+                     │                                                      │                                                                │    ├── variable: "_loop_step":65
+                     │                                                      │                                                                │    └── variable: "_loop_counter":66
+                     │                                                      │                                                                ├── params: x:44 i:45 "_loop_lower":46 "_loop_upper":47 "_loop_step":48 "_loop_counter":49
+                     │                                                      │                                                                └── body
+                     │                                                      │                                                                     └── project
+                     │                                                      │                                                                          ├── columns: stmt_loop_inc_7:50
+                     │                                                      │                                                                          ├── values
+                     │                                                      │                                                                          │    └── tuple
+                     │                                                      │                                                                          └── projections
+                     │                                                      │                                                                               └── udf: stmt_loop_inc_7 [as=stmt_loop_inc_7:50]
+                     │                                                      │                                                                                    ├── tail-call
+                     │                                                      │                                                                                    ├── args
+                     │                                                      │                                                                                    │    ├── variable: x:44
+                     │                                                      │                                                                                    │    ├── variable: i:45
+                     │                                                      │                                                                                    │    ├── variable: "_loop_lower":46
+                     │                                                      │                                                                                    │    ├── variable: "_loop_upper":47
+                     │                                                      │                                                                                    │    ├── variable: "_loop_step":48
+                     │                                                      │                                                                                    │    └── variable: "_loop_counter":49
+                     │                                                      │                                                                                    ├── params: x:38 i:39 "_loop_lower":40 "_loop_upper":41 "_loop_step":42 "_loop_counter":43
+                     │                                                      │                                                                                    └── body
+                     │                                                      │                                                                                         └── project
+                     │                                                      │                                                                                              ├── columns: stmt_loop_6:86
+                     │                                                      │                                                                                              ├── barrier
+                     │                                                      │                                                                                              │    ├── columns: "_loop_counter":84 i:85
+                     │                                                      │                                                                                              │    └── project
+                     │                                                      │                                                                                              │         ├── columns: i:85 "_loop_counter":84
+                     │                                                      │                                                                                              │         ├── project
+                     │                                                      │                                                                                              │         │    ├── columns: "_loop_counter":84
+                     │                                                      │                                                                                              │         │    ├── values
+                     │                                                      │                                                                                              │         │    │    └── tuple
+                     │                                                      │                                                                                              │         │    └── projections
+                     │                                                      │                                                                                              │         │         └── plus [as="_loop_counter":84]
+                     │                                                      │                                                                                              │         │              ├── variable: "_loop_counter":43
+                     │                                                      │                                                                                              │         │              └── variable: "_loop_step":42
+                     │                                                      │                                                                                              │         └── projections
+                     │                                                      │                                                                                              │              └── variable: "_loop_counter":84 [as=i:85]
+                     │                                                      │                                                                                              └── projections
+                     │                                                      │                                                                                                   └── udf: stmt_loop_6 [as=stmt_loop_6:86]
+                     │                                                      │                                                                                                        ├── tail-call
+                     │                                                      │                                                                                                        ├── args
+                     │                                                      │                                                                                                        │    ├── variable: x:38
+                     │                                                      │                                                                                                        │    ├── variable: i:85
+                     │                                                      │                                                                                                        │    ├── variable: "_loop_lower":40
+                     │                                                      │                                                                                                        │    ├── variable: "_loop_upper":41
+                     │                                                      │                                                                                                        │    ├── variable: "_loop_step":42
+                     │                                                      │                                                                                                        │    └── variable: "_loop_counter":84
+                     │                                                      │                                                                                                        └── recursive-call
+                     │                                                      └── subquery
+                     │                                                           ├── tail-call
+                     │                                                           └── project
+                     │                                                                ├── columns: loop_exit_2:82
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── udf: loop_exit_2 [as=loop_exit_2:82]
+                     │                                                                          ├── tail-call
+                     │                                                                          ├── args
+                     │                                                                          │    └── variable: x:32
+                     │                                                                          ├── params: x:13
+                     │                                                                          └── body
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: "_stmt_exec_3":25
+                     │                                                                                    ├── barrier
+                     │                                                                                    │    ├── columns: x:16
+                     │                                                                                    │    └── barrier
+                     │                                                                                    │         ├── columns: x:16
+                     │                                                                                    │         └── project
+                     │                                                                                    │              ├── columns: x:16
+                     │                                                                                    │              ├── values
+                     │                                                                                    │              │    └── tuple
+                     │                                                                                    │              └── projections
+                     │                                                                                    │                   └── subquery [as=x:16]
+                     │                                                                                    │                        └── max1-row
+                     │                                                                                    │                             ├── columns: "?column?":15
+                     │                                                                                    │                             └── with &3 (foo)
+                     │                                                                                    │                                  ├── columns: "?column?":15
+                     │                                                                                    │                                  ├── materialized
+                     │                                                                                    │                                  ├── project
+                     │                                                                                    │                                  │    ├── columns: "?column?":14
+                     │                                                                                    │                                  │    ├── values
+                     │                                                                                    │                                  │    │    └── tuple
+                     │                                                                                    │                                  │    └── projections
+                     │                                                                                    │                                  │         └── mult [as="?column?":14]
+                     │                                                                                    │                                  │              ├── cast: INT8
+                     │                                                                                    │                                  │              │    └── function: random
+                     │                                                                                    │                                  │              └── variable: x:13
+                     │                                                                                    │                                  └── with-scan &3 (foo)
+                     │                                                                                    │                                       ├── columns: "?column?":15
+                     │                                                                                    │                                       └── mapping:
+                     │                                                                                    │                                            └──  "?column?":14 => "?column?":15
+                     │                                                                                    └── projections
+                     │                                                                                         └── udf: _stmt_exec_3 [as="_stmt_exec_3":25]
+                     │                                                                                              ├── tail-call
+                     │                                                                                              ├── args
+                     │                                                                                              │    └── variable: x:16
+                     │                                                                                              ├── params: x:17
+                     │                                                                                              └── body
+                     │                                                                                                   ├── insert kv
+                     │                                                                                                   │    ├── columns: <none>
+                     │                                                                                                   │    ├── insert-mapping:
+                     │                                                                                                   │    │    ├── column1:22 => kv.k:18
+                     │                                                                                                   │    │    └── column2:23 => kv.v:19
+                     │                                                                                                   │    └── values
+                     │                                                                                                   │         ├── columns: column1:22 column2:23
+                     │                                                                                                   │         └── tuple
+                     │                                                                                                   │              ├── variable: x:17
+                     │                                                                                                   │              └── variable: x:17
+                     │                                                                                                   └── project
+                     │                                                                                                        ├── columns: stmt_return_4:24!null
+                     │                                                                                                        ├── values
+                     │                                                                                                        │    └── tuple
+                     │                                                                                                        └── projections
+                     │                                                                                                             └── const: 0 [as=stmt_return_4:24]
+                     └── const: 1
+
+# Case with an outer CTE.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    x := (WITH foo AS MATERIALIZED (SELECT random()::INT * 100) SELECT * FROM foo);
+    RETURN x;
+  END
+$$;
+----
+
+build format=show-scalars
+WITH foo AS MATERIALIZED (SELECT random() * 2) SELECT f() FROM foo;
+----
+with &1 (foo)
+ ├── columns: f:9
+ ├── materialized
+ ├── project
+ │    ├── columns: "?column?":1
+ │    ├── values
+ │    │    └── tuple
+ │    └── projections
+ │         └── mult [as="?column?":1]
+ │              ├── function: random
+ │              └── const: 2.0
+ └── project
+      ├── columns: f:9
+      ├── with-scan &1 (foo)
+      │    ├── columns: "?column?":2
+      │    └── mapping:
+      │         └──  "?column?":1 => "?column?":2
+      └── projections
+           └── udf: f [as=f:9]
+                └── body
+                     └── limit
+                          ├── columns: stmt_return_1:8
+                          ├── project
+                          │    ├── columns: stmt_return_1:8
+                          │    ├── barrier
+                          │    │    ├── columns: x:7
+                          │    │    └── project
+                          │    │         ├── columns: x:7
+                          │    │         ├── barrier
+                          │    │         │    ├── columns: x:3
+                          │    │         │    └── project
+                          │    │         │         ├── columns: x:3
+                          │    │         │         ├── values
+                          │    │         │         │    └── tuple
+                          │    │         │         └── projections
+                          │    │         │              └── cast: INT8 [as=x:3]
+                          │    │         │                   └── null
+                          │    │         └── projections
+                          │    │              └── subquery [as=x:7]
+                          │    │                   └── with &2 (foo)
+                          │    │                        ├── columns: column6:6
+                          │    │                        ├── materialized
+                          │    │                        ├── project
+                          │    │                        │    ├── columns: "?column?":4
+                          │    │                        │    ├── values
+                          │    │                        │    │    └── tuple
+                          │    │                        │    └── projections
+                          │    │                        │         └── mult [as="?column?":4]
+                          │    │                        │              ├── cast: INT8
+                          │    │                        │              │    └── function: random
+                          │    │                        │              └── const: 100
+                          │    │                        └── values
+                          │    │                             ├── columns: column6:6
+                          │    │                             └── tuple
+                          │    │                                  └── subquery
+                          │    │                                       └── max1-row
+                          │    │                                            ├── columns: "?column?":5
+                          │    │                                            └── with-scan &2 (foo)
+                          │    │                                                 ├── columns: "?column?":5
+                          │    │                                                 └── mapping:
+                          │    │                                                      └──  "?column?":4 => "?column?":5
+                          │    └── projections
+                          │         └── variable: x:7 [as=stmt_return_1:8]
+                          └── const: 1

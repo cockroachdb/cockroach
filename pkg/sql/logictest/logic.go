@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1248,7 +1249,7 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 			addr = t.tenantAddrs[nodeIdx]
 		}
 		var cleanupFunc func()
-		pgURL, cleanupFunc = sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
+		pgURL, cleanupFunc = pgurlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
 		t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, cleanupFunc)
 	}
 	pgURL.Path = "test"
@@ -1502,7 +1503,6 @@ func (t *logicTest) newCluster(
 	// when run with fakedist-disk config, so we'll use a larger limit here.
 	// There isn't really a downside to doing so.
 	tempStorageDiskLimit := int64(512 << 20) /* 512 MiB */
-	// MVCC range tombstones are only available in 22.2 or newer.
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes
 
@@ -1708,6 +1708,21 @@ func (t *logicTest) newCluster(
 				if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if _, err := conn.Exec(
+				"RESET CLUSTER SETTING kv.closed_timestamp.target_duration",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"RESET CLUSTER SETTING kv.closed_timestamp.side_transport_interval",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"RESET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval",
+			); err != nil {
+				t.Fatal(err)
 			}
 		}
 

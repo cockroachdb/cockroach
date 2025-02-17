@@ -1317,6 +1317,30 @@ An event of type `create_index` is recorded when an index is created.
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
+### `create_policy`
+
+An event of type `create_policy` is recorded when a policy is created.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `TableName` | Name of the policy's table. | no |
+| `PolicyName` | Name of the created policy. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
 ### `create_schema`
 
 An event of type `create_schema` is recorded when a schema is created.
@@ -1547,6 +1571,30 @@ An event of type `drop_index` is recorded when an index is dropped.
 | `IndexName` | The name of the affected index. | no |
 | `MutationID` | The mutation ID for the asynchronous job that is processing the index update. | no |
 | `CascadeDroppedViews` | The names of the views dropped as a result of a cascade operation. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+### `drop_policy`
+
+An event of type `drop_policy` is recorded when a policy is dropped.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `TableName` | Name of the policy's table. | no |
+| `PolicyName` | Name of the dropped policy. | no |
 
 
 #### Common fields

@@ -4,16 +4,16 @@
 new-index dims=512 min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 load-features=1000 hide-tree
 ----
 Created index with 1000 vectors with 512 dimensions.
-3 levels, 91 partitions, 12.91 vectors/partition.
+3 levels, 92 partitions, 12.57 vectors/partition.
 CV stats:
-  level 2 - mean: 0.1306, stdev: 0.0340
-  level 3 - mean: 0.0000, stdev: 0.0000
+  level 2 - mean: 0.1301, stdev: 0.0335
+  level 3 - mean: 0.1568, stdev: 0.0161
 
 # Search with small beam size.
 search max-results=1 use-feature=5000 beam-size=1
 ----
 vec356: 0.5976 (centroid=0.5)
-23 leaf vectors, 46 vectors, 3 full vectors, 4 partitions
+23 leaf vectors, 47 vectors, 3 full vectors, 4 partitions
 
 # Search for additional results.
 search max-results=6 use-feature=5000 beam-size=1
@@ -24,29 +24,29 @@ vec979: 0.8066 (centroid=0.6)
 vec133: 0.8381 (centroid=0.51)
 vec527: 0.845 (centroid=0.38)
 vec50: 0.8542 (centroid=0.55)
-23 leaf vectors, 46 vectors, 18 full vectors, 4 partitions
+23 leaf vectors, 47 vectors, 18 full vectors, 4 partitions
 
 # Use a larger beam size.
 search max-results=6 use-feature=5000 beam-size=4
 ----
 vec356: 0.5976 (centroid=0.5)
-vec95: 0.7008 (centroid=0.65)
+vec302: 0.6601 (centroid=0.55)
+vec329: 0.6871 (centroid=0.62)
+vec386: 0.7301 (centroid=0.67)
 vec309: 0.7311 (centroid=0.52)
-vec704: 0.7916 (centroid=0.63)
-vec637: 0.8039 (centroid=0.52)
-vec410: 0.8062 (centroid=0.58)
-104 leaf vectors, 136 vectors, 26 full vectors, 11 partitions
+vec117: 0.7576 (centroid=0.49)
+95 leaf vectors, 149 vectors, 22 full vectors, 13 partitions
 
 # Turn off re-ranking, which results in increased inaccuracy.
 search max-results=6 use-feature=5000 beam-size=4 skip-rerank
 ----
-vec356: 0.6241 ±0.03 (centroid=0.5)
-vec95: 0.7145 ±0.05 (centroid=0.65)
-vec704: 0.715 ±0.04 (centroid=0.63)
-vec309: 0.7382 ±0.04 (centroid=0.52)
-vec133: 0.7885 ±0.03 (centroid=0.51)
-vec202: 0.7968 ±0.04 (centroid=0.55)
-104 leaf vectors, 136 vectors, 0 full vectors, 11 partitions
+vec302: 0.5957 ±0.04 (centroid=0.55)
+vec356: 0.6234 ±0.03 (centroid=0.5)
+vec386: 0.6868 ±0.04 (centroid=0.67)
+vec329: 0.6988 ±0.04 (centroid=0.62)
+vec11: 0.7207 ±0.04 (centroid=0.6)
+vec117: 0.7295 ±0.03 (centroid=0.49)
+95 leaf vectors, 149 vectors, 0 full vectors, 13 partitions
 
 # Return top 25 results with large beam size.
 search max-results=25 use-feature=5000 beam-size=16
@@ -55,7 +55,7 @@ vec771: 0.5624 (centroid=0.65)
 vec356: 0.5976 (centroid=0.5)
 vec640: 0.6525 (centroid=0.58)
 vec302: 0.6601 (centroid=0.55)
-vec329: 0.6871 (centroid=0.69)
+vec329: 0.6871 (centroid=0.62)
 vec95: 0.7008 (centroid=0.65)
 vec249: 0.7268 (centroid=0.48)
 vec386: 0.7301 (centroid=0.67)
@@ -64,7 +64,7 @@ vec117: 0.7576 (centroid=0.49)
 vec25: 0.761 (centroid=0.49)
 vec859: 0.7708 (centroid=0.64)
 vec240: 0.7723 (centroid=0.67)
-vec347: 0.7745 (centroid=0.56)
+vec347: 0.7745 (centroid=0.54)
 vec11: 0.777 (centroid=0.6)
 vec340: 0.7858 (centroid=0.66)
 vec239: 0.7878 (centroid=0.51)
@@ -76,42 +76,42 @@ vec637: 0.8039 (centroid=0.52)
 vec410: 0.8062 (centroid=0.58)
 vec979: 0.8066 (centroid=0.6)
 vec457: 0.8084 (centroid=0.42)
-395 leaf vectors, 487 vectors, 85 full vectors, 40 partitions
+391 leaf vectors, 485 vectors, 82 full vectors, 41 partitions
 
 # Search for an "easy" result, where adaptive search inspects less partitions.
 recall topk=20 use-feature=8601 beam-size=4
 ----
-65.00% recall@20
-23.00 leaf vectors, 48.00 vectors, 23.00 full vectors, 5.00 partitions
+40.00% recall@20
+49.00 leaf vectors, 64.00 vectors, 28.00 full vectors, 6.00 partitions
 
 # Search for a "hard" result, where adaptive search inspects more partitions.
 recall topk=20 use-feature=2717 beam-size=4
 ----
-40.00% recall@20
-118.00 leaf vectors, 157.00 vectors, 50.00 full vectors, 11.00 partitions
+50.00% recall@20
+116.00 leaf vectors, 168.00 vectors, 50.00 full vectors, 13.00 partitions
 
 # Test recall at different beam sizes.
 recall topk=10 beam-size=2 samples=50
 ----
-34.40% recall@10
-34.70 leaf vectors, 54.84 vectors, 17.62 full vectors, 4.96 partitions
+47.20% recall@10
+34.46 leaf vectors, 60.54 vectors, 18.06 full vectors, 5.42 partitions
 
 recall topk=10 beam-size=4 samples=50
 ----
-59.20% recall@10
-73.86 leaf vectors, 106.56 vectors, 23.28 full vectors, 9.14 partitions
+66.40% recall@10
+73.50 leaf vectors, 114.00 vectors, 22.48 full vectors, 9.98 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
-83.00% recall@10
-150.40 leaf vectors, 206.08 vectors, 27.08 full vectors, 17.48 partitions
+84.00% recall@10
+147.94 leaf vectors, 216.26 vectors, 26.22 full vectors, 18.98 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-94.40% recall@10
-300.22 leaf vectors, 392.22 vectors, 30.38 full vectors, 32.84 partitions
+93.40% recall@10
+294.30 leaf vectors, 376.50 vectors, 29.68 full vectors, 32.72 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-99.20% recall@10
-591.04 leaf vectors, 683.04 vectors, 33.30 full vectors, 57.58 partitions
+98.80% recall@10
+582.06 leaf vectors, 676.06 vectors, 31.44 full vectors, 58.54 partitions

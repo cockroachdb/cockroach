@@ -1526,3 +1526,118 @@ func TestTxnPreparedWriteReadConflict(t *testing.T) {
 		}
 	}
 }
+
+// TestTxnBasicBufferedWrites verifies that a simple buffered writes transaction
+// can be run and committed. Moreover, it verifies that the transaction's writes
+// are only observed iff it commits.
+func TestTxnBasicBufferedWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
+		ctx := context.Background()
+
+		value1 := []byte("value1")
+		value2 := []byte("value2")
+		value3 := []byte("value3")
+
+		keyA := []byte("keyA")
+		keyB := []byte("keyB")
+		keyC := []byte("keyC")
+
+		// Before the test begins, write a value to keyC. We'll delete it below.
+		txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+		require.NoError(t, txn.Put(ctx, keyC, value3))
+		require.NoError(t, txn.Commit(ctx))
+
+		err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			txn.SetBufferedWritesEnabled(true)
+
+			// Put transactional value.
+			if err := txn.Put(ctx, keyA, value1); err != nil {
+				return err
+			}
+
+			// Attempt to read in another txn.
+			conflictTxn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+			conflictTxn.TestingSetPriority(enginepb.MinTxnPriority)
+			if gr, err := conflictTxn.Get(ctx, keyA); err != nil {
+				return err
+			} else if gr.Exists() {
+				return errors.Errorf("expected nil value; got %v", gr.Value)
+			}
+
+			// Read within the transaction.
+			if gr, err := txn.Get(ctx, keyA); err != nil {
+				return err
+			} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value1) {
+				return errors.Errorf("expected value %q; got %q", value1, gr.Value)
+			}
+
+			// Write to keyB two times. Only the last write should be visible once the
+			// transaction commits.
+			if err := txn.Put(ctx, keyB, value1); err != nil {
+				return err
+			}
+			if err := txn.Put(ctx, keyB, value2); err != nil {
+				return err
+			}
+
+			// Delete keyC before attempting to read it.
+			if _, err := txn.Del(ctx, keyC); err != nil {
+				return err
+			}
+			if gr, err := txn.Get(ctx, keyC); err != nil {
+				return err
+			} else if gr.Exists() {
+				return errors.Errorf("expected nil value for the deleted key; got %v", gr.Value)
+			}
+
+			if commit {
+				return nil
+			} else {
+				return errors.New("abort")
+			}
+		})
+
+		if commit {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			testutils.IsError(err, "abort")
+		}
+
+		// Verify the values are visible only if the transaction committed.
+		gr, err := s.DB.Get(ctx, keyA)
+		require.NoError(t, err)
+
+		if commit {
+			require.True(t, gr.Exists())
+			require.Equal(t, value1, gr.ValueBytes())
+		} else {
+			require.False(t, gr.Exists())
+		}
+
+		gr, err = s.DB.Get(ctx, keyB)
+		require.NoError(t, err)
+
+		if commit {
+			require.True(t, gr.Exists())
+			require.Equal(t, value2, gr.ValueBytes()) // value2 is the final value
+		} else {
+			require.False(t, gr.Exists())
+		}
+
+		// keyC was deleted.
+		gr, err = s.DB.Get(ctx, keyC)
+		require.NoError(t, err)
+		if commit {
+			require.False(t, gr.Exists())
+		} else {
+			require.True(t, gr.Exists())
+			require.Equal(t, value3, gr.ValueBytes())
+		}
+	})
+}

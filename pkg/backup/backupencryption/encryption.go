@@ -363,6 +363,9 @@ func GetEncryptionFromBaseStore(
 		return nil, nil
 	}
 	opts, err := ReadEncryptionOptions(ctx, baseStore)
+	if err != nil {
+		return nil, err
+	}
 	var encryptionOptions *jobspb.BackupEncryptionOptions
 	switch encryptionParams.Mode {
 	case jobspb.EncryptionMode_Passphrase:

@@ -121,8 +121,10 @@ type PhysicalPlanMaker func(context.Context, *DistSQLPlanner) (*PhysicalPlan, *P
 // the number in the old one.
 func calculatePlanGrowth(before, after *PhysicalPlan) (int, float64) {
 	var changed int
-	beforeSpecs := before.GenerateFlowSpecs()
-	afterSpecs := after.GenerateFlowSpecs()
+	beforeSpecs, beforeCleanup := before.GenerateFlowSpecs()
+	defer beforeCleanup(beforeSpecs)
+	afterSpecs, afterCleanup := after.GenerateFlowSpecs()
+	defer afterCleanup(afterSpecs)
 
 	// How many nodes are in after that are not in before, or are in both but
 	// have changed their spec?

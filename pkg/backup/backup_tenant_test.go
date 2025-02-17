@@ -185,7 +185,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 		if err := tSQL.QueryRow(`SELECT status FROM [show jobs] WHERE job_id = $1`, jobID).Scan(&status); err != nil {
 			return err
 		}
-		if status == string(jobs.StatusCanceled) {
+		if status == string(jobs.StateCanceled) {
 			return nil
 		}
 		return errors.Newf("%s", status)

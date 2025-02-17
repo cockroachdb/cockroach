@@ -79,8 +79,10 @@ Please copy this checklist into the relevant commit message and perform these
 steps:
 
 * [ ] Adjust the Pebble tests to run in new version.
-* [ ] Update `build/teamcity/internal/release/build-and-publish-patched-go/impl.sh` with the new version and adjust SHA256 sums as necessary.
-* [ ] Adjust `GO_VERSION` and `GO_FIPS_COMMIT` for the FIPS Go toolchain ([source](./teamcity/internal/release/build-and-publish-patched-go/impl-fips.sh)).
+* [ ] Update [our `go` fork](https://github.com/cockroachdb/go) with a new branch containing our patches. Create a new branch `cockroach-go$GO_VERSION` and take note of the commit ID.
+* [ ] Update `build/teamcity/internal/release/build-and-publish-patched-go/commit.txt` with the commit ID in the `go` fork.
+* [ ] Update `build/teamcity/internal/release/build-and-publish-patched-go/impl.sh` with the new `GOVERS` and adjust SHA256 sums as necessary.
+* [ ] Adjust `GO_FIPS_COMMIT` for the FIPS Go toolchain ([source](./teamcity/internal/release/build-and-publish-patched-go/impl-fips.sh)).
 * [ ] Run the `Internal / Cockroach / Build / Toolchains / Publish Patched Go for Mac` build configuration in TeamCity with your latest version of the script above. Note the job depends on another job `Build and Publish Patched Go`. That job prints out the SHA256 of all tarballs, which you will need to copy-paste into `WORKSPACE` (see below). `Publish Patched Go for Mac` is an extra step that publishes the *signed* `go` binaries for macOS. That job also prints out the SHA256 of the Mac tarballs in particular.
 * [ ] Adjust `--@io_bazel_rules_go//go/toolchain:sdk_version` in [.bazelrc](../.bazelrc).
 * [ ] Bump the version in `WORKSPACE` under `go_download_sdk`. You may need to bump [rules_go](https://github.com/bazelbuild/rules_go/releases). Also edit the filenames listed in `sdks` and update all the hashes to match what you built in the step above.

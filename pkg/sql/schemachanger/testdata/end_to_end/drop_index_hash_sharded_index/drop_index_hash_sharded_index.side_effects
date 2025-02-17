@@ -76,6 +76,7 @@ upsert descriptor #104
   -      isSharded: true
   -      name: crdb_internal_j_shard_16
   -      shardBuckets: 16
+  -    vecConfig: {}
   -    version: 4
   +  indexes: []
      modificationTime: {}
@@ -123,6 +124,7 @@ upsert descriptor #104
   +        isSharded: true
   +        name: crdb_internal_j_shard_16
   +        shardBuckets: 16
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -235,6 +237,7 @@ upsert descriptor #104
   -      isSharded: true
   -      name: crdb_internal_j_shard_16
   -      shardBuckets: 16
+  -    vecConfig: {}
   -    version: 4
   +  indexes: []
      modificationTime: {}
@@ -282,6 +285,7 @@ upsert descriptor #104
   +        isSharded: true
   +        name: crdb_internal_j_shard_16
   +        shardBuckets: 16
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -456,6 +460,7 @@ upsert descriptor #104
   -        isSharded: true
   -        name: crdb_internal_j_shard_16
   -        shardBuckets: 16
+  -      vecConfig: {}
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY

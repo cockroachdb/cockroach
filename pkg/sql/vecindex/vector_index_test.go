@@ -10,6 +10,8 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"regexp"
 	"runtime"
 	"sort"
@@ -60,6 +62,12 @@ func TestVectorIndex(t *testing.T) {
 			case "search":
 				return state.Search(d)
 
+			case "search-for-insert":
+				return state.SearchForInsert(d)
+
+			case "search-for-delete":
+				return state.SearchForDelete(d)
+
 			case "insert":
 				return state.Insert(d)
 
@@ -96,9 +104,7 @@ type testState struct {
 func (s *testState) NewIndex(d *datadriven.TestData) string {
 	var err error
 	dims := 2
-	// Set seed and allow at most one background worker to run so vector index
-	// operations can be deterministic.
-	s.Options = VectorIndexOptions{Seed: 42, MaxWorkers: 1}
+	s.Options = VectorIndexOptions{IsDeterministic: true}
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "min-partition-size":
@@ -130,7 +136,7 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 
 	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
 	s.InMemStore = vecstore.NewInMemoryStore(dims, 42)
-	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, &s.Options, s.Stopper)
+	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, 42, &s.Options, s.Stopper)
 	require.NoError(s.T, err)
 
 	// Suspend background fixups until ProcessFixups is explicitly called, so
@@ -151,7 +157,7 @@ func (s *testState) FormatTree(d *datadriven.TestData) string {
 }
 
 func (s *testState) Search(d *datadriven.TestData) string {
-	var vector vector.T
+	var vec vector.T
 	searchSet := vecstore.SearchSet{MaxResults: 1}
 	options := SearchOptions{}
 
@@ -162,7 +168,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 			require.Len(s.T, arg.Vals, 1)
 			offset, err := strconv.Atoi(arg.Vals[0])
 			require.NoError(s.T, err)
-			vector = s.Features.At(offset)
+			vec = s.Features.At(offset)
 
 		case "max-results":
 			require.Len(s.T, arg.Vals, 1)
@@ -180,14 +186,14 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		}
 	}
 
-	if vector == nil {
+	if vec == nil {
 		// Parse input as the vector to search for.
-		vector = s.parseVector(d.Input)
+		vec = s.parseVector(d.Input)
 	}
 
 	// Search the index within a transaction.
 	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-	err = s.Index.Search(s.Ctx, txn, vector, &searchSet, options)
+	err = s.Index.Search(s.Ctx, txn, vec, &searchSet, options)
 	require.NoError(s.T, err)
 	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -200,7 +206,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 			errorBound = fmt.Sprintf("±%s ", formatFloat(result.ErrorBound, 2))
 		}
 		fmt.Fprintf(&buf, "%s: %s %s(centroid=%s)\n",
-			string(result.ChildKey.PrimaryKey), formatFloat(result.QuerySquaredDistance, 4),
+			string(result.ChildKey.KeyBytes), formatFloat(result.QuerySquaredDistance, 4),
 			errorBound, formatFloat(result.CentroidDistance, 2))
 	}
 
@@ -208,6 +214,81 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%d vectors, ", searchSet.Stats.QuantizedVectorCount))
 	buf.WriteString(fmt.Sprintf("%d full vectors, ", searchSet.Stats.FullVectorCount))
 	buf.WriteString(fmt.Sprintf("%d partitions", searchSet.Stats.PartitionCount))
+
+	// Handle any fixups triggered by the search.
+	s.Index.ProcessFixups()
+
+	return buf.String()
+}
+
+func (s *testState) SearchForInsert(d *datadriven.TestData) string {
+	var vec vector.T
+
+	var err error
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "use-feature":
+			require.Len(s.T, arg.Vals, 1)
+			offset, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+			vec = s.Features.At(offset)
+		}
+	}
+
+	if vec == nil {
+		// Parse input as the vector to search for.
+		vec = s.parseVector(d.Input)
+	}
+
+	// Search the index within a transaction.
+	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+	result, err := s.Index.SearchForInsert(s.Ctx, txn, vec)
+	require.NoError(s.T, err)
+	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "partition %d, centroid=", result.ChildKey.PartitionKey)
+
+	// Un-randomize the centroid and write it to buffer.
+	original := make(vector.T, len(result.Vector))
+	s.Index.unRandomizeVector(result.Vector, original)
+	writeVector(&buf, original, 4)
+
+	fmt.Fprintf(&buf, ", sqdist=%s", formatFloat(result.QuerySquaredDistance, 4))
+	if result.ErrorBound != 0 {
+		fmt.Fprintf(&buf, "±%s", formatFloat(result.ErrorBound, 2))
+	}
+	buf.WriteByte('\n')
+
+	// Handle any fixups triggered by the search.
+	s.Index.ProcessFixups()
+
+	return buf.String()
+}
+
+func (s *testState) SearchForDelete(d *datadriven.TestData) string {
+	var buf bytes.Buffer
+
+	for _, line := range strings.Split(d.Input, "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+
+		key, vec := s.parseKeyAndVector(line)
+
+		// Search within a transaction.
+		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+		result, err := s.Index.SearchForDelete(s.Ctx, txn, vec, key)
+		require.NoError(s.T, err)
+		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+
+		if result == nil {
+			fmt.Fprintf(&buf, "%s: vector not found\n", string(key))
+		} else {
+			fmt.Fprintf(&buf, "%s: partition %d\n", string(key), result.ParentPartitionKey)
+		}
+	}
 
 	// Handle any fixups triggered by the search.
 	s.Index.ProcessFixups()
@@ -237,7 +318,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		}
 	}
 
-	vectors := vector.MakeSet(s.Quantizer.GetRandomDims())
+	vectors := vector.MakeSet(s.Quantizer.GetDims())
 	childKeys := make([]vecstore.ChildKey, 0, count)
 	if count != 0 {
 		// Load features.
@@ -245,8 +326,8 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		vectors = s.Features
 		vectors.SplitAt(count)
 		for i := 0; i < count; i++ {
-			key := vecstore.PrimaryKey(fmt.Sprintf("vec%d", i))
-			childKeys = append(childKeys, vecstore.ChildKey{PrimaryKey: key})
+			key := vecstore.KeyBytes(fmt.Sprintf("vec%d", i))
+			childKeys = append(childKeys, vecstore.ChildKey{KeyBytes: key})
 		}
 	} else {
 		// Parse vectors.
@@ -259,8 +340,8 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 			require.Len(s.T, parts, 2)
 
 			vectors.Add(s.parseVector(parts[1]))
-			key := vecstore.PrimaryKey(parts[0])
-			childKeys = append(childKeys, vecstore.ChildKey{PrimaryKey: key})
+			key := vecstore.KeyBytes(parts[0])
+			childKeys = append(childKeys, vecstore.ChildKey{KeyBytes: key})
 		}
 	}
 
@@ -269,11 +350,12 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	for i := 0; i < vectors.Count; i++ {
 		// Insert within the scope of a transaction.
 		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-		s.InMemStore.InsertVector(childKeys[i].PrimaryKey, vectors.At(i))
-		require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(i), childKeys[i].PrimaryKey))
+		s.InMemStore.InsertVector(childKeys[i].KeyBytes, vectors.At(i))
+		require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(i), childKeys[i].KeyBytes))
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 		if (i+1)%step == 0 && !noFixups {
+			// Run synchronous fixups so that test results are deterministic.
 			s.Index.ProcessFixups()
 		}
 	}
@@ -309,21 +391,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 			continue
 		}
 
-		// If vector to delete has a colon, then its value is specified as well
-		// as its name. This is useful for forcing a certain value to delete.
-		var key vecstore.PrimaryKey
-		var vec vector.T
-		parts := strings.Split(line, ":")
-		if len(parts) == 1 {
-			// Get the value from the store.
-			key = vecstore.PrimaryKey(line)
-			vec = s.InMemStore.GetVector(key)
-		} else {
-			require.Len(s.T, parts, 2)
-			// Parse the value after the colon.
-			key = vecstore.PrimaryKey(parts[0])
-			vec = s.parseVector(parts[1])
-		}
+		key, vec := s.parseKeyAndVector(line)
 
 		// Delete within the scope of a transaction.
 		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
@@ -385,6 +453,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	options := SearchOptions{}
 	numSamples := 50
 	var samples []int
+	seed := 42
 	var err error
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
@@ -401,6 +470,11 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 			numSamples, err = strconv.Atoi(arg.Vals[0])
 			require.NoError(s.T, err)
 
+		case "seed":
+			require.Len(s.T, arg.Vals, 1)
+			seed, err = strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+
 		case "topk":
 			require.Len(s.T, arg.Vals, 1)
 			searchSet.MaxResults, err = strconv.Atoi(arg.Vals[0])
@@ -413,19 +487,30 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		}
 	}
 
+	data := s.InMemStore.GetAllVectors()
+
 	// Construct list of feature offsets.
 	if samples == nil {
-		samples = make([]int, numSamples)
-		for i := range samples {
-			samples[i] = s.Features.Count - numSamples + i
+		// Shuffle the remaining features.
+		rng := rand.New(rand.NewSource(int64(seed)))
+		remaining := make([]int, s.Features.Count-len(data))
+		for i := range remaining {
+			remaining[i] = i
 		}
+		rng.Shuffle(len(remaining), func(i, j int) {
+			remaining[i], remaining[j] = remaining[j], remaining[i]
+		})
+
+		// Pick numSamples randomly from the remaining set
+		samples = make([]int, numSamples)
+		copy(samples, remaining[:numSamples])
 	}
 
 	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
 	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 	// calcTruth calculates the true nearest neighbors for the query vector.
-	calcTruth := func(queryVector vector.T, data []vecstore.VectorWithKey) []vecstore.PrimaryKey {
+	calcTruth := func(queryVector vector.T, data []vecstore.VectorWithKey) []vecstore.KeyBytes {
 		distances := make([]float32, len(data))
 		offsets := make([]int, len(data))
 		for i := 0; i < len(data); i++ {
@@ -440,14 +525,12 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 			return data[offsets[i]].Key.Compare(data[offsets[j]].Key) < 0
 		})
 
-		truth := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+		truth := make([]vecstore.KeyBytes, searchSet.MaxResults)
 		for i := 0; i < len(truth); i++ {
-			truth[i] = data[offsets[i]].Key.PrimaryKey
+			truth[i] = data[offsets[i]].Key.KeyBytes
 		}
 		return truth
 	}
-
-	data := s.InMemStore.GetAllVectors()
 
 	// Search for sampled features.
 	var sumMAP float64
@@ -461,9 +544,9 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		require.NoError(s.T, err)
 		results := searchSet.PopResults()
 
-		prediction := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+		prediction := make([]vecstore.KeyBytes, searchSet.MaxResults)
 		for res := 0; res < len(results); res++ {
-			prediction[res] = results[res].ChildKey.PrimaryKey
+			prediction[res] = results[res].ChildKey.KeyBytes
 		}
 
 		sumMAP += findMAP(prediction, truth)
@@ -515,7 +598,7 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 		}
 
 		// If this is not the leaf level, then process the next level.
-		if childKeys[0].PrimaryKey == nil {
+		if childKeys[0].KeyBytes == nil {
 			partitionKeys = make([]vecstore.PartitionKey, len(childKeys))
 			for i := range childKeys {
 				partitionKeys[i] = childKeys[i].PartitionKey
@@ -550,13 +633,21 @@ func (s *testState) parseVector(str string) vector.T {
 	return vector
 }
 
-func formatFloat(value float32, prec int) string {
-	s := strconv.FormatFloat(float64(value), 'f', prec, 32)
-	if strings.Contains(s, ".") {
-		s = strings.TrimRight(s, "0")
-		s = strings.TrimRight(s, ".")
+// parseKeyAndVector parses a line that may contain a key and vector separated
+// by a colon. If there's no colon, it treats the line as just a key and gets
+// the vector from the store.
+func (s *testState) parseKeyAndVector(line string) (vecstore.KeyBytes, vector.T) {
+	parts := strings.Split(line, ":")
+	if len(parts) == 1 {
+		// Get the value from the store.
+		key := vecstore.KeyBytes(line)
+		return key, s.InMemStore.GetVector(key)
 	}
-	return s
+
+	// Parse the value after the colon.
+	require.Len(s.T, parts, 2)
+	key := vecstore.KeyBytes(parts[0])
+	return key, s.parseVector(parts[1])
 }
 
 func beginTransaction(ctx context.Context, t *testing.T, store vecstore.Store) vecstore.Txn {
@@ -574,7 +665,7 @@ func commitTransaction(ctx context.Context, t *testing.T, store vecstore.Store, 
 // results with the true set of results. Both sets are expected to be of equal
 // length. It returns the percentage overlap of the predicted set with the truth
 // set.
-func findMAP(prediction, truth []vecstore.PrimaryKey) float64 {
+func findMAP(prediction, truth []vecstore.KeyBytes) float64 {
 	if len(prediction) != len(truth) {
 		panic(errors.AssertionFailedf("prediction and truth sets are not same length"))
 	}
@@ -594,6 +685,61 @@ func findMAP(prediction, truth []vecstore.PrimaryKey) float64 {
 	return intersect / float64(len(truth))
 }
 
+func TestRandomizeVector(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create index.
+	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	const dims = 97
+	const count = 5
+	quantizer := quantize.NewRaBitQuantizer(dims, 46)
+	inMemStore := vecstore.NewInMemoryStore(dims, 42)
+	index, err := NewVectorIndex(ctx, inMemStore, quantizer, 42, &VectorIndexOptions{}, stopper)
+	require.NoError(t, err)
+
+	// Generate random vectors with exponentially increasing norms, in order
+	// make distances more distinct.
+	rng := rand.New(rand.NewSource(42))
+	data := make([]float32, dims*count)
+	for i := range data {
+		vecIdx := float64(i / dims)
+		data[i] = float32(rng.NormFloat64() * math.Pow(1.5, vecIdx))
+	}
+
+	original := vector.MakeSetFromRawData(data, dims)
+	randomized := vector.MakeSet(dims)
+	randomized.AddUndefined(count)
+	for i := range original.Count {
+		index.randomizeVector(original.At(i), randomized.At(i))
+
+		// Ensure that calling unRandomizeVector recovers original vector.
+		randomizedInv := make([]float32, dims)
+		index.unRandomizeVector(randomized.At(i), randomizedInv)
+		for j, val := range original.At(i) {
+			require.InDelta(t, val, randomizedInv[j], 0.00001)
+		}
+	}
+
+	// Ensure that distances are similar, whether using the original vectors or
+	// the randomized vectors.
+	originalSet := quantizer.Quantize(ctx, original).(*quantize.RaBitQuantizedVectorSet)
+	randomizedSet := quantizer.Quantize(ctx, randomized).(*quantize.RaBitQuantizedVectorSet)
+
+	distances := make([]float32, count)
+	errorBounds := make([]float32, count)
+	quantizer.EstimateSquaredDistances(ctx, originalSet, original.At(0), distances, errorBounds)
+	require.Equal(t, []float32{0, 272.75, 550.86, 950.93, 2421.41}, testutils.RoundFloats(distances, 2))
+	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
+
+	quantizer.EstimateSquaredDistances(ctx, randomizedSet, randomized.At(0), distances, errorBounds)
+	require.Equal(t, []float32{5.1, 292.72, 454.95, 1011.85, 2475.87}, testutils.RoundFloats(distances, 2))
+	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
+}
+
 // TestVectorIndexConcurrency builds an index on multiple goroutines, with
 // background splits and merges enabled.
 func TestVectorIndexConcurrency(t *testing.T) {
@@ -608,9 +754,9 @@ func TestVectorIndexConcurrency(t *testing.T) {
 	// Load features.
 	vectors := testutils.LoadFeatures(t, 100)
 
-	primaryKeys := make([]vecstore.PrimaryKey, vectors.Count)
+	primaryKeys := make([]vecstore.KeyBytes, vectors.Count)
 	for i := 0; i < vectors.Count; i++ {
-		primaryKeys[i] = vecstore.PrimaryKey(fmt.Sprintf("vec%d", i))
+		primaryKeys[i] = vecstore.KeyBytes(fmt.Sprintf("vec%d", i))
 	}
 
 	for i := 0; i < 10; i++ {
@@ -619,11 +765,11 @@ func TestVectorIndexConcurrency(t *testing.T) {
 			MaxPartitionSize: 8,
 			BaseBeamSize:     2,
 			QualitySamples:   4,
-			Seed:             42,
 		}
-		store := vecstore.NewInMemoryStore(vectors.Dims, options.Seed)
-		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, options.Seed)
-		index, err := NewVectorIndex(ctx, store, quantizer, &options, stopper)
+		seed := int64(i)
+		store := vecstore.NewInMemoryStore(vectors.Dims, seed)
+		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)
+		index, err := NewVectorIndex(ctx, store, quantizer, seed, &options, stopper)
 		require.NoError(t, err)
 
 		buildIndex(ctx, t, store, index, vectors, primaryKeys)
@@ -641,7 +787,7 @@ func buildIndex(
 	store *vecstore.InMemoryStore,
 	index *VectorIndex,
 	vectors vector.Set,
-	primaryKeys []vecstore.PrimaryKey,
+	primaryKeys []vecstore.KeyBytes,
 ) {
 	// Insert block of vectors within the scope of a transaction.
 	insertBlock := func(start, end int) {
@@ -714,7 +860,7 @@ func validateIndex(ctx context.Context, t *testing.T, store *vecstore.InMemorySt
 		}
 
 		// If this is not the leaf level, then process the next level.
-		if childKeys[0].PrimaryKey == nil {
+		if childKeys[0].KeyBytes == nil {
 			partitionKeys = make([]vecstore.PartitionKey, len(childKeys))
 			for i := range childKeys {
 				partitionKeys[i] = childKeys[i].PartitionKey

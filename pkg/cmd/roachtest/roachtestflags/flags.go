@@ -328,6 +328,12 @@ var (
 		Usage: `flag to denote if roachtest should export openmetrics file for performance metrics.`,
 	})
 
+	OpenmetricsLabels string = ""
+	_                        = registerRunFlag(&OpenmetricsLabels, FlagInfo{
+		Name:  "openmetrics-labels",
+		Usage: `flag to pass custom labels to pass to openmetrics for performance metrics,`,
+	})
+
 	DatadogSite string = "us5.datadoghq.com"
 	_                  = registerRunOpsFlag(&DatadogSite, FlagInfo{
 		Name:  "datadog-site",

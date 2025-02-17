@@ -174,7 +174,10 @@ BEGIN; COMMIT
 statement ok
 BEGIN; END
 
-# COMMIT/ROLLBACK without a transaction are errors.
+# COMMIT/ROLLBACK without a transaction are errors when autocommit_before_ddl=false.
+
+statement ok
+SET autocommit_before_ddl = false
 
 statement error pgcode 25P01 there is no transaction in progress
 COMMIT TRANSACTION
@@ -182,10 +185,35 @@ COMMIT TRANSACTION
 statement error pgcode 25P01 there is no transaction in progress
 ROLLBACK TRANSACTION
 
-# Set isolation level without a transaction is an error.
+# COMMIT/ROLLBACK without a transaction are allowed when autocommit_before_ddl=true.
+
+statement ok
+SET autocommit_before_ddl = true
+
+statement ok
+COMMIT TRANSACTION
+
+statement ok
+ROLLBACK TRANSACTION
+
+# Set isolation level without a transaction is an error when autocommit_before_ddl=false.
+
+statement ok
+SET autocommit_before_ddl = false
 
 statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
+
+# Set isolation level without a transaction is a warning when autocommit_before_ddl=true.
+
+statement ok
+SET autocommit_before_ddl = true
+
+query T noticetrace
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
+----
+WARNING: there is no transaction in progress
+SQLSTATE: 25P01
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
@@ -509,8 +537,20 @@ COMMIT
 
 # User priority.
 
+statement ok
+SET autocommit_before_ddl = false
+
 statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION PRIORITY LOW
+
+statement ok
+SET autocommit_before_ddl = true
+
+query T noticetrace
+SET TRANSACTION PRIORITY LOW
+----
+WARNING: there is no transaction in progress
+SQLSTATE: 25P01
 
 statement ok
 BEGIN TRANSACTION PRIORITY LOW; COMMIT

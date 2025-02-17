@@ -140,6 +140,9 @@ query T
 SELECT crdb_internal.show_create_all_tables('temp_test')
 ----
 
+statement ok
+SET autocommit_before_ddl = false
+
 # Test that a database with foreign keys has the right order.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -162,6 +165,9 @@ CREATE TABLE c (i int REFERENCES d);
 CREATE SEQUENCE s;
 CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT,  FAMILY f1 (id, v));
 COMMIT;
+
+statement ok
+RESET autocommit_before_ddl
 
 # Table order should be B, A, E, G, F, D, C, sequence s, s_tbl.
 query T nosort

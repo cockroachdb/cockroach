@@ -101,7 +101,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		}
 
 		sb := &statisticsBuilder{}
-		sb.init(context.Background(), &evalCtx, mem.Metadata())
+		sb.init(context.Background(), &evalCtx, &mem)
 
 		// Make the scan.
 		scan := mem.MemoizeScan(&ScanPrivate{Table: tabID, Cols: cols})
@@ -112,7 +112,8 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		relProps := &props.Relational{Cardinality: props.AnyCardinality}
 		relProps.NotNullCols = cs.ExtractNotNullCols(ctx, &evalCtx)
 		s := relProps.Statistics()
-		s.Init(relProps)
+		const minRowCount = 0
+		s.Init(relProps, minRowCount)
 
 		// Calculate distinct counts.
 		sb.applyConstraintSet(cs, true /* tight */, sel, relProps, relProps.Statistics())

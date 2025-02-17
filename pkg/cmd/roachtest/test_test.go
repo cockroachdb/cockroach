@@ -767,4 +767,102 @@ func TestVMPreemptionPolling(t *testing.T) {
 		// be treated as a flake instead of a failed test.
 		require.NoError(t, err)
 	})
+
+	// Test that if VM preemption polling finds a preempted VM but the post test failure
+	// check doesn't, the test is still marked as a flake.
+	t.Run("post test check doesn't catch preemption", func(t *testing.T) {
+		setPollPreemptionInterval(10 * time.Millisecond)
+		testPreemptedCh := make(chan struct{})
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			preemptedVMs := []vm.PreemptedVM{{
+				Name:        "test_node",
+				PreemptedAt: time.Now(),
+			}}
+			close(testPreemptedCh)
+			return preemptedVMs, nil
+		}
+
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			defer func() {
+				getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+					return nil, nil
+				}
+			}()
+			// Make sure the preemption polling is called and the test context is cancelled
+			// before unblocking. Under stress, the test may time out before the preemption
+			// check is called otherwise.
+			<-testPreemptedCh
+			<-ctx.Done()
+		}
+
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+
+		require.NoError(t, err)
+	})
+
+	// Test that if the test hangs until timeout, a VM preemption will still be caught.
+	t.Run("test hangs and still catches preemption", func(t *testing.T) {
+		// We don't want the polling to cancel the test early.
+		setPollPreemptionInterval(10 * time.Minute)
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			preemptedVMs := []vm.PreemptedVM{{
+				Name:        "test_node",
+				PreemptedAt: time.Now(),
+			}}
+			return preemptedVMs, nil
+		}
+
+		mockTest.Timeout = 10 * time.Millisecond
+		// We expect the following to occur:
+		//	1. The test blocks on the context, which is only cancelled when the test runner
+		//		 returns after test completion. This effectively blocks the test forever.
+		//  2. The test times out and the test runner marks it as failed.
+		//  3. Normally, this would result in a failed test and runner.Run returning an error.
+		//     However, because we injected a preemption, the test runner marks it as a flake
+		//     instead and returns no errors.
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			<-ctx.Done()
+		}
+
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+
+		require.NoError(t, err)
+	})
+}
+
+// TestRunnerFailureAfterTimeout checks that a test has a failure added
+// after the test has timed out works as expected.
+//
+// Specifically, this is a regression test that replacing the test logger
+// for post test artifacts collection or assertion checks is atomic and
+// doesn't race with the logger potentially still being used by the test.
+func TestRunnerFailureAfterTimeout(t *testing.T) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cr := newClusterRegistry()
+	runner := newUnitTestRunner(cr, stopper)
+
+	var buf syncedBuffer
+	copt := defaultClusterOpt()
+	lopt := defaultLoggingOpt(&buf)
+	test := registry.TestSpec{
+		Name:  `timeout`,
+		Owner: OwnerUnitTest,
+		// Set the timeout very low so we can observe the timeout
+		// and error racing.
+		Timeout:          1 * time.Nanosecond,
+		Cluster:          spec.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  registry.StandardCockroach,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Error("test failed")
+		},
+	}
+	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
+		defaultParallelism, copt, testOpts{}, lopt)
+	require.Error(t, err)
 }

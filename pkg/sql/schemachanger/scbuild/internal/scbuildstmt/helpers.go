@@ -306,8 +306,8 @@ func getSortedColumnIDsInIndex(
 	return ret
 }
 
-// indexColumnIDs return an index's key column IDs, key suffix column IDs,
-// and storing column IDs, in sorted order.
+// getSortedColumnIDsInIndexByKind return an index's key column IDs, key suffix
+// column IDs, and storing column IDs, in sorted order.
 func getSortedColumnIDsInIndexByKind(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
 ) (
@@ -317,14 +317,13 @@ func getSortedColumnIDsInIndexByKind(
 ) {
 	// Retrieve all columns of this index.
 	allColumns := make([]*scpb.IndexColumn, 0)
-	scpb.ForEachIndexColumn(b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)), func(
-		current scpb.Status, target scpb.TargetStatus, ice *scpb.IndexColumn,
-	) {
-		if ice.TableID != tableID || ice.IndexID != indexID {
-			return
-		}
-		allColumns = append(allColumns, ice)
-	})
+	b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)).FilterIndexColumn().
+		ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
+			if e.IndexID != indexID {
+				return
+			}
+			allColumns = append(allColumns, e)
+		})
 
 	// Sort all columns by their (Kind, OrdinalInKind).
 	sort.Slice(allColumns, func(i, j int) bool {

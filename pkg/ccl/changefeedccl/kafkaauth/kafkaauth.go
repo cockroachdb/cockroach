@@ -77,7 +77,7 @@ func (r saslMechanismRegistry) pick(u *changefeedbase.SinkURL) (_ SASLMechanism,
 	}
 
 	// Return slightly nicer errors for this common case.
-	if b.name() != sarama.SASLTypeOAuth {
+	if b.name() != sarama.SASLTypeOAuth && b.name() != proprietaryOAuthName {
 		if err := validateNoOAuthOnlyParams(u); err != nil {
 			return nil, false, err
 		}
@@ -95,6 +95,10 @@ func (r saslMechanismRegistry) pick(u *changefeedbase.SinkURL) (_ SASLMechanism,
 func (r saslMechanismRegistry) allMechanismNames() string {
 	allMechanisms := make([]string, 0, len(r))
 	for k := range r {
+		// Exclude PROPRIETARY_OAUTH since we want it to remain undocumented.
+		if k == "PROPRIETARY_OAUTH" {
+			continue
+		}
 		allMechanisms = append(allMechanisms, k)
 	}
 	sort.Strings(allMechanisms)

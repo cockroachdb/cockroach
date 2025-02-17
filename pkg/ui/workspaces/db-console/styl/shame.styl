@@ -133,15 +133,15 @@
   opacity .6
   font-size 10px
 
-.crl-ant-divider
+.crdb-ant-divider
   background $button-border-color
   margin-left 0
   margin-right 22px
-  &.crl-ant-divider-vertical
+  &.crdb-ant-divider-vertical
     height auto
 
-.crl-ant-tooltip
-  .crl-ant-tooltip-inner
+.crdb-ant-tooltip
+  .crdb-ant-tooltip-inner
     font-size 12px
     border-radius 4px
     background-color $body-color
@@ -152,7 +152,7 @@
     min-width 0
     min-height 0
   &.preset-black
-    .crl-ant-tooltip-inner
+    .crdb-ant-tooltip-inner
       background-color #000
       pre
         font-family RobotoMono-Medium
@@ -164,7 +164,7 @@
           font-family RobotoMono-Bold
           color #0055ff
 
-.crl-ant-time-picker-input
+.crdb-ant-time-picker-input
   height 40px
   padding 0px 11px
   border-radius 3px
@@ -175,72 +175,72 @@
   &:hover
     border-color $link-color
 
-.crl-ant-time-picker-panel-combobox
+.crdb-ant-time-picker-panel-combobox
   display flex
 
-.crl-ant-calendar-picker:hover .crl-ant-calendar-picker-input:not(.crl-ant-input-disabled)
+.crdb-ant-calendar-picker:hover .crdb-ant-calendar-picker-input:not(.crdb-ant-input-disabled)
   border-color $link-color
 
-.crl-ant-fullcalendar-header
+.crdb-ant-fullcalendar-header
   padding: 10px 4px
   text-align: center
 
-.crl-ant-fullcalendar
+.crdb-ant-fullcalendar
   font-size 12px
   font-family Lato-Regular
 
-.crl-ant-fullcalendar-selected-day
-  .crl-ant-fullcalendar-date
+.crdb-ant-fullcalendar-selected-day
+  .crdb-ant-fullcalendar-date
     background #eff5fe
     color #3a7ce1
     &:hover
       background #e0efff
       color $blue-color
 
-.crl-ant-fullcalendar-today 
-  &.crl-ant-fullcalendar-date
+.crdb-ant-fullcalendar-today
+  &.crdb-ant-fullcalendar-date
     color #3a7ce1
     border-color #3a7ce1
     &:hover
       background #eff5fd
-  &.crl-ant-fullcalendar-selected-day
-    .crl-ant-fullcalendar-date
+  &.crdb-ant-fullcalendar-selected-day
+    .crdb-ant-fullcalendar-date
       background #eff5fd
       &:hover
         background $grey4
         font-weight bold
-  &.crl-ant-fullcalendar-disabled-cell
-    .crl-ant-fullcalendar-date
+  &.crdb-ant-fullcalendar-disabled-cell
+    .crdb-ant-fullcalendar-date
       background #E7ECF3
       &:hover
         background #E7ECF3
 
-.crl-ant-fullcalendar-date, .crl-ant-time-picker-panel li
+.crdb-ant-fullcalendar-date, .crdb-ant-time-picker-panel li
   color #5F6C87
   font-family Lato-Regular
   font-size 12px
-  &.crl-ant-time-picker-panel-addon-option-disabled
+  &.crdb-ant-time-picker-panel-addon-option-disabled
     color #a3a5af
   &:hover
     background #f6f6f6
   &:focus
     color $link-color
 
-.crl-ant-time-picker-panel li
+.crdb-ant-time-picker-panel li
   display flex
   align-items center
 
-.crl-ant-fullcalendar-disabled-cell .crl-ant-fullcalendar-date
+.crdb-ant-fullcalendar-disabled-cell .crdb-ant-fullcalendar-date
   background #E7ECF3
 
-.crl-ant-fullcalendar-disabled-cell.crl-ant-fullcalendar-today .crl-ant-fullcalendar-date
+.crdb-ant-fullcalendar-disabled-cell.crdb-ant-fullcalendar-today .crdb-ant-fullcalendar-date
   color #a3a5af
   font-weight bold
   border-color transparent
   &:before
     border 1px solid #a3a5af
 
-.crl-ant-calendar-today-btn
+.crdb-ant-calendar-today-btn
   width 100%
   font-family Lato-Bold
   color $link-color
@@ -254,13 +254,13 @@
     line-height 1.71
     letter-spacing 0.1px
 
-.crl-ant-btn:focus
+.crdb-ant-btn:focus
   color: $link-color
 
-.crl-ant-btn:after
+.crdb-ant-btn:after
   display: none !important;
 
-.crl-ant-btn-background-ghost
+.crdb-ant-btn-background-ghost
   box-shadow: none
   
 .color
@@ -269,20 +269,20 @@
     &:hover
       text-decoration underline
 
-.crl-ant-checkbox-wrapper
+.crdb-ant-checkbox-wrapper
   &:hover
-    .crl-ant-checkbox-inner
+    .crdb-ant-checkbox-inner
       border solid 1px $checkbox-border-hover
       background $popover-border-color
-  .crl-ant-checkbox-inner
+  .crdb-ant-checkbox-inner
     border solid 1px $checkbox-border
     border-radius 3px
-  .crl-ant-checkbox-checked
+  .crdb-ant-checkbox-checked
     &:hover
-      .crl-ant-checkbox-inner
+      .crdb-ant-checkbox-inner
         border solid 1px $link
         background $link
-    .crl-ant-checkbox-inner
+    .crdb-ant-checkbox-inner
       background-color $link
   span
     font-family SourceSansPro-SemiBold
@@ -291,39 +291,39 @@
     letter-spacing 0.1px
     color $popover-color
 
-.crl-ant-pagination
+.crdb-ant-pagination
   display flex
   justify-content center
   align-items flex-end
   margin 40px 0
   &.mini
-    .crl-ant-pagination-item, .crl-ant-pagination-prev, .crl-ant-pagination-next
+    .crdb-ant-pagination-item, .crdb-ant-pagination-prev, .crdb-ant-pagination-next
       margin 0 5px
-  .crl-ant-pagination-item
+  .crdb-ant-pagination-item
     a
       color $body-color
       font-size 14px
       font-family Lato-Medium
       &:hover
         color $link-color
-  .crl-ant-pagination-item-active
+  .crdb-ant-pagination-item-active
     background transparent
     border-radius 2px
     border 1px solid $link-color
     a
       color $link-color
-  .crl-ant-pagination-next, .crl-ant-pagination-prev
-    .crl-ant-pagination-item-link
+  .crdb-ant-pagination-next, .crdb-ant-pagination-prev
+    .crdb-ant-pagination-item-link
       font-size 12px
       color $body-color
     &:hover
-      .crl-ant-pagination-item-link
+      .crdb-ant-pagination-item-link
         color $link-color
-    &.crl-ant-pagination-disabled
-      .crl-ant-pagination-item-link
+    &.crdb-ant-pagination-disabled
+      .crdb-ant-pagination-item-link
         color #b8bbbc
       &:hover
-        .crl-ant-pagination-item-link
+        .crdb-ant-pagination-item-link
           color #b8bbbc
 
 .drawer--preset-black
@@ -350,7 +350,7 @@
   ::-webkit-scrollbar-thumb:hover {
     background #5f6c87ad
   }
-  .crl-ant-divider
+  .crdb-ant-divider
     width 1px
     background #5f6c87
     margin: 0 15px
@@ -365,21 +365,21 @@
       letter-spacing 0.1px
       &:hover
         color #5f6c87
-  .crl-ant-drawer-content
+  .crdb-ant-drawer-content
     overflow auto
-  .crl-ant-drawer-mask
+  .crdb-ant-drawer-mask
     background-color transparent
-  .crl-ant-drawer-content-wrapper
+  .crdb-ant-drawer-content-wrapper
     padding-left 80px
     box-shadow none !important
-  .crl-ant-drawer-content
+  .crdb-ant-drawer-content
     background #242a35
-  .crl-ant-drawer-header
+  .crdb-ant-drawer-header
     padding 15px 0
     margin 0 24px
     background transparent
     border-bottom: 1px solid #5f6c87;
-  .crl-ant-drawer-body
+  .crdb-ant-drawer-body
     padding 15px 20px
     margin 0 4px
     height 190px
@@ -395,9 +395,9 @@
       font-family RobotoMono-Bold
 
 .cockroach--tabs
-  .crl-ant-tabs-bar
+  .crdb-ant-tabs-bar
     border-bottom 1px solid $grey2
-  .crl-ant-tabs-tab
+  .crdb-ant-tabs-tab
     font-family SourceSansPro-Regular
     font-size 16px
     line-height 1.5
@@ -405,9 +405,9 @@
     color $placeholder
     &:hover
       color $adminui-grey-1 
-  .crl-ant-tabs-tab-active
+  .crdb-ant-tabs-tab-active
     color $adminui-grey-1 
-  .crl-ant-tabs-ink-bar
+  .crdb-ant-tabs-ink-bar
     height 3px
     border-radius 40px
     background-color $blue

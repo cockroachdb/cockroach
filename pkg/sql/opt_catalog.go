@@ -118,6 +118,11 @@ func (os *optSchema) ID() cat.StableID {
 	return cat.StableID(os.PostgresDescriptorID())
 }
 
+// Version is part of the cat.Object interface.
+func (os *optSchema) Version() uint64 {
+	return uint64(os.schema.GetVersion())
+}
+
 // PostgresDescriptorID is part of the cat.Object interface.
 func (os *optSchema) PostgresDescriptorID() catid.DescID {
 	switch os.schema.SchemaKind() {
@@ -438,6 +443,13 @@ func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return oc.planner.HasAdminRole(ctx)
 }
 
+// UserHasAdminRole is part of the cat.Catalog interface.
+func (oc *optCatalog) UserHasAdminRole(
+	ctx context.Context, user username.SQLUsername,
+) (bool, error) {
+	return oc.planner.UserHasAdminRole(ctx, user)
+}
+
 // HasRoleOption is part of the cat.Catalog interface.
 func (oc *optCatalog) HasRoleOption(
 	ctx context.Context, roleOption roleoption.Option,
@@ -508,6 +520,13 @@ func (oc *optCatalog) Optimizer() interface{} {
 // GetCurrentUser is part of the cat.Catalog interface.
 func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
 	return oc.planner.User()
+}
+
+// LeaseByStableID is part of the cat.Catalog interface.
+func (oc *optCatalog) LeaseByStableID(ctx context.Context, stableID cat.StableID) (uint64, error) {
+	// Lease the descriptor, so that schema changes cannot move forward
+	// after the current version.
+	return oc.planner.Descriptors().LockDescriptorWithLease(ctx, oc.planner.txn, descpb.ID(stableID))
 }
 
 // GetDependencyDigest is part of the cat.Catalog interface.
@@ -672,6 +691,11 @@ func (ov *optView) ID() cat.StableID {
 	return cat.StableID(ov.desc.GetID())
 }
 
+// Version is part of the cat.Object interface.
+func (ov *optView) Version() uint64 {
+	return uint64(ov.desc.GetVersion())
+}
+
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ov *optView) PostgresDescriptorID() catid.DescID {
 	return ov.desc.GetID()
@@ -743,6 +767,11 @@ func newOptSequence(desc catalog.TableDescriptor) *optSequence {
 // ID is part of the cat.Object interface.
 func (os *optSequence) ID() cat.StableID {
 	return cat.StableID(os.desc.GetID())
+}
+
+// Version is part of the cat.Object interface.
+func (os *optSequence) Version() uint64 {
+	return uint64(os.desc.GetVersion())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
@@ -1176,6 +1205,11 @@ func newOptTable(
 // ID is part of the cat.Object interface.
 func (ot *optTable) ID() cat.StableID {
 	return cat.StableID(ot.desc.GetID())
+}
+
+// Version is part of the cat.Object interface.
+func (ot *optTable) Version() uint64 {
+	return uint64(ot.desc.GetVersion())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
@@ -2386,6 +2420,11 @@ func (ot *optVirtualTable) ID() cat.StableID {
 	return ot.id
 }
 
+// Version is part of the cat.Object interface.
+func (ot *optVirtualTable) Version() uint64 {
+	return uint64(ot.desc.GetVersion())
+}
+
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ot *optVirtualTable) PostgresDescriptorID() catid.DescID {
 	return ot.desc.GetID()
@@ -2970,6 +3009,7 @@ func getOptPolicies(descPolicies []descpb.PolicyDescriptor) cat.Policies {
 		descPolicy := &descPolicies[i]
 		policy := cat.Policy{
 			Name:          tree.Name(descPolicy.Name),
+			ID:            descPolicy.ID,
 			UsingExpr:     descPolicy.UsingExpr,
 			WithCheckExpr: descPolicy.WithCheckExpr,
 			Command:       descPolicy.Command,

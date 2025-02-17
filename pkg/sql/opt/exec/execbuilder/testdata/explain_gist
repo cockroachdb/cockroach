@@ -86,6 +86,9 @@ CREATE TABLE t2 (a int, b int, c int, d int, e int)
 let $gist
 EXPLAIN (GIST) SELECT * FROM t2
 
+statement ok
+SET autocommit_before_ddl = false
+
 # To hit bug requires deleting lots of columns because of hidden columns.
 statement ok
 ALTER TABLE t2 DROP COLUMN b;

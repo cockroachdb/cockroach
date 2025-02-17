@@ -54,7 +54,7 @@ var (
 // instead of a method so that other packages can iterate over the map directly.
 // Note that additional elements for the array Oid types are added in init().
 var OidToType = map[oid.Oid]*T{
-	oid.T_anyelement: Any,
+	oid.T_anyelement: AnyElement,
 	oid.T_bit:        typeBit,
 	oid.T_bool:       Bool,
 	oid.T_bpchar:     BPChar,

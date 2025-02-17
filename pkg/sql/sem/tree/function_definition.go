@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -42,7 +43,26 @@ type ResolvedFunctionDefinition struct {
 	// not qualified.
 	Name string
 
+	// Overloads is the set of overloads for this resolved function. It can be
+	// empty in which case UnsupportedWithIssue is set.
 	Overloads []QualifiedOverload
+
+	// UnsupportedWithIssue, if non-zero, indicates the built-in is not really
+	// supported and provides the issue number to link.
+	UnsupportedWithIssue uint
+}
+
+// MakeUnsupportedError returns an implemented error if UnsupportedWithIssue is
+// non-zero.
+func (fd *ResolvedFunctionDefinition) MakeUnsupportedError() error {
+	if fd.UnsupportedWithIssue == 0 {
+		return nil
+	}
+	const msg = "this function is not yet supported"
+	return pgerror.Wrapf(
+		unimplemented.NewWithIssueDetail(int(fd.UnsupportedWithIssue), fd.Name, msg),
+		pgcode.InvalidParameterValue, "%s()", fd.Name,
+	)
 }
 
 type qualifiedOverloads []QualifiedOverload
@@ -70,11 +90,9 @@ func MakeQualifiedOverload(schema string, overload *Overload) QualifiedOverload 
 // FunctionProperties defines the properties of the built-in
 // functions that are common across all overloads.
 type FunctionProperties struct {
-	// UnsupportedWithIssue, if non-zero indicates the built-in is not
-	// really supported; the name is a placeholder. Value -1 just says
-	// "not supported" without an issue to link; values > 0 provide an
-	// issue number to link.
-	UnsupportedWithIssue int
+	// UnsupportedWithIssue, if non-zero, indicates the built-in is not really
+	// supported and provides the issue number to link.
+	UnsupportedWithIssue uint
 
 	// Undocumented, when set to true, indicates that the built-in function is
 	// hidden from documentation. This is currently used to hide experimental
@@ -505,8 +523,8 @@ func combineOverloads(a, b []QualifiedOverload, path SearchPath) []QualifiedOver
 // method, function is resolved to one overload, so that we can get rid of this
 // function and similar methods below.
 func (fd *ResolvedFunctionDefinition) GetClass() (FunctionClass, error) {
-	if len(fd.Overloads) < 1 {
-		return 0, errors.AssertionFailedf("no overloads found for function %s", fd.Name)
+	if fd.UnsupportedWithIssue != 0 {
+		return 0, fd.MakeUnsupportedError()
 	}
 	ret := fd.Overloads[0].Class
 	for i := range fd.Overloads {
@@ -523,8 +541,8 @@ func (fd *ResolvedFunctionDefinition) GetClass() (FunctionClass, error) {
 // different length. This is good enough since we don't create UDF with
 // ReturnLabel.
 func (fd *ResolvedFunctionDefinition) GetReturnLabel() ([]string, error) {
-	if len(fd.Overloads) < 1 {
-		return nil, errors.AssertionFailedf("no overloads found for function %s", fd.Name)
+	if fd.UnsupportedWithIssue != 0 {
+		return nil, fd.MakeUnsupportedError()
 	}
 	ret := fd.Overloads[0].ReturnLabels
 	for i := range fd.Overloads {
@@ -539,8 +557,8 @@ func (fd *ResolvedFunctionDefinition) GetReturnLabel() ([]string, error) {
 // checking each overload's HasSequenceArguments flag. Ambiguous error is
 // returned if there is any overload has a different flag.
 func (fd *ResolvedFunctionDefinition) GetHasSequenceArguments() (bool, error) {
-	if len(fd.Overloads) < 1 {
-		return false, errors.AssertionFailedf("no overloads found for function %s", fd.Name)
+	if fd.UnsupportedWithIssue != 0 {
+		return false, fd.MakeUnsupportedError()
 	}
 	ret := fd.Overloads[0].HasSequenceArguments
 	for i := range fd.Overloads {
@@ -554,12 +572,21 @@ func (fd *ResolvedFunctionDefinition) GetHasSequenceArguments() (bool, error) {
 // QualifyBuiltinFunctionDefinition qualified all overloads in a function
 // definition with a schema name. Note that this function can only be used for
 // builtin function.
+//
+// It must be called during the initialization of the process.
 func QualifyBuiltinFunctionDefinition(
 	def *FunctionDefinition, schema string,
 ) *ResolvedFunctionDefinition {
+	if len(def.Definition) == 0 && def.UnsupportedWithIssue == 0 {
+		panic(errors.AssertionFailedf("function %s has no overloads yet UnsupportedWithIssue is not set", def.Name))
+	}
+	if len(def.Definition) > 0 && def.UnsupportedWithIssue != 0 {
+		panic(errors.AssertionFailedf("function %s has %d overloads yet UnsupportedWithIssue is set to %d", def.Name, len(def.Definition), def.UnsupportedWithIssue))
+	}
 	ret := &ResolvedFunctionDefinition{
-		Name:      def.Name,
-		Overloads: make([]QualifiedOverload, 0, len(def.Definition)),
+		Name:                 def.Name,
+		Overloads:            make([]QualifiedOverload, 0, len(def.Definition)),
+		UnsupportedWithIssue: def.UnsupportedWithIssue,
 	}
 	for _, o := range def.Definition {
 		ret.Overloads = append(

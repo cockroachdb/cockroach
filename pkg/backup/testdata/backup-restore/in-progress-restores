@@ -174,7 +174,6 @@ USE d;
 DROP SCHEMA IF EXISTS me CASCADE;
 ----
 
-
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = restore.before_publishing_descriptors;
 ----

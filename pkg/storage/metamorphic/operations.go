@@ -316,7 +316,7 @@ func (m mvccAcquireLockOp) run(ctx context.Context) string {
 	txn := m.m.getTxn(m.txn)
 	writer := m.m.getReadWriter(m.writer)
 
-	err := storage.MVCCAcquireLock(ctx, writer, txn, m.strength, m.key, nil, int64(m.maxLockConflicts), m.targetLockConflictBytes)
+	err := storage.MVCCAcquireLock(ctx, writer, &txn.TxnMeta, txn.IgnoredSeqNums, m.strength, m.key, nil, int64(m.maxLockConflicts), m.targetLockConflictBytes)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}

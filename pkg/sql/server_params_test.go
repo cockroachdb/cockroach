@@ -20,8 +20,6 @@ import (
 func createTestServerParamsAllowTenants() (base.TestServerArgs, *tests.CommandFilters) {
 	var cmdFilters tests.CommandFilters
 	params := base.TestServerArgs{}
-	// Disable the default test tenant as limits to the number of spans in a
-	// secondary tenant cause this test to fail. Tracked with #76378.
 	params.Knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{

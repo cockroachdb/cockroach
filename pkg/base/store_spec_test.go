@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -92,13 +93,13 @@ target_file_size=2097152`
 		{"path=/mnt/hda1,attrs=hdd,attrs=ssd", "attrs field was used twice in store definition", StoreSpec{}},
 
 		// size
-		{"path=/mnt/hda1,size=671088640", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 671088640}}},
-		{"path=/mnt/hda1,size=20GB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 20000000000}}},
-		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 21474836480}}},
-		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 109951162777}}},
-		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 109951162777}}},
-		{"path=/mnt/hda1,size=123TB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 123000000000000}}},
-		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 135239930216448}}},
+		{"path=/mnt/hda1,size=671088640", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 671088640}}},
+		{"path=/mnt/hda1,size=20GB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 20000000000}}},
+		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 21474836480}}},
+		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 109951162777}}},
+		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 109951162777}}},
+		{"path=/mnt/hda1,size=123TB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 123000000000000}}},
+		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 135239930216448}}},
 		// %
 		{"path=/mnt/hda1,size=50.5%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 50.5}}},
 		{"path=/mnt/hda1,size=100%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 100}}},
@@ -123,18 +124,18 @@ target_file_size=2097152`
 		{"size=123TB", "no path specified", StoreSpec{}},
 
 		// ballast size
-		{"path=/mnt/hda1,ballast-size=671088640", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{InBytes: 671088640}}},
-		{"path=/mnt/hda1,ballast-size=20GB", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{InBytes: 20000000000}}},
+		{"path=/mnt/hda1,ballast-size=671088640", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Capacity: 671088640}}},
+		{"path=/mnt/hda1,ballast-size=20GB", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Capacity: 20000000000}}},
 		{"path=/mnt/hda1,ballast-size=1%", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Percent: 1}}},
 		{"path=/mnt/hda1,ballast-size=100.000%", "ballast size (100.000%) must be between 0.000000% and 50.000000%", StoreSpec{}},
 		{"ballast-size=20GiB,path=/mnt/hda1,ballast-size=20GiB", "ballast-size field was used twice in store definition", StoreSpec{}},
 
 		// type
-		{"type=mem,size=20GiB", "", StoreSpec{Size: SizeSpec{InBytes: 21474836480}, InMemory: true}},
-		{"size=20GiB,type=mem", "", StoreSpec{Size: SizeSpec{InBytes: 21474836480}, InMemory: true}},
-		{"size=20.5GiB,type=mem", "", StoreSpec{Size: SizeSpec{InBytes: 22011707392}, InMemory: true}},
+		{"type=mem,size=20GiB", "", StoreSpec{Size: SizeSpec{Capacity: 21474836480}, InMemory: true}},
+		{"size=20GiB,type=mem", "", StoreSpec{Size: SizeSpec{Capacity: 21474836480}, InMemory: true}},
+		{"size=20.5GiB,type=mem", "", StoreSpec{Size: SizeSpec{Capacity: 22011707392}, InMemory: true}},
 		{"size=20GiB,type=mem,attrs=mem", "", StoreSpec{
-			Size:       SizeSpec{InBytes: 21474836480},
+			Size:       SizeSpec{Capacity: 21474836480},
 			InMemory:   true,
 			Attributes: roachpb.Attributes{Attrs: []string{"mem"}},
 		}},
@@ -161,11 +162,11 @@ target_file_size=2097152`
 		// all together
 		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{
 			Path:       "/mnt/hda1",
-			Size:       SizeSpec{InBytes: 21474836480},
+			Size:       SizeSpec{Capacity: 21474836480},
 			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
 		{"type=mem,attrs=hdd:ssd,size=20GiB", "", StoreSpec{
-			Size:       SizeSpec{InBytes: 21474836480},
+			Size:       SizeSpec{Capacity: 21474836480},
 			InMemory:   true,
 			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
@@ -218,46 +219,8 @@ target_file_size=2097152`
 // StoreSpec aliases base.StoreSpec for convenience.
 type StoreSpec = base.StoreSpec
 
-// SizeSpec aliases base.SizeSpec for convenience.
-type SizeSpec = base.SizeSpec
-
-func TestJoinListType(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testData := []struct {
-		join string
-		exp  string
-		err  string
-	}{
-		{"", "", "no address specified in --join"},
-		{":", "--join=:" + base.DefaultPort, ""},
-		{"a", "--join=a:" + base.DefaultPort, ""},
-		{"a,b", "--join=a:" + base.DefaultPort + " --join=b:" + base.DefaultPort, ""},
-		{"a,,b", "--join=a:" + base.DefaultPort + " --join=b:" + base.DefaultPort, ""},
-		{",a", "--join=a:" + base.DefaultPort, ""},
-		{"a,", "--join=a:" + base.DefaultPort, ""},
-		{"a:123,b", "--join=a:123 --join=b:" + base.DefaultPort, ""},
-		{"[::1]:123,b", "--join=[::1]:123 --join=b:" + base.DefaultPort, ""},
-		{"[::1,b", "", `address \[::1: missing ']' in address`},
-	}
-
-	for _, test := range testData {
-		t.Run(test.join, func(t *testing.T) {
-			var jls base.JoinListType
-			err := jls.Set(test.join)
-			if !testutils.IsError(err, test.err) {
-				t.Fatalf("error: expected %q, got: %+v", test.err, err)
-			}
-			if test.err != "" {
-				return
-			}
-			actual := jls.String()
-			if actual != test.exp {
-				t.Errorf("expected: %q, got: %q", test.exp, actual)
-			}
-		})
-	}
-}
+// SizeSpec aliases storagepb.SizeSpec for convenience.
+type SizeSpec = storagepb.SizeSpec
 
 func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()

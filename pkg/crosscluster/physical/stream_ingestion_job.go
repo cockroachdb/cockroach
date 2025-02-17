@@ -789,7 +789,7 @@ func (c *cutoverProgressTracker) updateJobProgress(
 	}
 
 	if err := c.job.NoTxn().FractionProgressed(ctx, persistProgress); err != nil {
-		return jobs.SimplifyInvalidStatusError(err)
+		return jobs.SimplifyInvalidStateError(err)
 	}
 	if c.onJobProgressUpdate != nil {
 		c.onJobProgressUpdate(remainingSpans)

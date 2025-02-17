@@ -339,10 +339,14 @@ fk1  CREATE TABLE public.fk1 (
 # test that notices are generated on index drops
 subtest notice_on_drop_index
 
+statement ok
+CREATE TABLE drop_index_test(a int);
+CREATE INDEX drop_index_test_index ON drop_index_test(a);
+
 # Weak isolation levels emit extra notices, so skip them.
 skipif config weak-iso-level-configs
 query T noticetrace
-CREATE TABLE drop_index_test(a int); CREATE INDEX drop_index_test_index ON drop_index_test(a); DROP INDEX drop_index_test_index
+DROP INDEX drop_index_test_index
 ----
 NOTICE: the data for dropped indexes is reclaimed asynchronously
 HINT: The reclamation delay can be customized in the zone configuration for the table.
@@ -353,6 +357,9 @@ subtest new_uniqueness_constraint_error
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b DECIMAL(10,1) NOT NULL DEFAULT(0), UNIQUE INDEX t_secondary (b), FAMILY (a, b));
 INSERT INTO t VALUES (100, 500.5);
+
+statement ok
+SET autocommit_before_ddl = false;
 
 statement ok
 BEGIN;
@@ -366,6 +373,9 @@ UPSERT INTO t SELECT a + 1 FROM t;
 
 statement ok
 COMMIT;
+
+statement ok
+RESET autocommit_before_ddl
 
 # test the primary key cannot be dropped with drop index; see #56853
 subtest drop_primary_key

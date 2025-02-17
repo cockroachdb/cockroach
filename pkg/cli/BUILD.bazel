@@ -188,7 +188,6 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/storage/storagepb",
-        "//pkg/testutils",
         "//pkg/testutils/bazelcodecover",
         "//pkg/testutils/serverutils",
         "//pkg/ts",
@@ -442,6 +441,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/listenerutil",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -496,6 +496,7 @@ disallowed_imports_test(
         # TODO(#81375)
         #"//pkg/security/securitytest",
         "//pkg/sql/randgen",
+        "//pkg/testutils",
         # Prohibit the use of pgx v4 imports. This package now exclusively
         # relies on pgx v5.
         "@com_github_jackc_pgproto3//:pgproto3",

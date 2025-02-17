@@ -59,6 +59,7 @@ go_test(
     srcs = [
         "cluster_synced_test.go",
         "cockroach_test.go",
+        "expander_test.go",
         "monitor_test.go",
         "services_test.go",
         "session_test.go",

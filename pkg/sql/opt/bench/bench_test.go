@@ -534,8 +534,8 @@ var queries = [...]benchQuery{
 	},
 	{
 		name:    "json-insert",
-		query:   `INSERT INTO json_table(k, i, j) VALUES (1, 10, '{"a": "foo", "b": "bar", "c": [2, 3, "baz", true, false, null]}')`,
-		args:    []interface{}{},
+		query:   `INSERT INTO json_table(k, i, j) VALUES ($1, $2, $3)`,
+		args:    []interface{}{1, 10, `'{"a": "foo", "b": "bar", "c": [2, 3, "baz", true, false, null]}'`},
 		cleanup: "TRUNCATE TABLE json_table",
 	},
 	{
@@ -864,7 +864,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 			tb.Fatalf("%v", err)
 		}
 	} else {
-		if _, _, err := h.optimizer.TryPlaceholderFastPath(); err != nil {
+		if _, err := h.optimizer.TryPlaceholderFastPath(); err != nil {
 			tb.Fatalf("%v", err)
 		}
 	}

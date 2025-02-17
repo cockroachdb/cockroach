@@ -18,7 +18,9 @@ func indexJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoi
 	return required.CanProjectCols(inputCols)
 }
 
-func lookupJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func lookupJoinCanProvideOrdering(
+	mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
+) bool {
 	lookupJoin := expr.(*memo.LookupJoinExpr)
 
 	// LookupJoin can pass through its ordering if the ordering depends only on
@@ -44,7 +46,7 @@ func lookupJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingCho
 		// This case indicates that we didn't do a good job pushing down equalities
 		// (see #36219), but it should be handled correctly here nevertheless.
 		res = trimColumnGroups(&res, &child.Relational().FuncDeps)
-		return CanProvide(child, &res)
+		return CanProvide(mem, child, &res)
 	}
 	if !canProjectUsingOnlyInputCols {
 		// It is not possible to serve the required ordering using only input
@@ -69,7 +71,7 @@ func lookupJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingCho
 		}
 		// Check whether appending index columns to the input ordering would satisfy
 		// the required ordering.
-		_, ok := getLookupOrdCols(lookupJoin, &remainingRequired, canProjectPrefixCols)
+		_, ok := getLookupOrdCols(mem, lookupJoin, &remainingRequired, canProjectPrefixCols)
 		return ok
 	}
 	return canProjectUsingOnlyInputCols
@@ -135,7 +137,9 @@ func indexJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) o
 	return remapProvided(input.ProvidedPhysical().Ordering, &fds, rel.OutputCols)
 }
 
-func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+func lookupJoinBuildProvided(
+	mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
+) opt.Ordering {
 	lookupJoin := expr.(*memo.LookupJoinExpr)
 	provided := lookupJoin.Input.ProvidedPhysical().Ordering
 
@@ -146,7 +150,7 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) 
 		// getLookupOrdColumns for more details.
 		inputOrderingCols := provided.ColSet()
 		inputOrderingCols.UnionWith(required.Optional)
-		if lookupProvided, ok := getLookupOrdCols(lookupJoin, toExtend, inputOrderingCols); ok {
+		if lookupProvided, ok := getLookupOrdCols(mem, lookupJoin, toExtend, inputOrderingCols); ok {
 			newProvided := make(opt.Ordering, len(provided)+len(lookupProvided))
 			copy(newProvided, provided)
 			copy(newProvided[len(provided):], lookupProvided)
@@ -176,7 +180,7 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) 
 	var fds props.FuncDepSet
 	fds.CopyFrom(&lookupJoin.Input.Relational().FuncDeps)
 
-	md := lookupJoin.Memo().Metadata()
+	md := mem.Metadata()
 	index := md.Table(lookupJoin.Table).Index(lookupJoin.Index)
 	for i, colID := range lookupJoin.KeyCols {
 		indexColID := lookupJoin.Table.ColumnID(index.Column(i).Ordinal())
@@ -222,7 +226,10 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) 
 // is the set of columns referenced by the input ordering. getLookupOrdCols can
 // mutate the inputOrderingCols argument.
 func getLookupOrdCols(
-	lookupJoin *memo.LookupJoinExpr, required *props.OrderingChoice, inputOrderingCols opt.ColSet,
+	mem *memo.Memo,
+	lookupJoin *memo.LookupJoinExpr,
+	required *props.OrderingChoice,
+	inputOrderingCols opt.ColSet,
 ) (lookupOrdering opt.Ordering, ok bool) {
 	if !lookupJoin.Input.Relational().FuncDeps.ColsAreStrictKey(inputOrderingCols) {
 		// Ensure that the ordering forms a key over the input columns. Lookup
@@ -244,7 +251,7 @@ func getLookupOrdCols(
 
 	// Build an ordering that represents the index.
 	joinFDs := &lookupJoin.Relational().FuncDeps
-	idx := lookupJoin.Memo().Metadata().Table(lookupJoin.Table).Index(lookupJoin.Index)
+	idx := mem.Metadata().Table(lookupJoin.Table).Index(lookupJoin.Index)
 	indexOrder := make(opt.Ordering, 0, idx.KeyColumnCount())
 	requiredCols := required.ColSet()
 	for i := 0; i < idx.KeyColumnCount(); i++ {

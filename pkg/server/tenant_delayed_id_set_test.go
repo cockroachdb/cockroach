@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -87,7 +87,7 @@ func TestStartTenantWithDelayedID(t *testing.T) {
 
 	listenerReady.Wait()
 	// Try a connection.
-	pgURL, cleanupFn, err := sqlutils.PGUrlE(
+	pgURL, cleanupFn, err := pgurlutils.PGUrlE(
 		baseCfg.SQLAdvertiseAddr, "testConn", url.User(username.RootUser))
 	require.NoError(t, err)
 	defer cleanupFn()

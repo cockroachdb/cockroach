@@ -187,9 +187,15 @@ start_key  end_key  range_id  range_size_mb  lease_holder  lease_holder_locality
 # Add some tables. This will force at least one range to pop up.
 # also split them to make the test more interesting.
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE TABLE t(x INT PRIMARY KEY, y INT); ALTER TABLE t SPLIT AT VALUES (10);
 CREATE INDEX idx ON t(y); ALTER INDEX t@idx SPLIT AT VALUES (20), (30);
 CREATE TABLE u(x INT PRIMARY KEY); ALTER TABLE u SPLIT AT VALUES (42);
+
+statement ok
+RESET autocommit_before_ddl
 
 # List ranges again. Expect data this time.
 query TTIT colnames

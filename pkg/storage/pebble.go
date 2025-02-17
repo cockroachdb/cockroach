@@ -350,6 +350,9 @@ var EngineComparer = func() pebble.Comparer {
 		}
 		return EngineKeyFormatter{key: decoded}
 	}
+	// TODO(jackson): Consider overriding ValidateKey and using the stricter
+	// EngineKey.Validate. Today some tests create lock-table keys without the
+	// lock table prefix and these test keys fail EngineKey.Validate.
 	return c
 }()
 
@@ -528,19 +531,6 @@ func DefaultPebbleOptions() *pebble.Options {
 	// SSDs, that kick off an expensive GC if a lot of files are deleted at
 	// once.
 	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
-	// Validate min/max keys in each SSTable when performing a compaction. This
-	// serves as a simple protection against corruption or programmer-error in
-	// Pebble.
-	opts.Experimental.KeyValidationFunc = func(userKey []byte) error {
-		engineKey, ok := DecodeEngineKey(userKey)
-		if !ok {
-			return errors.Newf("key %s could not be decoded as an EngineKey", string(userKey))
-		}
-		if err := engineKey.Validate(); err != nil {
-			return err
-		}
-		return nil
-	}
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 	opts.Experimental.RequiredInPlaceValueBound = pebble.UserKeyPrefixBound{
 		Lower: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
@@ -609,11 +599,6 @@ type engineConfig struct {
 	// ballastSize is the amount reserved by a ballast file for manual
 	// out-of-disk recovery.
 	ballastSize int64
-	// cacheSize is stored separately so that we can avoid constructing the
-	// PebbleConfig.Opts.Cache until the call to Open. A Cache is created with
-	// a ref count of 1, so creating the Cache during execution of
-	// ConfigOption makes it too easy to leak a cache.
-	cacheSize *int64
 	// env holds the initialized virtual filesystem that the Engine should use.
 	env *fs.Env
 	// maxSize is used for calculating free space and making rebalancing

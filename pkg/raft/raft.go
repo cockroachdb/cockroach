@@ -250,18 +250,15 @@ type Config struct {
 	// See: https://github.com/etcd-io/raft/issues/80
 	DisableConfChangeValidation bool
 
-	// TestingDisablePreCampaignStoreLivenessCheck may be used by tests to disable
-	// the check performed by a peer before campaigning to ensure it has
-	// StoreLiveness support from a majority quorum.
-	TestingDisablePreCampaignStoreLivenessCheck bool
-
 	// StoreLiveness is a reference to the store liveness fabric.
 	StoreLiveness raftstoreliveness.StoreLiveness
 
 	// CRDBVersion exposes the active version to Raft. This helps version-gating
 	// features.
 	CRDBVersion clusterversion.Handle
-	Metrics     *Metrics
+
+	Metrics      *Metrics
+	TestingKnobs *TestingKnobs
 }
 
 func (c *Config) validate() error {
@@ -329,6 +326,16 @@ type raft struct {
 	lazyReplication      bool
 
 	state pb.StateType
+
+	// idxPreLeading is the last log index as of when this node became the
+	// leader. Separates entries proposed by previous leaders from the entries
+	// proposed by the current leader. Used only in StateLeader, and updated
+	// when entering StateLeader (in becomeLeader()).
+	//
+	// Invariants (when in StateLeader at raft.Term):
+	//	- entries at indices <= idxPreLeading have term < raft.Term
+	//	- entries at indices > idxPreLeading have term == raft.Term
+	idxPreLeading uint64
 
 	// isLearner is true if the local raft node is a learner.
 	isLearner bool
@@ -428,11 +435,6 @@ type raft struct {
 	randomizedElectionTimeout int64
 	disableProposalForwarding bool
 
-	// testingDisablePreCampaignStoreLivenessCheck may be used by tests to disable
-	// the check performed by a peer before campaigning to ensure it has
-	// StoreLiveness support from a majority quorum.
-	testingDisablePreCampaignStoreLivenessCheck bool
-
 	tick func()
 	step stepFunc
 
@@ -440,6 +442,7 @@ type raft struct {
 	storeLiveness raftstoreliveness.StoreLiveness
 	crdbVersion   clusterversion.Handle
 	metrics       *Metrics
+	testingKnobs  *TestingKnobs
 }
 
 func newRaft(c *Config) *raft {
@@ -468,10 +471,10 @@ func newRaft(c *Config) *raft {
 		preVote:                     c.PreVote,
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
-		testingDisablePreCampaignStoreLivenessCheck: c.TestingDisablePreCampaignStoreLivenessCheck,
-		storeLiveness: c.StoreLiveness,
-		crdbVersion:   c.CRDBVersion,
-		metrics:       c.Metrics,
+		storeLiveness:               c.StoreLiveness,
+		crdbVersion:                 c.CRDBVersion,
+		metrics:                     c.Metrics,
+		testingKnobs:                c.TestingKnobs,
 	}
 	lastID := r.raftLog.lastEntryID()
 
@@ -1028,9 +1031,14 @@ func (r *raft) maybeCommit() bool {
 	// replicas; once an entry from the current term has been committed in this
 	// way, then all prior entries are committed indirectly because of the Log
 	// Matching Property.
-	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
+	//
+	// This comparison is equivalent in output to:
+	// if !r.raftLog.matchTerm(entryID{term: r.Term, index: index})
+	// But avoids (potentially) loading the entry term from storage.
+	if index <= r.idxPreLeading {
 		return false
 	}
+
 	r.raftLog.commitTo(LogMark{Term: r.Term, Index: index})
 	return true
 }
@@ -1360,6 +1368,11 @@ func (r *raft) becomeLeader() {
 	// could be expensive.
 	r.pendingConfIndex = r.raftLog.lastIndex()
 
+	// Remember the last log index before the term advances to
+	// our current (leader) term.
+	// See the idxPreLeading comment for more details.
+	r.idxPreLeading = r.raftLog.lastIndex()
+
 	emptyEnt := pb.Entry{Data: nil}
 	if !r.appendEntry(emptyEnt) {
 		// This won't happen because we just called reset() above.
@@ -1421,7 +1434,8 @@ func (r *raft) hup(t CampaignType) {
 	// only make an exception if this is a leadership transfer, because otherwise
 	// the transfer might fail if the new leader doesn't already have support.
 	if t != campaignTransfer && r.fortificationTracker.RequireQuorumSupportOnCampaign() &&
-		!r.fortificationTracker.QuorumSupported() && !r.testingDisablePreCampaignStoreLivenessCheck {
+		!r.fortificationTracker.QuorumSupported() &&
+		!r.testingKnobs.IsPreCampaignStoreLivenessCheckDisabled() {
 		r.logger.Debugf("%x cannot campaign since it's not supported by a quorum in store liveness", r.id)
 		return
 	}
@@ -2296,10 +2310,10 @@ func stepFollower(r *raft, m pb.Message) error {
 		// may never be safe for MsgTimeoutNow to come from anyone but the leader.
 		// We need to think about this more.
 		//
-		//if r.supportingFortifiedLeader() && r.lead != m.From {
+		// if r.supportingFortifiedLeader() && r.lead != m.From {
 		//	r.logger.Infof("%x [term %d] ignored MsgTimeoutNow from %x due to leader fortification", r.id, r.Term, m.From)
 		//	return nil
-		//}
+		// }
 		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
 		// know we are not recovering from a partition so there is no need for the

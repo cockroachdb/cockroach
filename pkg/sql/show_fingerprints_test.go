@@ -202,7 +202,7 @@ func TestShowTenantFingerprintsProtectsTimestamp(t *testing.T) {
 		t.Logf("udating PTS reader cache to %s", asOf)
 		require.NoError(
 			t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
+			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 		)
 		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
 	}

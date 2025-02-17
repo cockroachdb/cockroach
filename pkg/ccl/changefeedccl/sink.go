@@ -59,6 +59,29 @@ const (
 	sinkTypePulsar
 )
 
+func (st sinkType) String() string {
+	switch st {
+	case sinkTypeSinklessBuffer:
+		return `sinkless buffer`
+	case sinkTypeNull:
+		return `null`
+	case sinkTypeKafka:
+		return `kafka`
+	case sinkTypeWebhook:
+		return `webhook`
+	case sinkTypePubsub:
+		return `pubsub`
+	case sinkTypeCloudstorage:
+		return `cloudstorage`
+	case sinkTypeSQL:
+		return `sql`
+	case sinkTypePulsar:
+		return `pulsar`
+	default:
+		return `unknown`
+	}
+}
+
 // externalResource is the interface common to both EventSink and
 // ResolvedTimestampSink.
 type externalResource interface {

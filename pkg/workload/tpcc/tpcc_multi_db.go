@@ -385,6 +385,11 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 		if err != nil {
 			return err
 		}
+		// Run the operations in a single txn so they complete more quickly.
+		_, err = tx.Exec("SET LOCAL autocommit_before_ddl = false")
+		if err != nil {
+			return err
+		}
 		// Create all of the databases that was specified in the list.
 		for _, dbName := range t.dbList {
 			if _, err := tx.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName.Catalog())); err != nil {

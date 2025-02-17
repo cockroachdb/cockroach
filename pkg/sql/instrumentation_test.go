@@ -33,7 +33,7 @@ func TestSampledStatsCollection(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	tt := s.ApplicationLayer()
-	sv, sqlStats := &tt.ClusterSettings().SV, tt.SQLServer().(*Server).sqlStats
+	sv, sqlStats := &tt.ClusterSettings().SV, tt.SQLServer().(*Server).localSqlStats
 
 	sqlutils.CreateTable(
 		t, db, "test", "x INT", 10, sqlutils.ToRowFn(sqlutils.RowIdxFn),
@@ -54,7 +54,6 @@ func TestSampledStatsCollection(t *testing.T) {
 			}
 			var stats *appstatspb.CollectedStatementStatistics
 			require.NoError(t, sqlStats.
-				GetLocalMemProvider().
 				IterateStatementStats(
 					ctx,
 					sqlstats.IteratorOptions{},
@@ -81,7 +80,6 @@ func TestSampledStatsCollection(t *testing.T) {
 		var stats *appstatspb.CollectedTransactionStatistics
 
 		require.NoError(t, sqlStats.
-			GetLocalMemProvider().
 			IterateTransactionStats(
 				ctx,
 				sqlstats.IteratorOptions{},

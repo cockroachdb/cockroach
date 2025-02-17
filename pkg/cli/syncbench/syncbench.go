@@ -140,7 +140,7 @@ func Run(opts Options) error {
 		context.Background(),
 		fs.MustInitPhysicalTestingEnv(opts.Dir),
 		cluster.MakeTestingClusterSettings(),
-		storage.CacheSize(0))
+		storage.CacheSize(1<<20 /* 1MiB */))
 	if err != nil {
 		return err
 	}

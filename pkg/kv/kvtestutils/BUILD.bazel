@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvtestutils",
+    testonly = 1,
+    srcs = ["test_utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvtestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvbase",
+        "//pkg/testutils",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+    ],
+)

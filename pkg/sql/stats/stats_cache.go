@@ -265,7 +265,10 @@ func DisallowedOnSystemTable(tableID descpb.ID) bool {
 	// benefit is not worth the potential performance hit.
 	// TODO(yuzefovich): re-evaluate this assumption. Perhaps we could at
 	// least enable manual collection on this table.
-	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID:
+	// Disable stats on system.span_configurations since we've seen excessively
+	// many collections on it in some cases, and the stats are unlikely to
+	// provide any benefit on this table.
+	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID, keys.SpanConfigurationsTableID:
 		return true
 	}
 	return false

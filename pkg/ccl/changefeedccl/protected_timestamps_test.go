@@ -100,7 +100,7 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 			span roachpb.Span) func() []hlc.Timestamp {
 			return func() (r []hlc.Timestamp) {
 				require.NoError(t,
-					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.Clock().Now()))
+					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, srv.Clock().Now()))
 				protections, _, err := ptsReader.GetProtectionTimestamps(ctx, span)
 				require.NoError(t, err)
 				return protections
@@ -217,7 +217,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 			span roachpb.Span) func() []hlc.Timestamp {
 			return func() (r []hlc.Timestamp) {
 				require.NoError(t,
-					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.Clock().Now()))
+					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, srv.Clock().Now()))
 				protections, _, err := ptsReader.GetProtectionTimestamps(ctx, span)
 				require.NoError(t, err)
 				return protections
@@ -442,8 +442,8 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '250ms'", jobFeed.JobID()))
 
 		// Stale PTS record should trigger job cancellation.
-		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
-			return s == jobs.StatusCanceled
+		require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
+			return s == jobs.StateCanceled
 		}))
 	}
 
@@ -509,7 +509,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 		})
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR TABLE foo INTO 'null://'`).Scan(&jobID)
-	waitForJobStatus(sqlDB, t, jobID, `running`)
+	waitForJobState(sqlDB, t, jobID, `running`)
 
 	// Lay protected timestamp record.
 	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts)
@@ -548,7 +548,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 		t.Logf("updating PTS reader cache to %s", asOf)
 		require.NoError(
 			t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
+			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 		)
 		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
 	}

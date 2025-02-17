@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -46,7 +47,7 @@ type StoreTestingKnobs struct {
 	GossipTestingKnobs      StoreGossipTestingKnobs
 	ReplicaPlannerKnobs     plan.ReplicaPlannerTestingKnobs
 	StoreLivenessKnobs      *storeliveness.TestingKnobs
-
+	RaftTestingKnobs        *raft.TestingKnobs
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
 	// blocking in the filter will not block interfering requests. If it

@@ -112,7 +112,7 @@ func PlanCDCExpression(
 		return cdcPlan, err
 	}
 	if log.V(2) {
-		log.Infof(ctx, "Optimized CDC expression: %s", memo.RootExpr().String())
+		log.Infof(ctx, "Optimized CDC expression: %s", memo)
 	}
 
 	const allowAutoCommit = false

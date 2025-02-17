@@ -327,7 +327,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 						job_type = 'SCHEMA CHANGE' AND
 						status = $1 AND
 						description NOT LIKE 'ROLL BACK%'
-				)`, jobs.StatusRunning)
+				)`, jobs.StateRunning)
 								return err
 							},
 							errorContains: "job canceled by user",
@@ -545,6 +545,10 @@ CREATE TABLE db.t(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
 	if err != nil {
 		t.Error(err)
 	}
+
+	sqlDB.SetMaxOpenConns(1)
+	_, err = sqlDB.Exec(`SET autocommit_before_ddl = false`)
+	require.NoError(t, err)
 
 	_, err = sqlDB.Exec(`BEGIN;
 ALTER DATABASE db ADD REGION "us-east3";

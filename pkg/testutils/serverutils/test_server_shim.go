@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -338,7 +338,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 func OpenDBConnE(
 	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) (*gosql.DB, error) {
-	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+	pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
 		sqlAddr, "StartServer" /* prefix */, url.User(username.RootUser))
 	if err != nil {
 		return nil, err

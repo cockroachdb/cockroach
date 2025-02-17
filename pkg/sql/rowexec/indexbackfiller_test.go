@@ -7,6 +7,7 @@ package rowexec
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -92,6 +94,9 @@ func BenchmarkIndexBackfill(b *testing.B) {
 	stopTimer := func() {}
 	startTimer := func() {}
 
+	dir, dirCleanupFn := testutils.TempDir(b)
+	defer dirCleanupFn()
+
 	srv, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLEvalContext: &eval.TestingKnobs{
@@ -120,6 +125,7 @@ func BenchmarkIndexBackfill(b *testing.B) {
 				},
 			},
 		},
+		StoreSpecs: []base.StoreSpec{{InMemory: false, Path: filepath.Join(dir, "testserver")}},
 	})
 	defer srv.Stopper().Stop(ctx)
 

@@ -786,7 +786,7 @@ func (b *Builder) buildTriggerFunction(
 	triggerFuncScope := b.allocScope()
 	funcRef := &tree.FunctionOID{OID: catid.FuncIDToOID(catid.DescID(trigger.FuncID()))}
 	funcExpr := tree.FuncExpr{Func: tree.ResolvableFunctionReference{FunctionReference: funcRef}}
-	triggerFuncScope.resolveType(&funcExpr, types.Any)
+	triggerFuncScope.resolveType(&funcExpr, types.AnyElement)
 	resolvedDef := funcExpr.Func.FunctionReference.(*tree.ResolvedFunctionDefinition)
 	o := funcExpr.ResolvedOverload()
 

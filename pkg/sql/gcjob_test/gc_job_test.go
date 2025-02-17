@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -121,7 +122,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 
 	var myTableDesc *tabledesc.Mutable
 	var myOtherTableDesc *tabledesc.Mutable
-	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		myImm, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, myTableID)
 		if err != nil {
 			return err
@@ -256,12 +257,12 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 		time.Sleep(500 * time.Millisecond)
 	} else {
 		sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %s", jobIDStr), [][]string{{"succeeded"}})
-		if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, lookupJR); err != nil {
+		if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, jobs.StateSucceeded, lookupJR); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		myImm, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, myTableID)
 		if err != nil {
 			if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
@@ -384,7 +385,7 @@ func TestGCResumer(t *testing.T) {
 		require.NoError(t, sj.AwaitCompletion(ctx))
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
-		require.Equal(t, jobs.StatusSucceeded, job.Status())
+		require.Equal(t, jobs.StateSucceeded, job.State())
 		err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			_, err := sql.GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(tenID), execCfg.Settings)
 			return err
@@ -417,7 +418,7 @@ func TestGCResumer(t *testing.T) {
 
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
-		require.Equal(t, jobs.StatusSucceeded, job.Status())
+		require.Equal(t, jobs.StateSucceeded, job.State())
 		err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			_, err := sql.GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(tenID), execCfg.Settings)
 			return err
