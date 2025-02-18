@@ -68,14 +68,14 @@ type Container struct {
 	// uniqueServerCount is a server level counter of all the unique fingerprints
 	uniqueServerCount *SQLStatsAtomicCounters
 
+	// acc is the memory account that tracks memory allocations related to stmts
+	// and txns within this Container struct.
+	// Since currently we do not destroy the Container struct when we perform
+	// reset, we never close this account.
+	acc *mon.ConcurrentBoundAccount
+
 	mu struct {
 		syncutil.Mutex
-
-		// acc is the memory account that tracks memory allocations related to stmts
-		// and txns within this Container struct.
-		// Since currently we do not destroy the Container struct when we perform
-		// reset, we never close this account.
-		acc mon.BoundAccount
 
 		stmts map[stmtKey]*stmtStats
 		txns  map[appstatspb.TransactionFingerprintID]*txnStats
@@ -113,7 +113,7 @@ func New(
 	}
 
 	if mon != nil {
-		s.mu.acc = mon.MakeBoundAccount()
+		s.acc = mon.MakeConcurrentBoundAccount()
 	}
 
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
@@ -607,9 +607,10 @@ func (s *Container) clearLocked(ctx context.Context) {
 // presumed to be no longer in use and its actual allocated memory will
 // eventually be GC'd.
 func (s *Container) Free(ctx context.Context) {
+	s.acc.Clear(ctx)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	s.freeLocked(ctx)
 }
 
@@ -617,8 +618,6 @@ func (s *Container) freeLocked(ctx context.Context) {
 	if s.uniqueServerCount != nil {
 		s.uniqueServerCount.freeByCnt(int64(len(s.mu.stmts)), int64(len(s.mu.txns)))
 	}
-
-	s.mu.acc.Clear(ctx)
 }
 
 // Add combines one Container into another. Add manages locks on a, so taking
@@ -670,7 +669,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 				if latestErr := func() error {
 					s.mu.Lock()
 					defer s.mu.Unlock()
-					growErr := s.mu.acc.Grow(ctx, estimatedAllocBytes)
+					growErr := s.acc.Grow(ctx, estimatedAllocBytes)
 					if growErr != nil {
 						delete(s.mu.stmts, k)
 					}
@@ -738,10 +737,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 				// We still want to continue this loop to merge stats that are already
 				// present in our map that do not require allocation.
 				if latestErr := func() error {
-					s.mu.Lock()
-					defer s.mu.Unlock()
-
-					growErr := s.mu.acc.Grow(ctx, estimatedAllocBytes)
+					growErr := s.acc.Grow(ctx, estimatedAllocBytes)
 					if growErr != nil {
 						delete(s.mu.txns, k)
 					}
