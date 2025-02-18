@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -149,6 +150,10 @@ func (t testWrapper) NewGroup(_ ...task.Option) task.Group {
 }
 
 func (t testWrapper) NewErrorGroup(_ ...task.Option) task.ErrorGroup {
+	panic("implement me")
+}
+
+func (t testWrapper) Monitor() test.Monitor {
 	panic("implement me")
 }
 

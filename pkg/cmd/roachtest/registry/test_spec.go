@@ -167,6 +167,12 @@ type TestSpec struct {
 	// important.
 	Randomized bool
 
+	// Monitor indicates if the test starts a process monitor. Eventually, this
+	// should replace all usages of `cluster.NewMonitor`. To replace the use of
+	// monitor, the test should be updated to use the `TestMonitor` and `Task`
+	// interfaces supplied with each test.
+	Monitor bool
+
 	// stats are populated by test selector based on previous execution data
 	stats *testStats
 }
