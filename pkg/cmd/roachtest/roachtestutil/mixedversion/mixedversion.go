@@ -558,7 +558,6 @@ func defaultTestOptions() testOptions {
 		// appears to help, but we should be cautious of tests that create a lot
 		// of ranges as this may add significant delay.
 		waitForReplication:             true,
-		predecessorFunc:                randomPredecessor,
 		enabledDeploymentModes:         allDeploymentModes,
 		skipVersionProbability:         0.5,
 		overriddenMutatorProbabilities: make(map[string]float64),
@@ -1086,13 +1085,18 @@ func (t *Test) updateOptionsForDeploymentMode(mode DeploymentMode) {
 		}
 	}
 
-	if mode == SeparateProcessDeployment {
-		// We use latest predecessors in separate-process deployments since separate-process
-		// is more prone to flake (due to the relative lack of testing historically). In
-		// addition, production separate-process deployments (Serverless) run in much more
-		// controlled environments than self-hosted and are generally running the latest
-		// patch releases.
-		t.options.predecessorFunc = latestPredecessor
+	if t.options.predecessorFunc == nil {
+		switch mode {
+		case SeparateProcessDeployment:
+			// We use latest predecessors in separate-process deployments since separate-process
+			// is more prone to flake (due to the relative lack of testing historically). In
+			// addition, production separate-process deployments (Serverless) run in much more
+			// controlled environments than self-hosted and are generally running the latest
+			// patch releases.
+			t.options.predecessorFunc = latestPredecessor
+		default:
+			t.options.predecessorFunc = randomPredecessor
+		}
 	}
 }
 
