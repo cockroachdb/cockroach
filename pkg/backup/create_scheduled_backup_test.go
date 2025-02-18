@@ -106,7 +106,6 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	require.NotNil(t, th.cfg)
 	th.sqlDB = sqlutils.MakeSQLRunner(db)
 	th.server = s.ApplicationLayer()
-	th.sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1MiB'`)
 	th.sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up test
 
 	return th, func() {

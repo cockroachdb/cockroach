@@ -161,12 +161,6 @@ func StartBackupRestoreTestCluster(
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.index_buffer_size = '16MiB'`)
 
-		// Set the max buffer size to something low to prevent
-		// backup/restore tests from hitting OOM errors. If any test
-		// cares about this setting in particular, they will override
-		// it inline after setting up the test cluster.
-		sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '16MiB'`)
-
 		sqlDB.Exec(t, `CREATE DATABASE data`)
 		l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
 		if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
