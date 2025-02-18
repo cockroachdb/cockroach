@@ -581,6 +581,14 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
+	// TODO (kev-cao): there is a decent amount of overlap between the initial
+	// setup of classic backup and backup compaction with some minor differences,
+	// (e.g. lock writing, checkpointing, etc.). It would be nice to unify these
+	// with a common setup function.
+	if details.Compact {
+		return compactBackups(ctx, b.job.ID(), p, details)
+	}
+
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		p.ExecCfg().Settings,
 		&p.ExecCfg().ExternalIODirConfig,
