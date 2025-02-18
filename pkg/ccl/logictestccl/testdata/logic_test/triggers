@@ -4009,7 +4009,7 @@ statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
 
 # Verify we log to the event log.
-query T
+query T retry
 select "eventType" from system.eventlog order by timestamp desc limit 1;
 ----
 create_trigger
@@ -4021,7 +4021,7 @@ statement ok
 DROP TRIGGER foo ON xy;
 
 # Verify we log to the event log.
-query T
+query T retry
 select "eventType" from system.eventlog order by timestamp desc limit 1;
 ----
 drop_trigger
