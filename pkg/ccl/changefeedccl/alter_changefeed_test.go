@@ -32,13 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -1356,7 +1356,11 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 141463)
+
+	// TODO(#141405): Remove this once llrbFrontier starts merging
+	// adjacent spans. The current lack of merging causes issues
+	// with the checks in this test around expected resolved spans.
+	defer span.EnableBtreeFrontier(true)()
 
 	var rndMu struct {
 		syncutil.Mutex
@@ -1472,7 +1476,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		var resolvedFoo []roachpb.Span
 		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
 			t.Logf("resolved span: %#v", r)
-			if !r.Span.Equal(fooTableSpan) {
+			if !r.Span.Equal(fooTableSpan) { // ignore spans that are the whole table, as that indicates normal non-backfill operation
 				resolvedFoo = append(resolvedFoo, r.Span)
 			}
 			return false, nil
@@ -1489,6 +1493,8 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		require.Equal(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
 
 		require.NoError(t, jobFeed.Pause())
+
+		// assertion: the spans that were checkpointed before the pause/alter should not be re-resolved after the resume
 
 		// Verify that none of the resolvedFoo spans after resume were checkpointed.
 		for _, sp := range resolvedFoo {
