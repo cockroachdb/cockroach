@@ -1198,6 +1198,9 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Set verbose log to confirm whether or not we hit the same nil row issue as in #140669
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	rnd, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)
 
