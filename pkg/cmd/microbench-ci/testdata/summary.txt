@@ -16,16 +16,16 @@ benchmarks:
 ----
 
 logs name=BenchmarkSysbench/SQL/3node/oltp_read_write path=/abcdef123/bin/pkg_sql_tests
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2368213 B/op 10378 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2375306 B/op 10377 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2358650 B/op 10287 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9982428 ns/op 2370670 B/op 10411 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9926623 ns/op 2367582 B/op 10386 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9898707 ns/op 2365463 B/op 10398 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9879350 ns/op 2364281 B/op 10361 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9808429 ns/op 2352326 B/op 10246 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9849367 ns/op 2369187 B/op 10379 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9872510 ns/op 2367752 B/op 10392 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2368213 B/op 10378 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2375306 B/op 10377 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2358650 B/op 10287 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9982428 ns/op 2370670 B/op 10411 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9926623 ns/op 2367582 B/op 10386 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9898707 ns/op 2365463 B/op 10398 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9879350 ns/op 2364281 B/op 10361 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9808429 ns/op 2352326 B/op 10246 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9849367 ns/op 2369187 B/op 10379 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9872510 ns/op 2367752 B/op 10392 allocs/op 0 errs/op
 
 ----
 
