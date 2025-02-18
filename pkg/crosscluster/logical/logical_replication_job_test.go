@@ -2092,7 +2092,9 @@ func TestUserDefinedTypes(t *testing.T) {
 	for _, mode := range []string{"validated", "immediate"} {
 		t.Run(mode, func(t *testing.T) {
 			dbA.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
+			dbA.Exec(t, "CREATE TABLE data2 (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
 			dbB.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
+			dbB.Exec(t, "CREATE TABLE data2 (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
 
 			dbB.Exec(t, "INSERT INTO data VALUES (1, 'one', (3, 'cat'))")
 			// Force default expression evaluation.
@@ -2100,7 +2102,7 @@ func TestUserDefinedTypes(t *testing.T) {
 
 			var jobAID jobspb.JobID
 			dbA.QueryRow(t,
-				fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE data ON $1 INTO TABLE data WITH mode = %s", mode),
+				fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLES (data, data2) ON $1 INTO TABLES (data, data2) WITH mode = %s", mode),
 				dbBURL.String(),
 			).Scan(&jobAID)
 			WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
@@ -2111,9 +2113,7 @@ func TestUserDefinedTypes(t *testing.T) {
 			var jobBID jobspb.JobID
 			dbB.QueryRow(t,
 				"SELECT job_id FROM [SHOW JOBS]"+
-					"WHERE job_type = 'REPLICATION STREAM PRODUCER' "+
-					"AND status = 'running' "+
-					"AND description = 'History Retention for Logical Replication of data'",
+					"WHERE job_type = 'REPLICATION STREAM PRODUCER' AND status = 'running'",
 			).Scan(&jobBID)
 
 			dbA.Exec(t, "CANCEL JOB $1", jobAID)
@@ -2121,7 +2121,9 @@ func TestUserDefinedTypes(t *testing.T) {
 			jobutils.WaitForJobToFail(t, dbB, jobBID)
 
 			dbA.Exec(t, "DROP TABLE data")
+			dbA.Exec(t, "DROP TABLE data2")
 			dbB.Exec(t, "DROP TABLE data")
+			dbB.Exec(t, "DROP TABLE data2")
 		})
 	}
 }

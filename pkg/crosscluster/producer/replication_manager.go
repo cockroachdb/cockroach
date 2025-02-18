@@ -208,7 +208,7 @@ func getUDTs(
 
 		typeDescriptors = append(typeDescriptors, typeDesc.TypeDescriptor)
 	}
-	return typeDescriptors, nil, nil
+	return typeDescriptors, foundTypeDescriptors, nil
 }
 
 var useStreaksInLDR = settings.RegisterBoolSetting(

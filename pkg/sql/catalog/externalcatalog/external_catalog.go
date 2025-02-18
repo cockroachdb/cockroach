@@ -105,7 +105,7 @@ func getUDTsForTable(
 		}
 		typeDescriptors = append(typeDescriptors, *typeDesc.TypeDesc())
 	}
-	return typeDescriptors, nil, nil
+	return typeDescriptors, foundTypeDescriptors, nil
 }
 
 // IngestExternalCatalog ingests the tables in the external catalog into into
