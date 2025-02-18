@@ -746,30 +746,20 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *VectorSearchExpr:
-		if c := t.PrefixConstraint; c != nil {
-			if c.IsContradiction() {
-				tp.Childf("prefix constraint: contradiction")
-			} else if c.Spans.Count() == 1 {
-				tp.Childf(
-					"prefix constraint: %s: %s", c.Columns.String(),
-					cat.MaybeMarkRedactable(c.Spans.Get(0).String(), f.RedactableValues),
-				)
-			} else {
-				n := tp.Childf("prefix constraint: %s", c.Columns.String())
-				for i := 0; i < c.Spans.Count(); i++ {
-					n.Child(cat.MaybeMarkRedactable(c.Spans.Get(i).String(), f.RedactableValues))
-				}
-			}
-		}
 		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
 
 	case *VectorMutationSearchExpr:
+		if t.IsIndexPut {
+			tp.Childf("index put")
+		} else {
+			tp.Childf("index del")
+		}
 		if len(t.PrefixKeyCols) > 0 {
 			tp.Childf("prefix key columns: %v", t.PrefixKeyCols)
 		}
 		tp.Childf("query vector column: %s", f.ColumnString(t.QueryVectorCol))
-		if !t.PrimaryKeyCols.Empty() {
-			tp.Childf("primary key columns: %v", t.PrimaryKeyCols)
+		if len(t.SuffixKeyCols) > 0 {
+			tp.Childf("suffix key columns: %v", t.SuffixKeyCols)
 		}
 		tp.Childf("partition col: %s", f.ColumnString(t.PartitionCol))
 		if t.QuantizedVectorCol != 0 {
