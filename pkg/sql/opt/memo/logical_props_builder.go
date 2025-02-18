@@ -1625,8 +1625,13 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	// from the constraint, minus any columns that are not projected by the
 	// VectorSearch operator.
 	rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, search.Table))
-	if search.PrefixConstraint != nil {
-		rel.FuncDeps.AddConstants(search.PrefixConstraint.ExtractConstCols(b.sb.ctx, b.evalCtx))
+	if idx := md.Table(search.Table).Index(search.Index); idx.PrefixColumnCount() > 0 {
+		// Prefix columns are restricted to constant values.
+		var constants opt.ColSet
+		for i := 0; i < idx.PrefixColumnCount(); i++ {
+			constants.Add(search.Table.ColumnID(idx.Column(i).Ordinal()))
+		}
+		rel.FuncDeps.AddConstants(constants)
 	}
 	rel.FuncDeps.ProjectCols(rel.OutputCols)
 
@@ -1640,8 +1645,6 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	rel.Cardinality = props.AnyCardinality
 	if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
-	} else if search.PrefixConstraint != nil {
-		b.updateCardinalityFromConstraint(search.PrefixConstraint, rel)
 	}
 
 	// Statistics

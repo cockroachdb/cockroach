@@ -1439,6 +1439,11 @@ define RecursiveCTEPrivate {
 # distances to the query vector, and applies the NN limit.
 [Relational, Telemetry]
 define VectorSearch {
+    # PrefixVals is set iff the vector index has a prefix of non-vector columns.
+    # It contains a list of constant values or placeholders that map 1-1 to the
+    # prefix columns.
+    PrefixVals ScalarListExpr
+
     # QueryVector is the scalar query vector. It is either a constant or a
     # placeholder.
     QueryVector ScalarExpr
@@ -1458,12 +1463,6 @@ define VectorSearchPrivate {
     # Cols is the set of columns produced by the vector search operator. This
     # is currently always the set of primary key columns.
     Cols ColSet
-
-    # PrefixConstraint is set iff the vector index has a prefix of non-vector
-    # columns. It contains one or more spans that each constrain every prefix
-    # column to a single value. The vector search will be conducted within each
-    # span independently.
-    PrefixConstraint Constraint
 
     # TargetNeighborCount is the number of nearest neighbors to search for.
     # The set of candidates returning will generally be larger than this number.
@@ -1508,11 +1507,14 @@ define VectorMutationSearchPrivate {
     # columns will be NULL.
     QueryVectorCol ColumnID
 
-    # PrimaryKeyCols is the optional set of input columns used to constrain
+    # SuffixKeyCols is the optional list of input columns used to constrain
     # the search to a specific row. This is used for deletion from the index.
     # In rare cases it is possible not to find the requested row, in which case
     # the partition key will be NULL.
-    PrimaryKeyCols ColSet
+    #
+    # If it is set, SuffixKeyCols must contain every primary key column that is
+    # not part of PrefixKeyCols.
+    SuffixKeyCols ColList
 
     # PartitionCol is the output column that contains the partition key for each
     # vector. It is always set.
@@ -1522,6 +1524,10 @@ define VectorMutationSearchPrivate {
     # encoded form of the vector, which will be inserted as a value into the
     # index. It is only set for inserts into the index.
     QuantizedVectorCol ColumnID
+
+    # IsIndexPut if the vector index search is being conducted to prepare an
+    # index PUT operation. Otherwise, it is an index DELETE operation.
+    IsIndexPut bool
 }
 
 # Barrier is a relational operator that simply passes through its input columns

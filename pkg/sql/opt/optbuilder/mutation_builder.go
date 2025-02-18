@@ -1053,94 +1053,62 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 	}
 }
 
-// projectVectorIndexCols builds VectorMutationSearch operators for the input
-// of a non-DELETE mutation. See projectVectorIndexColsImpl for details.
-func (mb *mutationBuilder) projectVectorIndexCols() {
-	mb.projectVectorIndexColsImpl(false /* delete */)
-}
-
-// projectVectorIndexCols builds VectorMutationSearch operators for the input
-// of a DELETE mutation. See projectVectorIndexColsImpl for details.
-func (mb *mutationBuilder) projectVectorIndexColsForDelete() {
-	mb.projectVectorIndexColsImpl(true /* delete */)
-}
-
-// projectVectorIndexColsImpl builds VectorMutationSearch operators that
-// project partitions to be the target of index insertions and deletions for
-// each vector index defined on the target table. This is needed because vector
-// indexes must perform a search to determine which partition a given vector
-// belongs to.
+// projectVectorIndexCols builds VectorMutationSearch operators that project
+// partitions to be the target of index insertions and deletions for each vector
+// index defined on the target table. This is needed because vector indexes must
+// perform a search to determine which partition a given vector belongs to.
 //
 // See the vectorIndexPutPartitionColIDs, vectorIndexPutQuantizedVecColIDs, and
 // vectorIndexDelPartitionColIDs fields for more information.
-func (mb *mutationBuilder) projectVectorIndexColsImpl(delete bool) {
+func (mb *mutationBuilder) projectVectorIndexCols(op opt.Operator) {
 	if vectorIndexCount(mb.tab) > 0 {
-		var pkCols opt.ColSet
-		getPKCols := func() opt.ColSet {
-			if !pkCols.Empty() {
-				return pkCols
-			}
-			primaryIndex := mb.tab.Index(cat.PrimaryIndex)
-			for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-				col := primaryIndex.Column(i)
-				pkCols.Add(mb.fetchColIDs[col.Ordinal()])
-			}
-			return pkCols
-		}
-		getPutCol := func(colOrd int) opt.ColumnID {
-			if mb.upsertColIDs[colOrd] != 0 {
-				// If set, the upsert column will have the new value for the column
-				// regardless of whether the row is inserted or updated.
-				return mb.upsertColIDs[colOrd]
-			}
-			if mb.insertColIDs[colOrd] != 0 {
-				// A new value is being inserted for the column.
-				return mb.insertColIDs[colOrd]
-			}
-			// Either the column is being updated, or it does not have a new value.
-			return mb.updateColIDs[colOrd]
-		}
-		getDelCol := func(colOrd int) opt.ColumnID {
-			if !delete && mb.updateColIDs[colOrd] == 0 {
-				// For INSERT, UPDATE, and UPSERT, old index entries are only deleted
-				// for rows where the vector column is being updated.
-				return 0
-			}
-			// If there is an old version of the vector column, delete its entry from
-			// the vector index.
-			return mb.fetchColIDs[colOrd]
-		}
 		addCol := func(name string, typ *types.T) opt.ColumnID {
 			colName := scopeColName("").WithMetadataName(name)
 			sc := mb.b.synthesizeColumn(mb.outScope, colName, typ, nil /* expr */, nil /* expr */)
 			return sc.id
 		}
 		idxOrd := 0
-		for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
+		for i := range mb.tab.DeletableIndexCount() {
 			index := mb.tab.Index(i)
 
 			// Skip non-vector indexes.
 			if index.Type() != idxtype.VECTOR {
 				continue
 			}
-			vectorColOrd := index.VectorColumn().Ordinal()
-			if delCol := getDelCol(vectorColOrd); delCol != 0 {
+
+			// Determine whether index PUT and DEL operations will be necessary.
+			indexColIsUpdated := false
+			if op == opt.UpsertOp || op == opt.UpdateOp {
+				// UPSERT and UPDATE statements can target specific columns for update.
+				// Check if any columns from the index are being updated.
+				for colIndexOrd := 0; colIndexOrd < index.ColumnCount(); colIndexOrd++ {
+					colTableOrd := index.Column(colIndexOrd).Ordinal()
+					if mb.upsertColIDs[colTableOrd] != 0 || mb.updateColIDs[colTableOrd] != 0 {
+						indexColIsUpdated = true
+						break
+					}
+				}
+			}
+			// It is possible for a vector index to be the target of both PUT and DEL
+			// operations, in which case two search operators are needed in order to
+			// locate the old index entry, as well as the partition for the new one.
+			//
+			// TODO(drewk): we may be able to avoid the DEL for updates to stored
+			// columns (once they're supported).
+			if op == opt.DeleteOp || indexColIsUpdated {
+				const isIndexPut = false
 				partitionCol := addCol(fmt.Sprintf("vector_index_del_partition%d", idxOrd+1), types.Int)
-				outCols := mb.outScope.colSet()
-				outCols.Add(partitionCol)
 				mb.outScope.expr = mb.buildVectorMutationSearch(
-					mb.outScope.expr, index, delCol, partitionCol, 0 /* encVectorCol */, getPKCols(),
+					mb.outScope.expr, index, partitionCol, 0 /* encVectorCol */, isIndexPut,
 				)
 				mb.vectorIndexDelPartitionColIDs[idxOrd] = partitionCol
 			}
-			if putCol := getPutCol(vectorColOrd); putCol != 0 {
+			if op == opt.InsertOp || op == opt.UpsertOp || indexColIsUpdated {
+				const isIndexPut = true
 				partitionCol := addCol(fmt.Sprintf("vector_index_put_partition%d", idxOrd+1), types.Int)
 				quantizedVecCol := addCol(fmt.Sprintf("vector_index_put_quantized_vec%d", idxOrd+1), types.Bytes)
-				outCols := mb.outScope.colSet()
-				outCols.Add(partitionCol)
-				outCols.Add(quantizedVecCol)
 				mb.outScope.expr = mb.buildVectorMutationSearch(
-					mb.outScope.expr, index, putCol, partitionCol, quantizedVecCol, opt.ColSet{}, /* pkCols */
+					mb.outScope.expr, index, partitionCol, quantizedVecCol, isIndexPut,
 				)
 				mb.vectorIndexPutPartitionColIDs[idxOrd] = partitionCol
 				mb.vectorIndexPutQuantizedVecColIDs[idxOrd] = quantizedVecCol
@@ -1153,22 +1121,52 @@ func (mb *mutationBuilder) projectVectorIndexColsImpl(delete bool) {
 // buildVectorMutationSearch builds a VectorMutationSearch operator that will
 // find the partition (and quantized vector, if requested) for vectors in the
 // given queryVectorCol.
-//
-// pkCols should only be set for an index del operation. It is used to locate
-// the partition for a specific row in the table.
 func (mb *mutationBuilder) buildVectorMutationSearch(
-	input memo.RelExpr,
-	index cat.Index,
-	queryVectorCol, partitionCol, quantizedVecCol opt.ColumnID,
-	pkCols opt.ColSet,
+	input memo.RelExpr, index cat.Index, partitionCol, quantizedVecCol opt.ColumnID, isIndexPut bool,
 ) memo.RelExpr {
+	getCol := func(colOrd int) (colID opt.ColumnID) {
+		// Check in turn if the column is being upserted, inserted, updated, or
+		// fetched.
+		if isIndexPut {
+			colID = mb.upsertColIDs[colOrd]
+			if colID == 0 {
+				colID = mb.insertColIDs[colOrd]
+			}
+			if colID == 0 {
+				colID = mb.updateColIDs[colOrd]
+			}
+		}
+		if colID == 0 {
+			colID = mb.fetchColIDs[colOrd]
+		}
+		if colID == 0 {
+			panic(errors.AssertionFailedf("column %d not found", colOrd))
+		}
+		return colID
+	}
+	prefixCols := make(opt.ColList, 0, index.PrefixColumnCount())
+	for colIdx := range index.PrefixColumnCount() {
+		prefixCols = append(prefixCols, getCol(index.Column(colIdx).Ordinal()))
+	}
+	var suffixCols opt.ColList
+	if !isIndexPut {
+		// Index DEL operations must specify the full key to ensure the correct
+		// index entry is deleted.
+		suffixStart := index.PrefixColumnCount() + 1
+		suffixCols = make(opt.ColList, 0, index.KeyColumnCount()-suffixStart)
+		for colIdx := suffixStart; colIdx < index.KeyColumnCount(); colIdx++ {
+			suffixCols = append(suffixCols, getCol(index.Column(colIdx).Ordinal()))
+		}
+	}
 	private := memo.VectorMutationSearchPrivate{
 		Table:              mb.tabID,
 		Index:              index.Ordinal(),
-		QueryVectorCol:     queryVectorCol,
-		PrimaryKeyCols:     pkCols,
+		PrefixKeyCols:      prefixCols,
+		QueryVectorCol:     getCol(index.VectorColumn().Ordinal()),
+		SuffixKeyCols:      suffixCols,
 		PartitionCol:       partitionCol,
 		QuantizedVectorCol: quantizedVecCol,
+		IsIndexPut:         isIndexPut,
 	}
 	return mb.b.factory.ConstructVectorMutationSearch(input, &private)
 }

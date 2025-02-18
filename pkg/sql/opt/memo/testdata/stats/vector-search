@@ -22,6 +22,7 @@ insert t
  ├── stats: [rows=0]
  └── vector-mutation-search t@t_v_idx,vector
       ├── columns: column1:5(int!null) v_cast:7(vector!null) vector_index_put_partition1:8(int) vector_index_put_quantized_vec1:9(bytes)
+      ├── index put
       ├── query vector column: v_cast:7
       ├── partition col: vector_index_put_partition1:8
       ├── quantized vector col: vector_index_put_quantized_vec1:9
@@ -63,6 +64,7 @@ insert t
  ├── stats: [rows=0]
  └── vector-mutation-search t@t_v_idx,vector
       ├── columns: column1:5(int!null) v_cast:7(vector!null) vector_index_put_partition1:8(int) vector_index_put_quantized_vec1:9(bytes)
+      ├── index put
       ├── query vector column: v_cast:7
       ├── partition col: vector_index_put_partition1:8
       ├── quantized vector col: vector_index_put_quantized_vec1:9

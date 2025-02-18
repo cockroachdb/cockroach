@@ -469,14 +469,17 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 			// This index is for a different vector column.
 			return
 		}
+		var prefixVals memo.ScalarListExpr
 		if index.PrefixColumnCount() > 0 {
 			// TODO(drewk, mw5h): support multi-column vector indexes.
 			return
 		}
+
 		// VectorSearch operators return the primary-key columns.
 		limitInt := int64(*limit.(*tree.DInt))
 		indexCols := c.PrimaryKeyCols(sp.Table)
-		vectorSearch := c.e.f.ConstructVectorSearch(queryVector,
+		vectorSearch := c.e.f.ConstructVectorSearch(
+			prefixVals, queryVector,
 			&memo.VectorSearchPrivate{
 				Table:               sp.Table,
 				Index:               index.Ordinal(),
