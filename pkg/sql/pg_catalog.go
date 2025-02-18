@@ -794,13 +794,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DNull,      // relacl
 			relOptions,      // reloptions
 			// These columns were automatically created by pg_catalog_test's missing column generator.
-			tree.DNull,                 // relforcerowsecurity
+			tree.MakeDBool(tree.DBool(table.IsRowLevelSecurityForced())), // relforcerowsecurity
 			tree.DNull,                 // relispartition
 			tree.DNull,                 // relispopulated
 			tree.NewDString(replIdent), // relreplident
 			tree.DNull,                 // relrewrite
-			tree.DNull,                 // relrowsecurity
-			tree.DNull,                 // relpartbound
+			tree.MakeDBool(tree.DBool(table.IsRowLevelSecurityEnabled())), // relrowsecurity
+			tree.DNull, // relpartbound
 			// These columns were automatically created by pg_catalog_test's missing column generator.
 			tree.DNull, // relminmxid
 		); err != nil {
