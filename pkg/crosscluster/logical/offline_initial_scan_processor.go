@@ -374,7 +374,6 @@ func (o *offlineInitialScanProcessor) checkpoint(
 		}
 	}
 
-	log.Infof(ctx, "flushing batcher on checkpoint")
 	if err := o.flushBatch(ctx); err != nil {
 		return errors.Wrap(err, "flushing batcher on checkpoint")
 	}
