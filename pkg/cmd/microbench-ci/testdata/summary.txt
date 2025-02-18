@@ -122,5 +122,224 @@ tree
 /qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged.prof
 /qwerty456/artifacts/raw_Sysbench_SQL_3node_oltp_read_write.log
 /suite.yml
+/summary.json
 ----
 ----
+
+json
+----
+{
+  "Entries": [
+    {
+      "Name": "BenchmarkSysbench/SQL/3node/oltp_read_write",
+      "Count": 10,
+      "Iterations": 3000,
+      "Data": {
+        "new": [
+          {
+            "Metric": "B/op",
+            "Summary": {
+              "Center": 2367667,
+              "Lo": 2358650,
+              "Hi": 2370670,
+              "Confidence": 0.978515625,
+              "Warnings": null
+            },
+            "Sample": {
+              "Values": [
+                2352326,
+                2358650,
+                2364281,
+                2365463,
+                2367582,
+                2367752,
+                2368213,
+                2369187,
+                2370670,
+                2375306
+              ],
+              "Thresholds": {
+                "CompareAlpha": 0.05
+              },
+              "Warnings": null
+            }
+          },
+          {
+            "Metric": "allocs/op",
+            "Summary": {
+              "Center": 10378.5,
+              "Lo": 10287,
+              "Hi": 10398,
+              "Confidence": 0.978515625,
+              "Warnings": null
+            },
+            "Sample": {
+              "Values": [
+                10246,
+                10287,
+                10361,
+                10377,
+                10378,
+                10379,
+                10386,
+                10392,
+                10398,
+                10411
+              ],
+              "Thresholds": {
+                "CompareAlpha": 0.05
+              },
+              "Warnings": null
+            }
+          },
+          {
+            "Metric": "sec/op",
+            "Summary": {
+              "Center": 0.009952036000000001,
+              "Lo": 0.009926623,
+              "Hi": 0.009982428,
+              "Confidence": 0.978515625,
+              "Warnings": null
+            },
+            "Sample": {
+              "Values": [
+                0.009908429,
+                0.009926623,
+                0.009949367,
+                0.009952036000000001,
+                0.009952036000000001,
+                0.009952036000000001,
+                0.00997251,
+                0.009979350000000001,
+                0.009982428,
+                0.009998707
+              ],
+              "Thresholds": {
+                "CompareAlpha": 0.05
+              },
+              "Warnings": null
+            }
+          }
+        ],
+        "old": [
+          {
+            "Metric": "B/op",
+            "Summary": {
+              "Center": 2367667,
+              "Lo": 2358650,
+              "Hi": 2370670,
+              "Confidence": 0.978515625,
+              "Warnings": null
+            },
+            "Sample": {
+              "Values": [
+                2352326,
+                2358650,
+                2364281,
+                2365463,
+                2367582,
+                2367752,
+                2368213,
+                2369187,
+                2370670,
+                2375306
+              ],
+              "Thresholds": {
+                "CompareAlpha": 0.05
+              },
+              "Warnings": null
+            }
+          },
+          {
+            "Metric": "allocs/op",
+            "Summary": {
+              "Center": 10378.5,
+              "Lo": 10287,
+              "Hi": 10398,
+              "Confidence": 0.978515625,
+              "Warnings": null
+            },
+            "Sample": {
+              "Values": [
+                10246,
+                10287,
+                10361,
+                10377,
+                10378,
+                10379,
+                10386,
+                10392,
+                10398,
+                10411
+              ],
+              "Thresholds": {
+                "CompareAlpha": 0.05
+              },
+              "Warnings": null
+            }
+          },
+          {
+            "Metric": "errs/op",
+            "Summary": {
+              "Center": 0,
+              "Lo": 0,
+              "Hi": 0,
+              "Confidence": 0.978515625,
+              "Warnings": null
+            },
+            "Sample": {
+              "Values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Thresholds": {
+                "CompareAlpha": 0.05
+              },
+              "Warnings": null
+            }
+          },
+          {
+            "Metric": "sec/op",
+            "Summary": {
+              "Center": 0.009862273000000001,
+              "Lo": 0.009849367000000001,
+              "Hi": 0.009926623,
+              "Confidence": 0.978515625,
+              "Warnings": null
+            },
+            "Sample": {
+              "Values": [
+                0.009808429,
+                0.009849367000000001,
+                0.009852036,
+                0.009852036,
+                0.009852036,
+                0.009872510000000001,
+                0.00987935,
+                0.009898707000000001,
+                0.009926623,
+                0.009982428
+              ],
+              "Thresholds": {
+                "CompareAlpha": 0.05
+              },
+              "Warnings": null
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "Revisions": {
+    "new": "qwerty456",
+    "old": "abcdef123"
+  }
+}
