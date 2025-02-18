@@ -1542,7 +1542,8 @@ func (c *clusterImpl) HealthStatus(
 	if len(nodes) < 1 {
 		return nil, nil // unit tests
 	}
-	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, nodes)
+	// Make sure we run the health checks on the KV pod.
+	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, nodes, option.VirtualClusterName(install.SystemInterfaceName))
 	if err != nil {
 		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
 	}
