@@ -572,6 +572,11 @@ roaches  CREATE TABLE public.roaches (
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
 
+query TBB
+select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
+----
+roaches  false  false
+
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -585,6 +590,11 @@ subtest alter_table_rls_force_no_force
 statement ok
 ALTER TABLE roaches FORCE ROW LEVEL SECURITY;
 
+query TBB
+select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
+----
+roaches  false  true
+
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -596,6 +606,11 @@ roaches  CREATE TABLE public.roaches (
 
 statement ok
 ALTER TABLE roaches NO FORCE ROW LEVEL SECURITY;
+
+query TBB
+select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
+----
+roaches  false  false
 
 query TT
 SHOW CREATE TABLE roaches
@@ -618,6 +633,11 @@ roaches  CREATE TABLE public.roaches (
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
          );
          ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
+
+query TBB
+select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
+----
+roaches  true  true
 
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
