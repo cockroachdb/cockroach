@@ -605,6 +605,12 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testutils.RunValues(t, "lease-type", roachpb.EpochAndLeaderLeaseType(),
 		func(t *testing.T, leaseType roachpb.LeaseType) {
+			if leaseType == roachpb.LeaseLeader {
+				// This test uses a very small context deadline when running the
+				// exemptRequests requests. However, it sometimes takes a longer time with
+				// leader leases in deadlock runs.
+				skip.UnderDeadlock(t)
+			}
 			tc := setupCircuitBreakerTest(t, leaseType)
 			defer tc.Stopper().Stop(context.Background())
 
