@@ -2600,6 +2600,16 @@ func (r *Replica) campaignLocked(ctx context.Context) {
 // caller is certain that the current leader is actually dead, and we're not
 // simply partitioned away from it and/or liveness.
 //
+// Note: This method is risky to use with leader leases since it causes the
+// follower to call forced elections without knowing that it should from the
+// leader. Forced elections cause other voters to ignore fortification promises
+// made to the leader. Currently, it's only used in the case where a leader is
+// removed in the new ConfChange. The leaseholder (who is not the leader) calls
+// this method to force a campaign after the ConfChange is applied. This
+// specific use-case is okay since the leader is removed from the range and the
+// leaseholder is the one calling this method, so there should be no leader
+// lease on top of raft fortification at this point.
+//
 // TODO(nvanbenschoten): this is the remaining logic which needs work in order
 // to complete #129796. See the comment in raft.go about how even a local
 // fortification check is not enough to make MsgTimeoutNow safe.
