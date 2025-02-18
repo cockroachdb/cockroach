@@ -374,7 +374,7 @@ message BackupDetails {
   // sub-paths of it based on date and time, etc. The actual path -- which is
   // derived from this destination -- is then captured in the field "URI" below.
   message Destination {
-    // To is either a backup path, path, or a collection path if subdir is set.
+    // To is a collection path 
     repeated string to = 1;
     // Subdir is the path within the collection path in to to backup to.
     string subdir = 2;
@@ -460,7 +460,7 @@ message BackupDetails {
 
   roachpb.Locality execution_locality = 24 [(gogoproto.nullable) = false];
 
-  // IncldeAllSecondaryTenants indicates whether a full tenant backup
+  // IncludeAllSecondaryTenants indicates whether a full tenant backup
   // should also include a tenant backup of all existing secondary
   // tenants.
   bool include_all_secondary_tenants = 25;
@@ -470,7 +470,15 @@ message BackupDetails {
   // time of a backup failure due to a KMS error.
   bool updates_cluster_monitoring_metrics = 26;
 
-  // NEXT ID: 27;
+  // Compact is set if the job is a compaction job. In that case, the StartTime
+  // and EndTime describe the time range of the compaction. StartTime will be
+  // the start time of the first backup to be compacted and EndTime will be the
+  // end time of the last backup to be compacted.
+  // NB: If Compact is set, the job is not a regular backup job and only a limited
+  //  set of fields are set meaningfully.
+  bool compact = 27;
+
+  // NEXT ID: 28;
 }
 
 message BackupProgress {
