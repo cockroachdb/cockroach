@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -1891,4 +1893,97 @@ func TestLeaseRequestFromExpirationToEpochOrLeaderDoesNotRegressExpiration(t *te
 			// assertion fails.
 			require.True(t, expLease.Expiration().LessEq(curLeaseStatus.Expiration()))
 		})
+}
+
+// TestReacquiredLeaderLeaseStartTimeIsLargerThanPrevLeaseEndTime tests that
+// with leader leases, if a node gets restarted, it will reacquire the lease but
+// the start time of the new lease will be larger than the end time of the
+// previous lease. This is important to avoid situations where we might accept
+// a write operation that violates a previously served future read before the
+// restart (We lose the timestamp cache after the restart).
+//
+// Leader leases avoids this situation because a replica won't be able to
+// reacquire the lease before it becomes the Raft leader, and this won't happen
+// unless the previous lease has expired.
+func TestReacquiredLeaderLeaseStartTimeIsLargerThanPrevLeaseEndTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	storeReg := fs.NewStickyRegistry()
+	listenerReg := listenerutil.NewListenerRegistry()
+	defer listenerReg.Close()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+
+	manualClock := hlc.NewHybridManualClock()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode:     base.ReplicationManual,
+		ReusableListenerReg: listenerReg,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			RaftConfig: base.RaftConfig{
+				RaftTickInterval: 100 * time.Millisecond, // speed up the test
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyVFSRegistry: storeReg,
+					WallClock:         manualClock,
+				},
+			},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:    true,
+					StickyVFSID: "test",
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Split off a scratch range.
+	key := tc.ScratchRange(t)
+	desc := tc.LookupRangeOrFatal(t, key)
+	repl := tc.GetFirstStoreFromServer(t, 0).GetReplicaIfExists(desc.RangeID)
+	require.NotNil(t, repl)
+
+	// Wait until the lease gets upgraded to a leader lease.
+	tc.WaitForLeaseUpgrade(ctx, t, desc)
+
+	lease, _ := repl.GetLease()
+	require.Equal(t, roachpb.LeaseLeader, lease.Type())
+	require.Equal(t, lease.Term, repl.RaftStatus().Term)
+	leaseStartTime := lease.Start
+
+	s1Ident := slpb.StoreIdent{
+		NodeID:  roachpb.NodeID(1),
+		StoreID: tc.GetFirstStoreFromServer(t, 0).StoreID(),
+	}
+
+	_, supportEndTime := tc.GetFirstStoreFromServer(t, 0).
+		TestingStoreLivenessSupportManager().SupportFrom(s1Ident)
+
+	// Sanity check that the support end time is after the lease start time.
+	require.True(t, leaseStartTime.ToTimestamp().Less(supportEndTime))
+
+	// Restart the server and make sure that the lease start time is larger than
+	// the support end time.
+	tc.StopServer(0)
+	require.NoError(t, tc.RestartServer(0))
+
+	// Make sure that the lease is valid.
+	repl = tc.GetFirstStoreFromServer(t, 0).GetReplicaIfExists(desc.RangeID)
+	var curLease roachpb.Lease
+	testutils.SucceedsSoon(t, func() error {
+		if repl.CurrentLeaseStatus(ctx).State != kvserverpb.LeaseState_VALID {
+			return errors.Errorf("lease not valid")
+		}
+		return nil
+	})
+
+	// Make sure that the lease start time is larger than the prev lease end time.
+	curLease, _ = repl.GetLease()
+	newLeaseStart := curLease.Start
+	require.True(t, supportEndTime.Less(newLeaseStart.ToTimestamp()))
 }
