@@ -582,6 +582,9 @@ var (
 		VarBit,
 	}
 
+	Any = &T{InternalType: InternalType{
+		Family: AnyFamily, Oid: oid.T_any, Locale: &emptyLocale}}
+
 	// AnyElement is a special type used only during static analysis as a wildcard type
 	// that matches any other type, including scalar, array, and tuple types.
 	// Execution-time values should never have this type. As an example of its
@@ -1207,9 +1210,11 @@ func MakeEnum(typeOID, arrayTypeOID oid.Oid) *T {
 // MakeArray constructs a new instance of an ArrayFamily type with the given
 // element type (which may itself be an ArrayFamily type).
 func MakeArray(typ *T) *T {
-	// Do not make an array of type unknown[]. Follow Postgres' behavior and
-	// convert this to type string[].
-	if typ.Family() == UnknownFamily {
+	// Do not make an array of type unknown[]. Follow Postgres' behavior and convert
+	// this to type string[]. Likewise, Any does not have an array type, so treat it
+	// as an array of strings.
+	if typ.Family() == UnknownFamily ||
+		(typ.Family() == AnyFamily && typ.Oid() == oid.T_any) {
 		typ = String
 	}
 	arr := &T{InternalType: InternalType{
@@ -2274,7 +2279,7 @@ func (t *T) Equal(other *T) bool {
 // static analysis, and cannot be used during execution.
 func (t *T) IsWildcardType() bool {
 	for _, wildcard := range []*T{
-		AnyElement, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray,
+		Any, AnyElement, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray,
 	} {
 		// Note that pointer comparison is insufficient since we might have
 		// deserialized t from disk.

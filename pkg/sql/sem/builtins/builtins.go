@@ -392,7 +392,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.AnyElement},
+			Types:      tree.VariadicType{VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
@@ -4438,7 +4438,7 @@ value if you rely on the HLC for accuracy.`,
 			// Note that datums_to_bytes(a) == datums_to_bytes(b) iff (a IS NOT DISTINCT FROM b)
 			Info: "Converts datums into key-encoded bytes. " +
 				"Supports NULLs and all data types which may be used in index keys",
-			Types:      tree.VariadicType{VarType: types.AnyElement},
+			Types:      tree.VariadicType{VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var out []byte
@@ -9191,7 +9191,7 @@ func makeSubStringImpls() builtinDefinition {
 
 var formatImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 	tree.Overload{
-		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.AnyElement},
+		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			if args[0] == tree.DNull {
@@ -9902,7 +9902,7 @@ func jsonProps() tree.FunctionProperties {
 }
 
 var jsonBuildObjectImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.AnyElement},
+	Types:      tree.VariadicType{VarType: types.Any},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		if len(args)%2 != 0 {
@@ -9980,7 +9980,7 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 )
 
 var jsonBuildArrayImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.AnyElement},
+	Types:      tree.VariadicType{VarType: types.Any},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))
