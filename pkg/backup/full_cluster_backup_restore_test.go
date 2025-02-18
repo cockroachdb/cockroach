@@ -1030,10 +1030,6 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	// and not report any progress in the meantime unless it is disabled.
 	srcDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '1'`)
 
-	// Test servers only have 128MB root memory monitors, reduce the buffer size
-	// so we don't see memory errors.
-	srcDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1MiB'`)
-
 	// Take a backup that we'll use to create an OFFLINE descriptor.
 	srcDB.Exec(t, `CREATE INDEX new_idx ON data.bank (balance)`)
 	srcDB.Exec(t, `BACKUP DATABASE data INTO $1 WITH revision_history`, dbBackupLoc)
