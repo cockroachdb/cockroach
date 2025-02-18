@@ -114,12 +114,25 @@ func (i ProgressStorage) Set(
 		ts = resolved.AsOfSystemTime()
 	}
 
-	if _, err := txn.ExecEx(
-		ctx, "write-job-progress-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.job_progress (job_id, written, fraction, resolved) VALUES ($1, now(), $2, $3)`,
+	// Optimistically update the job's progress row, but if it does not exist,
+	// insert it. This could have been implemented as a DELETE followed by an
+	// INSERT, but that would have always required two separate SQL operations.
+	rowsUpdated, err := txn.ExecEx(
+		ctx, "write-job-progress-update", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		`UPDATE system.job_progress SET (written, fraction, resolved) = (now(), $2, $3) WHERE job_id = $1`,
 		i, frac, ts,
-	); err != nil {
+	)
+	if err != nil {
 		return err
+	}
+	if rowsUpdated == 0 {
+		if _, err := txn.ExecEx(
+			ctx, "write-job-progress-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+			`INSERT INTO system.job_progress (job_id, written, fraction, resolved) VALUES ($1, now(), $2, $3)`,
+			i, frac, ts,
+		); err != nil {
+			return err
+		}
 	}
 
 	if _, err := txn.ExecEx(
@@ -180,20 +193,26 @@ func (i StatusStorage) Set(ctx context.Context, txn isql.Txn, status string) err
 	ctx, sp := tracing.ChildSpan(ctx, "write-job-status")
 	defer sp.Finish()
 
-	// Delete any existing status row in the same transaction before replacing it
-	// with the new one.
-	if err := i.Clear(ctx, txn); err != nil {
-		return err
-	}
-
-	if _, err := txn.ExecEx(
-		ctx, "write-job-status-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.job_status (job_id, written, status) VALUES ($1, now(), $2)`,
+	// Optimistically update the job's status row, but if it does not exist,
+	// insert it. This could have been implemented as a DELETE followed by an
+	// INSERT, but that would have always required two separate SQL operations.
+	rowsUpdated, err := txn.ExecEx(
+		ctx, "write-job-status-update", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		`UPDATE system.job_status SET (written, status) = (now(), $2) WHERE job_id = $1`,
 		i, status,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
-
+	if rowsUpdated == 0 {
+		if _, err := txn.ExecEx(
+			ctx, "write-job-status-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+			`INSERT INTO system.job_status (job_id, written, status) VALUES ($1, now(), $2)`,
+			i, status,
+		); err != nil {
+			return err
+		}
+	}
 	if err := MessageStorage(i).Record(ctx, txn, "status", status); err != nil {
 		return err
 	}
