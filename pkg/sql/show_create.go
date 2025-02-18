@@ -57,6 +57,9 @@ type ShowCreateDisplayOptions struct {
 	// RedactableValues causes all constants, literals, and other user-provided
 	// values to be surrounded with redaction markers.
 	RedactableValues bool
+	// IgnoreRLSStatements causes all row level security related statements to
+	// not show up in the SHOW CREATE TABLE output.
+	IgnoreRLSStatements bool
 }
 
 // ShowCreateTable returns a valid SQL representation of the CREATE
@@ -143,6 +146,7 @@ func ShowCreateTable(
 			f.WriteString(fkCtx.String())
 		}
 	}
+
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
 		// Showing the primary index is handled above.
 
@@ -197,13 +201,21 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if err := showAlterTableRLS(tn, &f.Buffer, desc.IsRowLevelSecurityEnabled(), desc.IsRowLevelSecurityForced()); err != nil {
-		return "", err
-	}
-
-	for _, policyDesc := range desc.GetPolicies() {
-		if err := showCreatePolicies(ctx, desc, p.EvalContext(), &p.semaCtx, p.SessionData(), tn, &f.Buffer, policyDesc); err != nil {
+	if !displayOptions.IgnoreRLSStatements {
+		if alterRLSStatements, err := showRLSAlterStatement(tn, desc, true); err != nil {
 			return "", err
+		} else {
+			buf := &f.Buffer
+			buf.WriteString(alterRLSStatements)
+		}
+
+		for _, policyDesc := range desc.GetPolicies() {
+			if policyStatements, err := showPolicyStatement(ctx, tn, desc, p.EvalContext(), &p.semaCtx, p.SessionData(), policyDesc, true); err != nil {
+				return "", err
+			} else {
+				buf := &f.Buffer
+				buf.WriteString(policyStatements)
+			}
 		}
 	}
 
@@ -216,96 +228,101 @@ func ShowCreateTable(
 	return f.CloseAndGetString(), nil
 }
 
-// showAlterTableRLS prints out the ALTER TABLE ... ROW LEVEL SECURITY statements
-func showAlterTableRLS(tn *tree.TableName, buf *bytes.Buffer, enabled bool, forced bool) error {
-	if !enabled && !forced {
-		return nil
+// showRLSAlterStatement returns a string of the ALTER TABLE ... ROW LEVEL SECURITY statements
+func showRLSAlterStatement(
+	tn *tree.TableName, table catalog.TableDescriptor, addNewLine bool,
+) (string, error) {
+	if !table.IsRowLevelSecurityEnabled() && !table.IsRowLevelSecurityForced() {
+		return "", nil
 	}
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	un := tn.ToUnresolvedObjectName()
 
 	var cmds []tree.AlterTableCmd
 
-	if enabled {
+	if table.IsRowLevelSecurityEnabled() {
 		enabledCmd := &tree.AlterTableSetRLSMode{
 			Mode: tree.TableRLSEnable,
 		}
 		cmds = append(cmds, enabledCmd)
 	}
 
-	if forced {
+	if table.IsRowLevelSecurityForced() {
 		forcedCmd := &tree.AlterTableSetRLSMode{
 			Mode: tree.TableRLSForce,
 		}
 		cmds = append(cmds, forcedCmd)
 	}
 
-	f.WriteString(";\n")
+	if addNewLine {
+		f.WriteString(";\n")
+	}
 	f.FormatNode(&tree.AlterTable{
 		Table: un,
 		Cmds:  cmds,
 	})
 
-	buf.WriteString(f.CloseAndGetString())
-
-	return nil
+	return f.CloseAndGetString(), nil
 }
 
-// showCreatePolicies prints out the CREATE POLICY statements
-func showCreatePolicies(
+// showPolicyStatement returns a string of the row level security POLICY statements
+func showPolicyStatement(
 	ctx context.Context,
-	desc catalog.TableDescriptor,
+	tn *tree.TableName,
+	table catalog.TableDescriptor,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
-	tn *tree.TableName,
-	buf *bytes.Buffer,
-	policyDesc descpb.PolicyDescriptor,
-) error {
-	f := tree.NewFmtCtx(tree.FmtSimple)
+	policy descpb.PolicyDescriptor,
+	addNewLine bool,
+) (string, error) {
 	un := tn.ToUnresolvedObjectName()
 
+	f := tree.NewFmtCtx(tree.FmtSimple)
+
 	var policyRoleSpecList []tree.RoleSpec
-	for _, roleName := range policyDesc.RoleNames {
+	for _, roleName := range policy.RoleNames {
 		policyRoleSpecList = append(policyRoleSpecList, tree.MakeRoleSpecWithRoleName(roleName))
 	}
 
 	// Check if we have a policy using expression
 	var exprUsing tree.Expr
-	if len(policyDesc.UsingExpr) != 0 {
+	if len(policy.UsingExpr) != 0 {
 		formattedExpr, err := schemaexpr.FormatExprForDisplay(
-			ctx, desc, policyDesc.UsingExpr, evalCtx, semaCtx, sessionData, tree.FmtParsable,
+			ctx, table, policy.UsingExpr, evalCtx, semaCtx, sessionData, tree.FmtParsable,
 		)
 		if err != nil {
-			return err
+			return "", err
 		}
 		exprUsing, err = parser.ParseExpr(formattedExpr)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 
 	// Check if we have a policy with check expression
 	var exprCheck tree.Expr
-	if len(policyDesc.WithCheckExpr) != 0 {
+	if len(policy.WithCheckExpr) != 0 {
 		formattedExpr, err := schemaexpr.FormatExprForDisplay(
-			ctx, desc, policyDesc.WithCheckExpr, evalCtx, semaCtx, sessionData, tree.FmtParsable,
+			ctx, table, policy.WithCheckExpr, evalCtx, semaCtx, sessionData, tree.FmtParsable,
 		)
 		if err != nil {
-			return err
+			return "", err
 		}
 		exprCheck, err = parser.ParseExpr(formattedExpr)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 
-	f.WriteString(";\n")
+	if addNewLine {
+		f.WriteString(";\n")
+	}
 	f.FormatNode(&tree.CreatePolicy{
-		PolicyName: tree.Name(policyDesc.Name),
+		PolicyName: tree.Name(policy.Name),
 		TableName:  un,
-		Type:       convertPolicyType(policyDesc.Type),
-		Cmd:        convertPolicyCommand(policyDesc.Command),
+		Type:       convertPolicyType(policy.Type),
+		Cmd:        convertPolicyCommand(policy.Command),
 		Roles:      policyRoleSpecList,
 		Exprs: tree.PolicyExpressions{
 			Using:     exprUsing,
@@ -313,9 +330,7 @@ func showCreatePolicies(
 		},
 	})
 
-	buf.WriteString(f.CloseAndGetString())
-
-	return nil
+	return f.CloseAndGetString(), nil
 }
 
 // convertPolicyType will convert from a catpb.PolicyType to a tree.PolicyType

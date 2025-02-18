@@ -525,6 +525,16 @@ CREATE TABLE public.flying_roaches (
 );
 CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)
 
+query T
+select policy_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
+----
+{"CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)"}
+
+query T
+select alter_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
+----
+{}
+
 statement ok
 drop table flying_roaches
 
@@ -618,6 +628,19 @@ CREATE TABLE public.roaches (
 );
 ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
 
+query TT
+select policy_statements, create_nofks from crdb_internal.create_statements where descriptor_name='roaches'
+----
+{}  CREATE TABLE public.roaches (
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+    )
+
+query T
+select alter_statements from crdb_internal.create_statements where descriptor_name='roaches'
+----
+{"ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"}
+
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY;
 
@@ -636,6 +659,16 @@ CREATE TABLE public.roaches (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
 )
+
+query T
+select policy_statements from crdb_internal.create_statements where descriptor_name='roaches'
+----
+{}
+
+query T
+select alter_statements from crdb_internal.create_statements where descriptor_name='roaches'
+----
+{}
 
 statement ok
 DROP TABLE roaches;

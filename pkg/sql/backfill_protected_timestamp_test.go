@@ -233,13 +233,13 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 	skip.UnderDeadlock(t, "test takes too long")
 	skip.UnderStress(t, "test takes too long")
 	skip.UnderRace(t, "test takes too long")
-	skip.WithIssue(t, 139862)
 
 	ctx := context.Background()
 	backfillQueryWait := make(chan struct{})
 	backfillQueryResume := make(chan struct{})
 	blockBackFillsForPTSFailure := atomic.Bool{}
 	blockBackFillsForPTSCheck := atomic.Bool{}
+	usingDeclarativeSchemaChanger := atomic.Bool{}
 	var s serverutils.TestServerInterface
 	var db *gosql.DB
 	var tableID uint32
@@ -253,7 +253,7 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 					// Cause the backfill to pause before adding the protected
 					// timestamp. This knob is for testing schema changes that
 					// are on the declarative schema changer.
-					if blockBackFillsForPTSFailure.Load() {
+					if blockBackFillsForPTSFailure.Load() && usingDeclarativeSchemaChanger.Load() {
 						if !blockBackFillsForPTSFailure.Swap(false) {
 							return nil
 						}
@@ -268,7 +268,7 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 					// Cause the backfill to pause after it already began running
 					// and has installed a protected timestamp. This knob is for
 					// testing schema changes that use the index backfiller.
-					if blockBackFillsForPTSCheck.Load() {
+					if blockBackFillsForPTSCheck.Load() && usingDeclarativeSchemaChanger.Load() {
 						_, prefix, err := s.Codec().DecodeTablePrefix(sp.Key)
 						if err != nil || prefix != tableID {
 							//nolint:returnerrcheck
@@ -287,7 +287,7 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 				RunBeforeQueryBackfill: func() error {
 					// Cause the backfill to pause before adding the protected
 					// timestamp. This knob is for testing CREATE MATERIALIZED VIEW.
-					if blockBackFillsForPTSFailure.Load() {
+					if blockBackFillsForPTSFailure.Load() && !usingDeclarativeSchemaChanger.Load() {
 						if !blockBackFillsForPTSFailure.Swap(false) {
 							return nil
 						}
@@ -302,7 +302,7 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 					// Detect the first scan on table from the backfill, which is
 					// after the PTS has been set up. This knob is for testing CREATE
 					// MATERIALIZED VIEW.
-					if blockBackFillsForPTSCheck.Load() &&
+					if blockBackFillsForPTSCheck.Load() && !usingDeclarativeSchemaChanger.Load() &&
 						request.Txn != nil &&
 						request.Txn.Name == "schemaChangerBackfill" &&
 						request.Requests[0].GetInner().Method() == kvpb.Scan {
@@ -368,47 +368,57 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 	} {
 		rSys.Exec(t, sql)
 	}
+	for _, sql := range []string{
+		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 5",
+	} {
+		r.Exec(t, sql)
+	}
 
 	const initialRowCount = 500000
 	const rowsDeletedPerIteration = 200000
 	const rowsAddedPerIteration = 1
 
 	for _, tc := range []struct {
-		name                 string
-		backfillSchemaChange string
-		jobDescriptionPrefix string
-		postTestQuery        string
-		expectedCount        int
+		name                   string
+		tableName              string
+		backfillSchemaChange   string
+		jobDescriptionPrefix   string
+		postTestQuery          string
+		expectedCount          int
+		usingDeclSchemaChanger bool
 	}{
 		{
-			name:                 "create materialized view",
-			backfillSchemaChange: "CREATE MATERIALIZED VIEW test AS (SELECT n from t)",
-			jobDescriptionPrefix: "CREATE MATERIALIZED VIEW",
-			postTestQuery:        "SELECT count(*) FROM test",
-			expectedCount:        initialRowCount - rowsDeletedPerIteration + rowsAddedPerIteration,
+			name:                   "create materialized view",
+			tableName:              "t_mat_view",
+			backfillSchemaChange:   "CREATE MATERIALIZED VIEW test AS (SELECT n from t_mat_view)",
+			jobDescriptionPrefix:   "CREATE MATERIALIZED VIEW",
+			postTestQuery:          "SELECT count(*) FROM test",
+			expectedCount:          initialRowCount - rowsDeletedPerIteration + rowsAddedPerIteration,
+			usingDeclSchemaChanger: false,
 		},
 		{
-			name:                 "create index",
-			backfillSchemaChange: "CREATE INDEX idx ON t(n)",
-			jobDescriptionPrefix: "CREATE INDEX idx",
-			postTestQuery:        "SELECT count(*) FROM t@idx",
-			expectedCount:        initialRowCount - 2*rowsDeletedPerIteration + 2*rowsAddedPerIteration,
+			name:                   "create index",
+			tableName:              "t_idx",
+			backfillSchemaChange:   "CREATE INDEX idx ON t_idx(n)",
+			jobDescriptionPrefix:   "CREATE INDEX idx",
+			postTestQuery:          "SELECT count(*) FROM t_idx@idx",
+			expectedCount:          initialRowCount - 2*rowsDeletedPerIteration + 2*rowsAddedPerIteration,
+			usingDeclSchemaChanger: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			usingDeclarativeSchemaChanger.Store(tc.usingDeclSchemaChanger)
 			for _, sql := range []string{
-				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-				"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 5",
-				"DROP TABLE IF EXISTS t CASCADE",
-				"CREATE TABLE t(n int)",
-				"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 5",
-				fmt.Sprintf("INSERT INTO t(n) SELECT * FROM generate_series(1, %d)", initialRowCount),
+				fmt.Sprintf("CREATE TABLE %s(n int primary key)", tc.tableName),
+				fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 5", tc.tableName),
+				fmt.Sprintf("INSERT INTO %s(n) SELECT * FROM generate_series(1, %d)", tc.tableName, initialRowCount),
 			} {
 				r.Exec(t, sql)
 			}
 
 			getTableID := func() (tableID uint32) {
-				r.QueryRow(t, `SELECT 't'::regclass::oid`).Scan(&tableID)
+				r.QueryRow(t, fmt.Sprintf(`SELECT '%s'::regclass::oid`, tc.tableName)).Scan(&tableID)
 				return tableID
 			}
 			tableID = getTableID()
@@ -423,20 +433,36 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 				for i := 0; i < 2; i++ {
 					i := i
 					if err := func() (retErr error) {
-						t.Logf("i=%d begin running operations in the middle of backfill", i)
 						<-backfillQueryWait
+						t.Logf(
+							"%s i=%d begin running operations in the middle of backfill",
+							timeutil.Now().Format(time.RFC3339), i,
+						)
 						defer func() {
+							t.Logf(
+								"%s i=%d finished running operations in the middle of backfill. retErr: %v",
+								timeutil.Now().Format(time.RFC3339), i, retErr)
 							backfillQueryResume <- struct{}{}
-							t.Logf("i=%d finished running operations in the middle of backfill. retErr: %v", i, retErr)
 						}()
 						if _, err := db.ExecContext(ctx, "SET sql_safe_updates=off"); err != nil {
 							return errors.Wrap(err, "failed to set sql_safe_updates")
 						}
+						deletedSoFar := 0
+						for deletedSoFar < rowsDeletedPerIteration {
+							const deleteBatchSize = 1000
+							if _, err := db.ExecContext(ctx, fmt.Sprintf(
+								"DELETE FROM %s LIMIT %d",
+								tc.tableName, deleteBatchSize,
+							)); err != nil {
+								return errors.Wrapf(err, "failed to DELETE; deleted %d so far", deletedSoFar)
+							}
+							deletedSoFar += deleteBatchSize
+						}
 						if _, err := db.ExecContext(ctx, fmt.Sprintf(
-							"BEGIN; DELETE FROM t LIMIT %d; INSERT INTO t VALUES('9999999'); COMMIT",
-							rowsDeletedPerIteration,
+							"INSERT INTO %s VALUES(9999999 + %d)",
+							tc.tableName, i,
 						)); err != nil {
-							return errors.Wrap(err, "failed to DELETE and INSERT")
+							return errors.Wrap(err, "failed to INSERT")
 						}
 						if err := refreshTo(ctx, tableKey, ts.Clock().Now()); err != nil {
 							return errors.Wrap(err, "failed to refresh in-memory PTS")
@@ -444,9 +470,9 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 						if err := refreshPTSCacheTo(ctx, ts.Clock().Now()); err != nil {
 							return errors.Wrap(err, "failed to refresh PTS cache")
 						}
-						if _, err := db.ExecContext(ctx, `
+						if _, err := db.ExecContext(ctx, fmt.Sprintf(`
 SELECT crdb_internal.kv_enqueue_replica(range_id, 'mvccGC', true)
-FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); err != nil {
+FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key);`, tc.tableName)); err != nil {
 							return errors.Wrap(err, "failed to enqueue replica for GC")
 						}
 						row := db.QueryRowContext(ctx, "SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
@@ -471,11 +497,9 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); er
 				// Backfill with the PTS being not setup early enough, which will
 				// lead to failure.
 				defer func() {
-					if retErr != nil {
-						t.Logf("backfill goroutine failed: %v", retErr)
-					}
+					t.Logf("%s backfill goroutine finished. retErr: %v", timeutil.Now().Format(time.RFC3339), retErr)
 				}()
-				t.Logf("running backfill with PTS not setup early enough")
+				t.Logf("%s running backfill with PTS not setup early enough", timeutil.Now().Format(time.RFC3339))
 				blockBackFillsForPTSFailure.Swap(true)
 				_, err := db.ExecContext(ctx, tc.backfillSchemaChange)
 				if err == nil || !testutils.IsError(err, "unable to retry backfill since fixed timestamp is before the GC timestamp") {
@@ -504,7 +528,7 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); er
 				}
 				// Next backfill with the PTS being setup on time, which should always
 				// succeed.
-				t.Logf("running backfill with PTS setup on time")
+				t.Logf("%s running backfill with PTS setup on time", timeutil.Now().Format(time.RFC3339))
 				blockBackFillsForPTSCheck.Swap(true)
 				_, err = db.ExecContext(ctx, tc.backfillSchemaChange)
 				if err != nil {

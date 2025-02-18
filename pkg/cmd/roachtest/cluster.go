@@ -2175,7 +2175,8 @@ func (c *clusterImpl) StartE(
 
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
-	if err := roachprod.Start(ctx, l, c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
+	nodes := selectedNodesOrDefault(opts, c.CRDBNodes())
+	if err := roachprod.Start(ctx, l, c.MakeNodes(nodes), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
 		return err
 	}
 
@@ -2186,7 +2187,6 @@ func (c *clusterImpl) StartE(
 			return err
 		}
 	}
-	nodes := selectedNodesOrDefault(opts, c.CRDBNodes())
 	// N.B. If `SkipInit` is set, we don't wait for SQL since node(s) may not join the cluster in any definite time.
 	if !startOpts.RoachprodOpts.SkipInit {
 		// Wait for SQL to be ready on all nodes, for 'system' tenant, only.
