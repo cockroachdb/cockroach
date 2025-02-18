@@ -1486,15 +1486,15 @@ off
 statement ok
 COMMIT
 
-# BEGIN READ WRITE overrides READ ONLY default
+# CREATE SEQUENCE below will autocommit, so ensure the default is writes
 statement ok
-BEGIN READ WRITE
+SET default_transaction_read_only = false
 
 statement ok
 CREATE SEQUENCE a
 
 statement ok
-COMMIT
+SET default_transaction_read_only = true
 
 statement error cannot execute CREATE TABLE in a read-only transaction
 CREATE TABLE tab (a int)

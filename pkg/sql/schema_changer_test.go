@@ -4062,6 +4062,10 @@ func TestSchemaChangeErrorOnCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := tx.Exec(`SET LOCAL autocommit_before_ddl = off;`); err != nil {
+		t.Fatal(err)
+	}
+
 	// This schema change is invalid because of the duplicate v, but its error is
 	// only reported later.
 	if _, err := tx.Exec("ALTER TABLE t.test ADD CONSTRAINT v_unique UNIQUE (v)"); err != nil {

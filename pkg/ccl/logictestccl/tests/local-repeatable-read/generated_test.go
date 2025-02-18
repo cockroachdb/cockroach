@@ -2036,13 +2036,6 @@ func TestRepeatableReadLogic_storing(
 	runLogicTest(t, "storing")
 }
 
-func TestRepeatableReadLogic_strict_ddl_atomicity(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "strict_ddl_atomicity")
-}
-
 func TestRepeatableReadLogic_suboperators(
 	t *testing.T,
 ) {

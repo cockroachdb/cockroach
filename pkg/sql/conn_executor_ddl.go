@@ -36,11 +36,18 @@ var defaultAutocommitBeforeDDL = settings.RegisterBoolSetting(
 func (ex *connExecutor) maybeAutoCommitBeforeDDL(
 	ctx context.Context, ast tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
+	// We will auto-commit in the following cases:
+	// - The query is not internal.
+	// - Auto-commit before DDL is enabled.
+	// - The current transaction is a multi-statement transaction.
+	// - We have executed at least one statement in the transaction, or it is an
+	//   explicit transaction. The latter check ensures that we commit for a
+	//   transaction that has only had the BEGIN statement executed.
 	if ex.executorType != executorTypeInternal &&
 		tree.CanModifySchema(ast) &&
 		ex.sessionData().AutoCommitBeforeDDL &&
 		(!ex.planner.EvalContext().TxnIsSingleStmt || !ex.implicitTxn()) &&
-		ex.extraTxnState.firstStmtExecuted {
+		(ex.extraTxnState.firstStmtExecuted || !ex.implicitTxn()) {
 		if err := ex.planner.SendClientNotice(
 			ctx,
 			pgnotice.Newf("auto-committing transaction before processing DDL due to autocommit_before_ddl setting"),

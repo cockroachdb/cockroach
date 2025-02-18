@@ -52,7 +52,15 @@ DEALLOCATE a
 statement ok
 BEGIN
 
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+skipif config local-read-committed local-repeatable-read
 statement error DISCARD ALL cannot run inside a transaction block
+DISCARD ALL
+
+onlyif config local-read-committed local-repeatable-read
+statement error pq: to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 DISCARD ALL
 
 statement ok

@@ -117,9 +117,19 @@ statement ok
 BEGIN
 
 statement ok
-SAVEPOINT cockroach_restart
+SET LOCAL autocommit_before_ddl=off;
 
 statement ok
+SAVEPOINT cockroach_restart
+
+skipif config local-repeatable-read local-read-committed
+statement ok
+CREATE TABLE t (
+id INT PRIMARY KEY
+)
+
+onlyif config local-repeatable-read local-read-committed
+statement error pq: to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
 CREATE TABLE t (
 id INT PRIMARY KEY
 )

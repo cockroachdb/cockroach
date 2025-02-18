@@ -815,10 +815,19 @@ statement ok
 BEGIN
 
 statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+skipif config local-read-committed local-repeatable-read
+statement ok
 ALTER TABLE bf ADD COLUMN b INT DEFAULT 10
 
+skipif config local-read-committed local-repeatable-read
 statement error pgcode 0A000 index element expression referencing columns \("b"\) added in the current transaction
 CREATE INDEX a_plus_b ON bf ((a + b))
+
+onlyif config local-read-committed local-repeatable-read
+statement error pq: to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
+ALTER TABLE bf ADD COLUMN b INT DEFAULT 10
 
 statement ok
 ABORT
@@ -1216,11 +1225,23 @@ CREATE TABLE t74216 (
 )
 
 # create index using an expression works even when retried
+skipif config local-repeatable-read local-read-committed
 statement ok
 BEGIN;
+SET LOCAL autocommit_before_ddl=off;
 CREATE INDEX t_a_times_three_idx ON t ((a * 3));
 SELECT crdb_internal.force_retry('10ms');
 COMMIT
+
+onlyif config local-repeatable-read local-read-committed
+statement error pq: to use multi-statement transactions involving a schema change under weak isolation levels, enable the autocommit_before_ddl setting
+BEGIN;
+SET LOCAL autocommit_before_ddl=off;
+CREATE INDEX t_a_times_three_idx ON t ((a * 3));
+
+onlyif config local-repeatable-read local-read-committed
+statement ok
+ABORT
 
 # JSON Expression Unique Indexes
 

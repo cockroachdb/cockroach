@@ -2043,13 +2043,6 @@ func TestReadCommittedLogic_storing(
 	runLogicTest(t, "storing")
 }
 
-func TestReadCommittedLogic_strict_ddl_atomicity(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "strict_ddl_atomicity")
-}
-
 func TestReadCommittedLogic_suboperators(
 	t *testing.T,
 ) {
