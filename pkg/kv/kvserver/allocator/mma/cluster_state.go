@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package allocator2
+package mma
 
 import (
 	"slices"
@@ -148,7 +148,7 @@ const (
 //
 // TODO(sumeer): unit test.
 //
-// TODO(sumeer,kvoli): integrate this into the rest of allocator2.
+// TODO(sumeer,kvoli): integrate this into the rest of mma.
 
 // enactedReplicaChange is information about a change at a store that was
 // enacted. It is an internal implementation detail of storeEnactedHistory and
