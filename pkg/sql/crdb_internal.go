@@ -4805,7 +4805,7 @@ CREATE TABLE crdb_internal.zones (
 
 			var table catalog.TableDescriptor
 			if zs.Database != "" {
-				database, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, descpb.ID(id))
+				database, err := p.Descriptors().ByID(p.txn).Get().Database(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
@@ -4815,7 +4815,7 @@ CREATE TABLE crdb_internal.zones (
 					continue
 				}
 			} else if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
-				tableEntry, err := p.Descriptors().ByID(p.txn).WithoutDropped().Get().Table(ctx, descpb.ID(id))
+				tableEntry, err := p.Descriptors().ByID(p.txn).Get().Table(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
