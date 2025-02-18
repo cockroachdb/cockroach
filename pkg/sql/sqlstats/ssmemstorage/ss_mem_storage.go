@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -90,8 +89,7 @@ type Container struct {
 	txnCounts transactionCounts
 	mon       *mon.BytesMonitor
 
-	knobs     *sqlstats.TestingKnobs
-	anomalies *insights.AnomalyDetector
+	knobs *sqlstats.TestingKnobs
 }
 
 // New returns a new instance of Container.
@@ -101,14 +99,12 @@ func New(
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
-	anomalies *insights.AnomalyDetector,
 ) *Container {
 	s := &Container{
 		st:                st,
 		appName:           appName,
 		mon:               mon,
 		knobs:             knobs,
-		anomalies:         anomalies,
 		uniqueServerCount: uniqueServerCount,
 	}
 
@@ -205,7 +201,6 @@ func NewTempContainerFromExistingStmtStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /*anomalies */
 	)
 
 	for i := range statistics {
@@ -278,7 +273,6 @@ func NewTempContainerFromExistingTxnStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /* anomalies */
 	)
 
 	for i := range statistics {
@@ -310,7 +304,6 @@ func (s *Container) NewApplicationStatsWithInheritedOptions() *Container {
 		s.mon,
 		s.appName,
 		s.knobs,
-		s.anomalies,
 	)
 }
 
