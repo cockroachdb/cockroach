@@ -492,8 +492,23 @@ func runStartInternal(
 		return err
 	}
 
-	// Check the --tenant-id-file flag.
-	if fl := fs.Lookup(cliflags.TenantIDFile.Name); fl != nil && fl.Changed {
+	// Check the --tenant-name-file flag.
+	if fl := fs.Lookup(cliflags.TenantNameFile.Name); fl != nil && fl.Changed {
+		fileName := fl.Value.String()
+		serverCfg.DelayedSetTenantName = func(
+			ctx context.Context,
+		) (roachpb.TenantName, roachpb.Locality, error) {
+			tenantName, err := tenantNameFromFile(ctx, fileName, nil, nil, nil)
+			if err != nil {
+				return roachpb.TenantName(""), roachpb.Locality{}, err
+			}
+			if err := tryReadLocalityFileFlag(fs); err != nil {
+				return roachpb.TenantName(""), roachpb.Locality{}, err
+			}
+			return tenantName, serverCfg.Locality, nil
+		}
+	} else if fl := fs.Lookup(cliflags.TenantIDFile.Name); fl != nil && fl.Changed {
+	  // Check the --tenant-id-file flag.
 		fileName := fl.Value.String()
 		serverCfg.DelayedSetTenantID = func(
 			ctx context.Context,
