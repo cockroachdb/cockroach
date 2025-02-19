@@ -4462,7 +4462,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			}
 			if tc.isGC {
 				testutils.SucceedsSoon(t, func() error {
-					return jobutils.VerifyRunningSystemJob(t, sqlDB, gcIdx*2, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingForMVCCGC, jobRecord)
+					return jobutils.VerifyRunningSystemJob(t, sqlDB, gcIdx*2, jobspb.TypeSchemaChangeGC, sql.StatusWaitingForMVCCGC, jobRecord)
 				})
 				gcIdx++
 			}
@@ -5526,7 +5526,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 	runBeforeConstraintValidation = func() error {
 		// TODO (lucy): Maybe this test API should use an offset starting
 		// from the most recent job instead.
-		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.StatusValidation, jobs.Record{
 			Username:    username.RootUserName(),
 			Description: "ALTER TABLE t.public.test ADD COLUMN a INT8 AS (v - 1) STORED, ADD CHECK ((a < v) AND (a IS NOT NULL))",
 			DescriptorIDs: descpb.IDs{

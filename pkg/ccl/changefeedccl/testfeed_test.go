@@ -559,14 +559,14 @@ func (f *jobFeed) FetchTerminalJobErr() error {
 	return nil
 }
 
-// FetchRunningStatus retrieves running status from changefeed job.
-func (f *jobFeed) FetchRunningStatus() (runningStatusStr string, err error) {
+// FetchStatus retrieves running status from changefeed job.
+func (f *jobFeed) FetchStatusMessage() (statusStr string, err error) {
 	if err = f.db.QueryRow(
 		`SELECT running_status FROM [SHOW JOBS] WHERE job_id=$1`, f.jobID,
-	).Scan(&runningStatusStr); err != nil {
-		return "", errors.Wrapf(err, "FetchRunningStatus for job %d", f.jobID)
+	).Scan(&statusStr); err != nil {
+		return "", errors.Wrapf(err, "FetchStatusMessage for job %d", f.jobID)
 	}
-	return runningStatusStr, err
+	return statusStr, err
 }
 
 // Close closes job feed.

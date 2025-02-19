@@ -80,8 +80,8 @@ type EnterpriseTestFeed interface {
 	WaitDurationForState(dur time.Duration, statusPred func(state jobs.State) bool) error
 	// FetchTerminalJobErr retrieves the error message from changefeed job.
 	FetchTerminalJobErr() error
-	// FetchRunningStatus retrieves running status from changefeed job.
-	FetchRunningStatus() (string, error)
+	// FetchStatus retrieves running status from changefeed job.
+	FetchStatusMessage() (string, error)
 	// Details returns changefeed details for this feed.
 	Details() (*jobspb.ChangefeedDetails, error)
 	// Progress returns the changefeed progress for this feed.

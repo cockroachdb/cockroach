@@ -144,7 +144,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 		dropTime = 1
 	}
 	var details jobspb.SchemaChangeGCDetails
-	var expectedRunningStatus string
+	var expectedStatusMessage string
 	switch dropItem {
 	case INDEX:
 		details = jobspb.SchemaChangeGCDetails{
@@ -157,7 +157,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 			ParentID: myTableID,
 		}
 		myTableDesc.SetPublicNonPrimaryIndexes([]descpb.IndexDescriptor{})
-		expectedRunningStatus = "deleting data"
+		expectedStatusMessage = "deleting data"
 	case TABLE:
 		details = jobspb.SchemaChangeGCDetails{
 			Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -169,7 +169,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 		}
 		myTableDesc.State = descpb.DescriptorState_DROP
 		myTableDesc.DropTime = dropTime
-		expectedRunningStatus = "deleting data"
+		expectedStatusMessage = "deleting data"
 	case DATABASE:
 		details = jobspb.SchemaChangeGCDetails{
 			Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -188,7 +188,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 		myTableDesc.DropTime = dropTime
 		myOtherTableDesc.State = descpb.DescriptorState_DROP
 		myOtherTableDesc.DropTime = dropTime
-		expectedRunningStatus = "deleting data"
+		expectedStatusMessage = "deleting data"
 	}
 
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -210,7 +210,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 		DescriptorIDs: descpb.IDs{myTableID},
 		Details:       details,
 		Progress:      jobspb.SchemaChangeGCProgress{},
-		RunningStatus: sql.RunningStatusWaitingGC,
+		StatusMessage: sql.StatusWaitingGC,
 		NonCancelable: true,
 	}
 
@@ -231,12 +231,12 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 	jobIDStr := strconv.Itoa(int(job.ID()))
 	testutils.SucceedsSoon(t, func() error {
 		if err := jobutils.VerifyRunningSystemJob(
-			t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR,
+			t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.StatusWaitingGC, lookupJR,
 		); err != nil {
 			// Since the intervals are set very low, the GC TTL job may have already
 			// started. If so, the status will be "deleting data" since "waiting for
 			// GC TTL" will have completed already.
-			if testutils.IsError(err, "expected running status waiting for GC TTL, got deleting data") {
+			if testutils.IsError(err, "expected status waiting for GC TTL, got deleting data") {
 				return nil
 			}
 			return err
@@ -249,7 +249,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 		sqlDB.CheckQueryResultsRetry(
 			t,
 			fmt.Sprintf("SELECT status, running_status FROM [SHOW JOBS] WHERE job_id = %s", jobIDStr),
-			[][]string{{"running", expectedRunningStatus}})
+			[][]string{{"running", expectedStatusMessage}})
 	}
 	blockGC <- struct{}{}
 
@@ -328,24 +328,24 @@ SELECT job_id
  WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE '%foo%';`,
 	).Scan(&jobID)
 
-	const expectedRunningStatus = string(sql.RunningStatusWaitingForMVCCGC)
+	const expectedStatusMessage = string(sql.StatusWaitingForMVCCGC)
 	testutils.SucceedsSoon(t, func() error {
-		var status, runningStatus, jobErr gosql.NullString
+		var state, statusMessage, jobErr gosql.NullString
 		tdb.QueryRow(t, fmt.Sprintf(`
 SELECT status, running_status, error
 FROM crdb_internal.jobs
-WHERE job_id = %s`, jobID)).Scan(&status, &runningStatus, &jobErr)
+WHERE job_id = %s`, jobID)).Scan(&state, &statusMessage, &jobErr)
 
-		t.Logf(`details about SCHEMA CHANGE GC job: {status: %#v, running_status: %#v, error: %#v}`,
-			status, runningStatus, jobErr)
+		t.Logf(`details about SCHEMA CHANGE GC job: {state: %#v, status: %#v, error: %#v}`,
+			state, statusMessage, jobErr)
 
-		if !runningStatus.Valid {
-			return errors.Newf(`running_status is NULL but expected %q`, expectedRunningStatus)
+		if !statusMessage.Valid {
+			return errors.Newf(`status is NULL but expected %q`, expectedStatusMessage)
 		}
 
-		if actualRunningStatus := runningStatus.String; actualRunningStatus != expectedRunningStatus {
-			return errors.Newf(`running_status %q does not match expected status %q`,
-				actualRunningStatus, expectedRunningStatus)
+		if actualStatus := statusMessage.String; actualStatus != expectedStatusMessage {
+			return errors.Newf(`status %q does not match expected status %q`,
+				actualStatus, expectedStatusMessage)
 		}
 
 		return nil

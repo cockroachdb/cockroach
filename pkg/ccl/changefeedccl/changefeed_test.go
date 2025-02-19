@@ -5127,14 +5127,14 @@ func TestChangefeedRetryableError(t *testing.T) {
 		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
 		job, err := registry.LoadJob(context.Background(), jobID)
 		require.NoError(t, err)
-		require.Contains(t, job.Progress().RunningStatus, "synthetic retryable error")
+		require.Contains(t, job.Progress().StatusMessage, "synthetic retryable error")
 
 		// Verify `SHOW JOBS` also shows this information.
-		var runningStatus string
+		var statusMessage string
 		sqlDB.QueryRow(t,
 			`SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
-		).Scan(&runningStatus)
-		require.Contains(t, runningStatus, "synthetic retryable error")
+		).Scan(&statusMessage)
+		require.Contains(t, statusMessage, "synthetic retryable error")
 
 		// Fix the sink and insert another row. Check that nothing funky happened.
 		atomic.StoreInt64(&failEmit, 0)
@@ -7879,7 +7879,7 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 
 		// check that running status correctly updates with retryable error
 		testutils.SucceedsSoon(t, func() error {
-			status, err := feedJob.FetchRunningStatus()
+			status, err := feedJob.FetchStatusMessage()
 			if err != nil {
 				return err
 			}
@@ -7930,7 +7930,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 			registry := s.Server.JobRegistry().(*jobs.Registry)
 			job, err := registry.LoadJob(context.Background(), jobID)
 			require.NoError(t, err)
-			require.Contains(t, job.Progress().RunningStatus, "job failed (should fail with custom error) but is being paused because of on_error=pause")
+			require.Contains(t, job.Progress().StatusMessage, "job failed (should fail with custom error) but is being paused because of on_error=pause")
 			knobs.BeforeEmitRow = nil
 
 			require.NoError(t, feedJob.Resume())
@@ -9329,7 +9329,7 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 
 				// check that running status correctly updates with retryable error
 				testutils.SucceedsSoon(t, func() error {
-					status, err := feedJob.FetchRunningStatus()
+					status, err := feedJob.FetchStatusMessage()
 					if err != nil {
 						return err
 					}

@@ -247,7 +247,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	// transactional schema changes. In all likelihood, not holding a lease here
 	// is the right thing to do as we would never want this operation to fail
 	// because a new mutation was enqueued.
-	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
+	tableDesc, err := sc.updateJobStatusMessage(ctx, StatusBackfill)
 	if err != nil {
 		return err
 	}
@@ -736,7 +736,7 @@ func (sc *SchemaChanger) validateConstraints(
 	}
 	log.Infof(ctx, "validating %d new constraints", len(constraints))
 
-	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
+	_, err := sc.updateJobStatusMessage(ctx, StatusValidation)
 	if err != nil {
 		return err
 	}
@@ -965,8 +965,8 @@ func (sc *SchemaChanger) distIndexBackfill(
 
 	writeAsOf := sc.job.Details().(jobspb.SchemaChangeDetails).WriteTimestamp
 	if writeAsOf.IsEmpty() {
-		status := jobs.RunningStatus("scanning target index for in-progress transactions")
-		if err := sc.job.NoTxn().RunningStatus(ctx, status); err != nil {
+		status := jobs.StatusMessage("scanning target index for in-progress transactions")
+		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 		writeAsOf = sc.clock.Now()
@@ -1005,7 +1005,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		}); err != nil {
 			return err
 		}
-		if err := sc.job.NoTxn().RunningStatus(ctx, RunningStatusBackfill); err != nil {
+		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, StatusBackfill); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 	} else {
@@ -1383,14 +1383,14 @@ func (sc *SchemaChanger) distColumnBackfill(
 	return nil
 }
 
-// updateJobRunningStatus updates the status field in the job entry
+// updateJobStatusMessage updates the status field in the job entry
 // with the given value.
 //
 // The update is performed in a separate txn at the current logical
 // timestamp.
 // TODO(ajwerner): Fix the transaction and descriptor lifetimes here.
-func (sc *SchemaChanger) updateJobRunningStatus(
-	ctx context.Context, status jobs.RunningStatus,
+func (sc *SchemaChanger) updateJobStatusMessage(
+	ctx context.Context, status jobs.StatusMessage,
 ) (tableDesc catalog.TableDescriptor, err error) {
 	err = DescsTxn(ctx, sc.execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		// Read table descriptor without holding a lease.
@@ -1415,7 +1415,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 			}
 		}
 		if updateJobRunningProgress && !tableDesc.Dropped() {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, status); err != nil {
+			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, status); err != nil {
 				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 			}
 		}
@@ -1434,7 +1434,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	}
 	log.Info(ctx, "validating new indexes")
 
-	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
+	_, err := sc.updateJobStatusMessage(ctx, StatusValidation)
 	if err != nil {
 		return err
 	}
@@ -2328,7 +2328,7 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 // temporary indexes to DELETE_ONLY and changes their direction to
 // DROP and steps any MERGING indexes to WRITE_ONLY
 func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context) error {
-	var runStatus jobs.RunningStatus
+	var runStatus jobs.StatusMessage
 	return sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
@@ -2354,7 +2354,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 				log.Infof(ctx, "dropping temporary index: %d", idx.IndexDesc().ID)
 				tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
 				tbl.Mutations[m.MutationOrdinal()].Direction = descpb.DescriptorMutation_DROP
-				runStatus = RunningStatusDeleteOnly
+				runStatus = StatusDeleteOnly
 			} else if m.Merging() {
 				tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_WRITE_ONLY
 			}
@@ -2368,7 +2368,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, runStatus); err != nil {
+			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}
