@@ -123,7 +123,7 @@ type Txn interface {
 	AddToPartition(
 		ctx context.Context,
 		partitionKey PartitionKey,
-		vector vector.T,
+		vec vector.T,
 		childKey ChildKey,
 		valueBytes ValueBytes,
 	) (PartitionMetadata, error)

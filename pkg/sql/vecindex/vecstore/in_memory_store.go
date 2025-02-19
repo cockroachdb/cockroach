@@ -293,11 +293,11 @@ func (s *InMemoryStore) MergeStats(ctx context.Context, stats *IndexStats, skipM
 // InsertVector inserts a new full-size vector into the in-memory store,
 // associated with the given primary key. This mimics inserting a vector into
 // the primary index, and is used during testing and benchmarking.
-func (s *InMemoryStore) InsertVector(key KeyBytes, vector vector.T) {
+func (s *InMemoryStore) InsertVector(key KeyBytes, vec vector.T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.mu.vectors[string(key)] = vector
+	s.mu.vectors[string(key)] = vec
 }
 
 // DeleteVector deletes the vector associated with the given primary key from
