@@ -20,6 +20,9 @@ type storeLoadMsg struct {
 	load loadVector
 	// storeRanges are only used for adjusting the accounting for load
 	// adjustments for pending changes. This is *all* the ranges at the store.
+	//
+	// TODO(sumeer): we have a distributed allocator, so cannot have all ranges
+	// represented here.
 	storeRanges []storeRange
 
 	capacity      loadVector
@@ -78,15 +81,7 @@ func (rm *rangeMsg) isDeletedRange() bool {
 // allocator. It is the top-level message containing all the previous structs
 // declared in this file.
 type nodeLoadResponse struct {
-	// -1 if this nodeLoadMsg is not a diff. Responder can unilaterally send a
-	// complete load even if the sender asked for a diff.
-	//
-	// TODO(sumeer): the diff story is not properly fleshed out for the local
-	// node in a distributed allocator, since there are also other updates via
-	// AdjustPendingChangesDisposition. We can start with only full state
-	// updates, and add diff support later.
-	lastLoadSeqNum int64
-	curLoadSeqNum  int64
+	curLoadSeqNum int64
 
 	nodeLoad
 	stores            []storeLoadMsg
@@ -119,7 +114,6 @@ var _ = rangeMsg{}.start
 var _ = rangeMsg{}.end
 var _ = rangeMsg{}.replicas
 var _ = rangeMsg{}.conf
-var _ = nodeLoadResponse{}.lastLoadSeqNum
 var _ = nodeLoadResponse{}.curLoadSeqNum
 var _ = nodeLoadResponse{}.nodeLoad
 var _ = nodeLoadResponse{}.stores
