@@ -494,9 +494,12 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	tab := md.Table(ups.Table)
 	canaryCol := exec.NodeColumnOrdinal(-1)
 	if ups.CanaryCol != 0 {
-		canaryCol, err = input.getNodeColumnOrdinal(ups.CanaryCol)
-		if err != nil {
-			return execPlan{}, err
+		// The canary column comes after the insert, fetch, and update columns.
+		canaryCol = exec.NodeColumnOrdinal(
+			ups.InsertCols.Len() + ups.FetchCols.Len() + ups.UpdateCols.Len(),
+		)
+		if colList[canaryCol] != ups.CanaryCol {
+			return execPlan{}, errors.AssertionFailedf("canary column not found")
 		}
 	}
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
