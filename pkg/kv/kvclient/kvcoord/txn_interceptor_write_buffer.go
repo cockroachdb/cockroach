@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // BufferedWritesEnabled is used to enable write buffering.
@@ -136,8 +137,12 @@ func (twb *txnWriteBuffer) SendLocked(
 		// left with an empty batch after applying transformations, eschew sending
 		// anything to KV.
 		br := ba.CreateReply()
+		var err error
 		for i, t := range ts {
-			br.Responses[i] = t.toResp()
+			br.Responses[i], err = t.toResp(twb, kvpb.ResponseUnion{})
+			if err != nil {
+				return nil, kvpb.NewError(err)
+			}
 		}
 		return br, nil
 	}
@@ -147,7 +152,11 @@ func (twb *txnWriteBuffer) SendLocked(
 		return nil, twb.adjustError(ctx, transformedBa, ts, pErr)
 	}
 
-	return twb.mergeResponseWithTransformations(ctx, ts, br), nil
+	resp, err := twb.mergeResponseWithTransformations(ctx, ts, br)
+	if err != nil {
+		return nil, kvpb.NewError(err)
+	}
+	return resp, nil
 }
 
 // adjustError adjusts the provided error based on the transformations made by
@@ -329,6 +338,20 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// Wasn't served locally; send the request to the KV layer.
 			baRemote.Requests = append(baRemote.Requests, ru)
 
+		case *kvpb.ScanRequest:
+			overlaps := twb.scanOverlaps(t.Key, t.EndKey)
+			if overlaps {
+				ts = append(ts, transformation{
+					stripped:    false,
+					index:       i,
+					origRequest: req,
+				})
+			}
+			// Regardless of whether the scan overlaps with any writes in the buffer
+			// or not, we must send the request to the KV layer. We can't know for
+			// sure that there's nothing else to read.
+			baRemote.Requests = append(baRemote.Requests, ru)
+
 		default:
 			baRemote.Requests = append(baRemote.Requests, ru)
 		}
@@ -372,30 +395,237 @@ func (twb *txnWriteBuffer) maybeServeRead(
 	return nil, false
 }
 
+// scanOverlaps returns whether the given key range overlaps with any buffered
+// write.
+func (twb *txnWriteBuffer) scanOverlaps(key roachpb.Key, endKey roachpb.Key) bool {
+	it := twb.buffer.MakeIter()
+	seek := &twb.bufferSeek
+	seek.key = key
+	seek.endKey = endKey
+
+	it.FirstOverlap(seek)
+	return it.Valid()
+}
+
+// mergeWithScanResp takes a ScanRequest, that was sent to the KV layer, and the
+// response returned by the KV layer, and merges it with any writes that were
+// buffered by the transaction to correctly uphold read-your-own-write
+// semantics.
+func (twb *txnWriteBuffer) mergeWithScanResp(
+	req *kvpb.ScanRequest, resp *kvpb.ScanResponse,
+) (*kvpb.ScanResponse, error) {
+	if req.ScanFormat == kvpb.COL_BATCH_RESPONSE {
+		return nil, errors.AssertionFailedf("unexpectedly called mergeWithScanResp on a ScanRequest " +
+			"with COL_BATCH_RESPONSE scan format")
+	}
+	if req.ScanFormat == kvpb.BATCH_RESPONSE {
+		// TODO(arul): See pebbleResults.put for how this should be done.
+		return nil, errors.AssertionFailedf("unimplemented")
+	}
+
+	valid := func(i int) bool {
+		switch req.ScanFormat {
+		case kvpb.KEY_VALUES:
+			return i < len(resp.Rows)
+		default:
+			panic("unexpected")
+		}
+	}
+
+	getKey := func(i int) (roachpb.Key, error) {
+		switch req.ScanFormat {
+		case kvpb.KEY_VALUES:
+			return resp.Rows[i].Key, nil
+		default:
+			panic("unexpected")
+		}
+	}
+
+	accumulateBufferResp := func(scanResponse *kvpb.ScanResponse, key roachpb.Key, val *roachpb.Value, resIdx int) {
+		switch req.ScanFormat {
+		case kvpb.KEY_VALUES:
+			scanResponse.Rows[resIdx] = roachpb.KeyValue{
+				Key:   key,
+				Value: *val,
+			}
+		default:
+			panic("unexpected")
+		}
+	}
+
+	accumulateServersideResp := func(scanResponse *kvpb.ScanResponse, i int, resIdx int) {
+		switch req.ScanFormat {
+		case kvpb.KEY_VALUES:
+			scanResponse.Rows[resIdx] = resp.Rows[i]
+		default:
+			panic("unexpected")
+		}
+	}
+
+	respSize := func() (int, error) {
+		it := twb.buffer.MakeIter()
+		seek := &twb.bufferSeek
+		seek.key = req.Key
+		seek.endKey = req.EndKey
+
+		it.FirstOverlap(seek)
+		i := 0
+		size := 0
+
+		for valid(i) && it.Valid() {
+			k, err := getKey(i)
+			if err != nil {
+				return 0, err
+			}
+			switch it.Cur().key.Compare(k) {
+			case -1:
+				if _, served := twb.maybeServeRead(it.Cur().key, req.Sequence); served {
+					// Only increment the size if we'll serve this read from the buffer
+					// based on the request's sequence number.
+					size++
+				}
+				it.Next()
+			case 0:
+				// We'll either serve this read from the buffer or the KV layer, but in
+				// either case, it'll count as one KV.
+				i++
+				it.NextOverlap(seek)
+				size++
+			case 1:
+				i++
+				size++
+			}
+		}
+		for valid(i) {
+			size++
+			i++
+		}
+		for it.Valid() {
+			size++
+			it.NextOverlap(seek)
+		}
+		return size, nil
+	}
+
+	scanResp := resp.ShallowCopy().(*kvpb.ScanResponse)
+	size, err := respSize()
+	if err != nil {
+		return nil, err
+	}
+	switch req.ScanFormat {
+	case kvpb.KEY_VALUES:
+		scanResp.Rows = make([]roachpb.KeyValue, size)
+	default:
+		panic("unexpected")
+	}
+
+	it := twb.buffer.MakeIter()
+	seek := &twb.bufferSeek
+	seek.key = req.Key
+	seek.endKey = req.EndKey
+
+	i := 0
+	resIdx := 0
+	it.FirstOverlap(seek)
+
+	for valid(i) && it.Valid() {
+		k, err := getKey(i)
+		if err != nil {
+			return nil, err
+		}
+		switch it.Cur().key.Compare(k) {
+		case -1:
+			// The key in the buffer is less than the next key in the KV layer
+			// response. Pick it.
+			val, served := twb.maybeServeRead(it.Cur().key, req.Sequence)
+			if served {
+				accumulateBufferResp(scanResp, it.Cur().key, val, resIdx)
+				resIdx++
+			}
+			it.NextOverlap(seek)
+
+		case 0:
+			// The key exists in the buffer. We must serve the read from the buffer,
+			// the value of which is dependent on the sequence number of the Scan
+			// request.
+			val, served := twb.maybeServeRead(it.Cur().key, req.Sequence)
+			if served {
+				accumulateBufferResp(scanResp, it.Cur().key, val, resIdx)
+			} else {
+				// Even though the key was in the buffer, its sequence number was higher
+				// than the Scan request's.
+				accumulateServersideResp(scanResp, i, resIdx)
+			}
+			resIdx++
+			i++
+			it.NextOverlap(seek)
+		case 1:
+			// The key in the buffer is greater than the key in the KV layer response.
+			// Pick the key from the KV layer response.
+			accumulateServersideResp(scanResp, i, resIdx)
+			resIdx++
+			i++
+		}
+	}
+
+	for valid(i) {
+		accumulateServersideResp(scanResp, i, resIdx)
+		i++
+		resIdx++
+	}
+	for it.Valid() {
+		val, served := twb.maybeServeRead(it.Cur().key, req.Sequence)
+		if served {
+			accumulateBufferResp(scanResp, it.Cur().key, val, resIdx)
+			resIdx++
+		}
+		it.NextOverlap(seek)
+	}
+
+	return scanResp, nil
+}
+
 // mergeResponsesWithTransformations merges responses from the KV layer with the
 // transformations that were applied by the txnWriteBuffer before sending the
 // batch request. As a result, interceptors above the txnWriteBuffer remain
 // oblivious to its decision to buffer any writes.
 func (twb *txnWriteBuffer) mergeResponseWithTransformations(
 	ctx context.Context, ts transformations, br *kvpb.BatchResponse,
-) *kvpb.BatchResponse {
+) (_ *kvpb.BatchResponse, err error) {
 	if ts.Empty() && br == nil {
 		log.Fatal(ctx, "unexpectedly found no transformations and no batch response")
 	} else if ts.Empty() {
-		return br
+		return br, nil
 	}
 
-	mergedResps := make([]kvpb.ResponseUnion, len(br.Responses)+len(ts))
+	// Figure out the length of the merged responses slice.
+	mergedRespsLen := len(br.Responses)
+	for _, t := range ts {
+		if t.stripped {
+			mergedRespsLen++
+		}
+	}
+	mergedResps := make([]kvpb.ResponseUnion, mergedRespsLen)
 	for i := range mergedResps {
 		if len(ts) > 0 && ts[0].index == i {
-			// The transformation applies at this index.
-			mergedResps[i] = ts[0].toResp()
-			ts = ts[1:]
+			if !ts[0].stripped {
+				// If the transformation wasn't stripped from the batch we sent to KV,
+				// we received a response for it, which then needs to be combined with
+				// what's in the write buffer.
+				resp := br.Responses[0]
+				mergedResps[i], err = ts[0].toResp(twb, resp)
+				if err != nil {
+					return nil, err
+				}
+				br.Responses = br.Responses[1:]
+			} else {
+				mergedResps[i], err = ts[0].toResp(twb, kvpb.ResponseUnion{})
+				if err != nil {
+					return nil, err
+				}
+			}
 
-			// TODO(arul): we'll also need to handle !transformation.stripped case here
-			// as well. In particular, if a transformation didn't strip the request,
-			// but instead modified it, we'll need to trim from br.Responses and trim
-			// the mergedResps slice -- we'd otherwise be overcounting.
+			ts = ts[1:]
 			continue
 		}
 
@@ -404,7 +634,7 @@ func (twb *txnWriteBuffer) mergeResponseWithTransformations(
 		br.Responses = br.Responses[1:]
 	}
 	br.Responses = mergedResps
-	return br
+	return br, nil
 }
 
 // transformation is a modification applied by the txnWriteBuffer on a batch
@@ -421,24 +651,43 @@ type transformation struct {
 	// evaluated locally (e.g. blind writes, reads that can be served entirely
 	// from the buffer). If non-empty, stripped must also be true.
 	resp kvpb.ResponseUnion
+	// origRequest is the original request that was transformed. Set iff stripped
+	// is false.
+	origRequest kvpb.Request
 }
 
 // toResp returns the response that should be added to the batch response as
 // a result of applying the transformation.
-func (t transformation) toResp() kvpb.ResponseUnion {
+func (t transformation) toResp(
+	twb *txnWriteBuffer, br kvpb.ResponseUnion,
+) (kvpb.ResponseUnion, error) {
 	if t.stripped {
-		return t.resp
+		return t.resp, nil
 	}
 
-	// This is only possible once we start decomposing read-write requests into
-	// separate bits.
-	panic("unimplemented")
+	var ru kvpb.ResponseUnion
+	switch br.GetInner().(type) {
+	case *kvpb.ScanResponse:
+		scanResp, err := twb.mergeWithScanResp(
+			t.origRequest.(*kvpb.ScanRequest), br.GetInner().(*kvpb.ScanResponse),
+		)
+		if err != nil {
+			return kvpb.ResponseUnion{}, err
+		}
+		ru.MustSetInner(scanResp)
+	default:
+		// This is only possible once we start decomposing read-write requests into
+		// separate bits.
+		panic("unimplemented")
+	}
 
 	// TODO(arul): in the future, when we'll evaluate CPuts locally, we'll have
 	// this function take in the result of the KVGet, save the CPut function
 	// locally on the transformation, and use these two things to evaluate the
 	// condition here, on the client. We'll then construct and return the
 	// appropriate response.
+
+	return ru, nil
 }
 
 // transformations is a list of transformations applied by the txnWriteBuffer.

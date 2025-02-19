@@ -1641,3 +1641,137 @@ func TestTxnBasicBufferedWrites(t *testing.T) {
 		}
 	})
 }
+
+// TestTxnBufferedWritesOverlappingScan verifies that a transaction that buffers
+// its writes on the client, and then performs scans that overlap with some part
+// of the buffer, correctly observe read-your-own-writes semantics.
+func TestTxnBufferedWritesOverlappingScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	makeKV := func(key []byte, val []byte) roachpb.KeyValue {
+		return roachpb.KeyValue{Key: key, Value: roachpb.Value{RawBytes: val}}
+	}
+
+	ctx := context.Background()
+	valueA := []byte("valueA")
+	valueC := []byte("valueC")
+	valueF := []byte("valueF")
+	valueTxn := []byte("valueTxn")
+
+	keyA := []byte("keyA")
+	keyB := []byte("keyB")
+	keyC := []byte("keyC")
+	keyD := []byte("keyD")
+	keyE := []byte("keyE")
+	keyF := []byte("keyF")
+	keyG := []byte("keyG")
+
+	_ = keyE
+
+	// Before the test begins, write a value to keyA and keyC.
+	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+	require.NoError(t, txn.Put(ctx, keyA, valueA))
+	require.NoError(t, txn.Put(ctx, keyC, valueC))
+	require.NoError(t, txn.Put(ctx, keyF, valueF))
+	require.NoError(t, txn.Commit(ctx))
+
+	err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txn.SetBufferedWritesEnabled(true)
+
+		// Write some values to keyB, keyC, and keyD.
+		if err := txn.Put(ctx, keyB, valueTxn); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, keyC, valueTxn); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, keyD, valueTxn); err != nil {
+			return err
+		}
+
+		// Perform some scans.
+		for _, tc := range []struct {
+			key    roachpb.Key
+			endKey roachpb.Key
+			expRes []roachpb.KeyValue
+		}{
+			{
+				// Scan over the entire keyspace.
+				key:    keyA,
+				endKey: keyG,
+				expRes: []roachpb.KeyValue{
+					makeKV(keyA, valueA),
+					makeKV(keyB, valueTxn),
+					makeKV(keyC, valueTxn),
+					makeKV(keyD, valueTxn),
+					makeKV(keyF, valueF),
+				},
+			},
+			{
+				// The end key should be exclusive.
+				key:    keyA,
+				endKey: keyF,
+				expRes: []roachpb.KeyValue{
+					makeKV(keyA, valueA),
+					makeKV(keyB, valueTxn),
+					makeKV(keyC, valueTxn),
+					makeKV(keyD, valueTxn),
+				},
+			},
+			{
+				// Entirely within the buffer.
+				key:    keyB,
+				endKey: keyF,
+				expRes: []roachpb.KeyValue{
+					makeKV(keyB, valueTxn), makeKV(keyC, valueTxn), makeKV(keyD, valueTxn),
+				},
+			},
+			{
+				// End key is present in the buffer, but isn't returned because the scan
+				// is exclusive.
+				key:    keyA,
+				endKey: keyB,
+				expRes: []roachpb.KeyValue{
+					makeKV(keyA, valueA),
+				},
+			},
+			{
+				key:    keyA,
+				endKey: keyD,
+				expRes: []roachpb.KeyValue{
+					makeKV(keyA, valueA), makeKV(keyB, valueTxn), makeKV(keyC, valueTxn),
+				},
+			},
+			{
+				key:    keyC,
+				endKey: keyE,
+				expRes: []roachpb.KeyValue{
+					makeKV(keyC, valueTxn), makeKV(keyD, valueTxn),
+				},
+			},
+			{
+				// Doesn't overlap with the buffer at all.
+				key:    keyF,
+				endKey: keyG,
+				expRes: []roachpb.KeyValue{
+					makeKV(keyF, valueF),
+				},
+			},
+		} {
+			res, err := txn.Scan(ctx, tc.key, tc.endKey, 0 /* maxRows */)
+			require.NoError(t, err)
+			require.Len(t, res, len(tc.expRes))
+			for i, exp := range tc.expRes {
+				require.Equal(t, exp.Key, res[i].Key)
+				val, err := res[i].Value.GetBytes()
+				require.NoError(t, err)
+				require.Equal(t, exp.Value.RawBytes, val)
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+}
