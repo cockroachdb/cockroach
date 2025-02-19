@@ -2456,6 +2456,13 @@ func TestReadCommittedLogic_udf_upsert(
 	runLogicTest(t, "udf_upsert")
 }
 
+func TestReadCommittedLogic_unimplemented(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "unimplemented")
+}
+
 func TestReadCommittedLogic_union(
 	t *testing.T,
 ) {

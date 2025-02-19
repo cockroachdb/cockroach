@@ -2465,6 +2465,13 @@ func TestTenantLogic_udf_upsert(
 	runLogicTest(t, "udf_upsert")
 }
 
+func TestTenantLogic_unimplemented(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "unimplemented")
+}
+
 func TestTenantLogic_union(
 	t *testing.T,
 ) {

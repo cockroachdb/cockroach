@@ -2449,6 +2449,13 @@ func TestRepeatableReadLogic_udf_upsert(
 	runLogicTest(t, "udf_upsert")
 }
 
+func TestRepeatableReadLogic_unimplemented(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "unimplemented")
+}
+
 func TestRepeatableReadLogic_union(
 	t *testing.T,
 ) {
