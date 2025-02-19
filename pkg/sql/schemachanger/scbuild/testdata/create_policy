@@ -5,14 +5,14 @@ CREATE FUNCTION is_valid(n INT) returns bool as $$ begin return n < 10; end; $$ 
 ----
 
 build
-CREATE POLICY "first policy" on defaultdb.foo AS PERMISSIVE FOR SELECT TO fred USING (i > 0) WITH CHECK (i % 2 = 0);
+CREATE POLICY "first policy" on defaultdb.foo AS PERMISSIVE FOR UPDATE TO fred USING (i > 0) WITH CHECK (i % 2 = 0);
 ----
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 - [[Policy:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
-  {command: 2, policyId: 1, tableId: 104, type: 1}
+  {command: 4, policyId: 1, tableId: 104, type: 1}
 - [[PolicyName:{DescID: 104, Name: first policy, PolicyID: 1}, PUBLIC], ABSENT]
   {name: first policy, policyId: 1, tableId: 104}
 - [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 1}, PUBLIC], ABSENT]
@@ -25,7 +25,7 @@ CREATE POLICY "first policy" on defaultdb.foo AS PERMISSIVE FOR SELECT TO fred U
   {policyId: 1, tableId: 104}
 
 build
-CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT USING (false);
+CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT WITH CHECK (false);
 ----
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
@@ -37,13 +37,13 @@ CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT USING (
   {name: second policy, policyId: 1, tableId: 104}
 - [[PolicyRole:{DescID: 104, Name: public, PolicyID: 1}, PUBLIC], ABSENT]
   {policyId: 1, roleName: public, tableId: 104}
-- [[PolicyUsingExpr:{DescID: 104, Expr: false, PolicyID: 1}, PUBLIC], ABSENT]
+- [[PolicyWithCheckExpr:{DescID: 104, Expr: false, PolicyID: 1}, PUBLIC], ABSENT]
   {expr: "false", policyId: 1, tableId: 104}
 - [[PolicyDeps:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
   {policyId: 1, tableId: 104}
 
 build
-CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred WITH CHECK (i < 0);
+CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred USING (i < 0);
 ----
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
@@ -57,7 +57,7 @@ CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred WI
   {policyId: 1, roleName: root, tableId: 104}
 - [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 1}, PUBLIC], ABSENT]
   {policyId: 1, roleName: fred, tableId: 104}
-- [[PolicyWithCheckExpr:{DescID: 104, Expr: i < 0:::INT8, PolicyID: 1}, PUBLIC], ABSENT]
+- [[PolicyUsingExpr:{DescID: 104, Expr: i < 0:::INT8, PolicyID: 1}, PUBLIC], ABSENT]
   {expr: 'i < 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 104}
 - [[PolicyDeps:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
   {policyId: 1, tableId: 104}

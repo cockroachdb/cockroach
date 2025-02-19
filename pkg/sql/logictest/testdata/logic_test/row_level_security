@@ -813,7 +813,7 @@ set role root
 
 # Add policies that apply to other commands. Only SELECT will return rows.
 statement ok
-CREATE POLICY restrict_insert ON bbteams FOR INSERT TO buck USING (false);
+CREATE POLICY restrict_insert ON bbteams FOR INSERT TO buck WITH CHECK (false);
 
 statement ok
 CREATE POLICY restrict_delete ON bbteams FOR DELETE TO buck USING (false);
@@ -894,7 +894,7 @@ statement ok
 DROP POLICY restrict_delete on bbteams;
 
 statement ok
-create policy restrict_delete on bbteams for delete to buck using (is_valid(league) and team = 'tigers' and nextval('seq1') < 1000) with check (true);
+create policy restrict_delete on bbteams for delete to buck using (is_valid(league) and team = 'tigers' and nextval('seq1') < 1000);
 
 statement ok
 set role buck
@@ -920,9 +920,9 @@ bbteams  CREATE TABLE public.bbteams (
          );
          ALTER TABLE public.bbteams ENABLE ROW LEVEL SECURITY;
          CREATE POLICY restrict_select ON public.bbteams AS PERMISSIVE FOR SELECT TO buck, root USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
-         CREATE POLICY restrict_insert ON public.bbteams AS PERMISSIVE FOR INSERT TO buck USING (false);
+         CREATE POLICY restrict_insert ON public.bbteams AS PERMISSIVE FOR INSERT TO buck WITH CHECK (false);
          CREATE POLICY restrict_update ON public.bbteams AS PERMISSIVE FOR UPDATE TO buck USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
-         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8)) WITH CHECK (true)
+         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8))
 
 statement ok
 set role root
@@ -955,7 +955,7 @@ statement ok
 ALTER TABLE animals ENABLE ROW LEVEL SECURITY;
 
 statement ok
-create policy p1 on animals for select to current_user using (class in ('mammals','birds')) with check (class in ('reptiles', 'amphibians'));
+create policy p1 on animals for select to current_user using (class in ('mammals','birds'));
 
 statement ok
 use defaultdb;
@@ -1137,5 +1137,22 @@ SET ROLE root
 
 statement ok
 DROP ROLE rls_cache_user;
+
+subtest block_invalid_expressions
+
+statement ok
+CREATE TABLE blocker();
+
+statement error pq: only WITH CHECK expression allowed for INSERT
+CREATE POLICY p_insert on blocker FOR INSERT USING (1 = 1);
+
+statement error pq: WITH CHECK cannot be applied to SELECT or DELETE
+CREATE POLICY p_select on blocker FOR SELECT WITH CHECK (false);
+
+statement error pq: WITH CHECK cannot be applied to SELECT or DELETE
+CREATE POLICY p_delete on blocker FOR DELETE WITH CHECK (1 = 1);
+
+statement ok
+DROP TABLE blocker;
 
 subtest end

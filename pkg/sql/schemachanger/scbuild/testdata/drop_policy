@@ -3,9 +3,9 @@ SET enable_row_level_security = true;
 CREATE FUNCTION is_valid(n INT) returns bool as $$ begin return n < 10; end; $$ language plpgsql;
 CREATE TABLE defaultdb.foo (i INT PRIMARY KEY);
 CREATE USER fred;
-CREATE POLICY "first policy" on defaultdb.foo AS PERMISSIVE FOR SELECT TO fred USING (i > 0) WITH CHECK (i % 2 = 0);
-CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT USING (false);
-CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred WITH CHECK (i < 0);
+CREATE POLICY "first policy" on defaultdb.foo AS PERMISSIVE FOR UPDATE TO fred USING (i > 0) WITH CHECK (i % 2 = 0);
+CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT WITH CHECK (false);
+CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred USING (i < 0);
 CREATE POLICY "fourth policy" on defaultdb.foo AS PERMISSIVE TO PUBLIC,SESSION_USER;
 CREATE POLICY "fifth policy" on defaultdb.foo USING (is_valid(i));
 CREATE POLICY "sixth policy" on defaultdb.foo WITH CHECK (is_valid(i));
@@ -17,7 +17,7 @@ DROP POLICY "first policy" on defaultdb.foo;
 - [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 105}
 - [[Policy:{DescID: 105, PolicyID: 1}, ABSENT], PUBLIC]
-  {command: 2, policyId: 1, tableId: 105, type: 1}
+  {command: 4, policyId: 1, tableId: 105, type: 1}
 - [[PolicyName:{DescID: 105, Name: first policy, PolicyID: 1}, ABSENT], PUBLIC]
   {name: first policy, policyId: 1, tableId: 105}
 - [[PolicyRole:{DescID: 105, Name: fred, PolicyID: 1}, ABSENT], PUBLIC]
@@ -42,7 +42,7 @@ DROP POLICY "second policy" on defaultdb.foo CASCADE;
   {name: second policy, policyId: 2, tableId: 105}
 - [[PolicyRole:{DescID: 105, Name: public, PolicyID: 2}, ABSENT], PUBLIC]
   {policyId: 2, roleName: public, tableId: 105}
-- [[PolicyUsingExpr:{DescID: 105, Expr: false, PolicyID: 2}, ABSENT], PUBLIC]
+- [[PolicyWithCheckExpr:{DescID: 105, Expr: false, PolicyID: 2}, ABSENT], PUBLIC]
   {expr: "false", policyId: 2, tableId: 105}
 - [[PolicyDeps:{DescID: 105, PolicyID: 2}, ABSENT], PUBLIC]
   {policyId: 2, tableId: 105}
@@ -62,7 +62,7 @@ DROP POLICY "third policy" on defaultdb.foo RESTRICT;
   {policyId: 3, roleName: root, tableId: 105}
 - [[PolicyRole:{DescID: 105, Name: fred, PolicyID: 3}, ABSENT], PUBLIC]
   {policyId: 3, roleName: fred, tableId: 105}
-- [[PolicyWithCheckExpr:{DescID: 105, Expr: i < 0:::INT8, PolicyID: 3}, ABSENT], PUBLIC]
+- [[PolicyUsingExpr:{DescID: 105, Expr: i < 0:::INT8, PolicyID: 3}, ABSENT], PUBLIC]
   {expr: 'i < 0:::INT8', policyId: 3, referencedColumnIds: [1], tableId: 105}
 - [[PolicyDeps:{DescID: 105, PolicyID: 3}, ABSENT], PUBLIC]
   {policyId: 3, tableId: 105}
