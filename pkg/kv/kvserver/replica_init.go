@@ -219,7 +219,10 @@ func newUninitializedReplicaWithoutRaftGroup(
 		Settings:   store.cfg.Settings,
 		TermCache:  raft.NewTermCache(TermCacheSize),
 		Metrics: logstore.Metrics{
-			RaftLogCommitLatency: store.metrics.RaftLogCommitLatency,
+			RaftLogCommitLatency:       store.metrics.RaftLogCommitLatency,
+			LoadTermFromStorageLatency: store.metrics.LoadTermFromStorageLatency,
+			TermCacheAccesses:          store.metrics.TermCacheAccesses,
+			TermCacheHits:              store.metrics.TermCacheHits,
 		},
 		DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
 			store.TestingKnobs().DisableSyncLogWriteToss,

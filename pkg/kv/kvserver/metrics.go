@@ -526,7 +526,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	//Ingest metrics
+	// Ingest metrics
 	metaIngestCount = metric.Metadata{
 		Name:        "storage.ingest.count",
 		Help:        "Number of successful ingestions performed",
@@ -1452,6 +1452,12 @@ being received, or at performance issues at the storage layer.
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaLoadTermFromStorageLatency = metric.Metadata{
+		Name:        "raft.process.loadTerm.latency",
+		Help:        `Latency histogram for loading the term of a Raft log entries`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRaftCommandCommitLatency = metric.Metadata{
 		Name: "raft.process.commandcommit.latency",
 		Help: `Latency histogram for applying a batch of Raft commands to the state machine.
@@ -1585,6 +1591,20 @@ cache will already have moved on to newer entries.
 		Name:        "raft.storage.error",
 		Help:        "Number of Raft storage errors",
 		Measurement: "Error Count",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	// Raft term cache metrics.
+	metaTermCacheAccesses = metric.Metadata{
+		Name:        "raft.process.termCache.accesses",
+		Help:        "Number of raft term cache accesses",
+		Measurement: "Access count",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTermCacheHits = metric.Metadata{
+		Name:        "raft.process.termCache.hits",
+		Help:        "Number of raft term cache hits",
+		Measurement: "Cache Hit Count",
 		Unit:        metric.Unit_COUNT,
 	}
 
@@ -2840,6 +2860,7 @@ type StoreMetrics struct {
 	RaftCommandsPending        *metric.Gauge
 	RaftCommandsApplied        *metric.Counter
 	RaftLogCommitLatency       metric.IHistogram
+	LoadTermFromStorageLatency metric.IHistogram
 	RaftCommandCommitLatency   metric.IHistogram
 	RaftHandleReadyLatency     metric.IHistogram
 	RaftApplyCommittedLatency  metric.IHistogram
@@ -2848,6 +2869,10 @@ type StoreMetrics struct {
 	RaftTimeoutCampaign        *metric.Counter
 	RaftStorageReadBytes       *metric.Counter
 	RaftStorageError           *metric.Counter
+
+	// Raft term cache metrics.
+	TermCacheAccesses *metric.Counter
+	TermCacheHits     *metric.Counter
 
 	// Raft message metrics.
 	//
@@ -3569,6 +3594,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
+		LoadTermFromStorageLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaLoadTermFromStorageLatency,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
 		RaftCommandCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftCommandCommitLatency,
@@ -3602,6 +3633,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftTimeoutCampaign:  metric.NewCounter(metaRaftTimeoutCampaign),
 		RaftStorageReadBytes: metric.NewCounter(metaRaftStorageReadBytes),
 		RaftStorageError:     metric.NewCounter(metaRaftStorageError),
+
+		// Raft term cache metrics.
+		TermCacheAccesses: metric.NewCounter(metaTermCacheAccesses),
+		TermCacheHits:     metric.NewCounter(metaTermCacheHits),
 
 		// Raft message metrics.
 		RaftRcvdMessages: [maxRaftMsgType + 1]*metric.Counter{

@@ -172,7 +172,10 @@ type AppendStats struct {
 
 // Metrics contains metrics specific to the log storage.
 type Metrics struct {
-	RaftLogCommitLatency metric.IHistogram
+	RaftLogCommitLatency       metric.IHistogram
+	LoadTermFromStorageLatency metric.IHistogram
+	TermCacheAccesses          *metric.Counter
+	TermCacheHits              *metric.Counter
 }
 
 // LogStore is a stub of a separated Raft log storage.
@@ -613,28 +616,30 @@ func LoadTerm(
 	eCache *raftentry.Cache,
 	index kvpb.RaftIndex,
 	tc *raft.TermCache,
+	metrics Metrics,
 ) (kvpb.RaftTerm, error) {
-	found := false
-
+	metrics.TermCacheAccesses.Inc(1)
 	term, err := tc.Term(uint64(index))
 	if err == nil {
-		found = true
-	}
-
-	if found {
-		fmt.Printf("returning term from term cache.index: %v, term: %v\n", index, term)
+		// found
+		metrics.TermCacheHits.Inc(1)
 		return kvpb.RaftTerm(term), nil
 	}
 
-	fmt.Printf("not found in term cache.index: %v, term: %v\n", index, term)
-
+	start := crtime.NowMono()
+	eCache.Metric.LoadTermAccesses.Inc(1)
 	entry, found := eCache.Get(rangeID, index)
 	if found {
+		eCache.Metric.LoadTermHits.Inc(1)
 		return kvpb.RaftTerm(entry.Term), nil
 	}
 
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
+
+	defer func() {
+		metrics.LoadTermFromStorageLatency.RecordValue(start.Elapsed().Nanoseconds())
+	}()
 
 	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {

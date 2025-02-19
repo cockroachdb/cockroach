@@ -26,11 +26,13 @@ import (
 
 type TermCache struct {
 	cache []entryID
-	// lastIndex is the last index know to the TermCache that is in the raftLog
+	// lastIndex is the last index known to the TermCache that is in the raftLog
 	// the entry at lastIndex has the same term as TermCache.cache's
 	// last element's term
+	// lastIndex == 0 means TermCache is empty
 	lastIndex uint64
-	maxSize   uint64
+	// max size of the term cache slice
+	maxSize uint64
 }
 
 // ErrInvalidEntryID is returned when the supplied entryID
@@ -56,35 +58,29 @@ func NewTermCache(size uint64) *TermCache {
 	}
 }
 
-// truncateFrom clears all entries from the ringBuf with index equal to or
-// greater than lo. The method returns the aggregate size and count of entries
-// removed. Note that lo itself may or may not be in the cache.
-// If lo is lower than the first entry index, then the whole term cache is wiped
-// Mirrors the truncateFrom function in raftEntry cache
+// truncateFrom clears all entries from the termCache with index equal to or
+// greater than lo. Note that lo itself may or may not be in the cache.
+// If lo is lower than the first entry index, the whole term cache is cleared.
+// Mirrors the truncateFrom function in raftentry/cache.go
 func (tc *TermCache) truncateFrom(lo uint64) error {
-	if len(tc.cache) == 0 {
+	if len(tc.cache) == 0 || lo > tc.lastIndex {
 		return nil
 	}
-	if lo > tc.lastIndex {
-		return nil
-	}
-	if lo <= tc.getFirstTermCacheEntry().index {
+
+	if lo <= tc.firstEntry().index {
 		tc.cache = tc.cache[:0]
 		tc.lastIndex = 0
 		return nil
 	}
 
-	if len(tc.cache) == 1 {
-		if lo == tc.cache[0].index {
-			tc.cache = tc.cache[:0]
-		} else if lo > tc.cache[0].index && lo <= tc.lastIndex {
+	for i := len(tc.cache) - 1; i >= 0; i-- {
+		// lo is in between tc.cache[i].index and tc.cache[i+1].index
+		if lo > tc.cache[i].index {
+			tc.cache = tc.cache[:i+1]
 			tc.lastIndex = lo - 1
+			return nil
 		}
-		return nil
-	}
-
-	for i := 0; i < len(tc.cache)-1; i++ {
-		// low match a term flip index
+		// lo matches a term flip index
 		if lo == tc.cache[i].index {
 			// remove everything starting from (including) this term flip index
 			tc.cache = tc.cache[:i]
@@ -93,76 +89,67 @@ func (tc *TermCache) truncateFrom(lo uint64) error {
 			} else {
 				// set lastIndex to be the index one before lo,
 				tc.lastIndex = lo - 1
-				// invariant after above assignment: tc.lastIndex >= tc.cache[i-1].index
+				// invariant after above assignment:
+				// tc.lastIndex >= tc.cache[i-1].index
 			}
 			return nil
 		}
-
-		if lo > tc.cache[i].index && lo < tc.cache[i+1].index {
-			tc.cache = tc.cache[:i+1]
-			tc.lastIndex = lo - 1
-			return nil
-		}
 	}
-
 	return nil
 }
 
-// clearTo clears all entries from the termCache with index less than hi.
-// Mirrors the clearTo function in raftEntry cache
+// ClearTo clears entries from the TermCache with index strictly less than hi.
+// Mirrors the clearTo function in raftentry/cache.go
+// TODO(hakuuww): actually, we are clearing more than hi here,
+//
+//	which causes TermCache misses in steady state.
+//	Investigate whether we can do better.
 func (tc *TermCache) ClearTo(hi uint64) error {
-	if len(tc.cache) == 0 {
-		return nil
-	}
-	if hi < tc.getFirstTermCacheEntry().index {
+	if len(tc.cache) == 0 || hi <= tc.firstEntry().index {
 		return nil
 	}
 
-	if hi > tc.lastIndex {
+	// special cases:
+	// includes hi > tc.lastIndex
+	if hi > tc.lastEntry().index {
 		tc.cache = tc.cache[:0]
 		tc.lastIndex = 0
 		return nil
 	}
 
-	if hi > tc.getLastFlipEntry().index {
-		// TODO(hakuuww): maybe we can do better
-		// wipe cache
-		tc.cache = tc.cache[:0]
-		tc.lastIndex = 0
+	// only keep the last entry
+	if hi == tc.lastEntry().index {
+		tc.cache = tc.cache[len(tc.cache)-1:]
 		return nil
 	}
-
 	if len(tc.cache) == 1 {
-		if hi == tc.cache[0].index {
-			tc.lastIndex = hi
-			return nil
-		}
-		if hi > tc.cache[0].index {
-			tc.lastIndex = hi
+		if hi > tc.firstEntry().index {
+			tc.cache = tc.cache[:0]
+			tc.lastIndex = 0
 			return nil
 		}
 	}
 
-	for i := 0; i < len(tc.cache); i++ {
-		// low match a term flip index
+	// general cases
+	for i := 0; i < len(tc.cache)-1; i++ {
+		// hi matches a term flip index
 		if hi == tc.cache[i].index {
 			tc.cache = tc.cache[i:]
 			return nil
 		}
 
 		// TODO(hakuuww): needs more think through
-		// does entries must represent term flip indices?
+		//  does entries must represent term flip indices?
 		if hi > tc.cache[i].index && hi < tc.cache[i+1].index {
 			tc.cache = tc.cache[i+1:]
 			return nil
 		}
 	}
-
 	return nil
 }
 
-// ScanAppend this is bad, we are scanning linearly through a
-// potentially very large array
+// ScanAppend appends a list of raft entries to the TermCache
+// It is the caller's responsibility to ensure entries is a valid raftLog.
 func (tc *TermCache) ScanAppend(entries []pb.Entry, truncate bool) error {
 	if len(entries) == 0 {
 		return nil
@@ -187,14 +174,14 @@ func (tc *TermCache) ScanAppend(entries []pb.Entry, truncate bool) error {
 func (tc *TermCache) Append(newEntry entryID) error {
 	if len(tc.cache) == 0 {
 		tc.cache = append(tc.cache, newEntry)
-		tc.lastIndex = tc.getFirstTermCacheEntry().index
+		tc.lastIndex = tc.firstEntry().index
 		return nil
 	}
 
 	// the entry index should be strictly increasing
 	// the entry term should be increasing
 	if newEntry.index <= tc.lastIndex ||
-		newEntry.term < tc.getLastFlipEntry().term {
+		newEntry.term < tc.lastEntry().term {
 		return ErrInvalidEntryID
 	}
 
@@ -204,7 +191,7 @@ func (tc *TermCache) Append(newEntry entryID) error {
 	}()
 
 	// if the term is the same as the last entry, update the last entry's index
-	if newEntry.term == tc.getLastFlipEntry().term {
+	if newEntry.term == tc.lastEntry().term {
 		return nil
 	}
 
@@ -229,13 +216,13 @@ func (tc *TermCache) Match(argEntryId entryID) (bool, error) {
 	if argEntryId.index < tc.cache[0].index ||
 		argEntryId.index > tc.lastIndex ||
 		argEntryId.term < tc.cache[0].term ||
-		argEntryId.term > tc.getLastFlipEntry().term {
+		argEntryId.term > tc.lastEntry().term {
 		return false, ErrUnavailableInTermCache
 	}
 
-	if argEntryId.term == tc.getLastFlipEntry().term {
+	if argEntryId.term == tc.lastEntry().term {
 		// redundant comparison here
-		if argEntryId.index >= tc.getLastFlipEntry().index && argEntryId.index <= tc.lastIndex {
+		if argEntryId.index >= tc.lastEntry().index && argEntryId.index <= tc.lastIndex {
 			return true, nil
 		}
 		return false, ErrInconsistent
@@ -261,39 +248,38 @@ func (tc *TermCache) Term(index uint64) (term uint64, err error) {
 		return 0, ErrTermCacheEmpty
 	}
 
-	if index < tc.getFirstTermCacheEntry().index ||
+	if index < tc.firstEntry().index ||
 		index > tc.lastIndex {
 		return 0, ErrUnavailableInTermCache
 	}
 
-	// in last term of termCache
-	if index >= tc.getLastFlipEntry().index && index <= tc.lastIndex {
-		return tc.getLastFlipEntry().term, nil
+	// in last term of termCache, index <= tc.lastIndex
+	if index >= tc.lastEntry().index {
+		return tc.lastEntry().term, nil
 	}
 
-	for i := 0; i < len(tc.cache)-1; i++ {
-		if index >= tc.cache[i].index && index < tc.cache[i+1].index {
+	for i := len(tc.cache) - 2; i >= 0; i-- {
+		if index >= tc.cache[i].index {
 			return tc.cache[i].term, nil
 		}
 	}
 
-	// shouldn't get here
 	return 0, ErrUnavailableInTermCache
 }
 
-// getLastFlipEntry returns the entryId symbolizing the latest term flip
-// according to the termCache.
-func (tc *TermCache) getLastFlipEntry() entryID {
+// lastEntry returns the entryId symbolizing the latest term flip
+// according to the term cache. The unstable log may have more up-to-date
+// term flips
+// This is not the last index covered by the term cache
+func (tc *TermCache) lastEntry() entryID {
 	return tc.cache[len(tc.cache)-1]
 }
 
-func (tc *TermCache) getFirstTermCacheEntry() entryID {
+// firstEntry returns the entryId symbolizing the first term flip
+// known to the term cache.
+func (tc *TermCache) firstEntry() entryID {
 	return tc.cache[0]
 }
-
-// truncate
-// no need for truncate for now, assume the caller doesn't query term cache for
-// compacted entries
 
 func (tc *TermCache) printTermCache() {
 	fmt.Print("printTermCache")
@@ -303,7 +289,7 @@ func (tc *TermCache) printTermCache() {
 		fmt.Print(entry.index, entry.term)
 		fmt.Print(")")
 	}
-	fmt.Println("]")
+	fmt.Print("]   ")
 	fmt.Print("lastIndex:")
 	fmt.Println(tc.lastIndex)
 }
