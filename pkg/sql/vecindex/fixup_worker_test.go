@@ -9,8 +9,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -24,7 +24,8 @@ func TestSplitPartitionData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
+	var workspace veclib.Workspace
+	ctx := context.Background()
 	quantizer := quantize.NewRaBitQuantizer(2, 42)
 	store := vecstore.NewInMemoryStore(2, 42)
 	options := VectorIndexOptions{IsDeterministic: true}
@@ -43,7 +44,7 @@ func TestSplitPartitionData(t *testing.T) {
 		5, 5,
 		6, 6,
 	}, 2)
-	quantizedSet := quantizer.Quantize(ctx, vectors)
+	quantizedSet := quantizer.Quantize(&workspace, vectors)
 
 	splitPartition := vecstore.NewPartition(
 		quantizer,

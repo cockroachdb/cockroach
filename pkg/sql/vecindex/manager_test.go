@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -102,7 +101,7 @@ func buildTestTable(tableID catid.DescID, tableName string) catalog.MutableTable
 func TestVectorManager(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
+	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	internalDB := srv.ApplicationLayer().InternalDB().(descs.DB)
 	codec := srv.ApplicationLayer().Codec()

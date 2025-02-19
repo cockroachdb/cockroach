@@ -1,10 +1,10 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "internal",
+    name = "veclib",
     srcs = ["workspace.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal",
-    visibility = ["//pkg/sql/vecindex:__subpackages__"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib",
+    visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/buildutil",
         "//pkg/util/vector",
@@ -12,8 +12,8 @@ go_library(
 )
 
 go_test(
-    name = "internal_test",
+    name = "veclib_test",
     srcs = ["workspace_test.go"],
-    embed = [":internal"],
+    embed = [":veclib"],
     deps = ["@com_github_stretchr_testify//require"],
 )

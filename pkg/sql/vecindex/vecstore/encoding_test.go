@@ -6,7 +6,6 @@
 package vecstore
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -15,8 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -44,7 +43,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 }
 
 func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set) {
-	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
+	var workspace veclib.Workspace
 	for _, quantizer := range []quantize.Quantizer{
 		quantize.NewUnQuantizer(set.Dims),
 		quantize.NewRaBitQuantizer(set.Dims, rnd.Int63()),
@@ -54,7 +53,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 			for _, level := range []Level{LeafLevel, Level(rnd.Intn(10)) + SecondLevel} {
 				t.Run(fmt.Sprintf("level=%d", level), func(t *testing.T) {
 					// Build the partition.
-					quantizedSet := quantizer.Quantize(ctx, set)
+					quantizedSet := quantizer.Quantize(&workspace, set)
 					childKeys := make([]ChildKey, set.Count)
 					valueBytes := make([]ValueBytes, set.Count)
 					for i := range childKeys {

@@ -38,7 +38,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/vecindex/internal",
+        "//pkg/sql/vecindex/veclib",
         "//pkg/util/buildutil",
         "//pkg/util/num32",
         "//pkg/util/vector",
@@ -57,8 +57,8 @@ go_test(
     data = ["//pkg/sql/vecindex:testdata"],
     embed = [":quantize"],
     deps = [
-        "//pkg/sql/vecindex/internal",
         "//pkg/sql/vecindex/testutils",
+        "//pkg/sql/vecindex/veclib",
         "//pkg/util/num32",
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",

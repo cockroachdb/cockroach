@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -140,9 +141,10 @@ func NewInMemoryStore(dims int, seed int64) *InMemoryStore {
 	st.mu.nextKey = RootKey + 1
 
 	// Create empty root partition.
+	var workspace veclib.Workspace
 	var empty vector.Set
 	quantizer := quantize.NewUnQuantizer(dims)
-	quantizedSet := quantizer.Quantize(context.Background(), empty)
+	quantizedSet := quantizer.Quantize(&workspace, empty)
 	inMemPartition := &inMemoryPartition{
 		key: RootKey,
 	}
@@ -167,14 +169,14 @@ func (s *InMemoryStore) Dims() int {
 }
 
 // Begin implements the Store interface.
-func (s *InMemoryStore) Begin(ctx context.Context) (Txn, error) {
+func (s *InMemoryStore) Begin(ctx context.Context, w *veclib.Workspace) (Txn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Create new transaction with unique id set to the current logical clock
 	// tick and insert the transaction into the pending list.
 	current := s.tickLocked()
-	txn := inMemoryTxn{id: current, current: current, store: s}
+	txn := inMemoryTxn{workspace: w, id: current, current: current, store: s}
 	elem := s.mu.pending.PushBack(pendingItem{activeTxn: txn})
 	return &elem.Value.activeTxn, nil
 }
@@ -360,6 +362,7 @@ func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
 			partitionProto := PartitionProto{
 				PartitionKey: partitionKey,
 				ChildKeys:    partition.ChildKeys(),
+				ValueBytes:   partition.ValueBytes(),
 				Level:        partition.Level(),
 			}
 
@@ -430,6 +433,7 @@ func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 
 		partition := inMemPartition.lock.partition
 		partition.childKeys = partitionProto.ChildKeys
+		partition.valueBytes = partitionProto.ValueBytes
 		partition.level = partitionProto.Level
 
 		inMemStore.mu.partitions[partitionProto.PartitionKey] = inMemPartition

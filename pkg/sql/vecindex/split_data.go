@@ -6,9 +6,8 @@
 package vecindex
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -30,7 +29,7 @@ type splitData struct {
 // Init initializes the split information by creating a new partition from the
 // given subset of vectors from the splitting partition.
 func (s *splitData) Init(
-	ctx context.Context,
+	w *veclib.Workspace,
 	quantizer quantize.Quantizer,
 	vectors vector.Set,
 	oldCentroidDistances []float32,
@@ -40,7 +39,7 @@ func (s *splitData) Init(
 ) {
 	s.Vectors = vectors
 	s.OldCentroidDistances = oldCentroidDistances
-	quantizedSet := quantizer.Quantize(ctx, s.Vectors)
+	quantizedSet := quantizer.Quantize(w, s.Vectors)
 	s.Partition = vecstore.NewPartition(quantizer, quantizedSet, childKeys, valueBytes, level)
 }
 

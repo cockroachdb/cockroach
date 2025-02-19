@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -26,8 +27,9 @@ import (
 // vector index's internal data. Committing changes is the responsibility of the
 // caller.
 type persistentStoreTxn struct {
-	kv    *kv.Txn
-	store *PersistentStore
+	workspace *veclib.Workspace
+	kv        *kv.Txn
+	store     *PersistentStore
 
 	// Locking durability required by transaction isolation level.
 	lockDurability kvpb.KeyLockingDurabilityType
@@ -92,11 +94,11 @@ func (psc *persistentStoreCodec) decodeVector(encodedVector []byte) ([]byte, err
 // encodeVector encodes a single vector. This method invalidates the internal
 // vector set.
 func (psc *persistentStoreCodec) encodeVector(
-	ctx context.Context, v vector.T, centroid vector.T,
+	w *veclib.Workspace, v vector.T, centroid vector.T,
 ) ([]byte, error) {
 	psc.clear(1, centroid)
 	input := v.AsSet()
-	psc.quantizer.QuantizeInSet(ctx, psc.tmpVectorSet, input)
+	psc.quantizer.QuantizeInSet(w, psc.tmpVectorSet, input)
 	return psc.encodeVectorFromSet(psc.tmpVectorSet, 0 /* idx */)
 }
 
@@ -125,8 +127,11 @@ func (psc *persistentStoreCodec) encodeVectorFromSet(
 
 // NewPersistentStoreTxn wraps a PersistentStore transaction around a kv
 // transaction for use with the vecstore API.
-func NewPersistentStoreTxn(store *PersistentStore, kv *kv.Txn) *persistentStoreTxn {
+func NewPersistentStoreTxn(
+	w *veclib.Workspace, store *PersistentStore, kv *kv.Txn,
+) *persistentStoreTxn {
 	psTxn := persistentStoreTxn{
+		workspace: w,
 		kv:        kv,
 		store:     store,
 		codec:     newPersistentStoreCodec(store.quantizer),
@@ -373,7 +378,7 @@ func (psTxn *persistentStoreTxn) AddToPartition(
 
 	// Add the Put command to the batch.
 	codec := psTxn.getCodecForPartitionKey(partitionKey)
-	encodedValue, err := codec.encodeVector(ctx, vec, metadata.Centroid)
+	encodedValue, err := codec.encodeVector(psTxn.workspace, vec, metadata.Centroid)
 	if err != nil {
 		return PartitionMetadata{}, err
 	}
@@ -458,7 +463,8 @@ func (psTxn *persistentStoreTxn) SearchPartitions(
 		if err != nil {
 			return InvalidLevel, err
 		}
-		searchLevel, partitionCount := partition.Search(ctx, partitionKeys[i], queryVector, searchSet)
+		searchLevel, partitionCount := partition.Search(
+			psTxn.workspace, partitionKeys[i], queryVector, searchSet)
 		if i == 0 {
 			level = searchLevel
 		} else if level != searchLevel {
