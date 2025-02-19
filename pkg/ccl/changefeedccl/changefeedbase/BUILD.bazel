@@ -26,6 +26,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/metamorphic",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_shopify_sarama//:sarama",
     ],
 )
 
@@ -51,6 +52,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_shopify_sarama//:sarama",
         "@com_github_stretchr_testify//require",
     ],
 )
