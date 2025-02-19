@@ -61,6 +61,8 @@ var startBackground bool
 var storeSpecs base.StoreSpecList
 var goMemLimit int64
 var tenantIDFile string
+var tenantName string
+var tenantNameFile string
 var localityFile string
 var encryptionSpecs storagepb.EncryptionSpecList
 
@@ -603,7 +605,13 @@ func init() {
 	{
 		f := mtStartSQLCmd.Flags()
 		cliflagcfg.VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
+		cliflagcfg.VarFlag(f, &tenantNameWrapper{&serverCfg.SQLConfig.TenantName}, cliflags.TenantName)
+		_ = f.MarkDeprecated(cliflags.TenantID.Name, fmt.Sprintf("use %s instead", cliflags.TenantName.Name))
+
 		cliflagcfg.StringFlag(f, &tenantIDFile, cliflags.TenantIDFile)
+		cliflagcfg.StringFlag(f, &tenantNameFile, cliflags.TenantNameFile)
+		_ = f.MarkDeprecated(cliflags.TenantIDFile.Name, fmt.Sprintf("use %s instead", cliflags.TenantNameFile.Name))
+
 		cliflagcfg.StringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
 	}
 
@@ -1051,20 +1059,43 @@ func (w *tenantIDWrapper) Type() string {
 	return "number"
 }
 
-// tenantIDFromFile will look for the given file and read the full first
-// line of the file that should contain the `<TenantID>`.
-func tenantIDFromFile(
+// tenantNameWrapper ensures that any value assigned to the TenantName flag is
+// properly validated.
+type tenantNameWrapper struct {
+	tenName *roachpb.TenantName
+}
+
+func (w *tenantNameWrapper) String() string {
+	return string(*w.tenName)
+}
+
+func (w *tenantNameWrapper) Set(s string) error {
+	tenantName := roachpb.TenantName(s)
+	if err := tenantName.IsValid(); err != nil {
+		return err
+	}
+	*w.tenName = roachpb.TenantName(s)
+	return nil
+}
+
+func (w *tenantNameWrapper) Type() string {
+	return "string"
+}
+
+// tenantInfoFromFile will look for the given file and read the full first
+// line of the file that should contain the `<TenantID>` or `<TenantName>`.
+func tenantInfoFromFile(
 	ctx context.Context,
 	fileName string,
 	watcherWaitCount *atomic.Uint32,
 	watcherEventCount *atomic.Uint32,
 	watcherReadCount *atomic.Uint32,
-) (roachpb.TenantID, error) {
+) (string, error) {
 	// Start watching the file for changes as the typical case is that the file
 	// will not have yet the tenant id at startup.
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return roachpb.TenantID{}, errors.Wrapf(err, "creating new watcher")
+		return "", errors.Wrapf(err, "creating new watcher")
 	}
 	defer func() { _ = watcher.Close() }()
 
@@ -1075,41 +1106,37 @@ func tenantIDFromFile(
 	//      Watching on the file would cause the watcher to break for such an
 	//      operation.
 	if err = watcher.Add(filepath.Dir(fileName)); err != nil {
-		return roachpb.TenantID{}, errors.Wrapf(err, "adding %q to watcher", fileName)
+		return "", errors.Wrapf(err, "adding %q to watcher", fileName)
 	}
 
-	tryReadTenantID := func() (roachpb.TenantID, error) {
+	tryReadTenantInfo := func() (string, error) {
 		if watcherReadCount != nil {
 			watcherReadCount.Add(1)
 		}
 		headBuf, err := os.ReadFile(fileName)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return roachpb.TenantID{}, errors.Wrapf(err, "reading %q file", fileName)
+			return "", errors.Wrapf(err, "reading %q file", fileName)
 		}
 		if err == nil {
 			// Ignore everything after the first newline character. If we
 			// don't see a newline, that means we have partial writes, so
 			// we'll continue waiting.
 			if line, _, foundNewLine := strings.Cut(string(headBuf), "\n"); foundNewLine {
-				cfgTenantID, err := tenantID(line)
-				if err != nil {
-					return roachpb.TenantID{}, errors.Wrapf(err, "setting tenant id from line %q", line)
-				}
-				return cfgTenantID, nil
+				return line, nil
 			}
 		}
 		// We either have partial writes here, or that the file does not exist.
-		return roachpb.TenantID{}, nil
+		return "", nil
 	}
 
 	// Perform an initial read.
-	if tid, err := tryReadTenantID(); err != nil || tid != (roachpb.TenantID{}) {
-		return tid, err
+	if tInfo, err := tryReadTenantInfo(); err != nil || tInfo != "" {
+		return tInfo, err
 	}
 
 	for {
 		if ctx.Err() != nil {
-			return roachpb.TenantID{}, ctx.Err()
+			return "", ctx.Err()
 		}
 
 		// Wait for file notification.
@@ -1122,7 +1149,7 @@ func tenantIDFromFile(
 				watcherEventCount.Add(1)
 			}
 			if !ok {
-				return roachpb.TenantID{},
+				return "",
 					errors.Newf("fsnotify.Watcher got Events channel closed while waiting on %q", fileName)
 			}
 
@@ -1133,21 +1160,63 @@ func tenantIDFromFile(
 			}
 
 			// Either we get an error, or we found the tenant ID.
-			if tid, err := tryReadTenantID(); err != nil || tid != (roachpb.TenantID{}) {
-				return tid, err
+			if tInfo, err := tryReadTenantInfo(); err != nil || tInfo != "" {
+				return tInfo, err
 			}
 
 		case err, ok := <-watcher.Errors:
 			if !ok {
-				return roachpb.TenantID{},
+				return "",
 					errors.Newf("fsnotify.Watcher got Errors channel closed while waiting on %q", fileName)
 			}
-			return roachpb.TenantID{}, errors.Wrapf(err, "watcher error while waiting on %q", fileName)
+			return "", errors.Wrapf(err, "watcher error while waiting on %q", fileName)
 
 		case <-ctx.Done():
-			return roachpb.TenantID{}, ctx.Err()
+			return "", ctx.Err()
 		}
 	}
+}
+
+// tenantIDFromFile will look for the given file and read the full first
+// line of the file that should contain the `<TenantID>`.
+func tenantIDFromFile(
+	ctx context.Context,
+	fileName string,
+	watcherWaitCount *atomic.Uint32,
+	watcherEventCount *atomic.Uint32,
+	watcherReadCount *atomic.Uint32,
+) (roachpb.TenantID, error) {
+	tInfo, err := tenantInfoFromFile(ctx, fileName, watcherWaitCount, watcherEventCount, watcherReadCount)
+	if err != nil {
+		return roachpb.TenantID{}, err
+	}
+
+	tenantID, err := tenantID(tInfo)
+	if err != nil {
+		return roachpb.TenantID{}, errors.Wrapf(err, "setting tenant id from line %q", tInfo)
+	}
+	return tenantID, nil
+}
+
+// tenantNameFromFile will look for the given file and read the full first
+// line of the file that should contain the `<TenantName>`.
+func tenantNameFromFile(
+	ctx context.Context,
+	fileName string,
+	watcherWaitCount *atomic.Uint32,
+	watcherEventCount *atomic.Uint32,
+	watcherReadCount *atomic.Uint32,
+) (roachpb.TenantName, error) {
+	tInfo, err := tenantInfoFromFile(ctx, fileName, watcherWaitCount, watcherEventCount, watcherReadCount)
+	if err != nil {
+		return roachpb.TenantName(""), err
+	}
+
+	tenantName := roachpb.TenantName(tInfo)
+	if err := tenantName.IsValid(); err != nil {
+		return roachpb.TenantName(""), errors.Wrapf(err, "setting tenant name from line %q", tInfo)
+	}
+	return tenantName, nil
 }
 
 // extraServerFlagInit configures the server.Config based on the command-line flags.
@@ -1327,10 +1396,11 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		)
 	}
 
-	// Only read locality-file if tenant-id-file is not present. The presence
-	// of the tenant-id-file flag (which only exists in `mt start-sql`) will
-	// defer reading the locality-file until the tenant ID has been read.
-	if !changed(fs, cliflags.TenantIDFile.Name) {
+	// Only read locality-file if tenant-id-file and tenant-name-file flags are not
+	// present. The presence of tenant-id-file or tenant-name-file flags (which
+	// only exists in `mt start-sql`) will defer reading the locality-file until
+	// the tenant ID or tenant name has been read.
+	if !changed(fs, cliflags.TenantIDFile.Name) && !changed(fs, cliflags.TenantNameFile.Name) {
 		if err := tryReadLocalityFileFlag(fs); err != nil {
 			return err
 		}
@@ -1463,25 +1533,51 @@ func extraClientFlagInit() error {
 }
 
 func mtStartSQLFlagsInit(cmd *cobra.Command) error {
-	// Override default store for mt to use a per tenant store directory.
 	fs := cliflagcfg.FlagSetForCmd(cmd)
+
+	// Only one of --tenant-id, tenant-id-file, tenant-name and tenant-name-file
+	// should be specified.
+	var tenantSourceFlag *cliflags.FlagInfo
+	for _, f := range []cliflags.FlagInfo{cliflags.TenantID,
+		cliflags.TenantIDFile, cliflags.TenantName, cliflags.TenantNameFile} {
+		if fs.Changed(f.Name) && tenantSourceFlag != nil {
+			return errors.Newf(
+				"--%s is incompatible with --%s",
+				f.Name,
+				tenantSourceFlag.Name,
+			)
+		} else {
+			tenantSourceFlag = &f
+		}
+	}
+
+	// Override default store for mt to use a per tenant store directory.
 	if !fs.Changed(cliflags.Store.Name) {
-		// If the tenant-id-file flag was supplied, this means that we don't
-		// have a tenant ID during process startup, so we can't construct the
-		// default store name. In that case, explicitly require that the
-		// store is supplied.
-		if fs.Lookup(cliflags.TenantIDFile.Name).Value.String() != "" {
+		// If one of tenant-id-file or tenant-name-file flags were supplied, this
+		// means that we don't have a tenant ID or tenant name during process
+		// startup, so we can't construct the default store name. In that case,
+		// explicitly require that the store is supplied.
+		tenantFileFlag := fs.Lookup(cliflags.TenantIDFile.Name)
+		if tenantFileFlag.Value.String() == "" {
+			tenantFileFlag = fs.Lookup(cliflags.TenantNameFile.Name)
+		}
+
+		if tenantFileFlag.Value.String() != "" {
 			return errors.Newf(
 				"--%s must be explicitly supplied when using --%s",
 				cliflags.Store.Name,
-				cliflags.TenantIDFile.Name,
+				tenantFileFlag,
 			)
 		}
+
 		// We assume that we only need to change top level store as temp dir
 		// configs are initialized when start is executed and temp dirs inherit
 		// path from first store.
-		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
-		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
+		tenantSuffix := fs.Lookup(cliflags.TenantName.Name).Value.String()
+		if tenantSuffix != "" {
+			tenantSuffix = fs.Lookup(cliflags.TenantID.Name).Value.String()
+		}
+		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantSuffix
 	}
 
 	// In standalone SQL servers, we do not generate a ballast file,

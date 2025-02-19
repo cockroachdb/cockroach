@@ -21,6 +21,24 @@ not exist, or if the tenant id is incomplete, the tenant server will block, and
 wait for the tenant id to be fully written to the file (with a newline character).`,
 	}
 
+	// TenantName will eventually replace TenantID. To start a SQL server bound to
+	// a tenant, use this flag instead of TenantID.
+	TenantName = FlagInfo{
+		Name:        "tenant-name",
+		EnvVar:      "COCKROACH_TENANT_NAME",
+		Description: `The tenant name under which to start the SQL server.`,
+	}
+
+	// TenantNameFile is similar to TenantIDFile but uses tenant name instead of
+	// TenantID. 
+	TenantNameFile = FlagInfo{
+		Name: "tenant-name-file",
+		Description: `Allows sourcing the tenant name from a file. The tenant name 
+will be expected to be by itself on the first line of the file. If the file does
+not exist, or if the tenant name is incomplete, the tenant server will block, and
+wait for the tenant name to be fully written to the file (with a newline character).`,
+	}
+
 	KVAddrs = FlagInfo{
 		Name:        "kv-addrs",
 		EnvVar:      "COCKROACH_KV_ADDRS",
