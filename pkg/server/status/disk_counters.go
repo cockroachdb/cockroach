@@ -11,7 +11,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v4/disk"
 )
 
 // GetDiskCounters returns DiskStats for all disks.

@@ -2852,6 +2852,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_ebitengine_purego",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ebitengine/purego",
+        sha256 = "a9f18aabcab7cd99fa4d2941a88ca6b21e85a86367742791031d59c0be080496",
+        strip_prefix = "github.com/ebitengine/purego@v0.8.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/ebitengine/purego/com_github_ebitengine_purego-v0.8.2.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_eclipse_paho_mqtt_golang",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/eclipse/paho.mqtt.golang",
@@ -8223,13 +8233,13 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_shirou_gopsutil_v3",
+        name = "com_github_shirou_gopsutil_v4",
         build_file_proto_mode = "disable_global",
-        importpath = "github.com/shirou/gopsutil/v3",
-        sha256 = "ea6f8b430cee40870d8d454aaa5d4c22e84d217a2548a3f755b91a96b1c67a88",
-        strip_prefix = "github.com/shirou/gopsutil/v3@v3.21.12",
+        importpath = "github.com/shirou/gopsutil/v4",
+        sha256 = "1745f4cc2b80a949b38736c9b9ee13435f74bdd08d4c48fd0e857172df797455",
+        strip_prefix = "github.com/shirou/gopsutil/v4@v4.25.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shirou/gopsutil/v3/com_github_shirou_gopsutil_v3-v3.21.12.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shirou/gopsutil/v4/com_github_shirou_gopsutil_v4-v4.25.1.zip",
         ],
     )
     go_repository(
@@ -8546,10 +8556,10 @@ def go_deps():
         name = "com_github_stretchr_testify",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/stretchr/testify",
-        sha256 = "ee5d4f73cb689b1b5432c6908a189f9fbdb172507c49c32dbdf79b239ea9b8e0",
-        strip_prefix = "github.com/stretchr/testify@v1.9.0",
+        sha256 = "36c87573527a97ce97fc15ce2a101e65e5ebb350db142d09f633580cb8d5c839",
+        strip_prefix = "github.com/stretchr/testify@v1.10.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/testify/com_github_stretchr_testify-v1.9.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/testify/com_github_stretchr_testify-v1.10.0.zip",
         ],
     )
     go_repository(
@@ -8646,20 +8656,20 @@ def go_deps():
         name = "com_github_tklauser_go_sysconf",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/tklauser/go-sysconf",
-        sha256 = "2233c2cf18d4d37354eb333ec8a2dca63c24a09cfbc3b90cd06a8b3afe70893f",
-        strip_prefix = "github.com/tklauser/go-sysconf@v0.3.9",
+        sha256 = "95a4a24b6f5fc5af05d94bbab39ff847a220d30c5adb4fb0a09f9c7926a2ffe8",
+        strip_prefix = "github.com/tklauser/go-sysconf@v0.3.12",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/tklauser/go-sysconf/com_github_tklauser_go_sysconf-v0.3.9.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/tklauser/go-sysconf/com_github_tklauser_go_sysconf-v0.3.12.zip",
         ],
     )
     go_repository(
         name = "com_github_tklauser_numcpus",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/tklauser/numcpus",
-        sha256 = "a5569abed62bb2d5f5f322f23fe8cae888fe98704442d59ed9e7aabfed423899",
-        strip_prefix = "github.com/tklauser/numcpus@v0.3.0",
+        sha256 = "267c7f91c5be3f1d091ee215825f91c315196f45e1fd6c4e8abb447f38549e03",
+        strip_prefix = "github.com/tklauser/numcpus@v0.6.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/tklauser/numcpus/com_github_tklauser_numcpus-v0.3.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/tklauser/numcpus/com_github_tklauser_numcpus-v0.6.1.zip",
         ],
     )
     go_repository(
@@ -9226,10 +9236,10 @@ def go_deps():
         name = "com_github_yusufpapurcu_wmi",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/yusufpapurcu/wmi",
-        sha256 = "5fe3e595564a38f7ba71acf4646ebdf542a1da8fa3afb116afb0fbec0cffe9b1",
-        strip_prefix = "github.com/yusufpapurcu/wmi@v1.2.2",
+        sha256 = "c2a0a12203162ef8fd6f65e191aac359823d370e113122cbd8e80711ddc9c1f9",
+        strip_prefix = "github.com/yusufpapurcu/wmi@v1.2.4",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/yusufpapurcu/wmi/com_github_yusufpapurcu_wmi-v1.2.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/yusufpapurcu/wmi/com_github_yusufpapurcu_wmi-v1.2.4.zip",
         ],
     )
     go_repository(

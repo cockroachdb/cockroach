@@ -18,14 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/host"
-	"github.com/shirou/gopsutil/v3/load"
-	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/host"
+	"github.com/shirou/gopsutil/v4/load"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // updatesURL is the URL used to check for new versions. Can be nil if an empty
@@ -155,18 +154,9 @@ func addJitter(d time.Duration) time.Duration {
 	return d + j
 }
 
-var populateMutex syncutil.Mutex
-
 // populateHardwareInfo populates OS, CPU, memory, etc. information about the
 // environment in which CRDB is running.
 func populateHardwareInfo(ctx context.Context, e *diagnosticspb.Environment) {
-	// The shirou/gopsutil/host library is not multi-thread safe. As one
-	// example, it lazily initializes a global map the first time the
-	// Virtualization function is called, but takes no lock while doing so.
-	// Work around this limitation by taking our own lock.
-	populateMutex.Lock()
-	defer populateMutex.Unlock()
-
 	if platform, family, version, err := host.PlatformInformation(); err == nil {
 		e.Os.Family = family
 		e.Os.Platform = platform
