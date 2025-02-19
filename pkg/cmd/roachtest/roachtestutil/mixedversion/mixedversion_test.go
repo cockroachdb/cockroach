@@ -263,7 +263,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 
 			mvt := newTest(opts...)
-			mvt.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+			mvt.options.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 				return testPredecessorMapping[v.Series()], tc.predecessorErr
 			}
 			mvt._arch = &tc.arch
