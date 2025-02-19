@@ -341,7 +341,7 @@ func (psTxn *persistentStoreTxn) GetPartitionMetadata(
 func (psTxn *persistentStoreTxn) AddToPartition(
 	ctx context.Context,
 	partitionKey PartitionKey,
-	vector vector.T,
+	vec vector.T,
 	childKey ChildKey,
 	valueBytes ValueBytes,
 ) (PartitionMetadata, error) {
@@ -373,7 +373,7 @@ func (psTxn *persistentStoreTxn) AddToPartition(
 
 	// Add the Put command to the batch.
 	codec := psTxn.getCodecForPartitionKey(partitionKey)
-	encodedValue, err := codec.encodeVector(ctx, vector, metadata.Centroid)
+	encodedValue, err := codec.encodeVector(ctx, vec, metadata.Centroid)
 	if err != nil {
 		return PartitionMetadata{}, err
 	}

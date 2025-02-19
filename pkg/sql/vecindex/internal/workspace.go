@@ -62,8 +62,8 @@ func (w *Workspace) AllocVector(dims int) vector.T {
 }
 
 // FreeVector reclaims a temporary vector that was previously allocated.
-func (w *Workspace) FreeVector(vector vector.T) {
-	w.FreeFloats(vector)
+func (w *Workspace) FreeVector(vec vector.T) {
+	w.FreeFloats(vec)
 }
 
 // AllocVectorSet returns a temporary vector set having the given number of
