@@ -1,0 +1,17 @@
+# LogicTest: local-legacy-schema-changer
+
+
+subtest comment_on_type_statement
+
+statement ok
+CREATE TYPE legacy_type AS ENUM ('a', 'b');
+
+statement error pq: COMMENT ON TYPE is only implemented in the declarative schema changer
+COMMENT ON TYPE legacy_type IS 'test';
+
+subtest drop_owned_by_statement
+
+statement error pq: DROP OWNED BY is only implemented in the declarative schema changer
+DROP owned by public;
+
+subtest end
