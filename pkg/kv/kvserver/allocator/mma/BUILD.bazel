@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "allocator2",
+    name = "mma",
     srcs = [
         "allocator.go",
         "allocator_state.go",
@@ -12,7 +12,7 @@ go_library(
         "memo_helper.go",
         "messages.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocator2",
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
@@ -21,7 +21,7 @@ go_library(
 )
 
 go_test(
-    name = "allocator2_test",
+    name = "mma_test",
     srcs = [
         "constraint_matcher_test.go",
         "constraint_test.go",
@@ -29,7 +29,7 @@ go_test(
         "memo_helper_test.go",
     ],
     data = glob(["testdata/**"]),
-    embed = [":allocator2"],
+    embed = [":mma"],
     deps = [
         "//pkg/roachpb",
         "@com_github_cockroachdb_datadriven//:datadriven",
