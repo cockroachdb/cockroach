@@ -10,7 +10,7 @@ CREATE FUNCTION is_even(n INT) returns bool as $$ begin return n % 2 = 0; end; $
 ----
 
 ops
-CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR SELECT TO user1,user2,public USING (tenant_id = '01538898-f55c-44db-a306-89078e2c430e' AND (c1).x > 0) WITH CHECK (nextval('seq1') < 10);
+CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR UPDATE TO user1,user2,public USING (tenant_id = '01538898-f55c-44db-a306-89078e2c430e' AND (c1).x > 0) WITH CHECK (nextval('seq1') < 10);
 ----
 StatementPhase stage 1 of 1 with 9 MutationType ops
   transitions:
@@ -25,7 +25,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
   ops:
     *scop.AddPolicy
       Policy:
-        Command: 2
+        Command: 4
         PolicyID: 1
         TableID: 106
         Type: 1
@@ -95,7 +95,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
   ops:
     *scop.AddPolicy
       Policy:
-        Command: 2
+        Command: 4
         PolicyID: 1
         TableID: 106
         Type: 1
