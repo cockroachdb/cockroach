@@ -8554,6 +8554,50 @@ project
  └── projections
       └── 1 [as="?column?":15]
 
+# Regression test for #136078. A project expression must be added above an
+# inverted filter to prune output columns to match the original group when there
+# is no index join to do so.
+exec-ddl
+CREATE TABLE t136078 (
+  a INT,
+  b STRING,
+  col3_8 STRING AS (lower(b)) VIRTUAL,
+  PRIMARY KEY (a, b),
+  INVERTED INDEX (col3_8 gin_trgm_ops)
+)
+----
+
+opt set=(optimizer_use_trigram_similarity_optimization=false)
+SELECT b FROM t136078 WHERE 'abc' % col3_8
+----
+project
+ ├── columns: b:2!null
+ ├── stable
+ └── inverted-filter
+      ├── columns: a:1!null b:2!null
+      ├── inverted expression: /6
+      │    ├── tight: false, unique: false
+      │    └── union spans
+      │         ├── ["  a", "  a"]
+      │         ├── [" ab", " ab"]
+      │         ├── ["abc", "abc"]
+      │         └── ["bc ", "bc "]
+      ├── stable
+      ├── key: (1,2)
+      └── select
+           ├── columns: a:1!null b:2!null col3_8_inverted_key:6!null
+           ├── stable
+           ├── scan t136078@t136078_col3_8_idx,inverted
+           │    ├── columns: a:1!null b:2!null col3_8_inverted_key:6!null
+           │    └── inverted constraint: /6/1/2
+           │         └── spans
+           │              ├── ["  a", "  a"]
+           │              ├── [" ab", " ab"]
+           │              ├── ["abc", "abc"]
+           │              └── ["bc ", "bc "]
+           └── filters
+                └── 'abc' % lower(b:2) [outer=(2), stable]
+
 
 # --------------------------------------------------
 # GenerateMinimalInvertedIndexScans
