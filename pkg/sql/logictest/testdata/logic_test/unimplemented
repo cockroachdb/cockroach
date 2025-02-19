@@ -1,0 +1,60 @@
+# LogicTest: local-legacy-schema-changer
+
+statement ok
+CREATE TABLE legacy();
+
+# Since all the below statements use a common method for the hint and detail part
+# of the error message, we only test this first one with the entire error message.
+statement error pq: CREATE POLICY is only implemented in the declarative schema changer\nHINT: This error may be happening due to running it in a multi-statement transaction. Try sending each schema change statement in its own implicit transaction.\nDETAIL:  See the documentation for additional details:https://www.cockroachlabs.com/docs/dev/online-schema-changes#declarative-schema-changer
+CREATE POLICY p1 on legacy;
+
+subtest policy_statements
+
+statement error pq: ALTER POLICY
+ALTER POLICY p1 on legacy;
+
+statement error pq: DROP POLICY
+DROP POLICY p1 on legacy;
+
+statement ok
+DROP TABLE legacy;
+
+subtest comment_on_type_statement
+
+statement ok
+CREATE TYPE legacy_type AS ENUM ('a', 'b');
+
+statement error pq: COMMENT ON TYPE
+COMMENT ON TYPE legacy_type IS 'test';
+
+subtest drop_owned_by_statement
+
+statement error pq: DROP OWNED BY
+DROP owned by public;
+
+subtest trigger_statements
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO t VALUES (1, 2);
+    RETURN NULL;
+  END;
+$$;
+
+statement error pq: CREATE TRIGGER
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+statement error pq: DROP TRIGGER
+DROP TRIGGER foo ON t;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DROP TABLE t;
+
+subtest end
