@@ -125,7 +125,7 @@ func (t *descriptorState) upsertLeaseLocked(
 	desc catalog.Descriptor,
 	session sqlliveness.Session,
 	regionEnumPrefix []byte,
-) (createdDescriptorVersionState *descriptorVersionState, _ error) {
+) (createdDescriptorVersionState *descriptorVersionState, previousLease *storedLease, _ error) {
 	if t.mu.maxVersionSeen < desc.GetVersion() {
 		t.mu.maxVersionSeen = desc.GetVersion()
 	}
@@ -136,10 +136,24 @@ func (t *descriptorState) upsertLeaseLocked(
 		}
 		descState := newDescriptorVersionState(t, desc, hlc.Timestamp{}, session, regionEnumPrefix, true /* isLease */)
 		t.mu.active.insert(descState)
-		return descState, nil
+		return descState, nil, nil
 	}
-	// If the version already exists, nothing needs to be done.
-	return nil, nil
+	// If the version already exists and the session ID matches nothing
+	// needs to be done.
+	if s.getSessionID() == session.ID() {
+		return nil, nil, nil
+	}
+
+	// Otherwise, we need to update the existing lease to fix the session ID. The
+	// previously stored lease also needs to be deleted.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	newStoredLease := *s.mu.lease
+	newStoredLease.sessionID = session.ID().UnsafeBytes()
+	existingLease := s.mu.lease
+	s.mu.lease = &newStoredLease
+	s.mu.session = session
+	return nil, existingLease, nil
 }
 
 var _ redact.SafeFormatter = (*descriptorVersionState)(nil)
