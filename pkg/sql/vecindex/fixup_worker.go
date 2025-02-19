@@ -10,7 +10,7 @@ import (
 	"math/rand"
 	"slices"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -30,7 +30,7 @@ type fixupWorker struct {
 	// generator will be used.
 	rng *rand.Rand
 	// workspace is used to stack-allocate temporary memory.
-	workspace internal.Workspace
+	workspace veclib.Workspace
 	// searchCtx is reused to perform index searches and inserts.
 	searchCtx searchContext
 
@@ -53,8 +53,6 @@ func NewFixupWorker(fp *FixupProcessor) *fixupWorker {
 
 // Start continually processes queued fixups until the context is canceled.
 func (fw *fixupWorker) Start(ctx context.Context) {
-	ctx = internal.WithWorkspace(ctx, &fw.workspace)
-
 	for {
 		next, ok := fw.fp.nextFixup(ctx)
 		if !ok {
@@ -96,7 +94,7 @@ func (fw *fixupWorker) splitOrMergePartition(
 	ctx context.Context, parentPartitionKey vecstore.PartitionKey, partitionKey vecstore.PartitionKey,
 ) (err error) {
 	// Run the split or merge within a transaction.
-	txn, err := fw.index.store.Begin(ctx)
+	txn, err := fw.index.store.Begin(ctx, &fw.workspace)
 	if err != nil {
 		return err
 	}
@@ -271,7 +269,7 @@ func (fw *fixupWorker) splitPartition(
 		centroids.EnsureCapacity(2)
 		centroids.Add(leftSplit.Partition.Centroid())
 		centroids.Add(rightSplit.Partition.Centroid())
-		quantizedSet := fw.index.rootQuantizer.Quantize(ctx, centroids)
+		quantizedSet := fw.index.rootQuantizer.Quantize(&fw.workspace, centroids)
 		childKeys := []vecstore.ChildKey{
 			{PartitionKey: leftPartitionKey},
 			{PartitionKey: rightPartitionKey},
@@ -382,13 +380,13 @@ func (fw *fixupWorker) splitPartitionData(
 	leftCentroidDistances := centroidDistances[:len(leftOffsets):len(leftOffsets)]
 	leftChildKeys := childKeys[:len(leftOffsets):len(leftOffsets)]
 	leftValueBytes := valueBytes[:len(leftOffsets):len(leftOffsets)]
-	leftSplit.Init(ctx, fw.index.quantizer, leftVectorSet,
+	leftSplit.Init(&fw.workspace, fw.index.quantizer, leftVectorSet,
 		leftCentroidDistances, leftChildKeys, leftValueBytes, splitPartition.Level())
 
 	rightCentroidDistances := centroidDistances[len(leftOffsets):]
 	rightChildKeys := childKeys[len(leftOffsets):]
 	rightValueBytes := valueBytes[len(leftOffsets):]
-	rightSplit.Init(ctx, fw.index.quantizer, rightVectorSet,
+	rightSplit.Init(&fw.workspace, fw.index.quantizer, rightVectorSet,
 		rightCentroidDistances, rightChildKeys, rightValueBytes, splitPartition.Level())
 
 	return leftSplit, rightSplit
@@ -541,7 +539,7 @@ func (fw *fixupWorker) linkNearbyVectors(
 		}
 
 		// Add the vector to the split partition.
-		partition.Add(ctx, vector, result.ChildKey, result.ValueBytes)
+		partition.Add(&fw.workspace, vector, result.ChildKey, result.ValueBytes)
 	}
 
 	return nil
@@ -588,7 +586,7 @@ func (fw *fixupWorker) mergePartition(
 		if parentPartitionKey != vecstore.RootKey {
 			return errors.AssertionFailedf("only root partition can have zero vectors")
 		}
-		quantizedSet := fw.index.rootQuantizer.Quantize(ctx, vectors)
+		quantizedSet := fw.index.rootQuantizer.Quantize(&fw.workspace, vectors)
 		rootPartition := vecstore.NewPartition(
 			fw.index.rootQuantizer, quantizedSet, partition.ChildKeys(),
 			partition.ValueBytes(), partition.Level())
@@ -640,7 +638,7 @@ func (fw *fixupWorker) deleteVector(
 	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.KeyBytes,
 ) (err error) {
 	// Run the deletion within a transaction.
-	txn, err := fw.index.store.Begin(ctx)
+	txn, err := fw.index.store.Begin(ctx, &fw.workspace)
 	if err != nil {
 		return err
 	}

@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -95,7 +95,7 @@ type SearchOptions struct {
 // operation and passed down the call stack.
 type searchContext struct {
 	Ctx       context.Context
-	Workspace internal.Workspace
+	Workspace veclib.Workspace
 	Txn       vecstore.Txn
 	Options   SearchOptions
 
@@ -339,12 +339,12 @@ func (vi *VectorIndex) Search(
 	options SearchOptions,
 ) error {
 	searchCtx := searchContext{
+		Ctx:      ctx,
 		Txn:      txn,
 		Original: vec,
 		Level:    vecstore.LeafLevel,
 		Options:  options,
 	}
-	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
 
 	// Randomize the vector.
 	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
@@ -408,6 +408,7 @@ func (vi *VectorIndex) SearchForDelete(
 	}
 
 	searchCtx := searchContext{
+		Ctx:      ctx,
 		Txn:      txn,
 		Original: vec,
 		Level:    vecstore.LeafLevel,
@@ -416,7 +417,6 @@ func (vi *VectorIndex) SearchForDelete(
 			UpdateStats: true,
 		},
 	}
-	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
 
 	// Randomize the vector.
 	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
@@ -484,6 +484,7 @@ func (vi *VectorIndex) setupInsertContext(
 	// Perform the search using quantized vectors rather than full vectors (i.e.
 	// skip reranking).
 	*parentSearchCtx = searchContext{
+		Ctx:      ctx,
 		Txn:      txn,
 		Original: vec,
 		Level:    vecstore.SecondLevel,
@@ -493,7 +494,6 @@ func (vi *VectorIndex) setupInsertContext(
 			UpdateStats:  true,
 		},
 	}
-	parentSearchCtx.Ctx = internal.WithWorkspace(ctx, &parentSearchCtx.Workspace)
 }
 
 // insertHelper looks for the best partition in which to add the vector and then
@@ -921,8 +921,6 @@ type FormatOptions struct {
 func (vi *VectorIndex) Format(
 	ctx context.Context, txn vecstore.Txn, options FormatOptions,
 ) (str string, err error) {
-	ctx = internal.WithWorkspace(ctx, &internal.Workspace{})
-
 	// Write formatted bytes to this buffer.
 	var buf bytes.Buffer
 

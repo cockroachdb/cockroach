@@ -3,41 +3,19 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package internal
+package veclib
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
-
-type workspaceCtxValueType struct{}
-
-var workspaceCtxValue interface{} = workspaceCtxValueType{}
-
-// WithWorkspace constructs a new context that is associated with the given
-// workspace. Callers can access the workspace using WorkspaceFromContext.
-func WithWorkspace(ctx context.Context, workspace *Workspace) context.Context {
-	return context.WithValue(ctx, workspaceCtxValue, workspace)
-}
-
-// WorkspaceFromContext extracts a workspace from the given context, or nil if
-// there is none.
-func WorkspaceFromContext(ctx context.Context) *Workspace {
-	workspace := ctx.Value(workspaceCtxValue)
-	if workspace == nil {
-		return nil
-	}
-	return workspace.(*Workspace)
-}
 
 // Workspace provides temporary per-thread memory for routines that only need to
 // use it within the context of their current stack frame. Allocated memory is
 // stack-allocated and must be explicitly freed in the same order it was
 // allocated and should never be referenced again once freed. For example:
 //
-//	workspace := WorkspaceFromContext(ctx)
+//	var workspace veclib.Workspace
 //	tempVector := workspace.AllocVector(2)
 //	defer workspace.FreeVector(tempVector)
 //	... use tempVector only within this scope

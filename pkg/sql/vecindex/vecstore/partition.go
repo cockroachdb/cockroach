@@ -6,11 +6,10 @@
 package vecstore
 
 import (
-	"context"
 	"slices"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
@@ -149,18 +148,17 @@ func (p *Partition) ValueBytes() []ValueBytes {
 // partition's level in the K-means tree and the count of quantized vectors in
 // the partition.
 func (p *Partition) Search(
-	ctx context.Context, partitionKey PartitionKey, queryVector vector.T, searchSet *SearchSet,
+	w *veclib.Workspace, partitionKey PartitionKey, queryVector vector.T, searchSet *SearchSet,
 ) (level Level, count int) {
 	count = p.Count()
-	workspace := internal.WorkspaceFromContext(ctx)
-	tempFloats := workspace.AllocFloats(count * 2)
-	defer workspace.FreeFloats(tempFloats)
+	tempFloats := w.AllocFloats(count * 2)
+	defer w.FreeFloats(tempFloats)
 
 	// Estimate distances of the data vectors from the query vector.
 	tempSquaredDistances := tempFloats[:count]
 	tempErrorBounds := tempFloats[count : count*2]
 	p.quantizer.EstimateSquaredDistances(
-		ctx, p.quantizedSet, queryVector, tempSquaredDistances, tempErrorBounds)
+		w, p.quantizedSet, queryVector, tempSquaredDistances, tempErrorBounds)
 	centroidDistances := p.quantizedSet.GetCentroidDistances()
 
 	// Add candidates to the search set, which is responsible for retaining the
@@ -183,7 +181,7 @@ func (p *Partition) Search(
 // Add quantizes the given vector as part of this partition. If a vector with
 // the same key is already in the partition, update its value and return false.
 func (p *Partition) Add(
-	ctx context.Context, vec vector.T, childKey ChildKey, valueBytes ValueBytes,
+	w *veclib.Workspace, vec vector.T, childKey ChildKey, valueBytes ValueBytes,
 ) bool {
 	offset := p.Find(childKey)
 	if offset != -1 {
@@ -192,7 +190,7 @@ func (p *Partition) Add(
 	}
 
 	vectorSet := vec.AsSet()
-	p.quantizer.QuantizeInSet(ctx, p.quantizedSet, vectorSet)
+	p.quantizer.QuantizeInSet(w, p.quantizedSet, vectorSet)
 	p.childKeys = append(p.childKeys, childKey)
 	p.valueBytes = append(p.valueBytes, valueBytes)
 

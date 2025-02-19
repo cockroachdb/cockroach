@@ -9,8 +9,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
@@ -36,7 +36,7 @@ func TestBalancedKMeans(t *testing.T) {
 		return distanceSum / float32(len(offsets))
 	}
 
-	workspace := &internal.Workspace{}
+	workspace := &veclib.Workspace{}
 	rng := rand.New(rand.NewSource(42))
 	kmeans := BalancedKmeans{Workspace: workspace, Rand: rng}
 
@@ -193,7 +193,7 @@ func TestMeanOfVariances(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			kmeans := BalancedKmeans{Workspace: &internal.Workspace{}, vectors: &tc.vectors}
+			kmeans := BalancedKmeans{Workspace: &veclib.Workspace{}, vectors: &tc.vectors}
 			result := float64(kmeans.calculateMeanOfVariances())
 			if !tc.noRound {
 				result = scalar.Round(result, 4)

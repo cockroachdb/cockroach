@@ -9,12 +9,16 @@ import (
 	"context"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
 
 // inMemoryTxn tracks the transaction's state.
 type inMemoryTxn struct {
+	// workspace allocates temporary memory.
+	workspace *veclib.Workspace
+
 	// store references the in-memory store instance that created this
 	// transaction.
 	store *InMemoryStore
@@ -235,7 +239,7 @@ func (tx *inMemoryTxn) AddToPartition(
 
 	// Add the vector to the partition.
 	partition := inMemPartition.lock.partition
-	if partition.Add(ctx, vec, childKey, valueBytes) {
+	if partition.Add(tx.workspace, vec, childKey, valueBytes) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.store.reportPartitionSizeLocked(partition.Count())
@@ -311,7 +315,7 @@ func (tx *inMemoryTxn) SearchPartitions(
 			defer inMemPartition.lock.ReleaseShared()
 
 			searchLevel, partitionCount := inMemPartition.lock.partition.Search(
-				ctx, partitionKeys[i], queryVector, searchSet)
+				tx.workspace, partitionKeys[i], queryVector, searchSet)
 			if i == 0 {
 				level = searchLevel
 			} else if level != searchLevel {

@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/sql/vecindex",
         "//pkg/sql/vecindex/quantize",
+        "//pkg/sql/vecindex/veclib",
         "//pkg/sql/vecindex/vecstore",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
