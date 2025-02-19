@@ -27,7 +27,6 @@ func registerJobsMixedVersions(r registry.Registry) {
 			spec.Geo(),
 			spec.GCEZones("us-east1-b,us-west1-b,europe-west2-b"),
 		),
-		Skip:             "skip until 140967 is fixed",
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
@@ -43,8 +42,6 @@ func runJobsMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		mixedversion.NumUpgrades(1),
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
 		mixedversion.AlwaysUseLatestPredecessors,
-		// TODO(butler): relax once we've addressed the og issue.
-		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 		mixedversion.NeverUseFixtures,
 	)
 	mvt.OnStartup("create a few jobs", func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
