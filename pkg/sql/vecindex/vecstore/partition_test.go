@@ -6,11 +6,10 @@
 package vecstore
 
 import (
-	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -22,8 +21,6 @@ import (
 func TestPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 
 	childKey10 := ChildKey{PartitionKey: 10}
 	childKey20 := ChildKey{PartitionKey: 20}
@@ -39,16 +36,17 @@ func TestPartition(t *testing.T) {
 	valueBytes20b := ValueBytes{11, 12}
 
 	// Create new partition and add 4 vectors.
+	var workspace veclib.Workspace
 	quantizer := quantize.NewUnQuantizer(2)
 	vectors := vector.MakeSetFromRawData([]float32{1, 2, 5, 2, 6, 6}, 2)
-	quantizedSet := quantizer.Quantize(ctx, vectors)
+	quantizedSet := quantizer.Quantize(&workspace, vectors)
 	childKeys := []ChildKey{childKey10, childKey20, childKey30}
 	valueBytes := []ValueBytes{valueBytes10, valueBytes20, valueBytes30, valueBytes40}
 	partition := NewPartition(quantizer, quantizedSet, childKeys, valueBytes, Level(1))
-	require.True(t, partition.Add(ctx, vector.T{4, 3}, childKey40, valueBytes40))
+	require.True(t, partition.Add(&workspace, vector.T{4, 3}, childKey40, valueBytes40))
 
 	// Add vector and expect its value to be updated.
-	require.False(t, partition.Add(ctx, vector.T{10, 10}, childKey20, valueBytes20b))
+	require.False(t, partition.Add(&workspace, vector.T{10, 10}, childKey20, valueBytes20b))
 
 	require.Equal(t, 4, partition.Count())
 	require.Equal(t, []ChildKey{childKey10, childKey40, childKey30, childKey20}, partition.ChildKeys())
@@ -58,11 +56,11 @@ func TestPartition(t *testing.T) {
 
 	// Ensure that cloning does not disturb anything.
 	cloned := partition.Clone()
-	cloned.Add(ctx, vector.T{0, -1}, childKey50, valueBytes50)
+	cloned.Add(&workspace, vector.T{0, -1}, childKey50, valueBytes50)
 
 	// Search method.
 	searchSet := SearchSet{MaxResults: 3}
-	level, count := partition.Search(ctx, RootKey, vector.T{1, 1}, &searchSet)
+	level, count := partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
 	require.Equal(t, Level(1), level)
 	require.Equal(t, 4, count)
 	result1 := SearchResult{
@@ -98,7 +96,8 @@ func TestPartition(t *testing.T) {
 	require.Equal(t, []ValueBytes{valueBytes10, valueBytes40, valueBytes30, valueBytes20b, valueBytes50}, cloned.ValueBytes())
 	squaredDistances := []float32{0, 0, 0, 0, 0}
 	errorBounds := []float32{0, 0, 0, 0, 0}
-	cloned.Quantizer().EstimateSquaredDistances(ctx, cloned.QuantizedSet(), vector.T{3, 4}, squaredDistances, errorBounds)
+	cloned.Quantizer().EstimateSquaredDistances(
+		&workspace, cloned.QuantizedSet(), vector.T{3, 4}, squaredDistances, errorBounds)
 	require.Equal(t, []float32{8, 2, 13, 85, 34}, squaredDistances)
 	checkPartitionMetadata(t, cloned.Metadata(), Level(1), vector.T{4, 3.33}, 5)
 }

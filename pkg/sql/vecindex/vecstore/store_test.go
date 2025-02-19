@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 )
@@ -22,6 +23,7 @@ func commonStoreTests(
 	testPKs []KeyBytes,
 	testVectors []vector.T,
 ) {
+	var workspace veclib.Workspace
 	childKey2 := ChildKey{PartitionKey: 2}
 	valueBytes2 := ValueBytes{0}
 	primaryKey100 := ChildKey{KeyBytes: KeyBytes{1, 00}}
@@ -38,7 +40,7 @@ func commonStoreTests(
 	valueBytes600 := ValueBytes{11, 12}
 
 	t.Run("get full vectors", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		// Include primary keys that cannot be found.
@@ -77,7 +79,7 @@ func commonStoreTests(
 	})
 
 	t.Run("search empty root partition", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		searchSet := SearchSet{MaxResults: 2}
@@ -96,7 +98,7 @@ func commonStoreTests(
 	})
 
 	t.Run("add to root partition", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		// Get partition metadata with forUpdate = true before updates.
@@ -144,7 +146,7 @@ func commonStoreTests(
 
 	var root *Partition
 	t.Run("get root partition", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		// Get root partition.
@@ -175,14 +177,14 @@ func commonStoreTests(
 	})
 
 	t.Run("replace root partition", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		// Replace root partition.
 		_, err := txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
 		vectors := vector.T{4, 3}.AsSet()
-		quantizedSet := quantizer.Quantize(ctx, vectors)
+		quantizedSet := quantizer.Quantize(&workspace, vectors)
 		newRoot := NewPartition(
 			quantizer, quantizedSet, []ChildKey{childKey2}, []ValueBytes{valueBytes2}, Level(2))
 		require.NoError(t, txn.SetRootPartition(ctx, newRoot))
@@ -211,7 +213,7 @@ func commonStoreTests(
 
 	var partitionKey1 PartitionKey
 	t.Run("insert another partition and update it", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		_, err := txn.GetPartition(ctx, RootKey)
@@ -252,7 +254,7 @@ func commonStoreTests(
 	})
 
 	t.Run("search multiple partitions at leaf level", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		_, err := txn.GetPartition(ctx, RootKey)
@@ -261,7 +263,7 @@ func commonStoreTests(
 		vectors := vector.MakeSet(2)
 		vectors.Add(vector.T{4, -1})
 		vectors.Add(vector.T{2, 8})
-		quantizedSet := quantizer.Quantize(ctx, vectors)
+		quantizedSet := quantizer.Quantize(&workspace, vectors)
 		partition := NewPartition(
 			quantizer, quantizedSet, []ChildKey{primaryKey500, primaryKey600},
 			[]ValueBytes{valueBytes500, valueBytes600}, LeafLevel)

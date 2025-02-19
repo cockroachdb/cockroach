@@ -20,9 +20,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,7 +38,7 @@ func TestVectorIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
+	ctx := context.Background()
 	state := testState{T: t, Ctx: ctx, Stopper: stop.NewStopper()}
 	defer state.Stopper.Stop(ctx)
 
@@ -93,6 +93,7 @@ func TestVectorIndex(t *testing.T) {
 type testState struct {
 	T          *testing.T
 	Ctx        context.Context
+	Workspace  veclib.Workspace
 	Stopper    *stop.Stopper
 	Quantizer  quantize.Quantizer
 	InMemStore *vecstore.InMemoryStore
@@ -148,7 +149,7 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 }
 
 func (s *testState) FormatTree(d *datadriven.TestData) string {
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+	txn := beginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
 	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 	tree, err := s.Index.Format(s.Ctx, txn, FormatOptions{PrimaryKeyStrings: true})
@@ -192,7 +193,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	}
 
 	// Search the index within a transaction.
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+	txn := beginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
 	err = s.Index.Search(s.Ctx, txn, vec, &searchSet, options)
 	require.NoError(s.T, err)
 	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
@@ -241,7 +242,7 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 	}
 
 	// Search the index within a transaction.
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+	txn := beginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
 	result, err := s.Index.SearchForInsert(s.Ctx, txn, vec)
 	require.NoError(s.T, err)
 	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
@@ -278,7 +279,7 @@ func (s *testState) SearchForDelete(d *datadriven.TestData) string {
 		key, vec := s.parseKeyAndVector(line)
 
 		// Search within a transaction.
-		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+		txn := beginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
 		result, err := s.Index.SearchForDelete(s.Ctx, txn, vec, key)
 		require.NoError(s.T, err)
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
@@ -349,7 +350,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	step := (s.Options.MinPartitionSize + s.Options.MaxPartitionSize) / 2
 	for i := 0; i < vectors.Count; i++ {
 		// Insert within the scope of a transaction.
-		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+		txn := beginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
 		s.InMemStore.InsertVector(childKeys[i].KeyBytes, vectors.At(i))
 		require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(i), childKeys[i].KeyBytes))
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
@@ -394,7 +395,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 		key, vec := s.parseKeyAndVector(line)
 
 		// Delete within the scope of a transaction.
-		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+		txn := beginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
 
 		// If notFound=true, then simulate case where the vector is deleted in
 		// the primary index, but it cannot be found in the secondary index.
@@ -506,7 +507,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		copy(samples, remaining[:numSamples])
 	}
 
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+	txn := beginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
 	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 	// calcTruth calculates the true nearest neighbors for the query vector.
@@ -568,7 +569,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 }
 
 func (s *testState) ValidateTree(d *datadriven.TestData) string {
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+	txn := beginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
 	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 	vectorCount := 0
@@ -650,8 +651,10 @@ func (s *testState) parseKeyAndVector(line string) (vecstore.KeyBytes, vector.T)
 	return key, s.parseVector(parts[1])
 }
 
-func beginTransaction(ctx context.Context, t *testing.T, store vecstore.Store) vecstore.Txn {
-	txn, err := store.Begin(ctx)
+func beginTransaction(
+	ctx context.Context, t *testing.T, w *veclib.Workspace, store vecstore.Store,
+) vecstore.Txn {
+	txn, err := store.Begin(ctx, w)
 	require.NoError(t, err)
 	return txn
 }
@@ -690,7 +693,8 @@ func TestRandomizeVector(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Create index.
-	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
+	var workspace veclib.Workspace
+	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
@@ -726,16 +730,16 @@ func TestRandomizeVector(t *testing.T) {
 
 	// Ensure that distances are similar, whether using the original vectors or
 	// the randomized vectors.
-	originalSet := quantizer.Quantize(ctx, original).(*quantize.RaBitQuantizedVectorSet)
-	randomizedSet := quantizer.Quantize(ctx, randomized).(*quantize.RaBitQuantizedVectorSet)
+	originalSet := quantizer.Quantize(&workspace, original).(*quantize.RaBitQuantizedVectorSet)
+	randomizedSet := quantizer.Quantize(&workspace, randomized).(*quantize.RaBitQuantizedVectorSet)
 
 	distances := make([]float32, count)
 	errorBounds := make([]float32, count)
-	quantizer.EstimateSquaredDistances(ctx, originalSet, original.At(0), distances, errorBounds)
+	quantizer.EstimateSquaredDistances(&workspace, originalSet, original.At(0), distances, errorBounds)
 	require.Equal(t, []float32{0, 272.75, 550.86, 950.93, 2421.41}, testutils.RoundFloats(distances, 2))
 	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
 
-	quantizer.EstimateSquaredDistances(ctx, randomizedSet, randomized.At(0), distances, errorBounds)
+	quantizer.EstimateSquaredDistances(&workspace, randomizedSet, randomized.At(0), distances, errorBounds)
 	require.Equal(t, []float32{5.1, 292.72, 454.95, 1011.85, 2475.87}, testutils.RoundFloats(distances, 2))
 	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
 }
@@ -790,9 +794,9 @@ func buildIndex(
 	primaryKeys []vecstore.KeyBytes,
 ) {
 	// Insert block of vectors within the scope of a transaction.
-	insertBlock := func(start, end int) {
+	insertBlock := func(w *veclib.Workspace, start, end int) {
 		for i := start; i < end; i++ {
-			txn := beginTransaction(ctx, t, store)
+			txn := beginTransaction(ctx, t, w, store)
 			store.InsertVector(primaryKeys[i], vectors.At(i))
 			require.NoError(t, index.Insert(ctx, txn, vectors.At(i), primaryKeys[i]))
 			commitTransaction(ctx, t, store, txn)
@@ -810,8 +814,9 @@ func buildIndex(
 		go func(start, end int) {
 			// Break vector group into individual transactions that each insert a
 			// block of vectors. Run any pending fixups after each block.
+			var workspace veclib.Workspace
 			for j := start; j < end; j += blockSize {
-				insertBlock(j, min(j+blockSize, end))
+				insertBlock(&workspace, j, min(j+blockSize, end))
 			}
 
 			wait.Done()
@@ -824,7 +829,8 @@ func buildIndex(
 }
 
 func validateIndex(ctx context.Context, t *testing.T, store *vecstore.InMemoryStore) int {
-	txn := beginTransaction(ctx, t, store)
+	var workspace veclib.Workspace
+	txn := beginTransaction(ctx, t, &workspace, store)
 	defer commitTransaction(ctx, t, store, txn)
 
 	vectorCount := 0

@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -26,15 +26,15 @@ func TestInMemoryStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
-
+	var workspace veclib.Workspace
+	ctx := context.Background()
 	store := NewInMemoryStore(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
 	testPKs := []KeyBytes{{11}, {12}}
 	testVectors := []vector.T{{100, 200}, {300, 400}}
 
 	t.Run("insert and get all vectors", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		store.InsertVector(testPKs[0], testVectors[0])
@@ -53,7 +53,7 @@ func TestInMemoryStore(t *testing.T) {
 	commonStoreTests(ctx, t, store, quantizer, testPKs, testVectors)
 
 	t.Run("delete full vector", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		store.DeleteVector([]byte{10})
@@ -64,7 +64,7 @@ func TestInMemoryStore(t *testing.T) {
 	})
 
 	t.Run("abort transaction", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer abortTransaction(ctx, t, store, txn)
 
 		// Perform some read-only operations.
@@ -82,8 +82,8 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
-
+	var workspace veclib.Workspace
+	ctx := context.Background()
 	childKey10 := ChildKey{PartitionKey: 10}
 	valueBytes10 := ValueBytes{1, 2, 3}
 
@@ -93,7 +93,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	var wait sync.WaitGroup
 	wait.Add(1)
 	func() {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		// Acquire partition lock.
@@ -102,17 +102,15 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 
 		// Search root partition on background goroutine.
 		go func() {
-			ctx2 := internal.WithWorkspace(context.Background(), &internal.Workspace{})
-
 			// Begin transaction should block until the outer transaction is
 			// complete.
-			txn2 := beginTransaction(ctx, t, store)
+			txn2 := beginTransaction(ctx, t, &workspace, store)
 			defer commitTransaction(ctx, t, store, txn2)
 
 			searchSet := SearchSet{MaxResults: 2}
 			partitionCounts := []int{0}
 			_, err := txn2.SearchPartitions(
-				ctx2, []PartitionKey{RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
+				ctx, []PartitionKey{RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
 			require.NoError(t, err)
 			result1 := SearchResult{
 				QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: RootKey, ChildKey: childKey10, ValueBytes: valueBytes10}
@@ -136,12 +134,12 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	var workspace veclib.Workspace
 	ctx := context.Background()
-
 	store := NewInMemoryStore(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
 
-	txn := beginTransaction(ctx, t, store)
+	txn := beginTransaction(ctx, t, &workspace, store)
 	defer commitTransaction(ctx, t, store, txn)
 
 	childKey10 := ChildKey{PartitionKey: 10}
@@ -181,7 +179,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 
 	// Insert new partition with lower level and check stats.
 	vectors := vector.MakeSetFromRawData([]float32{5, 6}, 2)
-	quantizedSet := quantizer.Quantize(ctx, vectors)
+	quantizedSet := quantizer.Quantize(&workspace, vectors)
 	partition := NewPartition(quantizer, quantizedSet, []ChildKey{childKey30}, []ValueBytes{valueBytes30}, 2)
 	partitionKey, err := txn.InsertPartition(ctx, partition)
 	require.NoError(t, err)
@@ -248,8 +246,9 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 				Data:  []float32{1, 2, 3, 4, 5, 6},
 			},
 		},
-		childKeys: []ChildKey{{PartitionKey: 10}, {PartitionKey: 20}},
-		level:     1,
+		childKeys:  []ChildKey{{PartitionKey: 10}, {PartitionKey: 20}},
+		valueBytes: []ValueBytes{{1, 2}, {3, 4}},
+		level:      1,
 	}
 	store.mu.partitions[10] = inMemPartition
 
@@ -265,8 +264,9 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 				Data:  []float32{1, 2, 3, 4, 5, 6, 7, 8},
 			},
 		},
-		childKeys: []ChildKey{{PartitionKey: 10}, {PartitionKey: 20}, {PartitionKey: 30}},
-		level:     2,
+		childKeys:  []ChildKey{{PartitionKey: 10}, {PartitionKey: 20}, {PartitionKey: 30}},
+		valueBytes: []ValueBytes{{1, 2}, {3, 4}, {5, 6}},
+		level:      2,
 	}
 	store.mu.partitions[20] = inMemPartition
 
@@ -295,6 +295,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	require.Equal(t, 3, store2.mu.partitions[10].lock.partition.quantizedSet.GetCount())
 	require.Equal(t, 2, store2.mu.partitions[20].lock.partition.quantizer.GetDims())
 	require.Len(t, store2.mu.partitions[20].lock.partition.childKeys, 3)
+	require.Len(t, store2.mu.partitions[20].lock.partition.valueBytes, 3)
 	require.Equal(t, PartitionKey(100), store2.mu.nextKey)
 	require.Len(t, store2.mu.vectors, 2)
 	require.Equal(t, vector.T{12, 13}, store2.mu.vectors[string([]byte{3, 4})])
@@ -382,8 +383,8 @@ func TestInMemoryLock(t *testing.T) {
 	})
 }
 
-func beginTransaction(ctx context.Context, t *testing.T, store Store) Txn {
-	txn, err := store.Begin(ctx)
+func beginTransaction(ctx context.Context, t *testing.T, w *veclib.Workspace, store Store) Txn {
+	txn, err := store.Begin(ctx, w)
 	require.NoError(t, err)
 	return txn
 }
