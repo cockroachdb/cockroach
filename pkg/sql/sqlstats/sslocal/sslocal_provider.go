@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -35,7 +34,6 @@ func New(
 	pool *mon.BytesMonitor,
 	reportingSink Sink,
 	knobs *sqlstats.TestingKnobs,
-	anomalies *insights.AnomalyDetector,
 ) *SQLStats {
 	return newSQLStats(
 		settings,
@@ -46,7 +44,6 @@ func New(
 		pool,
 		reportingSink,
 		knobs,
-		anomalies,
 	)
 }
 
@@ -101,7 +98,6 @@ func (s *SQLStats) GetApplicationStats(appName string) *ssmemstorage.Container {
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.anomalies,
 	)
 	s.mu.apps[appName] = a
 	return a
