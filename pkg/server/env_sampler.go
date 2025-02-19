@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/goroutinedumper"
 	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -21,6 +22,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+)
+
+var jemallocPurgeOverhead = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"server.jemalloc_purge_overhead_percent",
+	"a purge of jemalloc dirty pages is issued once the overhead exceeds this percent (0 disables purging)",
+	20,
+	settings.NonNegativeInt,
+)
+
+var jemallocPurgePeriod = settings.RegisterDurationSettingWithExplicitUnit(
+	settings.SystemVisible,
+	"server.jemalloc_purge_period",
+	"minimum amount of time that must pass between two jemalloc dirty page purges (0 disables purging)",
+	2*time.Minute,
+	settings.NonNegativeDuration,
 )
 
 type sampleEnvironmentCfg struct {
@@ -33,36 +50,37 @@ type sampleEnvironmentCfg struct {
 	runtime              *status.RuntimeStatSampler
 	sessionRegistry      *sql.SessionRegistry
 	rootMemMonitor       *mon.BytesMonitor
+	cgoMemTarget         uint64
 }
 
 // startSampleEnvironment starts a periodic loop that samples the environment and,
 // when appropriate, creates goroutine and/or heap dumps.
+//
+// The pebbleCacheSize is used to determine a target for CGO memory allocation.
 func startSampleEnvironment(
 	ctx context.Context,
-	settings *cluster.Settings,
+	srvCfg *BaseConfig,
+	pebbleCacheSize int64,
 	stopper *stop.Stopper,
-	goroutineDumpDirName string,
-	heapProfileDirName string,
-	cpuProfileDirName string,
 	runtimeSampler *status.RuntimeStatSampler,
 	sessionRegistry *sql.SessionRegistry,
 	rootMemMonitor *mon.BytesMonitor,
-	testingKnobs base.TestingKnobs,
 ) error {
 	metricsSampleInterval := base.DefaultMetricsSampleInterval
-	if p, ok := testingKnobs.Server.(*TestingKnobs); ok && p.EnvironmentSampleInterval != time.Duration(0) {
+	if p, ok := srvCfg.TestingKnobs.Server.(*TestingKnobs); ok && p.EnvironmentSampleInterval != time.Duration(0) {
 		metricsSampleInterval = p.EnvironmentSampleInterval
 	}
 	cfg := sampleEnvironmentCfg{
-		st:                   settings,
+		st:                   srvCfg.Settings,
 		stopper:              stopper,
 		minSampleInterval:    metricsSampleInterval,
-		goroutineDumpDirName: goroutineDumpDirName,
-		heapProfileDirName:   heapProfileDirName,
-		cpuProfileDirName:    cpuProfileDirName,
+		goroutineDumpDirName: srvCfg.GoroutineDumpDirName,
+		heapProfileDirName:   srvCfg.HeapProfileDirName,
+		cpuProfileDirName:    srvCfg.CPUProfileDirName,
 		runtime:              runtimeSampler,
 		sessionRegistry:      sessionRegistry,
 		rootMemMonitor:       rootMemMonitor,
+		cgoMemTarget:         max(uint64(pebbleCacheSize), 128*1024*1024),
 	}
 	// Immediately record summaries once on server startup.
 
@@ -155,6 +173,11 @@ func startSampleEnvironment(
 
 					cgoStats := status.GetCGoMemStats(ctx)
 					cfg.runtime.SampleEnvironment(ctx, cgoStats)
+
+					// Maybe purge jemalloc dirty pages.
+					if overhead, period := jemallocPurgeOverhead.Get(&cfg.st.SV), jemallocPurgePeriod.Get(&cfg.st.SV); overhead > 0 && period > 0 {
+						status.CGoMemMaybePurge(ctx, cgoStats.CGoAllocatedBytes, cgoStats.CGoTotalBytes, cfg.cgoMemTarget, int(overhead), period)
+					}
 
 					if goroutineDumper != nil {
 						goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
