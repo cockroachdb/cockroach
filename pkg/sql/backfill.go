@@ -3044,7 +3044,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	}
 
 	stop := periodicFlusher.StartPeriodicUpdates(ctx, tracker)
-	defer func() { _ = stop() }()
+	defer stop()
 
 	run, err := planner.plan(ctx, tableDesc, progress.TodoSpans, progress.AddedIndexes,
 		progress.TemporaryIndexes, metaFn, mergeTimestamp)
@@ -3053,10 +3053,6 @@ func (sc *SchemaChanger) distIndexMerge(
 	}
 
 	if err := run(ctx); err != nil {
-		return err
-	}
-
-	if err := stop(); err != nil {
 		return err
 	}
 
