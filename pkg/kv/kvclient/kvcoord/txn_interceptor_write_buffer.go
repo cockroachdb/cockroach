@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -289,9 +290,10 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// TODO(yuzefovich): ensure that we elide the lock acquisition
 			// whenever possible (e.g. blind UPSERT in an implicit txn).
 			ts = append(ts, transformation{
-				stripped: true,
-				index:    i,
-				resp:     ru,
+				stripped:    true,
+				index:       i,
+				origRequest: req,
+				resp:        ru,
 			})
 			twb.addToBuffer(t.Key, t.Value, t.Sequence)
 
@@ -304,9 +306,10 @@ func (twb *txnWriteBuffer) applyTransformations(
 				FoundKey: false,
 			})
 			ts = append(ts, transformation{
-				stripped: true,
-				index:    i,
-				resp:     ru,
+				stripped:    true,
+				index:       i,
+				origRequest: req,
+				resp:        ru,
 			})
 			twb.addToBuffer(t.Key, roachpb.Value{}, t.Sequence)
 
@@ -315,24 +318,35 @@ func (twb *txnWriteBuffer) applyTransformations(
 			val, served := twb.maybeServeRead(t.Key, t.Sequence)
 			if served {
 				log.VEventf(ctx, 2, "serving %s on key %s from the buffer", t.Method(), t.Key)
-				var ru kvpb.ResponseUnion
+				var resp kvpb.ResponseUnion
 				getResp := &kvpb.GetResponse{}
 				if val.IsPresent() {
 					getResp.Value = val
 				}
-				ru.MustSetInner(getResp)
+				resp.MustSetInner(getResp)
+
+				stripped := true
+				if t.KeyLockingStrength != lock.None {
+					// Even though the Get request must be served from the buffer, as the
+					// transaction performed a previous write to the key, we still need to
+					// acquire a lock at the leaseholder. As a result, we can't strip the
+					// request from the batch.
+					//
+					// TODO(arul): we could eschew sending this request if we knew there
+					// was a sufficiently strong lock already present on the key.
+					stripped = false
+					baRemote.Requests = append(baRemote.Requests, ru)
+				}
+
 				ts = append(ts, transformation{
-					stripped: true,
-					index:    i,
-					resp:     ru,
+					stripped:    stripped,
+					index:       i,
+					origRequest: req,
+					resp:        resp,
 				})
 				// We've constructed a response that we'll stitch together with the
 				// result on the response path; eschew sending the request to the KV
 				// layer.
-				//
-				// TODO(arul): if this is a locking Get request, we can't omit the KV
-				// request. At least, not unless we know a lock is already present on
-				// the key.
 				//
 				// TODO(arul): if the ReturnRawMVCCValues flag is set, we'll need to
 				// flush the buffer.
@@ -579,14 +593,14 @@ type transformation struct {
 	// index of the request in the original batch to which the transformation
 	// applies.
 	index int
+	// origRequest is the original request that was transformed.
+	origRequest kvpb.Request
 	// resp is locally produced response that needs to be merged with any
 	// responses returned by the KV layer. This is set for requests that can be
 	// evaluated locally (e.g. blind writes, reads that can be served entirely
-	// from the buffer). If non-empty, stripped must also be true.
+	// from the buffer). Must be set if stripped is true, but the converse doesn't
+	// hold.
 	resp kvpb.ResponseUnion
-	// origRequest is the original request that was transformed. Set iff stripped
-	// is false.
-	origRequest kvpb.Request
 }
 
 // toResp returns the response that should be added to the batch response as
@@ -599,8 +613,21 @@ func (t transformation) toResp(
 	}
 
 	var ru kvpb.ResponseUnion
-	switch br.GetInner().(type) {
-	case *kvpb.ScanResponse:
+	switch t.origRequest.(type) {
+	case *kvpb.PutRequest:
+		ru = t.resp
+	case *kvpb.DeleteRequest:
+		ru = t.resp
+	case *kvpb.GetRequest:
+		// Get requests must be served from the local buffer if a transaction
+		// performed a previous write to the key being read. However, Get requests
+		// must be sent to the KV layer (i.e. not be stripped) iff they are locking
+		// in nature.
+		req := t.origRequest.(*kvpb.GetRequest)
+		assertTrue(t.stripped == (req.KeyLockingStrength == lock.None),
+			"Get requests should either be stripped or be locking")
+		ru = t.resp
+	case *kvpb.ScanRequest:
 		scanResp, err := twb.mergeWithScanResp(
 			t.origRequest.(*kvpb.ScanRequest), br.GetInner().(*kvpb.ScanResponse),
 		)
