@@ -1570,7 +1570,11 @@ message Progress {
     util.hlc.Timestamp high_water = 3;
   }
   int64 modified_micros = 2;
-  string running_status = 4;
+
+  // StatusMessage contains the human readible status of a job (e.g. "running
+  // initial scan"), which is distinct from the state of a job (e.g. PAUSED).
+  // The status of a job is also stored in the system.job_status table.
+  string status_message = 4;
 
   //                ------ COMPLIANCE NOTE ------
   // If you're updating this `Progress` proto, consider its impact on compliance.

@@ -67,9 +67,9 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 				require.NoError(t, err)
 				switch stageIdx {
 				case 0:
-					runningStatus0.Store(job.Progress().RunningStatus)
+					runningStatus0.Store(job.Progress().StatusMessage)
 				case 1:
-					runningStatus1.Store(job.Progress().RunningStatus)
+					runningStatus1.Store(job.Progress().StatusMessage)
 				}
 				return nil
 			},

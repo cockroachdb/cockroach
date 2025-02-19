@@ -367,12 +367,12 @@ func completeReplicationStream(
 			if successfulIngestion {
 				md.Progress.GetStreamReplication().StreamIngestionStatus =
 					jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY
-				md.Progress.RunningStatus = "succeeding this producer job as the corresponding " +
+				md.Progress.StatusMessage = "succeeding this producer job as the corresponding " +
 					"stream ingestion finished successfully"
 			} else {
 				md.Progress.GetStreamReplication().StreamIngestionStatus =
 					jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY
-				md.Progress.RunningStatus = "canceling this producer job as the corresponding " +
+				md.Progress.StatusMessage = "canceling this producer job as the corresponding " +
 					"stream ingestion did not finish successfully"
 			}
 			ju.UpdateProgress(md.Progress)
