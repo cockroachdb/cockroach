@@ -338,6 +338,10 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
 		streamProgress.Checkpoint.ResolvedSpans = frontierResolvedSpans
 
+		if replicatedTime.IsSet() && streamProgress.ReplicationStatus == jobspb.InitialScan {
+			streamProgress.ReplicationStatus = jobspb.Replicating
+		}
+
 		// Keep the recorded replicatedTime empty until some advancement has been made
 		if sf.replicatedTimeAtStart.Less(replicatedTime) {
 			streamProgress.ReplicatedTime = replicatedTime
