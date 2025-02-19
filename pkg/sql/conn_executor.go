@@ -454,7 +454,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
-		insightsProvider.Anomalies(),
 	)
 	reportedSQLStatsController := reportedSQLStats.GetController(cfg.SQLStatusServer)
 	memSQLStats := sslocal.New(
@@ -466,7 +465,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
-		insightsProvider.Anomalies(),
 	)
 	s := &Server{
 		cfg:                     cfg,
