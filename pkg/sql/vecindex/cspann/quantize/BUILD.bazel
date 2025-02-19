@@ -16,7 +16,7 @@ proto_library(
 go_proto_library(
     name = "quantize_go_proto",
     compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize",
     proto = ":quantize_proto",
     visibility = ["//visibility:public"],
     deps = [
@@ -35,7 +35,7 @@ go_library(
         "unquantizer.go",
     ],
     embed = [":quantize_go_proto"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/vecindex/veclib",
@@ -54,10 +54,10 @@ go_test(
         "unquantizedpb_test.go",
         "unquantizer_test.go",
     ],
-    data = ["//pkg/sql/vecindex:testdata"],
+    data = ["//pkg/sql/vecindex/cspann:testdata"],
     embed = [":quantize"],
     deps = [
-        "//pkg/sql/vecindex/testutils",
+        "//pkg/sql/vecindex/cspann/testutils",
         "//pkg/sql/vecindex/veclib",
         "//pkg/util/num32",
         "//pkg/util/vector",

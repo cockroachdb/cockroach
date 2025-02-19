@@ -1,0 +1,67 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/sql/vecindex/cspann:__subpackages__"],
+)
+
+go_library(
+    name = "cspann",
+    srcs = [
+        "fixup_processor.go",
+        "fixup_worker.go",
+        "index_stats.go",
+        "kmeans.go",
+        "pacer.go",
+        "split_data.go",
+        "vector_index.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/veclib",
+        "//pkg/sql/vecindex/vecstore",
+        "//pkg/util/log",
+        "//pkg/util/num32",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_crlib//crtime",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_gonum_v1_gonum//stat",
+    ],
+)
+
+go_test(
+    name = "cspann_test",
+    srcs = [
+        "fixup_processor_test.go",
+        "fixup_worker_test.go",
+        "index_stats_test.go",
+        "kmeans_test.go",
+        "pacer_test.go",
+        "vector_index_test.go",
+    ],
+    data = ["//pkg/sql/vecindex/cspann:testdata"],
+    embed = [":cspann"],
+    deps = [
+        "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/cspann/testutils",
+        "//pkg/sql/vecindex/veclib",
+        "//pkg/sql/vecindex/vecstore",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/num32",
+        "//pkg/util/stop",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_crlib//crtime",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_guptarohit_asciigraph//:asciigraph",
+        "@com_github_stretchr_testify//require",
+        "@org_gonum_v1_gonum//floats/scalar",
+        "@org_gonum_v1_gonum//stat",
+    ],
+)

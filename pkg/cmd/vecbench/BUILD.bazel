@@ -10,8 +10,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/vecbench",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/sql/vecindex",
-        "//pkg/sql/vecindex/quantize",
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/veclib",
         "//pkg/sql/vecindex/vecstore",
         "//pkg/util/stop",
