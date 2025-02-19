@@ -67,7 +67,8 @@ message PartitionProto {
   quantize.RaBitQuantizedVectorSet ra_bit_q = 2;
   quantize.UnQuantizedVectorSet un_quantized = 3;
   repeated ChildKey child_keys = 4 [(gogoproto.nullable) = false];
-  uint64 level = 5 [(gogoproto.casttype) = "Level"];
+  repeated bytes value_bytes = 5 [(gogoproto.casttype) = "ValueBytes"];
+  uint64 level = 6 [(gogoproto.casttype) = "Level"];
 }
 
 // Vector serializes an original, full-size vector and its key bytes.

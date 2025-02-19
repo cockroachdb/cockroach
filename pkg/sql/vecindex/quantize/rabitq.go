@@ -6,12 +6,11 @@
 package quantize
 
 import (
-	"context"
 	"math"
 	"math/bits"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -91,7 +90,7 @@ func (q *RaBitQuantizer) GetDims() int {
 }
 
 // Quantize implements the Quantizer interface.
-func (q *RaBitQuantizer) Quantize(ctx context.Context, vectors vector.Set) QuantizedVectorSet {
+func (q *RaBitQuantizer) Quantize(w *veclib.Workspace, vectors vector.Set) QuantizedVectorSet {
 	var centroid vector.T
 	if vectors.Count == 1 {
 		// If quantizing a single vector, it is the centroid of the set.
@@ -102,15 +101,15 @@ func (q *RaBitQuantizer) Quantize(ctx context.Context, vectors vector.Set) Quant
 	}
 
 	quantizedSet := q.NewQuantizedVectorSet(vectors.Count, centroid)
-	q.quantizeHelper(ctx, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
+	q.quantizeHelper(w, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 	return quantizedSet
 }
 
 // QuantizeInSet implements the Quantizer interface.
 func (q *RaBitQuantizer) QuantizeInSet(
-	ctx context.Context, quantizedSet QuantizedVectorSet, vectors vector.Set,
+	w *veclib.Workspace, quantizedSet QuantizedVectorSet, vectors vector.Set,
 ) {
-	q.quantizeHelper(ctx, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
+	q.quantizeHelper(w, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 }
 
 // NewQuantizedVectorSet implements the Quantizer interface
@@ -139,7 +138,7 @@ func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) 
 
 // EstimateSquaredDistances implements the Quantizer interface.
 func (q *RaBitQuantizer) EstimateSquaredDistances(
-	ctx context.Context,
+	w *veclib.Workspace,
 	quantizedSet QuantizedVectorSet,
 	queryVector vector.T,
 	squaredDistances []float32,
@@ -148,11 +147,10 @@ func (q *RaBitQuantizer) EstimateSquaredDistances(
 	raBitSet := quantizedSet.(*RaBitQuantizedVectorSet)
 
 	// Allocate temp space for calculations.
-	workspace := internal.WorkspaceFromContext(ctx)
-	tempCodes := allocCodes(workspace, 4, raBitSet.Codes.Width)
-	defer freeCodes(workspace, tempCodes)
-	tempVectors := workspace.AllocVectorSet(1, q.dims)
-	defer workspace.FreeVectorSet(tempVectors)
+	tempCodes := allocCodes(w, 4, raBitSet.Codes.Width)
+	defer freeCodes(w, tempCodes)
+	tempVectors := w.AllocVectorSet(1, q.dims)
+	defer w.FreeVectorSet(tempVectors)
 
 	// Normalize the query vector to a unit vector.
 	// Paper: q = (q_raw - c) / ||q_raw - c||
@@ -281,7 +279,7 @@ func (q *RaBitQuantizer) EstimateSquaredDistances(
 // quantizeHelper quantizes the given set of vectors and adds the quantization
 // information to the provided quantized vector set.
 func (q *RaBitQuantizer) quantizeHelper(
-	ctx context.Context, qs *RaBitQuantizedVectorSet, vectors vector.Set,
+	w *veclib.Workspace, qs *RaBitQuantizedVectorSet, vectors vector.Set,
 ) {
 	// Extend any existing slices in the vector set.
 	count := vectors.Count
@@ -289,9 +287,8 @@ func (q *RaBitQuantizer) quantizeHelper(
 	qs.AddUndefined(count)
 
 	// Allocate temp space for vector calculations.
-	workspace := internal.WorkspaceFromContext(ctx)
-	tempVectors := workspace.AllocVectorSet(qs.GetCount(), q.dims)
-	defer workspace.FreeVectorSet(tempVectors)
+	tempVectors := w.AllocVectorSet(qs.GetCount(), q.dims)
+	defer w.FreeVectorSet(tempVectors)
 
 	// Calculate the difference between input vector(s) and the centroid.
 	// Paper: o_raw - c
@@ -429,11 +426,11 @@ func (q *RaBitQuantizer) quantizeHelper(
 	}
 }
 
-func allocCodes(w *internal.Workspace, count, width int) RaBitQCodeSet {
+func allocCodes(w *veclib.Workspace, count, width int) RaBitQCodeSet {
 	tempUints := w.AllocUint64s(count * width)
 	return MakeRaBitQCodeSetFromRawData(tempUints, width)
 }
 
-func freeCodes(w *internal.Workspace, codeSet RaBitQCodeSet) {
+func freeCodes(w *veclib.Workspace, codeSet RaBitQCodeSet) {
 	w.FreeUint64s(codeSet.Data)
 }

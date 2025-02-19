@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 )
 
 // PersistentStore implements the Store interface for KV backed vector indices.
@@ -115,8 +116,8 @@ func NewPersistentStore(
 // Begin is part of the vecstore.Store interface. Begin creates a new KV
 // transaction on behalf of the user and prepares it to operate on the persistent
 // vector store.
-func (s *PersistentStore) Begin(ctx context.Context) (Txn, error) {
-	return NewPersistentStoreTxn(s, s.db.KV().NewTxn(ctx, "vecstore.PersistentStore begin transaction")), nil
+func (s *PersistentStore) Begin(ctx context.Context, w *veclib.Workspace) (Txn, error) {
+	return NewPersistentStoreTxn(w, s, s.db.KV().NewTxn(ctx, "vecstore.PersistentStore begin transaction")), nil
 }
 
 // Commit is part of the vecstore.Store interface. Commit commits the

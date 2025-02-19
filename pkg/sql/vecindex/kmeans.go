@@ -10,7 +10,7 @@ import (
 	"math/rand"
 	"slices"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -42,7 +42,7 @@ type BalancedKmeans struct {
 	// algorithm will attempt as part of finding locally optimal partitions.
 	MaxIterations int
 	// Workspace is used to allocate temporary memory using stack allocators.
-	Workspace *internal.Workspace
+	Workspace *veclib.Workspace
 	// Rand is used to generate random numbers. If this is nil, then the global
 	// random number generator is used instead. Setting this to non-nil is useful
 	// for generating deterministic random numbers during testing.

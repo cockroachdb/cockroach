@@ -8,6 +8,7 @@ package vecstore
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -58,7 +59,7 @@ type PartitionMetadata struct {
 type Store interface {
 	// Begin creates a new transaction that can be used to read and write the
 	// store in a transactional context.
-	Begin(ctx context.Context) (Txn, error)
+	Begin(ctx context.Context, w *veclib.Workspace) (Txn, error)
 
 	// Commit commits a transaction previously started by a call to Begin.
 	Commit(ctx context.Context, txn Txn) error

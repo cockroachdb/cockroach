@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -31,7 +31,8 @@ import (
 func TestPersistentStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
+	var workspace veclib.Workspace
+	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	internalDB := srv.ApplicationLayer().InternalDB().(descs.DB)
 	codec := srv.ApplicationLayer().Codec()
@@ -92,22 +93,22 @@ func TestPersistentStore(t *testing.T) {
 
 	// TODO(mw5h): Figure out where to create the empty root partition.
 	t.Run("create empty root partition", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		emptyRoot := NewPartition(
-			quantizer, quantizer.Quantize(ctx, vector.Set{}), []ChildKey{}, []ValueBytes{}, LeafLevel)
+			quantizer, quantizer.Quantize(&workspace, vector.Set{}), []ChildKey{}, []ValueBytes{}, LeafLevel)
 		require.NoError(t, txn.SetRootPartition(ctx, emptyRoot))
 	})
 
 	commonStoreTests(ctx, t, store, quantizer, testPKs, testVectors)
 
 	t.Run("insert a root partition into the store and read it back", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		vectors := vector.T{4, 3}.AsSet()
-		quantizedSet := quantizer.Quantize(ctx, vectors)
+		quantizedSet := quantizer.Quantize(&workspace, vectors)
 		root := NewPartition(
 			quantizer, quantizedSet, []ChildKey{childKey2}, []ValueBytes{valueBytes2}, Level(2))
 		require.NoError(t, txn.SetRootPartition(ctx, root))
@@ -117,7 +118,7 @@ func TestPersistentStore(t *testing.T) {
 
 		vectors = vector.T{4, 3}.AsSet()
 		vectors.Add(vector.T{2, 1})
-		quantizedSet = quantizer.Quantize(ctx, vectors)
+		quantizedSet = quantizer.Quantize(&workspace, vectors)
 		root = NewPartition(
 			quantizer, quantizedSet, []ChildKey{childKey10, childKey20},
 			[]ValueBytes{valueBytes10, valueBytes20}, Level(2))
@@ -129,7 +130,7 @@ func TestPersistentStore(t *testing.T) {
 		vectors = vector.T{4, 3}.AsSet()
 		vectors.Add(vector.T{2, 1})
 		vectors.Add(vector.T{5, 6})
-		quantizedSet = quantizer.Quantize(ctx, vectors)
+		quantizedSet = quantizer.Quantize(&workspace, vectors)
 		root = NewPartition(
 			quantizer, quantizedSet, []ChildKey{primaryKey200, primaryKey300, primaryKey400},
 			[]ValueBytes{valueBytes200, valueBytes300, valueBytes400}, LeafLevel)
@@ -140,11 +141,11 @@ func TestPersistentStore(t *testing.T) {
 	})
 
 	t.Run("insert a partition and then delete it", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		vectors := vector.T{4, 3}.AsSet()
-		quantizedSet := quantizer.Quantize(ctx, vectors)
+		quantizedSet := quantizer.Quantize(&workspace, vectors)
 		testPartition := NewPartition(
 			quantizer, quantizedSet, []ChildKey{childKey2}, []ValueBytes{valueBytes2}, Level(2))
 		partitionKey, err := txn.InsertPartition(ctx, testPartition)
@@ -160,12 +161,12 @@ func TestPersistentStore(t *testing.T) {
 	})
 
 	t.Run("add to root partition", func(t *testing.T) {
-		txn := beginTransaction(ctx, t, store)
+		txn := beginTransaction(ctx, t, &workspace, store)
 		defer commitTransaction(ctx, t, store, txn)
 
 		emptySet := vector.MakeSet(2)
 		root := NewPartition(
-			quantizer, quantizer.Quantize(ctx, emptySet), []ChildKey{}, []ValueBytes{}, Level(2))
+			quantizer, quantizer.Quantize(&workspace, emptySet), []ChildKey{}, []ValueBytes{}, Level(2))
 		err := txn.SetRootPartition(ctx, root)
 		require.NoError(t, err)
 

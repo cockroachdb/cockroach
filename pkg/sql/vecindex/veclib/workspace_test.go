@@ -3,25 +3,16 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package internal
+package veclib
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestWorkspace(t *testing.T) {
-	ctx := context.Background()
-
-	// No workspace in context.
-	require.Nil(t, WorkspaceFromContext(ctx))
-
-	// Set workspace in context.
-	ctx = WithWorkspace(ctx, &Workspace{})
-	workspace := WorkspaceFromContext(ctx)
-	require.NotNil(t, workspace)
+	var workspace Workspace
 
 	// Test alloc/free vectors.
 	vectors := workspace.AllocVectorSet(3, 2)

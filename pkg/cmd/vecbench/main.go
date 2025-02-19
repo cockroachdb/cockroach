@@ -27,6 +27,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -194,10 +195,11 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 	data := loadDataset(searchFileName)
 	fmt.Println()
 
+	var workspace veclib.Workspace
 	doSearch := func(beamSize int) {
 		start := timeutil.Now()
 
-		txn := beginTransaction(ctx, index.Store())
+		txn := beginTransaction(ctx, &workspace, index.Store())
 		defer commitTransaction(ctx, index.Store(), txn)
 
 		// Search for test vectors.
@@ -405,8 +407,8 @@ func buildIndex(
 
 	// Insert block of vectors within the scope of a transaction.
 	var insertCount atomic.Uint64
-	insertBlock := func(start, end int) {
-		txn := beginTransaction(ctx, store)
+	insertBlock := func(w *veclib.Workspace, start, end int) {
+		txn := beginTransaction(ctx, w, store)
 		defer commitTransaction(ctx, store, txn)
 
 		for i := start; i < end; i++ {
@@ -441,10 +443,11 @@ func buildIndex(
 	for i := 0; i < data.Train.Count; i += countPerProc {
 		end := min(i+countPerProc, data.Train.Count)
 		go func(start, end int) {
+			var workspace veclib.Workspace
 			// Break vector group into individual transactions that each insert a
 			// block of vectors. Run any pending fixups after each block.
 			for j := start; j < end; j += blockSize {
-				insertBlock(j, min(j+blockSize, end))
+				insertBlock(&workspace, j, min(j+blockSize, end))
 			}
 		}(i, end)
 	}
@@ -574,8 +577,8 @@ func loadDataset(fileName string) dataset {
 	return data
 }
 
-func beginTransaction(ctx context.Context, store vecstore.Store) vecstore.Txn {
-	txn, err := store.Begin(ctx)
+func beginTransaction(ctx context.Context, w *veclib.Workspace, store vecstore.Store) vecstore.Txn {
+	txn, err := store.Begin(ctx, w)
 	if err != nil {
 		panic(err)
 	}
