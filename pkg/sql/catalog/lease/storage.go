@@ -120,7 +120,7 @@ func (s storage) crossValidateDuringRenewal() bool {
 // acquire a lease on the most recent version of a descriptor. The lease is tied
 // to the provided sqlliveness.Session. If a newer version (then lastVersion) of
 // the descriptor exists, this function will attempt to acquire a lease on it.
-// If no newer  version exists, it returns a nil descriptor. If the lease cannot
+// If no newer version exists, it returns a nil descriptor. If the lease cannot
 // be obtained because the descriptor is being dropped or is offline (currently
 // only applicable to tables), an inactiveTableError is returned.
 func (s storage) acquire(
@@ -128,6 +128,7 @@ func (s storage) acquire(
 	session sqlliveness.Session,
 	id descpb.ID,
 	lastVersion descpb.DescriptorVersion,
+	lastSessionID sqlliveness.SessionID,
 ) (desc catalog.Descriptor, prefix []byte, _ error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	prefix = s.getRegionPrefix()
@@ -151,7 +152,7 @@ func (s storage) acquire(
 		// written a value to the database, which we'd leak if we did not delete it.
 		// Note that the expiration is part of the primary key in the table, so we
 		// would not overwrite the old entry if we just were to do another insert.
-		//repeatIteration = desc != nil
+		// repeatIteration = desc != nil
 		if sessionID != nil && desc != nil {
 			if err := s.writer.deleteLease(ctx, txn, leaseFields{
 				regionPrefix: prefix,
@@ -168,9 +169,16 @@ func (s storage) acquire(
 		// any retryable error. If we run into an error then the delete
 		// above may need to be executed again.
 		latestDesc, err := s.mustGetDescriptorByID(ctx, txn, id)
-		// If the descriptor version hasn't changed, then nothing needs to be done.
-		if err != nil || latestDesc.GetVersion() == lastVersion {
+
+		if err != nil {
 			return err
+		}
+		// If the descriptor version hasn't changed, then no new lease to be
+		// inserted unless the session ID has changed on us. No descriptor will
+		// be set indicating to the caller that no new version exists.
+		if latestDesc.GetVersion() == lastVersion &&
+			lastSessionID == session.ID() {
+			return nil
 		}
 		desc = latestDesc
 		if err := catalog.FilterAddingDescriptor(desc); err != nil {
@@ -233,6 +241,11 @@ func (s storage) acquire(
 			continue
 		case err != nil:
 			return nil, nil, err
+		}
+		// If desc is nil then no new descriptor was available to be leased.
+		// i.e. the last version we leased is the latest and still held
+		if desc == nil {
+			return nil, nil, nil
 		}
 		log.VEventf(ctx, 2, "storage acquired lease %v", desc)
 		if s.testingKnobs.LeaseAcquiredEvent != nil {

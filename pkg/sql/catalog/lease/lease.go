@@ -853,15 +853,17 @@ func acquireNodeLease(
 			}
 			newest := m.findNewest(id)
 			var currentVersion descpb.DescriptorVersion
+			var currentSessionID sqlliveness.SessionID
 			if newest != nil {
 				currentVersion = newest.GetVersion()
+				currentSessionID = newest.getSessionID()
 			}
 			// A session will always be populated, since we use session based leasing.
 			session, err := m.storage.livenessProvider.Session(ctx)
 			if err != nil {
 				return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
 			}
-			desc, regionPrefix, err := m.storage.acquire(ctx, session, id, currentVersion)
+			desc, regionPrefix, err := m.storage.acquire(ctx, session, id, currentVersion, currentSessionID)
 			if err != nil {
 				return nil, err
 			}
@@ -877,13 +879,9 @@ func acquireNodeLease(
 			t.mu.Lock()
 			t.mu.takenOffline = false
 			defer t.mu.Unlock()
-			var newDescVersionState *descriptorVersionState
-			newDescVersionState, err = t.upsertLeaseLocked(ctx, desc, session, regionPrefix)
+			err = t.upsertLeaseLocked(ctx, desc, session, regionPrefix)
 			if err != nil {
 				return nil, err
-			}
-			if newDescVersionState != nil {
-				m.names.insert(ctx, newDescVersionState)
 			}
 			return true, nil
 		})
