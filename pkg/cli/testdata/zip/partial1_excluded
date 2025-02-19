@@ -75,6 +75,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [cluster] retrieving SQL data for system.tenant_tasks... writing output: debug/system.tenant_tasks.txt... done
 [cluster] retrieving SQL data for system.tenant_usage... writing output: debug/system.tenant_usage.txt... done
 [cluster] retrieving SQL data for system.tenants... writing output: debug/system.tenants.txt... done
+[cluster] retrieving SQL data for system.zones... writing output: debug/system.zones.txt... done
 [cluster] requesting nodes... received response... writing JSON output: debug/nodes.json... done
 [cluster] requesting liveness... received response... writing JSON output: debug/liveness.json... done
 [cluster] requesting tenant ranges... received response...
