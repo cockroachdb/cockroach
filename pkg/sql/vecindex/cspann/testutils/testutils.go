@@ -24,7 +24,7 @@ import (
 func LoadFeatures(t testing.TB, count int) vector.Set {
 	var filePath string
 	if bazel.BuiltWithBazel() {
-		runfile, err := bazel.Runfile("pkg/sql/vecindex/testdata/features_10000.gob")
+		runfile, err := bazel.Runfile("pkg/sql/vecindex/cspann/testdata/features_10000.gob")
 		require.NoError(t, err)
 		filePath = runfile
 	} else {

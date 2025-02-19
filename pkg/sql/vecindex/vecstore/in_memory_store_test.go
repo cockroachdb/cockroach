@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

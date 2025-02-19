@@ -3,13 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package vecindex
+package cspann
 
 import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"

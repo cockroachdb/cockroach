@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 )
 
