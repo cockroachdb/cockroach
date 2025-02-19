@@ -4401,7 +4401,7 @@ func (h *flowControlTestHelper) waitForConnectedStreams(
 				connected++
 			}
 		}
-		if connected != expConnectedStreams {
+		if len(state.ConnectedStreams) != expConnectedStreams || connected != expConnectedStreams {
 			return fmt.Errorf("expected %d connected streams, got %d/%d",
 				expConnectedStreams, connected, len(state.ConnectedStreams))
 		}
