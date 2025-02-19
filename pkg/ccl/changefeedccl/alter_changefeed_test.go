@@ -32,13 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -1198,6 +1198,9 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Set verbose log to confirm whether or not we hit the same nil row issue as in #140669
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	rnd, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)
 
@@ -1356,7 +1359,11 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 141463)
+
+	// TODO(#141405): Remove this once llrbFrontier starts merging
+	// adjacent spans. The current lack of merging causes issues
+	// with the checks in this test around expected resolved spans.
+	defer span.EnableBtreeFrontier(true)()
 
 	var rndMu struct {
 		syncutil.Mutex
