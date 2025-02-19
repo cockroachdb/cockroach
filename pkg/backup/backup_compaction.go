@@ -554,49 +554,6 @@ func resolveBackupDirs(
 	return resolvedBaseDirs, resolvedIncDirs, resolvedSubdir, nil
 }
 
-// maybeWriteBackupLock attempts to write a backup lock for the given jobID, if
-// it does not already exist. If another backup lock file for another job is
-// found, it will return an error.
-//
-// TODO (kev-cao): At some point should move this helper so it can be ysed by
-// the backup code as well.
-func maybeWriteBackupLock(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	dest backupdest.ResolvedDestination,
-	jobID jobspb.JobID,
-) error {
-	foundLockFile, err := backupinfo.CheckForBackupLock(
-		ctx,
-		execCtx.ExecCfg(),
-		dest.DefaultURI,
-		jobID,
-		execCtx.User(),
-	)
-	if err != nil {
-		return err
-	}
-	if foundLockFile {
-		return nil
-	}
-	if err := backupinfo.CheckForPreviousBackup(
-		ctx,
-		execCtx.ExecCfg(),
-		dest.DefaultURI,
-		jobID,
-		execCtx.User(),
-	); err != nil {
-		return err
-	}
-	return backupinfo.WriteBackupLock(
-		ctx,
-		execCtx.ExecCfg(),
-		dest.DefaultURI,
-		jobID,
-		execCtx.User(),
-	)
-}
-
 // prepareCompactedBackupMeta prepares the manifest, job details,
 // and resolved destination for the compacted backup based on the chain of backups.
 func prepareCompactedBackupMeta(
