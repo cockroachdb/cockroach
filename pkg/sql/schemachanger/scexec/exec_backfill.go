@@ -340,7 +340,7 @@ func runBackfiller(
 		}
 	}
 	stop := deps.PeriodicProgressFlusher().StartPeriodicUpdates(ctx, tracker)
-	defer func() { _ = stop() }()
+	defer stop()
 	ib := deps.IndexBackfiller()
 	im := deps.IndexMerger()
 	const op = "run backfills and merges"
@@ -364,9 +364,6 @@ func runBackfiller(
 			deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
 		}
 		return scerrors.SchemaChangerUserError(err)
-	}
-	if err := stop(); err != nil {
-		return err
 	}
 	if err := tracker.FlushFractionCompleted(ctx); err != nil {
 		return err
