@@ -464,8 +464,8 @@ func (tc *Catalog) GetDependencyDigest() cat.DependencyDigest {
 }
 
 // LeaseByStableID does not do anything since no leasing is used here.
-func (tc *Catalog) LeaseByStableID(_ context.Context, _ cat.StableID) error {
-	return nil
+func (tc *Catalog) LeaseByStableID(ctx context.Context, id cat.StableID) (uint64, error) {
+	return 1, nil
 }
 
 // ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
@@ -651,6 +651,11 @@ func (s *Schema) ID() cat.StableID {
 	return s.SchemaID
 }
 
+// Version is a part of cat.Object
+func (s *Schema) Version() uint64 {
+	return 1
+}
+
 // PostgresDescriptorID is part of the cat.Object interface.
 func (s *Schema) PostgresDescriptorID() catid.DescID {
 	return catid.DescID(s.SchemaID)
@@ -707,6 +712,11 @@ func (tv *View) String() string {
 // ID is part of the cat.DataSource interface.
 func (tv *View) ID() cat.StableID {
 	return tv.ViewID
+}
+
+// Version is a part of cat.Object
+func (tv *View) Version() uint64 {
+	return 1
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
@@ -824,6 +834,11 @@ func (tt *Table) SetMultiRegion(val bool) {
 // ID is part of the cat.DataSource interface.
 func (tt *Table) ID() cat.StableID {
 	return tt.TabID
+}
+
+// Version is a part of cat.Object
+func (tt *Table) Version() uint64 {
+	return 1
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
@@ -1681,6 +1696,11 @@ var _ cat.Sequence = &Sequence{}
 // ID is part of the cat.DataSource interface.
 func (ts *Sequence) ID() cat.StableID {
 	return ts.SeqID
+}
+
+// Version is a part of cat.Object
+func (ts *Sequence) Version() uint64 {
+	return 1
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
