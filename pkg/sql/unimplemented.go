@@ -7,10 +7,11 @@ package sql
 
 import (
 	"context"
-
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // The below methods are ordered in alphabetical order. They represent statements
@@ -29,6 +30,18 @@ func (p *planner) CommentOnType(ctx context.Context, n *tree.CommentOnType) (pla
 func (p *planner) CreatePolicy(ctx context.Context, n *tree.CreatePolicy) (planNode, error) {
 	return nil, pgerror.New(pgcode.FeatureNotSupported,
 		"CREATE POLICY is only implemented in the declarative schema changer")
+}
+
+// CreateTrigger is UNIMPLEMENTED for the legacy schema changer.
+func (p *planner) CreateTrigger(_ context.Context, _ *tree.CreateTrigger) (planNode, error) {
+	return nil, errors.WithHint(
+		pgerror.New(
+			pgcode.FeatureNotSupported,
+			"CREATE TRIGGER is only implemented in the declarative schema changer"),
+		"This error may be happening due to running CREATE TRIGGER in an explicit transaction."+
+			" you may want to try running CREATE TRIGGER in an implicit transaction."+
+			" See the documentation for additional details:"+
+			docs.URL("https://www.cockroachlabs.com/docs/stable/online-schema-changes#declarative-schema-changer"))
 }
 
 func (p *planner) DropOwnedBy(ctx context.Context) (planNode, error) {
