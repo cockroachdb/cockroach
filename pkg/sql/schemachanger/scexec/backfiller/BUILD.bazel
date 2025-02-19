@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/util/intsets",
+        "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
