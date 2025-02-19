@@ -6833,31 +6833,8 @@ func MVCCGarbageCollectRangeKeys(
 
 			// Verify that there are no remaining data under the deleted range using
 			// time bound iterator.
-			ptIter, err := NewMVCCIncrementalIterator(ctx, rw, MVCCIncrementalIterOptions{
-				KeyTypes:     IterKeyTypePointsOnly,
-				StartKey:     rangeKeys.Bounds.Key,
-				EndKey:       rangeKeys.Bounds.EndKey,
-				EndTime:      gcKey.Timestamp,
-				IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
-				ReadCategory: fs.MVCCGCReadCategory,
-			})
-			if err != nil {
+			if err := verifyNoValuesUnderRangeKey(ctx, rw, rangeKeys.Bounds, gcKey); err != nil {
 				return err
-			}
-			defer ptIter.Close()
-
-			for ptIter.SeekGE(MVCCKey{Key: rangeKeys.Bounds.Key}); ; ptIter.Next() {
-				if ok, err := ptIter.Valid(); err != nil {
-					return err
-				} else if !ok {
-					break
-				}
-				// Disallow any value under the range key. We only skip intents as they
-				// must have a provisional value with appropriate timestamp.
-				if pointKey := ptIter.UnsafeKey(); pointKey.IsValue() {
-					return errors.Errorf("attempt to delete range tombstone %q hiding key at %q",
-						gcKey, pointKey)
-				}
 			}
 		}
 		return nil
@@ -6870,6 +6847,37 @@ func MVCCGarbageCollectRangeKeys(
 	}
 
 	return nil
+}
+
+func verifyNoValuesUnderRangeKey(
+	ctx context.Context, reader Reader, bounds roachpb.Span, gcKey CollectableGCRangeKey,
+) error {
+	// Use a time bound iterator to verify there is no remaining data under the
+	// deleted range.
+	ptIter, err := NewMVCCIncrementalIterator(ctx, reader, MVCCIncrementalIterOptions{
+		KeyTypes:     IterKeyTypePointsOnly,
+		StartKey:     bounds.Key,
+		EndKey:       bounds.EndKey,
+		EndTime:      gcKey.Timestamp,
+		IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
+		ReadCategory: fs.MVCCGCReadCategory,
+	})
+	if err != nil {
+		return err
+	}
+	defer ptIter.Close()
+
+	for ptIter.SeekGE(MVCCKey{Key: bounds.Key}); ; ptIter.Next() {
+		if ok, err := ptIter.Valid(); err != nil || !ok {
+			return err
+		}
+		// Disallow any value under the range key. We only skip intents as they
+		// must have a provisional value with appropriate timestamp.
+		if pointKey := ptIter.UnsafeKey(); pointKey.IsValue() {
+			return errors.Errorf("attempt to delete range tombstone %q hiding key at %q",
+				gcKey, pointKey)
+		}
+	}
 }
 
 // MVCCGarbageCollectWholeRange removes all the range data and resets counters.
