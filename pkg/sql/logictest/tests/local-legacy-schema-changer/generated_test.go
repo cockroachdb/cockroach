@@ -2418,6 +2418,13 @@ func TestLogic_udf_upsert(
 	runLogicTest(t, "udf_upsert")
 }
 
+func TestLogic_unimplemented(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "unimplemented")
+}
+
 func TestLogic_union(
 	t *testing.T,
 ) {
