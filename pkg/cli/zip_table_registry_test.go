@@ -128,7 +128,6 @@ func TestNoForbiddenSystemTablesInDebugZip(t *testing.T) {
 		"system.join_tokens",
 		"system.comments",
 		"system.ui",
-		"system.zones",
 		"system.statement_bundle_chunks",
 		"system.statement_statistics",
 		"system.transaction_statistics",
