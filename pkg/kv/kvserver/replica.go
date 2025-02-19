@@ -85,7 +85,7 @@ const (
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
 
-	termCacheSize = 6
+	TermCacheSize = 6
 )
 
 // StrictGCEnforcement controls whether requests are rejected based on the GC

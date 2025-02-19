@@ -395,7 +395,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// to be durable and a stable portion for entries that are known to be
 	// durable.
 	s.EntryCache.Add(s.RangeID, m.Entries, true /* truncate */)
-	_ = s.TermCache.ScanAppend(m.Entries)
+	_ = s.TermCache.ScanAppend(m.Entries, true /* truncate */)
 
 	return state, nil
 }
@@ -622,8 +622,11 @@ func LoadTerm(
 	}
 
 	if found {
+		fmt.Printf("returning term from term cache.index: %v, term: %v\n", index, term)
 		return kvpb.RaftTerm(term), nil
 	}
+
+	fmt.Printf("not found in term cache.index: %v, term: %v\n", index, term)
 
 	entry, found := eCache.Get(rangeID, index)
 	if found {
@@ -659,6 +662,7 @@ func LoadTerm(
 		}
 		if !typ.IsSideloaded() {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
+			_ = tc.ScanAppend([]raftpb.Entry{entry}, false /* truncate */)
 		}
 		return kvpb.RaftTerm(entry.Term), nil
 	}
@@ -702,6 +706,7 @@ func LoadEntries(
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
 	account *BytesAccount,
+	tc *raft.TermCache,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -777,6 +782,7 @@ func LoadEntries(
 		return nil, 0, 0, err
 	}
 	eCache.Add(rangeID, ents, false /* truncate */)
+	_ = tc.ScanAppend(ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
 	// Did we hit the size limits? If so, return what we have.

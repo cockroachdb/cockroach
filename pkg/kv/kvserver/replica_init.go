@@ -217,7 +217,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		SyncWaiter: store.syncWaiters[int(rangeID)%len(store.syncWaiters)],
 		EntryCache: store.raftEntryCache,
 		Settings:   store.cfg.Settings,
-		TermCache:  raft.NewTermCache(termCacheSize),
+		TermCache:  raft.NewTermCache(TermCacheSize),
 		Metrics: logstore.Metrics{
 			RaftLogCommitLatency: store.metrics.RaftLogCommitLatency,
 		},

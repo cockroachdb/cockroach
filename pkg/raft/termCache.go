@@ -49,7 +49,6 @@ var ErrTermCacheEmpty = errors.New("termCache is empty")
 
 // NewTermCache initializes a TermCache with a fixed maxSize.
 func NewTermCache(size uint64) *TermCache {
-	fmt.Println("new term cache")
 	return &TermCache{
 		cache:     make([]entryID, 0, size),
 		maxSize:   size,
@@ -57,11 +56,125 @@ func NewTermCache(size uint64) *TermCache {
 	}
 }
 
+// truncateFrom clears all entries from the ringBuf with index equal to or
+// greater than lo. The method returns the aggregate size and count of entries
+// removed. Note that lo itself may or may not be in the cache.
+// If lo is lower than the first entry index, then the whole term cache is wiped
+// Mirrors the truncateFrom function in raftEntry cache
+func (tc *TermCache) truncateFrom(lo uint64) error {
+	if len(tc.cache) == 0 {
+		return nil
+	}
+	if lo > tc.lastIndex {
+		return nil
+	}
+	if lo <= tc.getFirstTermCacheEntry().index {
+		tc.cache = tc.cache[:0]
+		tc.lastIndex = 0
+		return nil
+	}
+
+	if len(tc.cache) == 1 {
+		if lo == tc.cache[0].index {
+			tc.cache = tc.cache[:0]
+		} else if lo > tc.cache[0].index && lo <= tc.lastIndex {
+			tc.lastIndex = lo - 1
+		}
+		return nil
+	}
+
+	for i := 0; i < len(tc.cache)-1; i++ {
+		// low match a term flip index
+		if lo == tc.cache[i].index {
+			// remove everything starting from (including) this term flip index
+			tc.cache = tc.cache[:i]
+			if len(tc.cache) == 0 {
+				tc.lastIndex = 0
+			} else {
+				// set lastIndex to be the index one before lo,
+				tc.lastIndex = lo - 1
+				// invariant after above assignment: tc.lastIndex >= tc.cache[i-1].index
+			}
+			return nil
+		}
+
+		if lo > tc.cache[i].index && lo < tc.cache[i+1].index {
+			tc.cache = tc.cache[:i+1]
+			tc.lastIndex = lo - 1
+			return nil
+		}
+	}
+
+	return nil
+}
+
+// clearTo clears all entries from the termCache with index less than hi.
+// Mirrors the clearTo function in raftEntry cache
+func (tc *TermCache) ClearTo(hi uint64) error {
+	if len(tc.cache) == 0 {
+		return nil
+	}
+	if hi < tc.getFirstTermCacheEntry().index {
+		return nil
+	}
+
+	if hi > tc.lastIndex {
+		tc.cache = tc.cache[:0]
+		tc.lastIndex = 0
+		return nil
+	}
+
+	if hi > tc.getLastFlipEntry().index {
+		// TODO(hakuuww): maybe we can do better
+		// wipe cache
+		tc.cache = tc.cache[:0]
+		tc.lastIndex = 0
+		return nil
+	}
+
+	if len(tc.cache) == 1 {
+		if hi == tc.cache[0].index {
+			tc.lastIndex = hi
+			return nil
+		}
+		if hi > tc.cache[0].index {
+			tc.lastIndex = hi
+			return nil
+		}
+	}
+
+	for i := 0; i < len(tc.cache); i++ {
+		// low match a term flip index
+		if hi == tc.cache[i].index {
+			tc.cache = tc.cache[i:]
+			return nil
+		}
+
+		// TODO(hakuuww): needs more think through
+		// does entries must represent term flip indices?
+		if hi > tc.cache[i].index && hi < tc.cache[i+1].index {
+			tc.cache = tc.cache[i+1:]
+			return nil
+		}
+	}
+
+	return nil
+}
+
 // ScanAppend this is bad, we are scanning linearly through a
 // potentially very large array
-func (tc *TermCache) ScanAppend(entries []pb.Entry) error {
-	fmt.Println("scan append")
+func (tc *TermCache) ScanAppend(entries []pb.Entry, truncate bool) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	if truncate {
+		truncIdx := entries[0].Index
+		_ = tc.truncateFrom(truncIdx)
+	}
+
 	for _, ent := range entries {
+		// TODO(hakuuww): refactor
 		if err := tc.Append(entryID{ent.Term, ent.Index}); errors.Is(err, ErrInvalidEntryID) {
 			continue
 		}
@@ -72,9 +185,9 @@ func (tc *TermCache) ScanAppend(entries []pb.Entry) error {
 // Append adds a new entryID to the cache.
 // If the cache is full, the oldest entryID is removed.
 func (tc *TermCache) Append(newEntry entryID) error {
-	fmt.Println("Append()")
 	if len(tc.cache) == 0 {
 		tc.cache = append(tc.cache, newEntry)
+		tc.lastIndex = tc.getFirstTermCacheEntry().index
 		return nil
 	}
 
@@ -109,7 +222,6 @@ func (tc *TermCache) Append(newEntry entryID) error {
 // Match returns whether the entryID is in the TermCache.
 // If it is in the termCache, then it is in the raftLog.
 func (tc *TermCache) Match(argEntryId entryID) (bool, error) {
-	fmt.Println("Match()")
 	if len(tc.cache) == 0 {
 		return false, ErrTermCacheEmpty
 	}
@@ -145,7 +257,6 @@ func (tc *TermCache) Match(argEntryId entryID) (bool, error) {
 // Term returns the entry term based on the given entry index
 // Returns error if not in the termCache
 func (tc *TermCache) Term(index uint64) (term uint64, err error) {
-	fmt.Println("Term()")
 	if len(tc.cache) == 0 {
 		return 0, ErrTermCacheEmpty
 	}
@@ -183,3 +294,16 @@ func (tc *TermCache) getFirstTermCacheEntry() entryID {
 // truncate
 // no need for truncate for now, assume the caller doesn't query term cache for
 // compacted entries
+
+func (tc *TermCache) printTermCache() {
+	fmt.Print("printTermCache")
+	fmt.Print("[")
+	for _, entry := range tc.cache {
+		fmt.Print(" (")
+		fmt.Print(entry.index, entry.term)
+		fmt.Print(")")
+	}
+	fmt.Println("]")
+	fmt.Print("lastIndex:")
+	fmt.Println(tc.lastIndex)
+}

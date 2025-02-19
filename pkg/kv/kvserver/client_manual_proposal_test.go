@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -228,6 +229,7 @@ LIMIT
 			SyncWaiter:  swl,
 			EntryCache:  raftentry.NewCache(1024),
 			Settings:    st,
+			TermCache:   raft.NewTermCache(kvserver.TermCacheSize),
 			Metrics: logstore.Metrics{
 				RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 					Mode:         metric.HistogramModePrometheus,
