@@ -431,9 +431,9 @@ func generateRepoList(
 	log.Printf("will bump version in the following branches: %s", strings.Join(maybeVersionBumpBranches, ", "))
 
 	for _, branch := range maybeVersionBumpBranches {
-		// skip extraordinary and baking branches
-		if strings.HasPrefix(branch, "staging-") || strings.HasSuffix(branch, "-rc") {
-			log.Printf("not bumping version on staging/backing branch %s", branch)
+		// skip extraordinary branches
+		if strings.HasPrefix(branch, "staging-") {
+			log.Printf("not bumping version on staging branch %s", branch)
 			continue
 		}
 		ok, err := fileExistsInGit(branch, versionFile)
