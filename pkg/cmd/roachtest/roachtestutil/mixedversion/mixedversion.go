@@ -321,12 +321,15 @@ type (
 	// testOptions contains some options that can be changed by the user
 	// that expose some control over the generated test plan and behaviour.
 	testOptions struct {
-		useFixturesProbability         float64
-		upgradeTimeout                 time.Duration
-		maxNumPlanSteps                int
-		minUpgrades                    int
-		maxUpgrades                    int
-		minimumSupportedVersion        *clusterupgrade.Version
+		useFixturesProbability  float64
+		upgradeTimeout          time.Duration
+		maxNumPlanSteps         int
+		minUpgrades             int
+		maxUpgrades             int
+		minimumSupportedVersion *clusterupgrade.Version
+		// predecessorFunc computes the predecessor of a particular
+		// release. By default, random predecessors are used, but tests
+		// may choose to always use the latest predecessor as well.
 		predecessorFunc                predecessorFunc
 		waitForReplication             bool
 		skipVersionProbability         float64
@@ -365,11 +368,6 @@ type (
 		// Invariant: there is exactly one channel in `bgChans` for each
 		// hook in `Test.hooks.background`.
 		bgChans []shouldStop
-
-		// predecessorFunc computes the predecessor of a particular
-		// release. By default, random predecessors are used, but tests
-		// may choose to always use the latest predecessor as well.
-		predecessorFunc predecessorFunc
 
 		// the following are test-only fields, allowing tests to simulate
 		// cluster properties without passing a cluster.Cluster
@@ -560,7 +558,6 @@ func defaultTestOptions() testOptions {
 		// appears to help, but we should be cautious of tests that create a lot
 		// of ranges as this may add significant delay.
 		waitForReplication:             true,
-		predecessorFunc:                randomPredecessor,
 		enabledDeploymentModes:         allDeploymentModes,
 		skipVersionProbability:         0.5,
 		overriddenMutatorProbabilities: make(map[string]float64),
@@ -616,17 +613,16 @@ func NewTest(
 	testCtx, cancel := context.WithCancel(ctx)
 
 	test := &Test{
-		ctx:             testCtx,
-		cancel:          cancel,
-		cluster:         c,
-		logger:          testLogger,
-		crdbNodes:       crdbNodes,
-		options:         opts,
-		rt:              t,
-		prng:            prng,
-		seed:            seed,
-		hooks:           &testHooks{crdbNodes: crdbNodes},
-		predecessorFunc: opts.predecessorFunc,
+		ctx:       testCtx,
+		cancel:    cancel,
+		cluster:   c,
+		logger:    testLogger,
+		crdbNodes: crdbNodes,
+		options:   opts,
+		rt:        t,
+		prng:      prng,
+		seed:      seed,
+		hooks:     &testHooks{crdbNodes: crdbNodes},
 	}
 
 	assertValidTest(test, t.Fatal)
@@ -821,9 +817,9 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 		}
 	}()
 	var retries int
-	// In case the length of the test plan exceeds `opts.maxNumPlanSteps`, retry up to 100 times.
+	// In case the length of the test plan exceeds `opts.maxNumPlanSteps`, retry up to 200 times.
 	// N.B. Statistically, the expected number of retries is miniscule; see #138014 for more info.
-	for ; retries < 100; retries++ {
+	for ; retries < 200; retries++ {
 
 		// Pick a random deployment mode to use in this test run among the
 		// list of enabled deployment modes enabled for this test.
@@ -922,7 +918,7 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 	// function to change in case the rules around what upgrades are
 	// possible in CRDB change.
 	possiblePredecessorsFor := func(v *clusterupgrade.Version) ([]*clusterupgrade.Version, error) {
-		pred, err := t.predecessorFunc(t.prng, v, t.options.minimumSupportedVersion)
+		pred, err := t.options.predecessorFunc(t.prng, v, t.options.minimumSupportedVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -937,7 +933,7 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 			return []*clusterupgrade.Version{pred}, nil
 		}
 
-		predPred, err := t.predecessorFunc(t.prng, pred, t.options.minimumSupportedVersion)
+		predPred, err := t.options.predecessorFunc(t.prng, pred, t.options.minimumSupportedVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -1089,14 +1085,18 @@ func (t *Test) updateOptionsForDeploymentMode(mode DeploymentMode) {
 		}
 	}
 
-	if mode == SeparateProcessDeployment {
-		// We use latest predecessors in separate-process deployments
-		// since they are more prone to flake (due to the relative lack of
-		// testing historically). In addition, production separate-process
-		// deployments (Serverless) run in much more controlled
-		// environments than self-hosted and are generally running the
-		// latest patch releases.
-		t.options.predecessorFunc = latestPredecessor
+	if t.options.predecessorFunc == nil {
+		switch mode {
+		case SeparateProcessDeployment:
+			// We use latest predecessors in separate-process deployments since separate-process
+			// is more prone to flake (due to the relative lack of testing historically). In
+			// addition, production separate-process deployments (Serverless) run in much more
+			// controlled environments than self-hosted and are generally running the latest
+			// patch releases.
+			t.options.predecessorFunc = latestPredecessor
+		default:
+			t.options.predecessorFunc = randomPredecessor
+		}
 	}
 }
 

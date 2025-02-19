@@ -391,17 +391,21 @@ func newTest(options ...CustomOption) *Test {
 		fn(&testOptions)
 	}
 
+	// N.B. by setting this, we override the framework defaults that force
+	// separate process to use latestPredecessor. This is intentional as it
+	// prevents flaking whenever new versions are added.
+	testOptions.predecessorFunc = testPredecessorFunc
+
 	return &Test{
-		ctx:             ctx,
-		logger:          nilLogger,
-		crdbNodes:       nodes,
-		options:         testOptions,
-		_arch:           archP(vm.ArchAMD64),
-		_isLocal:        boolP(false),
-		prng:            newRand(),
-		hooks:           &testHooks{crdbNodes: nodes},
-		seed:            seed,
-		predecessorFunc: testPredecessorFunc,
+		ctx:       ctx,
+		logger:    nilLogger,
+		crdbNodes: nodes,
+		options:   testOptions,
+		_arch:     archP(vm.ArchAMD64),
+		_isLocal:  boolP(false),
+		prng:      newRand(),
+		hooks:     &testHooks{crdbNodes: nodes},
+		seed:      seed,
 	}
 }
 
@@ -501,7 +505,7 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 		mvt._isLocal = isLocal
 	}
 	if predecessors != nil {
-		mvt.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+		mvt.options.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 			if v.IsCurrent() {
 				return predecessors[len(predecessors)-1], nil
 			}
@@ -880,4 +884,46 @@ func (removeUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutatio
 
 func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {
 	return nil
+}
+
+// This is a regression test to ensure that separate process deployments
+// correctly default to using latest predecessors.
+func Test_SeparateProcessUsesLatestPred(t *testing.T) {
+	testOptions := defaultTestOptions()
+	testOverrides := []CustomOption{
+		EnabledDeploymentModes(SeparateProcessDeployment),
+		DisableSkipVersionUpgrades,
+		MinUpgrades(5),
+		MaxUpgrades(5),
+	}
+
+	for _, fn := range testOverrides {
+		fn(&testOptions)
+	}
+	mvt := &Test{
+		ctx:       ctx,
+		logger:    nilLogger,
+		crdbNodes: nodes,
+		options:   testOptions,
+		_arch:     archP(vm.ArchAMD64),
+		_isLocal:  boolP(false),
+		prng:      newRand(),
+		hooks:     &testHooks{crdbNodes: nodes},
+		seed:      seed,
+	}
+
+	plan, err := mvt.plan()
+	require.NoError(t, err)
+	//
+	upgradePath := plan.Versions()
+	// Remove the last element as it's the current version which is a special case.
+	// The unit test framework hardcodes the current version which should have no
+	// patch releases but LatestPatchRelease will pull the actual latest patch.
+	upgradePath = upgradePath[:len(upgradePath)-1]
+	for _, version := range upgradePath {
+		series := version.Series()
+		latestVersion, err := clusterupgrade.LatestPatchRelease(series)
+		require.NoError(t, err)
+		require.Equal(t, latestVersion, version)
+	}
 }

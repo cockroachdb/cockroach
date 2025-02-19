@@ -2245,7 +2245,7 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	// storage cluster the virtual cluster needs to connect to. If the
 	// user customized the storage cluster in the `StartOpts`, we use
 	// that.
-	storageCluster := c.All()
+	storageCluster := c.CRDBNodes()
 	if len(startOpts.StorageNodes) > 0 {
 		storageCluster = startOpts.StorageNodes
 	}
