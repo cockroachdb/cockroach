@@ -29,12 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1605,4 +1607,120 @@ func TestLeaseCountDetailSessionBased(t *testing.T) {
 	require.Equal(t, 1, detail.count)
 	require.Equal(t, 1, detail.numSQLInstances)
 	require.Equal(t, 0, detail.sampleSQLInstanceID)
+}
+
+// fakeSessionProvider session provider that only overloads the Session function
+// with a callback.
+type fakeSessionProvider struct {
+	syncutil.Mutex
+	sqlliveness.Provider
+	getSession func() *sqllivenesstestutils.FakeSession
+}
+
+var _ sqlliveness.Provider = &fakeSessionProvider{}
+
+// Session implements sqlliveness.Provider
+func (p *fakeSessionProvider) Session(ctx context.Context) (sqlliveness.Session, error) {
+	p.Lock()
+	defer p.Unlock()
+	if f := p.getSession(); f != nil {
+		return f, nil
+	}
+	return p.Provider.Session(ctx)
+}
+
+// TestLeaseManagerSessionIDChanges validates that the lease manager can acquire
+// and release leases properly even if the SessionID changes. This can happen
+// during a fail over scenario, where a new SessionID could be picked up. Which,
+// should cause us to reacquire leases.
+func TestLeaseManagerSessionIDChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, sqlDB, kvDB := serverutils.StartServer(
+		t, base.TestServerArgs{
+			// Avoid using tenants since async tenant migration steps can acquire
+			// leases on our user tables.
+			DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+		})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+	leaseManager := s.LeaseManager().(*Manager)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	runner.Exec(t, `SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled = false`)
+
+	runner.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
+
+	getLatestLeasedDesc := func() *descriptorVersionState {
+		state := leaseManager.findDescriptorState(tableDesc.GetID(), false)
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		descState := state.mu.active.findNewest()
+		return descState
+	}
+
+	// Set up a fake session provider that will keep changing IDs and every session
+	// will instantly expire. This is like having a zero duration lease in the expiry
+	// model.
+	var nextSessionID atomic.Int64
+	var enableHook atomic.Bool
+
+	fs := fakeSessionProvider{
+		Provider: leaseManager.storage.livenessProvider,
+		getSession: func() *sqllivenesstestutils.FakeSession {
+			if !enableHook.Load() {
+				return nil
+			}
+			now := s.Clock().Now()
+			return &sqllivenesstestutils.FakeSession{
+				SessionID: sqlliveness.SessionID(fmt.Sprintf("session-%d", nextSessionID.Load())),
+				ExpTS:     now,
+				StartTS:   now,
+			}
+		},
+	}
+
+	// Replace the session provider which only returns expired leases.
+	leaseManager.storage.livenessProvider = &fs
+	defer func() {
+		// Restore the original provider so valid session IDs
+		// are assigned.
+		leaseManager.storage.livenessProvider = fs.Provider
+	}()
+
+	// Repeatedly lease the same descriptor, with the session ID continuously changing
+	// and each one always being expired. This validates that in fail over scenarios,
+	// nothing bad happens if the session is expired.
+	ctx := context.Background()
+	var previousSessionID sqlliveness.SessionID
+	var previousExpiry hlc.Timestamp
+	for count := 0; count < 10; count++ {
+		enableHook.Swap(true)
+		nextSessionID.Add(1)
+		now := s.Clock().Now()
+		desc, err := leaseManager.Acquire(ctx, now, tableDesc.GetID())
+		require.NoError(t, err)
+		// We expect a new session ID each time, and the descriptor
+		// to be expired.
+		newSessionID := getLatestLeasedDesc().getSessionID()
+		newExpiry := getLatestLeasedDesc().getExpiration(ctx)
+		require.NotEqualf(t, previousSessionID, newSessionID, "session ID should not match")
+		require.Truef(t, previousExpiry.Less(newExpiry), "session expiry should be later.")
+		// Disable the hook before the lease query.
+		enableHook.Swap(false)
+		// Sanity: Validate that system.lease only has a single lease with new
+		// id.
+		runner.CheckQueryResults(t, fmt.Sprintf("SELECT session_id FROM system.lease WHERE desc_id=%d", tableDesc.GetID()),
+			[][]string{{string(newSessionID.UnsafeBytes())}})
+		previousExpiry = newExpiry
+		previousSessionID = newSessionID
+		desc.Release(ctx)
+	}
+
 }
