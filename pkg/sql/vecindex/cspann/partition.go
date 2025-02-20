@@ -9,7 +9,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
@@ -148,7 +148,7 @@ func (p *Partition) ValueBytes() []ValueBytes {
 // partition's level in the K-means tree and the count of quantized vectors in
 // the partition.
 func (p *Partition) Search(
-	w *veclib.Workspace, partitionKey PartitionKey, queryVector vector.T, searchSet *SearchSet,
+	w *workspace.T, partitionKey PartitionKey, queryVector vector.T, searchSet *SearchSet,
 ) (level Level, count int) {
 	count = p.Count()
 	tempFloats := w.AllocFloats(count * 2)
@@ -181,7 +181,7 @@ func (p *Partition) Search(
 // Add quantizes the given vector as part of this partition. If a vector with
 // the same key is already in the partition, update its value and return false.
 func (p *Partition) Add(
-	w *veclib.Workspace, vec vector.T, childKey ChildKey, valueBytes ValueBytes,
+	w *workspace.T, vec vector.T, childKey ChildKey, valueBytes ValueBytes,
 ) bool {
 	offset := p.Find(childKey)
 	if offset != -1 {

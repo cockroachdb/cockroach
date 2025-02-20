@@ -11,7 +11,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -29,11 +29,12 @@ type fixupWorker struct {
 	// rng is a random number generator. If nil, then the global random number
 	// generator will be used.
 	rng *rand.Rand
-	// workspace is used to stack-allocate temporary memory.
-	workspace veclib.Workspace
-	// searchCtx is reused to perform index searches and inserts.
-	searchCtx searchContext
+	// indexCtx caches reusable context that's used when interacting with the
+	// index and the store.
+	indexCtx Context
 
+	// workspace is used to stack-allocate temporary memory.
+	workspace workspace.T
 	// tempVectorsWithKeys is temporary memory for vectors and their keys.
 	tempVectorsWithKeys []VectorWithKey
 }
@@ -94,15 +95,15 @@ func (fw *fixupWorker) splitOrMergePartition(
 	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) (err error) {
 	// Run the split or merge within a transaction.
-	txn, err := fw.index.store.Begin(ctx, &fw.workspace)
+	txn, err := fw.index.store.BeginTransaction(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err == nil {
-			err = fw.index.store.Commit(ctx, txn)
+			err = fw.index.store.CommitTransaction(ctx, txn)
 		} else {
-			err = errors.CombineErrors(err, fw.index.store.Abort(ctx, txn))
+			err = errors.CombineErrors(err, fw.index.store.AbortTransaction(ctx, txn))
 		}
 	}()
 
@@ -189,7 +190,8 @@ func (fw *fixupWorker) splitPartition(
 	tempLeftOffsets, tempRightOffsets := kmeans.Compute(&vectors, tempOffsets)
 
 	leftSplit, rightSplit := splitPartitionData(
-		&fw.workspace, fw.index.quantizer, partition, vectors, tempLeftOffsets, tempRightOffsets)
+		&fw.workspace, fw.index.quantizer, partition, vectors,
+		tempLeftOffsets, tempRightOffsets)
 
 	if parentPartition != nil {
 		// De-link the splitting partition from its parent partition. This does
@@ -287,19 +289,19 @@ func (fw *fixupWorker) splitPartition(
 		// Link the two new partitions into the K-means tree by inserting them
 		// into the parent level. This can trigger a further split, this time of
 		// the parent level.
-		searchCtx := fw.reuseSearchContext(ctx, txn)
-		searchCtx.Level = parentPartition.Level() + 1
+		idxCtx := fw.reuseIndexContext(txn)
+		idxCtx.level = parentPartition.Level() + 1
+		idxCtx.randomized = leftSplit.Partition.Centroid()
 
-		searchCtx.Randomized = leftSplit.Partition.Centroid()
 		childKey := ChildKey{PartitionKey: leftPartitionKey}
-		err = fw.index.insertHelper(searchCtx, childKey, ValueBytes{})
+		err = fw.index.insertHelper(ctx, idxCtx, childKey, ValueBytes{})
 		if err != nil {
 			return errors.Wrapf(err, "inserting left partition for split of partition %d", partitionKey)
 		}
 
-		searchCtx.Randomized = rightSplit.Partition.Centroid()
+		idxCtx.randomized = rightSplit.Partition.Centroid()
 		childKey = ChildKey{PartitionKey: rightPartitionKey}
-		err = fw.index.insertHelper(searchCtx, childKey, ValueBytes{})
+		err = fw.index.insertHelper(ctx, idxCtx, childKey, ValueBytes{})
 		if err != nil {
 			return errors.Wrapf(err, "inserting right partition for split of partition %d", partitionKey)
 		}
@@ -321,7 +323,7 @@ func (fw *fixupWorker) splitPartition(
 // vectors in the left partition to the left side of the set. However, the split
 // partition is not modified.
 func splitPartitionData(
-	w *veclib.Workspace,
+	w *workspace.T,
 	quantizer quantize.Quantizer,
 	splitPartition *Partition,
 	vectors vector.Set,
@@ -476,10 +478,10 @@ func (fw *fixupWorker) linkNearbyVectors(
 ) error {
 	// TODO(andyk): Add way to filter search set in order to skip vectors deeper
 	// down in the search rather than afterwards.
-	searchCtx := fw.reuseSearchContext(ctx, txn)
-	searchCtx.Options = SearchOptions{ReturnVectors: true}
-	searchCtx.Level = partition.Level()
-	searchCtx.Randomized = partition.Centroid()
+	idxCtx := fw.reuseIndexContext(txn)
+	idxCtx.options = SearchOptions{ReturnVectors: true}
+	idxCtx.level = partition.Level()
+	idxCtx.randomized = partition.Centroid()
 
 	// Don't link more vectors than the number of remaining slots in the split
 	// partition, to avoid triggering another split.
@@ -487,8 +489,8 @@ func (fw *fixupWorker) linkNearbyVectors(
 	if maxResults < 1 {
 		return nil
 	}
-	searchSet := SearchSet{MaxResults: maxResults}
-	err := fw.index.searchHelper(searchCtx, &searchSet)
+	idxCtx.tempSearchSet = SearchSet{MaxResults: maxResults}
+	err := fw.index.searchHelper(ctx, idxCtx, &idxCtx.tempSearchSet)
 	if err != nil {
 		return err
 	}
@@ -497,7 +499,7 @@ func (fw *fixupWorker) linkNearbyVectors(
 	defer fw.workspace.FreeVector(tempVector)
 
 	// Filter the results.
-	results := searchSet.PopUnsortedResults()
+	results := idxCtx.tempSearchSet.PopUnsortedResults()
 	for i := range results {
 		result := &results[i]
 
@@ -603,25 +605,23 @@ func (fw *fixupWorker) mergePartition(
 			partitionKey, parentPartitionKey)
 		return nil
 	}
-	if _, err = fw.index.removeFromPartition(ctx, txn, parentPartitionKey, childKey); err != nil {
+	_, err = fw.index.removeFromPartition(ctx, txn, parentPartitionKey, childKey)
+	if err != nil {
 		return errors.Wrapf(err, "remove partition %d from parent partition %d",
 			partitionKey, parentPartitionKey)
 	}
 
 	// Re-insert vectors from deleted partition into remaining partitions at the
 	// same level.
-	fw.searchCtx = searchContext{
-		Ctx:       ctx,
-		Workspace: fw.workspace,
-		Txn:       txn,
-		Level:     parentPartition.Level(),
-	}
+	idxCtx := fw.reuseIndexContext(txn)
+	idxCtx.level = parentPartition.Level()
 
 	childKeys := partition.ChildKeys()
 	valueBytes := partition.ValueBytes()
 	for i := range childKeys {
-		fw.searchCtx.Randomized = vectors.At(i)
-		err = fw.index.insertHelper(&fw.searchCtx, childKeys[i], valueBytes[i])
+		idxCtx.original = nil
+		idxCtx.randomized = vectors.At(i)
+		err = fw.index.insertHelper(ctx, &fw.indexCtx, childKeys[i], valueBytes[i])
 		if err != nil {
 			return errors.Wrapf(err, "inserting vector from merged partition %d", partitionKey)
 		}
@@ -636,15 +636,15 @@ func (fw *fixupWorker) deleteVector(
 	ctx context.Context, partitionKey PartitionKey, vectorKey KeyBytes,
 ) (err error) {
 	// Run the deletion within a transaction.
-	txn, err := fw.index.store.Begin(ctx, &fw.workspace)
+	txn, err := fw.index.store.BeginTransaction(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err == nil {
-			err = fw.index.store.Commit(ctx, txn)
+			err = fw.index.store.CommitTransaction(ctx, txn)
 		} else {
-			err = errors.CombineErrors(err, fw.index.store.Abort(ctx, txn))
+			err = errors.CombineErrors(err, fw.index.store.AbortTransaction(ctx, txn))
 		}
 	}()
 
@@ -717,16 +717,14 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 	return vectors, nil
 }
 
-// reuseSearchContext initializes the reusable search context, including reusing
-// its temp slices.
-func (fw *fixupWorker) reuseSearchContext(ctx context.Context, txn Txn) *searchContext {
-	fw.searchCtx = searchContext{
-		Ctx:                 ctx,
-		Workspace:           fw.workspace,
-		Txn:                 txn,
-		tempKeys:            fw.searchCtx.tempKeys,
-		tempCounts:          fw.searchCtx.tempCounts,
-		tempVectorsWithKeys: fw.searchCtx.tempVectorsWithKeys,
+// reuseIndexContext initializes the reusable operation context, including
+// reusing its temp slices.
+func (fw *fixupWorker) reuseIndexContext(txn Txn) *Context {
+	fw.indexCtx = Context{
+		txn:                 txn,
+		tempKeys:            fw.indexCtx.tempKeys,
+		tempCounts:          fw.indexCtx.tempCounts,
+		tempVectorsWithKeys: fw.indexCtx.tempVectorsWithKeys,
 	}
-	return &fw.searchCtx
+	return &fw.indexCtx
 }

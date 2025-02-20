@@ -9,14 +9,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 )
 
 // Basic tests.
 func TestUnQuantizerSimple(t *testing.T) {
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	quantizer := NewUnQuantizer(2)
 	require.Equal(t, 2, quantizer.GetDims())
 
