@@ -186,29 +186,43 @@ func disallowDroppingPrimaryIndexReferencedInUDFOrView(
 
 // maybeRewriteTempIDsInPrimaryIndexes is part of the post-processing
 // invoked at the end of building each ALTER TABLE statement to replace temporary
-// IDs with real, actual IDs.
+// IDs with real, actual IDs. If any replaced temporary IDs had any subzone
+// configs, we also ensure those references get updated.
 func maybeRewriteTempIDsInPrimaryIndexes(b BuildCtx, tableID catid.DescID) {
 	chain := getPrimaryIndexChain(b, tableID)
+	hasRewrittenPrimaryID := false
 	for i, spec := range chain.allPrimaryIndexSpecs(nonNilPrimaryIndexSpecSelector) {
 		if i == 0 {
 			continue
 		}
-		maybeRewriteIndexAndConstraintID(b, tableID, spec.primary.IndexID, spec.primary.ConstraintID)
+		hasRewrittenPrimaryID = maybeRewriteIndexAndConstraintID(b, tableID, spec.primary.IndexID, spec.primary.ConstraintID)
 		tempIndexSpec := chain.mustGetIndexSpecByID(spec.primary.TemporaryIndexID)
 		maybeRewriteIndexAndConstraintID(b, tableID, tempIndexSpec.temporary.IndexID, tempIndexSpec.temporary.ConstraintID)
 	}
 	chain.validate()
+	currPrimaryIndexID := getCurrentPrimaryIndexID(b, tableID)
+	hasZoneCfgRefs := hasSubzonesForIndex(b, tableID, currPrimaryIndexID)
+	if hasRewrittenPrimaryID && hasZoneCfgRefs {
+		if err := configureZoneConfigForNewIndexBackfill(b, tableID, currPrimaryIndexID); err != nil {
+			panic(errors.Wrapf(
+				err,
+				"error while updating zone config refs for indexID %d of tableID %d",
+				currPrimaryIndexID,
+				tableID))
+		}
+	}
 }
 
-// maybeRewriteIndexAndConstraintID attempts to replace index which currently has
-// a temporary index ID `indexID` with an actual index ID. It also updates
-// all elements that references this index with the actual index ID.
+// maybeRewriteIndexAndConstraintID attempts to replace index which currently
+// has a temporary index ID `indexID` with an actual index ID. It also updates
+// all elements that references this index with the actual index ID. It returns
+// a boolean indicating if any work has been done.
 func maybeRewriteIndexAndConstraintID(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID, constraintID catid.ConstraintID,
-) {
+) bool {
 	if indexID < catid.IndexID(TableTentativeIdsStart) || constraintID < catid.ConstraintID(TableTentativeIdsStart) {
 		// Nothing to do if it's already an actual index ID.
-		return
+		return false
 	}
 
 	actualIndexID := b.NextTableIndexID(tableID)
@@ -229,6 +243,7 @@ func maybeRewriteIndexAndConstraintID(
 			return nil
 		})
 	})
+	return true
 }
 
 // maybeDropRedundantPrimaryIndexes is part of the post-processing invoked at
