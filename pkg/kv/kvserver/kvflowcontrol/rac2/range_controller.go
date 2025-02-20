@@ -1631,6 +1631,7 @@ func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspec
 			}
 			streams = append(streams, kvflowinspectpb.ConnectedStream{
 				Stream:                  rc.opts.SSTokenCounter.InspectStream(rs.stream),
+				Disconnected:            rs.sendStream.mu.connectedState != replicate,
 				TrackedDeductions:       trackedDeductions,
 				TotalEvalDeductedTokens: int64(evalTokens),
 				TotalSendDeductedTokens: int64(sendTokens),
