@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -517,7 +518,7 @@ type TenantControlInterface interface {
 	GrantTenantCapabilities(
 		context.Context,
 		roachpb.TenantID,
-		map[tenantcapabilities.ID]string,
+		map[tenantcapabilitiespb.ID]string,
 	) error
 
 	// WaitForTenantCapabilities waits until the in-RAM cache of
@@ -526,7 +527,7 @@ type TenantControlInterface interface {
 	WaitForTenantCapabilities(
 		ctx context.Context,
 		tenID roachpb.TenantID,
-		targetCaps map[tenantcapabilities.ID]string,
+		targetCaps map[tenantcapabilitiespb.ID]string,
 		errPrefix string,
 	) error
 

@@ -1,16 +1,13 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "tenantcapabilities",
     srcs = [
-        "capabilities.go",
         "capability.go",
         "interfaces.go",
         "testingknobs.go",
         "value.go",
         "values.go",
-        ":id-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities",
     visibility = ["//visibility:public"],
@@ -26,17 +23,6 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
     ],
-)
-
-stringer(
-    name = "id-stringer",
-    src = "capabilities.go",
-    additional_args = [
-        "--linecomment",
-        "--stringtovaluemapname=stringToCapabilityIDMap",
-        "--enumvaluesslicename=IDs",
-    ],
-    typ = "ID",
 )
 
 go_test(

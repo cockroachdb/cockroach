@@ -41,7 +41,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

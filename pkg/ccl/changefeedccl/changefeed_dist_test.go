@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -404,7 +404,7 @@ func newRangeDistributionTester(
 	if tc.DefaultTenantDeploymentMode().IsExternal() {
 		tc.GrantTenantCapabilities(
 			ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"})
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
 	}
 
 	if tc.StartedDefaultTestTenant() {

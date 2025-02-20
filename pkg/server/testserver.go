@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
@@ -788,8 +789,8 @@ func (ts *testServer) grantDefaultTenantCapabilities(
 				return err
 			}
 		} else {
-			if err := ts.WaitForTenantCapabilities(ctx, tenantID, map[tenantcapabilities.ID]string{
-				tenantcapabilities.CanUseNodelocalStorage: "true",
+			if err := ts.WaitForTenantCapabilities(ctx, tenantID, map[tenantcapabilitiespb.ID]string{
+				tenantcapabilitiespb.CanUseNodelocalStorage: "true",
 			}, ""); err != nil {
 				return err
 			}
@@ -1287,7 +1288,7 @@ func (t *testTenant) DeploymentMode() serverutils.DeploymentMode {
 
 // GrantTenantCapabilities is part of the serverutils.TenantControlInterface.
 func (ts *testServer) GrantTenantCapabilities(
-	ctx context.Context, tenID roachpb.TenantID, targetCaps map[tenantcapabilities.ID]string,
+	ctx context.Context, tenID roachpb.TenantID, targetCaps map[tenantcapabilitiespb.ID]string,
 ) error {
 	conn, err := ts.SQLConnE()
 	if err != nil {
@@ -1313,7 +1314,7 @@ func (ts *testServer) GrantTenantCapabilities(
 func (ts *testServer) WaitForTenantCapabilities(
 	ctx context.Context,
 	tenID roachpb.TenantID,
-	targetCaps map[tenantcapabilities.ID]string,
+	targetCaps map[tenantcapabilitiespb.ID]string,
 	errPrefix string,
 ) error {
 	if tenID.IsSystem() {
@@ -1327,7 +1328,7 @@ func (ts *testServer) WaitForTenantCapabilities(
 		errPrefix += ": "
 	}
 
-	missingCapabilityError := func(capID tenantcapabilities.ID) error {
+	missingCapabilityError := func(capID tenantcapabilitiespb.ID) error {
 		return errors.Newf("%stenant %s cap %q not at expected value", errPrefix, tenID, capID)
 	}
 

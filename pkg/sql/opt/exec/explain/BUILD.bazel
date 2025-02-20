@@ -64,7 +64,7 @@ go_test(
     embed = [":explain"],
     deps = [
         "//pkg/base",
-        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

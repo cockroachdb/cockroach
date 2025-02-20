@@ -8988,7 +8988,7 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		})
 		for _, tenantCapabilitiesEntry := range tenantCapabilitiesEntries {
 			tenantID := tree.NewDInt(tree.DInt(tenantCapabilitiesEntry.tenantID.ToUint64()))
-			for _, capabilityID := range tenantcapabilities.IDs {
+			for _, capabilityID := range tenantcapabilitiespb.IDs {
 				value := tenantcapabilities.MustGetValueByID(
 					tenantCapabilitiesEntry.tenantCapabilities,
 					capabilityID,
