@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 package cockroach.multitenant.tenantcapabilitiespb;
-option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb";
 
 import "gogoproto/gogo.proto";
 import "roachpb/span_config.proto";
