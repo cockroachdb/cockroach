@@ -1,0 +1,22 @@
+/* setup */
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  V STRING
+);
+
+/* test */
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING gc.ttlseconds = 1;
+ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ADD COLUMN w TEXT NOT NULL DEFAULT 's';
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLUMN ‹w› STRING NOT NULL DEFAULT ‹'s'›; following ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹1›; ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹1›;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey+ (k; v, w+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ ├── validate NOT NULL constraint on column w+ in index t_pkey+ in relation t
+ └── execute 3 system table mutations transactions
