@@ -108,6 +108,13 @@ func (s *descriptorVersionState) stringLocked() redact.RedactableString {
 	return redact.Sprintf("%d(%q,%s) ver=%d:%s, refcount=%d", s.GetID(), s.GetName(), redact.SafeString(sessionID), s.GetVersion(), s.mu.expiration, s.mu.refcount)
 }
 
+// getSessionID returns the current session ID from the lease.
+func (s *descriptorVersionState) getSessionID() sqlliveness.SessionID {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.session.ID()
+}
+
 // hasExpired checks if the descriptor is too old to be used (by a txn
 // operating) at the given timestamp.
 func (s *descriptorVersionState) hasExpired(ctx context.Context, timestamp hlc.Timestamp) bool {
