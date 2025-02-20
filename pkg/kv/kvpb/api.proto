@@ -24,7 +24,7 @@ import "util/tracing/tracingpb/recorded_span.proto";
 import "util/tracing/tracingpb/tracing.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
-import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
+import "multitenant/tenantcapabilitiespb/capabilities.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.

@@ -1606,7 +1606,7 @@ GO_TARGETS = [
     "//pkg/multitenant/multitenantio:multitenantio",
     "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer:tenantcapabilitiesauthorizer",
     "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer:tenantcapabilitiesauthorizer_test",
-    "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb",
+    "//pkg/multitenant/tenantcapabilitiespb:tenantcapabilitiespb",
     "//pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils:tenantcapabilitiestestutils",
     "//pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher:tenantcapabilitieswatcher",
     "//pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher:tenantcapabilitieswatcher_test",

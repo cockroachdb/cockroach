@@ -18,7 +18,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvpb",
         "//pkg/multitenant/mtinfopb",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigbounds",
         "//pkg/util/hlc",
@@ -44,7 +44,7 @@ go_test(
     srcs = ["values_test.go"],
     embed = [":tenantcapabilities"],
     deps = [
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
