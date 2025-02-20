@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
