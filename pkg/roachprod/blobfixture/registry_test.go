@@ -226,3 +226,46 @@ func TestFixtureRegistryURI(t *testing.T) {
 		"nodelocal://1/roachprod/v25.1/metadata/test-kind/20240601-1223",
 		metaUri.String())
 }
+
+// setupTestFile creates a test file with given content in the registry
+func setupTestFile(t *testing.T, registry *Registry, path string, content []byte) {
+	t.Helper()
+	ctx := context.Background()
+	writer, err := registry.storage.Writer(ctx, path)
+	require.NoError(t, err)
+	_, err = writer.Write(content)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+}
+
+// checkFileContent verifies file content matches expected or doesn't exist
+func checkFileContent(t *testing.T, registry *Registry, path string, expectedContent []byte) {
+	t.Helper()
+	ctx := context.Background()
+	content, err := registry.maybeReadFile(ctx, path)
+	if expectedContent == nil {
+		require.Nil(t, content)
+		return
+	}
+	require.NoError(t, err)
+	require.Equal(t, expectedContent, content)
+}
+
+func TestRegistryHelpers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	registry := newTestRegistry(t, "nodelocal://1/roachtest/v25.1")
+	ctx := context.Background()
+
+	testData := []byte("test content")
+	testPath := "test/file.txt"
+
+	// Test reading non-existent file
+	content, err := registry.maybeReadFile(ctx, "nonexistent")
+	require.NoError(t, err)
+	require.Nil(t, content)
+
+	// Test reading existing file
+	setupTestFile(t, registry, testPath, testData)
+	checkFileContent(t, registry, testPath, testData)
+}
