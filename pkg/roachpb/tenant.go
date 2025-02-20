@@ -7,6 +7,7 @@ package roachpb
 
 import (
 	"context"
+	"encoding/binary"
 	"math"
 	"regexp"
 	"strconv"
@@ -222,4 +223,37 @@ func (c *TenantNameContainer) Get() TenantName {
 // String implements the fmt.Stringer interface.
 func (c *TenantNameContainer) String() string {
 	return (*syncutil.AtomicString)(c).Get()
+}
+
+// TenantIdentifier uniquely identifies a tenant. Both TenantID and TenantName
+// implements this interface.
+type TenantIdentifier interface {
+	// IsSet returns whether tenant identifier is valid.
+	IsSet() bool
+
+	// IsSystem returns true if the tenant identifier corresponds to
+	// that of the system tenant.
+	IsSystem() bool
+
+	// Bytes returns byte representation the the tenant identifier.
+	Bytes() []byte
+}
+
+func (tid TenantID) Bytes() []byte {
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], tid.ToUint64())
+
+	return b[:]
+}
+
+func (tname TenantName) Bytes() []byte {
+	return []byte(tname)
+}
+
+func (tname TenantName) IsSystem() bool {
+	return tname == TenantName(SystemTenantID.String())
+}
+
+func (tname TenantName) IsSet() bool {
+	return tname.IsValid() == nil
 }
