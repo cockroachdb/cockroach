@@ -1,0 +1,12 @@
+/* setup */
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  V STRING
+);
+
+/* test */
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING gc.ttlseconds = 1;
+EXPLAIN (DDL, SHAPE) ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹1›; following ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹1›;
+ └── execute 1 system table mutations transaction
