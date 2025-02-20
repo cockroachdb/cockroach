@@ -31,7 +31,7 @@ go_test(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/multitenant/tenantcapabilities",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
