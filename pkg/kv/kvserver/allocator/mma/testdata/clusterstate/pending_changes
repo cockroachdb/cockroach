@@ -1,0 +1,338 @@
+set-store
+store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
+store-id=2 node-id=2 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 init=full attrs=purple locality-code=1:2:3:
+node-id=2 failure-summary=ok locality-tiers=region=us-east-1,zone=us-east-1a,node=2
+  store-id=2 init=full attrs=yellow locality-code=4:5:6:
+
+msg last-seq=-1 cur-seq=-1
+node-id=1 cpu-load=80 cpu-capacity=100
+  store: store-id=1 load=(80,80,80) capacity=(-1,100,100) secondary-load=1
+    range: range-id=1 lease=true type=VOTER_FULL
+      replica: store-id=1 replica-id=1 type=VOTER_FULL
+----
+OK
+
+msg last-seq=-1 cur-seq=-1
+node-id=2 cpu-load=0 cpu-capacity=100
+  store: store-id=2 load=(0,0,0) capacity=(-1,100,100) secondary-load=0
+----
+OK
+
+make-pending-changes range-id=1
+add-replica: add-store=2 load=(80,80,80) cpu-raft=40
+----
+pending(1)
+change-id=1 start=0s store-id=2 range-id=1 delta=[40 80 80]
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=false type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+store-id=2 reported=[0 0 0] adjusted=[40 80 80] node-reported-cpu=0 node-adjusted-cpu=40 seq=2
+
+tick seconds=10
+----
+clock=10s
+
+msg last-seq=-1 cur-seq=-1
+node-id=1 cpu-load=80 cpu-capacity=100
+  store: store-id=1 load=(80,80,80) capacity=(-1,100,100) secondary-load=1
+    range: range-id=1 lease=true type=VOTER_FULL
+      replica: store-id=1 replica-id=1 type=VOTER_FULL
+      replica: store-id=2 replica-id=2 type=VOTER_FULL
+----
+OK
+
+# Check the pending changes on each store, we expect there to be an enacted
+# change on store 2. The change should also have been removed from the cluster
+# and range tracking.
+get-pending-changes
+----
+pending(1)
+change-id=1 start=0s store-id=2 range-id=1 delta=[40 80 80] enacted=10s
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=false type=VOTER_FULL)
+
+# The load deltas should still be applied to the adjusted store and node state
+# for s2. Enacting a change should not undo its adjustments.
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=2
+store-id=2 reported=[0 0 0] adjusted=[40 80 80] node-reported-cpu=0 node-adjusted-cpu=40 seq=2
+
+# Now send the load update from s2 which reports the change as complete.
+msg last-seq=-1 cur-seq=-1
+node-id=2 cpu-load=40 cpu-capacity=100
+  store: store-id=2 load=(40,80,80) capacity=(-1,100,100) secondary-load=0
+    range: range-id=1 lease=false type=VOTER_FULL
+----
+OK
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=2
+store-id=2 reported=[40 80 80] adjusted=[40 80 80] node-reported-cpu=40 node-adjusted-cpu=40 seq=3
+
+# Expect no changes tracked in either the store or cluster tracker.
+get-pending-changes
+----
+pending(0)
+
+# Next enqueue a lease transfer with the same range load as the replica add.
+make-pending-changes range-id=1
+transfer-lease: remove-store=1 add-store=2 load=(80,80,80) cpu-raft=40
+----
+pending(2)
+change-id=2 start=10s store-id=1 range-id=1 delta=[-40 0 0]
+  prev=(replica-id=1 lease=true type=VOTER_FULL)
+  next=(replica-id=1 lease=false type=VOTER_FULL)
+change-id=3 start=10s store-id=2 range-id=1 delta=[40 0 0]
+  prev=(replica-id=2 lease=false type=VOTER_FULL)
+  next=(replica-id=2 lease=true type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[40 80 80] node-reported-cpu=80 node-adjusted-cpu=40 seq=3
+store-id=2 reported=[40 80 80] adjusted=[80 80 80] node-reported-cpu=40 node-adjusted-cpu=80 seq=4
+
+# Bump the clock with the GC duration. The pending changes should be GC'd and
+# the reported load equal to the adjusted load.
+tick seconds=300
+----
+clock=310s
+
+gc-pending-changes
+----
+pending(0)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=4
+store-id=2 reported=[40 80 80] adjusted=[40 80 80] node-reported-cpu=40 node-adjusted-cpu=40 seq=5
+
+# Perform a replica removal without GC'ing. This time, instead of first
+# sending a lease store message to mark the change as enacted; send a load
+# message which should drop the load adjustments but leave the change as
+# pending in the cluster and range state.
+make-pending-changes range-id=1
+remove-replica: remove-store=2 load=(80,80,80) cpu-raft=40
+----
+pending(1)
+change-id=4 start=310s store-id=2 range-id=1 delta=[-40 -80 -80]
+  prev=(replica-id=2 lease=false type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=4
+store-id=2 reported=[40 80 80] adjusted=[0 0 0] node-reported-cpu=40 node-adjusted-cpu=0 seq=6
+
+msg last-seq=-1 cur-seq=-1
+node-id=2 cpu-load=0 cpu-capacity=100
+  store: store-id=2 load=(0,0,0) capacity=(-1,100,100) secondary-load=0
+----
+OK
+
+get-pending-changes
+----
+pending(1)
+change-id=4 start=310s store-id=2 range-id=1 delta=[-40 -80 -80]
+  prev=(replica-id=2 lease=false type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=4
+store-id=2 reported=[0 0 0] adjusted=[0 0 0] node-reported-cpu=0 node-adjusted-cpu=0 seq=7
+
+# Send a lease message to mark the change as enacted and clean it up from the
+# cluster tracking.
+msg last-seq=-1 cur-seq=-1
+node-id=1 cpu-load=80 cpu-capacity=100
+  store: store-id=1 load=(80,80,80) capacity=(-1,100,100) secondary-load=1
+    range: range-id=1 lease=true type=VOTER_FULL
+      replica: store-id=1 replica-id=1 type=VOTER_FULL
+----
+OK
+
+get-pending-changes
+----
+pending(0)
+
+# Add a new store (s3) and send a leaseholder message from the store indicating
+# it is the new leaseholder for r1.
+set-store
+store-id=3 node-id=3 attrs=green  locality-tiers=region=us-west-1,zone=us-west-1a
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 init=full attrs=purple locality-code=1:2:3:
+node-id=2 failure-summary=ok locality-tiers=region=us-east-1,zone=us-east-1a,node=2
+  store-id=2 init=full attrs=yellow locality-code=4:5:6:
+node-id=3 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=3
+  store-id=3 init=full attrs=green locality-code=1:2:7:
+
+msg last-seq=-1 cur-seq=-1
+node-id=3 cpu-load=80 cpu-capacity=100
+  store: store-id=3 load=(80,80,80) capacity=(-1,100,100) secondary-load=1
+    range: range-id=1 lease=true type=VOTER_FULL
+      replica: store-id=1 replica-id=1 type=VOTER_FULL
+      replica: store-id=3 replica-id=3 type=VOTER_FULL
+----
+OK
+
+ranges
+----
+range-id=1
+  store-id=1 replica-id=1 lease=false type=VOTER_FULL
+  store-id=3 replica-id=3 lease=true type=VOTER_FULL
+
+# Make a pending change to rebalance the replica from s1 to s3.
+make-pending-changes range-id=1
+rebalance-replica: add-store=2 remove-store=1 load=(80,80,80) cpu-raft=40
+----
+pending(2)
+change-id=5 start=310s store-id=2 range-id=1 delta=[40 80 80]
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=false type=VOTER_FULL)
+change-id=6 start=310s store-id=1 range-id=1 delta=[-40 -80 -80]
+  prev=(replica-id=1 lease=false type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+
+ranges
+----
+range-id=1
+  store-id=2 replica-id=unknown lease=false type=VOTER_FULL
+  store-id=3 replica-id=3 lease=true type=VOTER_FULL
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[40 0 0] node-reported-cpu=80 node-adjusted-cpu=40 seq=6
+store-id=2 reported=[0 0 0] adjusted=[40 80 80] node-reported-cpu=0 node-adjusted-cpu=40 seq=8
+store-id=3 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+
+# Mark the change as enacted by sending a lease range update from s3.
+msg last-seq=-1 cur-seq=-1
+node-id=3 cpu-load=80 cpu-capacity=100
+  store: store-id=3 load=(80,80,80) capacity=(-1,100,100) secondary-load=1
+    range: range-id=1 lease=true type=VOTER_FULL
+      replica: store-id=2 replica-id=2 type=VOTER_FULL
+      replica: store-id=3 replica-id=3 type=VOTER_FULL
+----
+OK
+
+# The change should still be present on each store for load adjustments.
+get-pending-changes
+----
+pending(2)
+change-id=6 start=310s store-id=1 range-id=1 delta=[-40 -80 -80] enacted=310s
+  prev=(replica-id=1 lease=false type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+change-id=5 start=310s store-id=2 range-id=1 delta=[40 80 80] enacted=310s
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=false type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[40 0 0] node-reported-cpu=80 node-adjusted-cpu=40 seq=6
+store-id=2 reported=[0 0 0] adjusted=[40 80 80] node-reported-cpu=0 node-adjusted-cpu=40 seq=8
+store-id=3 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=2
+
+# Bump the clock forward to GC the enacted changes. The involved stores (s1,s2) haven't
+# had any load updates to remove these yet - so the adjustments are still
+# applied, shown above.
+tick seconds=15
+----
+clock=325s
+
+gc-pending-changes
+----
+pending(2)
+change-id=6 start=310s store-id=1 range-id=1 delta=[-40 -80 -80] enacted=310s
+  prev=(replica-id=1 lease=false type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+change-id=5 start=310s store-id=2 range-id=1 delta=[40 80 80] enacted=310s
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=false type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[40 0 0] node-reported-cpu=80 node-adjusted-cpu=40 seq=6
+store-id=2 reported=[0 0 0] adjusted=[40 80 80] node-reported-cpu=0 node-adjusted-cpu=40 seq=8
+store-id=3 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=2
+
+ranges
+----
+range-id=1
+  store-id=2 replica-id=2 lease=false type=VOTER_FULL
+  store-id=3 replica-id=3 lease=true type=VOTER_FULL
+
+# Add a change which we then mark as rejected by the enacting module, the
+# change should be wiped.
+make-pending-changes range-id=1
+rebalance-replica: add-store=1 remove-store=2 load=(80,80,80) cpu-raft=40
+----
+pending(4)
+change-id=6 start=310s store-id=1 range-id=1 delta=[-40 -80 -80] enacted=310s
+  prev=(replica-id=1 lease=false type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+change-id=5 start=310s store-id=2 range-id=1 delta=[40 80 80] enacted=310s
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=false type=VOTER_FULL)
+change-id=7 start=325s store-id=1 range-id=1 delta=[40 80 80]
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=false type=VOTER_FULL)
+change-id=8 start=325s store-id=2 range-id=1 delta=[-40 -80 -80]
+  prev=(replica-id=2 lease=false type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=7
+store-id=2 reported=[0 0 0] adjusted=[0 0 0] node-reported-cpu=0 node-adjusted-cpu=0 seq=9
+store-id=3 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=2
+
+reject-pending-changes
+change-ids=(7,8)
+----
+pending(2)
+change-id=6 start=310s store-id=1 range-id=1 delta=[-40 -80 -80] enacted=310s
+  prev=(replica-id=1 lease=false type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+change-id=5 start=310s store-id=2 range-id=1 delta=[40 80 80] enacted=310s
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=false type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[40 0 0] node-reported-cpu=80 node-adjusted-cpu=40 seq=8
+store-id=2 reported=[0 0 0] adjusted=[40 80 80] node-reported-cpu=0 node-adjusted-cpu=40 seq=10
+store-id=3 reported=[80 80 80] adjusted=[80 80 80] node-reported-cpu=80 node-adjusted-cpu=80 seq=2
+
+# Rebalance the leaseholder replica from store 3 to store 1. The load
+# adjustment should include the full load of the range.
+make-pending-changes range-id=1
+rebalance-replica: add-store=1 remove-store=3 load=(80,80,80) cpu-raft=40
+----
+pending(4)
+change-id=6 start=310s store-id=1 range-id=1 delta=[-40 -80 -80] enacted=310s
+  prev=(replica-id=1 lease=false type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+change-id=5 start=310s store-id=2 range-id=1 delta=[40 80 80] enacted=310s
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=false type=VOTER_FULL)
+change-id=9 start=325s store-id=1 range-id=1 delta=[80 80 80]
+  prev=(replica-id=none lease=false type=VOTER_FULL)
+  next=(replica-id=unknown lease=true type=VOTER_FULL)
+change-id=10 start=325s store-id=3 range-id=1 delta=[-80 -80 -80]
+  prev=(replica-id=3 lease=true type=VOTER_FULL)
+  next=(replica-id=none lease=false type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 reported=[80 80 80] adjusted=[120 80 80] node-reported-cpu=80 node-adjusted-cpu=120 seq=9
+store-id=2 reported=[0 0 0] adjusted=[40 80 80] node-reported-cpu=0 node-adjusted-cpu=40 seq=10
+store-id=3 reported=[80 80 80] adjusted=[0 0 0] node-reported-cpu=80 node-adjusted-cpu=0 seq=3
