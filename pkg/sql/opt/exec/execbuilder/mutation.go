@@ -26,10 +26,10 @@ import (
 
 func (b *Builder) buildMutationInput(
 	mutExpr, inputExpr memo.RelExpr, colList opt.ColList, p *memo.MutationPrivate,
-) (_ execPlan, outputCols colOrdMap, err error) {
+) (_ execPlan, err error) {
 	toLock, err := b.shouldApplyImplicitLockingToMutationInput(mutExpr)
 	if err != nil {
-		return execPlan{}, colOrdMap{}, err
+		return execPlan{}, err
 	}
 	if toLock != 0 {
 		if b.forceForUpdateLocking != 0 {
@@ -38,7 +38,7 @@ func (b *Builder) buildMutationInput(
 				// assertion failure in test builds. Additionally, we will rely
 				// on forceForUpdateLocking set properly when buffered writes
 				// are enabled for correctness.
-				return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+				return execPlan{}, errors.AssertionFailedf(
 					"unexpectedly already locked %d, also want to lock %d", b.forceForUpdateLocking, toLock,
 				)
 			}
@@ -51,7 +51,7 @@ func (b *Builder) buildMutationInput(
 
 	input, inputCols, err := b.buildRelational(inputExpr)
 	if err != nil {
-		return execPlan{}, colOrdMap{}, err
+		return execPlan{}, err
 	}
 
 	// TODO(mgartner/radu): This can incorrectly append columns in a FK cascade
@@ -85,20 +85,22 @@ func (b *Builder) buildMutationInput(
 		inputExpr.ProvidedPhysical().Ordering, true, /* reuseInputCols */
 	)
 	if err != nil {
-		return execPlan{}, colOrdMap{}, err
+		return execPlan{}, err
 	}
 
 	if p.WithID != 0 {
 		label := fmt.Sprintf("buffer %d", p.WithID)
 		bufferNode, err := b.factory.ConstructBuffer(input.root, label)
 		if err != nil {
-			return execPlan{}, colOrdMap{}, err
+			return execPlan{}, err
 		}
 
 		b.addBuiltWithExpr(p.WithID, inputCols, bufferNode)
 		input.root = bufferNode
+	} else {
+		b.colOrdsAlloc.Free(inputCols)
 	}
-	return input, inputCols, nil
+	return input, nil
 }
 
 func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colOrdMap, err error) {
@@ -111,7 +113,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 		ins.InsertCols, ins.CheckCols, ins.PartialIndexPutCols,
 		ins.VectorIndexPutPartitionCols, ins.VectorIndexPutQuantizedVecCols,
 	)
-	input, _, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
+	input, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -426,7 +428,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		upd.VectorIndexDelPartitionCols,
 	)
 
-	input, _, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
+	input, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -500,7 +502,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 		ups.VectorIndexDelPartitionCols,
 	)
 
-	input, inputCols, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
+	input, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -510,9 +512,13 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	tab := md.Table(ups.Table)
 	canaryCol := exec.NodeColumnOrdinal(-1)
 	if ups.CanaryCol != 0 {
-		canaryCol, err = getNodeColumnOrdinal(inputCols, ups.CanaryCol)
-		if err != nil {
-			return execPlan{}, colOrdMap{}, err
+		// The canary column comes after the insert, fetch, and update columns.
+		canaryCol = exec.NodeColumnOrdinal(
+			ups.InsertCols.Len() + ups.FetchCols.Len() + ups.UpdateCols.Len(),
+		)
+		if colList[canaryCol] != ups.CanaryCol {
+			return execPlan{}, colOrdMap{},
+				errors.AssertionFailedf("canary column not found")
 		}
 	}
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
@@ -583,7 +589,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 		del.FetchCols, neededPassThroughCols, del.PartialIndexDelCols, del.VectorIndexDelPartitionCols,
 	)
 
-	input, _, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
+	input, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
