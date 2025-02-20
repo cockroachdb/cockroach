@@ -184,23 +184,45 @@ func (r *Registry) URI(path string) url.URL {
 	return copy
 }
 
+// maybeReadFile attempts to read a file and returns its contents. Returns nil bytes
+// if the file does not exist. This is useful for handling cases where files may have
+// been concurrently deleted by GC.
+func (r *Registry) maybeReadFile(ctx context.Context, filename string) ([]byte, error) {
+	bytes, err := func() ([]byte, error) {
+		file, _, err := r.storage.ReadFile(ctx, filename, cloud.ReadOptions{})
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = file.Close(ctx) }()
+
+		bytes, err := ioctx.ReadAll(ctx, file)
+		if err != nil {
+			return nil, err
+		}
+		return bytes, nil
+	}()
+	if errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return nil, nil
+	}
+	return bytes, err
+}
+
+// listFixtures lists all fixtures of the given kind.
 func (r *Registry) listFixtures(
 	ctx context.Context, kindPrefix string, l *logger.Logger,
 ) ([]FixtureMetadata, error) {
 	if l != nil {
 		l.Printf("listing fixtures: %s", kindPrefix)
 	}
-	result := []FixtureMetadata{}
+	var result []FixtureMetadata
+
 	err := r.storage.List(ctx, kindPrefix /*delimiter*/, "", func(found string) error {
-		file, _, err := r.storage.ReadFile(ctx, path.Join(kindPrefix, found), cloud.ReadOptions{})
+		json, err := r.maybeReadFile(ctx, path.Join(kindPrefix, found))
 		if err != nil {
 			return err
 		}
-		defer func() { _ = file.Close(ctx) }()
-
-		json, err := ioctx.ReadAll(ctx, file)
-		if err != nil {
-			return err
+		if json == nil {
+			return nil // Skip files that don't exist (may have been GC'd)
 		}
 
 		metadata := FixtureMetadata{}
@@ -209,7 +231,6 @@ func (r *Registry) listFixtures(
 		}
 
 		result = append(result, metadata)
-
 		return nil
 	})
 	if err != nil {
@@ -239,13 +260,14 @@ func (r *Registry) upsertMetadata(metadata FixtureMetadata) error {
 }
 
 func (r *Registry) deleteMetadata(metadata FixtureMetadata) error {
-	return errors.Wrap(r.storage.Delete(context.Background(), metadata.MetadataPath), "unable to delete fixture metadata")
+	return errors.Wrap(r.storage.Delete(context.Background(), metadata.MetadataPath), "failed to delete metadata")
 }
 
 func (r *Registry) deleteBlobsMatchingPrefix(prefix string) error {
-	return r.storage.List(context.Background(), prefix, "", func(path string) error {
+	err := r.storage.List(context.Background(), prefix, "", func(path string) error {
 		return r.storage.Delete(context.Background(), prefix+path)
 	})
+	return errors.Wrapf(err, "failed to delete blobs matching prefix %q", prefix)
 }
 
 // ScratchHandle is returned by Registry.Create and is used to mark a fixture
