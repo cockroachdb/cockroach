@@ -177,8 +177,8 @@ func (m mockReader) GetGlobalCapabilityState() map[roachpb.TenantID]*tenantcapab
 }
 
 func TestAllBatchCapsAreBoolean(t *testing.T) {
-	checkCap := func(t *testing.T, capID tenantcapabilities.ID) {
-		if capID >= tenantcapabilities.MaxCapabilityID {
+	checkCap := func(t *testing.T, capID tenantcapabilitiespb.ID) {
+		if capID >= tenantcapabilitiespb.MaxCapabilityID {
 			// One of the special values.
 			return
 		}
@@ -203,7 +203,7 @@ func TestAllBatchCapsAreBoolean(t *testing.T) {
 	{
 		const method = kvpb.EndTxn
 		mc := reqMethodToCap[method]
-		capIDs := []tenantcapabilities.ID{
+		capIDs := []tenantcapabilitiespb.ID{
 			mc.get(&kvpb.EndTxnRequest{}),
 			mc.get(&kvpb.EndTxnRequest{Prepare: true}),
 		}
