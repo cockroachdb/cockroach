@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 type flushBucket struct {
@@ -196,15 +196,17 @@ func (s *PersistedSQLStats) flush(
 
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
-
-		for _, statistics := range stmtStats {
-			if err := doFlushSingleStmtStats(ctx, statistics, flushBucket, s.cfg.DB); err != nil {
-				s.cfg.FlushesFailed.Inc(1)
-				log.Warningf(ctx, "failed to flush statement statistics: %s", err)
-			} else {
-				s.cfg.FlushesSuccessful.Inc(1)
-			}
+		if err := flushStmtStatsInBatches(ctx, stmtStats, flushBucket, s.cfg.DB); err != nil {
+			log.Warningf(ctx, "failed to flush statement statistics: %s", err)
 		}
+		//for _, statistics := range stmtStats {
+		//	if err := doFlushSingleStmtStats(ctx, statistics, flushBucket, s.cfg.DB); err != nil {
+		//		s.cfg.FlushesFailed.Inc(1)
+		//		log.Warningf(ctx, "failed to flush statement statistics: %s", err)
+		//	} else {
+		//		s.cfg.FlushesSuccessful.Inc(1)
+		//	}
+		//}
 	})
 	if err != nil {
 		log.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
@@ -216,13 +218,8 @@ func (s *PersistedSQLStats) flush(
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		for _, statistics := range txnStats {
-			if err := doFlushSingleTxnStats(ctx, statistics, flushBucket, s.cfg.DB); err != nil {
-				s.cfg.FlushesFailed.Inc(1)
-				log.Warningf(ctx, "failed to flush transaction statistics: %s", err)
-			} else {
-				s.cfg.FlushesSuccessful.Inc(1)
-			}
+		if err := flushTxnStatsInBatches(ctx, txnStats, flushBucket, s.cfg.DB); err != nil {
+			log.Warningf(ctx, "failed to flush statement statistics: %s", err)
 		}
 	})
 	if err != nil {
@@ -232,48 +229,180 @@ func (s *PersistedSQLStats) flush(
 	wg.Wait()
 }
 
-func doFlushSingleTxnStats(
+func flushTxnStatsInBatches(
 	ctx context.Context,
-	stats *appstatspb.CollectedTransactionStatistics,
-	bucket *flushBucket,
-	db isql.DB,
-) error {
-	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.TransactionFingerprintID))
-
-		err := upsertTransactionStats(ctx, txn, bucket, serializedFingerprintID, stats)
-		if err != nil {
-			return errors.Wrapf(err, "flushing transaction %d's statistics", stats.TransactionFingerprintID)
-		}
-		return nil
-	}, isql.WithPriority(admissionpb.UserLowPri))
-}
-
-func doFlushSingleStmtStats(
-	ctx context.Context,
-	stats *appstatspb.CollectedStatementStatistics,
+	stats []*appstatspb.CollectedTransactionStatistics,
 	flushBucket *flushBucket,
 	db isql.DB,
 ) error {
-	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.ID))
-		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.Key.TransactionFingerprintID))
-		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(stats.Key.PlanHash)
-
-		err := upsertStatementStats(
-			ctx,
-			txn,
-			flushBucket,
-			serializedFingerprintID,
-			serializedTransactionFingerprintID,
-			serializedPlanHash,
-			stats,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "flush statement %d's statistics", stats.ID)
+	const batchSize = 50
+	for i := 0; i < len(stats); i += batchSize {
+		end := i + batchSize
+		if end > len(stats) {
+			end = len(stats)
 		}
-		return nil
+		batch := stats[i:end]
+		if err := doFlushTxnStats(ctx, batch, flushBucket, db); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func doFlushTxnStats(
+	ctx context.Context,
+	stats []*appstatspb.CollectedTransactionStatistics,
+	bucket *flushBucket,
+	db isql.DB,
+) error {
+	var args []interface{}
+	query := generateTransactionStatsQuery(len(stats))
+	for _, stat := range stats {
+		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stat.TransactionFingerprintID))
+
+		// Prepare data for insertion.
+		metadataJSON, err := sqlstatsutil.BuildTxnMetadataJSON(stat)
+		if err != nil {
+			return err
+		}
+		metadata := tree.NewDJSON(metadataJSON)
+
+		statisticsJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(stat)
+		if err != nil {
+			return err
+		}
+		statistics := tree.NewDJSON(statisticsJSON)
+		args = append(args,
+			bucket.aggregatedTs,     // aggregated_ts
+			serializedFingerprintID, // fingerprint_id
+			stat.App,                // app_name
+			bucket.nodeID,           // node_id
+			bucket.aggInterval,      // agg_interval
+			metadata,                // metadata
+			statistics,              // statistics
+		)
+	}
+
+	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := txn.ExecEx(ctx,
+			"upsert-txn-stats",
+			txn.KV(), /* txn */
+			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride, query, args...)
+		return err
 	}, isql.WithPriority(admissionpb.UserLowPri))
+}
+
+func flushStmtStatsInBatches(
+	ctx context.Context,
+	stats []*appstatspb.CollectedStatementStatistics,
+	flushBucket *flushBucket,
+	db isql.DB,
+) error {
+	const batchSize = 50
+	for i := 0; i < len(stats); i += batchSize {
+		end := i + batchSize
+		if end > len(stats) {
+			end = len(stats)
+		}
+		batch := stats[i:end]
+		if err := doFlushStmtStats(ctx, batch, flushBucket, db); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func doFlushStmtStats(
+	ctx context.Context,
+	stats []*appstatspb.CollectedStatementStatistics,
+	flushBucket *flushBucket,
+	db isql.DB,
+) error {
+	var args []interface{}
+	query := generateStatementStatsQuery(len(stats))
+	for _, stat := range stats {
+		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stat.ID))
+		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stat.Key.TransactionFingerprintID))
+		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(stat.Key.PlanHash)
+
+		metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(stat)
+		if err != nil {
+			return err
+		}
+		metadata := tree.NewDJSON(metadataJSON)
+
+		statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&stat.Stats)
+		if err != nil {
+			return err
+		}
+		statistics := tree.NewDJSON(statisticsJSON)
+
+		plan := tree.NewDJSON(sqlstatsutil.ExplainTreePlanNodeToJSON(&stat.Stats.SensitiveInfo.MostRecentPlanDescription))
+
+		indexRecommendations := tree.NewDArray(types.String)
+		for _, recommendation := range stat.Stats.IndexRecommendations {
+			if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+				return err
+			}
+		}
+
+		args = append(args,
+			flushBucket.aggregatedTs,           // aggregated_ts
+			serializedFingerprintID,            // fingerprint_id
+			serializedTransactionFingerprintID, // transaction_fingerprint_id
+			serializedPlanHash,                 // plan_hash
+			stat.Key.App,                       // app_name
+			flushBucket.nodeID,                 // node_id
+			flushBucket.aggInterval,            // agg_interval
+			metadata,                           // metadata
+			statistics,                         // statistics
+			plan,                               // plan
+			indexRecommendations,               // index_recommendations
+		)
+	}
+	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := txn.ExecEx(ctx,
+			"upsert-stmt-stats",
+			txn.KV(), /* txn */
+			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride, query, args...)
+		return err
+	}, isql.WithPriority(admissionpb.UserLowPri))
+}
+
+func generateStatementStatsQuery(statementCount int) string {
+	placeholders := make([]string, 0, statementCount)
+	for i := 0; i < statementCount; i++ {
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			i*11+1, i*11+2, i*11+3, i*11+4, i*11+5, i*11+6, i*11+7, i*11+8, i*11+9, i*11+10, i*11+11))
+	}
+	query := fmt.Sprintf(`
+            INSERT INTO system.statement_statistics as s
+            VALUES %s
+            ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
+                         aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
+            DO UPDATE
+            SET
+              statistics = crdb_internal.merge_statement_stats(ARRAY(s.statistics, EXCLUDED.statistics)),
+              index_recommendations = EXCLUDED.index_recommendations
+        `, strings.Join(placeholders, ", "))
+	return query
+}
+
+func generateTransactionStatsQuery(statementCount int) string {
+	placeholders := make([]string, 0, statementCount)
+	for i := 0; i < statementCount; i++ {
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			i*7+1, i*7+2, i*7+3, i*7+4, i*7+5, i*7+6, i*7+7))
+	}
+	query := fmt.Sprintf(`
+INSERT INTO system.transaction_statistics as t
+VALUES %s
+ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
+DO UPDATE
+SET
+  statistics = crdb_internal.merge_transaction_stats(ARRAY(t.statistics, EXCLUDED.statistics))
+`, strings.Join(placeholders, ", "))
+	return query
 }
 
 // ComputeAggregatedTs returns the aggregation timestamp to assign
@@ -299,101 +428,4 @@ func (s *PersistedSQLStats) getTimeNow() time.Time {
 	}
 
 	return timeutil.Now()
-}
-
-func upsertTransactionStats(
-	ctx context.Context,
-	txn isql.Txn,
-	flushBucket *flushBucket,
-	serializedFingerprintID []byte,
-	stats *appstatspb.CollectedTransactionStatistics,
-) error {
-
-	// Prepare data for insertion.
-	metadataJSON, err := sqlstatsutil.BuildTxnMetadataJSON(stats)
-	if err != nil {
-		return err
-	}
-	metadata := tree.NewDJSON(metadataJSON)
-
-	statisticsJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(stats)
-	if err != nil {
-		return err
-	}
-	statistics := tree.NewDJSON(statisticsJSON)
-
-	_, err = txn.ExecParsed(
-		ctx,
-		"upsert-txn-stats",
-		txn.KV(),
-		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
-		upsertTxnStatsStmt,
-		flushBucket.aggregatedTs, // aggregated_ts
-		serializedFingerprintID,  // fingerprint_id
-		stats.App,                // app_name
-		flushBucket.nodeID,       // node_id
-		flushBucket.aggInterval,  // agg_interval
-		metadata,                 // metadata
-		statistics,               // statistics
-	)
-
-	return err
-}
-
-func upsertStatementStats(
-	ctx context.Context,
-	txn isql.Txn,
-	flushBucket *flushBucket,
-	serializedFingerprintID []byte,
-	serializedTransactionFingerprintID []byte,
-	serializedPlanHash []byte,
-	stats *appstatspb.CollectedStatementStatistics,
-) error {
-
-	// Prepare data for insertion.
-	metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(stats)
-	if err != nil {
-		return err
-	}
-	metadata := tree.NewDJSON(metadataJSON)
-
-	statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&stats.Stats)
-	if err != nil {
-		return err
-	}
-	statistics := tree.NewDJSON(statisticsJSON)
-
-	plan := tree.NewDJSON(sqlstatsutil.ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription))
-
-	indexRecommendations := tree.NewDArray(types.String)
-	for _, recommendation := range stats.Stats.IndexRecommendations {
-		if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
-			return err
-		}
-	}
-
-	args := append(make([]interface{}, 0, 11),
-		flushBucket.aggregatedTs,           // aggregated_ts
-		serializedFingerprintID,            // fingerprint_id
-		serializedTransactionFingerprintID, // transaction_fingerprint_id
-		serializedPlanHash,                 // plan_hash
-		stats.Key.App,                      // app_name
-		flushBucket.nodeID,                 // node_id
-		flushBucket.aggInterval,            // agg_interval
-		metadata,                           // metadata
-		statistics,                         // statistics
-		plan,                               // plan
-		indexRecommendations,               // index_recommendations
-	)
-
-	_, err = txn.ExecParsed(
-		ctx,
-		"upsert-stmt-stats",
-		txn.KV(), /* txn */
-		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
-		upsertStmtStatsStmt,
-		args...,
-	)
-
-	return err
 }
