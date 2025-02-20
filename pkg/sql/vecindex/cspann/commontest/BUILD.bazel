@@ -9,7 +9,7 @@ go_library(
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/testutils",
-        "//pkg/sql/vecindex/veclib",
+        "//pkg/sql/vecindex/cspann/workspace",
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",
         "@org_gonum_v1_gonum//floats/scalar",

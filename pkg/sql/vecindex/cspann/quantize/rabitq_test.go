@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
@@ -17,7 +17,7 @@ import (
 
 // Basic tests.
 func TestRaBitQuantizerSimple(t *testing.T) {
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	defer require.True(t, workspace.IsClear())
 
 	t.Run("add and remove vectors", func(t *testing.T) {
@@ -97,7 +97,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 
 // Edge cases.
 func TestRaBitQuantizerEdge(t *testing.T) {
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	defer require.True(t, workspace.IsClear())
 
 	// Search for query vector with two equal dimensions, which makes Δ = 0.
@@ -180,7 +180,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 
 // Load some real OpenAI embeddings and spot check calculations.
 func TestRaBitQuantizeEmbeddings(t *testing.T) {
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	defer require.True(t, workspace.IsClear())
 
 	features := testutils.LoadFeatures(t, 100)
@@ -215,7 +215,7 @@ func TestRaBitQuantizeEmbeddings(t *testing.T) {
 
 // Benchmark quantization of 100 vectors.
 func BenchmarkQuantize(b *testing.B) {
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	features := testutils.LoadFeatures(b, 100)
 	quantizer := NewRaBitQuantizer(features.Dims, 42)
 
@@ -228,7 +228,7 @@ func BenchmarkQuantize(b *testing.B) {
 
 // Benchmark distance estimation of 100 vectors.
 func BenchmarkEstimateSquaredDistances(b *testing.B) {
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	features := testutils.LoadFeatures(b, 100)
 	quantizer := NewRaBitQuantizer(features.Dims, 42)
 	quantizedSet := quantizer.Quantize(&workspace, features)

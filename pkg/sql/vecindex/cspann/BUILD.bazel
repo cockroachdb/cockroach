@@ -29,7 +29,7 @@ go_library(
     deps = [
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/utils",
-        "//pkg/sql/vecindex/veclib",
+        "//pkg/sql/vecindex/cspann/workspace",
         "//pkg/util/container/heap",
         "//pkg/util/log",
         "//pkg/util/num32",
@@ -64,7 +64,7 @@ go_test(
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/testutils",
         "//pkg/sql/vecindex/cspann/utils",
-        "//pkg/sql/vecindex/veclib",
+        "//pkg/sql/vecindex/cspann/workspace",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/num32",

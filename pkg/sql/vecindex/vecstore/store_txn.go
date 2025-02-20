@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -27,9 +27,8 @@ import (
 // Calling methods here will use the wrapped KV Txn to update the vector index's
 // internal data. Committing changes is the responsibility of the caller.
 type storeTxn struct {
-	workspace *veclib.Workspace
-	kv        *kv.Txn
-	store     *Store
+	kv    *kv.Txn
+	store *Store
 
 	// Locking durability required by transaction isolation level.
 	lockDurability kvpb.KeyLockingDurabilityType
@@ -40,6 +39,7 @@ type storeTxn struct {
 	codec     storeCodec
 
 	// Retained allocations to prevent excessive reallocation.
+	workspace     workspace.T
 	tmpChildKeys  []cspann.ChildKey
 	tmpValueBytes []cspann.ValueBytes
 	tmpSpans      []roachpb.Span
@@ -92,9 +92,7 @@ func (cs *storeCodec) decodeVector(encodedVector []byte) ([]byte, error) {
 
 // encodeVector encodes a single vector. This method invalidates the internal
 // vector set.
-func (cs *storeCodec) encodeVector(
-	w *veclib.Workspace, v vector.T, centroid vector.T,
-) ([]byte, error) {
+func (cs *storeCodec) encodeVector(w *workspace.T, v vector.T, centroid vector.T) ([]byte, error) {
 	cs.clear(1, centroid)
 	input := v.AsSet()
 	cs.quantizer.QuantizeInSet(w, cs.tmpVectorSet, input)
@@ -124,9 +122,8 @@ func (sc *storeCodec) encodeVectorFromSet(vs quantize.QuantizedVectorSet, idx in
 
 // newTxn wraps a Store transaction around a kv transaction for use with the
 // cspann.Store API.
-func newTxn(w *veclib.Workspace, store *Store, kv *kv.Txn) *storeTxn {
+func newTxn(store *Store, kv *kv.Txn) *storeTxn {
 	tx := storeTxn{
-		workspace: w,
 		kv:        kv,
 		store:     store,
 		codec:     newStoreCodec(store.quantizer),
@@ -370,7 +367,7 @@ func (tx *storeTxn) AddToPartition(
 
 	// Add the Put command to the batch.
 	codec := tx.getCodecForPartitionKey(partitionKey)
-	encodedValue, err := codec.encodeVector(tx.workspace, vec, metadata.Centroid)
+	encodedValue, err := codec.encodeVector(&tx.workspace, vec, metadata.Centroid)
 	if err != nil {
 		return cspann.PartitionMetadata{}, err
 	}
@@ -457,7 +454,7 @@ func (tx *storeTxn) SearchPartitions(
 			return cspann.InvalidLevel, err
 		}
 		searchLevel, partitionCount := partition.Search(
-			tx.workspace, partitionKeys[i], queryVector, searchSet)
+			&tx.workspace, partitionKeys[i], queryVector, searchSet)
 		if i == 0 {
 			level = searchLevel
 		} else if level != searchLevel {

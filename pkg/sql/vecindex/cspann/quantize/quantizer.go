@@ -6,7 +6,7 @@
 package quantize
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
@@ -27,14 +27,14 @@ type Quantizer interface {
 	// Quantize quantizes a set of input vectors and returns their compressed
 	// form as a quantized vector set. The set's centroid is calculated from the
 	// input vectors.
-	Quantize(w *veclib.Workspace, vectors vector.Set) QuantizedVectorSet
+	Quantize(w *workspace.T, vectors vector.Set) QuantizedVectorSet
 
 	// QuantizeInSet quantizes a set of input vectors and adds their compressed
 	// form to an existing quantized vector set.
 	//
 	// NOTE: The set's centroid is not recalculated to reflect the newly added
 	//       vectors.
-	QuantizeInSet(w *veclib.Workspace, quantizedSet QuantizedVectorSet, vectors vector.Set)
+	QuantizeInSet(w *workspace.T, quantizedSet QuantizedVectorSet, vectors vector.Set)
 
 	// NewQuantizedVectorSet returns a new empty vector set preallocated to the
 	// number of vectors specified.
@@ -49,7 +49,7 @@ type Quantizer interface {
 	// in "quantizedSet". EstimateSquaredDistances will update the slices with
 	// distances and distance error bounds.
 	EstimateSquaredDistances(
-		w *veclib.Workspace,
+		w *workspace.T,
 		quantizedSet QuantizedVectorSet,
 		queryVector vector.T,
 		squaredDistances []float32,
