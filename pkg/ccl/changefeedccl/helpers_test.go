@@ -132,9 +132,14 @@ func readNextMessages(
 }
 
 func stripTsFromPayloads(
-	envelopeType changefeedbase.EnvelopeType, payloads []cdctest.TestFeedMessage, includeSource bool,
+	envelopeType changefeedbase.EnvelopeType,
+	payloads []cdctest.TestFeedMessage,
+	sourceAssertion func(source map[string]interface{}),
 ) ([]string, error) {
 	var actual []string
+	if sourceAssertion == nil {
+		sourceAssertion = func(source map[string]interface{}) {}
+	}
 	for _, m := range payloads {
 		var value []byte
 		var message map[string]interface{}
@@ -146,35 +151,23 @@ func stripTsFromPayloads(
 		case changefeedbase.OptEnvelopeEnriched:
 			// This message may have a `payload` wrapper if format=json and `enriched_properties` includes `schema`
 			if message["payload"] == nil {
+				if message["source"] != nil {
+					sourceAssertion(message["source"].(map[string]any))
+				} else {
+					sourceAssertion(nil)
+				}
 				delete(message, "ts_ns")
+				delete(message, "source")
 			} else {
-				delete(message["payload"].(map[string]any), "ts_ns")
-			}
-
-			if includeSource {
-				var sourceMap map[string]interface{}
-				if message["payload"] != nil {
-					payload := message["payload"].(map[string]any)
-					sourceMap = payload["source"].(map[string]any)
+				payload := message["payload"].(map[string]any)
+				source := payload["source"]
+				if source != nil {
+					sourceAssertion(source.(map[string]any))
 				} else {
-					sourceMap = message["source"].(map[string]any)
+					sourceAssertion(nil)
 				}
-				nodeID := sourceMap["node_id"]
-				sourceNodeLocality := sourceMap["source_node_locality"]
-				if nodeID == "" {
-					return nil, errors.Newf("Node ID is empty, should be a number.")
-				}
-				if sourceNodeLocality != fmt.Sprintf("region=us-east%s", nodeID) {
-					return nil, errors.Newf("source_node_locality is not region=us-east%s", nodeID)
-				}
-				delete(sourceMap, "node_id")
-				delete(sourceMap, "source_node_locality")
-			} else {
-				if message["payload"] == nil {
-					delete(message, "source")
-				} else {
-					delete(message["payload"].(map[string]any), "source")
-				}
+				delete(payload, "ts_ns")
+				delete(payload, "source")
 			}
 		case changefeedbase.OptEnvelopeWrapped:
 			delete(message, "updated")
@@ -246,7 +239,7 @@ func assertPayloadsBase(
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, false, envelopeType)
+				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, nil, envelopeType)
 			},
 		))
 }
@@ -257,7 +250,7 @@ func assertPayloadsBaseErr(
 	expected []string,
 	stripTs bool,
 	perKeyOrdered bool,
-	includeSource bool,
+	sourceAssertion func(map[string]interface{}),
 	envelopeType changefeedbase.EnvelopeType,
 ) error {
 	actual, err := readNextMessages(ctx, f, len(expected))
@@ -284,7 +277,7 @@ func assertPayloadsBaseErr(
 	// strip timestamps after checking per-key ordering since check uses timestamps
 	if stripTs {
 		// format again with timestamps stripped
-		actualFormatted, err = stripTsFromPayloads(envelopeType, actual, includeSource)
+		actualFormatted, err = stripTsFromPayloads(envelopeType, actual, sourceAssertion)
 		if err != nil {
 			return err
 		}
@@ -332,7 +325,7 @@ func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 // about the "source" fields but when it's false we remove the source fields entirely.
 // In either case we strip the timestamps.
 func assertPayloadsEnriched(
-	t testing.TB, f cdctest.TestFeed, expected []string, includeSource bool,
+	t testing.TB, f cdctest.TestFeed, expected []string, sourceAssertion func(map[string]interface{}),
 ) {
 	t.Helper()
 	timeout := assertPayloadsTimeout()
@@ -344,7 +337,7 @@ func assertPayloadsEnriched(
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, true, false, includeSource, changefeedbase.OptEnvelopeEnriched)
+				return assertPayloadsBaseErr(ctx, f, expected, true, false, sourceAssertion, changefeedbase.OptEnvelopeEnriched)
 			},
 		))
 }
