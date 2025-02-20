@@ -455,9 +455,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		nil, /* knobs */
 	)
 
-	// TODO(xinhaoz): We'll come back and add the sql stats sink once we
-	// enable the SQL stats ingestion for sql stats.
-	ingester := sslocal.NewSQLStatsIngester(nil /* testing knobs */)
+	ingester := sslocal.NewSQLStatsIngester(nil /* knobs */, sqlStats)
 
 	appStats := sqlStats.GetApplicationStats("" /* appName */)
 	statsCollector := sslocal.NewStatsCollector(
@@ -466,8 +464,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		ingester,
 		sessionphase.NewTimes(),
 		sqlStats.GetCounters(),
-		false, /* underOuterTxn */
-		nil,   /* knobs */
+		nil, /* knobs */
 	)
 
 	recordStats := func(testCase *tc) {
@@ -475,7 +472,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		txnFingerprintIDHash := util.MakeFNV64()
 		statsCollector.StartTransaction()
 		defer func() {
-			statsCollector.EndTransaction(ctx, txnFingerprintID)
 			require.NoError(t,
 				statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 					FingerprintID:  txnFingerprintID,
@@ -586,8 +582,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			ingester,
 			sessionphase.NewTimes(),
 			sqlStats.GetCounters(),
-			false, /* underOuterTxn */
-			nil,   /* knobs */
+			nil, /* knobs */
 		)
 
 		for _, txn := range simulatedTxns {
@@ -604,7 +599,6 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			}
 
 			transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
-			statsCollector.EndTransaction(ctx, transactionFingerprintID)
 			err := statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 				FingerprintID:  transactionFingerprintID,
 				UserNormalized: username.RootUser,

@@ -202,8 +202,9 @@ func (ex *connExecutor) recordStatementSummary(
 		ExecStats:            queryLevelStats,
 		// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 		// converting to strings.
-		Indexes:  planner.instrumentation.indexesUsed.Strings(),
-		Database: planner.SessionData().Database,
+		Indexes:       planner.instrumentation.indexesUsed.Strings(),
+		Database:      planner.SessionData().Database,
+		UnderOuterTxn: ex.extraTxnState.underOuterTxn,
 	}
 
 	err := ex.statsCollector.RecordStatement(ctx, recordedStmtStats)

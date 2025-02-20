@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -22,14 +23,15 @@ import (
 const defaultFlushInterval = time.Millisecond * 500
 
 type SQLStatsSink interface {
-	// ObserveTransaction is called by the ingester to pass along a transaction and its statementsBySessionID.
+	// ObserveTransaction is called by the ingester to pass along a transaction event (possibly nil) and its
+	// statementsBySessionID.
 	// Note that the sink should transform the transaction and statementsBySessionID into the appropriate format
 	// as these objects will be returned to the pool.
 	ObserveTransaction(ctx context.Context, transaction *sqlstats.RecordedTxnStats, statements []*sqlstats.RecordedStmtStats)
 }
 
-// SQLStatsIngester amortizes the locking cost of writing to
-// the sql stats container concurrently from multiple goroutines.
+// SQLStatsIngester collects and buffers statements and transactions per session
+// before passing them to the sinks when we receive complete information for a transaction.
 // Built around contentionutils.ConcurrentBufferGuard.
 type SQLStatsIngester struct {
 	guard struct {
@@ -66,6 +68,9 @@ type eventBufChPayload struct {
 type statementBuf []*sqlstats.RecordedStmtStats
 
 func (b *statementBuf) release() {
+	for i, n := 0, len(*b); i < n; i++ {
+		(*b)[i] = nil
+	}
 	*b = (*b)[:0]
 	statementsBufPool.Put(b)
 }
@@ -76,7 +81,7 @@ var statementsBufPool = sync.Pool{
 	},
 }
 
-// SQLStatsIngester buffers the "events" it sees (via ObserveStatement
+// SQLStatsIngester buffers the "events" it sees (via IngestStatement
 // and IngestTransaction) and passes them along to the underlying registry
 // once its buffer is full. (Or once a timeout has passed, for low-traffic
 // clusters and tests.)
@@ -184,8 +189,13 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 		}
 		if e.statement != nil {
 			i.processStatement(e.statement)
+			// When under an outer transaction, we don't have a txn to associate
+			// the stmts with so we can send immediately to the sinks.
+			if e.statement.UnderOuterTxn {
+				i.flushBuffer(ctx, e.statement.SessionID, nil)
+			}
 		} else if e.transaction != nil {
-			i.flushBuffer(ctx, e.transaction)
+			i.flushBuffer(ctx, e.transaction.SessionID, e.transaction)
 		} else {
 			i.clearSession(e.sessionID)
 		}
@@ -293,11 +303,10 @@ func (i *SQLStatsIngester) processStatement(statement *sqlstats.RecordedStmtStat
 }
 
 // flushBuffer sends the buffered statementsBySessionID and provided transaction
-// to the registered sinks.
+// to the registered sinks. The transaction may be nil.
 func (i *SQLStatsIngester) flushBuffer(
-	ctx context.Context, transaction *sqlstats.RecordedTxnStats,
+	ctx context.Context, sessionID clusterunique.ID, transaction *sqlstats.RecordedTxnStats,
 ) {
-	sessionID := transaction.SessionID
 	statements, ok := func() (*statementBuf, bool) {
 		statements, ok := i.statementsBySessionID[sessionID]
 		if !ok {
@@ -315,9 +324,19 @@ func (i *SQLStatsIngester) flushBuffer(
 		return
 	}
 
-	// Set the transaction fingerprint ID for each statement.
-	for _, s := range *statements {
-		s.TransactionFingerprintID = transaction.FingerprintID
+	if transaction != nil {
+		// Set the transaction fingerprint ID for each statement.
+		// These values are only known at the time of the transaction.
+		for _, s := range *statements {
+			s.TransactionFingerprintID = transaction.FingerprintID
+			if s.ImplicitTxn == transaction.ImplicitTxn {
+				continue
+			}
+			// We need to recompute the fingerprint ID.
+			s.ImplicitTxn = transaction.ImplicitTxn
+			s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
+				s.Query, s.ImplicitTxn, s.Database)
+		}
 	}
 
 	for _, sink := range i.sinks {
