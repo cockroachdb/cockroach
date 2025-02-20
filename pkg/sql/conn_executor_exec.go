@@ -4181,11 +4181,6 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 		}
 
-		discardedStats := ex.statsCollector.EndTransaction(ctx, transactionFingerprintID)
-		if discardedStats > 0 {
-			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(discardedStats)
-		}
-
 		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
 			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(
 				ex.sessionData(),
@@ -4330,6 +4325,8 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
+	isInternaleExec := ex.executorType == executorTypeInternal
+
 	recordedTxnStats := &sqlstats.RecordedTxnStats{
 		FingerprintID:           transactionFingerprintID,
 		SessionID:               ex.planner.extendedEvalCtx.SessionID,
@@ -4357,14 +4354,15 @@ func (ex *connExecutor) recordTransactionFinish(
 		// TODO(107318): add qos
 		// TODO(107318): add asoftime or ishistorical
 		// TODO(107318): add readonly
-		TxnErr:         txnErr,
-		Application:    ex.applicationName.Load().(string),
-		UserNormalized: ex.sessionData().User().Normalized(),
+		TxnErr:           txnErr,
+		Application:      ex.applicationName.Load().(string),
+		UserNormalized:   ex.sessionData().User().Normalized(),
+		InternalExecutor: isInternaleExec,
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
 		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(
-			ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL, recordedTxnStats,
+			isInternaleExec, ex.phaseTimes, ex.planner.stmt.SQL, recordedTxnStats,
 		)
 	}
 
