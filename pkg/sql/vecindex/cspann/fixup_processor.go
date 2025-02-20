@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -51,12 +50,12 @@ type fixup struct {
 	Type fixupType
 	// PartitionKey is the key of the fixup's target partition, if the fixup
 	// operates on a partition.
-	PartitionKey vecstore.PartitionKey
+	PartitionKey PartitionKey
 	// ParentPartitionKey is the key of the parent of the fixup's target
 	// partition, if the fixup operates on a partition
-	ParentPartitionKey vecstore.PartitionKey
+	ParentPartitionKey PartitionKey
 	// VectorKey is the primary key of the fixup vector.
-	VectorKey vecstore.KeyBytes
+	VectorKey KeyBytes
 }
 
 // FixupProcessor applies index fixups in a background goroutine. Fixups repair
@@ -84,7 +83,7 @@ type FixupProcessor struct {
 	// stopper is used to create new workers and signal their quiescence.
 	stopper *stop.Stopper
 	// index points back to the vector index to which fixups are applied.
-	index *VectorIndex
+	index *Index
 	// seed, if non-zero, specifies that a deterministic random number generator
 	// should be used by the fixup processor. This is useful in testing.
 	seed int64
@@ -112,7 +111,7 @@ type FixupProcessor struct {
 		syncutil.Mutex
 
 		// pendingPartitions tracks pending split and merge fixups.
-		pendingPartitions map[vecstore.PartitionKey]bool
+		pendingPartitions map[PartitionKey]bool
 		// pendingVectors tracks pending fixups for deleting vectors.
 		pendingVectors map[string]bool
 		// totalWorkers is the number of background workers available to process
@@ -139,7 +138,7 @@ type FixupProcessor struct {
 // a deterministic random number generator. Otherwise, it will use the global
 // random number generator.
 func (fp *FixupProcessor) Init(
-	ctx context.Context, stopper *stop.Stopper, index *VectorIndex, seed int64,
+	ctx context.Context, stopper *stop.Stopper, index *Index, seed int64,
 ) {
 	// Background workers should spin down when the stopper begins to quiesce.
 	// Also save the cancel function so that workers can be shut down
@@ -157,7 +156,7 @@ func (fp *FixupProcessor) Init(
 	fp.fixups = make(chan fixup, maxFixups)
 	fp.fixupsLimitHit = log.Every(time.Second)
 
-	fp.mu.pendingPartitions = make(map[vecstore.PartitionKey]bool, maxFixups)
+	fp.mu.pendingPartitions = make(map[PartitionKey]bool, maxFixups)
 	fp.mu.pendingVectors = make(map[string]bool, maxFixups)
 	fp.mu.waitForFixups.L = &fp.mu
 }
@@ -214,7 +213,7 @@ func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 
 // AddSplit enqueues a split fixup for later processing.
 func (fp *FixupProcessor) AddSplit(
-	ctx context.Context, parentPartitionKey vecstore.PartitionKey, partitionKey vecstore.PartitionKey,
+	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) {
 	fp.addFixup(ctx, fixup{
 		Type:               splitOrMergeFixup,
@@ -225,7 +224,7 @@ func (fp *FixupProcessor) AddSplit(
 
 // AddMerge enqueues a merge fixup for later processing.
 func (fp *FixupProcessor) AddMerge(
-	ctx context.Context, parentPartitionKey vecstore.PartitionKey, partitionKey vecstore.PartitionKey,
+	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) {
 	fp.addFixup(ctx, fixup{
 		Type:               splitOrMergeFixup,
@@ -236,7 +235,7 @@ func (fp *FixupProcessor) AddMerge(
 
 // AddDeleteVector enqueues a vector deletion fixup for later processing.
 func (fp *FixupProcessor) AddDeleteVector(
-	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.KeyBytes,
+	ctx context.Context, partitionKey PartitionKey, vectorKey KeyBytes,
 ) {
 	fp.addFixup(ctx, fixup{
 		Type:         vectorDeleteFixup,
@@ -339,7 +338,7 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	// Start another worker.
 	fp.mu.totalWorkers++
 
-	worker := NewFixupWorker(fp)
+	worker := newFixupWorker(fp)
 	taskName := fmt.Sprintf("vecindex-worker-%d", fp.mu.totalWorkers)
 	err := fp.stopper.RunAsyncTask(fp.initCtx, taskName, worker.Start)
 	if err != nil {

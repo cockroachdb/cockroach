@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -50,22 +51,22 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 	} {
 		name := strings.TrimPrefix(fmt.Sprintf("%T", quantizer), "*quantize.")
 		t.Run(name, func(t *testing.T) {
-			for _, level := range []Level{LeafLevel, Level(rnd.Intn(10)) + SecondLevel} {
+			for _, level := range []cspann.Level{cspann.LeafLevel, cspann.Level(rnd.Intn(10)) + cspann.SecondLevel} {
 				t.Run(fmt.Sprintf("level=%d", level), func(t *testing.T) {
 					// Build the partition.
 					quantizedSet := quantizer.Quantize(&workspace, set)
-					childKeys := make([]ChildKey, set.Count)
-					valueBytes := make([]ValueBytes, set.Count)
+					childKeys := make([]cspann.ChildKey, set.Count)
+					valueBytes := make([]cspann.ValueBytes, set.Count)
 					for i := range childKeys {
-						if level == LeafLevel {
+						if level == cspann.LeafLevel {
 							pkSize := rnd.Intn(32) + 1
-							childKeys[i] = ChildKey{KeyBytes: randutil.RandBytes(rnd, pkSize)}
+							childKeys[i] = cspann.ChildKey{KeyBytes: randutil.RandBytes(rnd, pkSize)}
 						} else {
-							childKeys[i] = ChildKey{PartitionKey: PartitionKey(rnd.Uint64())}
+							childKeys[i] = cspann.ChildKey{PartitionKey: cspann.PartitionKey(rnd.Uint64())}
 						}
 						valueBytes[i] = randutil.RandBytes(rnd, 10)
 					}
-					originalPartition := NewPartition(quantizer, quantizedSet, childKeys, valueBytes, level)
+					originalPartition := cspann.NewPartition(quantizer, quantizedSet, childKeys, valueBytes, level)
 
 					// Encode the partition.
 					encMetadata, err := EncodePartitionMetadata(level, quantizedSet.GetCentroid())
@@ -124,7 +125,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 						require.Equal(t, trailingData, remainder)
 					}
 
-					decodedPartition := NewPartition(
+					decodedPartition := cspann.NewPartition(
 						quantizer, decodedSet, childKeys, valueBytes, decodedLevel)
 					testingAssertPartitionsEqual(t, originalPartition, decodedPartition)
 				})
@@ -133,9 +134,9 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 	}
 }
 
-func testingAssertPartitionsEqual(t *testing.T, l, r *Partition) {
-	q1, q2 := l.quantizedSet, r.quantizedSet
-	require.Equal(t, l.level, r.level, "levels do not match")
+func testingAssertPartitionsEqual(t *testing.T, l, r *cspann.Partition) {
+	q1, q2 := l.QuantizedSet(), r.QuantizedSet()
+	require.Equal(t, l.Level(), r.Level(), "levels do not match")
 	require.Equal(t, l.ChildKeys(), r.ChildKeys(), "childKeys do not match")
 	require.Equal(t, l.ValueBytes(), r.ValueBytes(), "valueBytes do not match")
 	require.Equal(t, q1.GetCentroid(), q2.GetCentroid(), "centroids do not match")

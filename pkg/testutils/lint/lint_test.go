@@ -758,8 +758,8 @@ func TestLint(t *testing.T) {
 			":!testutils/lint/passes/deferunlockcheck/testdata/src/github.com/cockroachdb/cockroach/pkg/util/syncutil/mutex_sync.go",
 			// Exception needed for goroutineStalledStates.
 			":!kv/kvserver/concurrency/concurrency_manager_test.go",
-			// See comment in inMemoryLock class.
-			":!sql/vecindex/vecstore/in_memory_lock.go",
+			// See comment in memLock class.
+			":!sql/vecindex/cspann/memstore/memstore_lock.go",
 		)
 		if err != nil {
 			t.Fatal(err)

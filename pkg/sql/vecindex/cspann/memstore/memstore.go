@@ -3,12 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package vecstore
+package memstore
 
 import (
 	"context"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
@@ -48,20 +49,20 @@ import (
 // calculations.
 const storeStatsAlpha = 0.05
 
-// inMemoryPartition wraps the partition data structure in order to add more
+// memPartition wraps the partition data structure in order to add more
 // information, such as its key, creation time, and whether it is deleted.
-type inMemoryPartition struct {
+type memPartition struct {
 	// key is the unique identifier for the partition. It is immutable and can
 	// be accessed without a lock.
-	key PartitionKey
+	key cspann.PartitionKey
 
 	// lock is a read-write lock that callers must acquire before accessing any
 	// of the fields.
 	lock struct {
-		inMemoryLock
+		memLock
 
 		// partition is the wrapped partition.
-		partition *Partition
+		partition *cspann.Partition
 		// created is the logical clock time at which the partition was created.
 		created uint64
 		// deleted is true if the partition has been deleted.
@@ -76,8 +77,8 @@ type inMemoryPartition struct {
 // creation time, then the partition is not visible. This latter check is
 // necessary because the root partition is modified in-place, unlike other
 // partitions which are never reused after their deletion.
-func (p *inMemoryPartition) isVisibleLocked(current uint64) bool {
-	return !p.lock.deleted && (p.key != RootKey || current > p.lock.created)
+func (p *memPartition) isVisibleLocked(current uint64) bool {
+	return !p.lock.deleted && (p.key != cspann.RootKey || current > p.lock.created)
 }
 
 // pendingItem tracks currently active transactions as well as partitions that
@@ -85,14 +86,14 @@ func (p *inMemoryPartition) isVisibleLocked(current uint64) bool {
 // transactions that pre-date the deletion have ended.
 // NOTE: Either activeTxn or deletedPartition must be defined, but not both.
 type pendingItem struct {
-	activeTxn        inMemoryTxn
-	deletedPartition *inMemoryPartition
+	activeTxn        memTxn
+	deletedPartition *memPartition
 }
 
-// InMemoryStore implements the Store interface over in-memory partitions and
+// Store implements the Store interface over in-memory partitions and
 // vectors. This is only used for testing and benchmarking. As such, it is
 // packed with assertions and extra validation intended to catch bugs.
-type InMemoryStore struct {
+type Store struct {
 	dims int
 	seed int64
 
@@ -100,13 +101,13 @@ type InMemoryStore struct {
 	// structure of the tree, e.g. splitting or merging a partition. This ensures
 	// that only one split or merge can be running at any given time, so that
 	// deadlocks are not possible.
-	structureLock inMemoryLock
+	structureLock memLock
 
 	mu struct {
 		syncutil.Mutex
 
 		// partitions stores all partitions in the store.
-		partitions map[PartitionKey]*inMemoryPartition
+		partitions map[cspann.PartitionKey]*memPartition
 		// vectors stores all original, full-sized vectors in the store, indexed
 		// by primary key (bytes converted to a string).
 		vectors map[string]vector.T
@@ -114,10 +115,10 @@ type InMemoryStore struct {
 		// accessed in order to order events relative to one another.
 		clock uint64
 		// nextKey is the next unused unique partition key.
-		nextKey PartitionKey
+		nextKey cspann.PartitionKey
 		// stats tracks the global index stats that are periodically merged with
 		// local stats cached by instances of the vector index.
-		stats IndexStats
+		stats cspann.IndexStats
 		// pending is a list of active transactions and deleted partitions that
 		// are ordered by creation time and deletion time, respectively. This is
 		// used to ensure that a deleted partition is not garbage collected until
@@ -126,35 +127,32 @@ type InMemoryStore struct {
 	}
 }
 
-var _ Store = (*InMemoryStore)(nil)
+var _ cspann.Store = (*Store)(nil)
 
-// NewInMemoryStore constructs a new in-memory store for vectors of the given
+// New constructs a new in-memory store for vectors of the given
 // size. The seed determines how vectors are transformed as part of
 // quantization and must be preserved if the store is saved to disk or loaded
 // from disk.
-func NewInMemoryStore(dims int, seed int64) *InMemoryStore {
-	st := &InMemoryStore{
+func New(dims int, seed int64) *Store {
+	st := &Store{
 		dims: dims,
 		seed: seed,
 	}
-	st.mu.partitions = make(map[PartitionKey]*inMemoryPartition)
-	st.mu.nextKey = RootKey + 1
+	st.mu.partitions = make(map[cspann.PartitionKey]*memPartition)
+	st.mu.nextKey = cspann.RootKey + 1
 
 	// Create empty root partition.
 	var workspace veclib.Workspace
 	var empty vector.Set
 	quantizer := quantize.NewUnQuantizer(dims)
 	quantizedSet := quantizer.Quantize(&workspace, empty)
-	inMemPartition := &inMemoryPartition{
-		key: RootKey,
+	memPart := &memPartition{
+		key: cspann.RootKey,
 	}
-	inMemPartition.lock.partition = &Partition{
-		quantizer:    quantizer,
-		quantizedSet: quantizedSet,
-		level:        LeafLevel,
-	}
-	inMemPartition.lock.created = 1
-	st.mu.partitions[RootKey] = inMemPartition
+	memPart.lock.partition = cspann.NewPartition(
+		quantizer, quantizedSet, []cspann.ChildKey{}, []cspann.ValueBytes{}, cspann.LeafLevel)
+	memPart.lock.created = 1
+	st.mu.partitions[cspann.RootKey] = memPart
 
 	st.mu.clock = 2
 	st.mu.vectors = make(map[string]vector.T)
@@ -164,27 +162,27 @@ func NewInMemoryStore(dims int, seed int64) *InMemoryStore {
 }
 
 // Dims returns the number of dimensions in stored vectors.
-func (s *InMemoryStore) Dims() int {
+func (s *Store) Dims() int {
 	return s.dims
 }
 
 // Begin implements the Store interface.
-func (s *InMemoryStore) Begin(ctx context.Context, w *veclib.Workspace) (Txn, error) {
+func (s *Store) Begin(ctx context.Context, w *veclib.Workspace) (cspann.Txn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Create new transaction with unique id set to the current logical clock
 	// tick and insert the transaction into the pending list.
 	current := s.tickLocked()
-	txn := inMemoryTxn{workspace: w, id: current, current: current, store: s}
+	txn := memTxn{workspace: w, id: current, current: current, store: s}
 	elem := s.mu.pending.PushBack(pendingItem{activeTxn: txn})
 	return &elem.Value.activeTxn, nil
 }
 
 // Commit implements the Store interface.
-func (s *InMemoryStore) Commit(ctx context.Context, txn Txn) error {
+func (s *Store) Commit(ctx context.Context, txn cspann.Txn) error {
 	// Release any exclusive partition locks held by the transaction.
-	tx := txn.(*inMemoryTxn)
+	tx := txn.(*memTxn)
 	for i := range tx.ownedLocks {
 		tx.ownedLocks[i].Release()
 	}
@@ -199,7 +197,7 @@ func (s *InMemoryStore) Commit(ctx context.Context, txn Txn) error {
 			defer tx.unbalanced.lock.ReleaseShared()
 
 			partition := tx.unbalanced.lock.partition
-			if partition.Count() == 0 && partition.Level() > LeafLevel {
+			if partition.Count() == 0 && partition.Level() > cspann.LeafLevel {
 				if tx.unbalanced.isVisibleLocked(tx.current) {
 					panic(errors.AssertionFailedf(
 						"K-means tree is unbalanced, with empty non-leaf partition %d",
@@ -242,8 +240,8 @@ func (s *InMemoryStore) Commit(ctx context.Context, txn Txn) error {
 }
 
 // Abort implements the Store interface.
-func (s *InMemoryStore) Abort(ctx context.Context, txn Txn) error {
-	tx := txn.(*inMemoryTxn)
+func (s *Store) Abort(ctx context.Context, txn cspann.Txn) error {
+	tx := txn.(*memTxn)
 	if tx.updated {
 		// Abort is only trivially supported by the in-memory store.
 		panic(errors.AssertionFailedf(
@@ -253,7 +251,7 @@ func (s *InMemoryStore) Abort(ctx context.Context, txn Txn) error {
 }
 
 // MergeStats implements the Store interface.
-func (s *InMemoryStore) MergeStats(ctx context.Context, stats *IndexStats, skipMerge bool) error {
+func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMerge bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -295,7 +293,7 @@ func (s *InMemoryStore) MergeStats(ctx context.Context, stats *IndexStats, skipM
 // InsertVector inserts a new full-size vector into the in-memory store,
 // associated with the given primary key. This mimics inserting a vector into
 // the primary index, and is used during testing and benchmarking.
-func (s *InMemoryStore) InsertVector(key KeyBytes, vec vector.T) {
+func (s *Store) InsertVector(key cspann.KeyBytes, vec vector.T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -305,7 +303,7 @@ func (s *InMemoryStore) InsertVector(key KeyBytes, vec vector.T) {
 // DeleteVector deletes the vector associated with the given primary key from
 // the in-memory store. This mimics deleting a vector from the primary index,
 // and is used during testing and benchmarking.
-func (s *InMemoryStore) DeleteVector(key KeyBytes) {
+func (s *Store) DeleteVector(key cspann.KeyBytes) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -314,7 +312,7 @@ func (s *InMemoryStore) DeleteVector(key KeyBytes) {
 
 // GetVector returns a single vector from the store, by its primary key. This
 // is used for testing.
-func (s *InMemoryStore) GetVector(key KeyBytes) vector.T {
+func (s *Store) GetVector(key cspann.KeyBytes) vector.T {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -323,20 +321,21 @@ func (s *InMemoryStore) GetVector(key KeyBytes) vector.T {
 
 // GetAllVectors returns all vectors that have been added to the store as key
 // and vector pairs. This is used for testing.
-func (s *InMemoryStore) GetAllVectors() []VectorWithKey {
+func (s *Store) GetAllVectors() []cspann.VectorWithKey {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	refs := make([]VectorWithKey, 0, len(s.mu.vectors))
+	refs := make([]cspann.VectorWithKey, 0, len(s.mu.vectors))
 	for key, vec := range s.mu.vectors {
-		refs = append(refs, VectorWithKey{Key: ChildKey{KeyBytes: KeyBytes(key)}, Vector: vec})
+		refs = append(refs, cspann.VectorWithKey{
+			Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes(key)}, Vector: vec})
 	}
 	return refs
 }
 
 // MarshalBinary saves the in-memory store as a bytes. This allows the store to
 // be saved and later loaded without needing to rebuild it from scratch.
-func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
+func (s *Store) MarshalBinary() (data []byte, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -353,12 +352,12 @@ func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
 	}
 
 	// Remap partitions to protobufs.
-	for partitionKey, inMemPartition := range s.mu.partitions {
+	for partitionKey, memPart := range s.mu.partitions {
 		func() {
-			inMemPartition.lock.AcquireShared(0)
-			defer inMemPartition.lock.ReleaseShared()
+			memPart.lock.AcquireShared(0)
+			defer memPart.lock.ReleaseShared()
 
-			partition := inMemPartition.lock.partition
+			partition := memPart.lock.partition
 			partitionProto := PartitionProto{
 				PartitionKey: partitionKey,
 				ChildKeys:    partition.ChildKeys(),
@@ -366,11 +365,11 @@ func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
 				Level:        partition.Level(),
 			}
 
-			rabitq, ok := partition.quantizedSet.(*quantize.RaBitQuantizedVectorSet)
+			rabitq, ok := partition.QuantizedSet().(*quantize.RaBitQuantizedVectorSet)
 			if ok {
 				partitionProto.RaBitQ = rabitq
 			} else {
-				partitionProto.UnQuantized = partition.quantizedSet.(*quantize.UnQuantizedVectorSet)
+				partitionProto.UnQuantized = partition.QuantizedSet().(*quantize.UnQuantizedVectorSet)
 			}
 
 			storeProto.Partitions = append(storeProto.Partitions, partitionProto)
@@ -387,9 +386,9 @@ func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
 	return protoutil.Marshal(&storeProto)
 }
 
-// LoadInMemoryStore loads the in-memory store from bytes that were previously
-// saved by MarshalBinary.
-func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
+// Load loads the in-memory store from bytes that were previously saved by
+// MarshalBinary.
+func Load(data []byte) (*Store, error) {
 	// Unmarshal bytes into a protobuf.
 	var storeProto StoreProto
 	if err := protoutil.Unmarshal(data, &storeProto); err != nil {
@@ -397,12 +396,12 @@ func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 	}
 
 	// Construct the InMemoryStore object.
-	inMemStore := &InMemoryStore{
+	inMemStore := &Store{
 		dims: int(storeProto.Config.Dims),
 		seed: storeProto.Config.Seed,
 	}
 	inMemStore.mu.clock = 2
-	inMemStore.mu.partitions = make(map[PartitionKey]*inMemoryPartition, len(storeProto.Partitions))
+	inMemStore.mu.partitions = make(map[cspann.PartitionKey]*memPartition, len(storeProto.Partitions))
 	inMemStore.mu.nextKey = storeProto.NextKey
 	inMemStore.mu.vectors = make(map[string]vector.T, len(storeProto.Vectors))
 	inMemStore.mu.stats = storeProto.Stats
@@ -414,29 +413,25 @@ func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 	// Construct the Partition objects.
 	for i := range storeProto.Partitions {
 		partitionProto := &storeProto.Partitions[i]
-		var inMemPartition = &inMemoryPartition{
+		var memPart = &memPartition{
 			key: partitionProto.PartitionKey,
 		}
-		inMemPartition.lock.created = 1
+		memPart.lock.created = 1
 
+		var quantizer quantize.Quantizer
+		var quantizedSet quantize.QuantizedVectorSet
 		if partitionProto.RaBitQ != nil {
-			inMemPartition.lock.partition = &Partition{
-				quantizer:    raBitQuantizer,
-				quantizedSet: partitionProto.RaBitQ,
-			}
+			quantizer = raBitQuantizer
+			quantizedSet = partitionProto.RaBitQ
 		} else {
-			inMemPartition.lock.partition = &Partition{
-				quantizer:    unquantizer,
-				quantizedSet: partitionProto.UnQuantized,
-			}
+			quantizer = unquantizer
+			quantizedSet = partitionProto.UnQuantized
 		}
 
-		partition := inMemPartition.lock.partition
-		partition.childKeys = partitionProto.ChildKeys
-		partition.valueBytes = partitionProto.ValueBytes
-		partition.level = partitionProto.Level
+		memPart.lock.partition = cspann.NewPartition(quantizer, quantizedSet,
+			partitionProto.ChildKeys, partitionProto.ValueBytes, partitionProto.Level)
 
-		inMemStore.mu.partitions[partitionProto.PartitionKey] = inMemPartition
+		inMemStore.mu.partitions[partitionProto.PartitionKey] = memPart
 	}
 
 	// Insert vectors into the in-memory store.
@@ -450,13 +445,13 @@ func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 
 // getPartition returns a partition by its key, or ErrPartitionNotFound if no
 // such partition exists.
-func (s *InMemoryStore) getPartition(partitionKey PartitionKey) (*inMemoryPartition, error) {
+func (s *Store) getPartition(partitionKey cspann.PartitionKey) (*memPartition, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	partition, ok := s.mu.partitions[partitionKey]
 	if !ok {
-		return nil, ErrPartitionNotFound
+		return nil, cspann.ErrPartitionNotFound
 	}
 	return partition, nil
 }
@@ -464,7 +459,7 @@ func (s *InMemoryStore) getPartition(partitionKey PartitionKey) (*inMemoryPartit
 // tickLocked returns the current value of the logical clock and advances its
 // time.
 // NOTE: Callers must have locked the s.mu mutex.
-func (s *InMemoryStore) tickLocked() uint64 {
+func (s *Store) tickLocked() uint64 {
 	val := s.mu.clock
 	s.mu.clock++
 	return val
@@ -474,7 +469,7 @@ func (s *InMemoryStore) tickLocked() uint64 {
 // tree. It also pushes the transactions current time forward so that it can
 // always observe its changes.
 // NOTE: Callers must have locked the s.mu mutex.
-func (s *InMemoryStore) updatedStructureLocked(tx *inMemoryTxn) {
+func (s *Store) updatedStructureLocked(tx *memTxn) {
 	tx.updated = true
 	tx.current = s.tickLocked()
 }
@@ -483,7 +478,7 @@ func (s *InMemoryStore) updatedStructureLocked(tx *inMemoryTxn) {
 // called with the count of vectors in a partition when a partition is inserted
 // or updated.
 // NOTE: Callers must have locked the s.mu mutex.
-func (s *InMemoryStore) reportPartitionSizeLocked(count int) {
+func (s *Store) reportPartitionSizeLocked(count int) {
 	if s.mu.stats.VectorsPerPartition == 0 {
 		// Use first value if this is the first update.
 		s.mu.stats.VectorsPerPartition = float64(count)

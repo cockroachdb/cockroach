@@ -9,18 +9,28 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/gonum/floats/scalar"
 )
 
-func TestIndexStats(t *testing.T) {
+func TestStatsManager(t *testing.T) {
 	ctx := context.Background()
 
+	globalStats := IndexStats{NumPartitions: 1}
+	var skippedMerge bool
+	mergeStats := func(ctx context.Context, stats *IndexStats, skipMerge bool) error {
+		skippedMerge = skipMerge
+		if !skipMerge {
+			globalStats = *stats
+		}
+		*stats = globalStats
+		return nil
+	}
+
 	var stats statsManager
-	store := vecstore.NewInMemoryStore(2, 42)
-	require.NoError(t, stats.Init(ctx, store))
+	require.NoError(t, stats.Init(ctx, mergeStats))
 	require.Equal(t, "1 levels, 1 partitions, 0.00 vectors/partition.\nCV stats:\n", stats.Format())
+	require.True(t, skippedMerge)
 
 	// Get zero, negative, positive z-scores.
 	zscore := stats.ReportSearch(2, []float64{1, 2, 3}, true /* updateStats */)
