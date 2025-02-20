@@ -1,0 +1,31 @@
+/* setup */
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  V STRING
+);
+
+/* test */
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING gc.ttlseconds = 1;
+EXPLAIN (DDL) ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹1›; following ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹1›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC TableZoneConfig:{DescID: 104 (t), SeqNum: 1}
+ │         └── 1 Mutation operation
+ │              └── AddTableZoneConfig {"TableID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+      │    │    └── PUBLIC → ABSENT TableZoneConfig:{DescID: 104 (t), SeqNum: 1}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 2 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+           │    └── ABSENT → PUBLIC TableZoneConfig:{DescID: 104 (t), SeqNum: 1}
+           └── 2 Mutation operations
+                ├── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+                └── AddTableZoneConfig {"TableID":104}
