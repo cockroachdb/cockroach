@@ -33,12 +33,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
 type testCase struct {
@@ -1273,6 +1275,64 @@ func TestSQLStatsFlushWorkerDoesntSignalJobOnAbort(t *testing.T) {
 	}
 }
 
+type Uint64RandomSeed struct {
+	seed uint64
+}
+
+func NewUint64RandomSeed() *Uint64RandomSeed {
+	_, seed := randutil.NewPseudoRand()
+	return &Uint64RandomSeed{seed: uint64(seed)}
+}
+
+// test-only
+func (rs *Uint64RandomSeed) Set(val uint64) {
+	rs.seed = val
+}
+
+func (rs *Uint64RandomSeed) Seed() uint64 {
+	return rs.seed
+}
+
+func (rs *Uint64RandomSeed) LogMessage() string {
+	return fmt.Sprintf("random seed: %d", rs.seed)
+}
+
+var RandomSeed = NewUint64RandomSeed()
+
+type gen struct {
+	syncutil.Mutex
+
+	in  []string
+	rng *rand.Rand
+}
+
+func (g *gen) Next() string {
+	g.Lock()
+	defer g.Unlock()
+
+	g.shuffleLocked()
+
+	s := strings.Join(g.in, ", ")
+	return fmt.Sprintf(`
+		INSERT INTO sql_stats_workload
+		(%s) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, s)
+}
+
+func (g *gen) shuffleLocked() {
+	g.rng.Shuffle(len(g.in), func(i, j int) {
+		g.in[i], g.in[j] = g.in[j], g.in[i]
+	})
+}
+
+func genPermutations() *gen {
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
+	return &gen{
+		rng: rng,
+		in:  []string{"col1", "col2", "col3", "col4", "col5", "col6", "col7", "col8", "col9", "col10"},
+	}
+}
+
 func BenchmarkSQLStatsFlush(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
@@ -1291,13 +1351,27 @@ func BenchmarkSQLStatsFlush(b *testing.B) {
 	defer ts.Stop(context.Background())
 
 	runner := sqlutils.MakeSQLRunner(conn)
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 
-	const QueryCountScale = int64(5000)
+	runner.Exec(b, `CREATE TABLE sql_stats_workload (
+		id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+		col1 INT,
+		col2 INT,
+		col3 INT,
+		col4 INT,
+		col5 INT,
+		col6 INT,
+		col7 INT,
+		col8 INT,
+		col9 INT,
+		col10 INT
+	)`)
+
+	gen := genPermutations()
+	const QueryCountScale = int64(2000)
 	for iter := 0; iter < b.N; iter++ {
-		for _, tc := range testQueries {
-			for i := int64(0); i < QueryCountScale; i++ {
-				runner.Exec(b, tc.query)
-			}
+		for i := int64(0); i < QueryCountScale; i++ {
+			runner.Exec(b, gen.Next(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int())
 		}
 		b.StartTimer()
 		sqlstatstestutil.FlushTestServerLocal(ts)
