@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -287,7 +288,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 			require.NoError(t, err)
 
 			serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-				tenantcapabilities.CanDebugProcess: "true",
+				tenantcapabilitiespb.CanDebugProcess: "true",
 			}, "")
 		}
 		resp, err := httpClient.Get(url.String())
@@ -302,7 +303,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 		require.NoError(t, err)
 
 		serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanDebugProcess: "false",
+			tenantcapabilitiespb.CanDebugProcess: "false",
 		}, "")
 	})
 
@@ -330,7 +331,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 			require.NoError(t, err)
 
 			serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-				tenantcapabilities.CanDebugProcess: "true",
+				tenantcapabilitiespb.CanDebugProcess: "true",
 			}, "")
 		}
 		resp, err := httpClient.Get(url.String())
@@ -345,7 +346,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 		require.NoError(t, err)
 
 		serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanDebugProcess: "false",
+			tenantcapabilitiespb.CanDebugProcess: "false",
 		}, "")
 	})
 }

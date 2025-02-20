@@ -31,31 +31,31 @@ func MustGetBoolByID(t *tenantcapabilitiespb.TenantCapabilities, id ID) bool {
 // error if the ID is not valid.
 func GetValueByID(t *tenantcapabilitiespb.TenantCapabilities, id ID) (Value, error) {
 	switch id {
-	case CanAdminRelocateRange:
+	case tenantcapabilitiespb.CanAdminRelocateRange:
 		return (*boolValue)(&t.CanAdminRelocateRange), nil
-	case CanAdminScatter:
+	case tenantcapabilitiespb.CanAdminScatter:
 		return (*invertedBoolValue)(&t.DisableAdminScatter), nil
-	case CanAdminSplit:
+	case tenantcapabilitiespb.CanAdminSplit:
 		return (*invertedBoolValue)(&t.DisableAdminSplit), nil
-	case CanAdminUnsplit:
+	case tenantcapabilitiespb.CanAdminUnsplit:
 		return (*boolValue)(&t.CanAdminUnsplit), nil
-	case CanCheckConsistency:
+	case tenantcapabilitiespb.CanCheckConsistency:
 		return (*boolValue)(&t.CanCheckConsistency), nil
-	case CanUseNodelocalStorage:
+	case tenantcapabilitiespb.CanUseNodelocalStorage:
 		return (*boolValue)(&t.CanUseNodelocalStorage), nil
-	case CanViewNodeInfo:
+	case tenantcapabilitiespb.CanViewNodeInfo:
 		return (*boolValue)(&t.CanViewNodeInfo), nil
-	case CanViewTSDBMetrics:
+	case tenantcapabilitiespb.CanViewTSDBMetrics:
 		return (*boolValue)(&t.CanViewTSDBMetrics), nil
-	case ExemptFromRateLimiting:
+	case tenantcapabilitiespb.ExemptFromRateLimiting:
 		return (*boolValue)(&t.ExemptFromRateLimiting), nil
-	case TenantSpanConfigBounds:
+	case tenantcapabilitiespb.TenantSpanConfigBounds:
 		return &spanConfigBoundsValue{b: &t.SpanConfigBounds}, nil
-	case CanDebugProcess:
+	case tenantcapabilitiespb.CanDebugProcess:
 		return (*boolValue)(&t.CanDebugProcess), nil
-	case CanViewAllMetrics:
+	case tenantcapabilitiespb.CanViewAllMetrics:
 		return (*boolValue)(&t.CanViewAllMetrics), nil
-	case CanPrepareTxns:
+	case tenantcapabilitiespb.CanPrepareTxns:
 		return (*boolValue)(&t.CanPrepareTxns), nil
 	default:
 		return nil, errors.AssertionFailedf("unknown capability: %q", id.String())

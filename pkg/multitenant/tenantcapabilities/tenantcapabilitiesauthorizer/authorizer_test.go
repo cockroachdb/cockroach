@@ -178,7 +178,7 @@ func (m mockReader) GetGlobalCapabilityState() map[roachpb.TenantID]*tenantcapab
 
 func TestAllBatchCapsAreBoolean(t *testing.T) {
 	checkCap := func(t *testing.T, capID tenantcapabilities.ID) {
-		if capID >= tenantcapabilities.MaxCapabilityID {
+		if capID >= tenantcapabilitiespb.MaxCapabilityID {
 			// One of the special values.
 			return
 		}

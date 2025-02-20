@@ -11,9 +11,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/redact/interfaces"
 )
+
+type ID = tenantcapabilitiespb.ID
 
 // Capability is an individual capability.
 type Capability interface {
@@ -55,3 +58,57 @@ func (b spanConfigBoundsCapability) Value(
 }
 
 var _ TypedCapability[bool] = boolCapability(0)
+
+// FromName looks up a capability by name.
+func FromName(s string) (Capability, bool) {
+	if id, ok := tenantcapabilitiespb.StringToCapabilityIDMap[s]; ok {
+		return FromID(id)
+	}
+	return nil, false
+}
+
+// FromID looks up a capability by ID.
+func FromID(id ID) (Capability, bool) {
+	if id.IsValid() {
+		return capabilities[id], true
+	}
+	return nil, false
+}
+
+var capabilities = [tenantcapabilitiespb.MaxCapabilityID + 1]Capability{
+	tenantcapabilitiespb.CanAdminRelocateRange:  boolCapability(tenantcapabilitiespb.CanAdminRelocateRange),
+	tenantcapabilitiespb.CanAdminScatter:        boolCapability(tenantcapabilitiespb.CanAdminScatter),
+	tenantcapabilitiespb.CanAdminSplit:          boolCapability(tenantcapabilitiespb.CanAdminSplit),
+	tenantcapabilitiespb.CanAdminUnsplit:        boolCapability(tenantcapabilitiespb.CanAdminUnsplit),
+	tenantcapabilitiespb.CanCheckConsistency:    boolCapability(tenantcapabilitiespb.CanCheckConsistency),
+	tenantcapabilitiespb.CanUseNodelocalStorage: boolCapability(tenantcapabilitiespb.CanUseNodelocalStorage),
+	tenantcapabilitiespb.CanViewNodeInfo:        boolCapability(tenantcapabilitiespb.CanViewNodeInfo),
+	tenantcapabilitiespb.CanViewTSDBMetrics:     boolCapability(tenantcapabilitiespb.CanViewTSDBMetrics),
+	tenantcapabilitiespb.ExemptFromRateLimiting: boolCapability(tenantcapabilitiespb.ExemptFromRateLimiting),
+	tenantcapabilitiespb.TenantSpanConfigBounds: spanConfigBoundsCapability(tenantcapabilitiespb.TenantSpanConfigBounds),
+	tenantcapabilitiespb.CanDebugProcess:        boolCapability(tenantcapabilitiespb.CanDebugProcess),
+	tenantcapabilitiespb.CanViewAllMetrics:      boolCapability(tenantcapabilitiespb.CanViewAllMetrics),
+	tenantcapabilitiespb.CanPrepareTxns:         boolCapability(tenantcapabilitiespb.CanPrepareTxns),
+}
+
+// EnableAll enables maximum access to services.
+func EnableAll(t *tenantcapabilitiespb.TenantCapabilities) {
+	for i := ID(1); i <= tenantcapabilitiespb.MaxCapabilityID; i++ {
+		val, err := GetValueByID(t, i)
+		if err != nil {
+			panic(err)
+		}
+		switch v := val.(type) {
+		case TypedValue[bool]:
+			// Access to the service is enabled.
+			v.Set(true)
+
+		case TypedValue[*spanconfigbounds.Bounds]:
+			// No bound.
+			v.Set(nil)
+
+		default:
+			panic(errors.AssertionFailedf("unhandled type: %T", val))
+		}
+	}
+}

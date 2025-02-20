@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -98,7 +99,7 @@ func TestSSLEnforcement(t *testing.T) {
 		// Enable access to the nodes endpoint for the test tenant.
 		require.NoError(t, srv.GrantTenantCapabilities(
 			ctx, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanViewNodeInfo: "true"}))
+			map[tenantcapabilities.ID]string{tenantcapabilitiespb.CanViewNodeInfo: "true"}))
 	}
 
 	s := srv.ApplicationLayer()

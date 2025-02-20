@@ -187,7 +187,7 @@ func AlteredCapabilitiesString(capabilities *tenantcapabilitiespb.TenantCapabili
 	var builder strings.Builder
 	builder.WriteByte('{')
 	space := ""
-	for _, capID := range tenantcapabilities.IDs {
+	for _, capID := range tenantcapabilitiespb.IDs {
 		value := tenantcapabilities.MustGetValueByID(capabilities, capID)
 		defaultValue := tenantcapabilities.MustGetValueByID(defaultCapabilities, capID)
 		if value.String() != defaultValue.String() {

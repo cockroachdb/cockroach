@@ -73,7 +73,7 @@ go_test(
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
-        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

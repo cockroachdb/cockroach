@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -224,7 +225,7 @@ func dynamicCap(capFn func(kvpb.Request) tenantcapabilities.ID) methodCapability
 }
 
 const (
-	noCapCheckNeededID = iota + tenantcapabilities.MaxCapabilityID + 1
+	noCapCheckNeededID = iota + tenantcapabilitiespb.MaxCapabilityID + 1
 	onlySystemTenantID
 	unknownMethodID
 )
@@ -269,19 +270,19 @@ var reqMethodToCap = map[kvpb.Method]methodCapability{
 	kvpb.EndTxn: dynamicCap(func(req kvpb.Request) tenantcapabilities.ID {
 		et := req.(*kvpb.EndTxnRequest)
 		if et.Prepare {
-			return tenantcapabilities.CanPrepareTxns
+			return tenantcapabilitiespb.CanPrepareTxns
 		}
 		return noCapCheckNeededID
 	}),
 
 	// The following are authorized via specific capabilities.
-	kvpb.AdminChangeReplicas: staticCap(tenantcapabilities.CanAdminRelocateRange),
-	kvpb.AdminScatter:        staticCap(tenantcapabilities.CanAdminScatter),
-	kvpb.AdminSplit:          staticCap(tenantcapabilities.CanAdminSplit),
-	kvpb.AdminUnsplit:        staticCap(tenantcapabilities.CanAdminUnsplit),
-	kvpb.AdminRelocateRange:  staticCap(tenantcapabilities.CanAdminRelocateRange),
-	kvpb.AdminTransferLease:  staticCap(tenantcapabilities.CanAdminRelocateRange),
-	kvpb.CheckConsistency:    staticCap(tenantcapabilities.CanCheckConsistency),
+	kvpb.AdminChangeReplicas: staticCap(tenantcapabilitiespb.CanAdminRelocateRange),
+	kvpb.AdminScatter:        staticCap(tenantcapabilitiespb.CanAdminScatter),
+	kvpb.AdminSplit:          staticCap(tenantcapabilitiespb.CanAdminSplit),
+	kvpb.AdminUnsplit:        staticCap(tenantcapabilitiespb.CanAdminUnsplit),
+	kvpb.AdminRelocateRange:  staticCap(tenantcapabilitiespb.CanAdminRelocateRange),
+	kvpb.AdminTransferLease:  staticCap(tenantcapabilitiespb.CanAdminRelocateRange),
+	kvpb.CheckConsistency:    staticCap(tenantcapabilitiespb.CanCheckConsistency),
 
 	// TODO(knz,arul): Verify with the relevant teams whether secondary
 	// tenants have legitimate access to any of those.
@@ -318,11 +319,11 @@ var (
 )
 
 var insufficientCapErrMap = map[tenantcapabilities.ID]error{
-	tenantcapabilities.CanViewNodeInfo:        errCannotQueryMetadata,
-	tenantcapabilities.CanViewTSDBMetrics:     errCannotQueryTSDB,
-	tenantcapabilities.CanUseNodelocalStorage: errCannotUseNodelocal,
-	tenantcapabilities.CanDebugProcess:        errCannotDebugProcess,
-	tenantcapabilities.CanViewAllMetrics:      errCannotQueryAllMetrics,
+	tenantcapabilitiespb.CanViewNodeInfo:        errCannotQueryMetadata,
+	tenantcapabilitiespb.CanViewTSDBMetrics:     errCannotQueryTSDB,
+	tenantcapabilitiespb.CanUseNodelocalStorage: errCannotUseNodelocal,
+	tenantcapabilitiespb.CanDebugProcess:        errCannotDebugProcess,
+	tenantcapabilitiespb.CanViewAllMetrics:      errCannotQueryAllMetrics,
 }
 
 func (a *Authorizer) hasCapability(
@@ -353,27 +354,27 @@ func (a *Authorizer) hasCapability(
 }
 
 func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	return a.hasCapability(ctx, tenID, tenantcapabilities.CanViewNodeInfo)
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanViewNodeInfo)
 }
 
 func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	return a.hasCapability(ctx, tenID, tenantcapabilities.CanViewTSDBMetrics)
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanViewTSDBMetrics)
 }
 
 func (a *Authorizer) HasNodelocalStorageCapability(
 	ctx context.Context, tenID roachpb.TenantID,
 ) error {
-	return a.hasCapability(ctx, tenID, tenantcapabilities.CanUseNodelocalStorage)
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanUseNodelocalStorage)
 }
 
 func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	return a.hasCapability(ctx, tenID, tenantcapabilities.CanDebugProcess)
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanDebugProcess)
 }
 
 func (a *Authorizer) HasTSDBAllMetricsCapability(
 	ctx context.Context, tenID roachpb.TenantID,
 ) error {
-	return a.hasCapability(ctx, tenID, tenantcapabilities.CanViewAllMetrics)
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanViewAllMetrics)
 }
 
 // IsExemptFromRateLimiting returns true if the tenant is not subject to rate limiting.
@@ -395,7 +396,7 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 		return false
 	}
 
-	return tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, tenantcapabilities.ExemptFromRateLimiting)
+	return tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, tenantcapabilitiespb.ExemptFromRateLimiting)
 }
 
 // getMode retrieves the authorization mode.
