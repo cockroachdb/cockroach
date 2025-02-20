@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 filegroup(
@@ -9,20 +11,26 @@ filegroup(
 go_library(
     name = "cspann",
     srcs = [
+        "cspannpb.go",
         "fixup_processor.go",
         "fixup_worker.go",
+        "index.go",
         "index_stats.go",
         "kmeans.go",
         "pacer.go",
+        "partition.go",
+        "search_set.go",
         "split_data.go",
-        "vector_index.go",
+        "store.go",
     ],
+    embed = [":cspann_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/cspann/utils",
         "//pkg/sql/vecindex/veclib",
-        "//pkg/sql/vecindex/vecstore",
+        "//pkg/util/container/heap",
         "//pkg/util/log",
         "//pkg/util/num32",
         "//pkg/util/stop",
@@ -30,6 +38,7 @@ go_library(
         "//pkg/util/vector",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//gogoproto",
         "@org_gonum_v1_gonum//stat",
     ],
 )
@@ -37,20 +46,25 @@ go_library(
 go_test(
     name = "cspann_test",
     srcs = [
+        "cspannpb_test.go",
         "fixup_processor_test.go",
         "fixup_worker_test.go",
         "index_stats_test.go",
+        "index_test.go",
         "kmeans_test.go",
         "pacer_test.go",
-        "vector_index_test.go",
+        "partition_test.go",
+        "search_set_test.go",
     ],
     data = ["//pkg/sql/vecindex/cspann:testdata"],
     embed = [":cspann"],
     deps = [
+        "//pkg/sql/vecindex/cspann/commontest",
+        "//pkg/sql/vecindex/cspann/memstore",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/testutils",
+        "//pkg/sql/vecindex/cspann/utils",
         "//pkg/sql/vecindex/veclib",
-        "//pkg/sql/vecindex/vecstore",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/num32",
@@ -64,4 +78,21 @@ go_test(
         "@org_gonum_v1_gonum//floats/scalar",
         "@org_gonum_v1_gonum//stat",
     ],
+)
+
+proto_library(
+    name = "cspann_proto",
+    srcs = ["cspann.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "cspann_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann",
+    proto = ":cspann_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )

@@ -3,16 +3,16 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package vecstore
+package cspann
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/gonum/floats/scalar"
@@ -51,7 +51,7 @@ func TestPartition(t *testing.T) {
 	require.Equal(t, 4, partition.Count())
 	require.Equal(t, []ChildKey{childKey10, childKey40, childKey30, childKey20}, partition.ChildKeys())
 	require.Equal(t, []ValueBytes{valueBytes10, valueBytes40, valueBytes30, valueBytes20b}, partition.ValueBytes())
-	require.Equal(t, []float32{4, 3.33}, roundFloats(partition.Centroid(), 2))
+	require.Equal(t, []float32{4, 3.33}, testutils.RoundFloats(partition.Centroid(), 2))
 	checkPartitionMetadata(t, partition.Metadata(), Level(1), vector.T{4, 3.33}, 4)
 
 	// Ensure that cloning does not disturb anything.
@@ -108,25 +108,15 @@ func roundResults(results SearchResults, prec int) SearchResults {
 		result.QuerySquaredDistance = float32(scalar.Round(float64(result.QuerySquaredDistance), prec))
 		result.ErrorBound = float32(scalar.Round(float64(result.ErrorBound), prec))
 		result.CentroidDistance = float32(scalar.Round(float64(result.CentroidDistance), prec))
-		result.Vector = roundFloats(result.Vector, prec)
+		result.Vector = testutils.RoundFloats(result.Vector, prec)
 	}
 	return results
-}
-
-func roundFloats(s []float32, prec int) []float32 {
-	if s == nil {
-		return nil
-	}
-	t := make([]float32, len(s))
-	copy(t, s)
-	num32.Round(t, prec)
-	return t
 }
 
 func checkPartitionMetadata(
 	t *testing.T, metadata PartitionMetadata, level Level, centroid vector.T, count int,
 ) {
 	require.Equal(t, level, metadata.Level)
-	require.Equal(t, []float32(centroid), roundFloats(metadata.Centroid, 2))
+	require.Equal(t, []float32(centroid), testutils.RoundFloats(metadata.Centroid, 2))
 	require.Equal(t, count, metadata.Count)
 }

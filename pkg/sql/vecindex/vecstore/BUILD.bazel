@@ -1,47 +1,12 @@
-load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-
-proto_library(
-    name = "vecstore_proto",
-    srcs = ["vecstore.proto"],
-    strip_import_prefix = "/pkg",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/sql/vecindex/cspann/quantize:quantize_proto",
-        "//pkg/sql/vecindex/vecpb:vecpb_proto",
-        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-    ],
-)
-
-go_proto_library(
-    name = "vecstore_go_proto",
-    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore",
-    proto = ":vecstore_proto",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/sql/vecindex/cspann/quantize",
-        "//pkg/sql/vecindex/vecpb",
-        "@com_github_gogo_protobuf//gogoproto",
-    ],
-)
 
 go_library(
     name = "vecstore",
     srcs = [
         "encoding.go",
-        "in_memory_lock.go",
-        "in_memory_store.go",
-        "in_memory_txn.go",
-        "partition.go",
-        "persistent_store.go",
-        "persistent_txn.go",
-        "search_set.go",
         "store.go",
-        "vecstorepb.go",
+        "store_txn.go",
     ],
-    embed = [":vecstore_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore",
     visibility = ["//visibility:public"],
     deps = [
@@ -59,18 +24,13 @@ go_library(
         "//pkg/sql/rowinfra",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/veclib",
-        "//pkg/sql/vecindex/vecpb",
-        "//pkg/util/container/heap",
-        "//pkg/util/container/list",
         "//pkg/util/encoding",
-        "//pkg/util/protoutil",
-        "//pkg/util/syncutil",
         "//pkg/util/unique",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//gogoproto",
     ],
 )
 
@@ -78,13 +38,8 @@ go_test(
     name = "vecstore_test",
     srcs = [
         "encoding_test.go",
-        "in_memory_store_test.go",
         "main_test.go",
-        "partition_test.go",
-        "persistent_store_test.go",
-        "search_set_test.go",
         "store_test.go",
-        "vecstorepb_test.go",
     ],
     embed = [":vecstore"],
     deps = [
@@ -103,6 +58,8 @@ go_test(
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/cspann/commontest",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/veclib",
         "//pkg/testutils/serverutils",
@@ -110,10 +67,8 @@ go_test(
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/num32",
         "//pkg/util/randutil",
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",
-        "@org_gonum_v1_gonum//floats/scalar",
     ],
 )

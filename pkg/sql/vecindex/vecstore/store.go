@@ -16,12 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 )
 
-// PersistentStore implements the Store interface for KV backed vector indices.
-type PersistentStore struct {
+// Store implements the cspann.Store interface for KV backed vector indices.
+type Store struct {
 	db descs.DB // Used to generate new partition IDs
 
 	// Used for generating prefixes and reading from the PK to get full length
@@ -41,13 +42,13 @@ type PersistentStore struct {
 	colIdxMap catalog.TableColMap    // A column map for extracting full sized vectors from the PK
 }
 
-var _ Store = (*PersistentStore)(nil)
+var _ cspann.Store = (*Store)(nil)
 
-// Create a PersistentStore for an index on the provided table descriptor using
-// the provided column ID as the vector column for the index. This is used in
-// unit tests where full vector index creation capabilities aren't necessarily
+// Create a Store for an index on the provided table descriptor using the
+// provided column ID as the vector column for the index. This is used in unit
+// tests where full vector index creation capabilities aren't necessarily
 // available.
-func NewPersistentStoreWithColumnID(
+func NewWithColumnID(
 	ctx context.Context,
 	db descs.DB,
 	quantizer quantize.Quantizer,
@@ -55,8 +56,8 @@ func NewPersistentStoreWithColumnID(
 	tableDesc catalog.TableDescriptor,
 	indexID catid.IndexID,
 	vectorColumnID descpb.ColumnID,
-) (ps *PersistentStore, err error) {
-	ps = &PersistentStore{
+) (ps *Store, err error) {
+	ps = &Store{
 		db:            db,
 		codec:         codec,
 		tableID:       tableDesc.GetID(),
@@ -80,16 +81,16 @@ func NewPersistentStoreWithColumnID(
 	return ps, err
 }
 
-// NewPersistentStore creates a vecstore.Store interface backed by the KV for a
-// single vector index.
-func NewPersistentStore(
+// New creates a cspann.Store interface backed by the KV for a single vector
+// index.
+func New(
 	ctx context.Context,
 	db descs.DB,
 	quantizer quantize.Quantizer,
 	codec keys.SQLCodec,
 	tableID catid.DescID,
 	indexID catid.IndexID,
-) (ps *PersistentStore, err error) {
+) (ps *Store, err error) {
 	var tableDesc catalog.TableDescriptor
 	err = db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		var err error
@@ -110,30 +111,30 @@ func NewPersistentStore(
 
 	vectorColumnID := index.VectorColumnID()
 
-	return NewPersistentStoreWithColumnID(ctx, db, quantizer, codec, tableDesc, indexID, vectorColumnID)
+	return NewWithColumnID(ctx, db, quantizer, codec, tableDesc, indexID, vectorColumnID)
 }
 
-// Begin is part of the vecstore.Store interface. Begin creates a new KV
-// transaction on behalf of the user and prepares it to operate on the persistent
-// vector store.
-func (s *PersistentStore) Begin(ctx context.Context, w *veclib.Workspace) (Txn, error) {
-	return NewPersistentStoreTxn(w, s, s.db.KV().NewTxn(ctx, "vecstore.PersistentStore begin transaction")), nil
+// Begin is part of the cspann.Store interface. Begin creates a new KV
+// transaction on behalf of the user and prepares it to operate on the vector
+// store.
+func (s *Store) Begin(ctx context.Context, w *veclib.Workspace) (cspann.Txn, error) {
+	return newTxn(w, s, s.db.KV().NewTxn(ctx, "cspann.Store begin transaction")), nil
 }
 
-// Commit is part of the vecstore.Store interface. Commit commits the
-// underlying KV transaction wrapped by the vecstore.Txn passed in.
-func (s *PersistentStore) Commit(ctx context.Context, txn Txn) error {
-	return txn.(*persistentStoreTxn).kv.Commit(ctx)
+// Commit is part of the cspann.Store interface. Commit commits the underlying
+// KV transaction wrapped by the cspann.Txn passed in.
+func (s *Store) Commit(ctx context.Context, txn cspann.Txn) error {
+	return txn.(*storeTxn).kv.Commit(ctx)
 }
 
-// Abort is part of the vecstore.Store interface. Abort causes the underlying
-// KV transaction wrapped by the passed vecstore.Txn to roll back.
-func (s *PersistentStore) Abort(ctx context.Context, txn Txn) error {
-	return txn.(*persistentStoreTxn).kv.Rollback(ctx)
+// Abort is part of the cspann.Store interface. Abort causes the underlying KV
+// transaction wrapped by the passed cspann.Txn to roll back.
+func (s *Store) Abort(ctx context.Context, txn cspann.Txn) error {
+	return txn.(*storeTxn).kv.Rollback(ctx)
 }
 
-// MergeStats is part of the vecstore.Store interface.
-func (s *PersistentStore) MergeStats(ctx context.Context, stats *IndexStats, skipMerge bool) error {
+// MergeStats is part of the cspann.Store interface.
+func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMerge bool) error {
 	// TODO(mw5h): Implement MergeStats. We're not panicking here because some tested
 	// functionality needs to call this function but does not depend on the results.
 	return nil

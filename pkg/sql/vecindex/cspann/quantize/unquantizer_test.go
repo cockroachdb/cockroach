@@ -24,7 +24,7 @@ func TestUnQuantizerSimple(t *testing.T) {
 	vectors := vector.MakeSet(2)
 	quantizedSet := quantizer.Quantize(&workspace, vectors)
 	require.Equal(t, vector.T{0, 0}, quantizedSet.GetCentroid())
-	require.Equal(t, []float32{}, testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
+	require.Equal(t, []float32(nil), testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 
 	// Add 3 vectors and verify centroid and centroid distances.
 	vectors = vector.MakeSetFromRawData([]float32{5, 2, 1, 2, 6, 5}, 2)
