@@ -8,6 +8,7 @@ package tests
 import (
 	"context"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -42,6 +43,7 @@ func runJobsMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		mixedversion.NumUpgrades(1),
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
 		mixedversion.AlwaysUseLatestPredecessors,
+		mixedversion.UpgradeTimeout(time.Minute*30),
 		mixedversion.NeverUseFixtures,
 	)
 	mvt.OnStartup("create a few jobs", func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
