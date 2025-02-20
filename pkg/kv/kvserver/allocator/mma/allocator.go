@@ -40,35 +40,13 @@ type Allocator interface {
 	// failure detection state for a node. A node starts in the fdOK state.
 	UpdateFailureDetectionSummary(nodeID roachpb.NodeID, fd failureDetectionSummary) error
 
-	// ProcessNodeLoadResponse provides frequent updates to the state of the
-	// external world.
-	//
-	// Only the node on which this allocator is running will provide a non-empty
-	// nodeLoadResponse.leaseholderStores slice.
-	//
-	// TODO(kvoli,sumeer): The storeLoadMsg may need a combination of gossip changes
-	// and local synthesis:
-	//
-	// - storeLoadMsg.storeRanges is the list of ranges at the node, and is
-	//   needed for accounting for load adjustments, and avoids making the
-	//   assumption that all changes have been applied. However, for expediency
-	//   of integration, we could relax this and synthesize this list as a
-	//   function of (a) timestamp of the gossiped load, (b) timestamp of the
-	//   proposed change, (c) timestamp of the latest leaseholderStores slice
-	//   that shows the change as being enacted. See
-	//   storeState.computePendingChangesReflectedInLatestLoad for such an
-	//   attempt.
-	//
-	// - storeLoadMsg.storeRanges does not need to be the complete list of
-	//   ranges -- it can be filtered down to only the ranges for which the
-	//   local node is the leaseholder.
-	//
-	// - storeLoadMsg.topKRanges could be locally synthesized by estimating the
-	//   load on a follower based on the measured load at the leaseholder. This
-	//   will not give us the follower non-raft CPU, so we will need to assume
-	//   that the CPU for a follower is only the raftCPU, and that it has the
-	//   same value as the raftCPU at the leaseholder.
-	ProcessNodeLoadResponse(resp *nodeLoadResponse) error
+	// ProcessNodeLoadMsg provides frequent the state of every node and store in
+	// the cluster.
+	ProcessNodeLoadMsg(msg *nodeLoadMsg) error
+
+	// ProcessStoreLeaseholderMsg provides updates for each local store and the
+	// ranges for which it is the leaseholder.
+	ProcessStoreLeaseholderMsg(msg *storeLeaseholderMsg) error
 
 	// TODO(sumeer): only a subset of the fields in pendingReplicaChange are
 	// relevant to the caller. Hide the remaining.
