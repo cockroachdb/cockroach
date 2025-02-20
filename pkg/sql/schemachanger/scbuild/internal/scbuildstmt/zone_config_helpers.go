@@ -1351,6 +1351,37 @@ func constructSideEffectPartitionElem(
 	return elem
 }
 
+// configureZoneConfigForNewIndexBackfill will ensure that current subzone
+// configs for the given index on tableID are updated to the newIndexID.
+func configureZoneConfigForNewIndexBackfill(
+	b BuildCtx, tableID catid.DescID, oldIndexID catid.IndexID, newIndexID catid.IndexID,
+) error {
+	currentZoneConfigWithRaw, err := b.ZoneConfigGetter().GetZoneConfig(b, tableID)
+	if err != nil {
+		return err
+	}
+	if currentZoneConfigWithRaw == nil {
+		return errors.AssertionFailedf("attempting to modify subzone configs for indexID %d"+
+			"on tableID %d that does not have subzone configs", oldIndexID, tableID)
+	}
+	newZoneConfig := *currentZoneConfigWithRaw.ZoneConfigProto()
+	newSubzones := make([]zonepb.Subzone, len(newZoneConfig.Subzones))
+	for i, subzone := range newZoneConfig.Subzones {
+		if subzone.IndexID == uint32(oldIndexID) {
+			subzone.IndexID = uint32(newIndexID)
+		}
+		newSubzones[i] = subzone
+	}
+	newZoneConfig.Subzones = newSubzones
+	newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
+	if err != nil {
+		return err
+	}
+	tzc := &scpb.TableZoneConfig{TableID: tableID, ZoneConfig: &newZoneConfig, SeqNum: 1}
+	b.Add(tzc)
+	return nil
+}
+
 // TODO(annie): This is unused for now.
 var _ = configureZoneConfigForNewIndexPartitioning
 

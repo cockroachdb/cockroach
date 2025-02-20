@@ -1868,3 +1868,9 @@ func failIfSafeUpdates(b BuildCtx, n tree.NodeFormatter) {
 		)
 	}
 }
+
+func hasSubzones(b BuildCtx, tableID descpb.ID) bool {
+	numIdxSubzones := b.QueryByID(tableID).FilterIndexZoneConfig().Size()
+	numPartSubzones := b.QueryByID(tableID).FilterPartitionZoneConfig().Size()
+	return numIdxSubzones > 0 || numPartSubzones > 0
+}

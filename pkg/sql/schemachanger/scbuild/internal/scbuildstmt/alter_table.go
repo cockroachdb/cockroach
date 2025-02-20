@@ -143,6 +143,15 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	}
 	maybeDropRedundantPrimaryIndexes(b, tbl.TableID)
 	maybeRewriteTempIDsInPrimaryIndexes(b, tbl.TableID)
+	if hasSubzones(b, tbl.TableID) {
+		currPrimaryIndexID := getCurrentPrimaryIndexID(b, tbl.TableID)
+		latestPrimaryIndex := getLatestPrimaryIndex(b, tbl.TableID)
+		// TOOD(before merge): is this ok
+		maybeRewriteTempIDsInPrimaryIndexes(b, tbl.TableID)
+		if err := configureZoneConfigForNewIndexBackfill(b, tbl.TableID, currPrimaryIndexID, latestPrimaryIndex.IndexID); err != nil {
+			panic(err)
+		}
+	}
 	disallowDroppingPrimaryIndexReferencedInUDFOrView(b, tbl.TableID, n.String())
 }
 
