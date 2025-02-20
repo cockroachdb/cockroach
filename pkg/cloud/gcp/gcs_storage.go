@@ -279,6 +279,11 @@ func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteClose
 	return w, nil
 }
 
+// isNotExistErr checks if the error indicates a file does not exist
+func isNotExistErr(err error) bool {
+	return errors.Is(err, gcs.ErrObjectNotExist)
+}
+
 func (g *gcsStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
 ) (ioctx.ReadCloserCtx, int64, error) {
@@ -317,17 +322,8 @@ func (g *gcsStorage) ReadFile(
 	)
 
 	if err := r.Open(ctx); err != nil {
-		if errors.Is(err, gcs.ErrObjectNotExist) {
-			// Callers of this method sometimes look at the returned error to determine
-			// if file does not exist.  Regardless why we couldn't open the stream
-			// (whether its invalid bucket or file doesn't exist),
-			// return our internal ErrFileDoesNotExist.
-			// nolint:errwrap
-			err = errors.Wrapf(
-				errors.Wrapf(cloud.ErrFileDoesNotExist, "gcs object %q does not exist", object),
-				"%v",
-				err.Error(),
-			)
+		if isNotExistErr(err) {
+			return nil, 0, cloud.WrapErrFileDoesNotExist(err, "gcs object does not exist")
 		}
 		return nil, 0, err
 	}
@@ -360,11 +356,14 @@ func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.Li
 }
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
-	return timeutil.RunWithTimeout(ctx, "delete gcs file",
-		cloud.Timeout.Get(&g.settings.SV),
+	err := timeutil.RunWithTimeout(ctx, "delete gcs file", cloud.Timeout.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
 		})
+	if isNotExistErr(err) {
+		return nil
+	}
+	return err
 }
 
 func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
