@@ -629,8 +629,8 @@ func NewNoopPeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
 
 func (n noopPeriodicProgressFlusher) StartPeriodicUpdates(
 	ctx context.Context, tracker scexec.BackfillerProgressFlusher,
-) (stop func() error) {
-	return func() error { return nil }
+) (stop func()) {
+	return func() {}
 }
 
 type constantClock struct {

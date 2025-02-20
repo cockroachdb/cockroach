@@ -167,17 +167,13 @@ func (cm *constraintMatcher) constrainStoresForConjunction(
 	*storeSet = (*storeSet)[:0]
 	for i := range constraints {
 		matchedSet := cm.getMatchedSetForConstraint(constraints[i])
-		if len(matchedSet.storeIDPostingList) == 0 {
-			*storeSet = (*storeSet)[:0]
-			return
-		}
 		if i == 0 {
 			*storeSet = append(*storeSet, matchedSet.storeIDPostingList...)
 		} else {
 			storeSet.intersect(matchedSet.storeIDPostingList)
-			if len(*storeSet) == 0 {
-				return
-			}
+		}
+		if len(*storeSet) == 0 {
+			return
 		}
 	}
 }
