@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "failures",
+    srcs = [
+        "failure.go",
+        "network_partition.go",
+        "registry.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+    ],
+)
