@@ -141,19 +141,6 @@ type storeLoad struct {
 	capacity loadVector
 
 	reportedSecondaryLoad secondaryLoadVector
-
-	// top-k ranges along some dimensions, chosen by the store. If the store is
-	// closer to hitting the resource limit on some resource it should choose to
-	// use that resource consumption to choose the top-k.
-	//
-	// This is extremely important: the allocator does not try to make a
-	// decision on what ranges to shed for an overloaded node -- it simply tries
-	// to find new homes for the ranges in this top-k. We decentralize this
-	// decision to reduce the time complexity of rebalancing.
-	topKRanges map[roachpb.RangeID]rangeLoad
-	// Mean load for the non-top-k ranges. This is used to estimate the load
-	// change for transferring them.
-	meanNonTopKRangeLoad rangeLoad
 }
 
 // nodeLoad is the load information for a node. Roughly, this is the
@@ -466,8 +453,6 @@ var _ = storeLoad{}.NodeID
 var _ = storeLoad{}.reportedLoad
 var _ = storeLoad{}.capacity
 var _ = storeLoad{}.reportedSecondaryLoad
-var _ = storeLoad{}.topKRanges
-var _ = storeLoad{}.meanNonTopKRangeLoad
 var _ = nodeLoad{}.nodeID
 var _ = nodeLoad{}.reportedCPU
 var _ = nodeLoad{}.capacityCPU
