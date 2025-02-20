@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,7 +37,7 @@ func TestStatusGossipJson(t *testing.T) {
 		)
 		require.NoError(t, err)
 		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanViewNodeInfo: "true"}, "")
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewNodeInfo: "true"}, "")
 	}
 	s := srv.ApplicationLayer()
 	require.NoError(t, validateGossipResponse(s))

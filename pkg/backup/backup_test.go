@@ -62,7 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -593,7 +593,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 	if tc.DefaultTenantDeploymentMode().IsExternal() {
 		tc.GrantTenantCapabilities(
 			ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"})
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
 	}
 
 	// Ensure that each node has at least one leaseholder. (These splits were

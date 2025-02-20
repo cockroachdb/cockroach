@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -89,8 +89,8 @@ ALTER TENANT application GRANT CAPABILITY can_use_nodelocal_storage`)
 
 	var tenantID uint64
 	db.QueryRow(t, "SELECT id FROM [SHOW TENANT application]").Scan(&tenantID)
-	tc.WaitForTenantCapabilities(t, roachpb.MustMakeTenantID(tenantID), map[tenantcapabilities.ID]string{
-		tenantcapabilities.CanUseNodelocalStorage: "true",
+	tc.WaitForTenantCapabilities(t, roachpb.MustMakeTenantID(tenantID), map[tenantcapabilitiespb.ID]string{
+		tenantcapabilitiespb.CanUseNodelocalStorage: "true",
 	})
 
 	// Wait for tenant to start up on all nodes.

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -597,7 +597,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 	if tc.DefaultTenantDeploymentMode().IsExternal() {
 		tc.GrantTenantCapabilities(
 			ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"})
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
 	}
 
 	db := tc.ServerConn(0)
