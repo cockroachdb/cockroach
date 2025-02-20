@@ -3,17 +3,17 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package vecstore
+package memstore
 
 import (
 	"sync"
 	"sync/atomic"
 )
 
-// inMemoryLock wraps a read-write lock, adding support for reentrancy and
+// memLock wraps a read-write memLock, adding support for reentrancy and
 // ownership tracking.
 // NOTE: This is only used in testing and benchmarking code.
-type inMemoryLock struct {
+type memLock struct {
 	mu struct {
 		// NOTE: Do not use syncutil.RWMutex here, because deadlock detection
 		// reports spurious failures. Different partitions in the vector index
@@ -35,14 +35,14 @@ type inMemoryLock struct {
 
 // IsAcquiredBy returns true if the lock is exclusively owned by the given
 // owner, or false if not.
-func (pl *inMemoryLock) IsAcquiredBy(owner uint64) bool {
+func (pl *memLock) IsAcquiredBy(owner uint64) bool {
 	return pl.exclusiveOwner.Load() == owner
 }
 
 // Acquire obtains exclusive write access to the resource protected by this
 // lock. The same owner can obtain the lock multiple times. The caller must
 // ensure that Release is called for each call to Acquire.
-func (pl *inMemoryLock) Acquire(owner uint64) {
+func (pl *memLock) Acquire(owner uint64) {
 	if pl.exclusiveOwner.Load() == owner {
 		// Exclusive lock has already been acquired by this owner.
 		pl.mu.reentrancy++
@@ -57,7 +57,7 @@ func (pl *inMemoryLock) Acquire(owner uint64) {
 // AcquireShared obtains shared read access to the resource protected by this
 // lock. The same owner can obtain the lock multiple times. The caller must
 // ensure that ReleaseShared is called for each all to AcquireShared.
-func (pl *inMemoryLock) AcquireShared(owner uint64) {
+func (pl *memLock) AcquireShared(owner uint64) {
 	if owner != 0 && pl.exclusiveOwner.Load() == owner {
 		// Exclusive lock has already been acquired by this owner.
 		pl.mu.reentrancy++
@@ -71,7 +71,7 @@ func (pl *inMemoryLock) AcquireShared(owner uint64) {
 // Release unlocks exclusive write access to the protected resource obtained by
 // a call to Acquire. If the same owner made multiple Acquire calls, the lock
 // isn't released until Release is called the same number of times.
-func (pl *inMemoryLock) Release() {
+func (pl *memLock) Release() {
 	if pl.mu.reentrancy > 0 {
 		pl.mu.reentrancy--
 		return
@@ -86,7 +86,7 @@ func (pl *inMemoryLock) Release() {
 // by a call to AcquireShared. If the same owner made multiple AcquireShared
 // calls, the lock isn't released until ReleaseShared is called the same number
 // of times.
-func (pl *inMemoryLock) ReleaseShared() {
+func (pl *memLock) ReleaseShared() {
 	if pl.mu.reentrancy > 0 {
 		pl.mu.reentrancy--
 		return
