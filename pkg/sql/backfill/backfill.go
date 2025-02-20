@@ -478,6 +478,10 @@ type IndexBackfiller struct {
 	// backfilled.
 	indexesToEncode []catalog.Index
 
+	// sourceIndex the primary index that should be used to execute this
+	// backfill.
+	sourceIndex catalog.Index
+
 	// keyPrefixes is a slice of key prefixes for each index in indexesToEncode.
 	// indexesToEncode and keyPrefixes should both have the same ordering.
 	keyPrefixes [][]byte
@@ -511,7 +515,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 ) error {
 
 	// Initialize ib.added.
-	ib.initIndexes(evalCtx.Codec, desc, nil /* allowList */)
+	ib.initIndexes(evalCtx.Codec, desc, nil /* allowList */, 0 /*sourceIndex*/)
 
 	// Initialize ib.cols and ib.colIdxMap.
 	if err := ib.initCols(desc); err != nil {
@@ -647,6 +651,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	flowCtx *execinfra.FlowCtx,
 	desc catalog.TableDescriptor,
 	allowList []catid.IndexID,
+	sourceIndexID catid.IndexID,
 	mon *mon.BytesMonitor,
 ) error {
 	// We'll be modifying the eval.Context in BuildIndexEntriesChunk, so we need
@@ -654,7 +659,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	evalCtx := flowCtx.NewEvalCtx()
 
 	// Initialize ib.added.
-	ib.initIndexes(evalCtx.Codec, desc, allowList)
+	ib.initIndexes(evalCtx.Codec, desc, allowList, sourceIndexID)
 
 	// Initialize ib.indexBackfillerCols.
 	if err := ib.initCols(desc); err != nil {
@@ -732,7 +737,7 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
 	ib.indexBackfillerCols, err = makeIndexBackfillColumns(
-		desc.DeletableColumns(), desc.GetPrimaryIndex(), ib.added,
+		desc.DeletableColumns(), ib.sourceIndex, ib.added,
 	)
 	return err
 }
@@ -744,7 +749,10 @@ func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
 // If `allowList` is non-nil, we only add those in this list.
 // If `allowList` is nil, we add all adding index mutations.
 func (ib *IndexBackfiller) initIndexes(
-	codec keys.SQLCodec, desc catalog.TableDescriptor, allowList []catid.IndexID,
+	codec keys.SQLCodec,
+	desc catalog.TableDescriptor,
+	allowList []catid.IndexID,
+	sourceIndexID catid.IndexID,
 ) {
 	var allowListAsSet catid.IndexSet
 	if len(allowList) > 0 {
@@ -753,6 +761,10 @@ func (ib *IndexBackfiller) initIndexes(
 
 	mutations := desc.AllMutations()
 	mutationID := mutations[0].MutationID()
+	ib.sourceIndex = desc.GetPrimaryIndex()
+	if sourceIndexID != 0 {
+		ib.sourceIndex = catalog.FindIndexByID(desc, sourceIndexID)
+	}
 	ib.keyPrefixes = make([][]byte, 0, len(ib.added))
 	// Mutations in the same transaction have the same ID. Loop through the
 	// mutations and collect all index mutations.
@@ -858,7 +870,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// read or used
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
+		&spec, ib.evalCtx.Codec, tableDesc, ib.sourceIndex, fetcherCols,
 	); err != nil {
 		return nil, nil, memUsedPerChunk, err
 	}
