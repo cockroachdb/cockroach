@@ -25,3 +25,4 @@ targets:
       - command: sync
         flags:
           clouds: gce
+      - script: pkg/cmd/drtprod/scripts/add_dd_api_key_to_bash.sh
