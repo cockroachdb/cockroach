@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/linkedin/goavro/v2"
 )
@@ -42,13 +43,25 @@ func newEnrichedSourceProvider(
 
 func (p *enrichedSourceProvider) avroSourceFunction(row cdcevent.Row) (map[string]any, error) {
 	return map[string]any{
-		"job_id": goavro.Union(avro.SchemaTypeString, p.sourceData.jobID),
+		"job_id":               goavro.Union(avro.SchemaTypeString, p.sourceData.jobID),
+		"db_version":           goavro.Union(avro.SchemaTypeString, p.sourceData.dbVersion),
+		"cluster_name":         goavro.Union(avro.SchemaTypeString, p.sourceData.clusterName),
+		"cluster_id":           goavro.Union(avro.SchemaTypeString, p.sourceData.clusterID),
+		"source_node_locality": goavro.Union(avro.SchemaTypeString, p.sourceData.sourceNodeLocality),
+		"node_name":            goavro.Union(avro.SchemaTypeString, p.sourceData.nodeName),
+		"node_id":              goavro.Union(avro.SchemaTypeString, p.sourceData.nodeID),
 	}, nil
 }
 
 func (p *enrichedSourceProvider) getAvroFields() []*avro.SchemaField {
 	return []*avro.SchemaField{
 		{Name: "job_id", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
+		{Name: "db_version", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
+		{Name: "cluster_name", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
+		{Name: "cluster_id", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
+		{Name: "source_node_locality", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
+		{Name: "node_name", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
+		{Name: "node_id", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
 	}
 }
 
@@ -60,10 +73,20 @@ func (p *enrichedSourceProvider) Schema() (*avro.FunctionalRecord, error) {
 	return rec, nil
 }
 
-func (p *enrichedSourceProvider) GetJSON(row cdcevent.Row) (json.JSON, error) {
+func (p *enrichedSourceProvider) GetJSON(
+	updated cdcevent.Row, updatedTs hlc.Timestamp, mvccTs hlc.Timestamp,
+) (json.JSON, error) {
 	// TODO(various): Add fields here.
 	keys := []string{
 		"job_id", "db_version", "cluster_name", "cluster_id", "source_node_locality", "node_name", "node_id",
+	}
+
+	if p.opts.updated {
+		keys = append(keys, "ts_hlc")
+		keys = append(keys, "ts_ns")
+	}
+	if p.opts.mvccTimestamp {
+		keys = append(keys, "mvcc_timestamp")
 	}
 	b, err := json.NewFixedKeysObjectBuilder(keys)
 	if err != nil {
