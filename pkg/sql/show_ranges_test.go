@@ -8,10 +8,6 @@ package sql_test
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
-	"testing"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sort"
+	"strings"
+	"testing"
 )
 
 func TestShowRangesWithLocality(t *testing.T) {
@@ -247,7 +246,7 @@ func TestShowRangesUnavailableReplicas(t *testing.T) {
 	const numNodes = 3
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
 	tc := testcluster.StartTestCluster(
 		// Manual replication will prevent the leaseholder for the unavailable range
 		// from moving a different node.
@@ -261,7 +260,7 @@ func TestShowRangesUnavailableReplicas(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold='1s'`)
+	//sqlDB.Exec(t, `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold='1s'`)
 	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
 	// Split the table's range to have a better chance of moving some leaseholders
 	// off of node 1 in the scatter below.

@@ -538,6 +538,118 @@ func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
 	require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
 }
 
+//func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
+//	defer leaktest.AfterTest(t)()
+//	defer log.Scope(t).Close(t)
+//	ctx := context.Background()
+//
+//	// The lease request timeout depends on the Raft election timeout, so we set
+//	// it low to get faster lease expiration (800 ms) and speed up the test.
+//	var raftCfg base.RaftConfig
+//	raftCfg.SetDefaults()
+//	raftCfg.RaftHeartbeatIntervalTicks = 1
+//	raftCfg.RaftElectionTimeoutTicks = 2
+//
+//	knobs, ltk := makeReplicationTestKnobs()
+//	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+//		ServerArgs: base.TestServerArgs{
+//			RaftConfig: raftCfg,
+//			Knobs:      knobs,
+//		},
+//		ReplicationMode: base.ReplicationManual,
+//	})
+//	defer tc.Stopper().Stop(ctx)
+//
+//	key := tc.ScratchRange(t)
+//	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+//	// Make sure n1 has the lease to start with.
+//	err := tc.Server(0).DB().AdminTransferLease(ctx, key, tc.Target(0).StoreID)
+//	require.NoError(t, err)
+//	store0, repl0 := getFirstStoreReplica(t, tc.Server(0), key)
+//	store1, repl1 := getFirstStoreReplica(t, tc.Server(1), key)
+//	store2, repl2 := getFirstStoreReplica(t, tc.Server(2), key)
+//
+//	// The test proceeds as follows:
+//	//
+//	//  - Send an AdminChangeReplicasRequest to remove n1 (leaseholder) and add n4
+//	//  - Stop the replication change after entering the joint configuration
+//	//  - Kill n4 and wait until n1 notices
+//	//  - Complete the replication change
+//
+//	// Enter joint config.
+//	ltk.withStopAfterJointConfig(func() {
+//		tc.RebalanceVoterOrFatal(ctx, t, key, tc.Target(0), tc.Target(3))
+//	})
+//	desc = tc.LookupRangeOrFatal(t, key)
+//	require.Len(t, desc.Replicas().Descriptors(), 4)
+//	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
+//
+//	// Kill n4.
+//	tc.StopServer(3)
+//
+//	// Wait for n1 to notice.
+//	testutils.SucceedsSoon(t, func() error {
+//		// Manually report n4 as unreachable to speed up the test.
+//		require.NoError(t, repl0.RaftReportUnreachable(4))
+//		// Check the Raft progress.
+//		s := repl0.RaftStatus()
+//		require.Equal(t, raftpb.StateLeader, s.RaftState)
+//		p := s.Progress
+//		require.Len(t, p, 4)
+//		require.Contains(t, p, raftpb.PeerID(4))
+//		if p[4].State != tracker.StateProbe {
+//			return errors.Errorf("dead replica not state probe")
+//		}
+//		return nil
+//	})
+//
+//	// Run the range through the replicate queue on n1.
+//	traceCtx, rec1 := tracing.ContextWithRecordingSpan(ctx, store0.GetStoreConfig().Tracer(), "trace-enqueue1")
+//	defer rec1()
+//	processErr, err := store0.Enqueue(
+//		traceCtx, "replicate", repl0, true /* skipShouldQueue */, false /* async */)
+//
+//	time.Sleep(6 * time.Second) // let the lease expire
+//
+//	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store0.GetStoreConfig().Tracer(), "trace-enqueue2")
+//	defer rec()
+//	processErr, err = store0.Enqueue(
+//		traceCtx, "replicate", repl0, true /* skipShouldQueue */, false /* async */)
+//
+//	if err != nil || processErr != nil {
+//		traceCtx, rec = tracing.ContextWithRecordingSpan(ctx, store1.GetStoreConfig().Tracer(), "trace-enqueue3")
+//		defer rec()
+//		processErr, err = store1.Enqueue(
+//			traceCtx, "replicate", repl1, true /* skipShouldQueue */, false /* async */)
+//	}
+//
+//	if err != nil || processErr != nil {
+//		defer rec()
+//		traceCtx, rec = tracing.ContextWithRecordingSpan(ctx, store2.GetStoreConfig().Tracer(), "trace-enqueuer")
+//		processErr, err = store2.Enqueue(
+//			traceCtx, "replicate", repl2, true /* skipShouldQueue */, false /* async */)
+//	}
+//
+//	require.NoError(t, err)
+//	require.NoError(t, processErr)
+//	//formattedTrace := rec().String()
+//	//expectedMessages := []string{}
+//	//require.NoError(t, testutils.MatchInOrder(formattedTrace, expectedMessages...))
+//
+//	formattedTrace := rec1().String()
+//	expectedMessages := []string{
+//		`transitioning out of joint configuration`,
+//		`leaseholder .* is being removed through an atomic replication change, transferring lease to`,
+//		`lease transfer to .* complete`,
+//	}
+//	require.NoError(t, testutils.MatchInOrder(formattedTrace, expectedMessages...))
+//
+//	//// Verify that the joint configuration has completed.
+//	//desc = tc.LookupRangeOrFatal(t, key)
+//	//require.Len(t, desc.Replicas().VoterDescriptors(), 3)
+//	//require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
+//}
+
 // internalTransferLeaseFailureDuringJointConfig reproduces
 // https://github.com/cockroachdb/cockroach/issues/83687
 // and makes sure that if lease transfer fails during a joint configuration

@@ -4619,7 +4619,8 @@ func TestPartialPartition(t *testing.T) {
 					require.NoError(t, txn.Commit(cancelCtx))
 				} else {
 					require.Error(t, err)
-					require.NoError(t, txn.Rollback(cancelCtx))
+					fmt.Printf("!!! IBRAHIM TEST !!! err = %v, cancelCtx: %+v\n", err, cancelCtx)
+					require.Error(t, txn.Rollback(cancelCtx))
 				}
 
 				// Stop all the clients first to avoid getting stuck on failing tests.

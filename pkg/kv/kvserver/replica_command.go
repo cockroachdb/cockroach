@@ -1440,6 +1440,8 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 	}
 	log.VEventf(ctx, 2, "leaseholder %v is being removed through an atomic "+
 		"replication change, transferring lease to %v", voterDemotingTarget, voterIncomingTarget)
+	fmt.Printf("leaseholder %v is being removed through an atomic "+
+		"replication change, transferring lease to %v\n", voterDemotingTarget, voterIncomingTarget)
 	// We bypass safety checks when transferring the lease to the VOTER_INCOMING.
 	// We do so because we could get stuck without a path to exit the joint
 	// configuration if we rejected this lease transfer while waiting to confirm

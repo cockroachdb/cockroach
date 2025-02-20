@@ -2528,7 +2528,8 @@ const slowDistSenderReplicaThreshold = 10 * time.Second
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*kvpb.BatchResponse, error) {
-
+	fmt.Printf("!!! IBRAHIM !!! fresh call to sendToReplicas\n")
+	t1 := time.Now()
 	// If this request can be sent to a follower to perform a consistent follower
 	// read under the closed timestamp, promote its routing policy to NEAREST.
 	// If we don't know the closed timestamp policy, we ought to optimistically
@@ -2624,8 +2625,10 @@ func (ds *DistSender) sendToReplicas(
 
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
-	var ambiguousError, replicaUnavailableError error
+	var ambiguousError, replicaUnavailableError, notLeaseholderError, leaseholderUnavailableError error
 	var leaseholderUnavailable bool
+	anyError := false
+	fmt.Printf("!!! IBRAHIM !!! setting anyError to false\n")
 	var br *kvpb.BatchResponse
 	attempts := int64(0)
 	for first := true; ; first, attempts = false, attempts+1 {
@@ -2641,11 +2644,31 @@ func (ds *DistSender) sendToReplicas(
 		if lastErr == nil && br != nil {
 			lastErr = br.Error.GoError()
 		}
+
+		if !anyError && leaseholderUnavailableError != nil && transport.IsExhausted() {
+			fmt.Printf("!!! IBRAHIM !!! replicaUnavailableError = leaseholderUnavailableError\n")
+			if time.Now().Sub(t1) > (time.Second * 6) {
+				replicaUnavailableError = leaseholderUnavailableError
+			} else {
+				leaseholderUnavailable = false
+				leaseholderUnavailableError = nil
+				transport.Reset()
+			}
+		}
+
+		if !anyError && notLeaseholderError != nil && transport.IsExhausted() {
+			fmt.Printf("!!! IBRAHIM !!! replicaUnavailableError = notLeaseholderError\n")
+			replicaUnavailableError = notLeaseholderError
+		}
+
 		err = skipStaleReplicas(transport, routing, ambiguousError, replicaUnavailableError, lastErr)
 		if err != nil {
+			//fmt.Printf("!!! IBRAHIM33 !!! ambiguousError: %+v, replicaUnavailableError: %+v, lastErr: %+v\n", ambiguousError, replicaUnavailableError, lastErr)
+			fmt.Printf("!!! IBRAHIM33 !!! ambiguousError: %+v, replicaUnavailableError: %+v, lastErr: %+v\n", ambiguousError, replicaUnavailableError, lastErr)
 			return nil, err
 		}
 		curReplica := transport.NextReplica()
+		fmt.Printf("!!! IBRAHIM !!! curReplica: %+v\n", curReplica)
 		if first {
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.VEventf(ctx, 2, "r%d: sending batch %s to %s", desc.RangeID, ba.Summary(), curReplica)
@@ -2753,6 +2776,7 @@ func (ds *DistSender) sendToReplicas(
 			transport.SkipReplica()
 		} else {
 			br, err = transport.SendNext(sendCtx, requestToSend)
+
 			tEnd := crtime.NowMono()
 			if cancelErr := cbToken.Done(br, err, tEnd); cancelErr != nil {
 				// The request was cancelled by the circuit breaker tripping. If this is
@@ -2795,11 +2819,14 @@ func (ds *DistSender) sendToReplicas(
 		}
 
 		if cbErr != nil {
+			fmt.Printf("!!! IBRAHIM !!! circuit breaker error: %+v\n", cbErr)
+
 			log.VErrEventf(ctx, 2, "circuit breaker error: %s", cbErr)
 			// We know the request did not start, so the error is not ambiguous.
 
 		} else if err != nil {
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
+			fmt.Printf("!!! IBRAHIM !!! RPC err: %+v\n", err)
 
 			// For most connection errors, we cannot tell whether or not the request
 			// may have succeeded on the remote server (exceptions are captured in the
@@ -2859,7 +2886,9 @@ func (ds *DistSender) sendToReplicas(
 			// If we get a gRPC error against the leaseholder, we don't want to
 			// backoff and keep trying the request against the same leaseholder.
 			if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
+				fmt.Printf("!!! IBRAHIM !!! leaseholderUnavailable = true\n")
 				leaseholderUnavailable = true
+				leaseholderUnavailableError = kvpb.NewReplicaUnavailableError(err, routing.Desc(), curReplica)
 			}
 		} else {
 			// If the reply contains a timestamp, update the local HLC with it.
@@ -2896,10 +2925,14 @@ func (ds *DistSender) sendToReplicas(
 			// TODO(andrei): There are errors below that cause us to move to a
 			// different replica without updating our caches. This means that future
 			// requests will attempt the same useless replicas.
+			fmt.Printf("!!! IBRAHIM !!! br.Error: %v\n", br.Error)
 			switch tErr := br.Error.GetDetail().(type) {
 			case *kvpb.StoreNotFoundError, *kvpb.NodeUnavailableError:
 				// These errors are likely to be unique to the replica that reported
 				// them, so no action is required before the next retry.
+				fmt.Printf("!!! IBRAHIM !!! setting anyError to true\n")
+				anyError = true
+
 			case *kvpb.RangeNotFoundError:
 				// The store we routed to doesn't have this replica. This can happen when
 				// our descriptor is outright outdated, but it can also be caused by a
@@ -2908,6 +2941,8 @@ func (ds *DistSender) sendToReplicas(
 				// We'll try other replicas which typically gives us the leaseholder, either
 				// via the NotLeaseHolderError or nil error paths, both of which update the
 				// leaseholder in the range cache.
+				fmt.Printf("!!! IBRAHIM !!! setting anyError to true\n")
+				anyError = true
 			case *kvpb.ReplicaUnavailableError:
 				// The replica's circuit breaker is tripped. This only means that this
 				// replica is unable to propose writes -- the range may or may not be
@@ -2954,6 +2989,8 @@ func (ds *DistSender) sendToReplicas(
 				//
 				// NB: we can't return tErr directly, because GetDetail() strips error
 				// marks from the error (e.g. ErrBreakerOpen).
+				fmt.Printf("!!! IBRAHIM !!! setting anyError to true\n")
+				anyError = true
 				if !tErr.Replica.IsSame(curReplica) {
 					// The ReplicaUnavailableError may have been proxied via this replica.
 					// This can happen e.g. if the replica has to access a txn record on a
@@ -2969,6 +3006,7 @@ func (ds *DistSender) sendToReplicas(
 					// return NLHEs to different replicas all returning RUEs.
 					replicaUnavailableError = br.Error.GoError()
 					leaseholderUnavailable = true
+					leaseholderUnavailableError = tErr
 				} else if replicaUnavailableError == nil {
 					// This is the first time we see a RUE. Record it, such that we'll
 					// return it if all other replicas fail (regardless of error).
@@ -2980,6 +3018,7 @@ func (ds *DistSender) sendToReplicas(
 					ambiguousError = br.Error.GoError()
 				}
 			case *kvpb.NotLeaseHolderError:
+				fmt.Printf("!!! IBRAHIM0 !!! br.Error.GetDetail(): %+v\n", br.Error.GetDetail())
 				ds.metrics.NotLeaseHolderErrCount.Inc(1)
 				// Update the leaseholder in the range cache. Naively this would also
 				// happen when the next RPC comes back, but we don't want to wait out
@@ -3015,6 +3054,7 @@ func (ds *DistSender) sendToReplicas(
 					// error too aggressively.
 					if updatedLeaseholder {
 						leaseholderUnavailable = false
+						leaseholderUnavailableError = nil
 						routeToLeaseholder = true
 						// If we changed the leaseholder, reset the transport to try all the
 						// replicas in order again. After a leaseholder change, requests to
@@ -3028,6 +3068,7 @@ func (ds *DistSender) sendToReplicas(
 						// information we would not need to reset the transport here.
 						transport.Reset()
 					}
+
 					// If the leaseholder is the replica that we've just tried, and
 					// we've tried this replica a bunch of times already, let's move on
 					// and not try it again. This prevents us getting stuck on a replica
@@ -3061,6 +3102,11 @@ func (ds *DistSender) sendToReplicas(
 							)
 						}
 					}
+
+					if lh.IsSame(curReplica) && tErr.Lease == nil {
+						notLeaseholderError = kvpb.NewReplicaUnavailableError(tErr, routing.Desc(), curReplica)
+					}
+
 					// Check whether the request was intentionally sent to a follower
 					// replica to perform a follower read. In such cases, the follower
 					// may reject the request with a NotLeaseHolderError if it does not
@@ -3302,4 +3348,35 @@ func (s *sendError) Unwrap() error { return s.cause }
 // IsSendError returns true if err is a sendError.
 func IsSendError(err error) bool {
 	return errors.HasType(err, &sendError{})
+}
+
+type leaseHolderNotFound struct {
+	cause error
+}
+
+// newLeaseHolderNotFound creates a leaseHolderNotFound that wraps the given error.
+func newLeaseHolderNotFound(err error) error {
+	return &leaseHolderNotFound{cause: err}
+}
+
+// TestNewLeaseHolderNotFound creates a new leaseHolderNotFound for the purpose of unit tests
+func TestNewLeaseHolderNotFound(msg string) error {
+	return newLeaseHolderNotFound(errors.NewWithDepthf(1, "%s", msg))
+}
+
+// Error implements error.
+func (s *leaseHolderNotFound) Error() string {
+	return fmt.Sprintf("failed to send RPC: %s", s.cause)
+}
+
+// Cause implements errors.Causer.
+// NB: this is an obsolete method, use Unwrap() instead.
+func (s *leaseHolderNotFound) Cause() error { return s.cause }
+
+// Unwrap implements errors.Wrapper.
+func (s *leaseHolderNotFound) Unwrap() error { return s.cause }
+
+// IsLeaseHolderNotFound returns true if err is a leaseHolderNotFound.
+func IsLeaseHolderNotFound(err error) bool {
+	return errors.HasType(err, &leaseHolderNotFound{})
 }

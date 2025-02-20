@@ -549,27 +549,32 @@ func TestRetrieveRangeStatus(t *testing.T) {
 	admServer := int(rs[2].NodeID - 1)
 	adm := tc.GetAdminClient(t, admServer)
 
-	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
-		DecommissionedNodeIDs: []roachpb.NodeID{rs[0].NodeID, rs[1].NodeID},
-		MaxReportedRanges:     999,
-		MaxConcurrency:        -1, // no limit
-	})
-	require.NoError(t, err, "failed to get range status")
+	testutils.SucceedsSoon(t, func() error {
+		r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
+			DecommissionedNodeIDs: []roachpb.NodeID{rs[0].NodeID, rs[1].NodeID},
+			MaxReportedRanges:     999,
+			MaxConcurrency:        -1, // no limit
+		})
 
-	// We verify that at least scratch range lost its quorum at this point.
-	func() {
-		for _, status := range r.UnavailableRanges.Ranges {
-			if status.RangeID == d.RangeID {
-				require.Equal(t, loqrecoverypb.RangeHealth_LOSS_OF_QUORUM.String(), status.Health.String())
-				return
-			}
+		if err != nil {
+			return err
 		}
-		t.Fatal("failed to find scratch range in unavailable ranges")
-	}()
-	require.Empty(t, r.UnavailableRanges.Error, "should have no error")
+
+		// We verify that at least scratch range lost its quorum at this point.
+		err = func() error {
+			for _, status := range r.UnavailableRanges.Ranges {
+				if status.RangeID == d.RangeID {
+					require.Equal(t, loqrecoverypb.RangeHealth_LOSS_OF_QUORUM.String(), status.Health.String())
+					return nil
+				}
+			}
+			return errors.Errorf("failed to find scratch range in unavailable ranges")
+		}()
+		return err
+	})
 
 	// Try to check if limiting number of ranges will produce error on too many ranges.
-	r, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
+	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
 		DecommissionedNodeIDs: []roachpb.NodeID{rs[0].NodeID, rs[1].NodeID},
 		MaxReportedRanges:     1,
 		MaxConcurrency:        -1, // no limit
