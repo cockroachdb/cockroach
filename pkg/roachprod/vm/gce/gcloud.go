@@ -2471,7 +2471,7 @@ type jsonInstanceTemplate struct {
 }
 
 func (t *jsonInstanceTemplate) getZone() string {
-	namePrefix := instanceTemplateNamePrefix(t.Properties.Labels[vm.TagCluster])
+	namePrefix := fmt.Sprintf("%s-", instanceTemplateNamePrefix(t.Properties.Labels[vm.TagCluster]))
 	return strings.TrimPrefix(t.Name, namePrefix)
 }
 
