@@ -5,7 +5,11 @@
 
 package mma
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // Incoming messages for updating cluster state.
 //
@@ -17,43 +21,28 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 type storeLoadMsg struct {
 	roachpb.StoreID
 
-	load loadVector
-	// storeRanges are only used for adjusting the accounting for load
-	// adjustments for pending changes. This is *all* the ranges at the store.
-	//
-	// TODO(sumeer): we have a distributed allocator, so cannot have all ranges
-	// represented here.
-	storeRanges []storeRange
-
+	load          loadVector
 	capacity      loadVector
 	secondaryLoad secondaryLoadVector
-	topKRanges    []struct {
-		roachpb.RangeID
-		rangeLoad
-	}
-	meanNonTopKRangeLoad rangeLoad
 }
 
-// storeRange is basic information about a range at a store, and is included
-// in storeLoadMsg.
-type storeRange struct {
-	// We don't bother with ReplicaID since only used for load adjustments.
-	roachpb.RangeID
-	// Only valid ReplicaTypes are used here.
-	replicaType
+// nodeLoadMsg provides all the load information for a node and its
+// constituent stores.
+type nodeLoadMsg struct {
+	nodeLoad
+	stores   []storeLoadMsg
+	loadTime time.Time
 }
 
-// storeLeaseholderMsg is sent by a store and includes information about all
-// ranges for which this store is the leaseholder. The range information
-// includes other replica stores.
+// storeLeaseholderMsg is sent by a local store and includes information about
+// all ranges for which this store is the leaseholder. The range information
+// includes other replica stores. This is a local message and will be sent
+// before every allocator pass, so that the allocator has the latest state to
+// make decisions.
 type storeLeaseholderMsg struct {
 	roachpb.StoreID
 
-	// NB: storeLoadMsg.storeRanges and storeLeaseholderMsg.ranges do not need
-	// to be consistent. This ranges is providing authoritative information from
-	// the leaseholder. storeRanges can lag in that the store may not include a
-	// range or the fact that this store is the leaseholder, if the effect of
-	// that range on the load is not yet properly accounted for.
+	// ranges provides authoritative information from the leaseholder.
 	ranges []rangeMsg
 }
 
@@ -61,52 +50,34 @@ type storeLeaseholderMsg struct {
 // storeLeaseholderMsg). If there is any change for that range, the full
 // information for that range is provided. This is also the case for a new
 // leaseholder since it does not know whether something has changed since the
-// last leaseholder informed the allocator.
+// last leaseholder informed the allocator. A tiny change to the rangeLoad
+// (decided by the caller) will not cause a rangeMsg.
 //
-// Also used in a best-effort manner to tell the allocator of ranges that no
-// longer exist.
+// Also used to tell the allocator about ranges that no longer exist.
+//
+// TODO(sumeeer): these diff semantics are ok for now, but we may decide to
+// incorporate the diffing logic into the allocator after the first code
+// iteration.
 type rangeMsg struct {
 	roachpb.RangeID
-	start    roachpb.Key
-	end      roachpb.Key
-	replicas []storeIDAndReplicaState
-	conf     roachpb.SpanConfig
+	start     roachpb.Key
+	end       roachpb.Key
+	replicas  []storeIDAndReplicaState
+	conf      roachpb.SpanConfig
+	rangeLoad rangeLoad
 }
 
 func (rm *rangeMsg) isDeletedRange() bool {
 	return len(rm.replicas) == 0
 }
 
-// nodeLoadResponse is sent periodically in response to polling by the
-// allocator. It is the top-level message containing all the previous structs
-// declared in this file.
-type nodeLoadResponse struct {
-	curLoadSeqNum int64
-
-	nodeLoad
-	stores            []storeLoadMsg
-	leaseholderStores []storeLeaseholderMsg
-}
-
-// nodeLoadRequest is the request corresponding to nodeLoadResponse.
-type nodeLoadRequest struct {
-	// Set to -1 if desire a complete load.
-	lastReceivedLoadSeqNum int64
-}
-
 // Avoid unused lint errors.
 
 var _ = (&rangeMsg{}).isDeletedRange
-var _ = nodeLoadRequest{}
 var _ = storeLoadMsg{}.StoreID
 var _ = storeLoadMsg{}.load
-var _ = storeLoadMsg{}.storeRanges
 var _ = storeLoadMsg{}.capacity
 var _ = storeLoadMsg{}.secondaryLoad
-var _ = storeLoadMsg{}.topKRanges
-var _ = storeLoadMsg{}.meanNonTopKRangeLoad
-var _ = storeRange{}.RangeID
-var _ = storeRange{}.replicaType
 var _ = storeLeaseholderMsg{}.StoreID
 var _ = storeLeaseholderMsg{}.ranges
 var _ = rangeMsg{}.RangeID
@@ -114,8 +85,7 @@ var _ = rangeMsg{}.start
 var _ = rangeMsg{}.end
 var _ = rangeMsg{}.replicas
 var _ = rangeMsg{}.conf
-var _ = nodeLoadResponse{}.curLoadSeqNum
-var _ = nodeLoadResponse{}.nodeLoad
-var _ = nodeLoadResponse{}.stores
-var _ = nodeLoadResponse{}.leaseholderStores
-var _ = nodeLoadRequest{}.lastReceivedLoadSeqNum
+var _ = rangeMsg{}.rangeLoad
+var _ = nodeLoadMsg{}.nodeLoad
+var _ = nodeLoadMsg{}.stores
+var _ = nodeLoadMsg{}.loadTime
