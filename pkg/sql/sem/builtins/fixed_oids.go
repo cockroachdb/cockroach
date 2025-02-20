@@ -2644,6 +2644,9 @@ var builtinOidsArray = []string{
 	2681: `varchar(jsonpath: jsonpath) -> varchar`,
 	2682: `char(jsonpath: jsonpath) -> "char"`,
 	2683: `substring_index(input: string, delim: string, count: int) -> string`,
+	2684: `jsonb_path_query(target: jsonb, path: jsonpath) -> jsonb`,
+	2685: `jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb) -> jsonb`,
+	2686: `jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> jsonb`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
