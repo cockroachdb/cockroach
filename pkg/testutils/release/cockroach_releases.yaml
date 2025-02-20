@@ -22,7 +22,7 @@
   latest: 23.2.20
   predecessor: "23.1"
 "24.1":
-  latest: 24.1.12
+  latest: 24.1.13
   predecessor: "23.2"
 "24.2":
   latest: 24.2.10
@@ -30,7 +30,7 @@
   - 24.2.1
   predecessor: "24.1"
 "24.3":
-  latest: 24.3.5
+  latest: 24.3.6
   predecessor: "24.2"
 "25.1":
   latest: 25.1.0-rc.1
