@@ -3031,7 +3031,7 @@ func TestReplicaLatchingOptimisticEvaluationSkipLocked(t *testing.T) {
 						resp := br.Responses[i]
 						if err := kvpb.ResponseKeyIterate(req.GetInner(), resp.GetInner(), func(k roachpb.Key) {
 							respKeys = append(respKeys, k)
-						}); err != nil {
+						}, false /* includeLockedNonExisting */); err != nil {
 							return kvpb.NewError(err)
 						}
 					}
