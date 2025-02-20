@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -37,7 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestVectorIndex(t *testing.T) {
+func TestIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -96,7 +96,7 @@ func TestVectorIndex(t *testing.T) {
 type testState struct {
 	T          *testing.T
 	Ctx        context.Context
-	Workspace  veclib.Workspace
+	Workspace  workspace.T
 	Stopper    *stop.Stopper
 	Quantizer  quantize.Quantizer
 	InMemStore *memstore.Store
@@ -152,10 +152,11 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 }
 
 func (s *testState) FormatTree(d *datadriven.TestData) string {
-	txn := commontest.BeginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 	defer commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
-	tree, err := s.Index.Format(s.Ctx, txn, cspann.FormatOptions{PrimaryKeyStrings: true})
+	idxCtx := &cspann.IndexContext{Txn: txn}
+	tree, err := s.Index.Format(s.Ctx, idxCtx, cspann.FormatOptions{PrimaryKeyStrings: true})
 	require.NoError(s.T, err)
 	return tree
 }
@@ -196,8 +197,9 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	}
 
 	// Search the index within a transaction.
-	txn := commontest.BeginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
-	err = s.Index.Search(s.Ctx, txn, vec, &searchSet, options)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
+	idxCtx := &cspann.IndexContext{Txn: txn}
+	err = s.Index.Search(s.Ctx, idxCtx, vec, &searchSet, options)
 	require.NoError(s.T, err)
 	commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -245,8 +247,9 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 	}
 
 	// Search the index within a transaction.
-	txn := commontest.BeginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
-	result, err := s.Index.SearchForInsert(s.Ctx, txn, vec)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
+	idxCtx := &cspann.IndexContext{Txn: txn}
+	result, err := s.Index.SearchForInsert(s.Ctx, idxCtx, vec)
 	require.NoError(s.T, err)
 	commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -273,6 +276,7 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 func (s *testState) SearchForDelete(d *datadriven.TestData) string {
 	var buf bytes.Buffer
 
+	var idxCtx cspann.IndexContext
 	for _, line := range strings.Split(d.Input, "\n") {
 		line = strings.TrimSpace(line)
 		if len(line) == 0 {
@@ -282,10 +286,10 @@ func (s *testState) SearchForDelete(d *datadriven.TestData) string {
 		key, vec := s.parseKeyAndVector(line)
 
 		// Search within a transaction.
-		txn := commontest.BeginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
-		result, err := s.Index.SearchForDelete(s.Ctx, txn, vec, key)
+		idxCtx.Txn = commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
+		result, err := s.Index.SearchForDelete(s.Ctx, &idxCtx, vec, key)
 		require.NoError(s.T, err)
-		commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+		commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, idxCtx.Txn)
 
 		if result == nil {
 			fmt.Fprintf(&buf, "%s: vector not found\n", string(key))
@@ -349,13 +353,15 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		}
 	}
 
+	var idxCtx cspann.IndexContext
 	var wait sync.WaitGroup
 	step := (s.Options.MinPartitionSize + s.Options.MaxPartitionSize) / 2
 	for i := 0; i < vectors.Count; i++ {
 		// Insert within the scope of a transaction.
-		txn := commontest.BeginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
+		txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
+		idxCtx.Txn = txn
 		s.InMemStore.InsertVector(childKeys[i].KeyBytes, vectors.At(i))
-		require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(i), childKeys[i].KeyBytes))
+		require.NoError(s.T, s.Index.Insert(s.Ctx, &idxCtx, vectors.At(i), childKeys[i].KeyBytes))
 		commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 		if (i+1)%step == 0 && !noFixups {
@@ -389,6 +395,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 		}
 	}
 
+	var idxCtx cspann.IndexContext
 	for i, line := range strings.Split(d.Input, "\n") {
 		line = strings.TrimSpace(line)
 		if len(line) == 0 {
@@ -398,12 +405,13 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 		key, vec := s.parseKeyAndVector(line)
 
 		// Delete within the scope of a transaction.
-		txn := commontest.BeginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
+		txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 
 		// If notFound=true, then simulate case where the vector is deleted in
 		// the primary index, but it cannot be found in the secondary index.
 		if !notFound {
-			err := s.Index.Delete(s.Ctx, txn, vec, key)
+			idxCtx.Txn = txn
+			err := s.Index.Delete(s.Ctx, &idxCtx, vec, key)
 			require.NoError(s.T, err)
 		}
 		s.InMemStore.DeleteVector(key)
@@ -510,7 +518,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		copy(samples, remaining[:numSamples])
 	}
 
-	txn := commontest.BeginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 	defer commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 	// calcTruth calculates the true nearest neighbors for the query vector.
@@ -537,6 +545,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	}
 
 	// Search for sampled features.
+	idxCtx := cspann.IndexContext{Txn: txn}
 	var sumMAP float64
 	for i := range samples {
 		// Calculate truth set for the vector.
@@ -544,7 +553,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		truth := calcTruth(queryVector, data)
 
 		// Calculate prediction set for the vector.
-		err = s.Index.Search(s.Ctx, txn, queryVector, &searchSet, options)
+		err = s.Index.Search(s.Ctx, &idxCtx, queryVector, &searchSet, options)
 		require.NoError(s.T, err)
 		results := searchSet.PopResults()
 
@@ -572,16 +581,17 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 }
 
 func (s *testState) ValidateTree(d *datadriven.TestData) string {
-	txn := commontest.BeginTransaction(s.Ctx, s.T, &s.Workspace, s.InMemStore)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 	defer commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
+	var txCtx cspann.TxnContext
 	vectorCount := 0
 	partitionKeys := []cspann.PartitionKey{cspann.RootKey}
 	for {
 		// Get all child keys for next level.
 		var childKeys []cspann.ChildKey
 		for _, key := range partitionKeys {
-			partition, err := txn.GetPartition(s.Ctx, key)
+			partition, err := txn.GetPartition(s.Ctx, &txCtx, key)
 			require.NoError(s.T, err)
 			childKeys = append(childKeys, partition.ChildKeys()...)
 		}
@@ -595,7 +605,7 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 		for i := range childKeys {
 			refs[i].Key = childKeys[i]
 		}
-		err := txn.GetFullVectors(s.Ctx, refs)
+		err := txn.GetFullVectors(s.Ctx, &txCtx, refs)
 		require.NoError(s.T, err)
 		for i := range refs {
 			require.NotNil(s.T, refs[i].Vector)
@@ -683,7 +693,7 @@ func TestRandomizeVector(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Create index.
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -784,12 +794,12 @@ func buildIndex(
 	primaryKeys []cspann.KeyBytes,
 ) {
 	// Insert block of vectors within the scope of a transaction.
-	insertBlock := func(w *veclib.Workspace, start, end int) {
+	insertBlock := func(idxCtx *cspann.IndexContext, start, end int) {
 		for i := start; i < end; i++ {
-			txn := commontest.BeginTransaction(ctx, t, w, store)
+			idxCtx.Txn = commontest.BeginTransaction(ctx, t, store)
 			store.InsertVector(primaryKeys[i], vectors.At(i))
-			require.NoError(t, index.Insert(ctx, txn, vectors.At(i), primaryKeys[i]))
-			commontest.CommitTransaction(ctx, t, store, txn)
+			require.NoError(t, index.Insert(ctx, idxCtx, vectors.At(i), primaryKeys[i]))
+			commontest.CommitTransaction(ctx, t, store, idxCtx.Txn)
 		}
 	}
 
@@ -804,9 +814,9 @@ func buildIndex(
 		go func(start, end int) {
 			// Break vector group into individual transactions that each insert a
 			// block of vectors. Run any pending fixups after each block.
-			var workspace veclib.Workspace
+			var idxCtx cspann.IndexContext
 			for j := start; j < end; j += blockSize {
-				insertBlock(&workspace, j, min(j+blockSize, end))
+				insertBlock(&idxCtx, j, min(j+blockSize, end))
 			}
 
 			wait.Done()
@@ -819,17 +829,17 @@ func buildIndex(
 }
 
 func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int {
-	var workspace veclib.Workspace
-	txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+	txn := commontest.BeginTransaction(ctx, t, store)
 	defer commontest.CommitTransaction(ctx, t, store, txn)
 
+	var txCtx cspann.TxnContext
 	vectorCount := 0
 	partitionKeys := []cspann.PartitionKey{cspann.RootKey}
 	for {
 		// Get all child keys for next level.
 		var childKeys []cspann.ChildKey
 		for _, key := range partitionKeys {
-			partition, err := txn.GetPartition(ctx, key)
+			partition, err := txn.GetPartition(ctx, &txCtx, key)
 			if err != nil {
 				panic(err)
 			}
@@ -846,7 +856,7 @@ func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int
 		for i := range childKeys {
 			refs[i].Key = childKeys[i]
 		}
-		err := txn.GetFullVectors(ctx, refs)
+		err := txn.GetFullVectors(ctx, &txCtx, refs)
 		require.NoError(t, err)
 		for i := range refs {
 			if refs[i].Vector == nil {

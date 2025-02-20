@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -44,7 +44,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 }
 
 func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set) {
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	for _, quantizer := range []quantize.Quantizer{
 		quantize.NewUnQuantizer(set.Dims),
 		quantize.NewRaBitQuantizer(set.Dims, rnd.Int63()),

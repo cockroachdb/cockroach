@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -27,9 +27,8 @@ import (
 // Calling methods here will use the wrapped KV Txn to update the vector index's
 // internal data. Committing changes is the responsibility of the caller.
 type storeTxn struct {
-	workspace *veclib.Workspace
-	kv        *kv.Txn
-	store     *Store
+	kv    *kv.Txn
+	store *Store
 
 	// Locking durability required by transaction isolation level.
 	lockDurability kvpb.KeyLockingDurabilityType
@@ -93,7 +92,7 @@ func (cs *storeCodec) decodeVector(encodedVector []byte) ([]byte, error) {
 // encodeVector encodes a single vector. This method invalidates the internal
 // vector set.
 func (cs *storeCodec) encodeVector(
-	w *veclib.Workspace, v vector.T, centroid vector.T,
+	w *workspace.T, v vector.T, centroid vector.T,
 ) ([]byte, error) {
 	cs.clear(1, centroid)
 	input := v.AsSet()
@@ -124,9 +123,8 @@ func (sc *storeCodec) encodeVectorFromSet(vs quantize.QuantizedVectorSet, idx in
 
 // newTxn wraps a Store transaction around a kv transaction for use with the
 // cspann.Store API.
-func newTxn(w *veclib.Workspace, store *Store, kv *kv.Txn) *storeTxn {
+func newTxn(store *Store, kv *kv.Txn) *storeTxn {
 	tx := storeTxn{
-		workspace: w,
 		kv:        kv,
 		store:     store,
 		codec:     newStoreCodec(store.quantizer),
@@ -214,7 +212,7 @@ func (tx *storeTxn) decodePartition(
 // indicated by `partitionKey` and build a Partition data structure, which is
 // returned.
 func (tx *storeTxn) GetPartition(
-	ctx context.Context, partitionKey cspann.PartitionKey,
+	ctx context.Context, txCtx *cspann.TxnContext, partitionKey cspann.PartitionKey,
 ) (*cspann.Partition, error) {
 	b := tx.kv.NewBatch()
 
@@ -243,7 +241,9 @@ func (tx *storeTxn) GetPartition(
 // new partition will overwrite existing vectors if child keys collide, but
 // otherwise the resulting partition will be a union of the two partitions.
 func (tx *storeTxn) insertPartition(
-	ctx context.Context, partitionKey cspann.PartitionKey, partition *cspann.Partition,
+	ctx context.Context,
+	partitionKey cspann.PartitionKey,
+	partition *cspann.Partition,
 ) error {
 	b := tx.kv.NewBatch()
 
@@ -274,8 +274,10 @@ func (tx *storeTxn) insertPartition(
 }
 
 // SetRootPartition implements the vecstore.Txn interface.
-func (tx *storeTxn) SetRootPartition(ctx context.Context, partition *cspann.Partition) error {
-	if err := tx.DeletePartition(ctx, cspann.RootKey); err != nil {
+func (tx *storeTxn) SetRootPartition(
+	ctx context.Context, txCtx *cspann.TxnContext, partition *cspann.Partition,
+) error {
+	if err := tx.DeletePartition(ctx, txCtx, cspann.RootKey); err != nil {
 		return err
 	}
 	return tx.insertPartition(ctx, cspann.RootKey, partition)
@@ -283,7 +285,7 @@ func (tx *storeTxn) SetRootPartition(ctx context.Context, partition *cspann.Part
 
 // InsertPartition implements the vecstore.Txn interface.
 func (tx *storeTxn) InsertPartition(
-	ctx context.Context, partition *cspann.Partition,
+	ctx context.Context, txCtx *cspann.TxnContext, partition *cspann.Partition,
 ) (cspann.PartitionKey, error) {
 	instanceID := tx.store.db.KV().Context().NodeID.SQLInstanceID()
 	partitionID := cspann.PartitionKey(unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID)))
@@ -291,7 +293,9 @@ func (tx *storeTxn) InsertPartition(
 }
 
 // DeletePartition implements the vecstore.Txn interface.
-func (tx *storeTxn) DeletePartition(ctx context.Context, partitionKey cspann.PartitionKey) error {
+func (tx *storeTxn) DeletePartition(
+	ctx context.Context, txCtx *cspann.TxnContext, partitionKey cspann.PartitionKey,
+) error {
 	b := tx.kv.NewBatch()
 
 	startKey := tx.encodePartitionKey(partitionKey)
@@ -303,7 +307,7 @@ func (tx *storeTxn) DeletePartition(ctx context.Context, partitionKey cspann.Par
 
 // GetPartitionMetadata implements the vecstore.Txn interface.
 func (tx *storeTxn) GetPartitionMetadata(
-	ctx context.Context, partitionKey cspann.PartitionKey, forUpdate bool,
+	ctx context.Context, txCtx *cspann.TxnContext, partitionKey cspann.PartitionKey, forUpdate bool,
 ) (cspann.PartitionMetadata, error) {
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := tx.kv.NewBatch()
@@ -336,6 +340,7 @@ func (tx *storeTxn) GetPartitionMetadata(
 // AddToPartition implements the vecstore.Txn interface.
 func (tx *storeTxn) AddToPartition(
 	ctx context.Context,
+	txCtx *cspann.TxnContext,
 	partitionKey cspann.PartitionKey,
 	vec vector.T,
 	childKey cspann.ChildKey,
@@ -370,7 +375,7 @@ func (tx *storeTxn) AddToPartition(
 
 	// Add the Put command to the batch.
 	codec := tx.getCodecForPartitionKey(partitionKey)
-	encodedValue, err := codec.encodeVector(tx.workspace, vec, metadata.Centroid)
+	encodedValue, err := codec.encodeVector(&txCtx.Workspace, vec, metadata.Centroid)
 	if err != nil {
 		return cspann.PartitionMetadata{}, err
 	}
@@ -393,7 +398,10 @@ func (tx *storeTxn) AddToPartition(
 
 // RemoveFromPartition implements the vecstore.Txn interface.
 func (tx *storeTxn) RemoveFromPartition(
-	ctx context.Context, partitionKey cspann.PartitionKey, childKey cspann.ChildKey,
+	ctx context.Context,
+	txCtx *cspann.TxnContext,
+	partitionKey cspann.PartitionKey,
+	childKey cspann.ChildKey,
 ) (cspann.PartitionMetadata, error) {
 	b := tx.kv.NewBatch()
 
@@ -432,6 +440,7 @@ func (tx *storeTxn) RemoveFromPartition(
 // SearchPartitions implements the vecstore.Txn interface.
 func (tx *storeTxn) SearchPartitions(
 	ctx context.Context,
+	txCtx *cspann.TxnContext,
 	partitionKeys []cspann.PartitionKey,
 	queryVector vector.T,
 	searchSet *cspann.SearchSet,
@@ -457,7 +466,7 @@ func (tx *storeTxn) SearchPartitions(
 			return cspann.InvalidLevel, err
 		}
 		searchLevel, partitionCount := partition.Search(
-			tx.workspace, partitionKeys[i], queryVector, searchSet)
+			&txCtx.Workspace, partitionKeys[i], queryVector, searchSet)
 		if i == 0 {
 			level = searchLevel
 		} else if level != searchLevel {
@@ -581,7 +590,9 @@ func (tx *storeTxn) getFullVectorsFromPartitionMetadata(
 }
 
 // GetFullVectors implements the Store interface.
-func (tx *storeTxn) GetFullVectors(ctx context.Context, refs []cspann.VectorWithKey) error {
+func (tx *storeTxn) GetFullVectors(
+	ctx context.Context, txCtx *cspann.TxnContext, refs []cspann.VectorWithKey,
+) error {
 	numPKLookups, err := tx.getFullVectorsFromPartitionMetadata(ctx, refs)
 	if err != nil {
 		return err

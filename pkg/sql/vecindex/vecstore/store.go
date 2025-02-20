@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 )
 
 // Store implements the cspann.Store interface for KV backed vector indices.
@@ -114,22 +113,22 @@ func New(
 	return NewWithColumnID(ctx, db, quantizer, codec, tableDesc, indexID, vectorColumnID)
 }
 
-// Begin is part of the cspann.Store interface. Begin creates a new KV
-// transaction on behalf of the user and prepares it to operate on the vector
+// BeginTransaction is part of the cspann.Store interface. Begin creates a new
+// KV transaction on behalf of the user and prepares it to operate on the vector
 // store.
-func (s *Store) Begin(ctx context.Context, w *veclib.Workspace) (cspann.Txn, error) {
-	return newTxn(w, s, s.db.KV().NewTxn(ctx, "cspann.Store begin transaction")), nil
+func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
+	return newTxn(s, s.db.KV().NewTxn(ctx, "cspann.Store begin transaction")), nil
 }
 
-// Commit is part of the cspann.Store interface. Commit commits the underlying
-// KV transaction wrapped by the cspann.Txn passed in.
-func (s *Store) Commit(ctx context.Context, txn cspann.Txn) error {
+// CommitTransaction is part of the cspann.Store interface. Commit commits the
+// underlying KV transaction wrapped by the cspann.Txn passed in.
+func (s *Store) CommitTransaction(ctx context.Context, txn cspann.Txn) error {
 	return txn.(*storeTxn).kv.Commit(ctx)
 }
 
-// Abort is part of the cspann.Store interface. Abort causes the underlying KV
-// transaction wrapped by the passed cspann.Txn to roll back.
-func (s *Store) Abort(ctx context.Context, txn cspann.Txn) error {
+// AbortTransaction is part of the cspann.Store interface. Abort causes the
+// underlying KV transaction wrapped by the passed cspann.Txn to roll back.
+func (s *Store) AbortTransaction(ctx context.Context, txn cspann.Txn) error {
 	return txn.(*storeTxn).kv.Rollback(ctx)
 }
 

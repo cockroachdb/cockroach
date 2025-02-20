@@ -10,16 +10,12 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
 
 // memTxn tracks the transaction's state.
 type memTxn struct {
-	// workspace allocates temporary memory.
-	workspace *veclib.Workspace
-
 	// store references the in-memory store instance that created this
 	// transaction.
 	store *Store
@@ -62,7 +58,7 @@ type memTxn struct {
 
 // GetPartition implements the Txn interface.
 func (tx *memTxn) GetPartition(
-	ctx context.Context, partitionKey cspann.PartitionKey,
+	ctx context.Context, txCtx *cspann.TxnContext, partitionKey cspann.PartitionKey,
 ) (*cspann.Partition, error) {
 	// GetPartition is only called by split and merge operations, so acquire the
 	// exclusive structure lock so that only one operation at a time can modify
@@ -90,7 +86,9 @@ func (tx *memTxn) GetPartition(
 }
 
 // SetRootPartition implements the Txn interface.
-func (tx *memTxn) SetRootPartition(ctx context.Context, partition *cspann.Partition) error {
+func (tx *memTxn) SetRootPartition(
+	ctx context.Context, txCtx *cspann.TxnContext, partition *cspann.Partition,
+) error {
 	if !tx.store.structureLock.IsAcquiredBy(tx.id) {
 		panic(errors.AssertionFailedf("txn %d did not acquire structure lock", tx.id))
 	}
@@ -129,7 +127,7 @@ func (tx *memTxn) SetRootPartition(ctx context.Context, partition *cspann.Partit
 
 // InsertPartition implements the Txn interface.
 func (tx *memTxn) InsertPartition(
-	ctx context.Context, partition *cspann.Partition,
+	ctx context.Context, txCtx *cspann.TxnContext, partition *cspann.Partition,
 ) (cspann.PartitionKey, error) {
 	if !tx.store.structureLock.IsAcquiredBy(tx.id) {
 		panic(errors.AssertionFailedf("txn %d did not acquire structure lock", tx.id))
@@ -157,7 +155,9 @@ func (tx *memTxn) InsertPartition(
 }
 
 // DeletePartition implements the Txn interface.
-func (tx *memTxn) DeletePartition(ctx context.Context, partitionKey cspann.PartitionKey) error {
+func (tx *memTxn) DeletePartition(
+	ctx context.Context, txCtx *cspann.TxnContext, partitionKey cspann.PartitionKey,
+) error {
 	if !tx.store.structureLock.IsAcquiredBy(tx.id) {
 		panic(errors.AssertionFailedf("txn %d did not acquire structure lock", tx.id))
 	}
@@ -197,7 +197,7 @@ func (tx *memTxn) DeletePartition(ctx context.Context, partitionKey cspann.Parti
 
 // GetPartitionMetadata implements the Txn interface.
 func (tx *memTxn) GetPartitionMetadata(
-	ctx context.Context, partitionKey cspann.PartitionKey, forUpdate bool,
+	ctx context.Context, txCtx *cspann.TxnContext, partitionKey cspann.PartitionKey, forUpdate bool,
 ) (cspann.PartitionMetadata, error) {
 	inMemPartition, err := tx.store.getPartition(partitionKey)
 	if err != nil {
@@ -213,6 +213,7 @@ func (tx *memTxn) GetPartitionMetadata(
 // AddToPartition implements the Txn interface.
 func (tx *memTxn) AddToPartition(
 	ctx context.Context,
+	txCtx *cspann.TxnContext,
 	partitionKey cspann.PartitionKey,
 	vec vector.T,
 	childKey cspann.ChildKey,
@@ -240,7 +241,7 @@ func (tx *memTxn) AddToPartition(
 
 	// Add the vector to the partition.
 	partition := inMemPartition.lock.partition
-	if partition.Add(tx.workspace, vec, childKey, valueBytes) {
+	if partition.Add(&txCtx.Workspace, vec, childKey, valueBytes) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.store.reportPartitionSizeLocked(partition.Count())
@@ -252,7 +253,10 @@ func (tx *memTxn) AddToPartition(
 
 // RemoveFromPartition implements the Txn interface.
 func (tx *memTxn) RemoveFromPartition(
-	ctx context.Context, partitionKey cspann.PartitionKey, childKey cspann.ChildKey,
+	ctx context.Context,
+	txCtx *cspann.TxnContext,
+	partitionKey cspann.PartitionKey,
+	childKey cspann.ChildKey,
 ) (cspann.PartitionMetadata, error) {
 	inMemPartition, err := tx.store.getPartition(partitionKey)
 	if err != nil {
@@ -296,6 +300,7 @@ func (tx *memTxn) RemoveFromPartition(
 // SearchPartitions implements the Txn interface.
 func (tx *memTxn) SearchPartitions(
 	ctx context.Context,
+	txCtx *cspann.TxnContext,
 	partitionKeys []cspann.PartitionKey,
 	queryVector vector.T,
 	searchSet *cspann.SearchSet,
@@ -316,7 +321,7 @@ func (tx *memTxn) SearchPartitions(
 			defer inMemPartition.lock.ReleaseShared()
 
 			searchLevel, partitionCount := inMemPartition.lock.partition.Search(
-				tx.workspace, partitionKeys[i], queryVector, searchSet)
+				&txCtx.Workspace, partitionKeys[i], queryVector, searchSet)
 			if i == 0 {
 				level = searchLevel
 			} else if level != searchLevel {
@@ -333,7 +338,9 @@ func (tx *memTxn) SearchPartitions(
 }
 
 // GetFullVectors implements the Txn interface.
-func (tx *memTxn) GetFullVectors(ctx context.Context, refs []cspann.VectorWithKey) error {
+func (tx *memTxn) GetFullVectors(
+	ctx context.Context, txCtx *cspann.TxnContext, refs []cspann.VectorWithKey,
+) error {
 	tx.store.mu.Lock()
 	defer tx.store.mu.Unlock()
 

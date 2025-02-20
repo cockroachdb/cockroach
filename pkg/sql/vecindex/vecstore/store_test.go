@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -33,7 +32,7 @@ import (
 func TestPersistentStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var workspace veclib.Workspace
+	var txCtx cspann.TxnContext
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	internalDB := srv.ApplicationLayer().InternalDB().(descs.DB)
@@ -95,106 +94,110 @@ func TestPersistentStore(t *testing.T) {
 
 	// TODO(mw5h): Figure out where to create the empty root partition.
 	t.Run("create empty root partition", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		emptyRoot := cspann.NewPartition(
-			quantizer, quantizer.Quantize(&workspace, vector.Set{}),
+			quantizer, quantizer.Quantize(&txCtx.Workspace, vector.Set{}),
 			[]cspann.ChildKey{}, []cspann.ValueBytes{}, cspann.LeafLevel)
-		require.NoError(t, txn.SetRootPartition(ctx, emptyRoot))
+		require.NoError(t, txn.SetRootPartition(ctx, &txCtx, emptyRoot))
 	})
 
 	commontest.StoreTests(ctx, t, store, quantizer, testPKs, testVectors)
 
 	t.Run("insert a root partition into the store and read it back", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		vectors := vector.T{4, 3}.AsSet()
-		quantizedSet := quantizer.Quantize(&workspace, vectors)
+		quantizedSet := quantizer.Quantize(&txCtx.Workspace, vectors)
 		root := cspann.NewPartition(quantizer, quantizedSet,
 			[]cspann.ChildKey{childKey2}, []cspann.ValueBytes{valueBytes2}, cspann.Level(2))
-		require.NoError(t, txn.SetRootPartition(ctx, root))
-		readRoot, err := txn.GetPartition(ctx, cspann.RootKey)
+		require.NoError(t, txn.SetRootPartition(ctx, &txCtx, root))
+		readRoot, err := txn.GetPartition(ctx, &txCtx, cspann.RootKey)
 		require.NoError(t, err)
 		testingAssertPartitionsEqual(t, root, readRoot)
 
 		vectors = vector.T{4, 3}.AsSet()
 		vectors.Add(vector.T{2, 1})
-		quantizedSet = quantizer.Quantize(&workspace, vectors)
+		quantizedSet = quantizer.Quantize(&txCtx.Workspace, vectors)
 		root = cspann.NewPartition(
 			quantizer, quantizedSet, []cspann.ChildKey{childKey10, childKey20},
 			[]cspann.ValueBytes{valueBytes10, valueBytes20}, cspann.Level(2))
-		require.NoError(t, txn.SetRootPartition(ctx, root))
-		readRoot, err = txn.GetPartition(ctx, cspann.RootKey)
+		require.NoError(t, txn.SetRootPartition(ctx, &txCtx, root))
+		readRoot, err = txn.GetPartition(ctx, &txCtx, cspann.RootKey)
 		require.NoError(t, err)
 		testingAssertPartitionsEqual(t, root, readRoot)
 
 		vectors = vector.T{4, 3}.AsSet()
 		vectors.Add(vector.T{2, 1})
 		vectors.Add(vector.T{5, 6})
-		quantizedSet = quantizer.Quantize(&workspace, vectors)
+		quantizedSet = quantizer.Quantize(&txCtx.Workspace, vectors)
 		root = cspann.NewPartition(
 			quantizer, quantizedSet, []cspann.ChildKey{primaryKey200, primaryKey300, primaryKey400},
 			[]cspann.ValueBytes{valueBytes200, valueBytes300, valueBytes400}, cspann.LeafLevel)
-		require.NoError(t, txn.SetRootPartition(ctx, root))
-		readRoot, err = txn.GetPartition(ctx, cspann.RootKey)
+		require.NoError(t, txn.SetRootPartition(ctx, &txCtx, root))
+		readRoot, err = txn.GetPartition(ctx, &txCtx, cspann.RootKey)
 		require.NoError(t, err)
 		testingAssertPartitionsEqual(t, root, readRoot)
 	})
 
 	t.Run("insert a partition and then delete it", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		vectors := vector.T{4, 3}.AsSet()
-		quantizedSet := quantizer.Quantize(&workspace, vectors)
+		quantizedSet := quantizer.Quantize(&txCtx.Workspace, vectors)
 		testPartition := cspann.NewPartition(quantizer, quantizedSet,
 			[]cspann.ChildKey{childKey2}, []cspann.ValueBytes{valueBytes2}, cspann.Level(2))
-		partitionKey, err := txn.InsertPartition(ctx, testPartition)
+		partitionKey, err := txn.InsertPartition(ctx, &txCtx, testPartition)
 		require.NoError(t, err)
-		newPartition, err := txn.GetPartition(ctx, partitionKey)
+		newPartition, err := txn.GetPartition(ctx, &txCtx, partitionKey)
 		require.NoError(t, err)
 		testingAssertPartitionsEqual(t, testPartition, newPartition)
 
-		err = txn.DeletePartition(ctx, partitionKey)
+		err = txn.DeletePartition(ctx, &txCtx, partitionKey)
 		require.NoError(t, err)
-		_, err = txn.GetPartition(ctx, partitionKey)
+		_, err = txn.GetPartition(ctx, &txCtx, partitionKey)
 		require.Error(t, err)
 	})
 
 	t.Run("add to root partition", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		emptySet := vector.MakeSet(2)
 		root := cspann.NewPartition(
-			quantizer, quantizer.Quantize(&workspace, emptySet),
+			quantizer, quantizer.Quantize(&txCtx.Workspace, emptySet),
 			[]cspann.ChildKey{}, []cspann.ValueBytes{}, cspann.Level(2))
-		err := txn.SetRootPartition(ctx, root)
+		err := txn.SetRootPartition(ctx, &txCtx, root)
 		require.NoError(t, err)
 
 		// Add to root partition.
-		metadata, err := txn.AddToPartition(ctx, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
+		metadata, err := txn.AddToPartition(
+			ctx, &txCtx, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
 		require.NoError(t, err)
 		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 1)
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{7, 4}, childKey20, valueBytes20)
+		metadata, err = txn.AddToPartition(
+			ctx, &txCtx, cspann.RootKey, vector.T{7, 4}, childKey20, valueBytes20)
 		require.NoError(t, err)
 		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 2)
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{4, 3}, childKey30, valueBytes30)
+		metadata, err = txn.AddToPartition(
+			ctx, &txCtx, cspann.RootKey, vector.T{4, 3}, childKey30, valueBytes30)
 		require.NoError(t, err)
 		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 3)
 
 		// Add duplicate and expect value to be overwritten
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{5, 5}, childKey30, valueBytes30)
+		metadata, err = txn.AddToPartition(
+			ctx, &txCtx, cspann.RootKey, vector.T{5, 5}, childKey30, valueBytes30)
 		require.NoError(t, err)
 		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 3)
 
 		// Search root partition.
 		searchSet := cspann.SearchSet{MaxResults: 2}
 		partitionCounts := []int{0}
-		level, err := txn.SearchPartitions(
-			ctx, []cspann.PartitionKey{cspann.RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
+		level, err := txn.SearchPartitions(ctx, &txCtx,
+			[]cspann.PartitionKey{cspann.RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, cspann.Level(2), level)
 		result1 := cspann.SearchResult{

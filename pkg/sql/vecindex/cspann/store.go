@@ -8,7 +8,7 @@ package cspann
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -49,6 +49,16 @@ type PartitionMetadata struct {
 	Count int
 }
 
+// TxnContext contains per-thread state needed by Txn implementations.
+//
+// NOTE: This struct is *not* thread-safe and should only be used on one
+// goroutine at a time. However, it can and should be re-used across multiple
+// store operations.
+type TxnContext struct {
+	// Workspace is used by Store implementations to allocate temporary state.
+	Workspace workspace.T
+}
+
 // Store encapsulates the component that’s actually storing the vectors, whether
 // that’s in a CRDB cluster for production or in memory for testing and
 // benchmarking. Callers can use Store to start and commit transactions against
@@ -57,15 +67,17 @@ type PartitionMetadata struct {
 // Store implementations must be thread-safe. There should typically be only one
 // Store instance in the process for each index.
 type Store interface {
-	// Begin creates a new transaction that can be used to read and write the
-	// store in a transactional context.
-	Begin(ctx context.Context, w *veclib.Workspace) (Txn, error)
+	// BeginTransaction creates a new transaction that can be used to read and
+	// write the store in a transactional context.
+	BeginTransaction(ctx context.Context) (Txn, error)
 
-	// Commit commits a transaction previously started by a call to Begin.
-	Commit(ctx context.Context, txn Txn) error
+	// CommitTransaction commits a transaction previously started by a call to
+	// Begin.
+	CommitTransaction(ctx context.Context, txn Txn) error
 
-	// Abort aborts a transaction previously started by a call to Begin.
-	Abort(ctx context.Context, txn Txn) error
+	// AbortTransaction aborts a transaction previously started by a call to
+	// Begin.
+	AbortTransaction(ctx context.Context, txn Txn) error
 
 	// MergeStats merges recently gathered stats for this process with global
 	// stats if "skipMerge" is false. "stats" is updated with the latest global
@@ -88,20 +100,24 @@ type Txn interface {
 	// ErrPartitionNotFound if the key cannot be found. The returned partition
 	// can be modified by the caller in the scope of the transaction with a
 	// guarantee it won't be changed by other agents.
-	GetPartition(ctx context.Context, partitionKey PartitionKey) (*Partition, error)
+	GetPartition(
+		ctx context.Context, txCtx *TxnContext, partitionKey PartitionKey,
+	) (*Partition, error)
 
 	// SetRootPartition makes the given partition the root partition in the store.
 	// If the root partition already exists, it is replaced, else it is newly
 	// inserted into the store.
-	SetRootPartition(ctx context.Context, partition *Partition) error
+	SetRootPartition(ctx context.Context, txCtx *TxnContext, partition *Partition) error
 
 	// InsertPartition inserts the given partition into the store and returns a
 	// new key that identifies it.
-	InsertPartition(ctx context.Context, partition *Partition) (PartitionKey, error)
+	InsertPartition(
+		ctx context.Context, txCtx *TxnContext, partition *Partition,
+	) (PartitionKey, error)
 
 	// DeletePartition deletes the partition with the given key from the store,
 	// or returns ErrPartitionNotFound if the key cannot be found.
-	DeletePartition(ctx context.Context, partitionKey PartitionKey) error
+	DeletePartition(ctx context.Context, txCtx *TxnContext, partitionKey PartitionKey) error
 
 	// GetPartitionMetadata returns metadata for the given partition, including
 	// its size, its centroid, and its level in the K-means tree. If "forUpdate"
@@ -111,7 +127,7 @@ type Txn interface {
 	// ErrRestartOperation if the caller should retry the operation that triggered
 	// this call.
 	GetPartitionMetadata(
-		ctx context.Context, partitionKey PartitionKey, forUpdate bool,
+		ctx context.Context, txCtx *TxnContext, partitionKey PartitionKey, forUpdate bool,
 	) (PartitionMetadata, error)
 
 	// AddToPartition adds the given vector and its associated child key and value
@@ -123,6 +139,7 @@ type Txn interface {
 	// triggered this call.
 	AddToPartition(
 		ctx context.Context,
+		txCtx *TxnContext,
 		partitionKey PartitionKey,
 		vec vector.T,
 		childKey ChildKey,
@@ -137,7 +154,7 @@ type Txn interface {
 	// ErrRestartOperation if the caller should retry the delete operation that
 	// triggered this call.
 	RemoveFromPartition(
-		ctx context.Context, partitionKey PartitionKey, childKey ChildKey,
+		ctx context.Context, txCtx *TxnContext, partitionKey PartitionKey, childKey ChildKey,
 	) (PartitionMetadata, error)
 
 	// SearchPartitions finds vectors that are closest to the given query vector.
@@ -156,6 +173,7 @@ type Txn interface {
 	// the search operation that triggered this call.
 	SearchPartitions(
 		ctx context.Context,
+		txCtx *TxnContext,
 		partitionKey []PartitionKey,
 		queryVector vector.T,
 		searchSet *SearchSet,
@@ -166,5 +184,5 @@ type Txn interface {
 	// by the given child keys and stores them in "refs". If a vector has been
 	// deleted, then its corresponding reference will be set to nil. If a
 	// partition cannot be found, GetFullVectors returns ErrPartitionNotFound.
-	GetFullVectors(ctx context.Context, refs []VectorWithKey) error
+	GetFullVectors(ctx context.Context, txCtx *TxnContext, refs []VectorWithKey) error
 }

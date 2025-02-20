@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -28,7 +27,7 @@ func TestInMemoryStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var workspace veclib.Workspace
+	var txCtx cspann.TxnContext
 	ctx := context.Background()
 	store := New(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
@@ -36,7 +35,7 @@ func TestInMemoryStore(t *testing.T) {
 	testVectors := []vector.T{{100, 200}, {300, 400}}
 
 	t.Run("insert and get all vectors", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		store.InsertVector(testPKs[0], testVectors[0])
@@ -55,25 +54,25 @@ func TestInMemoryStore(t *testing.T) {
 	commontest.StoreTests(ctx, t, store, quantizer, testPKs, testVectors)
 
 	t.Run("delete full vector", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		store.DeleteVector([]byte{10})
 		refs := []cspann.VectorWithKey{{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{10}}}}
-		err := txn.GetFullVectors(ctx, refs)
+		err := txn.GetFullVectors(ctx, &txCtx, refs)
 		require.NoError(t, err)
 		require.Nil(t, refs[0].Vector)
 	})
 
 	t.Run("abort transaction", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.AbortTransaction(ctx, t, store, txn)
 
 		// Perform some read-only operations.
-		_, err := txn.GetPartition(ctx, cspann.RootKey)
+		_, err := txn.GetPartition(ctx, &txCtx, cspann.RootKey)
 		require.NoError(t, err)
 
-		err = txn.GetFullVectors(ctx, []cspann.VectorWithKey{
+		err = txn.GetFullVectors(ctx, &txCtx, []cspann.VectorWithKey{
 			{Key: cspann.ChildKey{KeyBytes: testPKs[0]}},
 		})
 		require.NoError(t, err)
@@ -84,7 +83,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var workspace veclib.Workspace
+	var txCtx cspann.TxnContext
 	ctx := context.Background()
 	childKey10 := cspann.ChildKey{PartitionKey: 10}
 	valueBytes10 := cspann.ValueBytes{1, 2, 3}
@@ -95,24 +94,24 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	var wait sync.WaitGroup
 	wait.Add(1)
 	func() {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		// Acquire partition lock.
-		_, err := txn.GetPartition(ctx, cspann.RootKey)
+		_, err := txn.GetPartition(ctx, &txCtx, cspann.RootKey)
 		require.NoError(t, err)
 
 		// Search root partition on background goroutine.
 		go func() {
 			// Begin transaction should block until the outer transaction is
 			// complete.
-			txn2 := commontest.BeginTransaction(ctx, t, &workspace, store)
+			txn2 := commontest.BeginTransaction(ctx, t, store)
 			defer commontest.CommitTransaction(ctx, t, store, txn2)
 
 			searchSet := cspann.SearchSet{MaxResults: 2}
 			partitionCounts := []int{0}
-			_, err := txn2.SearchPartitions(
-				ctx, []cspann.PartitionKey{cspann.RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
+			_, err := txn2.SearchPartitions(ctx, &txCtx,
+				[]cspann.PartitionKey{cspann.RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
 			require.NoError(t, err)
 			result1 := cspann.SearchResult{
 				QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5,
@@ -126,7 +125,8 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		// Add vector to root partition after yielding to the background goroutine.
 		// The add should always happen before the background search.
 		runtime.Gosched()
-		_, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{3, 4}, childKey10, valueBytes10)
+		_, err = txn.AddToPartition(
+			ctx, &txCtx, cspann.RootKey, vector.T{3, 4}, childKey10, valueBytes10)
 		require.NoError(t, err)
 	}()
 
@@ -137,12 +137,12 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var workspace veclib.Workspace
+	var txCtx cspann.TxnContext
 	ctx := context.Background()
 	store := New(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
 
-	txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+	txn := commontest.BeginTransaction(ctx, t, store)
 	defer commontest.CommitTransaction(ctx, t, store, txn)
 
 	childKey10 := cspann.ChildKey{PartitionKey: 10}
@@ -155,9 +155,9 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	valueBytes30 := cspann.ValueBytes{5, 6}
 	valueBytes40 := cspann.ValueBytes{7, 8}
 
-	_, err := txn.AddToPartition(ctx, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
+	_, err := txn.AddToPartition(ctx, &txCtx, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
 	require.NoError(t, err)
-	_, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{3, 4}, childKey20, valueBytes20)
+	_, err = txn.AddToPartition(ctx, &txCtx, cspann.RootKey, vector.T{3, 4}, childKey20, valueBytes20)
 	require.NoError(t, err)
 
 	// Update stats.
@@ -170,11 +170,11 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	require.Equal(t, []cspann.CVStats{}, stats.CVStats)
 
 	// Upsert new root partition with higher level and check stats.
-	oldRoot, err := txn.GetPartition(ctx, cspann.RootKey)
+	oldRoot, err := txn.GetPartition(ctx, &txCtx, cspann.RootKey)
 	require.NoError(t, err)
 	newRoot := cspann.NewPartition(oldRoot.Quantizer(), oldRoot.QuantizedSet(),
 		oldRoot.ChildKeys(), oldRoot.ValueBytes(), cspann.Level(3))
-	require.NoError(t, txn.SetRootPartition(ctx, newRoot))
+	require.NoError(t, txn.SetRootPartition(ctx, &txCtx, newRoot))
 	stats.CVStats = []cspann.CVStats{{Mean: 2.5, Variance: 0.5}, {Mean: 1, Variance: 0.25}}
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
@@ -184,10 +184,10 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 
 	// Insert new partition with lower level and check stats.
 	vectors := vector.MakeSetFromRawData([]float32{5, 6}, 2)
-	quantizedSet := quantizer.Quantize(&workspace, vectors)
+	quantizedSet := quantizer.Quantize(&txCtx.Workspace, vectors)
 	partition := cspann.NewPartition(quantizer, quantizedSet,
 		[]cspann.ChildKey{childKey30}, []cspann.ValueBytes{valueBytes30}, 2)
-	partitionKey, err := txn.InsertPartition(ctx, partition)
+	partitionKey, err := txn.InsertPartition(ctx, &txCtx, partition)
 	require.NoError(t, err)
 
 	stats.CVStats = []cspann.CVStats{{Mean: 8, Variance: 2}, {Mean: 6, Variance: 1}}
@@ -199,7 +199,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		{Mean: 2.775, Variance: 0.1}, {Mean: 1.25, Variance: 0.05}}, roundCVStats(stats.CVStats))
 
 	// Add vector to partition and check stats.
-	_, err = txn.AddToPartition(ctx, partitionKey, vector.T{7, 8}, childKey40, valueBytes40)
+	_, err = txn.AddToPartition(ctx, &txCtx, partitionKey, vector.T{7, 8}, childKey40, valueBytes40)
 	require.NoError(t, err)
 
 	stats.CVStats = []cspann.CVStats{{Mean: 3, Variance: 1}, {Mean: 1.5, Variance: 0.5}}
@@ -211,7 +211,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		{Mean: 2.7863, Variance: 0.145}, {Mean: 1.2625, Variance: 0.0725}}, roundCVStats(stats.CVStats))
 
 	// Remove vector from partition and check stats.
-	_, err = txn.RemoveFromPartition(ctx, partitionKey, childKey30)
+	_, err = txn.RemoveFromPartition(ctx, &txCtx, partitionKey, childKey30)
 	require.NoError(t, err)
 
 	stats.CVStats = []cspann.CVStats{{Mean: 5, Variance: 2}, {Mean: 3, Variance: 1.5}}
