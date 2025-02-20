@@ -739,31 +739,47 @@ func registerKVSplits(r registry.Registry) {
 		splits  int
 		leases  registry.LeaseType
 		timeout time.Duration
+		envVars []string
 	}{
 		// NB: with 500000 splits, this test sometimes fails since it's pushing
 		// far past the number of replicas per node we support, at least if the
 		// ranges start to unquiesce (which can set off a cascade due to resource
 		// exhaustion).
-		{true, 300_000, registry.EpochLeases, 2 * time.Hour},
+		{true, 300_000, registry.EpochLeases, 2 * time.Hour, nil},
 		// This version of the test prevents range quiescence to trigger the
 		// badness described above more reliably for when we wish to improve
 		// the performance. For now, just verify that 30k unquiesced ranges
 		// is tenable.
-		{false, 30_000, registry.EpochLeases, 2 * time.Hour},
+		{false, 30_000, registry.EpochLeases, 2 * time.Hour, nil},
 		// Expiration-based leases prevent quiescence, and are also more expensive
 		// to keep alive. Again, just verify that 30k ranges is ok.
-		{false, 30_000, registry.ExpirationLeases, 2 * time.Hour},
-		// Leader leases don't need quiescence, as they use store liveness for
-		// failure detection and lease extension, so they don't issue raft
-		// heartbeats or periodic lease extensions. However, the cost of raft
-		// ticking is not entirely negligible (see #133885), so each range isn't
-		// completely free. Currently, they should be able to support 80k ranges in
-		// this cluster configuration.
-		{false, 80_000, registry.LeaderLeases, 2 * time.Hour},
+		{false, 30_000, registry.ExpirationLeases, 2 * time.Hour, nil},
+		// Leader leases without quiescence perform similarly to epoch leases
+		// without quiescence. Even though epoch leases are set to reach 30k, they
+		// also reach 60k reliably.
+		{false, 60_000, registry.LeaderLeases, 2 * time.Hour, nil},
+		// Leader leases with quiescence don't quite match epoch leases with
+		// quiescence because in leader leases only the followers ever quiesce.
+		{true, 90_000, registry.LeaderLeases, 2 * time.Hour, nil},
+		// With some additional tuning, leader leases can do even better. The extended interval allow
+		// for more flexibility in extending store liveness support, and prevent support withdrawals at
+		// higher CPU utilization when goroutine scheduling latency is high.
+		{
+			true, 120_000, registry.LeaderLeases, 2 * time.Hour,
+			[]string{
+				"COCKROACH_STORE_LIVENESS_SUPPORT_EXPIRY_INTERVAL=1s",
+				"COCKROACH_STORE_LIVENESS_HEARTBEAT_INTERVAL=3s",
+				"COCKROACH_STORE_LIVENESS_SUPPORT_DURATION=6s",
+			},
+		},
 	} {
 		item := item // for use in closure below
+		name := fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases)
+		if item.envVars != nil {
+			name += "/tuned"
+		}
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases),
+			Name:    name,
 			Owner:   registry.OwnerKV,
 			Timeout: item.timeout,
 			Cluster: r.MakeClusterSpec(4, spec.WorkloadNode()),
@@ -777,6 +793,7 @@ func registerKVSplits(r registry.Registry) {
 
 				settings := install.MakeClusterSettings()
 				settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=1m", "COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce))
+				settings.Env = append(settings.Env, item.envVars...)
 				startOpts := option.NewStartOpts(option.NoBackupSchedule)
 				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--cache=256MiB")
 				c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())

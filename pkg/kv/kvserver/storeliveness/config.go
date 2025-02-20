@@ -8,6 +8,21 @@ package storeliveness
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+)
+
+var (
+	// defaultSupportExpiryInterval is the default value for SupportExpiryInterval.
+	defaultSupportExpiryInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_STORE_LIVENESS_SUPPORT_EXPIRY_INTERVAL", 100*time.Millisecond,
+	)
+
+	// defaultIdleSupportFromInterval is the default value for
+	// IdleSupportFromInterval.
+	defaultIdleSupportFromInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_STORE_LIVENESS_IDLE_SUPPORT_FROM_INTERVAL", time.Minute,
+	)
 )
 
 // Options includes all Store Liveness durations needed by the SupportManager.
@@ -37,8 +52,8 @@ func NewOptions(
 	return Options{
 		SupportDuration:              supportDuration,
 		HeartbeatInterval:            heartbeatInterval,
-		SupportExpiryInterval:        100 * time.Millisecond,
-		IdleSupportFromInterval:      1 * time.Minute,
+		SupportExpiryInterval:        defaultSupportExpiryInterval,
+		IdleSupportFromInterval:      defaultIdleSupportFromInterval,
 		SupportWithdrawalGracePeriod: supportWithdrawalGracePeriod,
 	}
 }
