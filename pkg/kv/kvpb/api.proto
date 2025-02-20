@@ -219,6 +219,10 @@ message GetRequest {
   // This option is not compatible for reads over inline values (see
   // https://github.com/cockroachdb/cockroach/issues/131667)
   bool return_raw_mvcc_values = 4 [(gogoproto.customname) = "ReturnRawMVCCValues"];
+
+  // LockNonExisting indicates whether the Get request should acquire a lock
+  // on keys that don't exist.
+  bool lock_non_existing = 5;
 }
 
 // A GetResponse is the return value from the Get() method.
