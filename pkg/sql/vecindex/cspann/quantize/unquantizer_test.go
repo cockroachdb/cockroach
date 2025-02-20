@@ -8,7 +8,7 @@ package quantize
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"

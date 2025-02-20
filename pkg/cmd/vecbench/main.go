@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -177,7 +177,7 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 	// If index file has not been built, then do so now. Otherwise, load it from
 	// disk.
 	var inMemStore *vecstore.InMemoryStore
-	var index *vecindex.VectorIndex
+	var index *cspann.VectorIndex
 	_, err := os.Stat(indexFileName)
 	if err != nil {
 		if !oserror.IsNotExist(err) {
@@ -210,7 +210,7 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 			queryVector := data.Test.At(i)
 
 			searchSet := vecstore.SearchSet{MaxResults: *flagMaxResults}
-			searchOptions := vecindex.SearchOptions{BaseBeamSize: beamSize}
+			searchOptions := cspann.SearchOptions{BaseBeamSize: beamSize}
 
 			// Calculate prediction set for the vector.
 			err = index.Search(ctx, txn, queryVector, &searchSet, searchOptions)
@@ -380,7 +380,7 @@ func downloadDataset(ctx context.Context, datasetName string) dataset {
 // built index to the tmp directory.
 func buildIndex(
 	ctx context.Context, stopper *stop.Stopper, datasetName string,
-) (*vecstore.InMemoryStore, *vecindex.VectorIndex) {
+) (*vecstore.InMemoryStore, *cspann.VectorIndex) {
 	// Ensure dataset file has been downloaded.
 	data := downloadDataset(ctx, datasetName)
 	if *flagBuildCount != 0 {
@@ -498,15 +498,15 @@ func buildIndex(
 // createIndex returns a vector index created using the given store.
 func createIndex(
 	ctx context.Context, stopper *stop.Stopper, store vecstore.Store,
-) *vecindex.VectorIndex {
+) *cspann.VectorIndex {
 	inMemStore := store.(*vecstore.InMemoryStore)
 	quantizer := quantize.NewRaBitQuantizer(inMemStore.Dims(), seed)
-	options := vecindex.VectorIndexOptions{
+	options := cspann.VectorIndexOptions{
 		MinPartitionSize: minPartitionSize,
 		MaxPartitionSize: maxPartitionSize,
 		BaseBeamSize:     *flagBeamSize,
 	}
-	index, err := vecindex.NewVectorIndex(ctx, store, quantizer, seed, &options, stopper)
+	index, err := cspann.NewVectorIndex(ctx, store, quantizer, seed, &options, stopper)
 	if err != nil {
 		panic(err)
 	}

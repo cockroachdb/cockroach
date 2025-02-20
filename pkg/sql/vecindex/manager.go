@@ -13,7 +13,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,7 +61,7 @@ type indexKey struct {
 }
 
 type indexEntry struct {
-	idx *VectorIndex
+	idx *cspann.VectorIndex
 	// If mustWait is true, we are in the process of fetching the config and
 	// starting the VectorIndex. Other callers can wait on the waitCond until this
 	// is false.
@@ -78,7 +79,7 @@ func (m *Manager) SetTestingKnobs(knobs *VecIndexTestingKnobs) {
 // not currently have an active VectorIndex, one is created and cached.
 func (m *Manager) Get(
 	ctx context.Context, tableID catid.DescID, indexID catid.IndexID,
-) (*VectorIndex, error) {
+) (*cspann.VectorIndex, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	idxKey := indexKey{tableID, indexID}
@@ -105,7 +106,7 @@ func (m *Manager) Get(
 	e = &indexEntry{mustWait: true, waitCond: sync.Cond{L: &m.mu}}
 	m.mu.indexes[idxKey] = e
 
-	idx, err := func() (*VectorIndex, error) {
+	idx, err := func() (*cspann.VectorIndex, error) {
 		// Unlock while we build the index structure so that concurrent requests can be
 		// serviced. We've already set mustWait to true, so other requests will wait
 		// until we're done setting up the index.
@@ -127,7 +128,7 @@ func (m *Manager) Get(
 		// Use the stored context so that the VectorIndex can outlive the context of the
 		// Get call. The fixup process gets a child context from the context passed to
 		// NewVectorIndex, and we don't want that to be the context of the Get call.
-		return NewVectorIndex(m.ctx, store, quantizer, config.Seed, &VectorIndexOptions{}, m.stopper)
+		return cspann.NewVectorIndex(m.ctx, store, quantizer, config.Seed, &cspann.VectorIndexOptions{}, m.stopper)
 	}()
 	e.mustWait = false
 	e.idx, e.err = idx, err

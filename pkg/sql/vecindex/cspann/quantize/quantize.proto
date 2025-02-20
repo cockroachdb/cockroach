@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 package cockroach.sql.vecindex.quantize;
-option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize";
 
 import "util/vector/vector.proto";
 import "gogoproto/gogo.proto";

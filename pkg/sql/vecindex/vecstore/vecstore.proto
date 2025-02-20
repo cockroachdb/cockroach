@@ -7,7 +7,7 @@ syntax = "proto3";
 package cockroach.sql.vecindex.vecstore;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore";
 
-import "sql/vecindex/quantize/quantize.proto";
+import "sql/vecindex/cspann/quantize/quantize.proto";
 import "sql/vecindex/vecpb/vec.proto";
 import "gogoproto/gogo.proto";
 
