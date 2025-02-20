@@ -292,8 +292,9 @@ type storeState struct {
 	storeLoad
 	adjusted struct {
 		load loadVector
-		// loadReplicas is computed from storeLoadMsg.storeRanges, and adjusted
-		// for pending changes.
+		// loadReplicas is computed from the authoritative information provided by
+		// various leaseholders in storeLeaseholderMsgs, and adjusted for
+		// loadPendingChanges.
 		loadReplicas map[roachpb.RangeID]replicaType
 		// Pending changes for computing loadReplicas and load.
 		// Added to at the same time as clusterState.pendingChanges.
@@ -327,6 +328,20 @@ type storeState struct {
 		// various leaseholders in storeLeaseholderMsgs and adjusted for pending
 		// changes in clusterState.pendingChanges/rangeState.pendingChanges.
 		replicas map[roachpb.RangeID]replicaState
+
+		// top-k ranges along some dimensions. If the store is
+		// closer to hitting the resource limit on some resource ranges that are
+		// higher in that resource dimension should be over-represented in this map.
+		// It includes ranges whose replicas are being removed bia pending changes,
+		// since those pending changes may be reversed, and we don't want to bother
+		// recomputing the top-k.
+		//
+		// We need to keep this top-k up-to-date incrementally. Since
+		// storeLeaseholderMsg is incremental about the ranges it reports, that
+		// may provide a building block for the incremental computation.
+		// TODO(sumeer): figure out at least one reasonable way to do this, even
+		// if we postpone it to a later code iteration.
+		topKRanges map[roachpb.RangeID]rangeLoad
 	}
 	// This is a locally incremented seqnum which is incremented whenever the
 	// adjusted or reported load information for this store or the containing
@@ -417,6 +432,9 @@ type rangeState struct {
 	// the storeState.adjusted.replicas in the corresponding stores.
 	replicas []storeIDAndReplicaState
 	conf     *normalizedSpanConfig
+
+	load rangeLoad
+
 	// Only 1 or 2 changes (latter represents a least transfer or rebalance that
 	// adds and removes replicas).
 	//
@@ -468,9 +486,11 @@ func newClusterState(interner *stringInterner) *clusterState {
 // clusterState mutators
 //======================================================================
 
-func (cs *clusterState) processNodeLoadResponse(resp *nodeLoadResponse) {
+func (cs *clusterState) processNodeLoadMsg(msg *nodeLoadMsg) {
 	// TODO(sumeer):
 }
+
+func (cs *clusterState) processStoreLeaseholderMsg(msg *storeLeaseholderMsg) {}
 
 func (cs *clusterState) addNodeID(nodeID roachpb.NodeID) {
 	// TODO(sumeer):
@@ -565,7 +585,8 @@ func (cs *clusterState) computeLoadSummary(
 // Avoid unused lint errors.
 
 var _ = (&pendingChangesOldestFirst{}).removeChangeAtIndex
-var _ = (&clusterState{}).processNodeLoadResponse
+var _ = (&clusterState{}).processNodeLoadMsg
+var _ = (&clusterState{}).processStoreLeaseholderMsg
 var _ = (&clusterState{}).addNodeID
 var _ = (&clusterState{}).addStore
 var _ = (&clusterState{}).changeStore
