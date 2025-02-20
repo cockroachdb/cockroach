@@ -122,7 +122,14 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 
 	// Trash a random byte.
 	b := f.Bytes()
-	b[rng.Intn(len(b))]++
+
+	// If we mess with the format byte, we will get an unexpected error.
+	// See https://github.com/cockroachdb/cockroach/issues/141477 and
+	// TODO(radu): This can be removed if Pebble checksums the footer:
+	// https://github.com/cockroachdb/pebble/issues/4344
+	const nAvoidLastBytes = 12
+	//b[rng.Intn(len(b)-nAvoidLastBytes)]++
+	b[len(b)-60+rng.Intn(60-nAvoidLastBytes)]++
 
 	it, err := NewSSTIterator([][]sstable.ReadableFile{{vfs.NewMemFile(b)}},
 		IterOptions{UpperBound: roachpb.KeyMax})
