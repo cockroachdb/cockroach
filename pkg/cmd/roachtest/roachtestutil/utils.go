@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -236,4 +237,21 @@ func CheckPortBlocked(
 		return false, err
 	}
 	return strings.Contains(res.Stdout, "filtered"), nil
+}
+
+func NodeRTT(
+	ctx context.Context,
+	l *logger.Logger,
+	c cluster.Cluster,
+	fromNode, toNode option.NodeListOption,
+) (time.Duration, error) {
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(fromNode), fmt.Sprintf("nmap -p {pgport%[1]s} -Pn {ip%[1]s} -oG - | grep 'scanned in' | awk '{print $(NF-1)}'", toNode))
+	if err != nil {
+		return 0, err
+	}
+	avgRTT, err := strconv.ParseFloat(strings.TrimSpace(res.Stdout), 64)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(avgRTT * float64(time.Second)), nil
 }
