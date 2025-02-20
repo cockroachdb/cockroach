@@ -1277,3 +1277,12 @@ quality of service: regular
                   regions: <hidden>
                   actual row count: 1
                   size: 3 columns, 1 row
+
+# Regression test for #136458. The canary column ordinal should be correctly
+# selected when the canaray column is also a partial index DEL column.
+
+statement ok
+CREATE TABLE t136458 (c BOOL PRIMARY KEY, INDEX (c) WHERE c)
+
+statement ok
+UPSERT INTO t136458 (c) VALUES (false)
