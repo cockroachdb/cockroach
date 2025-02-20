@@ -739,13 +739,10 @@ func registerKVSplits(r registry.Registry) {
 		// Expiration-based leases prevent quiescence, and are also more expensive
 		// to keep alive. Again, just verify that 30k ranges is ok.
 		{false, 30_000, registry.ExpirationLeases, 2 * time.Hour},
-		// Leader leases don't need quiescence, as they use store liveness for
-		// failure detection and lease extension, so they don't issue raft
-		// heartbeats or periodic lease extensions. However, the cost of raft
-		// ticking is not entirely negligible (see #133885), so each range isn't
-		// completely free. Currently, they should be able to support 80k ranges in
-		// this cluster configuration.
-		{false, 80_000, registry.LeaderLeases, 2 * time.Hour},
+		// Leader leases without quiescence perform similarly to epoch leases
+		// without quiescence. Even though epoch leases are set to reach 30k, they
+		// also reach 60k reliably.
+		{false, 60_000, registry.LeaderLeases, 2 * time.Hour},
 	} {
 		item := item // for use in closure below
 		r.Add(registry.TestSpec{
