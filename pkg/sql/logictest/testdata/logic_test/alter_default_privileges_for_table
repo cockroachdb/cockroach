@@ -257,27 +257,29 @@ CREATE TABLE t8()
 query TTTTTB colnames,rowsort
 SHOW GRANTS ON t8
 ----
-database_name  schema_name  table_name  grantee    privilege_type  is_grantable
-d              public       t8          admin      ALL             true
-d              public       t8          root       ALL             true
-d              public       t8          testuser   BACKUP          false
-d              public       t8          testuser   CHANGEFEED      false
-d              public       t8          testuser   CREATE          false
-d              public       t8          testuser   DELETE          false
-d              public       t8          testuser   DROP            false
-d              public       t8          testuser   INSERT          false
-d              public       t8          testuser   TRIGGER         false
-d              public       t8          testuser   UPDATE          false
-d              public       t8          testuser   ZONECONFIG      false
-d              public       t8          testuser2  BACKUP          false
-d              public       t8          testuser2  CHANGEFEED      false
-d              public       t8          testuser2  CREATE          false
-d              public       t8          testuser2  DELETE          false
-d              public       t8          testuser2  DROP            false
-d              public       t8          testuser2  INSERT          false
-d              public       t8          testuser2  TRIGGER         false
-d              public       t8          testuser2  UPDATE          false
-d              public       t8          testuser2  ZONECONFIG      false
+database_name  schema_name  table_name  grantee    privilege_type   is_grantable
+d              public       t8          admin      ALL              true
+d              public       t8          root       ALL              true
+d              public       t8          testuser   BACKUP           false
+d              public       t8          testuser   CHANGEFEED       false
+d              public       t8          testuser   CREATE           false
+d              public       t8          testuser   DELETE           false
+d              public       t8          testuser   DROP             false
+d              public       t8          testuser   INSERT           false
+d              public       t8          testuser   REPLICATIONDEST  false
+d              public       t8          testuser   TRIGGER          false
+d              public       t8          testuser   UPDATE           false
+d              public       t8          testuser   ZONECONFIG       false
+d              public       t8          testuser2  BACKUP           false
+d              public       t8          testuser2  CHANGEFEED       false
+d              public       t8          testuser2  CREATE           false
+d              public       t8          testuser2  DELETE           false
+d              public       t8          testuser2  DROP             false
+d              public       t8          testuser2  INSERT           false
+d              public       t8          testuser2  REPLICATIONDEST  false
+d              public       t8          testuser2  TRIGGER          false
+d              public       t8          testuser2  UPDATE           false
+d              public       t8          testuser2  ZONECONFIG       false
 
 # Ensure you can only ALTER DEFAULT PRIVILEGES for a role you're a part of.
 user testuser2
