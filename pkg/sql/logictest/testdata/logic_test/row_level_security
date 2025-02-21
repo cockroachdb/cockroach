@@ -22,23 +22,6 @@ show session enable_row_level_security;
 ----
 on
 
-subtest legacy_fail
-
-statement ok
-SET use_declarative_schema_changer = 'off';
-
-statement ok
-CREATE TABLE legacy();
-
-statement error pq: CREATE POLICY is only implemented in the declarative schema changer
-CREATE POLICY p1 on legacy;
-
-statement ok
-DROP TABLE legacy;
-
-statement ok
-SET use_declarative_schema_changer = $use_decl_sc;
-
 subtest create_drop_sanity
 
 statement ok
