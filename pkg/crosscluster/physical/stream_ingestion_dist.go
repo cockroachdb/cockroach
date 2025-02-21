@@ -258,10 +258,15 @@ func startDistIngestion(
 		log.Infof(ctx, "initial splits already complete")
 	}
 
+	replicationStatusForFlow := jobspb.Replicating
+	if streamProgress.ReplicatedTime.IsEmpty() {
+		replicationStatusForFlow = jobspb.InitialScan
+	}
+
 	if err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		md.Progress.GetStreamIngest().ReplicationStatus = jobspb.Replicating
+		md.Progress.GetStreamIngest().ReplicationStatus = replicationStatusForFlow
 		md.Progress.GetStreamIngest().InitialSplitComplete = true
-		md.Progress.StatusMessage = "physical replication running"
+		md.Progress.StatusMessage = replicationStatusForFlow.String()
 		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {
