@@ -695,6 +695,17 @@ func (c *connector) NetworkConnectivity(
 	return
 }
 
+// Gossip implements the serverpb.TenantStatusServer interface
+func (c *connector) Gossip(
+	ctx context.Context, req *serverpb.GossipRequest,
+) (resp *gossip.InfoStatus, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Gossip(ctx, req)
+		return
+	})
+	return
+}
+
 // NewIterator implements the rangedesc.IteratorFactory interface.
 func (c *connector) NewIterator(
 	ctx context.Context, span roachpb.Span,
