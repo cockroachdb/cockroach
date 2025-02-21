@@ -157,17 +157,17 @@ func addJitter(d time.Duration) time.Duration {
 // populateHardwareInfo populates OS, CPU, memory, etc. information about the
 // environment in which CRDB is running.
 func populateHardwareInfo(ctx context.Context, e *diagnosticspb.Environment) {
-	if platform, family, version, err := host.PlatformInformation(); err == nil {
+	if platform, family, version, err := host.PlatformInformationWithContext(ctx); err == nil {
 		e.Os.Family = family
 		e.Os.Platform = platform
 		e.Os.Version = version
 	}
 
-	if virt, role, err := host.Virtualization(); err == nil && role == "guest" {
+	if virt, role, err := host.VirtualizationWithContext(ctx); err == nil && role == "guest" {
 		e.Hardware.Virtualization = virt
 	}
 
-	if m, err := mem.VirtualMemory(); err == nil {
+	if m, err := mem.VirtualMemoryWithContext(ctx); err == nil {
 		e.Hardware.Mem.Available = m.Available
 		e.Hardware.Mem.Total = m.Total
 	}

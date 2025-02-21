@@ -832,7 +832,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		log.Ops.Errorf(ctx, "unable to get process CPU usage: %v", err)
 	}
 	cpuCapacity := getCPUCapacity()
-	cpuUsageStats, err := cpu.Times(false /* percpu */)
+	cpuUsageStats, err := cpu.TimesWithContext(ctx, false /* percpu */)
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get system CPU usage: %v", err)
 	}
@@ -840,7 +840,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	if len(cpuUsageStats) > 0 {
 		cpuUsage = cpuUsageStats[0]
 	}
-	numHostCPUs, err := cpu.Counts(true /* logical */)
+	numHostCPUs, err := cpu.CountsWithContext(ctx, true /* logical */)
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get system CPU details: %v", err)
 	}
