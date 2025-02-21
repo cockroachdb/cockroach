@@ -178,6 +178,20 @@ message ReadImportDataSpec {
   // NEXTID: 21.
 }
 
+message MergeCoordinatorSpec {
+  optional int64 task_count = 1;
+  repeated bytes worker_sql_instance_ids = 2;
+  // NEXT ID: 3.
+}
+
+// MergeLoopback is scheduled on the same node as the MergeCoordinator.
+// MegeCoordinator is the final processor in the flow and MergeLoopback is the
+// first processor in the flow. Scheduling them on the same node allows the
+// MergeCoordinator to inject task rows into the process.
+message MergeLoopbackSpec {
+
+}
+
 message IngestStoppedSpec {
   optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID",
   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];
@@ -585,25 +599,31 @@ message CompactBackupsSpec {
 }
 
 message BulkMergeSpec {
-	// SST represents metadata about a single SST file to be merged.
-	message SST {
-		optional string uri = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URI"];
-		// start_key is the first key in the SST.
-		optional string start_key = 2 [(gogoproto.nullable) = false];
-		// end_key is the last key in the SST.
-		optional string end_key = 3 [(gogoproto.nullable) = false];
-	}
+  // ssts is the list of input SSTs to merge.
+  repeated SST ssts = 1 [(gogoproto.nullable) = false];
 
-	// ssts is the list of input SSTs to merge.
-	repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
+  // spans are the merge tasks.  E.g.the merge task `n` is to merge all the input data that overlaps with
+  // [spans[n].Key, spans[n].EndKey)
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
 
-	// spans are the key ranges that should be merged. Each merge processor
-	// will be assigned one or more spans to merge.
-	repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+  // output_uri is a URI like 'nodelocal://1/<job_id>/merger'. The uri should
+  // use this as the base for all output files. So an output file would be
+  // 'nodelocal://1/<job_id>/merger/0.sst'
+  optional string output_uri = 3 [(gogoproto.nullable) = false];
 
-	// output_uri is a URI prefix like 'nodelocal://1/<job_id>/merger'. The processor
-	// should use this as the base for all output files.
-	optional string output_uri = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "OutputURI"];
+  message SST {
+    // uri is a fully qualifed URI to the SST file. It will look something like
+    // 'nodelocal://2/<job_id>/input/0.sst'
+    optional string uri = 1 [(gogoproto.nullable) = false];
+    // start_key is the first key in the SST.
+    optional bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    // end_key is the last key in the SST.
+    optional bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  };
 
-	// NEXT ID: 4.
+  message Output {
+    // output_ssts is the list of output SSTs.
+    repeated SST ssts = 1 [(gogoproto.nullable) = false];
+  }
+  // NEXT ID: 4.
 }
