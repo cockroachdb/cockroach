@@ -1315,6 +1315,18 @@ func (ec *endCmds) poison() {
 	ec.repl.concMgr.PoisonReq(ec.g)
 }
 
+// recordProposalToLocalApplicationLatency records the duration of the last
+// local application on successful writes.
+func (ec *endCmds) recordProposalToLocalApplicationLatency() {
+	if ec.repl == nil {
+		return
+	}
+	if ts := ec.replicatingSince; !ts.IsZero() {
+		// Read-only commands have a zero replicatingSince timestamp.
+		ec.repl.recordProposalToLocalApplicationLatency(timeutil.Since(ts))
+	}
+}
+
 // done releases the latches acquired by the command and updates the timestamp
 // cache using the final timestamp of each command. If `br` is nil, it is
 // assumed that `done` is being called by a request that's dropping its latches

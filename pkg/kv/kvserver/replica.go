@@ -943,6 +943,20 @@ type Replica struct {
 	// computePostTrunc* methods.
 	pendingLogTruncations pendingLogTruncations
 
+	// avgProposalToLocalApplicationLatency tracks the average time between
+	// proposal evaluation and local application of a command on successful
+	// writes. An exponentially weighted moving average is used with an effective
+	// window size of 30, where recent data points have a higher influence, and
+	// older data gradually decays. Thread-safe.
+	//
+	// Notes:
+	// 1. It does not include full application on follower replicas.
+	// 2. No measurements are recorded for read-only commands or read-write
+	// commands that do not result in writes.
+	// 3. No measurements are recorded for proposal failures (e.g. due to
+	// AmbiguousResultError or rejected proposals).
+	avgProposalToLocalApplicationLatency *rpc.ThreadSafeMovingAverage
+
 	rangefeedMu struct {
 		syncutil.RWMutex
 		// proc is an instance of a rangefeed Processor that is capable of
@@ -1043,6 +1057,12 @@ func (r *Replica) ID() storage.FullReplicaID {
 // raftMu must be held when using the returned object.
 func (r *Replica) LogStorageRaftMuLocked() *logstore.LogStore {
 	return r.raftMu.logStorage
+}
+
+// recordProposalToLocalApplicationLatency records the duration it took to
+// propose and apply the last command locally on success.
+func (r *Replica) recordProposalToLocalApplicationLatency(timeToProposeAndApply time.Duration) {
+	r.avgProposalToLocalApplicationLatency.Add(float64(timeToProposeAndApply.Nanoseconds()))
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It

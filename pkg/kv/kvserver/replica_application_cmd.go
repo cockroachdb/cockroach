@@ -148,6 +148,9 @@ func (c *replicatedCmd) AckSuccess(ctx context.Context) error {
 // AckOutcomeAndFinish implements the apply.AppliedCommand.
 func (c *replicatedCmd) AckOutcomeAndFinish(ctx context.Context) error {
 	if c.IsLocal() {
+		c.proposal.ec.recordProposalToLocalApplicationLatency()
+		// finishApplication clears proposal's endCmds (c.proposal.ec), so we need
+		// to record the latency right before.
 		c.proposal.finishApplication(ctx, c.response)
 	}
 	c.finishTracingSpan()
