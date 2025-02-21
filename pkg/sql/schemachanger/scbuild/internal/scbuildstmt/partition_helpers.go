@@ -9,8 +9,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -28,7 +31,249 @@ import (
 )
 
 // TODO(annie): This is unused for now.
-var _ = createPartitioning
+var _ = configureIndexDescForNewIndexPartitioning
+
+// configureIndexDescForNewIndexPartitioning returns a new copy of an index
+// descriptor containing modifications needed if partitioning is configured.
+func configureIndexDescForNewIndexPartitioning(
+	b BuildCtx,
+	tableID catid.DescID,
+	indexDesc descpb.IndexDescriptor,
+	partitionByIndex *tree.PartitionByIndex,
+) (descpb.IndexDescriptor, error) {
+	var err error
+	partitionAllBy := b.QueryByID(tableID).FilterTablePartitioning().MustHaveZeroOrOne()
+	if partitionByIndex.ContainsPartitioningClause() || partitionAllBy != nil {
+		var partitionBy *tree.PartitionBy
+		if partitionAllBy == nil {
+			if partitionByIndex.ContainsPartitions() {
+				partitionBy = partitionByIndex.PartitionBy
+			}
+		} else if partitionByIndex.ContainsPartitioningClause() {
+			return indexDesc, pgerror.New(
+				pgcode.FeatureNotSupported,
+				"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
+			)
+		} else {
+			partitionBy, err = partitionByFromTableID(b, tableID)
+			if err != nil {
+				return indexDesc, err
+			}
+		}
+		localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().
+			MustGetZeroOrOneElement()
+		allowImplicitPartitioning := b.EvalCtx().SessionData().ImplicitColumnPartitioningEnabled ||
+			localityRBR != nil
+		if partitionBy != nil {
+			newImplicitCols, newPartitioning, err := createPartitioning(
+				b,
+				tableID,
+				partitionBy,
+				int(indexDesc.Partitioning.NumImplicitColumns),
+				indexDesc.KeyColumnNames,
+				nil, /* allowedNewColumnNames */
+				allowImplicitPartitioning,
+			)
+			if err != nil {
+				return indexDesc, err
+			}
+			updateIndexPartitioning(&indexDesc, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
+		}
+	}
+	return indexDesc, nil
+}
+
+// updateIndexPartitioning applies the new partition and adjusts the column info
+// for the specified index descriptor. Returns false iff this was a no-op.
+func updateIndexPartitioning(
+	idx *descpb.IndexDescriptor,
+	isIndexPrimary bool,
+	newImplicitCols []*scpb.ColumnName,
+	newPartitioning catpb.PartitioningDescriptor,
+) bool {
+	oldNumImplicitCols := int(idx.Partitioning.NumImplicitColumns)
+	isNoOp := oldNumImplicitCols == len(newImplicitCols) && idx.Partitioning.Equal(newPartitioning)
+	numCols := len(idx.KeyColumnIDs)
+	newCap := numCols + len(newImplicitCols) - oldNumImplicitCols
+	newColumnIDs := make([]descpb.ColumnID, len(newImplicitCols), newCap)
+	newColumnNames := make([]string, len(newImplicitCols), newCap)
+	newColumnDirections := make([]catenumpb.IndexColumn_Direction, len(newImplicitCols), newCap)
+	for i, col := range newImplicitCols {
+		newColumnIDs[i] = col.ColumnID
+		newColumnNames[i] = col.Name
+		newColumnDirections[i] = catenumpb.IndexColumn_ASC
+		if isNoOp &&
+			(idx.KeyColumnIDs[i] != newColumnIDs[i] ||
+				idx.KeyColumnNames[i] != newColumnNames[i] ||
+				idx.KeyColumnDirections[i] != newColumnDirections[i]) {
+			isNoOp = false
+		}
+	}
+	if isNoOp {
+		return false
+	}
+	idx.KeyColumnIDs = append(newColumnIDs, idx.KeyColumnIDs[oldNumImplicitCols:]...)
+	idx.KeyColumnNames = append(newColumnNames, idx.KeyColumnNames[oldNumImplicitCols:]...)
+	idx.KeyColumnDirections = append(newColumnDirections, idx.KeyColumnDirections[oldNumImplicitCols:]...)
+	idx.Partitioning = newPartitioning
+	if !isIndexPrimary {
+		return true
+	}
+
+	newStoreColumnIDs := make([]descpb.ColumnID, 0, len(idx.StoreColumnIDs))
+	newStoreColumnNames := make([]string, 0, len(idx.StoreColumnNames))
+	for i := range idx.StoreColumnIDs {
+		id := idx.StoreColumnIDs[i]
+		name := idx.StoreColumnNames[i]
+		found := false
+		for _, newColumnName := range newColumnNames {
+			if newColumnName == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			newStoreColumnIDs = append(newStoreColumnIDs, id)
+			newStoreColumnNames = append(newStoreColumnNames, name)
+		}
+	}
+	idx.StoreColumnIDs = newStoreColumnIDs
+	idx.StoreColumnNames = newStoreColumnNames
+	if len(idx.StoreColumnNames) == 0 {
+		idx.StoreColumnIDs = nil
+		idx.StoreColumnNames = nil
+	}
+	return true
+}
+
+// partitionByFromTableID constructs a PartitionBy clause from a tableID.
+func partitionByFromTableID(b BuildCtx, tableID catid.DescID) (*tree.PartitionBy, error) {
+	idx := getLatestPrimaryIndex(b, tableID)
+	partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, idx.IndexID)
+	return partitionByFromTableIDImpl(b, tableID, idx.IndexID, partitioning, 0)
+}
+
+// partitionByFromTableIDImpl contains the inner logic of partitionByFromTableID.
+// We derive the Fields, LIST and RANGE clauses from the table, recursing into
+// the subpartitions as required for LIST partitions.
+func partitionByFromTableIDImpl(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID, part catalog.Partitioning, colOffset int,
+) (*tree.PartitionBy, error) {
+	if part.NumColumns() == 0 {
+		return nil, nil
+	}
+
+	// We don't need real prefixes in the DecodePartitionTuple calls because we
+	// only use the tree.Datums part of the output.
+	fakePrefixDatums := make([]tree.Datum, colOffset)
+	for i := range fakePrefixDatums {
+		fakePrefixDatums[i] = tree.DNull
+	}
+
+	partitionBy := &tree.PartitionBy{
+		Fields: make(tree.NameList, part.NumColumns()),
+		List:   make([]tree.ListPartition, 0, part.NumLists()),
+		Range:  make([]tree.RangePartition, 0, part.NumRanges()),
+	}
+	keyCols, _, _ := getSortedColumnIDsInIndexByKind(b, tableID, indexID)
+	for i := 0; i < part.NumColumns(); i++ {
+		keyColID := keyCols[colOffset+i]
+		colName := b.QueryByID(tableID).FilterColumnName().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) bool {
+				return e.ColumnID == keyColID
+			}).MustGetOneElement()
+		partitionBy.Fields[i] = tree.Name(colName.Name)
+	}
+
+	// Copy the LIST of the PARTITION BY clause.
+	a := &tree.DatumAlloc{}
+	err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) (err error) {
+		lp := tree.ListPartition{
+			Name:  tree.Name(name),
+			Exprs: make(tree.Exprs, len(values)),
+		}
+		for j, v := range values {
+			tuple, _, err := decodePartitionTuple(
+				b,
+				a,
+				tableID,
+				indexID,
+				part,
+				v,
+				fakePrefixDatums,
+			)
+			if err != nil {
+				return err
+			}
+			exprs, err := partitionTupleToExprs(tuple)
+			if err != nil {
+				return err
+			}
+			lp.Exprs[j] = &tree.Tuple{
+				Exprs: exprs,
+			}
+		}
+		lp.Subpartition, err = partitionByFromTableIDImpl(
+			b,
+			tableID,
+			indexID,
+			subPartitioning,
+			colOffset+part.NumColumns(),
+		)
+		partitionBy.List = append(partitionBy.List, lp)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy the RANGE of the PARTITION BY clause.
+	err = part.ForEachRange(func(name string, from, to []byte) error {
+		rp := tree.RangePartition{Name: tree.Name(name)}
+		fromTuple, _, err := decodePartitionTuple(
+			b, a, tableID, indexID, part, from, fakePrefixDatums)
+		if err != nil {
+			return err
+		}
+		rp.From, err = partitionTupleToExprs(fromTuple)
+		if err != nil {
+			return err
+		}
+		toTuple, _, err := decodePartitionTuple(
+			b, a, tableID, indexID, part, to, fakePrefixDatums)
+		if err != nil {
+			return err
+		}
+		rp.To, err = partitionTupleToExprs(toTuple)
+		partitionBy.Range = append(partitionBy.Range, rp)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return partitionBy, nil
+}
+
+func partitionTupleToExprs(t *rowenc.PartitionTuple) (tree.Exprs, error) {
+	exprs := make(tree.Exprs, len(t.Datums)+t.SpecialCount)
+	for i, d := range t.Datums {
+		exprs[i] = d
+	}
+	for i := 0; i < t.SpecialCount; i++ {
+		switch t.Special {
+		case rowenc.PartitionDefaultVal:
+			exprs[i+len(t.Datums)] = &tree.DefaultVal{}
+		case rowenc.PartitionMinVal:
+			exprs[i+len(t.Datums)] = &tree.PartitionMinVal{}
+		case rowenc.PartitionMaxVal:
+			exprs[i+len(t.Datums)] = &tree.PartitionMaxVal{}
+		default:
+			return nil, errors.AssertionFailedf("unknown special value found: %v", t.Special)
+		}
+	}
+	return exprs, nil
+}
 
 // createPartitioning returns a set of implicit columns and a new partitioning
 // descriptor to build an index with partitioning fields populated to align with

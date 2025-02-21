@@ -84,6 +84,7 @@ scan checks@checks_x_y_idx
 # Test that changes to enums are picked up in plans.
 statement ok
 BEGIN;
+SET LOCAL autocommit_before_ddl=off;
 ALTER TYPE greeting ADD VALUE 'cheers'
 
 query T

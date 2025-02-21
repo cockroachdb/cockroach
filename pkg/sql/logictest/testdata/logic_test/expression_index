@@ -812,7 +812,10 @@ statement ok
 SET autocommit_before_ddl = false
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
 
 statement ok
 ALTER TABLE bf ADD COLUMN b INT DEFAULT 10
@@ -1217,7 +1220,8 @@ CREATE TABLE t74216 (
 
 # create index using an expression works even when retried
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl=off;
 CREATE INDEX t_a_times_three_idx ON t ((a * 3));
 SELECT crdb_internal.force_retry('10ms');
 COMMIT

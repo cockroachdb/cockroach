@@ -210,6 +210,7 @@ func TestTxnCanUseNewNameAfterRename(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	sql := `
+SET autocommit_before_ddl=off;
 CREATE DATABASE test;
 CREATE TABLE test.t (a INT PRIMARY KEY);
 `

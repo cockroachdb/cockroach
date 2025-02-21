@@ -1554,6 +1554,9 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement ok
 ALTER SEQUENCE cache_test INCREMENT 5
 
 # The cache is invalidated due to the above schema change, and 10 new values (15,20,...,60) are cached.
