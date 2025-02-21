@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -92,8 +93,18 @@ var jobsBackfillPageSize = 32
 func backfillJobsTablesAndColumns(
 	ctx context.Context, cv clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
+	totalRowsRow, err := d.DB.Executor().QueryRowEx(ctx, "jobs-backfill-count", nil, sessiondata.NodeUserSessionDataOverride,
+		`SELECT count(*) FROM system.jobs WHERE owner IS NULL`)
+	if err != nil {
+		return err
+	}
+	totalRows := int(tree.MustBeDInt(totalRowsRow[0]))
+	if totalRows == 0 {
+		return nil
+	}
+
 	every := log.Every(time.Minute)
-	log.Infof(ctx, "backfilling new jobs tables and columns")
+	log.Infof(ctx, "backfilling new jobs tables and columns for %d jobs", totalRows)
 	jobsBackfilled := 0
 	for {
 		candidateRows, err := d.DB.Executor().QueryBufferedEx(ctx, "jobs-backfill-find", nil, sessiondata.NodeUserSessionDataOverride,
@@ -192,7 +203,22 @@ func backfillJobsTablesAndColumns(
 				jobsBackfilled++
 			}
 			if every.ShouldLog() {
-				log.Infof(ctx, "backfilled new columns for %d jobs so far", jobsBackfilled)
+				log.Infof(ctx, "backfilled new columns for %d of %d jobs so far", jobsBackfilled, totalRows)
+				if jobID := d.OptionalJobID; jobID != 0 {
+					frac := float32(jobsBackfilled) / float32(totalRows)
+					if err := d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						// It would be nice to just ProgressStorage(jobID).Set() here, but
+						// the new table is not used by reads until this backfill is marked
+						// as complete, so we still need to use the old LoadJob/WithTxn API.
+						j, err := d.JobRegistry.LoadClaimedJob(ctx, jobID)
+						if err != nil {
+							return err
+						}
+						return j.WithTxn(txn).FractionProgressed(ctx, jobs.FractionUpdater(frac))
+					}); err != nil {
+						log.Warningf(ctx, "failed to update progress for job %d: %v", jobID, err)
+					}
+				}
 			}
 		}
 	}
