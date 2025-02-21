@@ -129,7 +129,8 @@ func runTestRestoreMidSchemaChange(t *testing.T, isSchemaOnly, isClusterRestore 
 // parseMajorVersion parses our major-versioned directory names as if they were
 // full crdb versions.
 func parseMajorVersion(verStr string) (*version.Version, error) {
-	return version.Parse(fmt.Sprintf("v%s.0", verStr))
+	v, err := version.Parse(fmt.Sprintf("v%s.0", verStr))
+	return &v, err
 }
 
 // expectedSCJobCount returns the expected number of schema change jobs

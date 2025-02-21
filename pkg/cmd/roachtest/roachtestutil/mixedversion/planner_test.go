@@ -351,7 +351,7 @@ func Test_maxNumPlanSteps(t *testing.T) {
 // the oldest supported version. Called by TestMain.
 func setDefaultVersions() func() {
 	previousBuildV := clusterupgrade.TestBuildVersion
-	clusterupgrade.TestBuildVersion = buildVersion
+	clusterupgrade.TestBuildVersion = &buildVersion
 
 	previousOldestV := OldestSupportedVersion
 	OldestSupportedVersion = minimumSupported

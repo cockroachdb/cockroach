@@ -66,7 +66,7 @@ func (p *poster) getProbableMilestone(ctx *postCtx) *int {
 		ctx.Printf("unable to parse version from binary version to determine milestone: %s", err)
 		return nil
 	}
-	vstring := fmt.Sprintf("%d.%d", v.Major(), v.Minor())
+	vstring := v.Format("%X.%Y")
 
 	milestones, _, err := p.listMilestones(ctx, p.Org, p.Repo, &github.MilestoneListOptions{
 		State: "open",

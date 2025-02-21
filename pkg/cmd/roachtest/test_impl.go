@@ -682,8 +682,8 @@ func (t *testImpl) IsBuildVersion(minVersion string) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p := vers.PreRelease(); p != "" {
-		panic("cannot specify a prerelease: " + p)
+	if vers.IsPrerelease() {
+		panic("cannot specify a prerelease: " + vers.Format("%P"))
 	}
 	// We append "-0" to the min-version spec so that we capture all
 	// prereleases of the specified version. Otherwise, "v2.1.0" would compare

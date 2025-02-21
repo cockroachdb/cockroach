@@ -828,7 +828,7 @@ func (r *testRunner) runWorker(
 			cockroach:              cockroach[arch],
 			cockroachEA:            cockroachEA[arch],
 			deprecatedWorkload:     workload[arch],
-			buildVersion:           binaryVersion,
+			buildVersion:           &binaryVersion,
 			artifactsDir:           testArtifactsDir,
 			artifactsSpec:          artifactsSpec,
 			versionsBinaryOverride: topt.versionsBinaryOverride,

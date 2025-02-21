@@ -6,6 +6,9 @@
 package version
 
 import (
+	"cmp"
+	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -14,110 +17,263 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Version represents a semantic version; see
-// https://semver.org/spec/v2.0.0.html.
-type Version struct {
-	major      int32
-	minor      int32
-	patch      int32
-	preRelease string
-	metadata   string
-}
+type releasePhase int
 
-// Major returns the major (first) version number.
-func (v *Version) Major() int {
-	return int(v.major)
-}
-
-// Minor returns the minor (second) version number.
-func (v *Version) Minor() int {
-	return int(v.minor)
-}
-
-// Patch returns the patch (third) version number.
-func (v *Version) Patch() int {
-	return int(v.patch)
-}
-
-// PreRelease returns the pre-release version (if present).
-func (v *Version) PreRelease() string {
-	return v.preRelease
-}
-
-// Metadata returns the metadata (if present).
-func (v *Version) Metadata() string {
-	return v.metadata
-}
-
-// String returns the string representation, in the format:
-//
-//	"v1.2.3-beta+md"
-func (v Version) String() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "v%d.%d.%d", v.major, v.minor, v.patch)
-	if v.preRelease != "" {
-		fmt.Fprintf(&b, "-%s", v.preRelease)
-	}
-	if v.metadata != "" {
-		fmt.Fprintf(&b, "+%s", v.metadata)
-	}
-	return b.String()
-}
-
-// versionRE is the regexp that is used to verify that a version string is
-// of the form "vMAJOR.MINOR.PATCH[-PRERELEASE][+METADATA]". This
-// conforms to https://semver.org/spec/v2.0.0.html
-var versionRE = regexp.MustCompile(
-	`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-.]+)?(\+[0-9A-Za-z-.]+|)?$`,
-	// ^major           ^minor           ^patch         ^preRelease       ^metadata
+const (
+	alpha     = releasePhase(1)
+	beta      = releasePhase(2)
+	rc        = releasePhase(3)
+	cloudonly = releasePhase(4)
+	stable    = releasePhase(5)
+	custom    = releasePhase(6)
 )
 
-// numericRE is the regexp used to check if an identifier is numeric.
-var numericRE = regexp.MustCompile(`^(0|[1-9][0-9]*)$`)
+// Version represents a CockroachDB version. Versions consist of two "main" parts:
+// a major version, written as "vX.Y" (which is typically the year and release number
+// within the year), and a patch version (the "Z" in "vX.Y.Z"). There are a number of
+// phases, sub-phases, and other suffixes that can complicate version numbers, and
+// especially correct ordering of version numbers. CRDB versions are not semantic
+// versions! You must use this package to parse and compare versions, in order to
+// account for the variety of versions currently or historically in use.
+type Version struct {
+	// A version is composed of many (possible) fields. See [Parse] for details of
+	// how a version string becomes these many fields. For comparison purposes, versions
+	// are considered equal if they have equal values for all these fields; if not,
+	// the fields are compared in the order listed here, and the earliest field with
+	// a difference determines the relative ordering of two unequal versions.
+	//
+	// The reference order: year, ordinal, patch, phase, phaseOrdinal, phaseSubOrdinal, nightlyOrdinal
+	year, ordinal, patch                          int
+	phase                                         releasePhase
+	phaseOrdinal, phaseSubOrdinal, nightlyOrdinal int
+	customLabel                                   string
+	// raw is the original, unprocessed string this Version was created with
+	raw string
+}
 
-// Parse creates a version from a string. The string must be a valid semantic
-// version (as per https://semver.org/spec/v2.0.0.html) in the format:
+// Major returns the version's MajorVersion (the "vX.Y" part)
+func (v Version) Major() MajorVersion {
+	return MajorVersion{v.year, v.ordinal}
+}
+
+// Patch returns the version's patch number.
+func (v Version) Patch() int {
+	return v.patch
+}
+
+// Format returns a string populated with parts of the version, using placeholders
+// similar to the fmt package. The following placeholders are supported:
 //
-//	"vMINOR.MAJOR.PATCH[-PRERELEASE][+METADATA]".
-//
-// MINOR, MAJOR, and PATCH are numeric values (without any leading 0s).
-// PRERELEASE and METADATA can contain ASCII characters and digits, hyphens and
-// dots.
-func Parse(str string) (*Version, error) {
-	if !versionRE.MatchString(str) {
-		return nil, errors.Errorf("invalid version string '%s'", str)
+// - %X: year
+// - %Y: ordinal
+// - %Z: patch
+// - %P: phase name (one of "alpha", "beta", "rc", "cloudonly")
+// - %p: phase sort order (see the top of version.go)
+// - %o: phase ordinal (eg, the 1 in "v24.1.0-rc.1")
+// - %s: phase sub-ordinal (eg the 2 in "v24.1.0-rc.1-cloudonly.2")
+// - %n: nightly ordinal (eg the 12 in "v24.1.0-12-gabcdef")
+// - %%: literal "%"
+func (v Version) Format(formatStr string) string {
+	placeholderRe := regexp.MustCompile("%[^%XYZpPosn]")
+	placeholders := placeholderRe.FindAllString(formatStr, -1)
+	if len(placeholders) > 0 {
+		panic(fmt.Sprintf("unknown placeholders in format string: %s", strings.Join(placeholders, ", ")))
 	}
 
-	var v Version
-	r := strings.NewReader(str)
-	// Read the major.minor.patch part.
-	_, err := fmt.Fscanf(r, "v%d.%d.%d", &v.major, &v.minor, &v.patch)
-	if err != nil {
-		panic(fmt.Sprintf("invalid version '%s' passed the regex: %s", str, err))
+	phaseName := map[releasePhase]string{
+		alpha:     "alpha",
+		beta:      "beta",
+		rc:        "rc",
+		cloudonly: "cloudonly",
+		custom:    "",
+		stable:    "",
 	}
-	remaining := str[len(str)-r.Len():]
-	// Read the pre-release, if present.
-	if len(remaining) > 0 && remaining[0] == '-' {
-		p := strings.IndexRune(remaining, '+')
-		if p == -1 {
-			p = len(remaining)
+
+	formatStr = strings.ReplaceAll(formatStr, "%X", strconv.Itoa(v.year))
+	formatStr = strings.ReplaceAll(formatStr, "%Y", strconv.Itoa(v.ordinal))
+	formatStr = strings.ReplaceAll(formatStr, "%Z", strconv.Itoa(v.patch))
+	formatStr = strings.ReplaceAll(formatStr, "%p", strconv.Itoa(int(v.phase)))
+	formatStr = strings.ReplaceAll(formatStr, "%P", phaseName[v.phase])
+	formatStr = strings.ReplaceAll(formatStr, "%o", strconv.Itoa(v.phaseOrdinal))
+	formatStr = strings.ReplaceAll(formatStr, "%s", strconv.Itoa(v.phaseSubOrdinal))
+	formatStr = strings.ReplaceAll(formatStr, "%n", strconv.Itoa(v.nightlyOrdinal))
+	formatStr = strings.ReplaceAll(formatStr, "%%", "%")
+	return formatStr
+}
+
+// Value implements [database/sql/driver.Valuer]
+func (v Version) Value() (driver.Value, error) {
+	return v.raw, nil
+}
+
+// Scan implements [database/sql.Scanner]
+func (v *Version) Scan(value interface{}) error {
+	if value == nil {
+		return errors.New("non-nil Version string required")
+	}
+	if str, ok := value.(string); ok {
+		if str == "" {
+			// Parse() doesn't accept empty string, but we allow empty string as
+			// equivalent to a null version
+			*v = Version{}
+		} else {
+			parsed, err := Parse(str)
+			if err != nil {
+				return err
+			}
+			*v = parsed
 		}
-		v.preRelease = remaining[1:p]
-		remaining = remaining[p:]
+		return nil
 	}
-	// Read the metadata, if present.
-	if len(remaining) > 0 {
-		if remaining[0] != '+' {
-			panic(fmt.Sprintf("invalid version '%s' passed the regex", str))
+	return errors.Newf("cannot convert %T to Version", value)
+}
+
+func (v Version) MarshalJSON() ([]byte, error) {
+	jsonData := map[string]string{
+		"$raw": v.raw,
+	}
+	return json.Marshal(jsonData)
+}
+
+func (v *Version) UnmarshalJSON(data []byte) error {
+	var rawMap map[string]string
+	if err := json.Unmarshal(data, &rawMap); err != nil {
+		return err
+	}
+	if rawValue, ok := rawMap["$raw"]; ok {
+		parsed, err := Parse(rawValue)
+		if err != nil {
+			return err
 		}
-		v.metadata = remaining[1:]
+		*v = parsed
+		return nil
 	}
-	return &v, nil
+	return errors.New("missing $raw key in Version JSON")
+}
+
+func (v Version) IsPrerelease() bool {
+	// cloudonly phase *is* stable, it's just not available to SH
+	// customers, and has a special version suffix inside of CC
+	return v.phase < cloudonly && !v.Empty()
+}
+
+func (v Version) IsCustomOrNightlyBuild() bool {
+	return v.nightlyOrdinal > 0
+}
+
+func (v Version) IsCloudOnlyBuild() bool {
+	return v.phase == cloudonly
+}
+
+// String returns the exact string used to create this Version
+func (v Version) String() string {
+	return v.raw
+}
+
+// DisplayName returns a user-friendly version number. DisplayName strips some
+// of the version suffixes, specifically -cloudonly.X and custom build info
+func (v Version) DisplayName() string {
+	if v.Empty() {
+		return ""
+	}
+
+	phaseName := map[releasePhase]string{
+		alpha: "alpha",
+		beta:  "beta",
+		rc:    "rc",
+	}
+
+	if phase, ok := phaseName[v.phase]; ok {
+		return fmt.Sprintf("v%d.%d.%d-%s.%d", v.year, v.ordinal, v.patch, phase, v.phaseOrdinal)
+	}
+
+	return fmt.Sprintf("v%d.%d.%d", v.year, v.ordinal, v.patch)
+}
+
+// Parse creates a version from a string.
+func Parse(str string) (Version, error) {
+	// these are roughly in "how often we expect to see them" order
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`^v(?P<year>[1-9][0-9]*)\.(?P<ordinal>[1-9][0-9]*)\.(?P<patch>(?:[1-9][0-9]*|0))(?:-fips)?$`),
+		regexp.MustCompile(`^v(?P<year>[1-9][0-9]*)\.(?P<ordinal>[1-9][0-9]*)\.(?P<patch>(?:[1-9][0-9]*|0))-(?P<phase>alpha|beta|rc|cloudonly)\.(?P<phaseOrdinal>[0-9]+)(?:-fips)?$`),
+		regexp.MustCompile(`^v(?P<year>[1-9][0-9]*)\.(?P<ordinal>[1-9][0-9]*)\.(?P<patch>(?:[1-9][0-9]*|0))-(?P<nightlyOrdinal>(?:[1-9][0-9]*|0))-g[a-f0-9]+(?:-fips)?$`),
+		regexp.MustCompile(`^v(?P<year>[1-9][0-9]*)\.(?P<ordinal>[1-9][0-9]*)\.(?P<patch>(?:[1-9][0-9]*|0))-(?P<phase>alpha|beta|rc|cloudonly).(?P<phaseOrdinal>[0-9]+)-(?P<nightlyOrdinal>(?:[1-9][0-9]*|0))-g[a-f0-9]+(?:-fips)?$`),
+		regexp.MustCompile(`^v(?P<year>[1-9][0-9]*)\.(?P<ordinal>[1-9][0-9]*)\.(?P<patch>(?:[1-9][0-9]*|0))-(?P<phase>alpha|beta|rc|cloudonly).(?P<phaseOrdinal>[0-9]+)-cloudonly(-rc|\.)(?P<phaseSubOrdinal>(?:[1-9][0-9]*|0))$`),
+		regexp.MustCompile(`^v(?P<year>[1-9][0-9]*)\.(?P<ordinal>[1-9][0-9]*)\.(?P<patch>(?:[1-9][0-9]*|0))-(?P<phase>cloudonly)-rc(?P<phaseOrdinal>[0-9]+)$`),
+		regexp.MustCompile(`^v(?P<year>[1-9][0-9]*)\.(?P<ordinal>[1-9][0-9]*)\.(?P<patch>(?:[1-9][0-9]*|0))-(?P<phase>cloudonly)(?P<phaseOrdinal>[0-9]+)?$`),
+
+		// vX.Y.Z-<anything> will sort after the corresponding "plain" vX.Y.Z version
+		regexp.MustCompile(`^v(?P<year>[1-9][0-9]*)\.(?P<ordinal>[1-9][0-9]*)\.(?P<patch>(?:[1-9][0-9]*|0))-(?P<customLabel>[-a-zA-Z0-9\.\+]+)$`),
+
+		// sha256:<hash>:latest-vX.Y-build will sort just after vX.Y.0, but before vX.Y.1
+		regexp.MustCompile(`^sha256:(?P<customLabel>[^:]+):latest-v(?P<year>[1-9][0-9]*)\.(?P<ordinal>[1-9][0-9]*)-build$`),
+	}
+
+	preReleasePhase := map[string]releasePhase{
+		"alpha":     alpha,
+		"beta":      beta,
+		"rc":        rc,
+		"cloudonly": cloudonly,
+	}
+
+	submatch := func(pat *regexp.Regexp, matches []string, group string) string {
+		index := pat.SubexpIndex(group)
+		if index == -1 {
+			return ""
+		}
+		return matches[index]
+	}
+
+	v := Version{raw: str, phase: stable}
+
+	for _, pat := range patterns {
+		if pat.MatchString(str) {
+			matches := pat.FindStringSubmatch(str)
+
+			// all patterns have vX.Y
+			v.year, _ = strconv.Atoi(submatch(pat, matches, "year"))
+			v.ordinal, _ = strconv.Atoi(submatch(pat, matches, "ordinal"))
+
+			// most have vX.Y.Z
+			if patch := submatch(pat, matches, "patch"); patch != "" {
+				v.patch, _ = strconv.Atoi(patch)
+			}
+
+			// handle -alpha.1, -rc.3, etc
+			if phase := submatch(pat, matches, "phase"); phase != "" {
+				v.phase = preReleasePhase[phase]
+
+				if ord := submatch(pat, matches, "phaseOrdinal"); ord != "" {
+					v.phaseOrdinal, _ = strconv.Atoi(ord)
+				}
+				// -beta.1-cloudonly-rc1
+				if subOrd := submatch(pat, matches, "phaseSubOrdinal"); subOrd != "" {
+					v.phaseSubOrdinal, _ = strconv.Atoi(subOrd)
+				}
+			}
+
+			// nightly/custom builds, eg -10-g7890abcd
+			if ord := submatch(pat, matches, "nightlyOrdinal"); ord != "" {
+				v.nightlyOrdinal, _ = strconv.Atoi(ord)
+			}
+
+			// arbitrary/custom build tags; we have these old versions and need to parse them
+			if customLabel := submatch(pat, matches, "customLabel"); customLabel != "" {
+				v.phase = custom
+				v.customLabel = customLabel
+			}
+
+			return v, nil
+		}
+	}
+
+	err := errors.Errorf("invalid version string '%s'", str)
+	return Version{}, err
 }
 
 // MustParse is like Parse but panics on any error. Recommended as an
 // initializer for global values.
-func MustParse(str string) *Version {
+func MustParse(str string) Version {
 	v, err := Parse(str)
 	if err != nil {
 		panic(err)
@@ -125,108 +281,71 @@ func MustParse(str string) *Version {
 	return v
 }
 
-func cmpVal(a, b int32) int {
-	if a > b {
-		return +1
+// Compare returns -1, 0, or +1 indicating the relative ordering of versions.
+//
+// CRDB versions are not semantic versions. SemVer treats suffixes after the
+// major.minor.patch quite generically; we have specific, known cases that have
+// well-defined ordering requirements:
+//
+// There are 4 known named prerelease phases. In order, they are: alpha, beta,
+// rc, cloudonly. Pre-release versions will look like "v24.1.0-cloudonly.1"
+// or "v23.2.0-rc.1".
+//
+// Additionally, we have custom builds, which have suffixes like "-<n>-g<hex>",
+// where <n> is an integer commit count past the branch point, and <hex> is
+// the git SHA. These versions sort AFTER the corresponding "normal" version,
+// eg "v24.1.0-1-g9cbe7c5281" is AFTER "v24.1.0".
+//
+// A version can have both a pre-release and custom build suffix, like
+// "v24.1.0-rc.2-14-g<hex>". In these cases, the pre-release portion has precedence,
+// so this example would sort after v24.1.0-rc.2, but before v24.1.0-rc.3.
+func (v Version) Compare(w Version) int {
+	if rslt := cmp.Compare(v.year, w.year); rslt != 0 {
+		return rslt
 	}
-	if a < b {
-		return -1
+	if rslt := cmp.Compare(v.ordinal, w.ordinal); rslt != 0 {
+		return rslt
+	}
+	if rslt := cmp.Compare(v.patch, w.patch); rslt != 0 {
+		return rslt
+	}
+	if rslt := cmp.Compare(v.phase, w.phase); rslt != 0 {
+		return rslt
+	}
+	if rslt := cmp.Compare(v.phaseOrdinal, w.phaseOrdinal); rslt != 0 {
+		return rslt
+	}
+	if rslt := cmp.Compare(v.phaseSubOrdinal, w.phaseSubOrdinal); rslt != 0 {
+		return rslt
+	}
+	if rslt := cmp.Compare(v.nightlyOrdinal, w.nightlyOrdinal); rslt != 0 {
+		return rslt
+	}
+	if rslt := cmp.Compare(v.customLabel, w.customLabel); rslt != 0 {
+		return rslt
 	}
 	return 0
 }
 
-// Compare returns -1, 0, or +1 indicating the relative ordering of versions.
-func (v *Version) Compare(w *Version) int {
-	if v := cmpVal(v.major, w.major); v != 0 {
-		return v
-	}
-	if v := cmpVal(v.minor, w.minor); v != 0 {
-		return v
-	}
-	if v := cmpVal(v.patch, w.patch); v != 0 {
-		return v
-	}
-	if v.preRelease != w.preRelease {
-		if v.preRelease == "" && w.preRelease != "" {
-			// 1.0.0 is greater than 1.0.0-alpha.
-			return 1
-		}
-		if v.preRelease != "" && w.preRelease == "" {
-			// 1.0.0-alpha is less than 1.0.0.
-			return -1
-		}
+func (v Version) Equals(w Version) bool {
+	return v.Compare(w) == 0
+}
 
-		// Quoting from https://semver.org/spec/v2.0.0.html:
-		//   Precedence for two pre-release versions with the same major, minor, and
-		//   patch version MUST be determined by comparing each dot separated
-		//   identifier from left to right until a difference is found as follows:
-		//    (1) Identifiers consisting of only digits are compared numerically.
-		//    (2) identifiers with letters or hyphens are compared lexically in ASCII
-		//        sort order.
-		//    (3) Numeric identifiers always have lower precedence than non-numeric
-		//        identifiers.
-		//    (4) A larger set of pre-release fields has a higher precedence than a
-		//        smaller set, if all of the preceding identifiers are equal.
-		//
-		vs := strings.Split(v.preRelease, ".")
-		ws := strings.Split(w.preRelease, ".")
-		for ; len(vs) > 0 && len(ws) > 0; vs, ws = vs[1:], ws[1:] {
-			vStr, wStr := vs[0], ws[0]
-			if vStr == wStr {
-				continue
-			}
-			vNumeric := numericRE.MatchString(vStr)
-			wNumeric := numericRE.MatchString(wStr)
-			switch {
-			case vNumeric && wNumeric:
-				// Case 1.
-				vVal, err := strconv.Atoi(vStr)
-				if err != nil {
-					panic(err)
-				}
-				wVal, err := strconv.Atoi(wStr)
-				if err != nil {
-					panic(err)
-				}
-				if vVal == wVal {
-					panic("different strings yield the same numbers")
-				}
-				if vVal < wVal {
-					return -1
-				}
-				return 1
+func (v Version) LessThan(w Version) bool {
+	return v.Compare(w) < 0
+}
 
-			case vNumeric:
-				// Case 3.
-				return -1
+// Empty returns true if the version is the zero value.
+func (v Version) Empty() bool {
+	return v.Equals(Version{})
+}
 
-			case wNumeric:
-				// Case 3.
-				return 1
-
-			default:
-				// Case 2.
-				if vStr < wStr {
-					return -1
-				}
-				return 1
-			}
-		}
-
-		if len(vs) > 0 {
-			// Case 4.
-			return +1
-		}
-		if len(ws) > 0 {
-			// Case 4.
-			return -1
-		}
-	}
-
-	return 0
+// Convenience wrapper for v.Major.Compare(w.Major())
+func (v Version) CompareSeries(w Version) int {
+	return v.Major().Compare(w.Major())
 }
 
 // AtLeast returns true if v >= w.
-func (v *Version) AtLeast(w *Version) bool {
+func (v Version) AtLeast(w Version) bool {
 	return v.Compare(w) >= 0
 }

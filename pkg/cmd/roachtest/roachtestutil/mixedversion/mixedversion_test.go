@@ -371,7 +371,7 @@ func Test_randomPredecessor(t *testing.T) {
 // "current version". Returns a function that resets that variable.
 func withTestBuildVersion(v string) func() {
 	testBuildVersion := version.MustParse(v)
-	clusterupgrade.TestBuildVersion = testBuildVersion
+	clusterupgrade.TestBuildVersion = &testBuildVersion
 	return func() { clusterupgrade.TestBuildVersion = nil }
 }
 
@@ -379,7 +379,9 @@ func TestSupportsSkipUpgradeTo(t *testing.T) {
 	expect := func(verStr string, expected bool) {
 		t.Helper()
 		v := clusterupgrade.MustParseVersion(verStr)
-		if r := clusterversion.Latest.ReleaseSeries(); int(r.Major) == v.Major() && int(r.Minor) == v.Minor() {
+		r := clusterversion.Latest.ReleaseSeries()
+		currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
+		if currentMajor.Equals(v.Version.Major()) {
 			// We have to special case the current series, to allow for bumping the
 			// min supported version separately from the current version.
 			expected = len(clusterversion.SupportedPreviousReleases()) > 1

@@ -8,46 +8,56 @@ package version
 import (
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetters(t *testing.T) {
-	v, err := Parse("v1.2.3-beta+md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	str := fmt.Sprintf(
-		"%d %d %d %s %s", v.Major(), v.Minor(), v.Patch(), v.PreRelease(), v.Metadata(),
-	)
-	exp := "1 2 3 beta md"
-	if str != exp {
-		t.Errorf("got '%s', expected '%s'", str, exp)
-	}
+	v, err := Parse("v1.2.3-beta.1")
+	require.NoError(t, err)
+
+	require.Equal(t, MajorVersion{1, 2}, v.Major())
+	require.Equal(t, 3, v.Patch())
+
+	require.True(t, v.IsPrerelease())
+	require.False(t, v.IsCloudOnlyBuild())
+	require.False(t, v.IsCustomOrNightlyBuild())
 }
 
 func TestValid(t *testing.T) {
 	testData := []string{
-		"v0.0.0",
-		"v0.0.1",
-		"v0.1.0",
-		"v1.0.0",
-		"v1.0.0-alpha",
-		"v1.0.0-beta.20190101",
-		"v1.0.0-rc1-with-hyphen",
-		"v1.0.0-rc2.dot.dot",
-		"v1.2.3+metadata",
-		"v1.2.3+metadata-with-hyphen",
-		"v1.2.3+metadata.with.dots",
+		// a subset of real version strings
+		"v19.1.11",
+		"v21.1.0-1-g9cbe7c5281",
+		"v22.2.10-1-g7b8322d67c-fips",
+		"v22.2.10-fips",
+		"v23.1.0-alpha.0",
+		"v23.1.0-alpha.1-1643-gdf8e73734e-fips",
+		"v23.1.0-alpha.4-fips",
+		"v23.1.11-cloudonly",
+		"v23.1.11-cloudonly2",
+		"v23.1.12-cloudonly-rc1",
+		"v23.2.0-beta.1-cloudonly-rc1",
+		"v23.2.0-alpha.00000000-4376-g7450647f213",
+
+		// we may generate a cloudonly pre-release, for testing purposes
+		"v24.3.0-alpha.1-cloudonly.1",
+
+		// some version strings wouldn't be considered valid, but have exist
+		// historically existed, so we have to allow them. see the ordering
+		// and Compare() tests for more on how these are handled
+		"v23.1.0-swenson-mr-4",
+
+		// these may not actually exist, but are parseable
 		"v1.1.2-beta.20190101+metadata",
 		"v1.2.3-rc1-with-hyphen+metadata-with-hyphen",
 	}
 	for _, str := range testData {
-		v, err := Parse(str)
-		if err != nil {
-			t.Errorf("%s: %s", str, err)
-		}
-		if v.String() != str {
-			t.Errorf("%s roundtripped to %s", str, v.String())
-		}
+		t.Run(str, func(t *testing.T) {
+			v, err := Parse(str)
+			require.NoError(t, err)
+			require.Equal(t, str, v.String())
+		})
 	}
 }
 
@@ -70,11 +80,26 @@ func TestInvalid(t *testing.T) {
 		"v01.2.3",
 		"v1.02.3",
 		"v1.2.03",
+
+		// these were formerly considered valid, and are valid SemVer versions; however
+		// CRDB versions are not semantic versions, so these are now considered invalid
+		"v0.0.0",
+		"v0.0.1",
+		"v0.1.0",
+		"v1.0.0",
+		"v1.0.0-alpha",
+		"v1.0.0-beta.20190101",
+		"v1.0.0-rc1-with-hyphen",
+		"v1.0.0-rc2.dot.dot",
+		"v1.2.3+metadata",
+		"v1.2.3+metadata-with-hyphen",
+		"v1.2.3+metadata.with.dots",
 	}
 	for _, str := range testData {
-		if _, err := Parse(str); err == nil {
-			t.Errorf("expected error for %s", str)
-		}
+		t.Run(str, func(t *testing.T) {
+			_, err := Parse(str)
+			require.Error(t, err)
+		})
 	}
 }
 
@@ -83,90 +108,35 @@ func TestCompare(t *testing.T) {
 		a, b string
 		cmp  int
 	}{
-		{"v1.0.0", "v1.0.0", 0},
-		{"v1.0.0", "v1.0.1", -1},
+		// Typical comparison scenarios of common types of versions
+		{"v1.1.0", "v1.1.0", 0},
+		{"v1.1.0", "v1.1.1", -1},
 		{"v1.2.3", "v1.3.0", -1},
-		{"v1.2.3", "v2.0.0", -1},
-		{"v1.0.0+metadata", "v1.0.0", 0},
-		{"v1.0.0+metadata", "v1.0.0+other.metadata", 0},
-		{"v1.0.1+metadata", "v1.0.0+other.metadata", +1},
-		{"v1.0.0", "v1.0.0-alpha", +1},
-		{"v1.0.0", "v1.0.0-rc2", +1},
-		{"v1.0.0-alpha", "v1.0.0-beta", -1},
-		{"v1.0.0-beta", "v1.0.0-rc.2", -1},
-		{"v1.0.0-rc.2", "v1.0.0-rc.10", -1},
-		{"v1.0.1", "v1.0.0-alpha", +1},
+		{"v1.2.3", "v2.1.0", -1},
+		{"v1.1.0", "v1.1.0-alpha.1", +1},
+		{"v1.1.0", "v1.1.0-rc.2", +1},
+		{"v1.1.0-alpha.1", "v1.1.0-beta.1", -1},
+		{"v1.1.0-beta.1", "v1.1.0-rc.2", -1},
+		{"v1.1.0-rc.2", "v1.1.0-rc.10", -1},
+		{"v1.1.1", "v1.1.0-alpha.1", +1},
 
-		// Tests below taken from coreos/go-semver, which carries the following
-		// copyright:
-		//
-		// Copyright 2013-2015 CoreOS, Inc.
-		// Copyright 2018 The Cockroach Authors.
-		//
-		// Licensed under the Apache License, Version 2.0 (the "License");
-		// you may not use this file except in compliance with the License.
-		// You may obtain a copy of the License at
-		//
-		//     http://www.apache.org/licenses/LICENSE-2.0
-		//
-		// Unless required by applicable law or agreed to in writing, software
-		// distributed under the License is distributed on an "AS IS" BASIS,
-		// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-		// See the License for the specific language governing permissions and
-		// limitations under the License.
-		{"v0.0.0", "v0.0.0-foo", +1},
-		{"v0.0.1", "v0.0.0", +1},
-		{"v1.0.0", "v0.9.9", +1},
-		{"v0.10.0", "v0.9.0", +1},
-		{"v0.99.0", "v0.10.0", +1},
-		{"v2.0.0", "v1.2.3", +1},
-		{"v0.0.0", "v0.0.0-foo", +1},
-		{"v0.0.1", "v0.0.0", +1},
-		{"v1.0.0", "v0.9.9", +1},
-		{"v0.10.0", "v0.9.0", +1},
-		{"v0.99.0", "v0.10.0", +1},
-		{"v2.0.0", "v1.2.3", +1},
-		{"v0.0.0", "v0.0.0-foo", +1},
-		{"v0.0.1", "v0.0.0", +1},
-		{"v1.0.0", "v0.9.9", +1},
-		{"v0.10.0", "v0.9.0", +1},
-		{"v0.99.0", "v0.10.0", +1},
-		{"v2.0.0", "v1.2.3", +1},
-		{"v1.2.3", "v1.2.3-asdf", +1},
-		{"v1.2.3", "v1.2.3-4", +1},
-		{"v1.2.3", "v1.2.3-4-foo", +1},
-		{"v1.2.3-5-foo", "v1.2.3-5", +1},
-		{"v1.2.3-5", "v1.2.3-4", +1},
-		{"v1.2.3-5-foo", "v1.2.3-5-Foo", +1},
-		{"v3.0.0", "v2.7.2+asdf", +1},
-		{"v3.0.0+foobar", "v2.7.2", +1},
-		{"v1.2.3-a.10", "v1.2.3-a.5", +1},
-		{"v1.2.3-a.b", "v1.2.3-a.5", +1},
-		{"v1.2.3-a.b", "v1.2.3-a", +1},
-		{"v1.2.3-a.b.c.10.d.5", "v1.2.3-a.b.c.5.d.100", +1},
-		{"v1.0.0", "v1.0.0-rc.1", +1},
-		{"v1.0.0-rc.2", "v1.0.0-rc.1", +1},
-		{"v1.0.0-rc.1", "v1.0.0-beta.11", +1},
-		{"v1.0.0-beta.11", "v1.0.0-beta.2", +1},
-		{"v1.0.0-beta.2", "v1.0.0-beta", +1},
-		{"v1.0.0-beta", "v1.0.0-alpha.beta", +1},
-		{"v1.0.0-alpha.beta", "v1.0.0-alpha.1", +1},
-		{"v1.0.0-alpha.1", "v1.0.0-alpha", +1},
+		// When versions have unrecognized custom suffixes, they are compared lexicographically.
+		// A version with any unrecognized custom suffix is considered earlier than the same version
+		// with no suffix, since these suffixes are most commonly used for odd pre-release cases
+		{"v1.2.3", "v1.2.3-foo", -1},
+		{"v1.2.3", "v1.2.3-4", -1},
+		{"v1.2.3", "v1.2.3-4-foo", -1},
+		{"v1.2.3-4", "v1.2.3-4-foo", -1},
 	}
 	for _, tc := range testData {
-		a, err := Parse(tc.a)
-		if err != nil {
-			t.Fatal(err)
-		}
-		b, err := Parse(tc.b)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if cmp := a.Compare(b); cmp != tc.cmp {
-			t.Errorf("'%s' vs '%s': expected %d, got %d", tc.a, tc.b, tc.cmp, cmp)
-		}
-		if cmp := b.Compare(a); cmp != -tc.cmp {
-			t.Errorf("'%s' vs '%s': expected %d, got %d", tc.b, tc.a, -tc.cmp, cmp)
-		}
+		t.Run(fmt.Sprintf("%s vs %s", tc.a, tc.b), func(t *testing.T) {
+			a, err := Parse(tc.a)
+			require.NoError(t, err)
+			b, err := Parse(tc.b)
+			require.NoError(t, err)
+
+			require.Equal(t, tc.cmp, a.Compare(b))
+			require.Equal(t, -tc.cmp, b.Compare(a))
+		})
 	}
 }
