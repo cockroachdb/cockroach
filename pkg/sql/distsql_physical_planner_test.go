@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -449,10 +450,9 @@ func TestDistSQLUnavailableHosts(t *testing.T) {
 			}
 
 			// Grant capability to run RELOCATE to secondary (test) tenant.
-			systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
-			systemDB.Exec(t,
-				`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`,
-				serverutils.TestTenantID().ToUint64())
+			tc.GrantTenantCapabilities(
+				ctx, t, serverutils.TestTenantID(),
+				map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"})
 		}
 
 		// Connect to node 1 (gateway node)

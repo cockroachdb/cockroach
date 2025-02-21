@@ -135,6 +135,11 @@ func (tc *TestCluster) StorageLayer(idx int) serverutils.StorageLayerInterface {
 	return tc.Server(idx).StorageLayer()
 }
 
+// DefaultTenantDeploymentMode implements TestClusterInterface.
+func (tc *TestCluster) DefaultTenantDeploymentMode() serverutils.DeploymentMode {
+	return tc.Server(0).DeploymentMode()
+}
+
 // stopServers stops the stoppers for each individual server in the cluster.
 // This method ensures that servers that were previously stopped explicitly are
 // not double-stopped.
@@ -2080,6 +2085,17 @@ func (tc *TestCluster) SplitTable(
 			}
 		}
 	}
+}
+
+// GrantTenantCapabilities implements TestClusterInterface.
+func (tc *TestCluster) GrantTenantCapabilities(
+	ctx context.Context,
+	t serverutils.TestFataler,
+	tenID roachpb.TenantID,
+	targetCaps map[tenantcapabilities.ID]string,
+) {
+	require.NoError(t, tc.Server(0).TenantController().GrantTenantCapabilities(ctx, tenID, targetCaps))
+	tc.WaitForTenantCapabilities(t, tenID, targetCaps)
 }
 
 // WaitForTenantCapabilities implements TestClusterInterface.
