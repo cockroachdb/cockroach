@@ -1248,9 +1248,8 @@ func makeTenantSQLServerArgs(
 
 	sTS := ts.MakeTenantServer(baseCfg.AmbientCtx, tenantConnect, rpcContext.TenantID, registry)
 
-	systemConfigWatcher := systemconfigwatcher.NewWithAdditionalProvider(
+	systemConfigWatcher := systemconfigwatcher.New(
 		keys.MakeSQLCodec(sqlCfg.TenantID), clock, rangeFeedFactory, &baseCfg.DefaultZoneConfig,
-		tenantConnect,
 	)
 
 	// Define structures which have circular dependencies. The underlying structures
