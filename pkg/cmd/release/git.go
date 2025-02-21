@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
@@ -328,4 +329,85 @@ func fileContent(ref string, f string) (string, error) {
 		return "", fmt.Errorf("git cat-file %s:%s: %w, `%s`", ref, f, err, out)
 	}
 	return string(out), nil
+}
+
+// isAncestor checks if commit1 is an ancestor of commit2.
+// Returns true if commit1 is an ancestor of commit2, false if not, and error if the command fails.
+func isAncestor(commit1, commit2 string) (bool, error) {
+	cmd := exec.Command("git", "merge-base", "--is-ancestor", commit1, commit2)
+	err := cmd.Run()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return false, nil
+		}
+		return false, fmt.Errorf("checking ancestry relationship between %s and %s: %w", commit1, commit2, err)
+	}
+	return true, nil
+}
+
+// mergeCreatesContentChanges checks if a merge commit introduces changes to the branch.
+// Returns true if the merge commit introduces changes, false if not, and error if the command fails.
+func mergeCreatesContentChanges(branch, intoBranch string, ignoredPatterns []string) (bool, error) {
+	// Make sure the working directory is clean
+	statusCmd := exec.Command("git", "status", "--porcelain")
+	if out, err := statusCmd.Output(); err != nil {
+		return false, fmt.Errorf("checking git status: %w", err)
+	} else if len(out) > 0 {
+		return false, fmt.Errorf("working directory is not clean")
+	}
+
+	// Checkout the branch to merge into
+	checkoutCmd := exec.Command("git", "checkout", intoBranch)
+	if err := checkoutCmd.Run(); err != nil {
+		return false, fmt.Errorf("running checkout: %w", err)
+	}
+
+	// Run the merge command without committing and without fast-forward. If
+	// fast-forward is allowed and the current branch can fast forward, there
+	// will be no merge commit, so the --no-commit option won't work.
+	// We need to use the ours strategy to avoid conflicts. In the next step we
+	// will checkout the files from the branch we are merging, excluding the
+	// ignored files (like version.txt).
+	mergeCmd := exec.Command("git", "merge", "--no-commit", "--no-ff", "-X", "ours", branch)
+	if err := mergeCmd.Run(); err != nil {
+		return false, fmt.Errorf("running merge: %w", err)
+	}
+	coCmd := exec.Command("git", "checkout", branch, "--", ".")
+	for _, pattern := range ignoredPatterns {
+		coCmd.Args = append(coCmd.Args, ":!"+pattern)
+	}
+	if err := coCmd.Run(); err != nil {
+		return false, fmt.Errorf("running checkout: %w", err)
+	}
+	if err := exec.Command("git", "add", ".").Run(); err != nil {
+		return false, fmt.Errorf("running add: %w", err)
+	}
+
+	// Check if there are any content changes. The exit code will be analyzed to
+	// determine if there are changes after we clean up the current repo.
+	diffCmd := exec.Command("git", "diff", "--staged", "--quiet")
+	err := diffCmd.Run()
+
+	// Always abort the merge attempt to clean up
+	abortCmd := exec.Command("git", "merge", "--abort")
+	if abortErr := abortCmd.Run(); abortErr != nil {
+		return false, fmt.Errorf("aborting merge: %w", abortErr)
+	}
+	masterCheckoutCmd := exec.Command("git", "checkout", "master")
+	if err := masterCheckoutCmd.Run(); err != nil {
+		return false, fmt.Errorf("running master checkout: %w", err)
+	}
+
+	// If diff returns no error (exit code 0), there are no changes
+	// If diff returns error with exit code 1, there are changes
+	// Any other error is unexpected
+	if err == nil {
+		return false, nil // No changes
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return true, nil // Has changes
+	}
+	return false, fmt.Errorf("checking diff: %w", err)
 }
