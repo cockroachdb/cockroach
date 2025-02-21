@@ -409,7 +409,7 @@ func TestCancelWithSubquery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, conn, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
