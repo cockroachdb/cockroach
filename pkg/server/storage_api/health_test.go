@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestHealthAPI(t *testing.T) {
@@ -123,16 +122,14 @@ func TestLivenessAPI(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
-	// The liveness endpoint needs a special tenant capability.
-	if tc.Server(0).TenantController().StartedDefaultTestTenant() {
-		// Enable access to the nodes endpoint for the test tenant.
-		_, err := tc.SystemLayer(0).SQLConn(t).Exec(
-			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
-		require.NoError(t, err)
+	ctx := context.Background()
 
-		tc.WaitForTenantCapabilities(t, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanViewNodeInfo: "true",
-		})
+	// The liveness endpoint needs a special tenant capability.
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		// Enable access to the nodes endpoint for the test tenant.
+		tc.GrantTenantCapabilities(
+			ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilities.ID]string{tenantcapabilities.CanViewNodeInfo: "true"})
 	}
 
 	ts := tc.Server(0).ApplicationLayer()

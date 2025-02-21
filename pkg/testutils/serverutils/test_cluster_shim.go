@@ -250,6 +250,11 @@ type TestClusterInterface interface {
 	// cluster.
 	StorageLayer(idx int) StorageLayerInterface
 
+	// DefaultTenantDeploymentMode returns the deployment mode of the default
+	// server or tenant, which can be single-tenant (system-only),
+	// shared-process, or external-process.
+	DefaultTenantDeploymentMode() DeploymentMode
+
 	// SplitTable splits a range in the table, creates a replica for the right
 	// side of the split on TargetNodeIdx, and moves the lease for the right
 	// side of the split to TargetNodeIdx for each SplitPoint. This forces the
@@ -258,6 +263,17 @@ type TestClusterInterface interface {
 	// TODO(radu): we should verify that the queries in tests using SplitTable
 	// are indeed distributed as intended.
 	SplitTable(t TestFataler, desc catalog.TableDescriptor, sps []SplitPoint)
+
+	// GrantTenantCapabilities grants a capability to a tenant and waits until all
+	// servers have the in-memory cache reflects the change.
+	//
+	// Note: There is no need to call WaitForTenantCapabilities separately.
+	GrantTenantCapabilities(
+		context.Context,
+		TestFataler,
+		roachpb.TenantID,
+		map[tenantcapabilities.ID]string,
+	)
 
 	// WaitForTenantCapabilities waits until all servers have the specified
 	// tenant capabilities for the specified tenant ID.
