@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -23,7 +22,7 @@ func TestTableRefs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -40,7 +39,7 @@ CREATE INDEX bc ON test.t(b, c);
 	}
 
 	// Retrieve the numeric descriptors.
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 	tID := tableDesc.GetID()
 	var aID, bID, cID descpb.ColumnID
 	for _, c := range tableDesc.PublicColumns() {
@@ -55,7 +54,7 @@ CREATE INDEX bc ON test.t(b, c);
 	}
 
 	// Retrieve the numeric descriptors.
-	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "hidden")
 	tIDHidden := tableDesc.GetID()
 	var rowIDHidden descpb.ColumnID
 	for _, c := range tableDesc.PublicColumns() {
@@ -78,7 +77,7 @@ ALTER TABLE test.t DROP COLUMN xx;
 		t.Fatal(err)
 	}
 
-	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 	pkID := tableDesc.GetPrimaryIndexID()
 	secID := tableDesc.PublicNonPrimaryIndexes()[0].GetID()
 
