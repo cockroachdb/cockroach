@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
@@ -2427,8 +2426,6 @@ func (n *Node) GossipSubscription(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
-	_, isSecondaryTenant := roachpb.ClientTenantFromContext(ctx)
-
 	// Register a callback for each of the requested patterns. We don't want to
 	// block the gossip callback goroutine on a slow consumer, so we instead
 	// handle all communication asynchronously. We could pick a channel size and
@@ -2439,26 +2436,12 @@ func (n *Node) GossipSubscription(
 	entC := make(chan *kvpb.GossipSubscriptionEvent, 256)
 	entCClosed := false
 	var callbackMu syncutil.Mutex
-	var systemConfigUpdateCh <-chan struct{}
 	for i := range args.Patterns {
 		pattern := args.Patterns[i] // copy for closure
 		switch pattern {
-		// Note that we need to support clients subscribing to the system config
-		// over this RPC even if the system config is no longer stored in gossip
-		// in the host cluster. To achieve this, we special-case the system config
-		// key and hook it up to the node's SystemConfigProvider. We need to
-		// support this because tenant clusters are upgraded *after* the system
-		// tenant of the host cluster. Tenant sql servers will still be expecting
-		// this information to drive GC TTLs for their GC jobs. It's worth noting
-		// that those zone configurations won't really map to reality, but that's
-		// okay, we just need to tell the pods something.
-		//
-		// TODO(ajwerner): Remove support for the system config key in the
-		// in 22.2, or leave it and make it a no-op.
 		case gossip.KeyDeprecatedSystemConfig:
-			var unregister func()
-			systemConfigUpdateCh, unregister = n.storeCfg.SystemConfigProvider.RegisterSystemConfigChannel()
-			defer unregister()
+			// This case must remain as a no-op until we entirely remove
+			// gossip.KeyDeprecatedSystemConfig.
 		default:
 			callback := func(key string, content roachpb.Value) {
 				callbackMu.Lock()
@@ -2488,29 +2471,8 @@ func (n *Node) GossipSubscription(
 			defer unregister()
 		}
 	}
-	handleSystemConfigUpdate := func() error {
-		cfg := n.storeCfg.SystemConfigProvider.GetSystemConfig()
-		ents := cfg.SystemConfigEntries
-		if isSecondaryTenant {
-			ents = kvtenant.GossipSubscriptionSystemConfigMask.Apply(ents)
-		}
-		var event kvpb.GossipSubscriptionEvent
-		var content roachpb.Value
-		if err := content.SetProto(&ents); err != nil {
-			event.Error = kvpb.NewError(errors.Wrap(err, "could not marshal system config"))
-		} else {
-			event.Key = gossip.KeyDeprecatedSystemConfig
-			event.Content = content
-			event.PatternMatched = gossip.KeyDeprecatedSystemConfig
-		}
-		return stream.Send(&event)
-	}
 	for {
 		select {
-		case <-systemConfigUpdateCh:
-			if err := handleSystemConfigUpdate(); err != nil {
-				return errors.Wrap(err, "handling system config update")
-			}
 		case e, ok := <-entC:
 			if !ok {
 				// The consumer was not keeping up with gossip updates, so its

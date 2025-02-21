@@ -658,19 +658,15 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: noError,
 			},
 			{
-				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"system-db"}},
-				expErr: noError,
-			},
-			{
 				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"table-stat-added"}},
 				expErr: `requested pattern "table-stat-added" not permitted`,
 			},
 			{
-				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "system-db"}},
+				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "store:.*"}},
 				expErr: noError,
 			},
 			{
-				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "system-db", "table-stat-added"}},
+				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "store:.*", "table-stat-added"}},
 				expErr: `requested pattern "table-stat-added" not permitted`,
 			},
 		},
