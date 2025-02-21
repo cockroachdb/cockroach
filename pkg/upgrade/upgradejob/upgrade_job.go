@@ -95,6 +95,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			SessionData:        execCtx.SessionData(),
 			ClusterID:          execCtx.ExtendedEvalContext().ClusterID,
 			TenantInfoAccessor: mc.SystemDeps().TenantInfoAccessor,
+			OptionalJobID:      r.j.ID(),
 		}
 
 		tenantDeps.SchemaResolverConstructor = func(
