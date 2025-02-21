@@ -51,6 +51,9 @@ func LoadFeatures(t testing.TB, count int) vector.Set {
 
 // RoundFloats rounds all float32 values in the slice using the given precision.
 func RoundFloats(s []float32, prec int) []float32 {
+	if len(s) == 0 {
+		return s
+	}
 	t := make([]float32, len(s))
 	copy(t, s)
 	num32.Round(t, prec)

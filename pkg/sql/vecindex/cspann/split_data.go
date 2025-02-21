@@ -8,7 +8,6 @@ package cspann
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
@@ -17,7 +16,7 @@ import (
 type splitData struct {
 	// Partition contains a subset of the quantized vectors and child keys from
 	// the splitting partition.
-	Partition *vecstore.Partition
+	Partition *Partition
 	// Vectors is the subset of full-size vectors from the splitting partition.
 	// The vectors are in randomized format.
 	Vectors vector.Set
@@ -33,14 +32,14 @@ func (s *splitData) Init(
 	quantizer quantize.Quantizer,
 	vectors vector.Set,
 	oldCentroidDistances []float32,
-	childKeys []vecstore.ChildKey,
-	valueBytes []vecstore.ValueBytes,
-	level vecstore.Level,
+	childKeys []ChildKey,
+	valueBytes []ValueBytes,
+	level Level,
 ) {
 	s.Vectors = vectors
 	s.OldCentroidDistances = oldCentroidDistances
 	quantizedSet := quantizer.Quantize(w, s.Vectors)
-	s.Partition = vecstore.NewPartition(quantizer, quantizedSet, childKeys, valueBytes, level)
+	s.Partition = NewPartition(quantizer, quantizedSet, childKeys, valueBytes, level)
 }
 
 // ReplaceWithLast removes the vector at the given offset in the set, replacing

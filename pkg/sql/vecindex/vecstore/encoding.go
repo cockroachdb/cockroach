@@ -8,13 +8,14 @@ package vecstore
 import (
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
 // EncodePartitionMetadata encodes the metadata for a partition.
-func EncodePartitionMetadata(level Level, centroid vector.T) ([]byte, error) {
+func EncodePartitionMetadata(level cspann.Level, centroid vector.T) ([]byte, error) {
 	// The encoding consists of 8 bytes for the level, and a 4-byte length,
 	// followed by 4 bytes for each dimension in the vector.
 	encMetadataSize := 8 + (4 * (len(centroid) + 1))
@@ -45,20 +46,20 @@ func EncodeUnquantizedVector(
 }
 
 // EncodePartitionKey encodes a partition key into the given byte slice.
-func EncodePartitionKey(appendTo []byte, key PartitionKey) []byte {
+func EncodePartitionKey(appendTo []byte, key cspann.PartitionKey) []byte {
 	return encoding.EncodeUvarintAscending(appendTo, uint64(key))
 }
 
 // EncodedPartitionKeyLen returns the number of bytes needed to encode the
 // partition key.
-func EncodedPartitionKeyLen(key PartitionKey) int {
+func EncodedPartitionKeyLen(key cspann.PartitionKey) int {
 	return encoding.EncLenUvarintAscending(uint64(key))
 }
 
 // EncodeChildKey encodes a child key into the given byte slice. The "appendTo"
 // slice is expected to be the prefix shared between all KV entries for a
 // partition.
-func EncodeChildKey(appendTo []byte, key ChildKey) []byte {
+func EncodeChildKey(appendTo []byte, key cspann.ChildKey) []byte {
 	if key.KeyBytes != nil {
 		// The primary key is already in encoded form.
 		return append(appendTo, key.KeyBytes...)
@@ -67,7 +68,9 @@ func EncodeChildKey(appendTo []byte, key ChildKey) []byte {
 }
 
 // DecodePartitionMetadata decodes the metadata for a partition.
-func DecodePartitionMetadata(encMetadata []byte) (level Level, centroid vector.T, err error) {
+func DecodePartitionMetadata(
+	encMetadata []byte,
+) (level cspann.Level, centroid vector.T, err error) {
 	encMetadata, decodedLevel, err := encoding.DecodeUint32Ascending(encMetadata)
 	if err != nil {
 		return 0, nil, err
@@ -76,7 +79,7 @@ func DecodePartitionMetadata(encMetadata []byte) (level Level, centroid vector.T
 	if err != nil {
 		return 0, nil, err
 	}
-	return Level(decodedLevel), centroid, nil
+	return cspann.Level(decodedLevel), centroid, nil
 }
 
 // DecodeRaBitQVectorToSet decodes a RaBitQ vector entry into the given
@@ -134,17 +137,17 @@ func DecodeUnquantizedVectorToSet(
 
 // DecodeChildKey decodes a child key from the given byte slice.
 // NOTE: the returned ChildKey may reference the input slice.
-func DecodeChildKey(encChildKey []byte, level Level) (ChildKey, error) {
-	if level == LeafLevel {
+func DecodeChildKey(encChildKey []byte, level cspann.Level) (cspann.ChildKey, error) {
+	if level == cspann.LeafLevel {
 		// Leaf vectors point to the primary index. The primary key is already in
 		// encoded form, so just use it as-is.
-		return ChildKey{KeyBytes: encChildKey}, nil
+		return cspann.ChildKey{KeyBytes: encChildKey}, nil
 	} else {
 		// Non-leaf vectors point to the partition key.
 		_, childPartitionKey, err := encoding.DecodeUvarintAscending(encChildKey)
 		if err != nil {
-			return ChildKey{}, err
+			return cspann.ChildKey{}, err
 		}
-		return ChildKey{PartitionKey: PartitionKey(childPartitionKey)}, nil
+		return cspann.ChildKey{PartitionKey: cspann.PartitionKey(childPartitionKey)}, nil
 	}
 }
