@@ -2022,6 +2022,9 @@ func TestUserPrivileges(t *testing.T) {
 
 // TestLogicalReplicationSchemaChanges verifies that only certain schema changes
 // are allowed on tables participating in logical replication.
+//
+// NOTE: for trivial schema allow list testing, add a test to
+// TestIsAllowedLDRSchemaChange instead.
 func TestLogicalReplicationSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
@@ -2040,26 +2043,72 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
+	// Add some stuff to tables in prep for schema change testing.
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
+	dbA.Exec(t, "CREATE OR REPLACE FUNCTION my_trigger() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END $$ LANGUAGE PLPGSQL")
+	dbB.Exec(t, "CREATE OR REPLACE FUNCTION my_trigger() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END $$ LANGUAGE PLPGSQL")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN composite_col DECIMAL NOT NULL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN composite_col DECIMAL NOT NULL")
+
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var jobAID jobspb.JobID
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
 
-	// Creating non-unique secondary index is allowed.
-	dbA.Exec(t, "CREATE INDEX idx ON tab(payload)")
+	// Changing safe table storage parameters is allowed.
+	// table driven test schema changes
+	testCases := []struct {
+		name    string
+		cmd     string
+		allowed bool
+	}{
 
-	// But other schema changes are blocked.
-	expectedErr := "this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs"
-	cmd := "ALTER TABLE tab ADD COLUMN newcol INT NOT NULL DEFAULT 10"
-	dbA.ExpectErr(t, expectedErr, cmd)
-	dbB.ExpectErr(t, expectedErr, cmd)
+		// add and drop index allowed on composite column
+		{"add index", "CREATE INDEX idx ON tab(composite_col)", true},
+		{"drop index", "DROP INDEX idx", true},
 
-	// Kill replication job and verify that schema changes work now.
+		// adding unsuppored indexes disallowed
+		{"add virtual column index", "CREATE INDEX virtual_col_idx ON tab(virtual_col)", false},
+		{"add hash index", "CREATE INDEX hash_idx ON tab(pk) USING HASH WITH (bucket_count = 4)", false},
+		{"add partial index", "CREATE INDEX partial_idx ON tab(composite_col) WHERE pk > 0", false},
+		{"add unique index", "CREATE UNIQUE INDEX unique_idx ON tab(composite_col)", false},
+
+		// Drop table is blocked
+		{"drop table", "DROP TABLE tab", false},
+
+		// Dissalow storage param updates if is not the only change.
+		{"storage param update", "ALTER TABLE tab ADD COLUMN C INT, SET (fillfactor = 70)", false},
+		{"storage param update", "ALTER TABLE tab SET (fillfactor = 70)", true},
+
+		// Allow ttl schema changes that do not conduct a backfill.
+		{"reset ttl", "ALTER TABLE tab RESET (ttl)", false},
+		{"ttl expression", "ALTER TABLE tab SET (ttl_expiration_expression = $$ '2024-01-01 12:00:00'::TIMESTAMPTZ $$)", true},
+		{"ttl on", "ALTER TABLE tab SET (ttl = 'on', ttl_expire_after = '5m')", false},
+
+		{"trigger", "CREATE TRIGGER my_trigger BEFORE INSERT ON tab FOR EACH ROW EXECUTE FUNCTION my_trigger()", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.allowed {
+				dbA.Exec(t, tc.cmd)
+				dbB.Exec(t, tc.cmd)
+			} else {
+				expectedErr := "this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs"
+				dbA.ExpectErr(t, expectedErr, tc.cmd)
+				dbB.ExpectErr(t, expectedErr, tc.cmd)
+			}
+		})
+	}
+
+	// Kill replication job and verify that one of the schema changes work now to
+	// verify the schema lock has been lifted from the target tables.
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-	dbA.Exec(t, cmd)
-	dbB.Exec(t, cmd)
+	dbA.Exec(t, testCases[0].cmd)
+	dbB.Exec(t, testCases[0].cmd)
 }
 
 // TestUserDefinedTypes verifies that user-defined types are correctly
@@ -2404,56 +2453,6 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab",
 		dbBURL.String(),
 	).Scan(&jobAID)
-
-	// Verify that unsupported CREATE INDEX statements are blocked.
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"CREATE INDEX virtual_col_idx ON tab(virtual_col)",
-	)
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"CREATE INDEX hash_idx ON tab(pk) USING HASH WITH (bucket_count = 4)",
-	)
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"CREATE INDEX partial_idx ON tab(composite_col) WHERE pk > 0",
-	)
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"CREATE UNIQUE INDEX unique_idx ON tab(composite_col)",
-	)
-
-	// Dropping the table is blocked.
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"DROP TABLE tab",
-	)
-
-	// Creating triggers is also blocked.
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"CREATE TRIGGER my_trigger BEFORE INSERT ON tab FOR EACH ROW EXECUTE FUNCTION my_trigger()",
-	)
-
-	// Creating a "normal" secondary index (and dropping it) is allowed.
-	dbA.Exec(t, "CREATE INDEX normal_idx ON tab(composite_col)")
-	dbA.Exec(t, "DROP INDEX normal_idx")
-
-	// Changing safe table storage parameters is allowed.
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"ALTER TABLE tab SET (ttl = 'on', ttl_expire_after = '5m')",
-	)
-	dbA.Exec(t, "ALTER TABLE tab SET (ttl = 'on', ttl_expiration_expression = $$ '2024-01-01 12:00:00'::TIMESTAMPTZ $$)")
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"ALTER TABLE tab RESET (ttl)",
-	)
-	// Storage param updates are only allowed if it is the only change.
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"ALTER TABLE tab ADD COLUMN c INT, SET (fillfactor = 70)",
-	)
 
 	// Kill replication job.
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
