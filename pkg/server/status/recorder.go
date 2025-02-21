@@ -49,9 +49,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
-	"github.com/elastic/gosigar"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 const (
@@ -852,46 +852,42 @@ func GetTotalMemory(ctx context.Context) (int64, error) {
 // as a string instead of logging it.
 func GetTotalMemoryWithoutLogging() (int64, string, error) {
 	totalMem, err := func() (int64, error) {
-		mem := gosigar.Mem{}
-		if err := mem.Get(); err != nil {
+		m, err := mem.VirtualMemory()
+		if err != nil {
 			return 0, err
 		}
-		if mem.Total > math.MaxInt64 {
+		if m.Total > math.MaxInt64 {
 			return 0, fmt.Errorf("inferred memory size %s exceeds maximum supported memory size %s",
-				humanize.IBytes(mem.Total), humanize.Bytes(math.MaxInt64))
+				humanize.IBytes(m.Total), humanize.Bytes(math.MaxInt64))
 		}
-		return int64(mem.Total), nil
+		return int64(m.Total), nil
 	}()
 	if err != nil {
 		return 0, "", err
 	}
-	checkTotal := func(x int64, warning string) (int64, string, error) {
-		if x <= 0 {
-			// https://github.com/elastic/gosigar/issues/72
-			return 0, warning, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
-		}
-		return x, warning, nil
-	}
 	if runtime.GOOS != "linux" {
-		return checkTotal(totalMem, "")
+		return totalMem, "", nil
 	}
 	cgAvlMem, warning, err := cgroups.GetMemoryLimit()
 	if err != nil {
-		return checkTotal(totalMem,
+		return totalMem,
 			fmt.Sprintf("available memory from cgroups is unsupported, using system memory %s instead: %v",
-				humanizeutil.IBytes(totalMem), err))
+				humanizeutil.IBytes(totalMem), err),
+			nil
 	}
 	// Let's special case unlimited memory from cgroups to get a more accurate error message.
 	// When memory limit isn't set, cgroups returns 2^63-1 rounded to page size multiple (i.e., 4096).
 	if cgAvlMem == 0x7FFFFFFFFFFFF000 {
-		return checkTotal(totalMem,
+		return totalMem,
 			fmt.Sprintf("available memory from cgroups (%s) is unlimited ('systemd' without MemoryMax?), using system memory %s instead: %s",
-				humanize.IBytes(uint64(cgAvlMem)), humanizeutil.IBytes(totalMem), warning))
+				humanize.IBytes(uint64(cgAvlMem)), humanizeutil.IBytes(totalMem), warning),
+			nil
 	}
 	if cgAvlMem == 0 || (totalMem > 0 && cgAvlMem > totalMem) {
-		return checkTotal(totalMem,
+		return totalMem,
 			fmt.Sprintf("available memory from cgroups (%s) is unsupported, using system memory %s instead: %s",
-				humanize.IBytes(uint64(cgAvlMem)), humanizeutil.IBytes(totalMem), warning))
+				humanize.IBytes(uint64(cgAvlMem)), humanizeutil.IBytes(totalMem), warning),
+			nil
 	}
-	return checkTotal(cgAvlMem, "")
+	return cgAvlMem, "", nil
 }

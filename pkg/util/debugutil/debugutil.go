@@ -11,7 +11,7 @@ import (
 	"runtime/debug"
 	"sync/atomic"
 
-	"github.com/elastic/gosigar"
+	"github.com/shirou/gopsutil/v4/process"
 )
 
 // IsLaunchedByDebugger returns true in cases where the delve debugger
@@ -27,19 +27,23 @@ func init() {
 		// We loop in case there were intermediary processes like the gopls
 		// language server.
 		for maybeDelvePID != 0 {
-			var exe gosigar.ProcExe
-			if err := exe.Get(maybeDelvePID); err != nil {
+			proc, err := process.NewProcess(int32(maybeDelvePID))
+			if err != nil {
 				break
 			}
-			switch filepath.Base(exe.Name) {
+			exe, err := proc.Exe()
+			if err != nil {
+				break
+			}
+			switch filepath.Base(exe) {
 			case "dlv":
 				return true
 			}
-			var state gosigar.ProcState
-			if err := state.Get(maybeDelvePID); err != nil {
+			ppid, err := proc.Ppid()
+			if err != nil {
 				break
 			}
-			maybeDelvePID = state.Ppid
+			maybeDelvePID = int(ppid)
 		}
 		return false
 	}(os.Getppid()))

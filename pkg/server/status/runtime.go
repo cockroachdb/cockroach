@@ -7,6 +7,7 @@ package status
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -23,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/net"
+	"github.com/shirou/gopsutil/v4/process"
 )
 
 var (
@@ -807,6 +808,10 @@ func CGoMemMaybePurge(
 
 var netstatEvery = log.Every(time.Minute)
 
+// This is a copy of the internal error from the gopsutil package that we cannot import.
+// source: https://github.com/shirou/gopsutil/blob/master/internal/common/common.go
+var ErrNotImplementedError = errors.New("not implemented yet")
+
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
 // RuntimeStatSampler. This makes runtime statistics more convenient for
@@ -823,8 +828,12 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 
 	// Retrieve Mem and CPU statistics.
 	pid := os.Getpid()
-	mem := gosigar.ProcMem{}
-	if err := mem.Get(pid); err != nil {
+	p, err := process.NewProcessWithContext(ctx, int32(pid))
+	if err != nil {
+		log.Ops.Errorf(ctx, "unable to open process: %v", err)
+	}
+	m, err := p.MemoryInfoWithContext(ctx)
+	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get mem usage: %v", err)
 	}
 	userTimeMillis, sysTimeMillis, err := GetProcCPUTime(ctx)
@@ -845,15 +854,32 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		log.Ops.Errorf(ctx, "unable to get system CPU details: %v", err)
 	}
 
-	fds := gosigar.ProcFDUsage{}
-	if err := fds.Get(pid); err != nil {
-		if gosigar.IsNotImplemented(err) {
+	numFDs, err := p.NumFDsWithContext(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotImplementedError) {
 			if !rsr.fdUsageNotImplemented {
 				rsr.fdUsageNotImplemented = true
-				log.Ops.Warningf(ctx, "unable to get file descriptor usage (will not try again): %s", err)
+				log.Ops.Warningf(ctx, "unable to get file descriptor count (will not try again): %s", err)
 			}
 		} else {
-			log.Ops.Errorf(ctx, "unable to get file descriptor usage: %s", err)
+			log.Ops.Errorf(ctx, "unable to get file descriptor count: %s", err)
+		}
+	}
+	rLimitStat, err := p.RlimitWithContext(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotImplementedError) {
+			if !rsr.fdUsageNotImplemented {
+				rsr.fdUsageNotImplemented = true
+				log.Ops.Warningf(ctx, "unable to get file descriptor limit (will not try again): %s", err)
+			}
+		} else {
+			log.Ops.Errorf(ctx, "unable to get file descriptor limit: %s", err)
+		}
+	}
+	numFDSoftLimit := 0
+	for _, limit := range rLimitStat {
+		if limit.Resource == int32(process.RLIMIT_NOFILE) {
+			numFDSoftLimit = int(limit.Soft)
 		}
 	}
 
@@ -956,7 +982,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	heapReservedBytes := rsr.goRuntimeSampler.uint64(runtimeMetricHeapReservedBytes)
 	heapReleasedBytes := rsr.goRuntimeSampler.uint64(runtimeMetricHeapReleasedBytes)
 	stats := &eventpb.RuntimeStats{
-		MemRSSBytes:       mem.Resident,
+		MemRSSBytes:       m.RSS,
 		GoroutineCount:    uint64(numGoroutine),
 		MemStackSysBytes:  stackTotal,
 		GoAllocBytes:      goAlloc,
@@ -1008,9 +1034,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.CPUNowNS.Update(now)
 	rsr.HostCPUCombinedPercentNorm.Update(combinedNormalizedHostPerc)
 
-	rsr.FDOpen.Update(int64(fds.Open))
-	rsr.FDSoftLimit.Update(int64(fds.SoftLimit))
-	rsr.RSSBytes.Update(int64(mem.Resident))
+	rsr.FDOpen.Update(int64(numFDs))
+	rsr.FDSoftLimit.Update(int64(numFDSoftLimit))
+	rsr.RSSBytes.Update(int64(m.RSS))
 	totalMem, _, _ := GetTotalMemoryWithoutLogging()
 	rsr.TotalMemBytes.Update(totalMem)
 	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
@@ -1160,11 +1186,15 @@ func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
 // GetProcCPUTime returns the cumulative user/system time (in ms) since the process start.
 func GetProcCPUTime(ctx context.Context) (userTimeMillis, sysTimeMillis int64, err error) {
 	pid := os.Getpid()
-	cpuTime := gosigar.ProcTime{}
-	if err := cpuTime.Get(pid); err != nil {
+	p, err := process.NewProcessWithContext(ctx, int32(pid))
+	if err != nil {
 		return 0, 0, err
 	}
-	return int64(cpuTime.User), int64(cpuTime.Sys), nil
+	cpuTime, err := p.TimesWithContext(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	return int64(cpuTime.User), int64(cpuTime.System), nil
 }
 
 // getCPUCapacity returns the number of logical CPU processors available for

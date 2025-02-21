@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/elastic/gosigar"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/shirou/gopsutil/v4/process"
 	"github.com/stretchr/testify/require"
 )
 
@@ -97,12 +97,14 @@ func TestTenantVars(t *testing.T) {
 		require.LessOrEqual(t, float64(startNowNanos), nowNanos)
 		require.LessOrEqual(t, nowNanos, float64(timeutil.Now().UnixNano()))
 
-		testCpuTime := gosigar.ProcTime{}
-		require.NoError(t, testCpuTime.Get(os.Getpid()))
+		proc, err := process.NewProcess(int32(os.Getpid()))
+		require.NoError(t, err)
+		times, err := proc.Times()
+		require.NoError(t, err)
 		require.LessOrEqual(t, 0., tenantCpuUserNanos)
-		require.LessOrEqual(t, tenantCpuUserNanos, float64(testCpuTime.User)*1e6)
+		require.LessOrEqual(t, tenantCpuUserNanos, float64(times.User)*1e9)
 		require.LessOrEqual(t, 0., tenantCpuSysNanos)
-		require.LessOrEqual(t, tenantCpuSysNanos, float64(testCpuTime.Sys)*1e6)
+		require.LessOrEqual(t, tenantCpuSysNanos, float64(times.System)*1e9)
 		require.LessOrEqual(t, 0., uptimeSeconds)
 
 		resp, err = client.Get(url)
@@ -132,11 +134,10 @@ func TestTenantVars(t *testing.T) {
 		require.Equal(t, io_prometheus_client.MetricType_GAUGE, tenantUptime.GetType())
 		uptimeSeconds2 := tenantUptime.Metric[0].GetGauge().GetValue()
 
-		cpuTime2 := gosigar.ProcTime{}
-		require.NoError(t, cpuTime2.Get(os.Getpid()))
-
-		require.Less(t, tenantCpuUserNanos2, float64(cpuTime2.User)*1e6)
-		require.LessOrEqual(t, tenantCpuSysNanos2, float64(cpuTime2.Sys)*1e6)
+		times, err = proc.Times()
+		require.NoError(t, err)
+		require.Less(t, tenantCpuUserNanos2, float64(times.User)*1e6)
+		require.LessOrEqual(t, tenantCpuSysNanos2, float64(times.System)*1e6)
 		require.LessOrEqual(t, uptimeSeconds, uptimeSeconds2)
 
 		_, found = metrics["jobs_running_non_idle"]

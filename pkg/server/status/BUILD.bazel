@@ -74,11 +74,12 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
-        "@com_github_elastic_gosigar//:gosigar",
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
         "@com_github_shirou_gopsutil_v4//cpu",
+        "@com_github_shirou_gopsutil_v4//mem",
         "@com_github_shirou_gopsutil_v4//net",
+        "@com_github_shirou_gopsutil_v4//process",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@com_github_shirou_gopsutil_v4//disk",

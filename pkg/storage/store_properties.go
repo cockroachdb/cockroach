@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/elastic/gosigar"
+	"github.com/shirou/gopsutil/v4/disk"
 )
 
 func computeStoreProperties(ctx context.Context, cfg engineConfig) roachpb.StoreProperties {
@@ -55,29 +55,20 @@ func getFileSystemProperties(ctx context.Context, dir string) roachpb.FileStoreP
 	// Note that scanning the list of mounts is also
 	// what linux' df(1) command does.
 	//
-	var fslist gosigar.FileSystemList
-	if err := fslist.Get(); err != nil {
+	partitions, err := disk.PartitionsWithContext(ctx, false)
+	if err != nil {
 		log.Warningf(ctx, "cannot retrieve filesystem list: %v", err)
 		return fsprops
 	}
 
-	var fsInfo *gosigar.FileSystem
+	var fsInfo *disk.PartitionStat
 	// We're reading the list of mounts in reverse order: we're assuming
 	// that mounts are LIFO and can only be stacked, so the best match
 	// will necessarily be the first filesystem that's a prefix of the
 	// target directory, when looking from the end of the file.
-	//
-	// TODO(ssd): Steven points out that gosigar reads from /etc/mtab on
-	// linux, which is sometimes managed by the user command 'mount' and
-	// can sometimes miss entries when `mount -n` is used. It might be
-	// better to change gosigar to use /proc/mounts instead.
-	//
-	// FWIW, we are OK with this for now, since the systems where crdb
-	// is typically being deployed are well-behaved in that regard:
-	// Kubernetes mirrors /proc/mount in /etc/mtab.
-	for i := len(fslist.List) - 1; i >= 0; i-- {
-		if pathIsInside(fslist.List[i].DirName, absPath) {
-			fsInfo = &fslist.List[i]
+	for i := len(partitions) - 1; i >= 0; i-- {
+		if pathIsInside(partitions[i].Mountpoint, absPath) {
+			fsInfo = &partitions[i]
 			break
 		}
 	}
@@ -87,10 +78,10 @@ func getFileSystemProperties(ctx context.Context, dir string) roachpb.FileStoreP
 		return fsprops
 	}
 
-	fsprops.FsType = fsInfo.SysTypeName
-	fsprops.BlockDevice = fsInfo.DevName
-	fsprops.MountPoint = fsInfo.DirName
-	fsprops.MountOptions = fsInfo.Options
+	fsprops.FsType = fsInfo.Fstype
+	fsprops.BlockDevice = fsInfo.Device
+	fsprops.MountPoint = fsInfo.Mountpoint
+	fsprops.MountOptions = strings.Join(fsInfo.Opts, ", ")
 	return fsprops
 }
 

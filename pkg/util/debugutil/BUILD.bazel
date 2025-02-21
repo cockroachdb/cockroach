@@ -5,7 +5,7 @@ go_library(
     srcs = ["debugutil.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/debugutil",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_elastic_gosigar//:gosigar"],
+    deps = ["@com_github_shirou_gopsutil_v4//process"],
 )
 
 go_test(
