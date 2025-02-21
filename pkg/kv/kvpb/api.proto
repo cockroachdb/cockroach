@@ -2503,6 +2503,22 @@ message BarrierResponse {
   RangeDescriptor range_desc = 4 [(gogoproto.nullable) = false];
 }
 
+// FlushLockTableRequest instructs the replica, if it is the leaseholder, to
+// flush any in-memory unreplicated locks to the replicated lock table contained
+// in the request header's span.
+message FlushLockTableRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// FlushLockTableResponse is the response for a FlushLockTable operation.
+message FlushLockTableResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // LocksWritten is the number of locks written to the replicated lock table as
+  // a result of this request.
+  uint64 locks_written = 2;
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -2559,6 +2575,7 @@ message RequestUnion {
     ProbeRequest probe = 54;
     IsSpanEmptyRequest is_span_empty = 56;
     LinkExternalSSTableRequest link_external_sstable = 57;
+    FlushLockTableRequest flush_lock_table = 58;
   }
   reserved 8, 15, 23, 25, 27, 31, 34, 52;
 }
@@ -2615,6 +2632,7 @@ message ResponseUnion {
     ProbeResponse probe = 54;
     IsSpanEmptyResponse is_span_empty = 56;
     LinkExternalSSTableResponse link_external_sstable = 57;
+    FlushLockTableResponse flush_lock_table = 58;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34, 52;
 }
