@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -1069,16 +1068,6 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %v", key, clusterID))
-		} else if key == gossip.KeyDeprecatedSystemConfig {
-			if debugCtx.printSystemConfig {
-				var config config.SystemConfigEntries
-				if err := protoutil.Unmarshal(bytes, &config); err != nil {
-					return "", errors.Wrapf(err, "failed to parse value for key %q", key)
-				}
-				output = append(output, fmt.Sprintf("%q: %+v", key, config))
-			} else {
-				output = append(output, fmt.Sprintf("%q: omitted", key))
-			}
 		} else if key == gossip.KeyFirstRangeDescriptor {
 			var desc roachpb.RangeDescriptor
 			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
