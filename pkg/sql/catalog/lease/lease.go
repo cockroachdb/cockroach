@@ -1098,12 +1098,11 @@ type Manager struct {
 	// should only be used if we currently have an active lease on the respective
 	// id; otherwise, the mapping may well be stale.
 	// Not protected by mu.
-	names            nameCache
-	testingKnobs     ManagerTestingKnobs
-	ambientCtx       log.AmbientContext
-	stopper          *stop.Stopper
-	sem              *quotapool.IntPool
-	refreshAllLeases chan struct{}
+	names        nameCache
+	testingKnobs ManagerTestingKnobs
+	ambientCtx   log.AmbientContext
+	stopper      *stop.Stopper
+	sem          *quotapool.IntPool
 
 	// descUpdateCh receives updated descriptors from the range feed.
 	descUpdateCh chan catalog.Descriptor
@@ -1209,7 +1208,6 @@ func NewLeaseManager(
 		ambientCtx:       ambientCtx,
 		stopper:          stopper,
 		sem:              quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
-		refreshAllLeases: make(chan struct{}),
 	}
 	lm.leaseGeneration.Swap(1) // Start off with 1 as the initial value.
 	lm.storage.regionPrefix = &atomic.Value{}
@@ -1880,8 +1878,6 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 			case <-m.stopper.ShouldQuiesce():
 				return
 
-			case <-m.refreshAllLeases:
-				m.refreshSomeLeases(ctx, true /*refreshAll*/)
 			case <-rangeFeedProgressWatchDog.C:
 				rangeFeedProgressWatchDog.Read = true
 				// Detect if the range feed has stopped making
