@@ -185,6 +185,11 @@ type TestClusterInterface interface {
 		t TestFataler, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 	)
 
+	// MaybeWaitForLeaseUpgrade waits until the lease held for the given range
+	// descriptor is upgraded to an epoch-based or leader lease, but only if we
+	// expect the lease to be upgraded.
+	MaybeWaitForLeaseUpgrade(_ context.Context, _ TestFataler, _ roachpb.RangeDescriptor)
+
 	// MoveRangeLeaseNonCooperatively performs a non-cooperative transfer of the
 	// lease for a range from whoever has it to a particular store. That store
 	// must already have a replica of the range. If that replica already has the

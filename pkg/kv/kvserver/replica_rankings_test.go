@@ -497,6 +497,10 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 	// Disable the consistency checker, to avoid interleaving requests
 	// artificially inflating measurement due to consistency checking.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
+	// Wait for lease upgrade, to avoid interleaving upgrade requests inflating
+	// the measurements below.
+	desc := tc.LookupRangeOrFatal(t, scratchKey)
+	tc.MaybeWaitForLeaseUpgrade(ctx, t, desc)
 
 	for i, testCase := range testCases {
 		t.Logf("test #%d", i+1)

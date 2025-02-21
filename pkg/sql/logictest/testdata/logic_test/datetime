@@ -228,6 +228,9 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
   v TIMESTAMPTZ

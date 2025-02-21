@@ -499,7 +499,9 @@ statement ok
 CREATE TABLE mutation(x INT, y INT NOT NULL DEFAULT(10)); INSERT INTO mutation VALUES (1, 1)
 
 statement ok
-BEGIN; ALTER TABLE mutation DROP COLUMN y
+BEGIN;
+SET LOCAL autocommit_before_ddl=off;
+ALTER TABLE mutation DROP COLUMN y
 
 # Ensure that default value is still inserted into y, since y is write-only.
 query T
@@ -524,7 +526,9 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN; ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
+BEGIN;
+SET LOCAL autocommit_before_ddl=off;
+ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
 
 # Ensure that value is *not* inserted into z, since z is delete-only.
 query T

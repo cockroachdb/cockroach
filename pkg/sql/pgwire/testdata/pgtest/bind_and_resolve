@@ -101,6 +101,19 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
+# Disable autocommit to prevent the DDL below from committing the
+# transaction and closing the portal. The test queries portal p8 after
+# the DDL, so it must remain open.
+send
+Query {"String": "SET LOCAL autocommit_before_ddl=off"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
 send
 Query {"String": "ALTER TABLE t RENAME TO tab"}
 ----
