@@ -438,7 +438,7 @@ INSERT INTO t select x, y from generate_series(1, 100) as g(x), generate_series(
 
 	checkProtectionPolicy := func(expectedProtectionPolicy hlc.Timestamp, databaseName, tableName string) {
 		testutils.SucceedsSoon(t, func() error {
-			trace := runGCWithTrace(t, th.sqlDB,
+			trace := runGCWithTrace(t, th.sqlDB, th.systemDB,
 				false /* skipShouldQueue */, databaseName, tableName)
 
 			// Check the trace for the applicable protection policy.
