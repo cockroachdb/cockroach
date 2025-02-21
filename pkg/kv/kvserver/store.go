@@ -2318,7 +2318,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		if err != nil {
 			return err
 		}
-		rep, err := newInitializedReplica(s, state)
+		rep, err := newInitializedReplica(s, state, true /* waitForPrevLeaseToExpire */)
 		if err != nil {
 			return err
 		}
