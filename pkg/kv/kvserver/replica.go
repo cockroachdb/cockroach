@@ -943,6 +943,21 @@ type Replica struct {
 	// computePostTrunc* methods.
 	pendingLogTruncations pendingLogTruncations
 
+	// avgProposalToLocalApplicationLatency tracks the average time between a
+	// proposal being submitted to Raft and its local application for successful
+	// writes. It uses an exponentially weighted moving average (EWMA) with an
+	// effective window size of 30, giving more weight to recent data while
+	// gradually decaying older values. Thread-safe.
+	//
+	// Notes:
+	// 1. It does not include full application on follower replicas.
+	// 2. No measurements are recorded for read-only commands or read-write
+	// commands that do not result in writes.
+	// 3. No measurements are recorded for proposal failures (e.g. due to
+	// AmbiguousResultError, rejected proposal, or for request evaluation that did
+	// not lead to raft proposals).
+	avgProposalToLocalApplicationLatency *rpc.ThreadSafeMovingAverage
+
 	rangefeedMu struct {
 		syncutil.RWMutex
 		// proc is an instance of a rangefeed Processor that is capable of
@@ -1043,6 +1058,13 @@ func (r *Replica) ID() storage.FullReplicaID {
 // raftMu must be held when using the returned object.
 func (r *Replica) LogStorageRaftMuLocked() *logstore.LogStore {
 	return r.raftMu.logStorage
+}
+
+// recordProposalToLocalApplicationLatency records the duration it took between
+// a proposal being submitted to Raft and its local application for successful
+// writes.
+func (r *Replica) recordProposalToLocalApplicationLatency(timeToProposeAndApply time.Duration) {
+	r.avgProposalToLocalApplicationLatency.Add(float64(timeToProposeAndApply.Nanoseconds()))
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It

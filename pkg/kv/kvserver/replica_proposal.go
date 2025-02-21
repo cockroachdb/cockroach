@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage/remote"
@@ -144,6 +145,10 @@ type ProposalData struct {
 	// *first* proposed.
 	createdAtTicks int64
 
+	// createdAtTs is the moment in time at which this command was *first*
+	// proposed. Similar to createdAtTicks.
+	createdAtTs crtime.Mono
+
 	// command is the log entry that is encoded into encodedCommand and proposed
 	// to raft. Never mutated.
 	command *kvserverpb.RaftCommand
@@ -253,7 +258,7 @@ func (proposal *ProposalData) useReplicationAdmissionControl() bool {
 // The method is safe to call more than once, but only the first result will be
 // returned to the client.
 func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposalResult) {
-	proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
+	proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err, proposal.createdAtTs /*writeProposalCreatedAt*/)
 	proposal.signalProposalResult(pr)
 	if proposal.sp != nil {
 		proposal.sp.Finish()

@@ -256,7 +256,7 @@ func (r *Replica) updateTimestampCacheAndDropLatches(
 	st kvserverpb.LeaseStatus,
 ) {
 	ec := makeUnreplicatedEndCmds(r, g, st)
-	ec.done(ctx, ba, br, pErr)
+	ec.done(ctx, ba, br, pErr, 0 /*writeProposalCreatedAt*/)
 }
 
 var allowDroppingLatchesBeforeEval = settings.RegisterBoolSetting(

@@ -195,6 +195,14 @@ type ThreadSafeMovingAverage struct {
 	ma ewma.MovingAverage
 }
 
+// NewThreadMovingAverage creates a new NewThreadMovingAverage that uses a
+// SimpleEWMA. It is a weighted moving average with an effective window size of
+// 30, where recent data points have a higher influence, and older data
+// gradually decays.
+func NewThreadMovingAverage() *ThreadSafeMovingAverage {
+	return &ThreadSafeMovingAverage{ma: ewma.NewMovingAverage()}
+}
+
 func (t *ThreadSafeMovingAverage) Set(v float64) {
 	t.Lock()
 	defer t.Unlock()
