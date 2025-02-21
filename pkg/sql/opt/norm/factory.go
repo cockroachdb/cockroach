@@ -363,32 +363,38 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	// the copy proceeds.
 	var replaceFn ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
-		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
+		switch t := e.(type) {
+		case *memo.PlaceholderExpr:
 			d, err := eval.Expr(f.ctx, f.evalCtx, e.(*memo.PlaceholderExpr).Value)
 			if err != nil {
 				panic(err)
 			}
-			return f.ConstructConstVal(d, placeholder.DataType())
-		}
-		// A recursive CTE may have the stats change on its Initial expression
-		// after placeholder assignment, if that happens we need to
-		// propagate that change to the Binding expression and rebuild
-		// everything.
-		if rcte, ok := e.(*memo.RecursiveCTEExpr); ok {
-			newInitial := f.CopyAndReplaceDefault(rcte.Initial, replaceFn).(memo.RelExpr)
-			if newInitial != rcte.Initial {
+			return f.ConstructConstVal(d, t.DataType())
+		case *memo.UDFCallExpr:
+			// Statements in the body of a UDF cannot have placeholders, but
+			// they must be copied so that they reference the new memo.
+			for i := range t.Def.Body {
+				t.Def.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
+			}
+		case *memo.RecursiveCTEExpr:
+			// A recursive CTE may have the stats change on its Initial expression
+			// after placeholder assignment, if that happens we need to
+			// propagate that change to the Binding expression and rebuild
+			// everything.
+			newInitial := f.CopyAndReplaceDefault(t.Initial, replaceFn).(memo.RelExpr)
+			if newInitial != t.Initial {
 				newBinding := f.ConstructFakeRel(&memo.FakeRelPrivate{
 					Props: MakeBindingPropsForRecursiveCTE(
-						props.AnyCardinality, rcte.Binding.Relational().OutputCols,
+						props.AnyCardinality, t.Binding.Relational().OutputCols,
 						newInitial.Relational().Statistics().RowCount)})
-				if id := rcte.WithBindingID(); id != 0 {
+				if id := t.WithBindingID(); id != 0 {
 					f.Metadata().AddWithBinding(id, newBinding)
 				}
 				return f.ConstructRecursiveCTE(
 					newBinding,
 					newInitial,
-					f.invokeReplace(rcte.Recursive, replaceFn).(memo.RelExpr),
-					&rcte.RecursiveCTEPrivate,
+					f.invokeReplace(t.Recursive, replaceFn).(memo.RelExpr),
+					&t.RecursiveCTEPrivate,
 				)
 			}
 		}
