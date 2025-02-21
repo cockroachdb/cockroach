@@ -105,10 +105,7 @@ func TargetForPolicy(
 		sideTransportPropTime := maxNetworkRTT/2 + sideTransportCloseInterval
 
 		// See propagation_time.
-		maxTransportPropTime := sideTransportPropTime
-		if maxTransportPropTime < raftTransportPropTime {
-			maxTransportPropTime = raftTransportPropTime
-		}
+		maxTransportPropTime := max(sideTransportPropTime, raftTransportPropTime)
 
 		// Include a small amount of extra margin to smooth out temporary
 		// network blips or anything else that slows down closed timestamp
