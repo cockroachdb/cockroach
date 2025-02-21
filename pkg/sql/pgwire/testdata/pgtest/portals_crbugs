@@ -119,6 +119,7 @@ ReadyForQuery
 
 send
 Query {"String": "BEGIN"}
+Query {"String": "SET LOCAL autocommit_before_ddl=off"}
 Parse {"Name": "ddl_stmt", "Query": "DROP ROLE foo"}
 Bind {"DestinationPortal": "ddl_portal", "PreparedStatement": "ddl_stmt"}
 Execute {"Portal": "ddl_portal", "MaxRows": 1}
@@ -128,8 +129,11 @@ Sync
 until
 ReadyForQuery
 ReadyForQuery
+ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
@@ -230,6 +234,7 @@ subtest bind_before_update
 
 send
 Query {"String": "BEGIN"}
+Query {"String": "SET LOCAL autocommit_before_ddl=off"}
 Query {"String": "CREATE TABLE mytable (x int)"}
 Query {"String": "INSERT INTO mytable VALUES (1),(2),(3)"}
 Parse {"Name": "q3", "Query": "SELECT * FROM mytable"}
@@ -242,8 +247,11 @@ ReadyForQuery
 ReadyForQuery
 ReadyForQuery
 ReadyForQuery
+ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"T"}

@@ -23,7 +23,7 @@ CREATE TABLE t()
 ----
 
 spy-sql unixSecs=0.1
-BEGIN; TRUNCATE t; COMMIT
+BEGIN; SET LOCAL autocommit_before_ddl=off; TRUNCATE t; COMMIT
 ----
 {
 	"ApplicationName": "telemetry-logging-datadriven",
@@ -32,9 +32,21 @@ BEGIN; TRUNCATE t; COMMIT
 	"EventType": "sampled_query",
 	"PlanGist": "Ais=",
 	"SkippedQueries": 1,
+	"Statement": "SET LOCAL autocommit_before_ddl = off",
+	"StatementFingerprintID": "12756973544607263707",
+	"StmtPosInTxn": 1,
+	"Tag": "SET",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "Ais=",
 	"Statement": "TRUNCATE TABLE defaultdb.public.t",
 	"StatementFingerprintID": "554456288574568545",
-	"StmtPosInTxn": 1,
+	"StmtPosInTxn": 2,
 	"Tag": "TRUNCATE",
 	"User": "root"
 }
@@ -45,7 +57,7 @@ BEGIN; TRUNCATE t; COMMIT
 	"EventType": "sampled_query",
 	"Statement": "COMMIT TRANSACTION",
 	"StatementFingerprintID": "6247508841109746112",
-	"StmtPosInTxn": 2,
+	"StmtPosInTxn": 3,
 	"Tag": "COMMIT",
 	"User": "root"
 }
@@ -57,9 +69,10 @@ BEGIN; TRUNCATE t; COMMIT
 	"RowsRead": 0,
 	"RowsWritten": 0,
 	"StatementFingerprintIDs": [
+		"12756973544607263707",
 		"554456288574568545"
 	],
-	"TransactionFingerprintID": "12164906773462273982",
+	"TransactionFingerprintID": "779223648613753517",
 	"User": "root"
 }
 
