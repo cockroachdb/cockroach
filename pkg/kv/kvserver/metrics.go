@@ -1542,6 +1542,21 @@ the actual replication latency, despite returning early to the client.`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftProposalsLeaderAckLatency = metric.Metadata{
+		Name: "raft.proposal.leader.ack.latency",
+		Help: `The duration elapsed between a proposal being submitted to Raft 
+and its local Raft leader's acknowledgement on the success to the client. 
+Note that this may not include the time taken to apply the command to the 
+state machine for asynchronous consensus.
+
+Only successful write commands are measured. Measurements are not recorded for:
+- Failed proposals
+- Read-only commands
+- Read-write commands that don't result in actual writes
+`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRaftProposalsLeaderAppliedLatency = metric.Metadata{
 		Name: "raft.proposal.leader.applied.latency",
 		Help: `The duration elapsed between a proposal being submitted to Raft and 
@@ -2871,6 +2886,7 @@ type StoreMetrics struct {
 	RaftHandleReadyLatency            metric.IHistogram
 	RaftApplyCommittedLatency         metric.IHistogram
 	RaftReplicationLatency            metric.IHistogram
+	RaftProposalsLeaderAckLatency     metric.IHistogram
 	RaftProposalsLeaderAppliedLatency metric.IHistogram
 	RaftSchedulerLatency              metric.IHistogram
 	RaftTimeoutCampaign               *metric.Counter
@@ -3619,6 +3635,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftReplicationLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaRaftReplicationLatency,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		RaftProposalsLeaderAckLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaRaftProposalsLeaderAckLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),

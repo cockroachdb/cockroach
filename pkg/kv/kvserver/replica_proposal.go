@@ -295,6 +295,11 @@ func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 		// through finishApplication.
 		ctx := context.Background()
 		proposal.ctx.Store(&ctx)
+		if createdAtTs := proposal.createdAtTs; createdAtTs != 0 && pr.Err == nil {
+			if repl := proposal.ec.repl; repl != nil {
+				repl.store.metrics.RaftProposalsLeaderAckLatency.RecordValue(createdAtTs.Elapsed().Nanoseconds())
+			}
+		}
 	}
 }
 
