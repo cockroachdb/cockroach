@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 )
 
 const (
@@ -534,25 +535,26 @@ func WithTag(tag string) CustomOption {
 // previous major version during upgrade. For example, 24.3 supports upgrade
 // directly from 24.1, but 25.1 only supports upgrade from 24.3.
 func supportsSkipUpgradeTo(v *clusterupgrade.Version) bool {
-	major, minor := v.Version.Major(), v.Version.Minor()
-
 	// Special case for the current release series. This is useful to keep the
 	// test correct when we bump the minimum supported version separately from
 	// the current version.
-	if r := clusterversion.Latest.ReleaseSeries(); int(r.Major) == major && int(r.Minor) == minor {
+	r := clusterversion.Latest.ReleaseSeries()
+	currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
+	if currentMajor.Equals(v.Version.Major()) {
 		return len(clusterversion.SupportedPreviousReleases()) > 1
 	}
 
+	series := v.Version.Major()
 	switch {
-	case major < 24:
+	case series.Year < 24:
 		return false
-	case major == 24:
+	case series.Year == 24:
 		// v24.3 is the first version which officially supports the skip upgrade.
-		return minor == 3
+		return series.Ordinal == 3
 	default:
 		// The current plan for 2025+ is for .1 and .3 to be skippable innovation
 		// releases and thus allow skip upgrades to 25.2 and 25.4.
-		return minor == 2 || minor == 4
+		return series.Ordinal == 2 || series.Ordinal == 4
 	}
 }
 
@@ -1109,7 +1111,7 @@ func randomPredecessor(
 
 	// If the latest release of a series is a pre-release, we validate
 	// whether the minimum supported version is valid.
-	if predV.PreRelease() != "" && !predV.AtLeast(minSupported) {
+	if predV.IsPrerelease() && !predV.AtLeast(minSupported) {
 		return nil, fmt.Errorf(
 			"latest release for %s (%s) is not sufficient for minimum supported version (%s)",
 			predV.Series(), predV, minSupported.Version,
@@ -1133,7 +1135,7 @@ func randomPredecessor(
 	var supportedPatchReleases []*clusterupgrade.Version
 	for j := minSupported.Patch(); j <= latestPred.Patch(); j++ {
 		supportedV := clusterupgrade.MustParseVersion(
-			fmt.Sprintf("v%d.%d.%d", predV.Major(), predV.Minor(), j),
+			fmt.Sprintf("%s.%d", predV.Major().String(), j),
 		)
 
 		isWithdrawn, err := release.IsWithdrawn(&supportedV.Version)
@@ -1425,11 +1427,8 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 
 	currentVersion := clusterupgrade.CurrentVersion()
 	msv := test.options.minimumSupportedVersion
-	// The minimum supported version should be from an older major
-	// version or, if from the same major version, from an older minor
-	// version.
-	validVersion := msv.Major() < currentVersion.Major() ||
-		(msv.Major() == currentVersion.Major() && msv.Minor() < currentVersion.Minor())
+	// The minimum supported version should be strictly less than the current version
+	validVersion := currentVersion.AtLeast(msv) && !currentVersion.Equal(msv)
 
 	if !validVersion {
 		fail(
@@ -1483,12 +1482,8 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 
 	// Validate that the minimum bootstrap version if set.
 	if minBootstrapVersion := test.options.minimumBootstrapVersion; minBootstrapVersion != nil {
-		// The minimum bootstrap version should be from an older major
-		// version or, if from the same major version, from an older minor
-		// version.
-		validVersion = minBootstrapVersion.Major() < currentVersion.Major() ||
-			(minBootstrapVersion.Major() == currentVersion.Major() && minBootstrapVersion.Minor() < currentVersion.Minor())
-
+		// The minimum bootstrap version should be from an older major version.
+		validVersion = minBootstrapVersion.Major().LessThan(currentVersion.Major())
 		if !validVersion {
 			fail(
 				fmt.Errorf(

@@ -33,12 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/ttycolor"
+	"github.com/cockroachdb/version"
 	"github.com/codahale/hdrhistogram"
 	"github.com/lib/pq"
 	promapi "github.com/prometheus/client_golang/api"
@@ -466,7 +466,7 @@ func runTPCC(
 // performance movement, but at the least for every major release.
 var tpccSupportedWarehouses = []struct {
 	hardware   string
-	v          *version.Version
+	v          version.Version
 	warehouses int
 }{
 	// TODO(darrylwong): these numbers are old, with azure and n5 cluster values being copied
@@ -475,18 +475,18 @@ var tpccSupportedWarehouses = []struct {
 	// We append "-0" to the version so that we capture all prereleases of the
 	// specified version. Otherwise, "v2.1.0" would compare greater than
 	// "v2.1.0-alpha.x".
-	{hardware: "gce-n4cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
-	{hardware: "gce-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1250},
-	{hardware: "aws-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 2100},
-	{hardware: "azure-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
+	{hardware: "gce-n4cpu16", v: version.MustParse(`v2.1.0-alpha.0`), warehouses: 1300},
+	{hardware: "gce-n4cpu16", v: version.MustParse(`v19.1.0-alpha.0`), warehouses: 1250},
+	{hardware: "aws-n4cpu16", v: version.MustParse(`v19.1.0-alpha.0`), warehouses: 2100},
+	{hardware: "azure-n4cpu16", v: version.MustParse(`v19.1.0-alpha.0`), warehouses: 1300},
 
 	// TODO(tbg): this number is copied from gce-n4cpu16. The real number should be a
 	// little higher, find out what it is.
-	{hardware: "gce-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
-	{hardware: "aws-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 2100},
-	{hardware: "azure-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
+	{hardware: "gce-n5cpu16", v: version.MustParse(`v19.1.0-alpha.0`), warehouses: 1300},
+	{hardware: "aws-n5cpu16", v: version.MustParse(`v19.1.0-alpha.0`), warehouses: 2100},
+	{hardware: "azure-n5cpu16", v: version.MustParse(`v19.1.0-alpha.0`), warehouses: 1300},
 	// Ditto.
-	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
+	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-alpha.0`), warehouses: 1300},
 }
 
 // tpccMaxRate calculates the max rate of the workload given a number of warehouses.
@@ -506,19 +506,19 @@ func maxSupportedTPCCWarehouses(
 		return 15
 	}
 
-	var v *version.Version
+	var v version.Version
 	var warehouses int
 	hardware := fmt.Sprintf(`%s-%s`, cloud, &nodes)
 	for _, x := range tpccSupportedWarehouses {
 		if x.hardware != hardware {
 			continue
 		}
-		if buildVersion.AtLeast(x.v) && (v == nil || buildVersion.AtLeast(v)) {
+		if buildVersion.AtLeast(x.v) && (v.Empty() || buildVersion.AtLeast(v)) {
 			v = x.v
 			warehouses = x.warehouses
 		}
 	}
-	if v == nil {
+	if v.Empty() {
 		panic(fmt.Sprintf(`could not find max tpcc warehouses for %s`, hardware))
 	}
 	return warehouses

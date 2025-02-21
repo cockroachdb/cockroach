@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -129,7 +129,8 @@ func runTestRestoreMidSchemaChange(t *testing.T, isSchemaOnly, isClusterRestore 
 // parseMajorVersion parses our major-versioned directory names as if they were
 // full crdb versions.
 func parseMajorVersion(verStr string) (*version.Version, error) {
-	return version.Parse(fmt.Sprintf("v%s.0", verStr))
+	v, err := version.Parse(fmt.Sprintf("v%s.0", verStr))
+	return &v, err
 }
 
 // expectedSCJobCount returns the expected number of schema change jobs

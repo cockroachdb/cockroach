@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/version"
 )
 
 // TimeFormat is the reference format for build.Time. Make sure it stays in sync
@@ -76,7 +76,7 @@ func parseCockroachVersion(versionTxt string) *version.Version {
 	if err != nil {
 		panic(fmt.Errorf("could not parse version.txt: %w", err))
 	}
-	return v
+	return &v
 }
 
 func computeBinaryVersion(
@@ -110,21 +110,23 @@ func BinaryVersion() string {
 // N.B. new public-facing doc URLs are expected to be up beginning with the "alpha.1" prerelease. Otherwise, "dev" will
 // cause the url mapper to redirect to the latest stable release.
 func VersionForURLs() string {
-	// Prerelease versions >= "alpha.1"
-	if parsedVersionTxt.PreRelease() >= "alpha.1" {
-		return fmt.Sprintf("v%d.%d", parsedVersionTxt.Major(), parsedVersionTxt.Minor())
+	if parsedVersionTxt.IsPrerelease() {
+		phaseAndOrdinal := parsedVersionTxt.Format("%P.%o")
+		// builds prior to "alpha.1" use 'dev' in their URLs
+		if phaseAndOrdinal < "alpha.1" {
+			return "dev"
+		}
+	} else if parsedVersionTxt.IsCustomOrNightlyBuild() {
+		return "dev"
 	}
-	// Production release versions
-	if parsedVersionTxt.PreRelease() == "" {
-		return fmt.Sprintf("v%d.%d", parsedVersionTxt.Major(), parsedVersionTxt.Minor())
-	}
-	return "dev"
+	return parsedVersionTxt.Major().String()
 }
 
 // BranchReleaseSeries returns tha major and minor in version.txt, without
 // allowing for any overrides.
-func BranchReleaseSeries() (major, minor int) {
-	return parsedVersionTxt.Major(), parsedVersionTxt.Minor()
+func BranchReleaseSeries() (year, ordinal int) {
+	major := parsedVersionTxt.Major()
+	return major.Year, major.Ordinal
 }
 
 func init() {
