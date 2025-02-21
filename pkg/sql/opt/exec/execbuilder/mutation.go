@@ -493,7 +493,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 		ups.VectorIndexDelPartitionCols,
 	)
 
-	input, inputCols, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
+	input, _, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -503,9 +503,13 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	tab := md.Table(ups.Table)
 	canaryCol := exec.NodeColumnOrdinal(-1)
 	if ups.CanaryCol != 0 {
-		canaryCol, err = getNodeColumnOrdinal(inputCols, ups.CanaryCol)
-		if err != nil {
-			return execPlan{}, colOrdMap{}, err
+		// The canary column comes after the insert, fetch, and update columns.
+		canaryCol = exec.NodeColumnOrdinal(
+			ups.InsertCols.Len() + ups.FetchCols.Len() + ups.UpdateCols.Len(),
+		)
+		if colList[canaryCol] != ups.CanaryCol {
+			return execPlan{}, colOrdMap{},
+				errors.AssertionFailedf("canary column not found")
 		}
 	}
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
