@@ -28,6 +28,11 @@ func TargetForPolicy(
 		// Simple calculation: lag now by desired duration.
 		res = now.ToTimestamp().Add(-lagTargetDuration.Nanoseconds(), 0)
 	case roachpb.LEAD_FOR_GLOBAL_READS:
+		// Override entirely with cluster setting, if necessary.
+		if leadTargetOverride != 0 {
+			res = now.ToTimestamp().Add(leadTargetOverride.Nanoseconds(), 0)
+			break
+		}
 		// The LEAD_FOR_GLOBAL_READS calculation is more complex. Instead of the
 		// policy defining an offset from the publisher's perspective, the
 		// policy defines a goal from the consumer's perspective - the goal
@@ -110,12 +115,6 @@ func TargetForPolicy(
 		// propagation momentarily.
 		const bufferTime = 25 * time.Millisecond
 		leadTimeAtSender := maxTransportPropTime + maxClockOffset + bufferTime
-
-		// Override entirely with cluster setting, if necessary.
-		if leadTargetOverride != 0 {
-			leadTimeAtSender = leadTargetOverride
-		}
-
 		res = now.ToTimestamp().Add(leadTimeAtSender.Nanoseconds(), 0)
 	default:
 		panic("unexpected RangeClosedTimestampPolicy")
