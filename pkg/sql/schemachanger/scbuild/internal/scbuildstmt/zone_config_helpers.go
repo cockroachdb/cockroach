@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 type zoneConfigAuthorizer interface {
@@ -1244,6 +1247,20 @@ func isCorrespondingTemporaryIndex(
 	return maybeCorresponding != nil
 }
 
+// findCorrespondingTemporaryIndexByID finds the temporary index that
+// corresponds to the currently mutated index identified by ID.
+//
+// Callers should take care that AllocateIDs() has been called before
+// using this function.
+func findCorrespondingTemporaryIndexByID(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) *scpb.TemporaryIndex {
+	return b.QueryByID(tableID).FilterTemporaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+			return e.SourceIndexID == indexID
+		}).MustGetZeroOrOneElement()
+}
+
 // getSubzoneSpansWithIdx groups each subzone span by their subzoneIndexes
 // for a lookup of which subzone spans a particular subzone is referred to by.
 func getSubzoneSpansWithIdx(
@@ -1333,3 +1350,188 @@ func constructSideEffectPartitionElem(
 	}
 	return elem
 }
+
+// TODO(annie): This is unused for now.
+var _ = configureZoneConfigForNewIndexPartitioning
+
+// configureZoneConfigForNewIndexPartitioning configures the zone config for any
+// new index in a REGIONAL BY ROW table.
+// This *must* be done after the index ID has been allocated.
+func configureZoneConfigForNewIndexPartitioning(
+	b BuildCtx, tableID catid.DescID, indexDesc descpb.IndexDescriptor,
+) error {
+	if indexDesc.ID == 0 {
+		return errors.AssertionFailedf("index %s does not have id", indexDesc.Name)
+	}
+	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
+	localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+	if localityRBR != nil {
+		dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+		regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
+		if err != nil {
+			return err
+		}
+
+		indexIDs := []descpb.IndexID{indexDesc.ID}
+		if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexDesc.ID); idx != nil {
+			indexIDs = append(indexIDs, idx.IndexID)
+		}
+
+		if err := ApplyZoneConfigForMultiRegionTable(
+			b,
+			regionConfig,
+			tableID,
+			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDs...),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ApplyZoneConfigForMultiRegionTable applies zone config settings based
+// on the options provided and adds the scpb.TableZoneConfig to our builder.
+func ApplyZoneConfigForMultiRegionTable(
+	b BuildCtx,
+	regionConfig multiregion.RegionConfig,
+	tableID catid.DescID,
+	opts ...applyZoneConfigForMultiRegionTableOption,
+) error {
+	currentZoneConfigWithRaw, err := b.ZoneConfigGetter().GetZoneConfig(b, tableID)
+	if err != nil {
+		return err
+	}
+	if currentZoneConfigWithRaw == nil {
+		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
+	}
+	newZoneConfig := *currentZoneConfigWithRaw.ZoneConfigProto()
+
+	for _, opt := range opts {
+		modifiedNewZoneConfig, err := opt(
+			newZoneConfig,
+			regionConfig,
+			tableID,
+		)
+		if err != nil {
+			return err
+		}
+		newZoneConfig = modifiedNewZoneConfig
+	}
+
+	if regionConfig.HasSecondaryRegion() {
+		var newLeasePreferences []zonepb.LeasePreference
+		localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+		switch {
+		case localityRBR != nil:
+			region := b.QueryByID(tableID).FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
+			if region != nil {
+				newLeasePreferences = regions.SynthesizeLeasePreferences(region.RegionName, regionConfig.SecondaryRegion())
+			} else {
+				newLeasePreferences = regions.SynthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
+			}
+		default:
+			newLeasePreferences = regions.SynthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
+		}
+		newZoneConfig.LeasePreferences = newLeasePreferences
+	}
+
+	// Mark the NumReplicas as 0 if we have subzones but no other features
+	// in the zone config. This signifies a placeholder.
+	// Note we do not use hasNewSubzones here as there may be existing subzones
+	// on the zone config which may still be a placeholder.
+	if regions.IsPlaceholderZoneConfigForMultiRegion(newZoneConfig) {
+		newZoneConfig.NumReplicas = proto.Int32(0)
+	}
+
+	// Determine if we're rewriting or deleting the zone configuration.
+	newZoneConfigIsEmpty := newZoneConfig.Equal(zonepb.NewZoneConfig())
+	currentZoneConfigIsEmpty := currentZoneConfigWithRaw.ZoneConfigProto().Equal(zonepb.NewZoneConfig())
+	rewriteZoneConfig := !newZoneConfigIsEmpty
+	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
+
+	if deleteZoneConfig {
+		return nil
+	}
+	if !rewriteZoneConfig {
+		return nil
+	}
+
+	if err := newZoneConfig.Validate(); err != nil {
+		return pgerror.Wrap(
+			err,
+			pgcode.CheckViolation,
+			"could not validate zone config",
+		)
+	}
+	if err := newZoneConfig.ValidateTandemFields(); err != nil {
+		return pgerror.Wrap(
+			err,
+			pgcode.CheckViolation,
+			"could not validate zone config",
+		)
+	}
+	if len(newZoneConfig.Subzones) > 0 {
+		newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
+		if err != nil {
+			return err
+		}
+	} else {
+		// To keep the Subzone and SubzoneSpan arrays consistent
+		newZoneConfig.SubzoneSpans = nil
+	}
+	if newZoneConfig.IsSubzonePlaceholder() && len(newZoneConfig.Subzones) == 0 {
+		return nil
+	}
+	// Adding a new zone config element entails adding a new element where the
+	// seqNum is 1 greater than the most recent zone config element. This ensures
+	// zone config changes are applied in the correct order during schema changes.
+	maxSeq := uint32(0)
+	b.QueryByID(tableID).FilterTableZoneConfig().
+		ForEach(func(status scpb.Status, targetStatus scpb.TargetStatus, elem *scpb.TableZoneConfig) {
+			if elem.SeqNum > maxSeq {
+				maxSeq = elem.SeqNum
+			}
+		})
+	tzc := &scpb.TableZoneConfig{
+		TableID:    tableID,
+		ZoneConfig: &newZoneConfig,
+		SeqNum:     maxSeq + 1,
+	}
+	b.Add(tzc)
+	return nil
+}
+
+// applyZoneConfigForMultiRegionTableOptionNewIndexes applies table zone configs
+// for a newly added index which requires partitioning of individual indexes.
+func applyZoneConfigForMultiRegionTableOptionNewIndexes(
+	indexIDs ...descpb.IndexID,
+) applyZoneConfigForMultiRegionTableOption {
+	return func(
+		zoneConfig zonepb.ZoneConfig,
+		regionConfig multiregion.RegionConfig,
+		tableID catid.DescID,
+	) (newZoneConfig zonepb.ZoneConfig, err error) {
+		for _, indexID := range indexIDs {
+			for _, region := range regionConfig.Regions() {
+				zc, err := regions.ZoneConfigForMultiRegionPartition(region, regionConfig)
+				if err != nil {
+					return zoneConfig, err
+				}
+				zoneConfig.SetSubzone(zonepb.Subzone{
+					IndexID:       uint32(indexID),
+					PartitionName: string(region),
+					Config:        zc,
+				})
+			}
+		}
+		return zoneConfig, nil
+	}
+}
+
+// applyZoneConfigForMultiRegionTableOption is an option that can be passed into
+// applyZoneConfigForMultiRegionTable.
+type applyZoneConfigForMultiRegionTableOption func(
+	zoneConfig zonepb.ZoneConfig,
+	regionConfig multiregion.RegionConfig,
+	tableID catid.DescID,
+) (newZoneConfig zonepb.ZoneConfig, err error)
