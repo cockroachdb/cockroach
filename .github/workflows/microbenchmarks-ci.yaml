@@ -91,6 +91,7 @@ jobs:
         if: always()
   post:
     runs-on: [ self-hosted, basic_runner_group ]
+    if: contains(github.event.pull_request.labels.*.name, 'T-microbench-post') # TODO: remove this check once results are confirmed to be stable on CI.
     timeout-minutes: 30
     permissions:
         contents: read
