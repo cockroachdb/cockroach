@@ -1488,7 +1488,10 @@ COMMIT
 
 # BEGIN READ WRITE overrides READ ONLY default
 statement ok
-BEGIN READ WRITE
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE;
+
+statement ok
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 CREATE SEQUENCE a

@@ -443,6 +443,9 @@ CREATE TABLE t20 (x INT);
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
 statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported inside a transaction
 ALTER TABLE t20 ALTER COLUMN x TYPE STRING
 

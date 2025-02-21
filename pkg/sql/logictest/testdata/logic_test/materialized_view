@@ -90,6 +90,9 @@ SELECT y FROM v WHERE y > 4
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
 statement error  pq: cannot refresh view in a multi-statement transaction
 REFRESH MATERIALIZED VIEW v
 

@@ -18,6 +18,7 @@ SELECT ARRAY['hi']::_newname
 # Test that we can use the new name within a transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl=off;
 ALTER TYPE newname RENAME TO renameagain
 
 query T
