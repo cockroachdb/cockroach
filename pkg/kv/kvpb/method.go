@@ -167,6 +167,11 @@ const (
 	// Excise is a non-MVCC command that destroys all data in a user MVCC key
 	// span. See ExciseRequest for details.
 	Excise
+
+	// FlushLockTable is an operation writes unreplicated locks in the
+	// in-memory lock table to the replicated lock table.
+	FlushLockTable
+
 	// MaxMethod is the maximum method.
 	MaxMethod Method = iota - 1
 	// NumMethods represents the total number of API methods.
