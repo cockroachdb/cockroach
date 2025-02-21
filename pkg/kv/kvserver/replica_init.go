@@ -79,9 +79,23 @@ func newInitializedReplica(store *Store, loaded kvstorage.LoadedReplicaState) (*
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if err := r.initRaftMuLockedReplicaMuLocked(loaded); err != nil {
 		return nil, err
 	}
+
+	// ForwardMinLeaseProposedTS past the previous lease expiration time. This is
+	// important because if the node was restarted, we don't want to reacquire the
+	// lease with a start time that overlaps the previous lease. This is
+	// important so that we don't serve a write request with the new lease that
+	// contradicts a future read served by the old lease before the restart
+	// (we would have lost that timestamp cache).
+	if r.shMu.state.Lease.Sequence > 0 {
+		if err := r.forwardMinLeaseProposedTSPastLeaseExpirationReplicaMuLocked(store); err != nil {
+			return nil, err
+		}
+	}
+	
 	return r, nil
 }
 
@@ -487,4 +501,28 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 			r.store.scheduler.AddPriorityID(desc.RangeID)
 		}
 	}
+}
+
+// forwardMinLeaseProposedTSPastLeaseExpirationReplicaMuLocked forwards the
+// minLeaseProposedTS past the previous lease expiration time. It does so by
+// sleeping until Clock().Now() is past the previous lease expiration time.
+// This works for expiration-based leases, and leader-leases but not for
+// epoch-based leases since the liveness record might not be found in cache
+// after the restart.
+func (r *Replica) forwardMinLeaseProposedTSPastLeaseExpirationReplicaMuLocked(store *Store) error {
+	r.mu.AssertHeld()
+	st := r.leaseStatusAtRLocked(r.AnnotateCtx(context.TODO()), r.Clock().NowAsClockTimestamp())
+
+	if st.OwnedBy(store.StoreID()) {
+		// Only sleep if we were the lease owner.
+		if err := r.Clock().SleepUntil(
+			r.AnnotateCtx(context.TODO()),
+			st.Expiration().Next(),
+		); err != nil {
+			return err
+		}
+
+		r.mu.minLeaseProposedTS.Forward(r.Clock().NowAsClockTimestamp())
+	}
+	return nil
 }
