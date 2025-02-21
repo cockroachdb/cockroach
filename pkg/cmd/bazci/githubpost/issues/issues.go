@@ -17,8 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
@@ -66,7 +66,7 @@ func (p *poster) getProbableMilestone(ctx *postCtx) *int {
 		ctx.Printf("unable to parse version from binary version to determine milestone: %s", err)
 		return nil
 	}
-	vstring := fmt.Sprintf("%d.%d", v.Major(), v.Minor())
+	vstring := v.Format("%X.%Y")
 
 	milestones, _, err := p.listMilestones(ctx, p.Org, p.Repo, &github.MilestoneListOptions{
 		State: "open",

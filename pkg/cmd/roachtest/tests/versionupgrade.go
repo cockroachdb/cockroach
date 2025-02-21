@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 )
 
 type versionFeatureTest struct {
@@ -198,7 +198,8 @@ func makeVersionFixtureAndFatal(
 		}
 	}()
 
-	predecessorVersionStr, err := release.LatestPredecessor(version.MustParse(makeFixtureVersion))
+	v := version.MustParse(makeFixtureVersion)
+	predecessorVersionStr, err := release.LatestPredecessor(&v)
 	if err != nil {
 		t.Fatal(err)
 	}
