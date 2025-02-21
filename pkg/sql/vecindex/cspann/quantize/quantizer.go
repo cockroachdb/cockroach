@@ -27,8 +27,6 @@ type Quantizer interface {
 	// Quantize quantizes a set of input vectors and returns their compressed
 	// form as a quantized vector set. The set's centroid is calculated from the
 	// input vectors.
-	//
-	// NOTE: The caller must ensure that a Workspace is attached to the context.
 	Quantize(w *veclib.Workspace, vectors vector.Set) QuantizedVectorSet
 
 	// QuantizeInSet quantizes a set of input vectors and adds their compressed
@@ -36,7 +34,6 @@ type Quantizer interface {
 	//
 	// NOTE: The set's centroid is not recalculated to reflect the newly added
 	//       vectors.
-	// NOTE: The caller must ensure that a Workspace is attached to the context.
 	QuantizeInSet(w *veclib.Workspace, quantizedSet QuantizedVectorSet, vectors vector.Set)
 
 	// NewQuantizedVectorSet returns a new empty vector set preallocated to the
@@ -51,8 +48,6 @@ type Quantizer interface {
 	// "errorBounds" slices with length equal to the number of quantized vectors
 	// in "quantizedSet". EstimateSquaredDistances will update the slices with
 	// distances and distance error bounds.
-	//
-	// NOTE: The caller must ensure that a Workspace is attached to the context.
 	EstimateSquaredDistances(
 		w *veclib.Workspace,
 		quantizedSet QuantizedVectorSet,

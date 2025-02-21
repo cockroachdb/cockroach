@@ -6,16 +6,13 @@
 package cspann
 
 import (
-	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 )
@@ -25,16 +22,7 @@ func TestSplitPartitionData(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var workspace veclib.Workspace
-	ctx := context.Background()
 	quantizer := quantize.NewRaBitQuantizer(2, 42)
-	store := vecstore.NewInMemoryStore(2, 42)
-	options := VectorIndexOptions{IsDeterministic: true}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	index, err := NewVectorIndex(ctx, store, quantizer, 42, &options, stopper)
-	require.NoError(t, err)
-	worker := NewFixupWorker(&index.fixups)
-
 	vectors := vector.MakeSetFromRawData([]float32{
 		0, 0,
 		1, 1,
@@ -46,19 +34,19 @@ func TestSplitPartitionData(t *testing.T) {
 	}, 2)
 	quantizedSet := quantizer.Quantize(&workspace, vectors)
 
-	splitPartition := vecstore.NewPartition(
+	splitPartition := NewPartition(
 		quantizer,
 		quantizedSet,
-		[]vecstore.ChildKey{
-			{KeyBytes: vecstore.KeyBytes("vec1")},
-			{KeyBytes: vecstore.KeyBytes("vec2")},
-			{KeyBytes: vecstore.KeyBytes("vec3")},
-			{KeyBytes: vecstore.KeyBytes("vec4")},
-			{KeyBytes: vecstore.KeyBytes("vec5")},
-			{KeyBytes: vecstore.KeyBytes("vec6")},
-			{KeyBytes: vecstore.KeyBytes("vec7")},
+		[]ChildKey{
+			{KeyBytes: KeyBytes("vec1")},
+			{KeyBytes: KeyBytes("vec2")},
+			{KeyBytes: KeyBytes("vec3")},
+			{KeyBytes: KeyBytes("vec4")},
+			{KeyBytes: KeyBytes("vec5")},
+			{KeyBytes: KeyBytes("vec6")},
+			{KeyBytes: KeyBytes("vec7")},
 		},
-		[]vecstore.ValueBytes{
+		[]ValueBytes{
 			{1, 2}, {3, 4}, {5, 6}, {7, 8}, {9, 10}, {11, 12}, {13, 14},
 		},
 		1)
@@ -143,8 +131,8 @@ func TestSplitPartitionData(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			tempVectors := vector.MakeSet(2)
 			tempVectors.AddSet(vectors)
-			leftSplit, rightSplit := worker.splitPartitionData(
-				ctx, splitPartition, tempVectors, tc.leftOffsets, tc.rightOffsets)
+			leftSplit, rightSplit := splitPartitionData(
+				&workspace, quantizer, splitPartition, tempVectors, tc.leftOffsets, tc.rightOffsets)
 
 			validate(&leftSplit, tc.expectedLeft)
 			validate(&rightSplit, tc.expectedRight)

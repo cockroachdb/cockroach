@@ -11,7 +11,6 @@ import (
 	"slices"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"gonum.org/v1/gonum/stat"
@@ -25,6 +24,10 @@ const statsAlpha = 0.01
 // deleted before local statistics will be merged with global statistics.
 const statsReportingInterval = 100
 
+// mergeStatsFunc defines the function called by the stats manager when it needs
+// to read and update global statistics.
+type mergeStatsFunc func(ctx context.Context, stats *IndexStats, skipMerge bool) error
+
 // statsManager maintains locally-cached statistics about the vector index that
 // are used by adaptive search to improve search accuracy. Local statistics are
 // updated as the index is searched during Insert and Delete operations.
@@ -33,8 +36,8 @@ const statsReportingInterval = 100
 //
 // All methods in statsManager are thread-safe.
 type statsManager struct {
-	// store is used to read and update global statistics.
-	store vecstore.Store
+	// mergeStats is called to read and update global statistics.
+	mergeStats mergeStatsFunc
 
 	// addRemoveCount counts the number of vectors added to the index or removed
 	// from it since the last stats merge.
@@ -47,17 +50,17 @@ type statsManager struct {
 
 		// stats maintains locally-updated statistics. These are periodically
 		// merged with global statistics.
-		stats vecstore.IndexStats
+		stats IndexStats
 	}
 }
 
 // Init initializes the stats manager for use.
-func (sm *statsManager) Init(ctx context.Context, store vecstore.Store) error {
-	sm.store = store
+func (sm *statsManager) Init(ctx context.Context, mergeStats mergeStatsFunc) error {
+	sm.mergeStats = mergeStats
 
 	// Fetch global statistics to be used as the initial starting point for local
 	// statistics.
-	err := sm.store.MergeStats(ctx, &sm.mu.stats, true /* skipMerge */)
+	err := sm.mergeStats(ctx, &sm.mu.stats, true /* skipMerge */)
 	if err != nil {
 		return errors.Wrap(err, "fetching starting stats")
 	}
@@ -79,10 +82,10 @@ func (sm *statsManager) OnAddOrRemoveVector(ctx context.Context) error {
 	// Determine whether to merge local statistics with global statistics. Do
 	// this in a separate function to avoid holding the lock during the call to
 	// MergeStats.
-	stats, shouldMerge := func() (stats vecstore.IndexStats, shouldMerge bool) {
+	stats, shouldMerge := func() (stats IndexStats, shouldMerge bool) {
 		// Determine if it's time to merge statistics.
 		if sm.addRemoveCount.Add(1) != statsReportingInterval {
-			return vecstore.IndexStats{}, false
+			return IndexStats{}, false
 		}
 
 		// Copy CVStats while holding the lock.
@@ -95,7 +98,7 @@ func (sm *statsManager) OnAddOrRemoveVector(ctx context.Context) error {
 	}
 
 	// Merge local stats with store stats.
-	err := sm.store.MergeStats(ctx, &stats, false /* skipMerge */)
+	err := sm.mergeStats(ctx, &stats, false /* skipMerge */)
 	if err != nil {
 		return errors.Wrap(err, "merging stats")
 	}
@@ -126,7 +129,7 @@ func (sm *statsManager) OnAddOrRemoveVector(ctx context.Context) error {
 // "spread" of distances at a given level of the tree and are used to calculate
 // the Z-score of a particular search.
 func (sm *statsManager) ReportSearch(
-	level vecstore.Level, squaredDistances []float64, updateStats bool,
+	level Level, squaredDistances []float64, updateStats bool,
 ) float64 {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -136,7 +139,7 @@ func (sm *statsManager) ReportSearch(
 		return 0
 	}
 
-	offset := int(level - vecstore.SecondLevel)
+	offset := int(level - SecondLevel)
 	if offset < 0 {
 		panic(errors.AssertionFailedf("ReportSearch should never be called for the leaf level"))
 	} else if offset >= len(sm.mu.stats.CVStats) {
@@ -160,7 +163,7 @@ func (sm *statsManager) ReportSearch(
 //
 // The Z-score compares the CV of this search with the average, normalized CV of
 // previous searches.
-func deriveZScore(cvstats *vecstore.CVStats, squaredDistances []float64, updateStats bool) float64 {
+func deriveZScore(cvstats *CVStats, squaredDistances []float64, updateStats bool) float64 {
 	// Need at least 2 distance values to calculate the CV.
 	if len(squaredDistances) < 2 {
 		// Return zero Z-score, meaning no variation from the mean.
