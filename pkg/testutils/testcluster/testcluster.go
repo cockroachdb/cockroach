@@ -1157,8 +1157,8 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 }
 
 // MaybeWaitForLeaseUpgrade waits until the lease held for the given range
-// descriptor is upgraded to an epoch-based one, but only if we expect the lease
-// to be upgraded.
+// descriptor is upgraded to an epoch-based or leader lease, but only if we
+// expect the lease to be upgraded.
 func (tc *TestCluster) MaybeWaitForLeaseUpgrade(
 	ctx context.Context, t serverutils.TestFataler, desc roachpb.RangeDescriptor,
 ) {
