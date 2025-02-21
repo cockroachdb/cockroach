@@ -13,6 +13,7 @@ go_library(
         "cmd_end_transaction.go",
         "cmd_excise.go",
         "cmd_export.go",
+        "cmd_flush_lock_table.go",
         "cmd_gc.go",
         "cmd_get.go",
         "cmd_heartbeat_txn.go",
