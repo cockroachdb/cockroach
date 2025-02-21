@@ -32,12 +32,12 @@ func TestStatusGossipJson(t *testing.T) {
 	if srv.TenantController().StartedDefaultTestTenant() {
 		// explicitly enabling debug capability for the secondary/application tenant
 		_, err := srv.SystemLayer().SQLConn(t).Exec(
-			`ALTER TENANT [$1] GRANT CAPABILITY can_debug_process=true`,
+			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`,
 			serverutils.TestTenantID().ToUint64(),
 		)
 		require.NoError(t, err)
 		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanDebugProcess: "true"}, "")
+			map[tenantcapabilities.ID]string{tenantcapabilities.CanViewNodeInfo: "true"}, "")
 	}
 	s := srv.ApplicationLayer()
 	require.NoError(t, validateGossipResponse(s))
@@ -59,7 +59,7 @@ func TestStatusGossipJsonWithoutTenantCapability(t *testing.T) {
 		s := srv.ApplicationLayer()
 		actualErr := validateGossipResponse(s)
 		require.Error(t, actualErr)
-		require.Contains(t, actualErr.Error(), "client tenant does not have capability to debug the process")
+		require.Contains(t, actualErr.Error(), "client tenant does not have capability to query cluster node metadata")
 	}
 }
 

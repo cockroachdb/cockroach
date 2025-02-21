@@ -122,7 +122,7 @@ func (a tenantAuthorizer) authorize(
 		return a.capabilitiesAuthorizer.HasProcessDebugCapability(ctx, tenID)
 
 	case "/cockroach.server.serverpb.Status/Gossip":
-		return a.capabilitiesAuthorizer.HasProcessDebugCapability(ctx, tenID)
+		return a.capabilitiesAuthorizer.HasNodeStatusCapability(ctx, tenID)
 
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)
