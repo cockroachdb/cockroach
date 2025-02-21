@@ -1050,6 +1050,122 @@ DROP FUNCTION my_non_sec_definer_function;
 statement ok
 DROP TABLE sensitive_data_table;
 
+subtest truncate
+
+statement ok
+CREATE TYPE trunc_type AS ENUM('a', 'b', 'c');
+
+statement ok
+CREATE TABLE trunc (a INT, b trunc_type, FAMILY (a, b));
+
+statement ok
+INSERT INTO trunc VALUES (1, 'a'), (2, 'b'), (3, 'c');
+
+statement ok
+CREATE USER deleter;
+
+statement ok
+GRANT ALL ON trunc TO deleter;
+
+statement ok
+ALTER TABLE trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p1 ON trunc FOR SELECT TO deleter USING (a % 2 = 1 and b != 'b');
+
+statement ok
+CREATE POLICY p2 ON trunc FOR DELETE TO deleter USING (false);
+
+statement ok
+CREATE POLICY p3 ON trunc FOR INSERT TO deleter WITH CHECK (true);
+
+statement ok
+SET ROLE deleter;
+
+query IT
+SELECT a, b FROM trunc ORDER BY a;
+----
+1  a
+3  c
+
+# This should not delete anything because the expression for delete is false.
+statement ok
+DELETE FROM trunc;
+
+query IT
+SELECT a, b FROM trunc ORDER BY a;
+----
+1  a
+3  c
+
+query TT
+SHOW CREATE TABLE trunc;
+----
+trunc  CREATE TABLE public.trunc (
+         a INT8 NULL,
+         b public.trunc_type NULL,
+         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+         CONSTRAINT trunc_pkey PRIMARY KEY (rowid ASC),
+         FAMILY fam_0_a_b_rowid (a, b, rowid)
+       );
+       ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+       CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
+       CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
+       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true)
+
+
+# Truncate should be allowed, despite the policy to prevent deletes.
+statement ok
+TRUNCATE TABLE trunc;
+
+query IT
+SELECT a, b FROM trunc ORDER BY a;
+----
+
+# TRUNCATE is implemented by recreating the table. Verify the same policies exist.
+query TT
+SHOW CREATE TABLE trunc;
+----
+trunc  CREATE TABLE public.trunc (
+         a INT8 NULL,
+         b public.trunc_type NULL,
+         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+         CONSTRAINT trunc_pkey PRIMARY KEY (rowid ASC),
+         FAMILY fam_0_a_b_rowid (a, b, rowid)
+       );
+       ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+       CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
+       CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
+       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true)
+
+# Ensure the policies are still enforced.
+statement ok
+INSERT INTO trunc VALUES (7, 'a'), (8, 'b'), (9, 'c');
+
+query IT
+SELECT a, b FROM trunc ORDER BY a;
+----
+7  a
+9  c
+
+statement ok
+DELETE FROM trunc;
+
+query IT
+SELECT a, b FROM TRUNC ORDER BY a;
+----
+7  a
+9  c
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE trunc;
+
+statement ok
+DROP USER deleter;
+
 subtest validate_statement_cache_after_rls_changes
 
 statement ok
