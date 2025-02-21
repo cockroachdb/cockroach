@@ -25,12 +25,12 @@ func TestStatusGossipJson(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantProbabilistic,
+		DefaultTestTenant: base.TestTenantProbabilisticOnly,
 	})
 	defer srv.Stopper().Stop(context.Background())
 
 	if srv.TenantController().StartedDefaultTestTenant() {
-		// explicitly enabling debug capability for the secondary/application tenant
+		// explicitly enabling CanViewNodeInfo capability for the secondary/application tenant
 		_, err := srv.SystemLayer().SQLConn(t).Exec(
 			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`,
 			serverutils.TestTenantID().ToUint64(),
@@ -54,13 +54,10 @@ func TestStatusGossipJsonWithoutTenantCapability(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(context.Background())
 
-	if srv.TenantController().StartedDefaultTestTenant() {
-		// application tenant with debug capability
-		s := srv.ApplicationLayer()
-		actualErr := validateGossipResponse(s)
-		require.Error(t, actualErr)
-		require.Contains(t, actualErr.Error(), "client tenant does not have capability to query cluster node metadata")
-	}
+	s := srv.ApplicationLayer()
+	actualErr := validateGossipResponse(s)
+	require.Error(t, actualErr)
+	require.Contains(t, actualErr.Error(), "client tenant does not have capability to query cluster node metadata")
 }
 
 func validateGossipResponse(s serverutils.ApplicationLayerInterface) error {
