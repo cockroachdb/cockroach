@@ -1096,3 +1096,12 @@ vectorized: true
               missing stats
               table: t121322_c@t121322_c_pkey
               spans: FULL SCAN
+
+# Regression test for #136458. The canary column ordinal should be correctly
+# selected when the canary column is also a partial index DEL column.
+
+statement ok
+CREATE TABLE t136458 (c BOOL PRIMARY KEY, INDEX (c) WHERE c)
+
+statement ok
+UPSERT INTO t136458 (c) VALUES (false)
