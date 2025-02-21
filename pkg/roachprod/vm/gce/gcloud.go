@@ -1781,6 +1781,33 @@ func computeGrowDistribution(groups []jsonManagedInstanceGroup, newNodeCount int
 	return addCount
 }
 
+// computeHostNamesPerZone distributes VM hostnames across zones based on the required
+// node count. Groups must be sorted by size from smallest to largest before passing to
+// this function. It takes instance groups, available hostnames, and the number of new nodes,
+// then returns a mapping of zones to their assigned hostnames.
+func computeHostNamesPerZone(
+	groups []jsonManagedInstanceGroup, vmNames []string, newNodeCount int,
+) map[string][]string {
+	addCounts := computeGrowDistribution(groups, newNodeCount)
+	zoneToHostNames := make(map[string][]string)
+	nameIndex := 0
+	for idx, group := range groups {
+		addCount := addCounts[idx]
+		if addCount == 0 {
+			continue
+		}
+
+		vmNamesForZone := make([]string, addCount)
+		for i := 0; i < addCount; i++ {
+			vmNamesForZone[i] = vmNames[nameIndex]
+			nameIndex++
+		}
+
+		zoneToHostNames[group.Zone] = vmNamesForZone
+	}
+	return zoneToHostNames
+}
+
 // Shrink shrinks the cluster by deleting the given VMs. This is only supported
 // for managed instance groups. Currently, nodes should only be deleted from the
 // tail of the cluster, due to complexities thar arise when the node names are
@@ -1838,22 +1865,17 @@ func (p *Provider) Grow(
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Size < groups[j].Size
 	})
-	addCounts := computeGrowDistribution(groups, newNodeCount)
+	zoneToHostNames := computeHostNamesPerZone(groups, names, newNodeCount)
 
-	zoneToHostNames := make(map[string][]string)
 	addedVms := make(map[string]bool)
 	var g errgroup.Group
-	for idx, group := range groups {
-		addCount := addCounts[idx]
-		if addCount == 0 {
-			continue
-		}
+	for _, group := range groups {
 		createArgs := []string{"compute", "instance-groups", "managed", "create-instance", "--zone", group.Zone, groupName,
 			"--project", project}
-		for i := 0; i < addCount; i++ {
-			addedVms[names[i]] = true
-			argsWithName := append(createArgs[:len(createArgs):len(createArgs)], []string{"--instance", names[i]}...)
-			zoneToHostNames[group.Zone] = append(zoneToHostNames[group.Zone], names[i])
+		for _, vmName := range zoneToHostNames[group.Zone] {
+			vmName := vmName
+			addedVms[vmName] = true
+			argsWithName := append(createArgs[:len(createArgs):len(createArgs)], []string{"--instance", vmName}...)
 			g.Go(func() error {
 				cmd := exec.Command("gcloud", argsWithName...)
 				output, err := cmd.CombinedOutput()
@@ -2500,7 +2522,7 @@ func (d *jsonInstanceTemplateDisk) toVolume(vmName, zone string) (*vm.Volume, Vo
 	diskSize, _ := strconv.Atoi(d.InitializeParams.DiskSizeGb)
 
 	// This is a scratch disk.
-	if d.InitializeParams.DiskType == "SCRATCH" {
+	if d.Type == "SCRATCH" {
 		return &vm.Volume{
 			Size:               diskSize,
 			ProviderVolumeType: "local-ssd",
