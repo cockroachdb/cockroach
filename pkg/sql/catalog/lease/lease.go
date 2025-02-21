@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1584,6 +1585,7 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 // rangefeeds. This function must be passed a non-nil gossip if
 // RangefeedLeases is not active.
 func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, db *kv.DB) {
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	defer close(m.waitForInit)
@@ -1852,6 +1854,7 @@ func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) 
 // range feed progress / recovery, and supporting legacy expiry
 // based leases.
 func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	// The refresh loop is used to clean up leases that have expired (because of
 	// a new version), and track range feed availability. This will run based on
 	// the lease duration, but will still periodically run if the duration is zero.
@@ -2098,6 +2101,8 @@ func (m *Manager) DeleteOrphanedLeases(
 	// Run as async worker to prevent blocking the main server Start method.
 	// Exit after releasing all the orphaned leases.
 	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
+	newCtx = multitenant.WithTenantCostControlExemption(newCtx)
+
 	// AddTags and not WithTags, so that we combine the tags with those
 	// filled by AnnotateCtx.
 	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
