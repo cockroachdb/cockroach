@@ -991,7 +991,6 @@ func purgeOldVersions(
 				if sessionExpiry := leaseToExpire.mu.session.Expiration(); leaseDuration > 0 && leaseToExpire.mu.expiration.Less(sessionExpiry) {
 					leaseToExpire.mu.expiration = sessionExpiry
 				}
-				leaseToExpire.mu.session = nil
 				if leaseToExpire.mu.lease != nil {
 					m.storage.sessionBasedLeasesWaitingToExpire.Inc(1)
 					m.mu.leasesToExpire = append(m.mu.leasesToExpire, leaseToExpire)
