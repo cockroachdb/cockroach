@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -399,15 +399,17 @@ func Test_randomPredecessor(t *testing.T) {
 // "current version". Returns a function that resets that variable.
 func withTestBuildVersion(v string) func() {
 	testBuildVersion := version.MustParse(v)
-	clusterupgrade.TestBuildVersion = testBuildVersion
-	return func() { clusterupgrade.TestBuildVersion = buildVersion }
+	clusterupgrade.TestBuildVersion = &testBuildVersion
+	return func() { clusterupgrade.TestBuildVersion = &buildVersion }
 }
 
 func TestSupportsSkipUpgradeTo(t *testing.T) {
 	expect := func(verStr string, expected bool) {
 		t.Helper()
 		v := clusterupgrade.MustParseVersion(verStr)
-		if r := clusterversion.Latest.ReleaseSeries(); int(r.Major) == v.Major() && int(r.Minor) == v.Minor() {
+		r := clusterversion.Latest.ReleaseSeries()
+		currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
+		if currentMajor.Equals(v.Version.Major()) {
 			// We have to special case the current series, to allow for bumping the
 			// min supported version separately from the current version.
 			expected = len(clusterversion.SupportedPreviousReleases()) > 1
