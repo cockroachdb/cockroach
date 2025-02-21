@@ -503,8 +503,9 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			b.appendPlpgSQLStmts(&blockCon, stmts[i+1:])
 			b.pushContinuation(blockCon)
-			defer b.popContinuation()
-			return b.buildBlock(t, s)
+			blockScope := b.buildBlock(t, s)
+			b.popContinuation()
+			return blockScope
 
 		case *ast.Return:
 			// If the routine has OUT-parameters or a VOID return type, the RETURN
@@ -672,11 +673,12 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			exitCon := b.makeContinuationWithTyp("loop_exit", t.Label, continuationLoopExit)
 			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
 			b.pushContinuation(exitCon)
-			defer b.popContinuation()
 			switch c := t.Control.(type) {
 			case *ast.IntForLoopControl:
 				// FOR target IN [ REVERSE ] expr .. expr [ BY expr ] LOOP ...
-				return b.handleIntForLoop(s, t, c)
+				loopScope := b.handleIntForLoop(s, t, c)
+				b.popContinuation()
+				return loopScope
 			default:
 				panic(errors.WithDetail(unsupportedPLStmtErr,
 					"query and cursor FOR loops are not yet supported",
