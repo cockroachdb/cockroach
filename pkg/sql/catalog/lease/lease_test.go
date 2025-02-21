@@ -2247,6 +2247,11 @@ func TestLeaseAcquisitionDoesntBlock(t *testing.T) {
 			schemaCh <- err
 			return
 		}
+		_, err = tx.Exec("SET LOCAL autocommit_before_ddl = off")
+		if err != nil {
+			schemaCh <- err
+			return
+		}
 		_, err = tx.Exec("ALTER TABLE t.test ADD COLUMN v2 CHAR")
 		schemaCh <- err
 		if err != nil {
@@ -2299,6 +2304,11 @@ func TestLeaseAcquisitionByNameDoesntBlock(t *testing.T) {
 			schemaCh <- err
 			return
 		}
+		_, err = tx.Exec("SET LOCAL autocommit_before_ddl = off")
+		if err != nil {
+			schemaCh <- err
+			return
+		}
 		_, err = tx.Exec("CREATE TABLE t.test()")
 		schemaCh <- err
 		if err != nil {
@@ -2343,9 +2353,13 @@ func TestIntentOnSystemConfigDoesNotPreventSchemaChange(t *testing.T) {
 	require.NoError(t, err)
 
 	// Lay down an intent on the system config span.
+	_, err = txA.Exec("SET LOCAL autocommit_before_ddl = off")
+	require.NoError(t, err)
 	_, err = txA.Exec("CREATE TABLE bar (i INT PRIMARY KEY)")
 	require.NoError(t, err)
 
+	_, err = txB.Exec("SET LOCAL autocommit_before_ddl = off")
+	require.NoError(t, err)
 	_, err = txB.Exec("ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 2")
 	require.NoError(t, err)
 
