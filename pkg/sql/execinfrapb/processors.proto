@@ -134,9 +134,12 @@ message ProcessorCoreUnion {
   optional VectorMutationSearchSpec vectorMutationSearch = 48;
   optional CompactBackupsSpec compactBackups = 49;
   optional InspectSpec inspect = 50;
+  optional BulkMergeSpec bulkMerge = 51;
+  optional MergeCoordinatorSpec mergeCoordinator = 52;
+  optional MergeLoopbackSpec mergeLoopback = 53;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
-  // NEXT ID: 51.
+  // NEXT ID: 54.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
