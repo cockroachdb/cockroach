@@ -807,6 +807,18 @@ func (m *CompactBackupsSpec) summary() (string, []string) {
 	return "CompactBackupsSpec", details
 }
 
+func (m *BulkMergeSpec) summary() (string, []string) {
+	return "BulkMerge", nil
+}
+
+func (m *MergeCoordinatorSpec) summary() (string, []string) {
+	return "MergeCoordinator", nil
+}
+
+func (m *MergeLoopbackSpec) summary() (string, []string) {
+	return "MergeLoopback", nil
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`
