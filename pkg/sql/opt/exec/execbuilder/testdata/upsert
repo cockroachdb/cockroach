@@ -947,3 +947,12 @@ count         Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
 count         Del /Table/120/2/3/0
 count         CPut /Table/120/2/2/0 -> /BYTES/0x8a (expecting does not exist)
 sql query     execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+
+# Regression test for #136458. The canary column ordinal should be correctly
+# selected when the canary column is also a partial index DEL column.
+
+statement ok
+CREATE TABLE t136458 (c BOOL PRIMARY KEY, INDEX (c) WHERE c)
+
+statement ok
+UPSERT INTO t136458 (c) VALUES (false)
