@@ -171,6 +171,31 @@ message ReadImportDataSpec {
   // NEXTID: 20.
 }
 
+message BulkMergeSpec {
+	// ssts is the list of input SSTs to merge.
+	repeated SST ssts = 1 [(gogoproto.nullable) = false];
+
+	// splits are the keys that seperate the spans that should be merged. E.g.
+	// the merge task `n` is to merge all the input data that overlaps with
+	// [splits[n-1], splits[n]).
+	repeated string splits = 2;
+
+	// output_uri is a URI like 'nodelocal://1/<job_id>/merger'. The uri should
+	// use this as the base for all output files. So an output file would be
+	// 'nodelocal://1/<job_id>/merger/0.sst'
+	optional string output_uri = 3;
+
+	message SST {
+		// uri is a fully qualifed URI to the SST file. It will look something like
+		// 'nodelocal://2/<job_id>/input/0.sst'
+		optional string uri = 1 [(gogoproto.nullable) = false];
+		// start_key is the first key in the SST.
+		optional string start_key = 2 [(gogoproto.nullable) = false];
+		// end_key is the last key in the SST.
+		optional string end_key = 3 [(gogoproto.nullable) = false];
+	};
+}
+
 message IngestStoppedSpec {
   optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID",
   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];

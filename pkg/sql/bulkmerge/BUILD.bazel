@@ -1,0 +1,42 @@
+# Copyright 2025 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bulkmerge",
+    srcs = ["merge_processor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/bulkmerge",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/types",
+    ],
+)
+
+go_test(
+    name = "bulkmerge_test",
+    srcs = [
+        "main_test.go",
+        "merge_processor_test.go",
+    ],
+    embed = [":bulkmerge"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/execinfrapb",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
