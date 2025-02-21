@@ -104,9 +104,9 @@ func awsdmsVerString(v *version.Version) string {
 		ciBuildID = strings.ReplaceAll(ciBuildID, ".", "-")
 		return fmt.Sprintf("ci-build-%s", ciBuildID)
 	}
-	ret := fmt.Sprintf("local-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
-	if v.PreRelease() != "" {
-		ret += "-" + v.PreRelease()
+	ret := v.Format("local-%X-%Y-%Z")
+	if v.IsPrerelease() {
+		ret += v.Format("-%P")
 	}
 	ret = strings.ReplaceAll(ret, ".", "-")
 	const maxSize = 24

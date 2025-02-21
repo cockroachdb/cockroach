@@ -387,7 +387,8 @@ func (c *SyncedCluster) fetchVersion(
 	if err != nil {
 		return nil, err
 	}
-	return version.Parse(strings.TrimSpace(result.CombinedOut))
+	v, err := version.Parse(strings.TrimSpace(result.CombinedOut))
+	return &v, err
 }
 
 // Start cockroach on the cluster. For non-multitenant deployments or
@@ -1165,7 +1166,7 @@ func (c *SyncedCluster) generateStartFlagsKV(
 		// N.B. WALFailover is only supported in v24+.
 		// If version is unknown, we only set WALFailover if StoreCount > 1.
 		// To silence redundant warnings, when other nodes are started, we reset WALFailover.
-		if startOpts.Version != nil && startOpts.Version.Major() < 24 {
+		if startOpts.Version != nil && startOpts.Version.Major().Year < 24 {
 			l.Printf("WARN: WALFailover is only supported in v24+. Ignoring --wal-failover flag.")
 			startOpts.WALFailover = ""
 		} else if startOpts.Version == nil && startOpts.StoreCount <= 1 {

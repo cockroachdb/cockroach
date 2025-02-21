@@ -139,9 +139,7 @@ func run(
 				versionStr, err)
 		}
 
-		// Prerelease returns anything after the `-` and before metadata. eg:
-		// `beta` for `1.0.1-beta+metadata`
-		if ver.PreRelease() == "" {
+		if !ver.IsPrerelease() {
 			// TODO(dan): This is what it did before, but isn't this wrong? It
 			// seems like it would mark a patch release of the previous minor
 			// version as latest. Instead, move to something like "latest-2.0",
