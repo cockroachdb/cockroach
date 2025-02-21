@@ -1,0 +1,128 @@
+store store-id=1 locality-tiers=region=a,zone=a1
+----
+locality: =a,=a1 str: 1:2:
+
+store store-id=2 locality-tiers=region=a,zone=a2
+----
+locality: =a,=a2 str: 1:3:
+
+store store-id=3 locality-tiers=region=b,zone=b1
+----
+locality: =b,=b1 str: 4:5:
+
+existing-replica-localities store-ids=1
+----
+replicas:
+  =a,=a1
+score-sums:
+num-existing-replica-localities: 1
+
+score-new-replica store-id=2
+----
+score: 0.500000
+replicas:
+  =a,=a1
+score-sums:
+  locality-str 1:3:: 0.500000
+
+score-new-replica store-id=3
+----
+score: 1.000000
+replicas:
+  =a,=a1
+score-sums:
+  locality-str 1:3:: 0.500000
+  locality-str 4:5:: 1.000000
+
+existing-replica-localities store-ids=1,2
+----
+replicas:
+  =a,=a1
+  =a,=a2
+score-sums:
+num-existing-replica-localities: 2
+
+score-new-replica store-id=3
+----
+score: 2.000000
+replicas:
+  =a,=a1
+  =a,=a2
+score-sums:
+  locality-str 4:5:: 2.000000
+
+score-remove-replica store-id=2
+----
+score: -0.500000
+replicas:
+  =a,=a1
+  =a,=a2
+score-sums:
+  locality-str 1:3:: 0.500000
+  locality-str 4:5:: 2.000000
+
+existing-replica-localities store-ids=1,3
+----
+replicas:
+  =a,=a1
+  =b,=b1
+score-sums:
+num-existing-replica-localities: 3
+
+score-new-replica store-id=2
+----
+score: 1.500000
+replicas:
+  =a,=a1
+  =b,=b1
+score-sums:
+  locality-str 1:3:: 1.500000
+
+score-remove-replica store-id=3
+----
+score: -1.000000
+replicas:
+  =a,=a1
+  =b,=b1
+score-sums:
+  locality-str 1:3:: 1.500000
+  locality-str 4:5:: 1.000000
+
+score-rebalance remove-store-id=3 add-store-id=2
+----
+score: -0.500000
+replicas:
+  =a,=a1
+  =b,=b1
+score-sums:
+  locality-str 1:3:: 1.500000
+  locality-str 4:5:: 1.000000
+
+score-rebalance remove-store-id=1 add-store-id=2
+----
+score: 0.000000
+replicas:
+  =a,=a1
+  =b,=b1
+score-sums:
+  locality-str 1:2:: 1.000000
+  locality-str 1:3:: 1.500000
+  locality-str 4:5:: 1.000000
+
+# store-id 4 has the same locality tiers as store-id 1.
+store store-id=4 locality-tiers=region=a,zone=a1
+----
+locality: =a,=a1 str: 1:2:
+
+# We already have the score-sum for the locality of store-id 1, and reuse it
+# for store-id 4.
+score-rebalance remove-store-id=1 add-store-id=4
+----
+score: 0.000000
+replicas:
+  =a,=a1
+  =b,=b1
+score-sums:
+  locality-str 1:2:: 1.000000
+  locality-str 1:3:: 1.500000
+  locality-str 4:5:: 1.000000
