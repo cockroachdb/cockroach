@@ -178,30 +178,32 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM foo, bar, public;
 query TBTTTB colnames,rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-role  for_all_roles  object_type  grantee  privilege_type  is_grantable
-root  false          routines     public   EXECUTE         false
-root  false          routines     root     ALL             true
-root  false          schemas      root     ALL             true
-root  false          sequences    root     ALL             true
-root  false          tables       bar      BACKUP          false
-root  false          tables       bar      CHANGEFEED      false
-root  false          tables       bar      CREATE          false
-root  false          tables       bar      DELETE          false
-root  false          tables       bar      DROP            false
-root  false          tables       bar      INSERT          false
-root  false          tables       bar      TRIGGER         false
-root  false          tables       bar      UPDATE          false
-root  false          tables       bar      ZONECONFIG      false
-root  false          tables       foo      BACKUP          false
-root  false          tables       foo      CHANGEFEED      false
-root  false          tables       foo      CREATE          false
-root  false          tables       foo      DELETE          false
-root  false          tables       foo      DROP            false
-root  false          tables       foo      INSERT          false
-root  false          tables       foo      TRIGGER         false
-root  false          tables       foo      UPDATE          false
-root  false          tables       foo      ZONECONFIG      false
-root  false          types        root     ALL             true
+role  for_all_roles  object_type  grantee  privilege_type   is_grantable
+root  false          routines     public   EXECUTE          false
+root  false          routines     root     ALL              true
+root  false          schemas      root     ALL              true
+root  false          sequences    root     ALL              true
+root  false          tables       bar      BACKUP           false
+root  false          tables       bar      CHANGEFEED       false
+root  false          tables       bar      CREATE           false
+root  false          tables       bar      DELETE           false
+root  false          tables       bar      DROP             false
+root  false          tables       bar      INSERT           false
+root  false          tables       bar      REPLICATIONDEST  false
+root  false          tables       bar      TRIGGER          false
+root  false          tables       bar      UPDATE           false
+root  false          tables       bar      ZONECONFIG       false
+root  false          tables       foo      BACKUP           false
+root  false          tables       foo      CHANGEFEED       false
+root  false          tables       foo      CREATE           false
+root  false          tables       foo      DELETE           false
+root  false          tables       foo      DROP             false
+root  false          tables       foo      INSERT           false
+root  false          tables       foo      REPLICATIONDEST  false
+root  false          tables       foo      TRIGGER          false
+root  false          tables       foo      UPDATE           false
+root  false          tables       foo      ZONECONFIG       false
+root  false          types        root     ALL              true
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM foo, bar, public;
