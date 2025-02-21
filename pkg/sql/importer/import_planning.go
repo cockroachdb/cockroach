@@ -817,6 +817,19 @@ func importPlanHook(
 				return errors.Newf("cannot run an import on table %s which is apart of a Logical Data Replication stream", table)
 			}
 
+			// Import into an RLS table is blocked, unless this is the admin. It is
+			// allowed for admins since they are exempt from RLS policies and have
+			// unrestricted read/write access.
+			if found.IsRowLevelSecurityEnabled() {
+				admin, err := p.HasAdminRole(ctx)
+				if err != nil {
+					return err
+				} else if !admin {
+					return pgerror.New(pgcode.FeatureNotSupported,
+						"IMPORT INTO not supported with row-level security for non-admin users")
+				}
+			}
+
 			// Validate target columns.
 			var intoCols []string
 			isTargetCol := make(map[string]bool)
