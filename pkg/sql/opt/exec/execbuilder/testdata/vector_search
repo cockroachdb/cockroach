@@ -1,0 +1,449 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v VECTOR (3), FAMILY (k, v), VECTOR INDEX (v));
+
+statement ok
+CREATE TABLE t_multi (
+  x INT,
+  y INT,
+  a INT,
+  b INT,
+  c INT,
+  v VECTOR (3),
+  FAMILY (x, y, a, b, c, v),
+  PRIMARY KEY (x, y),
+  VECTOR INDEX (a, b, v)
+);
+
+# ==============================================================================
+# Vector Search Tests
+# ==============================================================================
+
+query T
+EXPLAIN SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
+----
+distribution: local
+vectorized: false
+·
+• top-k
+│ order: +column7
+│ k: 1
+│
+└── • render
+    │
+    └── • index join
+        │ table: t@t_pkey
+        │
+        └── • vector search
+              table: t@t_v_idx
+              target count: 1
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
+----
+distribution: local
+vectorized: false
+·
+• project
+│ columns: (k, v)
+│
+└── • top-k
+    │ columns: (column7, k, v)
+    │ estimated row count: 1 (missing stats)
+    │ order: +column7
+    │ k: 1
+    │
+    └── • render
+        │ columns: (column7, k, v)
+        │ render column7: v <-> '[1,2,3]'
+        │ render k: k
+        │ render v: v
+        │
+        └── • index join
+            │ columns: (k, v)
+            │ estimated row count: 2 (missing stats)
+            │ table: t@t_pkey
+            │ key columns: k
+            │
+            └── • vector search
+                  columns: (k)
+                  estimated row count: 2 (missing stats)
+                  table: t@t_v_idx
+                  target count: 1
+                  query vector: '[1,2,3]'
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 5;
+----
+distribution: local
+vectorized: false
+·
+• project
+│ columns: (k, v)
+│
+└── • top-k
+    │ columns: (column7, k, v)
+    │ estimated row count: 5 (missing stats)
+    │ order: +column7
+    │ k: 5
+    │
+    └── • render
+        │ columns: (column7, k, v)
+        │ render column7: v <-> '[1,2,3]'
+        │ render k: k
+        │ render v: v
+        │
+        └── • index join
+            │ columns: (k, v)
+            │ estimated row count: 10 (missing stats)
+            │ table: t@t_pkey
+            │ key columns: k
+            │
+            └── • vector search
+                  columns: (k)
+                  estimated row count: 10 (missing stats)
+                  table: t@t_v_idx
+                  target count: 5
+                  query vector: '[1,2,3]'
+
+# NOTE: the vector-search rule doesn't yet handle prefix columns.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t_multi WHERE a = 1 AND b = 2 ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (x, y, a, b, c, v)
+│
+└── • top-k
+    │ columns: (column11, x, y, a, b, c, v)
+    │ estimated row count: 1 (missing stats)
+    │ order: +column11
+    │ k: 1
+    │
+    └── • render
+        │ columns: (column11, x, y, a, b, c, v)
+        │ render column11: v <-> '[1,2,3]'
+        │ render x: x
+        │ render y: y
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render v: v
+        │
+        └── • filter
+            │ columns: (x, y, a, b, c, v)
+            │ estimated row count: 1 (missing stats)
+            │ filter: (a = 1) AND (b = 2)
+            │
+            └── • scan
+                  columns: (x, y, a, b, c, v)
+                  estimated row count: 1,000 (missing stats)
+                  table: t_multi@t_multi_pkey
+                  spans: FULL SCAN
+
+# ==============================================================================
+# Vector Mutation Search Tests
+# ==============================================================================
+
+query T
+EXPLAIN INSERT INTO t VALUES (1, '[1, 2, 3]');
+----
+distribution: local
+vectorized: false
+·
+• insert
+│ into: t(k, v)
+│ auto commit
+│
+└── • vector mutation search
+    │ estimated row count: 1
+    │ mutation type: put
+    │ table: t@t_v_idx
+    │
+    └── • values
+          size: 2 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (2, '[1, 2, 3]');
+----
+distribution: local
+vectorized: false
+·
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t(k, v)
+│ auto commit
+│
+└── • vector mutation search
+    │ columns: (column1, v_cast, "partition-key", "quantized-vector")
+    │ estimated row count: 1
+    │ mutation type: put
+    │ table: t@t_v_idx
+    │ query vector col: v_cast
+    │
+    └── • values
+          columns: (column1, v_cast)
+          size: 2 columns, 1 row
+          row 0, expr 0: 2
+          row 0, expr 1: '[1,2,3]'
+
+query T
+EXPLAIN (VERBOSE) UPDATE t SET v = '[1, 2, 3]' WHERE k = 1;
+----
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t
+│ set: v
+│ auto commit
+│
+└── • project
+    │ columns: (k, v, v_cast, "partition-key", "quantized-vector", "partition-key")
+    │
+    └── • vector mutation search
+        │ columns: (v_cast, k, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key", "partition-key", "quantized-vector")
+        │ estimated row count: 1 (missing stats)
+        │ mutation type: put
+        │ table: t@t_v_idx
+        │ query vector col: v_cast
+        │
+        └── • vector mutation search
+            │ columns: (v_cast, k, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key")
+            │ estimated row count: 1 (missing stats)
+            │ mutation type: del
+            │ table: t@t_v_idx
+            │ query vector col: v
+            │ suffix key cols: k
+            │
+            └── • render
+                │ columns: (v_cast, k, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                │ render v_cast: '[1,2,3]'
+                │ render k: k
+                │ render v: v
+                │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+                │ render tableoid: tableoid
+                │ render crdb_internal_origin_id: crdb_internal_origin_id
+                │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+                │
+                └── • scan
+                      columns: (k, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                      estimated row count: 1 (missing stats)
+                      table: t@t_pkey
+                      spans: /1/0
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t WHERE k = 1;
+----
+distribution: local
+vectorized: false
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t
+│ auto commit
+│
+└── • project
+    │ columns: (k, v, "partition-key")
+    │
+    └── • vector mutation search
+        │ columns: (k, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key")
+        │ estimated row count: 1 (missing stats)
+        │ mutation type: del
+        │ table: t@t_v_idx
+        │ query vector col: v
+        │ suffix key cols: k
+        │
+        └── • scan
+              columns: (k, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+              estimated row count: 1 (missing stats)
+              table: t@t_pkey
+              spans: /1/0
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_multi VALUES (1, 2, 1, 2, 3, '[1, 2, 3]');
+----
+distribution: local
+vectorized: false
+·
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_multi(x, y, a, b, c, v)
+│ auto commit
+│
+└── • vector mutation search
+    │ columns: (column1, column2, column3, column4, column5, v_cast, "partition-key", "quantized-vector")
+    │ estimated row count: 1
+    │ mutation type: put
+    │ table: t_multi@t_multi_a_b_v_idx
+    │ prefix key cols: column3, column4
+    │ query vector col: v_cast
+    │
+    └── • values
+          columns: (column1, column2, column3, column4, column5, v_cast)
+          size: 6 columns, 1 row
+          row 0, expr 0: 1
+          row 0, expr 1: 2
+          row 0, expr 2: 1
+          row 0, expr 3: 2
+          row 0, expr 4: 3
+          row 0, expr 5: '[1,2,3]'
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_multi SET v = '[1, 2, 3]' WHERE a = 1 AND b = 2;
+----
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t_multi
+│ set: v
+│ auto commit
+│
+└── • project
+    │ columns: (x, y, a, b, c, v, v_cast, "partition-key", "quantized-vector", "partition-key")
+    │
+    └── • vector mutation search
+        │ columns: (v_cast, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key", "partition-key", "quantized-vector")
+        │ estimated row count: 1 (missing stats)
+        │ mutation type: put
+        │ table: t_multi@t_multi_a_b_v_idx
+        │ prefix key cols: a, b
+        │ query vector col: v_cast
+        │
+        └── • vector mutation search
+            │ columns: (v_cast, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key")
+            │ estimated row count: 1 (missing stats)
+            │ mutation type: del
+            │ table: t_multi@t_multi_a_b_v_idx
+            │ prefix key cols: a, b
+            │ query vector col: v
+            │ suffix key cols: x, y
+            │
+            └── • render
+                │ columns: (v_cast, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                │ render v_cast: '[1,2,3]'
+                │ render x: x
+                │ render y: y
+                │ render a: a
+                │ render b: b
+                │ render c: c
+                │ render v: v
+                │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+                │ render tableoid: tableoid
+                │ render crdb_internal_origin_id: crdb_internal_origin_id
+                │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+                │
+                └── • filter
+                    │ columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                    │ estimated row count: 1 (missing stats)
+                    │ filter: (a = 1) AND (b = 2)
+                    │
+                    └── • scan
+                          columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                          estimated row count: 1,000 (missing stats)
+                          table: t_multi@t_multi_pkey
+                          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_multi SET a = 2 WHERE a = 1;
+----
+distribution: local
+vectorized: false
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t_multi
+│ set: a
+│ auto commit
+│
+└── • project
+    │ columns: (x, y, a, b, c, v, a_new, "partition-key", "quantized-vector", "partition-key")
+    │
+    └── • vector mutation search
+        │ columns: (a_new, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key", "partition-key", "quantized-vector")
+        │ estimated row count: 10 (missing stats)
+        │ mutation type: put
+        │ table: t_multi@t_multi_a_b_v_idx
+        │ prefix key cols: a_new, b
+        │ query vector col: v
+        │
+        └── • vector mutation search
+            │ columns: (a_new, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key")
+            │ estimated row count: 10 (missing stats)
+            │ mutation type: del
+            │ table: t_multi@t_multi_a_b_v_idx
+            │ prefix key cols: a, b
+            │ query vector col: v
+            │ suffix key cols: x, y
+            │
+            └── • render
+                │ columns: (a_new, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                │ render a_new: 2
+                │ render x: x
+                │ render y: y
+                │ render a: a
+                │ render b: b
+                │ render c: c
+                │ render v: v
+                │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+                │ render tableoid: tableoid
+                │ render crdb_internal_origin_id: crdb_internal_origin_id
+                │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+                │
+                └── • filter
+                    │ columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                    │ estimated row count: 10 (missing stats)
+                    │ filter: a = 1
+                    │
+                    └── • scan
+                          columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                          estimated row count: 1,000 (missing stats)
+                          table: t_multi@t_multi_pkey
+                          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t_multi WHERE a = 1 AND b = 2;
+----
+distribution: local
+vectorized: false
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t_multi
+│ auto commit
+│
+└── • project
+    │ columns: (x, y, a, b, v, "partition-key")
+    │
+    └── • vector mutation search
+        │ columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key")
+        │ estimated row count: 1 (missing stats)
+        │ mutation type: del
+        │ table: t_multi@t_multi_a_b_v_idx
+        │ prefix key cols: a, b
+        │ query vector col: v
+        │ suffix key cols: x, y
+        │
+        └── • filter
+            │ columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+            │ estimated row count: 1 (missing stats)
+            │ filter: (a = 1) AND (b = 2)
+            │
+            └── • scan
+                  columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                  estimated row count: 1,000 (missing stats)
+                  table: t_multi@t_multi_pkey
+                  spans: FULL SCAN
