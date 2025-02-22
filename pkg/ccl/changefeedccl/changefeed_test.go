@@ -1401,6 +1401,10 @@ func TestChangefeedInitialScan(t *testing.T) {
 		`cursor - with initial backfill`: `CREATE CHANGEFEED FOR initial_scan WITH initial_scan = 'yes', resolved='1s', cursor='%s'`,
 	}
 
+	initialScanOnlyTests := map[string]string{
+		`initial scan only with resolved`: `CREATE CHANGEFEED FOR initial_scan_only WITH initial_scan='only', resolved='1s'`,
+	}
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1442,6 +1446,25 @@ func TestChangefeedInitialScan(t *testing.T) {
 				assertPayloads(t, initialScan, []string{
 					`initial_scan: [4]->{"after": {"a": 4}}`,
 				})
+			})
+		}
+
+		for testName, changefeedStmt := range initialScanOnlyTests {
+			t.Run(testName, func(t *testing.T) {
+				sqlDB.Exec(t, `CREATE TABLE initial_scan_only (a INT PRIMARY KEY)`)
+				defer sqlDB.Exec(t, `DROP TABLE initial_scan_only`)
+				sqlDB.Exec(t, `INSERT INTO initial_scan_only VALUES (1), (2), (3)`)
+
+				initialScanOnly := feed(t, f, changefeedStmt)
+				defer closeFeed(t, initialScanOnly)
+
+				assertPayloads(t, initialScanOnly, []string{
+					`initial_scan_only: [1]->{"after": {"a": 1}}`,
+					`initial_scan_only: [2]->{"after": {"a": 2}}`,
+					`initial_scan_only: [3]->{"after": {"a": 3}}`,
+				})
+
+				expectResolvedTimestamp(t, initialScanOnly)
 			})
 		}
 	}
@@ -5849,11 +5872,6 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErrWithTimeout(
 		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'only', end_time = '1'`, `kafka://nope`,
-	)
-
-	sqlDB.ExpectErrWithTimeout(
-		t, `cannot specify both initial_scan='only' and resolved`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH resolved, initial_scan = 'only'`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErrWithTimeout(

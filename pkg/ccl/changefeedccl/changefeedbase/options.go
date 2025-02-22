@@ -492,7 +492,7 @@ type OptionsSet map[string]struct{}
 
 // InitialScanOnlyUnsupportedOptions is options that are not supported with the
 // initial scan only option
-var InitialScanOnlyUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptResolvedTimestamps, OptDiff,
+var InitialScanOnlyUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptDiff,
 	OptMVCCTimestamps, OptUpdatedTimestamps)
 
 // ParquetFormatUnsupportedOptions is options that are not supported with the

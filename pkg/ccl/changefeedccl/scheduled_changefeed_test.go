@@ -640,17 +640,6 @@ func TestScheduledChangefeedErrors(t *testing.T) {
 		hintStr string
 	}{
 		{
-			name:    "implicit-conflict-with-initial-scan-only",
-			stmt:    "CREATE SCHEDULE test_schedule FOR CHANGEFEED t1 INTO 'null://sink' WITH resolved RECURRING '@daily';",
-			errRE:   "cannot specify both initial_scan='only' and resolved",
-			hintStr: "scheduled changefeeds implicitly pass the option initial_scan='only'",
-		},
-		{
-			name:  "explicit-conflict-with-initial-scan-only",
-			stmt:  "CREATE SCHEDULE test_schedule FOR CHANGEFEED t1 INTO 'null://sink' WITH resolved, initial_scan='only' RECURRING '@daily';",
-			errRE: "cannot specify both initial_scan='only' and resolved",
-		},
-		{
 			name:  "explicit-conflict-with-initial-scan-only",
 			stmt:  "CREATE SCHEDULE test_schedule FOR CHANGEFEED t1 INTO 'null://sink' WITH resolved, initial_scan='no' RECURRING '@daily';",
 			errRE: "initial_scan must be `only` for scheduled changefeeds",
