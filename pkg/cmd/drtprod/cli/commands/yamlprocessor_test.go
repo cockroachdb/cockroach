@@ -22,6 +22,8 @@ import (
 var cleanupFuncs = make([]func(), 0)
 
 func Test_processYaml(t *testing.T) {
+	// DD_API_KEY can impact the tests. So, it is unset
+	_ = os.Unsetenv("DD_API_KEY")
 	t.Cleanup(func() {
 		// cleanup all once the tests are complete
 		for _, f := range cleanupFuncs {
@@ -459,6 +461,80 @@ environment:
 		require.Equal(t, 1, len(runCmds["mv"]))
 		require.Equal(t, 1, len(runCmds["systemd"]))
 		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) drtprod execute ./location/to/test.yaml",
+			runCmds["systemd"][0])
+	})
+	t.Run("run command remotely with no failure and DD_API_KEY set", func(t *testing.T) {
+		_ = os.Setenv("DD_API_KEY", "the_secret")
+		defer func() {
+			_ = os.Unsetenv("DD_API_KEY")
+		}()
+		f, err := os.CreateTemp("", "drtprod")
+		require.Nil(t, err)
+		drtprodLocation = f.Name()
+		scriptsDir := os.TempDir()
+		executedCmds := make([]string, 0)
+		runCmds := make(map[string][]string)
+		runCmdsLock := syncutil.Mutex{}
+		putCmds := make(map[string]int)
+		putCmdsLock := syncutil.Mutex{}
+		commandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
+			require.Equal(t, "test-monitor", logPrefix)
+			executedCmds = append(executedCmds, (&command{name: cmd, args: args}).String())
+			return nil
+		}
+		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
+			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
+			cmdArray []string, options install.RunOptions) error {
+			require.Equal(t, "test-monitor", clusterName)
+			runCmdsLock.Lock()
+			defer runCmdsLock.Unlock()
+			if strings.HasPrefix(cmdArray[0], "mkdir -p") {
+				if _, ok := runCmds["mkdir"]; !ok {
+					runCmds["mkdir"] = make([]string, 0)
+				}
+				runCmds["mkdir"] = append(runCmds["mkdir"], cmdArray[0])
+			} else if strings.HasPrefix(cmdArray[0], "sudo mv") {
+				if _, ok := runCmds["mv"]; !ok {
+					runCmds["mv"] = make([]string, 0)
+				}
+				runCmds["mv"] = append(runCmds["mv"], cmdArray[0])
+			} else if strings.HasPrefix(cmdArray[0], "sudo systemd-run") {
+				if _, ok := runCmds["systemd"]; !ok {
+					runCmds["systemd"] = make([]string, 0)
+				}
+				runCmds["systemd"] = append(runCmds["systemd"], cmdArray[0])
+			}
+			return nil
+		}
+		roachprodPut = func(ctx context.Context, l *logger.Logger, clusterName, src, dest string, useTreeDist bool) error {
+			require.Equal(t, "test-monitor", clusterName)
+			putCmdsLock.Lock()
+			defer putCmdsLock.Unlock()
+			require.Equal(t, src, dest)
+			if strings.Contains(src, "drtprod") {
+				putCmds["drtprod"] += 1
+			} else if strings.Contains(src, "put") {
+				putCmds["put"] += 1
+			} else if strings.Contains(src, "script") {
+				putCmds["script"] += 1
+			} else if strings.Contains(src, "yaml") {
+				putCmds["yaml"] += 1
+			}
+			return nil
+		}
+		require.Nil(t, processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
+			getRemoteConfigYaml(), false, nil))
+		require.Equal(t, 2, len(executedCmds))
+		require.Equal(t, 4, len(putCmds))
+		for _, v := range putCmds {
+			require.Equal(t, 1, v)
+		}
+		t.Log(runCmds)
+		require.Equal(t, 3, len(runCmds))
+		require.Equal(t, 4, len(runCmds["mkdir"]))
+		require.Equal(t, 1, len(runCmds["mv"]))
+		require.Equal(t, 1, len(runCmds["systemd"]))
+		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) --setenv=DD_API_KEY=the_secret drtprod execute ./location/to/test.yaml",
 			runCmds["systemd"][0])
 	})
 	t.Run("run command remotely with no failure and targets specified", func(t *testing.T) {

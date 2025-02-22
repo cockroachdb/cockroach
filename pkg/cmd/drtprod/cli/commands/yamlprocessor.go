@@ -285,11 +285,16 @@ func setupAndExecute(
 		return err
 	}
 
+	envArg := ""
+	// the DD_API_KEY is added to environment
+	ddAPIKey := os.Getenv("DD_API_KEY")
+	if ddAPIKey != "" {
+		envArg = fmt.Sprintf(" --setenv=DD_API_KEY=%s", ddAPIKey)
+	}
 	// Prepare the systemd command to execute the drtprod binary.
 	executeArgs := fmt.Sprintf(
-		"sudo systemd-run --unit %s --same-dir --uid $(id -u) --gid $(id -g) drtprod execute ./%s",
-		monitorClusterName,
-		yamlFileLocation)
+		"sudo systemd-run --unit %s --same-dir --uid $(id -u) --gid $(id -g)%s drtprod execute ./%s",
+		monitorClusterName, envArg, yamlFileLocation)
 
 	// If the user provided specific target names, add them to the execution command.
 	if len(userProvidedTargetNames) > 0 {
