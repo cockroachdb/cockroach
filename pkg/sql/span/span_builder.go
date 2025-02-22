@@ -299,7 +299,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	var err error
 	var containsNull bool
 	// Encode each logical part of the start key.
-	span.Key, containsNull, err = s.encodeConstraintKey(cs.StartKey())
+	span.Key, containsNull, err = s.EncodeConstraintKey(cs.StartKey())
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +312,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		span.Key = span.Key.PrefixEnd()
 	}
 	// Encode each logical part of the end key.
-	span.EndKey, _, err = s.encodeConstraintKey(cs.EndKey())
+	span.EndKey, _, err = s.EncodeConstraintKey(cs.EndKey())
 	if err != nil {
 		return nil, err
 	}
@@ -335,9 +335,9 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	return append(appendTo, span), nil
 }
 
-// encodeConstraintKey encodes each logical part of a constraint.Key into a
+// EncodeConstraintKey encodes each logical part of a constraint.Key into a
 // roachpb.Key.
-func (s *Builder) encodeConstraintKey(
+func (s *Builder) EncodeConstraintKey(
 	ck constraint.Key,
 ) (key roachpb.Key, containsNull bool, _ error) {
 	if ck.IsEmpty() {

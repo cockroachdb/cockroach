@@ -1069,6 +1069,31 @@ func (e *distSQLSpecExecFactory) ConstructDeleteRange(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: delete range")
 }
 
+func (e *distSQLSpecExecFactory) ConstructVectorSearch(
+	table cat.Table,
+	index cat.Index,
+	outCols exec.TableColumnOrdinalSet,
+	prefixKey constraint.Key,
+	queryVector tree.TypedExpr,
+	targetNeighborCount uint64,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473,
+		"experimental opt-driven distsql planning: vector-search")
+}
+
+func (e *distSQLSpecExecFactory) ConstructVectorMutationSearch(
+	input exec.Node,
+	table cat.Table,
+	index cat.Index,
+	prefixKeyCols []exec.NodeColumnOrdinal,
+	queryVectorCol exec.NodeColumnOrdinal,
+	suffixKeyCols []exec.NodeColumnOrdinal,
+	isIndexPut bool,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473,
+		"experimental opt-driven distsql planning: vector-mutation-search")
+}
+
 func (e *distSQLSpecExecFactory) ConstructCreateTable(
 	schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {

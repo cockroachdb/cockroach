@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -300,6 +301,20 @@ func NewProcessor(
 			return nil, err
 		}
 		return newWindower(ctx, flowCtx, processorID, core.Windower, inputs[0], post)
+	}
+	if core.VectorSearch != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		return nil, unimplemented.New("vector-search",
+			"vector-search processor unimplemented")
+	}
+	if core.VectorMutationSearch != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		return nil, unimplemented.New("vector-mutation-search",
+			"vector-mutation-search processor unimplemented")
 	}
 	if core.LocalPlanNode != nil {
 		numInputs := int(core.LocalPlanNode.NumInputs)

@@ -47,6 +47,10 @@ func planReqOrdering(plan planNode) ReqOrdering {
 	case *windowNode:
 		// TODO: window partitions can be ordered if the source is ordered
 		// appropriately.
+	case *vectorSearchNode:
+	case *vectorMutationSearchNode:
+		// TODO(drewk,mw5h): vector partition search could pass through the input
+		// ordering.
 	case *joinNode:
 		return n.reqOrdering
 	case *unionNode:

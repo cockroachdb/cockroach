@@ -123,9 +123,11 @@ message ProcessorCoreUnion {
   optional IngestStoppedSpec ingestStopped = 44;
   optional LogicalReplicationWriterSpec logicalReplicationWriter = 45;
   optional LogicalReplicationOfflineScanSpec logicalReplicationOfflineScan = 46;
+  optional VectorSearchSpec vectorSearch = 47;
+  optional VectorMutationSearchSpec vectorMutationSearch = 48;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
-  // NEXT ID: 47.
+  // NEXT ID: 49.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just

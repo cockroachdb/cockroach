@@ -823,3 +823,38 @@ define Call {
 define CreateTrigger {
     Ct *tree.CreateTrigger
 }
+
+# VectorSearch is used to perform an approximate K-nearest-neighbor search for a
+# single query vector on a vector index. It returns a set of candidate primary
+# keys which should be used in a re-ranking step that computes the exact
+# distances to the query vector, and applies the NN limit.
+define VectorSearch {
+    Table cat.Table
+    Index cat.Index
+    OutCols exec.TableColumnOrdinalSet
+    PrefixKey constraint.Key
+    QueryVector tree.TypedExpr
+    TargetNeighborCount uint64
+}
+
+# VectorMutationSearch is used to determine the vector-index partition that
+# contains (or should contain) each vector from the input. It is used in the
+# input of mutation operators. It always produces exactly one row for each
+# input row, containing the partition key and optionally the quantized vector.
+# If the input query vector is NULL, no vector search is performed, and the
+# projected output columns are NULL.
+define VectorMutationSearch {
+    Input exec.Node
+    Table cat.Table
+    Index cat.Index
+    PrefixKeyCols []exec.NodeColumnOrdinal
+    QueryVectorCol exec.NodeColumnOrdinal
+
+    # Only set for index deletes, which need to find the specific index entry
+    # for the deleted row.
+    SuffixKeyCols []exec.NodeColumnOrdinal
+
+    # Indicates whether the search operation is for an index put or del. If set,
+    # the search must return the quantized vector.
+    IsIndexPut bool
+}

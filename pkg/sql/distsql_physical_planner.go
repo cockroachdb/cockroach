@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -449,6 +450,9 @@ var (
 	ordinalityNotDistributableErr = newQueryNotSupportedError(
 		"ordinality operation cannot be distributed",
 	)
+	cannotDistributeVectorSearchErr = newQueryNotSupportedError(
+		"vector search operation cannot be distributed",
+	)
 )
 
 // mustWrapNode returns true if a node has no DistSQL-processor equivalent.
@@ -477,6 +481,8 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *unionNode:
 	case *valuesNode:
 		return mustWrapValuesNode(planCtx, n.specifiedInQuery)
+	case *vectorMutationSearchNode:
+	case *vectorSearchNode:
 	case *windowNode:
 	case *zeroNode:
 	case *zigzagJoinNode:
@@ -787,6 +793,10 @@ func checkSupportForPlanNode(
 			}
 		}
 		return canDistribute, nil
+
+	case *vectorSearchNode, *vectorMutationSearchNode:
+		// Don't allow distribution for vector search operators, for now.
+		return cannotDistribute, cannotDistributeVectorSearchErr
 
 	case *windowNode:
 		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
@@ -4122,6 +4132,12 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			}
 		}
 
+	case *vectorMutationSearchNode:
+		plan, err = dsp.createPlanForVectorMutationSearch(ctx, planCtx, n)
+
+	case *vectorSearchNode:
+		plan, err = dsp.createPlanForVectorSearch(planCtx, n)
+
 	case *windowNode:
 		plan, err = dsp.createPlanForWindow(ctx, planCtx, n)
 
@@ -4441,6 +4457,104 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 		plan.GetResultTypes(), plan.MergeOrdering, plan.ResultRouters,
 	)
 	plan.SetMergeOrdering(spec.OutputOrdering)
+}
+
+func (dsp *DistSQLPlanner) createPlanForVectorSearch(
+	planCtx *PlanningCtx, n *vectorSearchNode,
+) (*PhysicalPlan, error) {
+	var queryVector vector.T
+	switch t := n.queryVector.(type) {
+	case *tree.DPGVector:
+		queryVector = t.T
+	default:
+		return nil, errors.AssertionFailedf("unexpected query vector type: %T", t)
+	}
+
+	p := planCtx.NewPhysicalPlan()
+	colTypes := getTypesFromResultColumns(n.resultCols)
+	spec := &execinfrapb.VectorSearchSpec{
+		PrefixKey:           n.prefixKey,
+		QueryVector:         queryVector,
+		TargetNeighborCount: n.targetNeighborCount,
+	}
+	fetchCols := make([]descpb.ColumnID, len(n.cols))
+	for i, col := range n.cols {
+		fetchCols[i] = col.GetID()
+	}
+	if err := rowenc.InitIndexFetchSpec(
+		&spec.FetchSpec,
+		planCtx.ExtendedEvalCtx.Codec,
+		n.table,
+		n.index,
+		fetchCols,
+	); err != nil {
+		return nil, err
+	}
+
+	// Execute the vector search on the gateway node.
+	corePlacement := []physicalplan.ProcessorCorePlacement{{
+		SQLInstanceID: dsp.gatewaySQLInstanceID,
+		Core:          execinfrapb.ProcessorCoreUnion{VectorSearch: spec},
+	}}
+	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, colTypes, execinfrapb.Ordering{})
+	p.PlanToStreamColMap = identityMap(make([]int, len(colTypes)), len(colTypes))
+	return p, nil
+}
+
+func (dsp *DistSQLPlanner) createPlanForVectorMutationSearch(
+	ctx context.Context, planCtx *PlanningCtx, n *vectorMutationSearchNode,
+) (*PhysicalPlan, error) {
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	// Add the partition column. Also add the quantized vector column for index
+	// puts.
+	inputTypes := plan.GetResultTypes()
+	outputTypes := append(inputTypes, types.Int)
+	plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, len(inputTypes))
+	if n.isIndexPut {
+		outputTypes = append(outputTypes, types.Bytes)
+		plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, len(inputTypes)+1)
+	}
+	// Retrieve the prefix and suffix index columns.
+	prefixKeyColumnOrdinals := make([]uint32, len(n.prefixKeyCols))
+	for i, col := range n.prefixKeyCols {
+		prefixKeyColumnOrdinals[i] = uint32(plan.PlanToStreamColMap[col])
+	}
+	suffixKeyColumnOrdinals := make([]uint32, len(n.suffixKeyCols))
+	for i, col := range n.suffixKeyCols {
+		suffixKeyColumnOrdinals[i] = uint32(plan.PlanToStreamColMap[col])
+	}
+	keyAndSuffixCols := n.table.IndexFetchSpecKeyAndSuffixColumns(n.index)
+	prefixKeyCols := keyAndSuffixCols[n.index.NumKeyColumns()-1:]
+	suffixKeyCols := keyAndSuffixCols[n.index.NumKeyColumns():]
+	spec := &execinfrapb.VectorMutationSearchSpec{
+		PrefixKeyColumnOrdinals:  prefixKeyColumnOrdinals,
+		PrefixKeyColumns:         prefixKeyCols,
+		QueryVectorColumnOrdinal: uint32(plan.PlanToStreamColMap[n.queryVectorCol]),
+		SuffixKeyColumnOrdinals:  suffixKeyColumnOrdinals,
+		SuffixKeyColumns:         suffixKeyCols,
+		IsIndexPut:               n.isIndexPut,
+	}
+	// VectorMutationSearch operators materialize partition and quantized-vec
+	// columns rather than fetching from the table, so leave fetchCols empty.
+	var fetchCols []descpb.ColumnID
+	if err := rowenc.InitIndexFetchSpec(
+		&spec.FetchSpec,
+		planCtx.ExtendedEvalCtx.Codec,
+		n.table,
+		n.index,
+		fetchCols,
+	); err != nil {
+		return nil, err
+	}
+
+	// The vector mutation search can be conducted for each row independently, so
+	// it's fine to instantiate one instance for each stream.
+	pSpec := execinfrapb.ProcessorCoreUnion{VectorMutationSearch: spec}
+	plan.AddNoGroupingStage(pSpec, execinfrapb.PostProcessSpec{}, outputTypes, execinfrapb.Ordering{})
+	return plan, nil
 }
 
 func (dsp *DistSQLPlanner) createPlanForOrdinality(
