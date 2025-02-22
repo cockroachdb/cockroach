@@ -8,7 +8,7 @@ SET enable_row_level_security=on;
 CREATE TYPE greeting AS ENUM('hi', 'howdy', 'hello');
 CREATE FUNCTION is_valid(n INT) returns bool as $$ begin return n < 10; end; $$ language plpgsql;
 CREATE FUNCTION is_even(n INT) returns bool as $$ begin return n % 2 = 0; end; $$ language plpgsql;
-CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR SELECT TO user1,user2,public USING (tenant_id = '01538898-f55c-44db-a306-89078e2c430e' AND (c1).x > 0) WITH CHECK (nextval('seq1') < 10);
+CREATE POLICY "policy 1" on t1 AS PERMISSIVE FOR UPDATE TO user1,user2,public USING (tenant_id = '01538898-f55c-44db-a306-89078e2c430e' AND (c1).x > 0) WITH CHECK (nextval('seq1') < 10);
 CREATE POLICY "policy 2" on t1 USING (c2::greeting = 'hello'::greeting) WITH CHECK (c2::greeting = 'hi'::greeting);
 CREATE POLICY "policy 3" on t1 USING (is_valid((c1).x)) WITH CHECK (is_even((c1).y));
 ----
@@ -58,7 +58,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
       - 107
     *scop.RemovePolicy
       Policy:
-        Command: 2
+        Command: 4
         PolicyID: 1
         TableID: 106
         Type: 1
@@ -117,7 +117,7 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
       - 107
     *scop.RemovePolicy
       Policy:
-        Command: 2
+        Command: 4
         PolicyID: 1
         TableID: 106
         Type: 1
