@@ -183,7 +183,7 @@ var _ storeMatchesConstraintInterface = &constraintMatcher{}
 // storeMatches returns whether the given storeID matches the given
 // conjunction of constraints.
 func (cm *constraintMatcher) storeMatches(
-	storeID roachpb.StoreID, constraints []internedConstraint,
+	storeID roachpb.StoreID, constraints constraintsConj,
 ) bool {
 	mc := cm.stores[storeID]
 	if mc == nil {
