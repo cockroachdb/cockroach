@@ -115,7 +115,7 @@ func TestMeansMemo(t *testing.T) {
 						continue
 					}
 					cc := parseConstraints(t, parts)
-					disj = append(disj, interner.internConstraints(cc))
+					disj = append(disj, interner.internConstraintsConj(cc))
 				}
 				mss = mm.getMeans(disj)
 				var b strings.Builder

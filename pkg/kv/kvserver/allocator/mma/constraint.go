@@ -280,7 +280,7 @@ func makeNormalizedSpanConfig(
 	var lps []internedLeasePreference
 	for i := range conf.LeasePreferences {
 		lps = append(lps, internedLeasePreference{
-			constraints: interner.internConstraints(conf.LeasePreferences[i].Constraints)})
+			constraints: interner.internConstraintsConj(conf.LeasePreferences[i].Constraints)})
 	}
 	nConf := &normalizedSpanConfig{
 		numVoters:        conf.NumVoters,
@@ -333,21 +333,7 @@ func normalizeConstraints(
 	for i := range nc {
 		icc := internedConstraintsConjunction{
 			numReplicas: nc[i].NumReplicas,
-			constraints: interner.internConstraints(nc[i].Constraints),
-		}
-		if len(icc.constraints) > 0 {
-			sort.Slice(icc.constraints, func(j, k int) bool {
-				return icc.constraints[j].less(icc.constraints[k])
-			})
-			j := 0
-			// De-dup conjuncts in the conjunction.
-			for k := 1; k < len(icc.constraints); k++ {
-				if !(icc.constraints[j] == icc.constraints[k]) {
-					j++
-					icc.constraints[j] = icc.constraints[k]
-				}
-			}
-			icc.constraints = icc.constraints[:j+1]
+			constraints: interner.internConstraintsConj(nc[i].Constraints),
 		}
 		rv = append(rv, icc)
 	}
@@ -621,8 +607,8 @@ func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfi
 			}
 		}
 		// Sort these relationships in the order we want to examine them.
-		sort.Slice(rels, func(i, j int) bool {
-			return rels[i].voterAndAllRel < rels[j].voterAndAllRel
+		slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
+			return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
 		})
 		// Ignore conjIntersecting.
 		index = 0
@@ -822,7 +808,7 @@ func (rac *rangeAnalyzedConstraints) stateForInit() *analyzeConstraintsBuf {
 }
 
 type storeMatchesConstraintInterface interface {
-	storeMatches(storeID roachpb.StoreID, constraintConj []internedConstraint) bool
+	storeMatches(storeID roachpb.StoreID, constraintConj constraintsConj) bool
 }
 
 func (rac *rangeAnalyzedConstraints) finishInit(
@@ -1715,7 +1701,10 @@ func (si *stringInterner) toString(code stringCode) string {
 	return si.codeToString[code]
 }
 
-func (si *stringInterner) internConstraints(constraints []roachpb.Constraint) []internedConstraint {
+func (si *stringInterner) internConstraintsConj(constraints []roachpb.Constraint) constraintsConj {
+	if len(constraints) == 0 {
+		return nil
+	}
 	var rv []internedConstraint
 	for i := range constraints {
 		rv = append(rv, internedConstraint{
@@ -1724,6 +1713,18 @@ func (si *stringInterner) internConstraints(constraints []roachpb.Constraint) []
 			value: si.toCode(constraints[i].Value),
 		})
 	}
+	sort.Slice(rv, func(j, k int) bool {
+		return rv[j].less(rv[k])
+	})
+	j := 0
+	// De-dup conjuncts in the conjunction.
+	for k := 1; k < len(rv); k++ {
+		if !(rv[j] == rv[k]) {
+			j++
+			rv[j] = rv[k]
+		}
+	}
+	rv = rv[:j+1]
 	return rv
 }
 
@@ -1787,7 +1788,7 @@ func (l localityTiers) diversityScore(other localityTiers) float64 {
 type storeIDPostingList []roachpb.StoreID
 
 func makeStoreIDPostingList(a []roachpb.StoreID) storeIDPostingList {
-	sort.Sort(storeIDIncreasing(a))
+	slices.Sort(a)
 	return a
 }
 
@@ -1811,7 +1812,7 @@ func (s *storeIDPostingList) union(b storeIDPostingList) {
 		j++
 	}
 	if len(a) > n {
-		sort.Sort(storeIDIncreasing(a))
+		slices.Sort(a)
 		*s = a
 	}
 }
@@ -1906,9 +1907,8 @@ func (s *storeIDPostingList) insert(storeID roachpb.StoreID) bool {
 }
 
 func (s *storeIDPostingList) contains(storeID roachpb.StoreID) bool {
-	n := len(*s)
-	index := sort.Search(n, func(i int) bool { return (*s)[i] >= storeID })
-	return index != n && (*s)[index] == storeID
+	_, found := slices.BinarySearch(*s, storeID)
+	return found
 }
 
 const (
@@ -1929,20 +1929,6 @@ func (s *storeIDPostingList) hash() uint64 {
 	return h
 }
 
-type storeIDIncreasing []roachpb.StoreID
-
-func (s storeIDIncreasing) Len() int {
-	return len(s)
-}
-
-func (s storeIDIncreasing) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (s storeIDIncreasing) Less(i, j int) bool {
-	return s[i] < s[j]
-}
-
 // Avoid unused lint errors.
 
 var _ = normalizedSpanConfig{}
@@ -1957,7 +1943,6 @@ var _ = storeAndLocality{}
 var _ = localityTierInterner{}
 var _ = localityTiers{}
 var _ = storeIDPostingList{}
-var _ = storeIDIncreasing{}
 
 var _ = constraintsDisj{}.hash
 var _ = constraintsDisj{}.isEqual

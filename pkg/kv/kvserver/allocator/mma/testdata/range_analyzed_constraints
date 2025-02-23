@@ -599,6 +599,28 @@ replaceNonVoterRebalance replace=6
 replaceNonVoterRebalance replace=7
 	add: ()
 
+# Same as multi-region1, but containing some duplication of constraints within
+# conjunctions. The constraints in a conjunction are de-duplicated and sorted
+# based on the interning code, so the ordering becomes the same as
+# multi-region1.
+span-config name=multi-region1-dup num-replicas=5 num-voters=3
+constraint num-replicas=1 +zone=d2 +region=d +zone=d2
+constraint num-replicas=1 +zone=c2 +region=c +region=c
+voter-constraint num-replicas=1 +region=b +=ssd +zone=b1 +=ssd
+voter-constraint num-replicas=1 +region=a -zone=a1
+----
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=d,+zone=d2:1
+   +region=c,+zone=c2:1
+   +region=a,-zone=a1:1
+   +ssd,+region=b,+zone=b1:1
+   :1
+ voter-constraints:
+   +ssd,+region=b,+zone=b1:1
+   +region=a,-zone=a1:1
+   :1
+
 # TODO(kvoli): Test additional configurations
 # - Single conjunction without num_replicas specified for either/both
 #   constraints and voter constraints.

@@ -102,7 +102,7 @@ func TestConstraintMatcher(t *testing.T) {
 				var storeID int
 				d.ScanArgs(t, "store-id", &storeID)
 				cc := parseConstraints(t, strings.Fields(strings.Split(d.Input, "\n")[0]))
-				matches := cm.storeMatches(roachpb.StoreID(storeID), interner.internConstraints(cc))
+				matches := cm.storeMatches(roachpb.StoreID(storeID), interner.internConstraintsConj(cc))
 				return fmt.Sprintf("%t", matches)
 
 			case "match-stores":
@@ -113,7 +113,7 @@ func TestConstraintMatcher(t *testing.T) {
 						continue
 					}
 					cc := parseConstraints(t, parts)
-					disj = append(disj, interner.internConstraints(cc))
+					disj = append(disj, interner.internConstraintsConj(cc))
 				}
 				var pl storeIDPostingList
 				if len(disj) == 1 {
