@@ -114,3 +114,19 @@ type RecordedTxnStats struct {
 	SessionData             *sessiondata.SessionData
 	TxnErr                  error
 }
+
+// SSDrainer is the interface for draining or resetting sql stats.
+type SSDrainer interface {
+	// DrainStats Stats that are drained will permanently be removed from their
+	// source. Once the stats are drained, they cannot be processed again.
+	// DrainStats returns the collected statement and transaction statistics, as
+	// well as the total number of fingerprints drained.
+	DrainStats(ctx context.Context) (
+		[]*appstatspb.CollectedStatementStatistics,
+		[]*appstatspb.CollectedTransactionStatistics,
+		int64,
+	)
+	// Reset will reset all the stats in the drainer. Once reset, the stats will
+	// be lost.
+	Reset(ctx context.Context) error
+}

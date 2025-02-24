@@ -60,9 +60,7 @@ type descriptorVersionState struct {
 		// when the version isn't associated with a lease.
 		expiration hlc.Timestamp
 
-		// The session that was used to acquire this descriptor version, which is
-		// only populated when the session based leasing mode is *at least* dual
-		// write.
+		// The session that was used to acquire this descriptor version.
 		session sqlliveness.Session
 
 		refcount int

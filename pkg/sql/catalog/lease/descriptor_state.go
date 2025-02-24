@@ -181,13 +181,12 @@ func newDescriptorVersionState(
 			version: int(desc.GetVersion()),
 		}
 		descState.mu.lease.sessionID = session.ID().UnsafeBytes()
-		descState.mu.session = session
-
 		if buildutil.CrdbTestBuild && !expiration.IsEmpty() {
 			panic(errors.AssertionFailedf("expiration should always be empty for "+
 				"session based leases (got: %s on Desc: %s(%d))", expiration.String(), desc.GetName(), desc.GetID()))
 		}
 	}
+	descState.mu.session = session
 	descState.mu.expiration = expiration
 
 	return descState

@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -810,6 +812,111 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
 		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Even though we flushed the buffer, responses from the blind writes should
+	// not be returned.
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+}
+
+// TestTxnWriteBufferLockingGetRequests ensures that locking get requests are
+// handled appropriately -- they're sent to KV, to acquire a lock, but the
+// read is served from the buffer (upholding read-your-own-write semantics).
+func TestTxnWriteBufferLockingGetRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer()
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA := roachpb.Key("a")
+	valA := "val"
+
+	// Blindly write to keys A.
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putA := putArgs(keyA, valA, txn.Sequence)
+	ba.Add(putA)
+
+	numCalled := mockSender.NumCalled()
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	// All the requests should be buffered and not make it past the
+	// txnWriteBuffer.
+	require.Equal(t, numCalled, mockSender.NumCalled())
+	// Even though the txnWriteBuffer did not send any Put requests to the KV
+	// layer above, the responses should still be populated.
+	require.Len(t, br.Responses, 1)
+	require.Equal(t, br.Responses[0].GetInner(), &kvpb.PutResponse{})
+
+	// Verify the writes were buffered correctly.
+	expBufferedWrites := []bufferedWrite{
+		makeBufferedWrite(keyA, makeBufferedValue(valA, 10)),
+	}
+	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
+
+	// Perform a locking read on keyA. Ensure a request is sent to the KV layer,
+	// but the response is served from the buffer.
+	testutils.RunValues(t, "str", []lock.Strength{lock.None, lock.Shared, lock.Exclusive, lock.Update}, func(t *testing.T, strength lock.Strength) {
+		txn.Sequence = 11
+		ba = &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		getA := &kvpb.GetRequest{
+			RequestHeader:      kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
+			KeyLockingStrength: strength,
+		}
+		ba.Add(getA)
+		numCalled = mockSender.NumCalled()
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+			require.Equal(t, strength, ba.Requests[0].GetInner().(*kvpb.GetRequest).KeyLockingStrength)
+			require.True(t, strength != lock.None) // non-locking Gets aren't sent to KV
+
+			br = ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+
+		br, pErr = twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Len(t, br.Responses, 1)
+		require.Equal(t, roachpb.MakeValueFromString(valA), *br.Responses[0].GetInner().(*kvpb.GetResponse).Value)
+
+		var expNumCalled int
+		if strength == lock.None {
+			expNumCalled = numCalled // nothing should be sent to KV
+		} else {
+			expNumCalled = numCalled + 1 // a locking request should still be sent to KV
+		}
+		require.Equal(t, expNumCalled, mockSender.NumCalled())
+	})
+
+	// Lastly, for completeness, commit the transaction and ensure that the buffer
+	// is correctly flushed.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+
+		// We now expect the buffer to be flushed along with the commit.
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn

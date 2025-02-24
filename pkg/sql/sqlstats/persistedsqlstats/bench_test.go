@@ -383,14 +383,15 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 	defer s.Stopper().Stop(ctx)
 	sqlConn := sqlutils.MakeSQLRunner(conn)
 
-	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	sqlStats := s.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
+	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
 	controller := s.SQLServer().(*sql.Server).GetSQLStatsController()
 	stmtFingerprintLimit := sqlstats.MaxMemSQLStatsStmtFingerprints.Get(&s.ClusterSettings().SV)
 	txnFingerprintLimit := sqlstats.MaxMemSQLStatsTxnFingerprints.Get(&s.ClusterSettings().SV)
 
 	// Fills the in-memory stats for the 'bench' application until the fingerprint limit is reached.
 	fillBenchAppMemStats := func() {
-		appContainer := sqlStats.SQLStats.GetApplicationStats("bench")
+		appContainer := sqlStats.GetApplicationStats("bench")
 		mockStmtValue := sqlstats.RecordedStmtStats{}
 		for i := int64(1); i <= stmtFingerprintLimit; i++ {
 			stmtKey := appstatspb.StatementStatisticsKey{
@@ -436,7 +437,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 			require.NoError(b, controller.ResetClusterSQLStats(ctx))
 			fillBenchAppMemStats()
 			b.StartTimer()
-			require.True(b, sqlStats.MaybeFlush(ctx, s.AppStopper()))
+			require.True(b, pss.MaybeFlush(ctx, s.AppStopper()))
 			b.StopTimer()
 		}
 	})
@@ -448,7 +449,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			fillBenchAppMemStats()
 			b.StartTimer()
-			require.True(b, sqlStats.MaybeFlush(ctx, s.AppStopper()))
+			require.True(b, pss.MaybeFlush(ctx, s.AppStopper()))
 			b.StopTimer()
 		}
 	})
