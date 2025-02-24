@@ -55,7 +55,19 @@ type AggregatedTransactionVisitor func(appName string, statistics *appstatspb.Tx
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.
 type RecordedStmtStats struct {
-	FingerprintID        appstatspb.StmtFingerprintID
+	FingerprintID            appstatspb.StmtFingerprintID
+	Query                    string
+	App                      string
+	DistSQL                  bool
+	ImplicitTxn              bool
+	Vec                      bool
+	FullScan                 bool
+	Database                 string
+	PlanHash                 uint64
+	QuerySummary             string
+	TransactionFingerprintID appstatspb.TransactionFingerprintID
+
+	// Statement execution metadata.
 	SessionID            clusterunique.ID
 	StatementID          clusterunique.ID
 	TransactionID        uuid.UUID
@@ -79,17 +91,15 @@ type RecordedStmtStats struct {
 	PlanGist             string
 	StatementError       error
 	IndexRecommendations []string
-	Query                string
 	StartTime            time.Time
 	EndTime              time.Time
-	FullScan             bool
 	ExecStats            *execstats.QueryLevelStats
 	Indexes              []string
-	Database             string
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
 type RecordedTxnStats struct {
+	FingerprintID           appstatspb.TransactionFingerprintID
 	SessionID               clusterunique.ID
 	TransactionID           uuid.UUID
 	TransactionTimeSec      float64
