@@ -74,14 +74,13 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 ----
 │
 ├ Node 1
-│ └ *colexec.isNullSelOp
-│   └ *colexecbase.castNativeToDatumOp
-│     └ *colexec.ParallelUnorderedSynchronizer
-│       ├ *colfetcher.ColBatchScan
-│       ├ *colrpc.Inbox
-│       ├ *colrpc.Inbox
-│       ├ *colrpc.Inbox
-│       └ *colrpc.Inbox
+│ └ *rowexec.filtererProcessor
+│   └ *colexec.ParallelUnorderedSynchronizer
+│     ├ *colfetcher.ColBatchScan
+│     ├ *colrpc.Inbox
+│     ├ *colrpc.Inbox
+│     ├ *colrpc.Inbox
+│     └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *colfetcher.ColBatchScan
@@ -104,9 +103,8 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 ----
 │
 └ Node 1
-  └ *colexec.isNullSelOp
-    └ *colexecbase.castNativeToDatumOp
-      └ *colfetcher.ColBatchScan
+  └ *rowexec.filtererProcessor
+    └ *colfetcher.ColBatchScan
 
 statement ok
 SET experimental_distsql_planning = always
@@ -118,7 +116,7 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 ----
 │
 ├ Node 1
-│ └ *colexecbase.castNativeToDatumOp
+│ └ *rowexec.noopProcessor
 │   └ *colexec.ParallelUnorderedSynchronizer
 │     ├ *colfetcher.ColBatchScan
 │     ├ *colrpc.Inbox
@@ -149,7 +147,7 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 ----
 │
 ├ Node 1
-│ └ *colexecbase.castNativeToDatumOp
+│ └ *rowexec.noopProcessor
 │   └ *colexec.ParallelUnorderedSynchronizer
 │     ├ *colfetcher.ColBatchScan
 │     ├ *colrpc.Inbox
