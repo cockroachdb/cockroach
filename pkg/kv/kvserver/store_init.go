@@ -143,6 +143,7 @@ func WriteInitialClusterData(
 			ctx, 2, "creating range %d [%s, %s). Initial values: %d",
 			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
 		batch := eng.NewBatch()
+		//nolint:deferloop TODO(#137605)
 		defer batch.Close()
 
 		now := hlc.Timestamp{

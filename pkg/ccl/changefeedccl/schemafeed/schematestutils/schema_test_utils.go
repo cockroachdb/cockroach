@@ -174,6 +174,7 @@ func FetchDescVersionModificationTime(
 		if err != nil {
 			t.Fatal(err)
 		}
+		//nolint:deferloop TODO(#137605)
 		defer it.Close()
 		for it.SeekGE(storage.NilKey); ; it.Next() {
 			if ok, err := it.Valid(); err != nil {

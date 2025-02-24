@@ -2458,6 +2458,7 @@ func (n *Node) GossipSubscription(
 		case gossip.KeyDeprecatedSystemConfig:
 			var unregister func()
 			systemConfigUpdateCh, unregister = n.storeCfg.SystemConfigProvider.RegisterSystemConfigChannel()
+			//nolint:deferloop TODO(#137605)
 			defer unregister()
 		default:
 			callback := func(key string, content roachpb.Value) {
@@ -2485,6 +2486,7 @@ func (n *Node) GossipSubscription(
 				}
 			}
 			unregister := n.storeCfg.Gossip.RegisterCallback(pattern, callback)
+			//nolint:deferloop TODO(#137605)
 			defer unregister()
 		}
 	}

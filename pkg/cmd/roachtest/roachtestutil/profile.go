@@ -175,6 +175,7 @@ func DownloadProfiles(
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(#137605)
 		defer resp.Body.Close()
 		// Copy the contents of the URL to a BytesBuffer to determine the
 		// filename before saving it below.
@@ -251,6 +252,7 @@ func MeasureQPS(
 		var dbs []*gosql.DB
 		for _, nodeId := range nodes {
 			db := c.Conn(ctx, t.L(), nodeId)
+			//nolint:deferloop TODO(#137605)
 			defer db.Close()
 			dbs = append(dbs, db)
 		}
