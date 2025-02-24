@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bulksst",
+    srcs = ["sst_writer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/bulksst",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "@com_github_cockroachdb_pebble//objstorage",
+    ],
+)
+
+go_test(
+    name = "bulksst_test",
+    srcs = [
+        "main_test.go",
+        "sst_writer_test.go",
+    ],
+    deps = [
+        ":bulksst",
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/storage",
+        "//pkg/storage/fs",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/intsets",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_pebble//objstorage",
+        "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
+        "@com_github_cockroachdb_pebble//sstable",
+        "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_stretchr_testify//require",
+    ],
+)
