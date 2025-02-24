@@ -71,7 +71,7 @@ func TestDiversityScoringMemo(t *testing.T) {
 				d.ScanArgs(t, "store-id", &storeID)
 				var lts string
 				d.ScanArgs(t, "locality-tiers", &lts)
-				locality := parseLocalityTiers(t, d, lts)
+				locality := parseLocalityTiers(t, lts)
 				lt := ltInterner.intern(locality)
 				storeLocalities[storeID] = lt
 				return fmt.Sprintf("locality: %s str: %s", ltInterner.unintern(lt).String(), lt.str)

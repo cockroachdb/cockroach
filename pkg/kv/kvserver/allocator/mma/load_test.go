@@ -59,9 +59,11 @@ func TestMeansMemo(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "store":
-				desc := parseStoreDescriptor(t, d)
-				cm.setStore(desc)
-				storeMap[desc.StoreID] = desc
+				for _, line := range strings.Split(d.Input, "\n") {
+					desc := parseStoreDescriptor(t, strings.TrimSpace(line))
+					cm.setStore(desc)
+					storeMap[desc.StoreID] = desc
+				}
 				return ""
 
 			case "store-load":

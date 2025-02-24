@@ -1,9 +1,8 @@
 # Two stores at different nodes.
 
-store store-id=1 node-id=1 attrs=green locality-tiers=region=us-west
-----
-
-store store-id=2 node-id=2 attrs=green locality-tiers=region=us-east
+store 
+  store-id=1 node-id=1 attrs=green locality-tiers=region=us-west
+  store-id=2 node-id=2 attrs=green locality-tiers=region=us-east
 ----
 
 # -1 is parentCapacity.
@@ -49,7 +48,8 @@ get-store-summary store-id=2 load-seq-num=0
 called computeLoadSummary: returning seqnum 0
 
 # Add another store that is on the same node as store 1.
-store store-id=3 node-id=1 attrs=green locality-tiers=region=us-west
+store 
+  store-id=3 node-id=1 attrs=green locality-tiers=region=us-west
 ----
 
 store-load store-id=3 load=(100,200,400) capacity=(-1,800,1600) secondary-load=120
