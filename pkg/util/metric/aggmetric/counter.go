@@ -36,6 +36,9 @@ func NewCounter(metadata metric.Metadata, childLabels ...string) *AggCounter {
 // GetName is part of the metric.Iterable interface.
 func (c *AggCounter) GetName() string { return c.g.GetName() }
 
+// GetPrometheusName is part of the metric.PrometheusExportable interface.
+func (c *AggCounter) GetPrometheusName() string { return c.g.GetPrometheusName() }
+
 // GetHelp is part of the metric.Iterable interface.
 func (c *AggCounter) GetHelp() string { return c.g.GetHelp() }
 
@@ -144,6 +147,9 @@ func NewCounterFloat64(metadata metric.Metadata, childLabels ...string) *AggCoun
 
 // GetName is part of the metric.Iterable interface.
 func (c *AggCounterFloat64) GetName() string { return c.g.GetName() }
+
+// GetPrometheusName is part of the metric.PrometheusExportable interface.
+func (c *AggCounterFloat64) GetPrometheusName() string { return c.g.GetPrometheusName() }
 
 // GetHelp is part of the metric.Iterable interface.
 func (c *AggCounterFloat64) GetHelp() string { return c.g.GetHelp() }

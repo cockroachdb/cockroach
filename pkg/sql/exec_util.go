@@ -917,28 +917,56 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaSelectStarted = metric.Metadata{
-		Name:        "sql.select.started.count",
-		Help:        "Number of SQL SELECT statements started",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
+		Name:             "sql.started.count",
+		Help:             "Number of SQL SELECT statements started",
+		Measurement:      "SQL Statements",
+		Unit:             metric.Unit_COUNT,
+		LegacyStaticName: "sql.select.started.count",
+		StaticLabels: []*metric.StaticLabel{
+			{
+				Key:   "query_type",
+				Value: "select",
+			},
+		},
 	}
 	MetaUpdateStarted = metric.Metadata{
-		Name:        "sql.update.started.count",
-		Help:        "Number of SQL UPDATE statements started",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
+		Name:             "sql.started.count",
+		Help:             "Number of SQL UPDATE statements started",
+		Measurement:      "SQL Statements",
+		Unit:             metric.Unit_COUNT,
+		LegacyStaticName: "sql.update.started.count",
+		StaticLabels: []*metric.StaticLabel{
+			{
+				Key:   "query_type",
+				Value: "update",
+			},
+		},
 	}
 	MetaInsertStarted = metric.Metadata{
-		Name:        "sql.insert.started.count",
-		Help:        "Number of SQL INSERT statements started",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
+		Name:             "sql.started.count",
+		Help:             "Number of SQL INSERT statements started",
+		Measurement:      "SQL Statements",
+		Unit:             metric.Unit_COUNT,
+		LegacyStaticName: "sql.insert.started.count",
+		StaticLabels: []*metric.StaticLabel{
+			{
+				Key:   "query_type",
+				Value: "insert",
+			},
+		},
 	}
 	MetaDeleteStarted = metric.Metadata{
-		Name:        "sql.delete.started.count",
-		Help:        "Number of SQL DELETE statements started",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
+		Name:             "sql.started.count",
+		Help:             "Number of SQL DELETE statements started",
+		Measurement:      "SQL Statements",
+		Unit:             metric.Unit_COUNT,
+		LegacyStaticName: "sql.delete.started.count",
+		StaticLabels: []*metric.StaticLabel{
+			{
+				Key:   "query_type",
+				Value: "delete",
+			},
+		},
 	}
 	MetaCRUDStarted = metric.Metadata{
 		Name:        "sql.crud_query.started.count",
@@ -1255,6 +1283,7 @@ var (
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
 	if internal {
 		meta.Name += ".internal"
+		meta.LegacyStaticName += ".internal"
 		meta.Help += " (internal queries)"
 		meta.Measurement = "SQL Internal Statements"
 	}

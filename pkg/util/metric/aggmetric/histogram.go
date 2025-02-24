@@ -95,6 +95,9 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 // GetName is part of the metric.Iterable interface.
 func (a *AggHistogram) GetName() string { return a.h.GetName() }
 
+// GetPrometheusName is part of the metric.PrometheusExportable interface.
+func (a *AggHistogram) GetPrometheusName() string { return a.h.GetPrometheusName() }
+
 // GetHelp is part of the metric.Iterable interface.
 func (a *AggHistogram) GetHelp() string { return a.h.GetHelp() }
 
