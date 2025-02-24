@@ -123,6 +123,9 @@ message ProcessorCoreUnion {
   optional IngestStoppedSpec ingestStopped = 44;
   optional LogicalReplicationWriterSpec logicalReplicationWriter = 45;
   optional LogicalReplicationOfflineScanSpec logicalReplicationOfflineScan = 46;
+  optional BulkMergeSpec bulkMerge = 47;
+  optional MergeCoordinatorSpec mergeCoordinator = 48;
+  optional MergeLoopbackSpec mergeLoopback = 49;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
   // NEXT ID: 47.

@@ -7,14 +7,27 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "bulkmerge",
-    srcs = ["merge_processor.go"],
+    srcs = [
+        "merge_coordinator.go",
+        "merge_loopback.go",
+        "merge_planning.go",
+        "merge_processor.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/bulkmerge",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/sql",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/physicalplan",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -23,6 +36,7 @@ go_test(
     srcs = [
         "main_test.go",
         "merge_processor_test.go",
+        "merge_test.go",
     ],
     embed = [":bulkmerge"],
     deps = [
@@ -30,12 +44,15 @@ go_test(
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/execinfrapb",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
     ],

@@ -196,6 +196,18 @@ message BulkMergeSpec {
 	};
 }
 
+message MergeCoordinatorSpec {
+  optional string job_id = 1 [(gogoproto.nullable) = false];
+}
+
+// MergeLoopback is scheduled on the same node as the MergeCoordinator.
+// MegeCoordinator is the final processor in the flow and MergeLoopback is the
+// first processor in the flow. Scheduling them on the same node allows the
+// MergeCoordinator to inject task rows into the process.
+message MergeLoopbackSpec {
+
+}
+
 message IngestStoppedSpec {
   optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID",
   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];

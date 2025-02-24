@@ -10,16 +10,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/stretchr/testify/require"
 )
 
 func TestBulkMergeProcessor(t *testing.T) {
-	ctx := context.Background()
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	tc := testcluster.NewTestCluster(t, 1, base.TestClusterArgs{})
 	tc.Start(t)
@@ -29,6 +27,6 @@ func TestBulkMergeProcessor(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE test`)
 
-	_, err := newBulkMergeProcessor(ctx, nil, 0, execinfrapb.StreamIngestionDataSpec{}, nil)
-	require.ErrorContains(t, err, "unimplemented")
+	// _, err := newBulkMergeProcessor(ctx, nil, 0, execinfrapb.BulkMergeSpec{}, nil, nil)
+	// require.ErrorContains(t, err, "unimplemented")
 }

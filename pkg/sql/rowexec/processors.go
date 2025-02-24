@@ -391,6 +391,34 @@ func NewProcessor(
 		}
 		return NewGenerativeSplitAndScatterProcessor(ctx, flowCtx, processorID, *core.GenerativeSplitAndScatter, post)
 	}
+	if core.BulkMerge != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if NewBulkMergeProcessor == nil {
+			return nil, errors.New("BulkMerge processor unimplemented")
+		}
+		return NewBulkMergeProcessor(ctx, flowCtx, processorID, *core.BulkMerge, post, inputs[0])
+	}
+	if core.MergeCoordinator != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if NewMergeCoordinatorProcessor == nil {
+			return nil, errors.New("MergeCoordinator processor unimplemented")
+		}
+		return NewMergeCoordinatorProcessor(ctx, flowCtx, processorID, *core.MergeCoordinator, post, inputs[0])
+	}
+	if core.MergeLoopback != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewMergeLoopbackProcessor == nil {
+			return nil, errors.New("MergeLoopback processor unimplemented")
+		}
+		return NewMergeLoopbackProcessor(ctx, flowCtx, processorID, *core.MergeLoopback, post)
+	}
+
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
@@ -402,6 +430,12 @@ var NewCloudStorageTestProcessor func(context.Context, *execinfra.FlowCtx, int32
 
 // NewIngestStoppedProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewIngestStoppedProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestStoppedSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+var NewBulkMergeProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.BulkMergeSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource) (execinfra.Processor, error)
+
+var NewMergeCoordinatorProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.MergeCoordinatorSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource) (execinfra.Processor, error)
+
+var NewMergeLoopbackProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.MergeLoopbackSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewBackupDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
