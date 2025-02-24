@@ -387,6 +387,50 @@ var regularBuiltins = map[string]builtinDefinition{
 	"substr":    makeSubStringImpls(),
 	"substring": makeSubStringImpls(),
 
+	"substring_index": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "input", Typ: types.String},
+				{Name: "delim", Typ: types.String},
+				{Name: "count", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				input := string(tree.MustBeDString(args[0]))
+				delim := string(tree.MustBeDString(args[1]))
+				count := int(tree.MustBeDInt(args[2]))
+
+				// Handle empty input.
+				if input == "" || delim == "" || count == 0 {
+					return tree.NewDString(""), nil
+				}
+
+				parts := strings.Split(input, delim)
+				length := len(parts)
+
+				// If count is positive, return the first 'count' parts joined by delim
+				if count > 0 {
+					if count >= length {
+						return tree.NewDString(input), nil // If count exceeds occurrences, return the full string
+					}
+					result := strings.Join(parts[:count], delim)
+					return tree.NewDString(result), nil
+				}
+
+				// If count is negative, return the last 'abs(count)' parts joined by delim
+				count = -count
+				if count >= length {
+					return tree.NewDString(input), nil // If count exceeds occurrences, return the full string
+				}
+				return tree.NewDString(strings.Join(parts[length-count:], delim)), nil
+			},
+			Info: "Returns a substring of `input` before `count` occurrences of `delim`.\n" +
+				"If `count` is positive, the leftmost part is returned. If `count` is negative, the rightmost part is returned.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	// concat concatenates the text representations of all the arguments.
 	// NULL arguments are ignored.
 	"concat": makeBuiltin(
