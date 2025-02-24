@@ -49,3 +49,17 @@ var LeadForGlobalReadsOverride = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
+
+// LeadForGlobalReadsAutoTune auto-tunes the lead time that ranges with the
+// LEAD_FOR_GLOBAL_READS closed timestamp policy use to publish close timestamps
+// based on past observed raft and side transport closed timestamp propagation
+// latencies (see TargetForPolicy). Falls back to the hardcoded lead time
+// calculation if no data is observed. LeadForGlobalReadsOverride takes
+// precedence over this setting.
+var LeadForGlobalReadsAutoTune = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled",
+	"if nonzero, attempt to auto-tune the lead time that global_read ranges use to publish closed timestamps",
+	false,
+	settings.WithPublic,
+)
