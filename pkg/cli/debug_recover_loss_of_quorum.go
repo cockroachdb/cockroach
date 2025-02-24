@@ -819,7 +819,9 @@ func applyRecoveryToLocalStore(
 		}
 		stores[i] = store
 		batch := store.NewBatch()
+		//nolint:deferloop TODO(radu): fix this
 		defer store.Close()
+		//nolint:deferloop TODO(radu): fix this
 		defer batch.Close()
 
 		storeIdent, err := kvstorage.ReadStoreIdent(ctx, store)

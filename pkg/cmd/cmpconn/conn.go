@@ -181,6 +181,7 @@ func CompareConns(
 		if err != nil {
 			return true, nil //nolint:returnerrcheck
 		}
+		//nolint:deferloop TODO(radu): fix this
 		defer rows.Close()
 		connRows[name] = rows
 	}

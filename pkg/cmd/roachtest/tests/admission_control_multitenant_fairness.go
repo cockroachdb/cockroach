@@ -299,6 +299,7 @@ func runMultiTenantFairness(
 		node := virtualClusters[name]
 
 		vcdb := c.Conn(ctx, t.L(), node[0], option.VirtualClusterName(name))
+		//nolint:deferloop TODO(radu): fix this
 		defer vcdb.Close()
 
 		_, err := vcdb.ExecContext(ctx, "USE kv")

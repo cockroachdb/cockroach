@@ -229,6 +229,7 @@ func repeatGetLatestTag(
 			t.L().Printf("error fetching - retrying: %s", lastError)
 			continue
 		}
+		//nolint:deferloop TODO(radu): fix this
 		defer resp.Body.Close()
 
 		var tags Tags

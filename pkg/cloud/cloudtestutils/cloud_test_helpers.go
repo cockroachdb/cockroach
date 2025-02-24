@@ -193,6 +193,7 @@ func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			//nolint:deferloop TODO(radu): fix this
 			defer r.Close(ctx)
 
 			res, err := ioctx.ReadAll(ctx, r)

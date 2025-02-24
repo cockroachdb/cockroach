@@ -183,6 +183,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 	for first := true; r.shouldBackpressureWrites(); first = false {
 		if first {
 			r.store.metrics.BackpressuredOnSplitRequests.Inc(1)
+			//nolint:deferloop TODO(radu): fix this
 			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1)
 
 			if backpressureLogLimiter.ShouldLog() {

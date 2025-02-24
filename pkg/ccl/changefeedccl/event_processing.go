@@ -633,6 +633,7 @@ func (c *parallelEventConsumer) workerLoop(
 			return nil
 		case <-c.termCh:
 			c.mu.Lock()
+			//nolint:deferloop TODO(radu): fix this
 			defer c.mu.Unlock()
 			return c.mu.termErr
 		case e := <-c.workerCh[id]:

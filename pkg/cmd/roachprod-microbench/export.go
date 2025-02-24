@@ -35,6 +35,7 @@ func exportMetrics(
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(radu): fix this
 		defer file.Close()
 		reader := benchfmt.NewReader(file, path)
 		err = builder.AddMetrics(runID, pkg+"/", reader)

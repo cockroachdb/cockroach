@@ -202,6 +202,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 			if err != nil {
 				return err
 			}
+			//nolint:deferloop TODO(radu): fix this
 			defer es.Close()
 
 			part := fmt.Sprintf("n%d.%d", uniqueID, chunk)

@@ -91,6 +91,7 @@ func checkURI(
 			total.error = errors.Wrapf(err, "opening external storage").Error()
 			return total
 		}
+		//nolint:deferloop TODO(radu): fix this
 		defer store.Close()
 
 		res, err := checkStorage(ctx, store, transferSize)

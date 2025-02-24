@@ -2220,6 +2220,7 @@ func (ds *DistSender) sendPartialBatch(
 			// RPC is not retried any more.
 			if err != nil || reply.Error != nil {
 				ds.metrics.SlowRPCs.Inc(1)
+				//nolint:deferloop TODO(radu): fix this
 				defer func(tBegin crtime.Mono, attempts int64) {
 					ds.metrics.SlowRPCs.Dec(1)
 					var s redact.StringBuilder

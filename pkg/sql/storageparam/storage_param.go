@@ -61,6 +61,7 @@ func Set(
 
 		// Storage params handle their own scalar arguments, with no help from the
 		// optimizer. As such, they cannot contain subqueries.
+		//nolint:deferloop TODO(radu): fix this
 		defer semaCtx.Properties.Restore(semaCtx.Properties)
 		semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
 

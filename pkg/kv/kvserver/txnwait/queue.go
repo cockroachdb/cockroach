@@ -704,6 +704,7 @@ func (q *Queue) waitForPush(
 				timeutil.Since(tBegin).Seconds(),
 				req.PusheeTxn.ID.Short(),
 			)
+			//nolint:deferloop TODO(radu): fix this
 			defer func() {
 				metrics.PusherSlow.Dec(1)
 				log.Warningf(ctx, "pusher %s: finished waiting after %.2fs for pushee %s",

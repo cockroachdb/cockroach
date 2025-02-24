@@ -340,6 +340,7 @@ func downloadDataset(ctx context.Context, datasetName string) dataset {
 		if err != nil {
 			panic(err)
 		}
+		//nolint:deferloop TODO(radu): fix this
 		defer zippedFile.Close()
 
 		// Create the output file
@@ -348,6 +349,7 @@ func downloadDataset(ctx context.Context, datasetName string) dataset {
 		if err != nil {
 			panic(err)
 		}
+		//nolint:deferloop TODO(radu): fix this
 		defer outputFile.Close()
 
 		// Copy the contents of the zipped file to the output file

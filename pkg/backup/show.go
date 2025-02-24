@@ -224,6 +224,7 @@ func showBackupPlanHook(
 			if err != nil {
 				return errors.Wrapf(err, "make storage")
 			}
+			//nolint:deferloop TODO(radu): fix this
 			defer baseStores[j].Close()
 		}
 
@@ -1222,6 +1223,7 @@ func backupShowerFileSetup() backupShower {
 				if err != nil {
 					return nil, err
 				}
+				//nolint:deferloop TODO(radu): fix this
 				defer it.Close()
 				var idx int
 				for ; ; it.Next() {

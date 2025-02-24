@@ -249,6 +249,7 @@ func (sp *csvWriter) Run(ctx context.Context, output execinfra.RowReceiver) {
 			if err != nil {
 				return err
 			}
+			//nolint:deferloop TODO(radu): fix this
 			defer es.Close()
 
 			part := fmt.Sprintf("n%d.%d", uniqueID, chunk)

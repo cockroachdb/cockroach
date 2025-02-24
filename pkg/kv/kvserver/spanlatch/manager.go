@@ -608,6 +608,7 @@ func (m *Manager) waitForSignal(
 				base.SlowRequestThreshold, waitType, wait, heldType, held)
 			if m.slowReqs != nil {
 				m.slowReqs.Inc(1)
+				//nolint:deferloop TODO(radu): fix this
 				defer m.slowReqs.Dec(1)
 			}
 		case <-ctx.Done():

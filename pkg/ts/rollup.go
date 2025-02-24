@@ -162,6 +162,7 @@ func (db *DB) rollupTimeSeries(
 		rollupDataMap := make(map[string]rollupData)
 
 		account := qmc.workerMonitor.MakeBoundAccount()
+		//nolint:deferloop TODO(radu): fix this
 		defer account.Close(ctx)
 
 		childQmc := QueryMemoryContext{

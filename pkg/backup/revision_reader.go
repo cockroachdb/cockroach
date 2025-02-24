@@ -59,6 +59,7 @@ func GetAllRevisions(
 			if err != nil {
 				return err
 			}
+			//nolint:deferloop TODO(radu): fix this
 			defer func() {
 				if iter != nil {
 					iter.Close()
