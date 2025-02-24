@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -96,7 +97,7 @@ func runBenchmarkPersistedSqlStatsFlush(
 			db.Exec(b, "SELECT id FROM bench.t1 LIMIT 5")
 		}
 		b.StartTimer()
-		tc.Server(0).SQLServer().(*sql.Server).GetSQLStatsProvider().MaybeFlush(ctx, tc.ApplicationLayer(0).AppStopper())
+		sqlstatstestutil.FlushTestServerLocal(tc.Server(0))
 		b.StopTimer()
 	}
 }
@@ -390,7 +391,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 
 	// Fills the in-memory stats for the 'bench' application until the fingerprint limit is reached.
 	fillBenchAppMemStats := func() {
-		appContainer := sqlStats.SQLStats.GetApplicationStats("bench")
+		appContainer := sqlStats.GetApplicationStats("bench")
 		mockStmtValue := sqlstats.RecordedStmtStats{}
 		for i := int64(1); i <= stmtFingerprintLimit; i++ {
 			stmtKey := appstatspb.StatementStatisticsKey{

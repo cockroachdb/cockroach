@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -82,7 +83,8 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	})
 	defer cluster.Stopper().Stop(ctx)
 
-	server := cluster.Server(0 /* idx */).ApplicationLayer()
+	ts := cluster.Server(0 /* idx */)
+	server := ts.ApplicationLayer()
 	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider()
 
 	appStats := sqlStats.GetApplicationStats("app1")
@@ -116,7 +118,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			}
 			return strings.Join(rows, "\n")
 		case "sql-stats-flush":
-			sqlStats.MaybeFlush(ctx, cluster.ApplicationLayer(0).AppStopper())
+			sqlstatstestutil.FlushTestServerLocal(ts)
 		case "set-time":
 			mustHaveArgsOrFatal(t, d, timeArgs)
 

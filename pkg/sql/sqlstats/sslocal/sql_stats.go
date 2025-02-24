@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+var _ sqlstats.SSDrainer = &SQLStats{}
+
 // SQLStats carries per-application in-memory statistics for all applications.
 type SQLStats struct {
 	st *cluster.Settings

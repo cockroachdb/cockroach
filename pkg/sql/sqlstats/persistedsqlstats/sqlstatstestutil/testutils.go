@@ -18,13 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
 )
 
 // GetRandomizedCollectedStatementStatisticsForTest returns a
 // appstatspb.CollectedStatementStatistics with its fields randomly filled.
 func GetRandomizedCollectedStatementStatisticsForTest(
-	t *testing.T,
+	t testing.TB,
 ) (result appstatspb.CollectedStatementStatistics) {
 	data := sqlstatsutil.GenRandomData()
 	sqlstatsutil.FillObject(t, reflect.ValueOf(&result), &data)
@@ -35,7 +36,7 @@ func GetRandomizedCollectedStatementStatisticsForTest(
 // GetRandomizedCollectedTransactionStatisticsForTest returns a
 // appstatspb.CollectedTransactionStatistics with its fields randomly filled.
 func GetRandomizedCollectedTransactionStatisticsForTest(
-	t *testing.T,
+	t testing.TB,
 ) (result appstatspb.CollectedTransactionStatistics) {
 	data := sqlstatsutil.GenRandomData()
 	sqlstatsutil.FillObject(t, reflect.ValueOf(&result), &data)
@@ -292,4 +293,9 @@ VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 	)
 
 	return err
+}
+
+func FlushTestServerLocal(ts serverutils.TestServerInterface) {
+	sqlStatsFlusher := ts.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	sqlStatsFlusher.MaybeFlush(context.Background(), ts.Stopper())
 }

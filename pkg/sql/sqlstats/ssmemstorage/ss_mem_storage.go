@@ -502,9 +502,9 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
 
-// PopAllStats returns all collected statement and transaction stats in memory to the caller and clears SQL stats
+// DrainStats returns all collected statement and transaction stats in memory to the caller and clears SQL stats
 // make sure that new arriving stats won't be interfering with existing one.
-func (s *Container) PopAllStats(
+func (s *Container) DrainStats(
 	ctx context.Context,
 ) ([]*appstatspb.CollectedStatementStatistics, []*appstatspb.CollectedTransactionStatistics) {
 	statementStats := make([]*appstatspb.CollectedStatementStatistics, 0)
