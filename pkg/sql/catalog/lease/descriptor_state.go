@@ -141,7 +141,7 @@ func (t *descriptorState) upsertLeaseLocked(
 	}
 	// If the version already exists and the session ID matches nothing
 	// needs to be done.
-	if s.getSessionID() == session.ID() {
+	if _, sessionID := s.getSessionID(); sessionID == session.ID() {
 		return nil
 	}
 

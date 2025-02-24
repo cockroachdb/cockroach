@@ -109,10 +109,14 @@ func (s *descriptorVersionState) stringLocked() redact.RedactableString {
 }
 
 // getSessionID returns the current session ID from the lease.
-func (s *descriptorVersionState) getSessionID() sqlliveness.SessionID {
+func (s *descriptorVersionState) getSessionID() (hasSession bool, sessionID sqlliveness.SessionID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.session.ID()
+	// Historical leases will never have sessions.
+	if s.mu.session == nil {
+		return false, ""
+	}
+	return true, s.mu.session.ID()
 }
 
 // hasExpired checks if the descriptor is too old to be used (by a txn

@@ -855,8 +855,13 @@ func acquireNodeLease(
 			var currentVersion descpb.DescriptorVersion
 			var currentSessionID sqlliveness.SessionID
 			if newest != nil {
-				currentVersion = newest.GetVersion()
-				currentSessionID = newest.getSessionID()
+				// Historical descriptors will not have a session ID, so
+				// for the purpose of this check they can be ignored.
+				var hasSessionID bool
+				hasSessionID, currentSessionID = newest.getSessionID()
+				if hasSessionID {
+					currentVersion = newest.GetVersion()
+				}
 			}
 			// A session will always be populated, since we use session based leasing.
 			session, err := m.storage.livenessProvider.Session(ctx)
