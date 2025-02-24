@@ -94,6 +94,13 @@ func TestLogic_mixed_version_can_login(
 	runLogicTest(t, "mixed_version_can_login")
 }
 
+func TestLogic_mixed_version_jsonpath(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_jsonpath")
+}
+
 func TestLogic_mixed_version_stats(
 	t *testing.T,
 ) {

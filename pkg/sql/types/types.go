@@ -86,6 +86,7 @@ import (
 // | TIMETZ            | TIMETZ         | T_timetz      | 0         | 0     |
 // | JSON              | JSONB          | T_json        | 0         | 0     |
 // | JSONB             | JSONB          | T_jsonb       | 0         | 0     |
+// | JSONPATH          | JSONPATH       | T_jsonpath    | 0         | 0     |
 // |                   |                |               |           |       |
 // | BYTES             | BYTES          | T_bytea       | 0         | 0     |
 // |                   |                |               |           |       |
@@ -541,6 +542,15 @@ var (
 		},
 	}
 
+	// Jsonpath is the jsonpath type which represents a jsonpath query.
+	Jsonpath = &T{
+		InternalType: InternalType{
+			Family: JsonpathFamily,
+			Oid:    oidext.T_jsonpath,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// RefCursor is the type for a variable representing the name of a cursor in a
 	// PLpgSQL routine. The underlying value is a string.
 	RefCursor = &T{
@@ -580,6 +590,7 @@ var (
 		TimeTZ,
 		Jsonb,
 		VarBit,
+		// TODO(normanchenn): consider including jsonpath here.
 	}
 
 	// AnyElement is a special type used only during static analysis as a wildcard type
@@ -721,6 +732,13 @@ var (
 	// by Postgres in system tables. Int2vectors are 0-indexed, unlike normal arrays.
 	Int2Vector = &T{InternalType: InternalType{
 		Family: ArrayFamily, Oid: oid.T_int2vector, ArrayContents: Int2, Locale: &emptyLocale}}
+
+	// JsonpathArray is the type of an array value having Jsonpath-typed elements.
+	JsonpathArray = &T{
+		InternalType: InternalType{
+			Family: ArrayFamily, ArrayContents: Jsonpath, Oid: oidext.T__jsonpath, Locale: &emptyLocale,
+		},
+	}
 )
 
 // Unexported wrapper types.
@@ -1567,6 +1585,7 @@ var familyNames = map[Family]redact.SafeString{
 	UuidFamily:           "uuid",
 	VoidFamily:           "void",
 	EncodedKeyFamily:     "encodedkey",
+	JsonpathFamily:       "jsonpath",
 }
 
 // Name returns a user-friendly word indicating the family type.
@@ -1817,6 +1836,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 	case JsonFamily:
 		// Only binary JSON is currently supported.
 		return "jsonb"
+	case JsonpathFamily:
+		return "jsonpath"
 	case OidFamily:
 		switch t.Oid() {
 		case oid.T_oid:
@@ -2000,6 +2021,8 @@ func (t *T) SQLString() string {
 	case JsonFamily:
 		// Only binary JSON is currently supported.
 		return "JSONB"
+	case JsonpathFamily:
+		return "JSONPATH"
 	case TimestampFamily, TimestampTZFamily, TimeFamily, TimeTZFamily:
 		if t.InternalType.Precision > 0 || t.InternalType.TimePrecisionIsSet {
 			return fmt.Sprintf("%s(%d)", strings.ToUpper(t.Name()), t.Precision())

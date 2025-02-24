@@ -494,6 +494,8 @@ func performCastWithoutPrecisionTruncation(
 			s = tree.AsStringWithFlags(t, tree.FmtPgwireText)
 		case *tree.DJSON:
 			s = t.JSON.String()
+		case *tree.DJsonpath:
+			s = string(*t)
 		case *tree.DTSQuery:
 			s = t.TSQuery.String()
 		case *tree.DTSVector:
@@ -906,6 +908,11 @@ func performCastWithoutPrecisionTruncation(
 				return nil, err
 			}
 			return tree.ParseDJSON(string(j))
+		}
+	case types.JsonpathFamily:
+		switch v := d.(type) {
+		case *tree.DString:
+			return tree.ParseDJsonpath(string(*v))
 		}
 	case types.TSQueryFamily:
 		switch v := d.(type) {
