@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -45,12 +46,12 @@ func TestBackupCompaction(t *testing.T) {
 	)
 	defer cleanupDB()
 
-	startAndAwaitCompaction := func(start, end string) {
+	startCompaction := func(start, end string) jobspb.JobID {
 		compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY['nodelocal://1/backup'], 'LATEST', ''::BYTES, '%s'::DECIMAL, '%s'::DECIMAL)"
 		row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, start, end))
 		var jobID jobspb.JobID
 		row.Scan(&jobID)
-		waitForSuccessfulJob(t, tc, jobID)
+		return jobID
 	}
 	fullBackupAostCmd := "BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'"
 	incBackupCmd := "BACKUP INTO LATEST IN 'nodelocal://1/backup'"
@@ -78,7 +79,7 @@ func TestBackupCompaction(t *testing.T) {
 				t,
 				fmt.Sprintf(incBackupAostCmd, end),
 			)
-			startAndAwaitCompaction(start, end)
+			waitForSuccessfulJob(t, tc, startCompaction(start, end))
 			validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
 			start = end
 		}
@@ -117,7 +118,7 @@ func TestBackupCompaction(t *testing.T) {
 			t,
 			fmt.Sprintf(incBackupAostCmd, end),
 		)
-		startAndAwaitCompaction(start, end)
+		waitForSuccessfulJob(t, tc, startCompaction(start, end))
 		validateCompactedBackupForTables(
 			t, db,
 			[]string{"foo", "bar", "baz"},
@@ -130,7 +131,7 @@ func TestBackupCompaction(t *testing.T) {
 			t,
 			fmt.Sprintf(incBackupAostCmd, end),
 		)
-		startAndAwaitCompaction(start, end)
+		waitForSuccessfulJob(t, tc, startCompaction(start, end))
 
 		db.Exec(t, "DROP TABLE foo, baz")
 		db.Exec(t, "RESTORE FROM LATEST IN 'nodelocal://1/backup'")
@@ -158,7 +159,7 @@ func TestBackupCompaction(t *testing.T) {
 			t,
 			fmt.Sprintf(incBackupAostCmd, end),
 		)
-		startAndAwaitCompaction(start, end)
+		waitForSuccessfulJob(t, tc, startCompaction(start, end))
 
 		var numIndexes, restoredNumIndexes int
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&numIndexes)
@@ -199,7 +200,7 @@ func TestBackupCompaction(t *testing.T) {
 		db.Exec(t, "INSERT INTO foo VALUES (6, 6)")
 		db.Exec(t, incBackupCmd)
 
-		startAndAwaitCompaction(start, end)
+		waitForSuccessfulJob(t, tc, startCompaction(start, end))
 		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
 	})
 
@@ -227,7 +228,7 @@ func TestBackupCompaction(t *testing.T) {
 			),
 		)
 
-		startAndAwaitCompaction(start, end)
+		waitForSuccessfulJob(t, tc, startCompaction(start, end))
 		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
 	})
 
@@ -269,6 +270,39 @@ crdb_internal.json_to_pb(
 		validateCompactedBackupForTablesWithOpts(
 			t, db, []string{"foo"}, "'nodelocal://1/backup'", opts,
 		)
+	})
+
+	t.Run("pause resume and cancel", func(t *testing.T) {
+		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+		defer func() {
+			db.Exec(t, "DROP TABLE foo")
+		}()
+		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+		start := getTime()
+		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, start))
+		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+		end := getTime()
+		db.Exec(t, fmt.Sprintf(incBackupAostCmd, end))
+		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
+		defer func() {
+			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		}()
+
+		jobID := startCompaction(start, end)
+		jobutils.WaitForJobToPause(t, db, jobID)
+		db.Exec(t, "RESUME JOB $1", jobID)
+		waitForSuccessfulJob(t, tc, jobID)
+		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
+
+		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
+		end = getTime()
+		db.Exec(t, fmt.Sprintf(incBackupAostCmd, end))
+		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
+		jobID = startCompaction(start, end)
+		jobutils.WaitForJobToPause(t, db, jobID)
+		db.Exec(t, "CANCEL JOB $1", jobID)
+		jobutils.WaitForJobToCancel(t, db, jobID)
 	})
 	// TODO (kev-cao): Once range keys are supported by the compaction
 	// iterator, add tests for dropped tables/indexes.

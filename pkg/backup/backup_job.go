@@ -535,8 +535,8 @@ func (b *backupResumer) DumpTraceAfterRun() bool {
 // Resume is part of the jobs.Resumer interface.
 func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
-	initialDetails := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
+	initialDetails := b.job.Details().(jobspb.BackupDetails)
 
 	if err := maybeRelocateJobExecution(
 		ctx, b.job.ID(), p, initialDetails.ExecutionLocality, "BACKUP",
@@ -548,14 +548,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	// TODO (kev-cao): there is a decent amount of overlap between the initial
-	// setup of classic backup and backup compaction with some minor differences,
-	// (e.g. lock writing, checkpointing, etc.). It would be nice to unify these
-	// with a common setup function.
-	if initialDetails.Compact {
-		return compactBackups(ctx, b.job.ID(), p, initialDetails)
-	}
-
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		p.ExecCfg().Settings,
 		&p.ExecCfg().ExternalIODirConfig,
@@ -563,6 +555,9 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		p.User(),
 	)
 
+	if initialDetails.Compact {
+		return b.ResumeCompaction(ctx, initialDetails, p, &kmsEnv)
+	}
 	// Resolve the backup destination. We can skip this step if we
 	// have already resolved and persisted the destination either
 	// during a previous resumption of this job.
@@ -707,7 +702,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	statsCache := p.ExecCfg().TableStatsCache
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
-	// errors that are also rpc errors. Don't retry to aggressively.
+	// errors that are also rpc errors. Don't retry too aggressively.
 	retryOpts := retry.Options{
 		MaxBackoff: 1 * time.Second,
 		MaxRetries: 5,
@@ -764,7 +759,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// previous attempts.
 		var reloadBackupErr error
 		mem.Shrink(ctx, memSize)
-		memSize = 0
 		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(),
 			defaultStore, details, p.User(), &kmsEnv)
 		if reloadBackupErr != nil {
