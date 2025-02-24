@@ -24,7 +24,7 @@ import (
 )
 
 func newBulkMergePlan(
-	ctx context.Context, execCtx sql.JobExecContext,
+	ctx context.Context, execCtx sql.JobExecContext, taskCount int,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	// NOTE: This implementation is inspired by the physical plan created by
 	// restore in `pkg/backup/restore_processor_planning.go`
@@ -92,7 +92,8 @@ func newBulkMergePlan(
 
 	plan.AddSingleGroupStage(ctx, coordinatorID[0], execinfrapb.ProcessorCoreUnion{
 		MergeCoordinator: &execinfrapb.MergeCoordinatorSpec{
-			// TODO fill in the rest of the spec
+			TaskCount:            int64(taskCount),
+			WorkerSqlInstanceIds: getRoutingKeys(router),
 		},
 	}, execinfrapb.PostProcessSpec{}, mergeCoordinatorOutputTypes)
 
@@ -166,4 +167,12 @@ func makeInstanceRouter(
 		return bytes.Compare(a.Start, b.Start)
 	})
 	return rangeRouterSpec, nil
+}
+
+func getRoutingKeys(router execinfrapb.OutputRouterSpec_RangeRouterSpec) []string {
+	keys := make([]string, 0, len(router.Spans))
+	for _, span := range router.Spans {
+		keys = append(keys, string(span.Start), string(span.End))
+	}
+	return keys
 }

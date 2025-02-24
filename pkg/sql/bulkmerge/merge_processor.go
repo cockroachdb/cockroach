@@ -7,6 +7,7 @@ package bulkmerge
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -14,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
 )
 
@@ -24,7 +27,7 @@ var (
 
 // TODO(jeffswenson/annie): pick an encoding for the output SSTs
 var bulkMergeProcessorOutputTypes = []*types.T{
-	types.Int4,  // SQL Instance ID of the merge processor
+	types.Bytes, // The encoded SQL Instance ID used for routing
 	types.Int4,  // Task ID
 	types.Bytes, // Encoded list of output SSTs
 }
@@ -43,6 +46,26 @@ type bulkMergeProcessor struct {
 	execinfra.ProcessorBase
 	spec  execinfrapb.BulkMergeSpec
 	input execinfra.RowSource
+}
+
+type mergeProcessorInput struct {
+	sqlInstanceID string
+	taskID        taskset.TaskId
+}
+
+func parseMergeProcessorInput(row rowenc.EncDatumRow) (mergeProcessorInput, error) {
+	sqlInstanceID, ok := row[0].Datum.(*tree.DBytes)
+	if !ok {
+		return mergeProcessorInput{}, errors.Newf("expected bytes column for sqlInstanceID, got %s", row[0].Datum.String())
+	}
+	taskID, ok := row[1].Datum.(*tree.DInt)
+	if !ok {
+		return mergeProcessorInput{}, errors.Newf("expected int4 column for taskID, got %s", row[1].Datum.String())
+	}
+	return mergeProcessorInput{
+		sqlInstanceID: string(*sqlInstanceID),
+		taskID:        taskset.TaskId(*taskID),
+	}, nil
 }
 
 func newBulkMergeProcessor(
@@ -69,29 +92,53 @@ func newBulkMergeProcessor(
 
 // Next implements execinfra.RowSource.
 func (m *bulkMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	// TODO(jeffswenson): fully consume the input
 	for m.State == execinfra.StateRunning {
 		row, meta := m.input.Next()
 		switch {
 		case row == nil && meta == nil:
 			m.MoveToDraining(nil /* err */)
-			break
+			return nil, m.DrainHelper()
 		case meta != nil && meta.Err != nil:
 			m.MoveToDraining(meta.Err)
-			break
+			return nil, m.DrainHelper()
 		case meta != nil:
 			m.MoveToDraining(errors.Newf("unexpected meta: %v", meta))
-			break
+			return nil, m.DrainHelper()
 		case row != nil:
-			base := *row[0].Datum.(*tree.DBytes)
-			return rowenc.EncDatumRow{
-				rowenc.EncDatum{Datum: tree.NewDInt(1)},                  // TODO(jeffswenson): SQL Instance ID
-				rowenc.EncDatum{Datum: tree.NewDInt(1)},                  // TODO(jeffswenson): Task ID
-				rowenc.EncDatum{Datum: tree.NewDBytes(base + "->merge")}, // TODO(jeffswenson): output SST
-			}, nil
+			output, err := m.handleRow(row)
+			if err != nil {
+				m.MoveToDraining(err)
+				return nil, m.DrainHelper()
+			}
+			return output, nil
 		}
 	}
 	return nil, m.DrainHelper()
+}
+
+func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
+	input, err := parseMergeProcessorInput(row)
+	if err != nil {
+		return nil, err
+	}
+
+	results := execinfrapb.BulkMergeSpec_Output{}
+	results.Ssts = append(results.Ssts, execinfrapb.BulkMergeSpec_SST{
+		// TODO(jeffswenson): replace this with real output. For now we just
+		// want to make sure each task is processed
+		Uri: fmt.Sprintf("nodelocal://%d.sst", input.taskID),
+	})
+
+	marshaled, err := protoutil.Marshal(&results)
+	if err != nil {
+		return nil, err
+	}
+
+	return rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(input.sqlInstanceID))},
+		rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(input.taskID))},
+		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(marshaled))},
+	}, nil
 }
 
 // Start implements execinfra.RowSource.

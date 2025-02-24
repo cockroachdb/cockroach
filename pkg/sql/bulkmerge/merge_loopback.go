@@ -7,14 +7,54 @@ package bulkmerge
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
+
+// loopbackMap is a cursed hack to allow the mergeLoopback processor to
+// communicate with the merge coordinator.
+//
+// TODO(jeffswenson): this is cursed. We should remove this once we have a the
+// merge coordinator communicate with the loopback processor. Maybe we can do it
+// by creating multiple outputs.
+type loopbackMap struct {
+	sync.Mutex
+	loopback map[execinfrapb.FlowID]chan rowenc.EncDatumRow
+}
+
+var loopback = &loopbackMap{
+	loopback: make(map[execinfrapb.FlowID]chan rowenc.EncDatumRow),
+}
+
+// get returns the channel for the given id if it exists.
+func (l *loopbackMap) get(flowCtx *execinfra.FlowCtx) (chan rowenc.EncDatumRow, bool) {
+	l.Lock()
+	defer l.Unlock()
+	id := flowCtx.ID
+	channel, ok := l.loopback[id]
+	return channel, ok
+}
+
+// create returns a channel for the given id and a function to close it.
+func (l *loopbackMap) create(flowCtx *execinfra.FlowCtx) (chan rowenc.EncDatumRow, func()) {
+	l.Lock()
+	defer l.Unlock()
+	id := flowCtx.ID
+	ch := make(chan rowenc.EncDatumRow)
+	l.loopback[id] = ch
+	return ch, func() {
+		l.Lock()
+		defer l.Unlock()
+		delete(l.loopback, id)
+		close(ch)
+	}
+}
 
 var (
 	_ execinfra.Processor = &mergeLoopback{}
@@ -28,26 +68,32 @@ var mergeLoopbackOutputTypes = []*types.T{
 
 type mergeLoopback struct {
 	execinfra.ProcessorBase
-	done bool
+	loopback chan rowenc.EncDatumRow
 }
 
 // Next implements execinfra.RowSource.
 func (m *mergeLoopback) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if m.done {
-		m.MoveToDraining(nil)
-		return nil, m.DrainHelper()
+	// Read from the loopback channel until it's closed
+	if m.State == execinfra.StateRunning {
+		row, ok := <-m.loopback
+		if !ok {
+			m.MoveToDraining(nil)
+			return nil, m.DrainHelper()
+		}
+		return row, nil
 	}
-	m.done = true
-	return rowenc.EncDatumRow{
-		rowenc.EncDatum{Datum: tree.NewDBytes("loopback")},
-		rowenc.EncDatum{Datum: tree.NewDInt(1)},
-	}, nil
+	return nil, m.DrainHelper()
 }
 
 // Start implements execinfra.RowSource.
 func (m *mergeLoopback) Start(ctx context.Context) {
 	m.StartInternal(ctx, "mergeLoopback")
-	// TODO(jeffswenson): create the initial set of tasks
+	var ok bool
+	m.loopback, ok = loopback.get(m.FlowCtx)
+	if !ok {
+		m.MoveToDraining(errors.New("loopback channel not found"))
+		return
+	}
 }
 
 func init() {
@@ -59,4 +105,5 @@ func init() {
 		}
 		return ml, nil
 	}
+
 }

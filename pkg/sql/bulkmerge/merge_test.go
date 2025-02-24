@@ -7,15 +7,18 @@ package bulkmerge
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,15 +39,15 @@ func TestMergeProcessors(t *testing.T) {
 	jobExecCtx, cleanup := sql.MakeJobExecContext(ctx, "test", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg)
 	defer cleanup()
 
-	plan, planCtx, err := newBulkMergePlan(ctx, jobExecCtx)
+	plan, planCtx, err := newBulkMergePlan(ctx, jobExecCtx, 5)
 	require.NoError(t, err)
 	defer plan.Release()
 
 	require.Equal(t, plan.GetResultTypes(), mergeCoordinatorOutputTypes)
 
-	var result string
+	var result execinfrapb.BulkMergeSpec_Output
 	rowWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
-		result = string(*row[0].(*tree.DBytes))
+		require.NoError(t, protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &result))
 		return nil
 	})
 
@@ -69,5 +72,18 @@ func TestMergeProcessors(t *testing.T) {
 	)
 
 	require.NoError(t, rowWriter.Err())
-	require.Equal(t, result, "loopback->merge->coordinator")
+
+	var uri []string
+	for _, sst := range result.Ssts {
+		uri = append(uri, sst.Uri)
+	}
+	sort.Strings(uri)
+
+	require.Equal(t, uri, []string{
+		"nodelocal://0.sst",
+		"nodelocal://1.sst",
+		"nodelocal://2.sst",
+		"nodelocal://3.sst",
+		"nodelocal://4.sst",
+	})
 }

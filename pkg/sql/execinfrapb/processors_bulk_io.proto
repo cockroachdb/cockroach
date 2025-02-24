@@ -194,10 +194,16 @@ message BulkMergeSpec {
 		// end_key is the last key in the SST.
 		optional string end_key = 3 [(gogoproto.nullable) = false];
 	};
+
+  message Output {
+    // output_ssts is the list of output SSTs.
+    repeated SST ssts = 1 [(gogoproto.nullable) = false];
+  }
 }
 
 message MergeCoordinatorSpec {
-  optional string job_id = 1 [(gogoproto.nullable) = false];
+  optional int64 task_count = 1 [(gogoproto.nullable) = false];
+  repeated string worker_sql_instance_ids = 2 [(gogoproto.nullable) = false];
 }
 
 // MergeLoopback is scheduled on the same node as the MergeCoordinator.
