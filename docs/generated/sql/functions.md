@@ -3119,8 +3119,8 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="similar_to_escape"></a><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> on <code>delimiter</code> and return the value in the <code>return_index_pos</code>  position (starting at 1).</p>
-<p>For example, <code>split_part('123.456.789.0','.',3)</code>returns <code>789</code>.</p>
+<tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> using <code>delimiter</code> and returns the field at <code>return_index_pos</code> (starting from 1). If <code>return_index_pos</code> is negative, it returns the |<code>return_index_pos</code>|'th field from the end.</p>
+<p>For example, <code>split_part('123.456.789.0', '.', 3)</code> returns <code>789</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="strpos"></a><code>strpos(input: <a href="bytes.html">bytes</a>, find: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the position where the byte subarray <code>find</code> begins in <code>input</code>.</p>
 </span></td><td>Immutable</td></tr>
