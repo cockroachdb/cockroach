@@ -12,6 +12,7 @@ import (
 
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -45,6 +46,8 @@ func init() {
 		case oid.T_float4:
 			// Don't include FLOAT4 due to known bugs that cause test failures.
 			// See #73743 and #48613.
+		case oidext.T_jsonpath:
+			// TODO(normanchenn): Temporarily don't include Jsonpath
 		case oid.T_anyarray, oid.T_oidvector, oid.T_int2vector:
 			// Include these.
 			SeedTypes = append(SeedTypes, typ)
@@ -175,6 +178,11 @@ func IsLegalColumnType(typ *types.T) bool {
 		// unlikely to use these types of columns, so disabling their generation
 		// is low risk.
 		// TODO(#95641): Remove this once we correctly handle this edge case.
+		return false
+	case oidext.T_jsonpath, oidext.T__jsonpath:
+		// Jsonpath and Jsonpath[] columns are not supported yet. Customers are very
+		// unlikely to use these types of columns, so disabling their generation
+		// is low risk.
 		return false
 	}
 	ctx := context.Background()

@@ -572,6 +572,11 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		typ := randgen.RandArrayType(rng)
 
+		// We don't allow jsonpath indices.
+		if typ.ArrayContents().Family() == types.JsonpathFamily {
+			continue
+		}
+
 		// Generate two random arrays and evaluate the result of `left @> right`.
 		left := randgen.RandArray(rng, typ, 0 /* nullChance */)
 		right := randgen.RandArray(rng, typ, 0 /* nullChance */)
@@ -952,6 +957,11 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		typ := randgen.RandArrayType(rng)
+
+		// We don't allow jsonpath indices.
+		if typ.ArrayContents().Family() == types.JsonpathFamily {
+			continue
+		}
 
 		// Generate two random arrays and evaluate the result of `left && right`.
 		// Using 1/9th as the Null Chance to generate arrays with a small

@@ -1161,6 +1161,13 @@ func TestReadCommittedLogic_json_index(
 	runLogicTest(t, "json_index")
 }
 
+func TestReadCommittedLogic_jsonpath(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonpath")
+}
+
 func TestReadCommittedLogic_kv_builtin_functions(
 	t *testing.T,
 ) {

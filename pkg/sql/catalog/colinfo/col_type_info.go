@@ -129,13 +129,19 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 // column in a regular FORWARD index.
 func ColumnTypeIsIndexable(t *types.T) bool {
 	// NB: .IsAmbiguous checks the content type of array types.
-	if t.IsAmbiguous() || t.Family() == types.TupleFamily || t.Family() == types.RefCursorFamily {
+	if t.IsAmbiguous() {
+		return false
+	}
+
+	switch t.Family() {
+	case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily:
 		return false
 	}
 
 	// If the type is an array, check its content type as well.
 	if unwrapped := t.ArrayContents(); unwrapped != nil {
-		if unwrapped.Family() == types.TupleFamily || unwrapped.Family() == types.RefCursorFamily {
+		switch unwrapped.Family() {
+		case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily:
 			return false
 		}
 	}
@@ -150,7 +156,12 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	switch t.Family() {
 	case types.ArrayFamily:
-		return t.ArrayContents().Family() != types.RefCursorFamily
+		switch t.ArrayContents().Family() {
+		case types.RefCursorFamily, types.JsonpathFamily:
+			return false
+		default:
+			return true
+		}
 	case types.JsonFamily, types.StringFamily:
 		return true
 	}
