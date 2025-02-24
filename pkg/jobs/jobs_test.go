@@ -216,6 +216,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) func() {
 			SkipUpdateSQLActivityJobBootstrap:     true,
 			SkipMVCCStatisticsJobBootstrap:        true,
 			SkipUpdateTableMetadataCacheBootstrap: true,
+			SkipSqlActivityFlushJobBootstrap:      true,
 		}
 		args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 
