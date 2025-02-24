@@ -68,6 +68,7 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 		var stats serverpb.StatementsResponse_CollectedStatementStatistics
 		randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
 		stats.Key.KeyData = randomData.Key
+		stats.ID = randomData.ID
 		testData = append(testData, stats)
 	}
 
@@ -1695,6 +1696,7 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 	for i := 0; i < expectedCountStats; i++ {
 		var stats serverpb.StatementsResponse_CollectedStatementStatistics
 		randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		stats.ID = appstatspb.StmtFingerprintID(i)
 		stats.Key.KeyData = randomData.Key
 		testStmtData = append(testStmtData, stats)
 

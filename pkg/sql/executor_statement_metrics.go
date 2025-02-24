@@ -145,16 +145,6 @@ func (ex *connExecutor) recordStatementSummary(
 	ex.recordStatementLatencyMetrics(stmt, flags, automaticRetryCount, runLatRaw, svcLatRaw)
 
 	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
-	recordedStmtStatsKey := appstatspb.StatementStatisticsKey{
-		Query:        stmt.StmtNoConstants,
-		QuerySummary: stmt.StmtSummary,
-		DistSQL:      flags.IsDistributed(),
-		Vec:          flags.IsSet(planFlagVectorized),
-		ImplicitTxn:  flags.IsSet(planFlagImplicitTxn),
-		FullScan:     fullScan,
-		Database:     planner.SessionData().Database,
-		PlanHash:     planner.instrumentation.planGist.Hash(),
-	}
 
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
@@ -168,9 +158,17 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 		kvNodeIDs = queryLevelStats.KVNodeIDs
 	}
-
 	startTime := phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).ToUTC()
+	implicitTxn := flags.IsSet(planFlagImplicitTxn)
+	fingerprintID := appstatspb.ConstructStatementFingerprintID(
+		stmt.StmtNoConstants, implicitTxn, planner.SessionData().Database)
 	recordedStmtStats := sqlstats.RecordedStmtStats{
+		FingerprintID:        fingerprintID,
+		QuerySummary:         stmt.StmtSummary,
+		DistSQL:              flags.IsDistributed(),
+		Vec:                  flags.IsSet(planFlagVectorized),
+		ImplicitTxn:          implicitTxn,
+		PlanHash:             planner.instrumentation.planGist.Hash(),
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,
 		StatementID:          stmt.QueryID,
 		AutoRetryCount:       automaticRetryCount,
@@ -204,7 +202,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	stmtFingerprintID, err :=
-		ex.statsCollector.RecordStatement(ctx, recordedStmtStatsKey, recordedStmtStats)
+		ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
 	if err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "failed to record statement: %s", err)
