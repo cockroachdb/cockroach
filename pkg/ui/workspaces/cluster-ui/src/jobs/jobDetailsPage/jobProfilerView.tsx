@@ -99,6 +99,32 @@ export function makeJobProfilerViewColumns(
               as="a"
               size="small"
               intent="tertiary"
+              className={cx("view-execution-detail-button")}
+              onClick={() => {
+                const req =
+                  new cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest(
+                    {
+                      job_id: jobID,
+                      filename: executionDetailFile,
+                    },
+                  );
+                onDownloadExecutionFileClicked(req).then(resp => {
+                  const type = getContentTypeForFile(executionDetailFile);
+                  const executionFileBytes = new Blob([resp?.data], {
+                    type: type,
+                  });
+                  const url = URL.createObjectURL(executionFileBytes);
+                  window.open(url, "_blank");
+                });
+              }}
+            >
+              <Icon iconName="Open" />
+              View
+            </Button>
+            <Button
+              as="a"
+              size="small"
+              intent="tertiary"
               className={cx("download-execution-detail-button")}
               onClick={() => {
                 const req =
