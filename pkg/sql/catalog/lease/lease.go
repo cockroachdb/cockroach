@@ -774,8 +774,14 @@ func (m *Manager) readOlderVersionForTimestamp(
 
 // Insert descriptor versions. The versions provided are not in
 // any particular order.
-func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDescriptor) {
+func (m *Manager) insertDescriptorVersions(
+	ctx context.Context, id descpb.ID, versions []historicalDescriptor,
+) error {
 	t := m.findDescriptorState(id, false /* create */)
+	session, err := m.storage.livenessProvider.Session(ctx)
+	if err != nil {
+		return err
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for i := range versions {
@@ -785,9 +791,10 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 		existingVersion := t.mu.active.findVersion(versions[i].desc.GetVersion())
 		if existingVersion == nil {
 			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, nil, false))
+				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, session, nil, false))
 		}
 	}
+	return nil
 }
 
 // AcquireFreshestFromStore acquires a new lease from the store and
@@ -1471,8 +1478,10 @@ func (m *Manager) Acquire(
 			if errRead != nil {
 				return nil, errRead
 			}
-			m.insertDescriptorVersions(id, versions)
-
+			errRead = m.insertDescriptorVersions(ctx, id, versions)
+			if errRead != nil {
+				return nil, errRead
+			}
 		default:
 			return nil, err
 		}
