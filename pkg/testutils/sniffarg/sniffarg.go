@@ -3,19 +3,21 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package tests_test
+package sniffarg
 
 import (
+	"os"
 	"regexp"
-	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/spf13/pflag"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// sniffArgs looks for the flags specified in `names` (no leading dashes) and
+// DoEnv calls Do with os.Args[1:] as the first argument.
+func DoEnv(name string, out *string) error {
+	return Do(os.Args[1:], name, out)
+}
+
+// Do looks for the flags specified in `names` (no leading dashes) and
 // sets the corresponding `out` values to the values found in `args`. This only
 // works for string flags and in particular does not reliably work for
 // "presence" flags, such as bools, since these flags don't carry an explicit
@@ -23,7 +25,7 @@ import (
 //
 // This is a helper for benchmarks that want to react to flags from their
 // environment.
-func sniffArgs(inArgs []string, name string, out *string) error {
+func Do(inArgs []string, name string, out *string) error {
 	pf := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	pf.StringVar(out, name, "", "")
 	var args []string
@@ -48,25 +50,4 @@ func sniffArgs(inArgs []string, name string, out *string) error {
 		}
 	}
 	return pf.Parse(args)
-}
-
-func TestSniffArgs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	args := []string{
-		"-test.benchmem=5",
-		"-test.outputdir", "banana",
-		"something",
-		"--somethingelse", "foo",
-		"--boolflag",
-	}
-	var benchMem string
-	var outputDir string
-	var somethingElse string
-	require.NoError(t, sniffArgs(args, "test.benchmem", &benchMem))
-	require.NoError(t, sniffArgs(args, "test.outputdir", &outputDir))
-	require.NoError(t, sniffArgs(args, "somethingelse", &somethingElse))
-	assert.Equal(t, "5", benchMem)
-	assert.Equal(t, "banana", outputDir)
-	assert.Equal(t, "foo", somethingElse)
 }
