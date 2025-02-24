@@ -573,18 +573,22 @@ func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursor
 		// "unnamed" portal, which always exists.
 		return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor \"\" already in use")
 	}
-	// Use context.Background(), since the cursor can outlive the context in which
-	// it was created.
+	// The CloseCursorsAtCommit setting provides oracle-compatible behavior, where
+	// cursors are holdable by default.
+	withHold := !g.p.SessionData().CloseCursorsAtCommit
 	planCols := plan.main.planColumns()
 	cursorHelper := &plpgsqlCursorHelper{
-		ctx:        context.Background(),
 		cursorName: cursorName,
-		resultCols: make(colinfo.ResultColumns, len(planCols)),
 		cursorSql:  open.CursorSQL,
+		withHold:   withHold,
 	}
+	// Use context.Background(), since the cursor can outlive the context in which
+	// it was created.
+	cursorHelper.ctx = context.Background()
+	cursorHelper.resultCols = make(colinfo.ResultColumns, len(planCols))
 	copy(cursorHelper.resultCols, planCols)
 	mon := g.p.Mon()
-	if !g.p.SessionData().CloseCursorsAtCommit {
+	if withHold {
 		mon = g.p.sessionMonitor
 		if mon == nil {
 			return nil, errors.AssertionFailedf("cannot open cursor WITH HOLD without an active session")
@@ -603,32 +607,30 @@ func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursor
 // plpgsqlCursorHelper wraps a row container in order to feed the results of
 // executing a SQL statement to a SQL cursor. Note that the SQL statement is not
 // lazily executed; its entire result is written to the container.
+//
 // TODO(#111479): while the row container can spill to disk, we should default
 // to lazy execution for cursors for performance reasons.
 type plpgsqlCursorHelper struct {
-	ctx         context.Context
+	persistedCursorHelper
+
 	cursorName  tree.Name
 	cursorSql   string
 	addedCursor bool
-
-	// Fields related to implementing the isql.Rows interface.
-	container    rowContainerHelper
-	iter         *rowContainerIterator
-	resultCols   colinfo.ResultColumns
-	lastRow      tree.Datums
-	rowsAffected int
+	withHold    bool
 }
+
+var _ isql.Rows = &plpgsqlCursorHelper{}
 
 func (h *plpgsqlCursorHelper) createCursor(p *planner) error {
 	h.iter = newRowContainerIterator(h.ctx, h.container)
 	cursor := &sqlCursor{
-		Rows:           h,
-		readSeqNum:     p.txn.GetReadSeqNum(),
-		txn:            p.txn,
-		statement:      h.cursorSql,
-		created:        timeutil.Now(),
-		withHold:       !p.SessionData().CloseCursorsAtCommit,
-		eagerExecution: true,
+		Rows:       h,
+		readSeqNum: p.txn.GetReadSeqNum(),
+		txn:        p.txn,
+		statement:  h.cursorSql,
+		created:    timeutil.Now(),
+		withHold:   h.withHold,
+		persisted:  true,
 	}
 	if err := p.checkIfCursorExists(h.cursorName); err != nil {
 		return err
@@ -638,52 +640,6 @@ func (h *plpgsqlCursorHelper) createCursor(p *planner) error {
 	}
 	h.addedCursor = true
 	return nil
-}
-
-var _ isql.Rows = &plpgsqlCursorHelper{}
-
-// Next implements the isql.Rows interface.
-func (h *plpgsqlCursorHelper) Next(_ context.Context) (bool, error) {
-	row, err := h.iter.Next()
-	if err != nil || row == nil {
-		return false, err
-	}
-	// Shallow-copy the row to ensure that it is safe to hold on to after Next()
-	// and Close() calls - see the isql.Rows interface.
-	h.lastRow = make(tree.Datums, len(row))
-	copy(h.lastRow, row)
-	h.rowsAffected++
-	return true, nil
-}
-
-// Cur implements the isql.Rows interface.
-func (h *plpgsqlCursorHelper) Cur() tree.Datums {
-	return h.lastRow
-}
-
-// RowsAffected implements the isql.Rows interface.
-func (h *plpgsqlCursorHelper) RowsAffected() int {
-	return h.rowsAffected
-}
-
-// Close implements the isql.Rows interface.
-func (h *plpgsqlCursorHelper) Close() error {
-	if h.iter != nil {
-		h.iter.Close()
-		h.iter = nil
-	}
-	h.container.Close(h.ctx)
-	return nil
-}
-
-// Types implements the isql.Rows interface.
-func (h *plpgsqlCursorHelper) Types() colinfo.ResultColumns {
-	return h.resultCols
-}
-
-// HasResults implements the isql.Rows interface.
-func (h *plpgsqlCursorHelper) HasResults() bool {
-	return h.lastRow != nil
 }
 
 // storedProcTxnStateAccessor provides a method for stored procedures to request
