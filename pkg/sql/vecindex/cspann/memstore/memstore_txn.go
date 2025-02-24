@@ -10,16 +10,13 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
 
 // memTxn tracks the transaction's state.
 type memTxn struct {
-	// workspace allocates temporary memory.
-	workspace *veclib.Workspace
-
 	// store references the in-memory store instance that created this
 	// transaction.
 	store *Store
@@ -50,6 +47,9 @@ type memTxn struct {
 	// during the transaction. These will be released at the end of the
 	// transaction.
 	ownedLocks []*memLock
+
+	// workspace is used to stack-allocate temporary memory.
+	workspace workspace.T
 
 	// The following fields can only be accessed after the store mutex has been
 	// acquired (i.e. Store.mu).
@@ -240,7 +240,7 @@ func (tx *memTxn) AddToPartition(
 
 	// Add the vector to the partition.
 	partition := inMemPartition.lock.partition
-	if partition.Add(tx.workspace, vec, childKey, valueBytes) {
+	if partition.Add(&tx.workspace, vec, childKey, valueBytes) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.store.reportPartitionSizeLocked(partition.Count())
@@ -316,7 +316,7 @@ func (tx *memTxn) SearchPartitions(
 			defer inMemPartition.lock.ReleaseShared()
 
 			searchLevel, partitionCount := inMemPartition.lock.partition.Search(
-				tx.workspace, partitionKeys[i], queryVector, searchSet)
+				&tx.workspace, partitionKeys[i], queryVector, searchSet)
 			if i == 0 {
 				level = searchLevel
 			} else if level != searchLevel {

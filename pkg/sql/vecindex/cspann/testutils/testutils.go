@@ -59,3 +59,11 @@ func RoundFloats(s []float32, prec int) []float32 {
 	num32.Round(t, prec)
 	return t
 }
+
+// NormalizeSlice returns nil rather than the empty slice.
+func NormalizeSlice[T any](s []T) []T {
+	if len(s) == 0 {
+		return []T(nil)
+	}
+	return s
+}

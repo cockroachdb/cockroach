@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -28,7 +28,6 @@ func TestInMemoryStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var workspace veclib.Workspace
 	ctx := context.Background()
 	store := New(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
@@ -36,7 +35,7 @@ func TestInMemoryStore(t *testing.T) {
 	testVectors := []vector.T{{100, 200}, {300, 400}}
 
 	t.Run("insert and get all vectors", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		store.InsertVector(testPKs[0], testVectors[0])
@@ -55,7 +54,7 @@ func TestInMemoryStore(t *testing.T) {
 	commontest.StoreTests(ctx, t, store, quantizer, testPKs, testVectors)
 
 	t.Run("delete full vector", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		store.DeleteVector([]byte{10})
@@ -66,7 +65,7 @@ func TestInMemoryStore(t *testing.T) {
 	})
 
 	t.Run("abort transaction", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.AbortTransaction(ctx, t, store, txn)
 
 		// Perform some read-only operations.
@@ -84,7 +83,6 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var workspace veclib.Workspace
 	ctx := context.Background()
 	childKey10 := cspann.ChildKey{PartitionKey: 10}
 	valueBytes10 := cspann.ValueBytes{1, 2, 3}
@@ -95,7 +93,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	var wait sync.WaitGroup
 	wait.Add(1)
 	func() {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		// Acquire partition lock.
@@ -106,7 +104,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		go func() {
 			// Begin transaction should block until the outer transaction is
 			// complete.
-			txn2 := commontest.BeginTransaction(ctx, t, &workspace, store)
+			txn2 := commontest.BeginTransaction(ctx, t, store)
 			defer commontest.CommitTransaction(ctx, t, store, txn2)
 
 			searchSet := cspann.SearchSet{MaxResults: 2}
@@ -137,12 +135,12 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var workspace veclib.Workspace
 	ctx := context.Background()
+	var workspace workspace.T
 	store := New(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
 
-	txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+	txn := commontest.BeginTransaction(ctx, t, store)
 	defer commontest.CommitTransaction(ctx, t, store, txn)
 
 	childKey10 := cspann.ChildKey{PartitionKey: 10}

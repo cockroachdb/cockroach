@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/memstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -195,12 +194,13 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 	data := loadDataset(searchFileName)
 	fmt.Println()
 
-	var workspace veclib.Workspace
+	var idxCtx cspann.Context
 	doSearch := func(beamSize int) {
 		start := timeutil.Now()
 
-		txn := beginTransaction(ctx, &workspace, index.Store())
+		txn := beginTransaction(ctx, index.Store())
 		defer commitTransaction(ctx, index.Store(), txn)
+		idxCtx.Init(txn)
 
 		// Search for test vectors.
 		var sumMAP, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions float64
@@ -213,7 +213,7 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 			searchOptions := cspann.SearchOptions{BaseBeamSize: beamSize}
 
 			// Calculate prediction set for the vector.
-			err = index.Search(ctx, txn, queryVector, &searchSet, searchOptions)
+			err = index.Search(ctx, &idxCtx, queryVector, &searchSet, searchOptions)
 			if err != nil {
 				panic(err)
 			}
@@ -407,16 +407,17 @@ func buildIndex(
 
 	// Insert block of vectors within the scope of a transaction.
 	var insertCount atomic.Uint64
-	insertBlock := func(w *veclib.Workspace, start, end int) {
-		txn := beginTransaction(ctx, w, store)
+	insertBlock := func(idxCtx *cspann.Context, start, end int) {
+		txn := beginTransaction(ctx, store)
 		defer commitTransaction(ctx, store, txn)
+		idxCtx.Init(txn)
 
 		for i := start; i < end; i++ {
 			key := primaryKeys[i*4 : i*4+4]
 			vec := data.Train.At(i)
 			store.InsertVector(key, vec)
 			startMono := crtime.NowMono()
-			if err := index.Insert(ctx, txn, vec, key); err != nil {
+			if err := index.Insert(ctx, idxCtx, vec, key); err != nil {
 				panic(err)
 			}
 			estimator.Add(startMono.Elapsed().Seconds())
@@ -443,11 +444,11 @@ func buildIndex(
 	for i := 0; i < data.Train.Count; i += countPerProc {
 		end := min(i+countPerProc, data.Train.Count)
 		go func(start, end int) {
-			var workspace veclib.Workspace
+			var indexCtx cspann.Context
 			// Break vector group into individual transactions that each insert a
 			// block of vectors. Run any pending fixups after each block.
 			for j := start; j < end; j += blockSize {
-				insertBlock(&workspace, j, min(j+blockSize, end))
+				insertBlock(&indexCtx, j, min(j+blockSize, end))
 			}
 		}(i, end)
 	}
@@ -575,8 +576,8 @@ func loadDataset(fileName string) dataset {
 	return data
 }
 
-func beginTransaction(ctx context.Context, w *veclib.Workspace, store cspann.Store) cspann.Txn {
-	txn, err := store.Begin(ctx, w)
+func beginTransaction(ctx context.Context, store cspann.Store) cspann.Txn {
+	txn, err := store.BeginTransaction(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -584,7 +585,7 @@ func beginTransaction(ctx context.Context, w *veclib.Workspace, store cspann.Sto
 }
 
 func commitTransaction(ctx context.Context, store cspann.Store, txn cspann.Txn) {
-	if err := store.Commit(ctx, txn); err != nil {
+	if err := store.CommitTransaction(ctx, txn); err != nil {
 		panic(err)
 	}
 }

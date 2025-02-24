@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -21,7 +21,7 @@ func TestSplitPartitionData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	quantizer := quantize.NewRaBitQuantizer(2, 42)
 	vectors := vector.MakeSetFromRawData([]float32{
 		0, 0,

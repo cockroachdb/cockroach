@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/gonum/floats/scalar"
@@ -28,7 +28,7 @@ func StoreTests(
 	testPKs []cspann.KeyBytes,
 	testVectors []vector.T,
 ) {
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	childKey2 := cspann.ChildKey{PartitionKey: 2}
 	valueBytes2 := cspann.ValueBytes{0}
 	primaryKey100 := cspann.ChildKey{KeyBytes: cspann.KeyBytes{1, 00}}
@@ -45,7 +45,7 @@ func StoreTests(
 	valueBytes600 := cspann.ValueBytes{11, 12}
 
 	t.Run("get full vectors", func(t *testing.T) {
-		txn := BeginTransaction(ctx, t, &workspace, store)
+		txn := BeginTransaction(ctx, t, store)
 		defer CommitTransaction(ctx, t, store, txn)
 
 		// Include primary keys that cannot be found.
@@ -84,7 +84,7 @@ func StoreTests(
 	})
 
 	t.Run("search empty root partition", func(t *testing.T) {
-		txn := BeginTransaction(ctx, t, &workspace, store)
+		txn := BeginTransaction(ctx, t, store)
 		defer CommitTransaction(ctx, t, store, txn)
 
 		searchSet := cspann.SearchSet{MaxResults: 2}
@@ -103,7 +103,7 @@ func StoreTests(
 	})
 
 	t.Run("add to root partition", func(t *testing.T) {
-		txn := BeginTransaction(ctx, t, &workspace, store)
+		txn := BeginTransaction(ctx, t, store)
 		defer CommitTransaction(ctx, t, store, txn)
 
 		// Get partition metadata with forUpdate = true before updates.
@@ -112,18 +112,22 @@ func StoreTests(
 		CheckPartitionMetadata(t, metadata, cspann.Level(1), vector.T{0, 0}, 0)
 
 		// Add to root partition.
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{1, 2}, primaryKey100, valueBytes100)
+		metadata, err = txn.AddToPartition(
+			ctx, cspann.RootKey, vector.T{1, 2}, primaryKey100, valueBytes100)
 		require.NoError(t, err)
 		CheckPartitionMetadata(t, metadata, cspann.LeafLevel, vector.T{0, 0}, 1)
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{7, 4}, primaryKey200, valueBytes200)
+		metadata, err = txn.AddToPartition(
+			ctx, cspann.RootKey, vector.T{7, 4}, primaryKey200, valueBytes200)
 		require.NoError(t, err)
 		CheckPartitionMetadata(t, metadata, cspann.LeafLevel, vector.T{0, 0}, 2)
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{4, 3}, primaryKey300, valueBytes300)
+		metadata, err = txn.AddToPartition(
+			ctx, cspann.RootKey, vector.T{4, 3}, primaryKey300, valueBytes300)
 		require.NoError(t, err)
 		CheckPartitionMetadata(t, metadata, cspann.LeafLevel, vector.T{0, 0}, 3)
 
 		// Add duplicate and expect value to be overwritten
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{5, 5}, primaryKey300, valueBytes300)
+		metadata, err = txn.AddToPartition(
+			ctx, cspann.RootKey, vector.T{5, 5}, primaryKey300, valueBytes300)
 		require.NoError(t, err)
 		CheckPartitionMetadata(t, metadata, cspann.LeafLevel, vector.T{0, 0}, 3)
 
@@ -153,7 +157,7 @@ func StoreTests(
 
 	var root *cspann.Partition
 	t.Run("get root partition", func(t *testing.T) {
-		txn := BeginTransaction(ctx, t, &workspace, store)
+		txn := BeginTransaction(ctx, t, store)
 		defer CommitTransaction(ctx, t, store, txn)
 
 		// Get root partition.
@@ -184,7 +188,7 @@ func StoreTests(
 	})
 
 	t.Run("replace root partition", func(t *testing.T) {
-		txn := BeginTransaction(ctx, t, &workspace, store)
+		txn := BeginTransaction(ctx, t, store)
 		defer CommitTransaction(ctx, t, store, txn)
 
 		// Replace root partition.
@@ -220,7 +224,7 @@ func StoreTests(
 
 	var partitionKey1 cspann.PartitionKey
 	t.Run("insert another partition and update it", func(t *testing.T) {
-		txn := BeginTransaction(ctx, t, &workspace, store)
+		txn := BeginTransaction(ctx, t, store)
 		defer CommitTransaction(ctx, t, store, txn)
 
 		_, err := txn.GetPartition(ctx, cspann.RootKey)
@@ -263,7 +267,7 @@ func StoreTests(
 	})
 
 	t.Run("search multiple partitions at leaf level", func(t *testing.T) {
-		txn := BeginTransaction(ctx, t, &workspace, store)
+		txn := BeginTransaction(ctx, t, store)
 		defer CommitTransaction(ctx, t, store, txn)
 
 		_, err := txn.GetPartition(ctx, cspann.RootKey)
@@ -307,23 +311,21 @@ func CheckPartitionMetadata(
 }
 
 // BeginTransaction starts a new transaction for the given store and returns it.
-func BeginTransaction(
-	ctx context.Context, t *testing.T, w *veclib.Workspace, store cspann.Store,
-) cspann.Txn {
-	txn, err := store.Begin(ctx, w)
+func BeginTransaction(ctx context.Context, t *testing.T, store cspann.Store) cspann.Txn {
+	txn, err := store.BeginTransaction(ctx)
 	require.NoError(t, err)
 	return txn
 }
 
 // CommitTransaction commits a transaction that was started by BeginTransaction.
 func CommitTransaction(ctx context.Context, t *testing.T, store cspann.Store, txn cspann.Txn) {
-	err := store.Commit(ctx, txn)
+	err := store.CommitTransaction(ctx, txn)
 	require.NoError(t, err)
 }
 
 // AbortTransaction aborts a transaction that was started by BeginTransaction.
 func AbortTransaction(ctx context.Context, t *testing.T, store cspann.Store, txn cspann.Txn) {
-	err := store.Abort(ctx, txn)
+	err := store.AbortTransaction(ctx, txn)
 	require.NoError(t, err)
 }
 

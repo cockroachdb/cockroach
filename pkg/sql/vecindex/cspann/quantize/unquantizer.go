@@ -6,7 +6,7 @@
 package quantize
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -33,7 +33,7 @@ func (q *UnQuantizer) GetDims() int {
 }
 
 // Quantize implements the Quantizer interface.
-func (q *UnQuantizer) Quantize(w *veclib.Workspace, vectors vector.Set) QuantizedVectorSet {
+func (q *UnQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedVectorSet {
 	unquantizedSet := &UnQuantizedVectorSet{
 		Centroid: make(vector.T, q.dims),
 		Vectors:  vector.MakeSet(q.dims),
@@ -47,7 +47,7 @@ func (q *UnQuantizer) Quantize(w *veclib.Workspace, vectors vector.Set) Quantize
 
 // QuantizeInSet implements the Quantizer interface.
 func (q *UnQuantizer) QuantizeInSet(
-	w *veclib.Workspace, quantizedSet QuantizedVectorSet, vectors vector.Set,
+	w *workspace.T, quantizedSet QuantizedVectorSet, vectors vector.Set,
 ) {
 	unquantizedSet := quantizedSet.(*UnQuantizedVectorSet)
 	unquantizedSet.AddSet(vectors)
@@ -65,7 +65,7 @@ func (q *UnQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) Qua
 
 // EstimateSquaredDistances implements the Quantizer interface.
 func (q *UnQuantizer) EstimateSquaredDistances(
-	w *veclib.Workspace,
+	w *workspace.T,
 	quantizedSet QuantizedVectorSet,
 	queryVector vector.T,
 	squaredDistances []float32,

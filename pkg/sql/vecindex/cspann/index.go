@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -90,34 +89,41 @@ type SearchOptions struct {
 	UpdateStats bool
 }
 
-// searchContext contains per-thread state needed during index search
-// operations. Fields in the context are set at the beginning of an index
-// operation and passed down the call stack.
-type searchContext struct {
-	Ctx       context.Context
-	Workspace veclib.Workspace
-	Txn       Txn
-	Options   SearchOptions
-
-	// Level of the tree from which search results are returned. For the Search
+// Context contains per-thread state needed during index operations. Callers
+// must call Init before use.
+//
+// NOTE: This struct is *not* thread-safe and should only be used on one
+// goroutine at a time. However, it can and should be re-used across multiple
+// index operations.
+type Context struct {
+	// txn is the transaction in which the current operation runs.
+	txn Txn
+	// options specifies settings that modify searches over the vector index.
+	options SearchOptions
+	// level of the tree from which search results are returned. For the Search
 	// operation, this is always LeafLevel, but inserts and splits/merges can
 	// search at intermediate levels of the tree.
-	Level Level
-
-	// Original is the original, full-size vector that was passed to the top-level
+	level Level
+	// original is the original, full-size vector that was passed to the top-level
 	// method on VectorIndex.
-	Original vector.T
-
-	// Randomized is the original vector after it has been randomized by applying
+	original vector.T
+	// randomized is the original vector after it has been randomized by applying
 	// a random orthogonal transformation (ROT).
-	Randomized vector.T
+	randomized vector.T
 
 	tempSearchSet       SearchSet
+	tempSubSearchSet    SearchSet
 	tempResults         [1]SearchResult
 	tempQualitySamples  [MaxQualitySamples]float64
 	tempKeys            []PartitionKey
 	tempCounts          []int
 	tempVectorsWithKeys []VectorWithKey
+}
+
+// Init sets up the context to operate in the scope of the given transaction.
+func (ic *Context) Init(txn Txn) {
+	// Methods on the index are responsible for initializing other private fields.
+	ic.txn = txn
 }
 
 // Index implements the C-SPANN algorithm, which adapts Microsoft's SPANN and
@@ -302,23 +308,17 @@ func (vi *Index) Close() {
 // before Insert when a vector is updated. Even then, it's not guaranteed that
 // Delete will find the old vector. Vector index methods handle this rare case
 // by checking for duplicates when returning search results.
-func (vi *Index) Insert(ctx context.Context, txn Txn, vec vector.T, key KeyBytes) error {
+func (vi *Index) Insert(ctx context.Context, idxCtx *Context, vec vector.T, key KeyBytes) error {
 	// Potentially throttle insert operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
 		return err
 	}
 
-	var parentSearchCtx searchContext
-	vi.setupInsertContext(ctx, txn, vec, &parentSearchCtx)
-
-	// Randomize the vector.
-	tempRandomized := parentSearchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
-	defer parentSearchCtx.Workspace.FreeVector(tempRandomized)
-	parentSearchCtx.Randomized = vi.RandomizeVector(vec, tempRandomized)
+	vi.setupInsertContext(idxCtx, vec)
 
 	// Insert the vector into the secondary index.
 	childKey := ChildKey{KeyBytes: key}
-	return vi.insertHelper(&parentSearchCtx, childKey, ValueBytes{})
+	return vi.insertHelper(ctx, idxCtx, childKey, ValueBytes{})
 }
 
 // Delete attempts to remove a vector from the index, given its value and
@@ -329,8 +329,8 @@ func (vi *Index) Insert(ctx context.Context, txn Txn, vec vector.T, key KeyBytes
 // "dangling vector" reference will be left in the tree. Vector index methods
 // handle this rare case by checking for duplicates when returning search
 // results.
-func (vi *Index) Delete(ctx context.Context, txn Txn, vec vector.T, key KeyBytes) error {
-	result, err := vi.SearchForDelete(ctx, txn, vec, key)
+func (vi *Index) Delete(ctx context.Context, idxCtx *Context, vec vector.T, key KeyBytes) error {
+	result, err := vi.SearchForDelete(ctx, idxCtx, vec, key)
 	if err != nil {
 		return err
 	}
@@ -339,7 +339,7 @@ func (vi *Index) Delete(ctx context.Context, txn Txn, vec vector.T, key KeyBytes
 	}
 
 	// Remove the vector from its partition in the store.
-	_, err = vi.removeFromPartition(ctx, txn, result.ParentPartitionKey, result.ChildKey)
+	_, err = vi.removeFromPartition(ctx, idxCtx.txn, result.ParentPartitionKey, result.ChildKey)
 	return err
 }
 
@@ -348,22 +348,10 @@ func (vi *Index) Delete(ctx context.Context, txn Txn, vec vector.T, key KeyBytes
 // number of results. This is called within the scope of a transaction so that
 // the index does not appear to change during the search.
 func (vi *Index) Search(
-	ctx context.Context, txn Txn, vec vector.T, searchSet *SearchSet, options SearchOptions,
+	ctx context.Context, idxCtx *Context, vec vector.T, searchSet *SearchSet, options SearchOptions,
 ) error {
-	searchCtx := searchContext{
-		Ctx:      ctx,
-		Txn:      txn,
-		Original: vec,
-		Level:    LeafLevel,
-		Options:  options,
-	}
-
-	// Randomize the vector.
-	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
-	defer searchCtx.Workspace.FreeVector(tempRandomized)
-	searchCtx.Randomized = vi.RandomizeVector(vec, tempRandomized)
-
-	return vi.searchHelper(&searchCtx, searchSet)
+	vi.setupContext(idxCtx, vec, options, LeafLevel)
+	return vi.searchHelper(ctx, idxCtx, searchSet)
 }
 
 // SearchForInsert finds the best partition in which to insert the given vector.
@@ -372,22 +360,15 @@ func (vi *Index) Search(
 // This is useful for callers that directly insert KV rows rather than using
 // this library to do it.
 func (vi *Index) SearchForInsert(
-	ctx context.Context, txn Txn, vec vector.T,
+	ctx context.Context, idxCtx *Context, vec vector.T,
 ) (*SearchResult, error) {
 	// Potentially throttle operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
 		return nil, err
 	}
 
-	var parentSearchCtx searchContext
-	vi.setupInsertContext(ctx, txn, vec, &parentSearchCtx)
-
-	// Randomize the vector.
-	tempRandomized := parentSearchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
-	defer parentSearchCtx.Workspace.FreeVector(tempRandomized)
-	parentSearchCtx.Randomized = vi.RandomizeVector(vec, tempRandomized)
-
-	result, err := vi.searchForInsertHelper(&parentSearchCtx)
+	vi.setupInsertContext(idxCtx, vec)
+	result, err := vi.searchForInsertHelper(ctx, idxCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +376,7 @@ func (vi *Index) SearchForInsert(
 	// Now fetch the centroid of the insert partition. This has the side effect
 	// of checking the size of the partition, in case it's over-sized.
 	partitionKey := result.ChildKey.PartitionKey
-	metadata, err := txn.GetPartitionMetadata(ctx, partitionKey, true /* forUpdate */)
+	metadata, err := idxCtx.txn.GetPartitionMetadata(ctx, partitionKey, true /* forUpdate */)
 	if err != nil {
 		return nil, err
 	}
@@ -412,43 +393,32 @@ func (vi *Index) SearchForInsert(
 // nil if the vector cannot be found. This is useful for callers that directly
 // delete KV rows rather than using this library to do it.
 func (vi *Index) SearchForDelete(
-	ctx context.Context, txn Txn, vec vector.T, key KeyBytes,
+	ctx context.Context, idxCtx *Context, vec vector.T, key KeyBytes,
 ) (*SearchResult, error) {
 	// Potentially throttle operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
 		return nil, err
 	}
 
-	searchCtx := searchContext{
-		Ctx:      ctx,
-		Txn:      txn,
-		Original: vec,
-		Level:    LeafLevel,
-		Options: SearchOptions{
-			SkipRerank:  vi.options.DisableErrorBounds,
-			UpdateStats: true,
-		},
-	}
+	vi.setupContext(idxCtx, vec, SearchOptions{
+		SkipRerank:  vi.options.DisableErrorBounds,
+		UpdateStats: true,
+	}, LeafLevel)
 
-	// Randomize the vector.
-	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
-	defer searchCtx.Workspace.FreeVector(tempRandomized)
-	searchCtx.Randomized = vi.RandomizeVector(vec, tempRandomized)
-
-	searchCtx.tempSearchSet = SearchSet{MaxResults: 1, MatchKey: key}
+	idxCtx.tempSearchSet = SearchSet{MaxResults: 1, MatchKey: key}
 
 	// Search with the base beam size. If that fails to find the vector, try again
 	// with a larger beam size, in order to minimize the chance of dangling
 	// vector references in the index.
 	baseBeamSize := max(vi.options.BaseBeamSize, 1)
 	for i := 0; i < 2; i++ {
-		searchCtx.Options.BaseBeamSize = baseBeamSize
+		idxCtx.options.BaseBeamSize = baseBeamSize
 
-		err := vi.searchHelper(&searchCtx, &searchCtx.tempSearchSet)
+		err := vi.searchHelper(ctx, idxCtx, &idxCtx.tempSearchSet)
 		if err != nil {
 			return nil, err
 		}
-		results := searchCtx.tempSearchSet.PopUnsortedResults()
+		results := idxCtx.tempSearchSet.PopUnsortedResults()
 		if len(results) == 0 {
 			// Retry search with significantly higher beam size.
 			baseBeamSize *= 8
@@ -486,57 +456,64 @@ func (vi *Index) ForceMerge(
 	vi.fixups.AddMerge(ctx, parentPartitionKey, partitionKey)
 }
 
-// setupInsertContext sets up the given search context for an insert operation.
-// Before performing an insert, we need to search for the best partition with
-// the closest centroid to the query vector. The partition in which to insert
-// the vector is at the parent of of the leaf level.
-func (vi *Index) setupInsertContext(
-	ctx context.Context, txn Txn, vec vector.T, parentSearchCtx *searchContext,
-) {
+// setupInsertContext sets up the given context for an insert operation. Before
+// performing an insert, we need to search for the best partition with the
+// closest centroid to the query vector. The partition in which to insert the
+// vector is at the parent of of the leaf level.
+func (vi *Index) setupInsertContext(idxCtx *Context, vec vector.T) {
 	// Perform the search using quantized vectors rather than full vectors (i.e.
 	// skip reranking).
-	*parentSearchCtx = searchContext{
-		Ctx:      ctx,
-		Txn:      txn,
-		Original: vec,
-		Level:    SecondLevel,
-		Options: SearchOptions{
-			BaseBeamSize: vi.options.BaseBeamSize,
-			SkipRerank:   vi.options.DisableErrorBounds,
-			UpdateStats:  true,
-		},
-	}
+	vi.setupContext(idxCtx, vec, SearchOptions{
+		BaseBeamSize: vi.options.BaseBeamSize,
+		SkipRerank:   vi.options.DisableErrorBounds,
+		UpdateStats:  true,
+	}, SecondLevel)
+}
+
+// setupContext sets up the given context as an operation is beginning.
+func (vi *Index) setupContext(idxCtx *Context, vec vector.T, options SearchOptions, level Level) {
+	// Perform the search using quantized vectors rather than full vectors (i.e.
+	// skip reranking).
+	idxCtx.options = options
+	idxCtx.level = level
+	idxCtx.original = vec
+
+	// Randomize the original vector.
+	idxCtx.randomized = ensureSliceLen(idxCtx.randomized, len(vec))
+	idxCtx.randomized = vi.RandomizeVector(vec, idxCtx.randomized)
 }
 
 // insertHelper looks for the best partition in which to add the vector and then
 // adds the vector to that partition. This is an internal helper method that can
 // be used by callers once they have set up a search context.
 func (vi *Index) insertHelper(
-	parentSearchCtx *searchContext, childKey ChildKey, valueBytes ValueBytes,
+	ctx context.Context, idxCtx *Context, childKey ChildKey, valueBytes ValueBytes,
 ) error {
-	result, err := vi.searchForInsertHelper(parentSearchCtx)
+	result, err := vi.searchForInsertHelper(ctx, idxCtx)
 	if err != nil {
 		return err
 	}
 	parentPartitionKey := result.ParentPartitionKey
 	partitionKey := result.ChildKey.PartitionKey
-	err = vi.addToPartition(parentSearchCtx.Ctx, parentSearchCtx.Txn, parentPartitionKey,
-		partitionKey, parentSearchCtx.Randomized, childKey, valueBytes)
+	err = vi.addToPartition(ctx, idxCtx.txn, parentPartitionKey,
+		partitionKey, idxCtx.randomized, childKey, valueBytes)
 	if errors.Is(err, ErrRestartOperation) {
-		return vi.insertHelper(parentSearchCtx, childKey, valueBytes)
+		return vi.insertHelper(ctx, idxCtx, childKey, valueBytes)
 	}
 	return err
 }
 
 // searchForInsertHelper searches for the best partition in which to add a
 // vector and returns that as exactly one search result (never nil).
-func (vi *Index) searchForInsertHelper(parentSearchCtx *searchContext) (*SearchResult, error) {
-	parentSearchCtx.tempSearchSet = SearchSet{MaxResults: 1}
-	err := vi.searchHelper(parentSearchCtx, &parentSearchCtx.tempSearchSet)
+func (vi *Index) searchForInsertHelper(
+	ctx context.Context, idxCtx *Context,
+) (*SearchResult, error) {
+	idxCtx.tempSearchSet = SearchSet{MaxResults: 1}
+	err := vi.searchHelper(ctx, idxCtx, &idxCtx.tempSearchSet)
 	if err != nil {
 		return nil, err
 	}
-	results := parentSearchCtx.tempSearchSet.PopUnsortedResults()
+	results := idxCtx.tempSearchSet.PopUnsortedResults()
 	if len(results) != 1 {
 		return nil, errors.AssertionFailedf(
 			"SearchForInsert should return exactly one result, got %d", len(results))
@@ -592,28 +569,29 @@ func (vi *Index) removeFromPartition(
 // data vectors are the quantized representation of the original vectors that
 // were inserted into the tree. The original, full-size vectors are fetched from
 // the primary index and used to re-rank candidate search results.
-func (vi *Index) searchHelper(searchCtx *searchContext, searchSet *SearchSet) error {
+func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *SearchSet) error {
 	// Return enough search results to:
 	// 1. Ensure that the number of results requested by the caller is respected.
 	// 2. Ensure that there are enough samples for calculating stats.
 	// 3. Ensure that there are enough results for adaptive querying to dynamically
 	//    expand the beam size (up to 4x the base beam size).
 	maxResults := max(
-		searchSet.MaxResults, vi.options.QualitySamples, searchCtx.Options.BaseBeamSize*4)
-	subSearchSet := SearchSet{MaxResults: maxResults}
-	searchCtx.tempResults[0] = SearchResult{
+		searchSet.MaxResults, vi.options.QualitySamples, idxCtx.options.BaseBeamSize*4)
+	subSearchSet := &idxCtx.tempSubSearchSet
+	*subSearchSet = SearchSet{MaxResults: maxResults}
+	idxCtx.tempResults[0] = SearchResult{
 		ChildKey: ChildKey{PartitionKey: RootKey}}
-	searchLevel, err := vi.searchChildPartitions(searchCtx, &subSearchSet, searchCtx.tempResults[:])
+	searchLevel, err := vi.searchChildPartitions(ctx, idxCtx, subSearchSet, idxCtx.tempResults[:])
 	if err != nil {
 		return err
 	}
 
-	if searchLevel < searchCtx.Level {
+	if searchLevel < idxCtx.level {
 		// This should only happen when inserting into the root.
-		if searchLevel != searchCtx.Level-1 {
-			panic(errors.AssertionFailedf("caller passed invalid level %d", searchCtx.Level))
+		if searchLevel != idxCtx.level-1 {
+			panic(errors.AssertionFailedf("caller passed invalid level %d", idxCtx.level))
 		}
-		if searchCtx.Options.ReturnVectors {
+		if idxCtx.options.ReturnVectors {
 			panic(errors.AssertionFailedf("ReturnVectors=true not supported for this case"))
 		}
 		searchSet.Add(&SearchResult{
@@ -641,30 +619,30 @@ func (vi *Index) searchHelper(searchCtx *searchContext, searchSet *SearchSet) er
 			// samples. Otherwise, use the default Z-score of 0.
 			if len(results) >= vi.options.QualitySamples {
 				for i := 0; i < vi.options.QualitySamples; i++ {
-					searchCtx.tempQualitySamples[i] = float64(results[i].QuerySquaredDistance)
+					idxCtx.tempQualitySamples[i] = float64(results[i].QuerySquaredDistance)
 				}
-				samples := searchCtx.tempQualitySamples[:vi.options.QualitySamples]
-				zscore = vi.stats.ReportSearch(searchLevel, samples, searchCtx.Options.UpdateStats)
+				samples := idxCtx.tempQualitySamples[:vi.options.QualitySamples]
+				zscore = vi.stats.ReportSearch(searchLevel, samples, idxCtx.options.UpdateStats)
 			}
 		}
 
-		if searchLevel <= searchCtx.Level {
+		if searchLevel <= idxCtx.level {
 			// We've reached the end of the search.
-			if searchLevel != searchCtx.Level {
+			if searchLevel != idxCtx.level {
 				// This indicates index corruption, since each lower level should
 				// be one less than its parent level.
 				panic(errors.AssertionFailedf("somehow skipped to level %d when searching for level %d",
-					searchLevel, searchCtx.Level))
+					searchLevel, idxCtx.level))
 			}
 
 			// Aggregate all stats from searching lower levels of the tree.
 			searchSet.Stats.Add(&subSearchSet.Stats)
 
 			results = vi.pruneDuplicates(results)
-			if !searchCtx.Options.SkipRerank || searchCtx.Options.ReturnVectors {
+			if !idxCtx.options.SkipRerank || idxCtx.options.ReturnVectors {
 				// Re-rank search results with full vectors.
 				searchSet.Stats.FullVectorCount += len(results)
-				results, err = vi.rerankSearchResults(searchCtx, results)
+				results, err = vi.rerankSearchResults(ctx, idxCtx, results)
 				if err != nil {
 					return err
 				}
@@ -674,7 +652,7 @@ func (vi *Index) searchHelper(searchCtx *searchContext, searchSet *SearchSet) er
 		}
 
 		// Calculate beam size for searching next level.
-		beamSize := searchCtx.Options.BaseBeamSize
+		beamSize := idxCtx.options.BaseBeamSize
 		if beamSize == 0 {
 			beamSize = vi.options.BaseBeamSize
 		}
@@ -699,7 +677,7 @@ func (vi *Index) searchHelper(searchCtx *searchContext, searchSet *SearchSet) er
 		beamSize = max(beamSize, 1)
 
 		searchLevel--
-		if searchLevel == searchCtx.Level {
+		if searchLevel == idxCtx.level {
 			// Searching the last level, so return enough search results to:
 			// 1. Ensure that the number of results requested by the caller is
 			//    respected.
@@ -723,9 +701,9 @@ func (vi *Index) searchHelper(searchCtx *searchContext, searchSet *SearchSet) er
 		// since we always sort non-leaf levels above, and this must be a non-leaf
 		// level (leaf-level partitions do not have children).
 		results = results[:min(beamSize, len(results))]
-		_, err = vi.searchChildPartitions(searchCtx, &subSearchSet, results)
+		_, err = vi.searchChildPartitions(ctx, idxCtx, subSearchSet, results)
 		if errors.Is(err, ErrRestartOperation) {
-			return vi.searchHelper(searchCtx, searchSet)
+			return vi.searchHelper(ctx, idxCtx, searchSet)
 		} else if err != nil {
 			return err
 		}
@@ -738,31 +716,29 @@ func (vi *Index) searchHelper(searchCtx *searchContext, searchSet *SearchSet) er
 // the set of partitions referenced by the given search results. It adds the
 // closest matches to the given search set.
 func (vi *Index) searchChildPartitions(
-	searchCtx *searchContext, searchSet *SearchSet, parentResults SearchResults,
+	ctx context.Context, idxCtx *Context, searchSet *SearchSet, parentResults SearchResults,
 ) (level Level, err error) {
-	searchCtx.tempKeys = ensureSliceLen(searchCtx.tempKeys, len(parentResults))
+	idxCtx.tempKeys = ensureSliceLen(idxCtx.tempKeys, len(parentResults))
 	for i := range parentResults {
-		searchCtx.tempKeys[i] = parentResults[i].ChildKey.PartitionKey
+		idxCtx.tempKeys[i] = parentResults[i].ChildKey.PartitionKey
 	}
 
-	searchCtx.tempCounts = ensureSliceLen(searchCtx.tempCounts, len(parentResults))
-	level, err = searchCtx.Txn.SearchPartitions(
-		searchCtx.Ctx, searchCtx.tempKeys, searchCtx.Randomized, searchSet, searchCtx.tempCounts)
+	idxCtx.tempCounts = ensureSliceLen(idxCtx.tempCounts, len(parentResults))
+	level, err = idxCtx.txn.SearchPartitions(
+		ctx, idxCtx.tempKeys, idxCtx.randomized, searchSet, idxCtx.tempCounts)
 	if err != nil {
 		return 0, err
 	}
 
 	for i := range parentResults {
-		count := searchCtx.tempCounts[i]
+		count := idxCtx.tempCounts[i]
 		searchSet.Stats.SearchedPartition(level, count)
 
 		partitionKey := parentResults[i].ChildKey.PartitionKey
 		if count < vi.options.MinPartitionSize && partitionKey != RootKey {
-			vi.fixups.AddMerge(
-				searchCtx.Ctx, parentResults[i].ParentPartitionKey, partitionKey)
+			vi.fixups.AddMerge(ctx, parentResults[i].ParentPartitionKey, partitionKey)
 		} else if count > vi.options.MaxPartitionSize {
-			vi.fixups.AddSplit(
-				searchCtx.Ctx, parentResults[i].ParentPartitionKey, partitionKey)
+			vi.fixups.AddSplit(ctx, parentResults[i].ParentPartitionKey, partitionKey)
 		}
 	}
 
@@ -809,31 +785,29 @@ func (vi *Index) pruneDuplicates(candidates []SearchResult) []SearchResult {
 // size vectors from the store, in order to re-rank the top candidates for
 // extra search result accuracy.
 func (vi *Index) rerankSearchResults(
-	searchCtx *searchContext, candidates []SearchResult,
+	ctx context.Context, idxCtx *Context, candidates []SearchResult,
 ) ([]SearchResult, error) {
 	if len(candidates) == 0 {
 		return candidates, nil
 	}
 
 	// Fetch the full vectors from the store.
-	candidates, err := vi.getRerankVectors(searchCtx, candidates)
+	candidates, err := vi.getRerankVectors(ctx, idxCtx, candidates)
 	if err != nil {
 		return candidates, err
 	}
 
-	queryVector := searchCtx.Randomized
-	if searchCtx.Level == LeafLevel {
+	queryVector := idxCtx.randomized
+	if idxCtx.level == LeafLevel {
 		// Leaf vectors haven't been randomized, so compare with the original query
 		// vector if available, or un-randomize the randomized vector. The original
 		// vector is not available in some cases where split/merge needs to move
 		// vectors between partitions.
-		if searchCtx.Original != nil {
-			queryVector = searchCtx.Original
-		} else {
-			queryVector = searchCtx.Workspace.AllocVector(vi.quantizer.GetDims())
-			defer searchCtx.Workspace.FreeVector(queryVector)
-			vi.UnRandomizeVector(searchCtx.Randomized, queryVector)
+		if idxCtx.original == nil {
+			idxCtx.original = ensureSliceLen(idxCtx.original, len(idxCtx.randomized))
+			vi.UnRandomizeVector(idxCtx.randomized, idxCtx.original)
 		}
+		queryVector = idxCtx.original
 	}
 
 	// Compute exact distances for the vectors.
@@ -851,32 +825,32 @@ func (vi *Index) rerankSearchResults(
 // the primary index, that candidate is removed from the list of candidates
 // that's returned.
 func (vi *Index) getRerankVectors(
-	searchCtx *searchContext, candidates []SearchResult,
+	ctx context.Context, idxCtx *Context, candidates []SearchResult,
 ) ([]SearchResult, error) {
 	// Prepare vector references.
-	searchCtx.tempVectorsWithKeys = ensureSliceLen(searchCtx.tempVectorsWithKeys, len(candidates))
+	idxCtx.tempVectorsWithKeys = ensureSliceLen(idxCtx.tempVectorsWithKeys, len(candidates))
 	for i := 0; i < len(candidates); i++ {
-		searchCtx.tempVectorsWithKeys[i].Key = candidates[i].ChildKey
+		idxCtx.tempVectorsWithKeys[i].Key = candidates[i].ChildKey
 	}
 
 	// The store is expected to fetch the vectors in parallel.
-	err := searchCtx.Txn.GetFullVectors(searchCtx.Ctx, searchCtx.tempVectorsWithKeys)
+	err := idxCtx.txn.GetFullVectors(ctx, idxCtx.tempVectorsWithKeys)
 	if err != nil {
 		return nil, err
 	}
 
 	for i := 0; i < len(candidates); i++ {
-		candidates[i].Vector = searchCtx.tempVectorsWithKeys[i].Vector
+		candidates[i].Vector = idxCtx.tempVectorsWithKeys[i].Vector
 
 		// Exclude deleted vectors from results.
 		if candidates[i].Vector == nil {
 			// Vector was deleted, so add fixup to delete it.
 			vi.fixups.AddDeleteVector(
-				searchCtx.Ctx, candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
+				ctx, candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
 
 			// Move the last candidate to the current position and reduce size
 			// of slice by one.
-			searchCtx.tempVectorsWithKeys[i] = searchCtx.tempVectorsWithKeys[len(candidates)-1]
+			idxCtx.tempVectorsWithKeys[i] = idxCtx.tempVectorsWithKeys[len(candidates)-1]
 			candidates[i] = candidates[len(candidates)-1]
 			candidates = candidates[:len(candidates)-1]
 			i--
@@ -906,7 +880,7 @@ type FormatOptions struct {
 // values are rounded to 4 decimal places. Centroids are printed next to
 // partition keys.
 func (vi *Index) Format(
-	ctx context.Context, txn Txn, options FormatOptions,
+	ctx context.Context, idxCtx *Context, options FormatOptions,
 ) (str string, err error) {
 	// Write formatted bytes to this buffer.
 	var buf bytes.Buffer
@@ -926,7 +900,7 @@ func (vi *Index) Format(
 
 	var helper func(partitionKey PartitionKey, parentPrefix string, childPrefix string) error
 	helper = func(partitionKey PartitionKey, parentPrefix string, childPrefix string) error {
-		partition, err := txn.GetPartition(ctx, partitionKey)
+		partition, err := idxCtx.txn.GetPartition(ctx, partitionKey)
 		if err != nil {
 			return err
 		}
@@ -959,7 +933,7 @@ func (vi *Index) Format(
 
 			if partition.Level() == LeafLevel {
 				refs := []VectorWithKey{{Key: childKey}}
-				if err = txn.GetFullVectors(ctx, refs); err != nil {
+				if err = idxCtx.txn.GetFullVectors(ctx, refs); err != nil {
 					return err
 				}
 				buf.WriteString(parentPrefix)

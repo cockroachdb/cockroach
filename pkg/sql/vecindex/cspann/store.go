@@ -8,7 +8,6 @@ package cspann
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -57,15 +56,17 @@ type PartitionMetadata struct {
 // Store implementations must be thread-safe. There should typically be only one
 // Store instance in the process for each index.
 type Store interface {
-	// Begin creates a new transaction that can be used to read and write the
-	// store in a transactional context.
-	Begin(ctx context.Context, w *veclib.Workspace) (Txn, error)
+	// BeginTransaction creates a new transaction that can be used to read and
+	// write the store in a transactional context.
+	BeginTransaction(ctx context.Context) (Txn, error)
 
-	// Commit commits a transaction previously started by a call to Begin.
-	Commit(ctx context.Context, txn Txn) error
+	// CommitTransaction commits a transaction previously started by a call to
+	// Begin.
+	CommitTransaction(ctx context.Context, txn Txn) error
 
-	// Abort aborts a transaction previously started by a call to Begin.
-	Abort(ctx context.Context, txn Txn) error
+	// AbortTransaction aborts a transaction previously started by a call to
+	// Begin.
+	AbortTransaction(ctx context.Context, txn Txn) error
 
 	// MergeStats merges recently gathered stats for this process with global
 	// stats if "skipMerge" is false. "stats" is updated with the latest global
