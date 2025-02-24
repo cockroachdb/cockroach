@@ -429,6 +429,46 @@ SELECT split_part('abc~@~def~@~ghi', '~@~', 2)
 def
 
 query T
+SELECT split_part('abc,def,ghi,jkl', ',', -2)
+----
+ghi
+
+statement error pq: split_part\(\): field position must not be zero
+SELECT split_part('abc,def,ghi,jkl', ',', 0)
+
+# To maintain compatibility with postgres, if the separator is not found and
+# the request is for the first or last field, return the entire input text.
+query T
+SELECT split_part('joeuser@mydatabase', '', 1)
+----
+joeuser@mydatabase
+
+query T
+SELECT split_part('joeuser@mydatabase', '', -1)
+----
+joeuser@mydatabase
+
+query T
+SELECT split_part('joeuser@mydatabase', '?', 1)
+----
+joeuser@mydatabase
+
+query T
+SELECT split_part('joeuser@mydatabase', '?', -1)
+----
+joeuser@mydatabase
+
+query T
+SELECT split_part('joeuser@mydatabase', '', 2)
+----
+·
+
+query T
+SELECT split_part('joeuser@mydatabase', '?', -2)
+----
+·
+
+query T
 SELECT repeat('Pg', 4)
 ----
 PgPgPgPg
