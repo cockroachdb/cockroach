@@ -774,6 +774,7 @@ func (l *DockerCluster) stop(ctx context.Context) {
 		maybePanic(os.MkdirAll(filepath.Dir(file), 0755))
 		w, err := os.Create(file)
 		maybePanic(err)
+		//nolint:deferloop TODO(#137605)
 		defer w.Close()
 		maybePanic(n.Logs(ctx, w))
 		log.Infof(ctx, "node %d: stderr at %s", i, file)

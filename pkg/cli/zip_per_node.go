@@ -485,6 +485,7 @@ func (zc *debugZipContext) getLogFiles(
 			if warnRedactLeak {
 				// Defer the warning, so that it does not get "drowned" as
 				// part of the main zip output.
+				//nolint:deferloop TODO(#137605)
 				defer func(fileName string) {
 					fmt.Fprintf(stderr, "WARNING: server-side redaction failed for %s, completed client-side (--redact=true)\n", fileName)
 				}(file.Name)

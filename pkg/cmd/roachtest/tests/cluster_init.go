@@ -80,6 +80,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		var dbs []*gosql.DB
 		for i := 1; i <= c.Spec().NodeCount; i++ {
 			db := c.Conn(ctx, t.L(), i)
+			//nolint:deferloop TODO(#137605)
 			defer db.Close()
 			dbs = append(dbs, db)
 		}
@@ -139,6 +140,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if err != nil {
 					t.Fatalf("unexpected error hitting %s endpoint: %v", tc.endpoint, err)
 				}
+				//nolint:deferloop TODO(#137605)
 				defer resp.Body.Close()
 				if resp.StatusCode != tc.expectedStatus {
 					bodyBytes, _ := io.ReadAll(resp.Body)

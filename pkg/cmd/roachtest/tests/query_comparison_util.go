@@ -385,6 +385,7 @@ func runOneRoundQueryComparison(
 				// Initialize a new mutating smither that generates INSERT, UPDATE and
 				// DELETE statements with the MutationsOnly option.
 				mutatingSmither = newMutatingSmither(conn, rnd, t, false /* disableDelete */, qct.isMultiRegion)
+				//nolint:deferloop TODO(#137605)
 				defer mutatingSmither.Close()
 			}
 

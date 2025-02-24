@@ -389,12 +389,14 @@ func stageLibraries(platform Platform, bazelBin string, dir string) error {
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(#137605)
 		defer closeFileOrPanic(srcF)
 		dst := filepath.Join(dir, filepath.Base(src))
 		dstF, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(#137605)
 		defer closeFileOrPanic(dstF)
 		_, err = io.Copy(dstF, srcF)
 		if err != nil {
