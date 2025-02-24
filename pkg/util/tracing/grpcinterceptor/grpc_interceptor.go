@@ -390,7 +390,11 @@ func (cs *tracingClientStream) Header() (metadata.MD, error) {
 
 func (cs *tracingClientStream) SendMsg(m interface{}) error {
 	err := cs.ClientStream.SendMsg(m)
-	if err != nil {
+	if err == io.EOF {
+		cs.finishFunc(nil)
+		// Do not wrap EOF.
+		return err
+	} else if err != nil {
 		cs.finishFunc(err)
 	}
 	return errors.Wrap(err, "send msg error")
