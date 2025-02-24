@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/redact"
 )
 
 // Misc helper classes for working with range, store and node load.
@@ -36,6 +37,15 @@ type loadValue int64
 // loadVector represents a vector of loads, with one element for each resource
 // dimension.
 type loadVector [numLoadDimensions]loadValue
+
+func (lv loadVector) String() string {
+	return redact.StringWithoutMarkers(lv)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (lv loadVector) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[%d,%d,%d]", lv[cpu], lv[writeBandwidth], lv[byteSize])
+}
 
 func (lv *loadVector) add(other loadVector) {
 	for i := range other {

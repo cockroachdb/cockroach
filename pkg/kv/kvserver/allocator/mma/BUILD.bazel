@@ -16,7 +16,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -24,6 +26,7 @@ go_test(
     name = "mma_test",
     srcs = [
         "allocator_state_test.go",
+        "cluster_state_test.go",
         "constraint_matcher_test.go",
         "constraint_test.go",
         "load_test.go",
@@ -33,7 +36,10 @@ go_test(
     embed = [":mma"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/spanconfig/spanconfigtestutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
