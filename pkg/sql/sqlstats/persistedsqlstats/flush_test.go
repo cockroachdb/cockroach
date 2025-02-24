@@ -11,13 +11,16 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"runtime/pprof"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -27,18 +30,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
+	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
 type testCase struct {
@@ -1286,6 +1292,64 @@ func TestSQLStatsFlushWorkerDoesntSignalJobOnAbort(t *testing.T) {
 	}
 }
 
+type Uint64RandomSeed struct {
+	seed uint64
+}
+
+func NewUint64RandomSeed() *Uint64RandomSeed {
+	_, seed := randutil.NewPseudoRand()
+	return &Uint64RandomSeed{seed: uint64(seed)}
+}
+
+// test-only
+func (rs *Uint64RandomSeed) Set(val uint64) {
+	rs.seed = val
+}
+
+func (rs *Uint64RandomSeed) Seed() uint64 {
+	return rs.seed
+}
+
+func (rs *Uint64RandomSeed) LogMessage() string {
+	return fmt.Sprintf("random seed: %d", rs.seed)
+}
+
+var RandomSeed = NewUint64RandomSeed()
+
+type gen struct {
+	syncutil.Mutex
+
+	in  []string
+	rng *rand.Rand
+}
+
+func (g *gen) Next() string {
+	g.Lock()
+	defer g.Unlock()
+
+	g.shuffleLocked()
+
+	s := strings.Join(g.in, ", ")
+	return fmt.Sprintf(`
+		UPSERT INTO sql_stats_workload
+		(%s) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, s)
+}
+
+func (g *gen) shuffleLocked() {
+	g.rng.Shuffle(len(g.in), func(i, j int) {
+		g.in[i], g.in[j] = g.in[j], g.in[i]
+	})
+}
+
+func genPermutations() *gen {
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
+	return &gen{
+		rng: rng,
+		in:  []string{"col1", "col2", "col3", "col4", "col5", "col6", "col7", "col8", "col9", "col10"},
+	}
+}
+
 func BenchmarkSQLStatsFlush(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
@@ -1293,29 +1357,107 @@ func BenchmarkSQLStatsFlush(b *testing.B) {
 		aggInterval: time.Hour,
 	}
 	fakeTime.setTime(timeutil.Now())
-	ts, conn, _ := serverutils.StartServer(b, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				StubTimeNow: fakeTime.Now,
+	jobCompletedChan := make(chan interface{})
+	jobReadyChan := make(chan interface{})
+	var zeroDuration time.Duration
+	defer close(jobCompletedChan)
+	defer close(jobReadyChan)
+
+	tc := serverutils.StartCluster(b, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					StubTimeNow: fakeTime.Now,
+				},
+				TableMetadata: &tablemetadatacacheutil.TestingKnobs{
+					OnJobReady: func() {
+						jobReadyChan <- struct{}{}
+					},
+					OnJobComplete: func() {
+						jobCompletedChan <- struct{}{}
+					},
+					TableMetadataUpdater: &tablemetadatacacheutil.NoopUpdater{},
+				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					IntervalOverrides: jobs.TestingIntervalOverrides{
+						Adopt: &zeroDuration,
+					},
+				},
 			},
 		},
-	},
-	)
-	defer ts.Stop(context.Background())
+	})
+	ts := tc.Server(0)
+	conn := ts.SQLConn(b)
+	defer tc.Stopper().Stop(context.Background())
+	cp := []*sqlutils.SQLRunner{}
+	for i := range tc.NumServers() {
+		cp = append(cp, sqlutils.MakeSQLRunner(tc.Server(i).SQLConn(b)))
+	}
 
-	sqlStats := ts.SQLServer().(*sql.Server).GetSQLStatsProvider()
 	runner := sqlutils.MakeSQLRunner(conn)
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
+
+	runner.Exec(b, `CREATE TABLE sql_stats_workload (
+		id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+		col1 INT,
+		col2 INT,
+		col3 INT,
+		col4 INT,
+		col5 INT,
+		col6 INT,
+		col7 INT,
+		col8 INT,
+		col9 INT,
+		col10 INT
+	)`)
+
+	gen := genPermutations()
 
 	ctx := context.Background()
-	const QueryCountScale = int64(5000)
+	const QueryCountScale = int64(2000)
+	ts.SQLServer().(*sql.Server).GetSQLStatsProvider().MaybeFlush(ctx, ts.Stopper())
+	<-jobReadyChan
 	for iter := 0; iter < b.N; iter++ {
-		for _, tc := range testQueries {
+		b.Run("Setup-1", func(b *testing.B) {
 			for i := int64(0); i < QueryCountScale; i++ {
-				runner.Exec(b, tc.query)
+				query := gen.Next()
+				for _, c := range cp {
+					c.Exec(b, query, rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int())
+				}
 			}
-		}
-		b.StartTimer()
-		sqlStats.MaybeFlush(ctx, ts.Stopper())
-		b.StartTimer()
+			b.Run("Flush", func(b *testing.B) {
+				var wg sync.WaitGroup
+				wg.Add(tc.NumServers())
+				//f, err := os.Create("cpu_flush_maybe_flush.out")
+				//require.NoError(b, err)
+				//require.NoError(b, pprof.StartCPUProfile(f))
+				for i := range tc.NumServers() {
+					ts := tc.Server(i)
+					provider := ts.SQLServer().(*sql.Server).GetSQLStatsProvider()
+					provider.MaybeFlush(ctx, ts.Stopper())
+					wg.Done()
+				}
+				wg.Wait()
+				pprof.StopCPUProfile()
+			})
+		})
+
+		b.Run("Setup-2", func(b *testing.B) {
+			for i := int64(0); i < QueryCountScale; i++ {
+				query := gen.Next()
+				for _, c := range cp {
+					c.Exec(b, query, rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int())
+				}
+			}
+			b.Run("Run-Job", func(b *testing.B) {
+				//f, err := os.Create("cpu_flush_flush_job.out")
+				//require.NoError(b, err)
+				//require.NoError(b, pprof.StartCPUProfile(f))
+				_, err2 := tc.Server(0).GetStatusClient(b).UpdateTableMetadataCache(ctx, &serverpb.UpdateTableMetadataCacheRequest{Local: false})
+				require.NoError(b, err2)
+				<-jobCompletedChan
+				pprof.StopCPUProfile()
+			})
+		})
 	}
 }

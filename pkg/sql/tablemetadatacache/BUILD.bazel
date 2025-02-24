@@ -21,6 +21,8 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlstats/persistedsqlstats",
+        "//pkg/sql/sqlstats/ssremote",
         "//pkg/sql/tablemetadatacache/util",
         "//pkg/util/log",
         "//pkg/util/metric",

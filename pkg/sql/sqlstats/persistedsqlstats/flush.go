@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -26,13 +28,9 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// MaybeFlush flushes in-memory sql stats into a system table, returning true if the flush
-// was attempted. Any errors encountered will be logged as warning. We may return
-// without attempting to flush any sql stats if any of the following are true:
-// 1. The flush is disabled by the cluster setting `sql.stats.flush.enabled`.
-// 2. The flush is called too soon after the last flush (`sql.stats.flush.minimum_interval`).
-// 3. We have reached the limit of the number of rows in the system table.
-func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stopper) bool {
+func (s *PersistedSQLStats) MaybeFlushWithProvider(
+	ctx context.Context, stopper *stop.Stopper, ssProvider sqlstats.SSProvider,
+) bool {
 	now := s.getTimeNow()
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
 	minimumFlushInterval := MinimumInterval.Get(&s.cfg.Settings.SV)
@@ -89,21 +87,48 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 	}
 
 	flushBegin := s.getTimeNow()
-	s.SQLStats.ConsumeStats(ctx, stopper,
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+	stmtsCount := 0
+	txnCount := 0
+	stmtStats, txns := ssProvider.PopAllStats(ctx)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	err = stopper.RunAsyncTask(ctx, "sql-stmt-stats-flush", func(ctx context.Context) {
+		defer wg.Done()
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		for _, stat := range stmtStats {
 			s.doFlush(ctx, func() error {
-				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
+				stmtsCount++
+				return s.doFlushSingleStmtStats(ctx, stat, aggregatedTs)
 			}, "failed to flush statement statistics" /* errMsg */)
+		}
+	})
+	if err != nil {
+		log.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
+		wg.Done()
+	}
+	err = stopper.RunAsyncTask(ctx, "sql-txn-stats-flush", func(ctx context.Context) {
+		defer wg.Done()
 
-			return nil
-		},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		for _, txn := range txns {
 			s.doFlush(ctx, func() error {
-				return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)
+				txnCount++
+				return s.doFlushSingleTxnStats(ctx, txn, aggregatedTs)
 			}, "failed to flush transaction statistics" /* errMsg */)
+		}
+	})
 
-			return nil
-		})
+	if err != nil {
+		log.Warningf(ctx, "failed to execute sql-txn-stats-flush task, %s", err.Error())
+		wg.Done()
+	}
+
+	wg.Wait()
+	log.Infof(ctx, "flushed %d statements (%d transactions)", stmtsCount, txnCount)
 	s.cfg.FlushLatency.RecordValue(s.getTimeNow().Sub(flushBegin).Nanoseconds())
 
 	if s.cfg.Knobs != nil && s.cfg.Knobs.OnStmtStatsFlushFinished != nil {
@@ -115,6 +140,16 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 	}
 
 	return true
+}
+
+// MaybeFlush flushes in-memory sql stats into a system table, returning true if the flush
+// was attempted. Any errors encountered will be logged as warning. We may return
+// without attempting to flush any sql stats if any of the following are true:
+// 1. The flush is disabled by the cluster setting `sql.stats.flush.enabled`.
+// 2. The flush is called too soon after the last flush (`sql.stats.flush.minimum_interval`).
+// 3. We have reached the limit of the number of rows in the system table.
+func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stopper) bool {
+	return s.MaybeFlushWithProvider(ctx, stopper, s)
 }
 
 func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, error) {
