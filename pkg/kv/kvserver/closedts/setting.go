@@ -49,3 +49,19 @@ var LeadForGlobalReadsOverride = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
+
+// LeadForGlobalReadsAutoTuneInterval auto-tunes the lead time that ranges with
+// the LEAD_FOR_GLOBAL_READS closed timestamp policy use to publish close
+// timestamps based on observed network latency. Falls back to the hardcoded
+// lead time calculation if no data is observed. LeadForGlobalReadsOverride
+// takes precedence over this setting.
+var LeadForGlobalReadsAutoTuneInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.lead_for_global_reads_auto_tune_interval",
+	"interval at which the closed timestamp lead time is automatically tuned based on observed network latency. "+
+		"If non-zero, the system periodically measures latency between nodes and adjusts the lead time of closed timestamp for ranges configured with the LEAD_FOR_GLOBAL_READS policy. If kv.closed_timestamp.lead_for_global_reads_override is set, "+
+		"it takes precedence over the auto-tuned value. Set to 0 to disable auto-tuning and use default lead time.",
+	5*time.Minute,
+	settings.NonNegativeDuration,
+	settings.WithPublic,
+)
