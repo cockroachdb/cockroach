@@ -364,6 +364,7 @@ func runDecommission(
 			}
 
 			db := c.Conn(ctx, l, pinnedNode)
+			//nolint:deferloop TODO(#137605)
 			defer db.Close()
 
 			startOpts := option.NewStartOpts(option.SkipInit)

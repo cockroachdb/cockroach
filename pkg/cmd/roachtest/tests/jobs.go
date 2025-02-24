@@ -143,6 +143,7 @@ func createTablesWithChangefeeds(
 	for i := 0; i < nodeCount; i++ {
 		conn := c.Conn(ctx, t.L(), i+1)
 		sqlDBs[i] = sqlutils.MakeSQLRunner(conn)
+		//nolint:deferloop TODO(#137605)
 		defer conn.Close()
 	}
 
