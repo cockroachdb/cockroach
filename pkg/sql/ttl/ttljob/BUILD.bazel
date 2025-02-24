@@ -48,6 +48,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
         "//pkg/util/quotapool",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
