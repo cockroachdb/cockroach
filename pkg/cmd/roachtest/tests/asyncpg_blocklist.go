@@ -59,6 +59,8 @@ var asyncpgBlocklist = blocklist{
 	`test_prepare.TestPrepare.test_prepare_28_max_args`:                                                   "unknown",
 	`test_prepare.TestPrepare.test_prepare_statement_invalid`:                                             "experimental feature - https://github.com/cockroachdb/cockroach/issues/49329",
 	`test_timeout.TestTimeout.test_timeout_06`:                                                            "unknown",
+	`test_transaction.TestTransaction.test_transaction_nested`:                                            "autocommit_before_ddl set to true by default",
+	`test_transaction.TestTransaction.test_transaction_regular`:                                           "autocommit before_ddl set to true by default",
 	`test_utils.TestUtils.test_mogrify_simple`:                                                            "multi-dim arrays - https://github.com/cockroachdb/cockroach/issues/32552",
 }
 
