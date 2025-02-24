@@ -5984,8 +5984,8 @@ func TestChangefeedErrors(t *testing.T) {
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `this sink is incompatible with option compression`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='gzip'`,
+		t, `unknown compression: invalid, valid values are 'gzip' and 'zstd'`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='invalid'`,
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErrWithTimeout(
@@ -6027,6 +6027,12 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErrWithTimeout(
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
+		`kafka://nope`)
+
+	// Sanity check for options compatibility validation.
+	sqlDB.ExpectErrWithTimeout(
+		t, `this sink is incompatible with option compression`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH compression='gzip'`,
 		`kafka://nope`)
 
 	sqlDB.ExpectErrWithTimeout(

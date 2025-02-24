@@ -103,6 +103,8 @@ func isIdentityCast(fromType, toType *types.T) bool {
 
 var errUnhandledCast = errors.New("unhandled cast")
 
+var errUnhandledCastToOid = errors.New("unhandled cast to oid")
+
 func GetCastOperator(
 	ctx context.Context,
 	allocator *colmem.Allocator,
@@ -120,6 +122,11 @@ func GetCastOperator(
 		colIdx:                   colIdx,
 		outputIdx:                resultIdx,
 		evalCtx:                  evalCtx,
+	}
+	if toType.Family() == types.OidFamily {
+		// Casting to Oid has special logic that involves resolving different
+		// objects, so we'll fall back to the row-by-row engine for that.
+		return nil, errUnhandledCastToOid
 	}
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{castOpBase: base}, nil
@@ -188,6 +195,11 @@ func GetCastOperator(
 }
 
 func IsCastSupported(fromType, toType *types.T) bool {
+	if toType.Family() == types.OidFamily {
+		// Casting to Oid has special logic that involves resolving different
+		// objects, so we'll fall back to the row-by-row engine for that.
+		return false
+	}
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
