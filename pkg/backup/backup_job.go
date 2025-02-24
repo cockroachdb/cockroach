@@ -536,6 +536,9 @@ func (b *backupResumer) DumpTraceAfterRun() bool {
 func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
 	initialDetails := b.job.Details().(jobspb.BackupDetails)
+	if initialDetails.Compact {
+		return b.ResumeCompaction(ctx, execCtx)
+	}
 	p := execCtx.(sql.JobExecContext)
 
 	if err := maybeRelocateJobExecution(
@@ -546,14 +549,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	if err := b.ensureClusterIDMatches(p.ExecCfg().NodeInfo.LogicalClusterID()); err != nil {
 		return err
-	}
-
-	// TODO (kev-cao): there is a decent amount of overlap between the initial
-	// setup of classic backup and backup compaction with some minor differences,
-	// (e.g. lock writing, checkpointing, etc.). It would be nice to unify these
-	// with a common setup function.
-	if initialDetails.Compact {
-		return compactBackups(ctx, b.job.ID(), p, initialDetails)
 	}
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
@@ -707,7 +702,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	statsCache := p.ExecCfg().TableStatsCache
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
-	// errors that are also rpc errors. Don't retry to aggressively.
+	// errors that are also rpc errors. Don't retry too aggressively.
 	retryOpts := retry.Options{
 		MaxBackoff: 1 * time.Second,
 		MaxRetries: 5,
@@ -764,7 +759,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// previous attempts.
 		var reloadBackupErr error
 		mem.Shrink(ctx, memSize)
-		memSize = 0
 		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(),
 			defaultStore, details, p.User(), &kmsEnv)
 		if reloadBackupErr != nil {
@@ -1722,7 +1716,7 @@ func getBackupDetailAndManifest(
 	if len(backupDestination.PrevBackupURIs) != 0 {
 		var err error
 		baseEncryptionOptions, err = backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage,
-			backupDestination.PrevBackupURIs[0], *initialDetails.EncryptionOptions, &kmsEnv)
+			backupDestination.PrevBackupURIs[0], initialDetails.EncryptionOptions, &kmsEnv)
 		if err != nil {
 			return jobspb.BackupDetails{}, nil, err
 		}
@@ -1924,6 +1918,11 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 func (b *backupResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, jobErr error,
 ) error {
+	details := b.job.Details().(jobspb.BackupDetails)
+	if details.Compact {
+		return b.OnFailOrCancelCompactions(ctx, execCtx, jobErr)
+	}
+
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
@@ -1931,7 +1930,6 @@ func (b *backupResumer) OnFailOrCancel(
 
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
-	details := b.job.Details().(jobspb.BackupDetails)
 
 	b.deleteCheckpoint(ctx, cfg, p.User())
 	if err := cfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
