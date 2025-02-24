@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -210,4 +211,6 @@ type Cluster interface {
 
 	// CaptureSideEyeSnapshot triggers a side-eye snapshot if side-eye is enabled in the enviroment.
 	CaptureSideEyeSnapshot(ctx context.Context) string
+
+	RegisterClusterHook(hookName string, hookType option.ClusterHookType, timeout time.Duration, hook func(context.Context) error)
 }
