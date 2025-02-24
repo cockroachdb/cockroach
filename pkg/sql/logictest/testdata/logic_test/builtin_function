@@ -4407,4 +4407,106 @@ SELECT crdb_internal.type_is_indexable(NULL);
 ----
 NULL
 
+subtest substring_index
+
+# Test basic behavior of SUBSTRING_INDEX
+query T
+SELECT SUBSTRING_INDEX('www.cockroachlabs.com', '.', 2);
+----
+www.cockroachlabs
+
+query T
+SELECT SUBSTRING_INDEX('www.cockroachlabs.com', '.', -2);
+----
+cockroachlabs.com
+
+query T
+SELECT SUBSTRING_INDEX('hello.world.example.com', '.', 3);
+----
+hello.world.example
+
+query T
+SELECT SUBSTRING_INDEX('hello.world.example.com', '.', -1);
+----
+com
+
+# Test when count is 0, should return empty string
+query T
+SELECT SUBSTRING_INDEX('111-22222-3333', '-', 0);
+----
+·
+
+# Test when count exceeds available delimiters, should return full string
+query T
+SELECT SUBSTRING_INDEX('example.com', '.', 5);
+----
+example.com
+
+query T
+SELECT SUBSTRING_INDEX('example.com', '.', -5);
+----
+example.com
+
+# Test when delimiter is not found in the string, should return full string
+query T
+SELECT SUBSTRING_INDEX('no.delimiters.here', ':', 1);
+----
+no.delimiters.here
+
+query T
+SELECT SUBSTRING_INDEX('singleword', '.', 1);
+----
+singleword
+
+# Test when input is empty, should return empty string
+query T
+SELECT SUBSTRING_INDEX('', '.', 1);
+----
+·
+
+
+# Test when delimiter is empty, should return empty string
+query T
+SELECT SUBSTRING_INDEX('teststring', '', 1);
+----
+·
+
+# Test NULL behavior, should return NULL if any argument is NULL
+query T
+SELECT SUBSTRING_INDEX(NULL, '.', 1);
+----
+NULL
+
+query T
+SELECT SUBSTRING_INDEX('test.string', NULL, 1);
+----
+NULL
+
+query T
+SELECT SUBSTRING_INDEX('test.string', '.', NULL);
+----
+NULL
+
+# Test with multi-character delimiters
+query T
+SELECT SUBSTRING_INDEX('apple--banana--cherry--date', '--', 2);
+----
+apple--banana
+
+query T
+SELECT SUBSTRING_INDEX('apple--banana--cherry--date', '--', -2);
+----
+cherry--date
+
+# Test when the string contains repeated delimiters
+query T
+SELECT SUBSTRING_INDEX('a..b..c..d', '..', 2);
+----
+a..b
+
+query T
+SELECT SUBSTRING_INDEX('a..b..c..d', '..', -2);
+----
+c..d
+
 subtest end

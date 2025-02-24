@@ -3161,6 +3161,9 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="substring"></a><code>substring(input: varbit, start_pos: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Returns a bit subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1) and including up to <code>length</code> characters.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="substring_index"></a><code>substring_index(input: <a href="string.html">string</a>, delim: <a href="string.html">string</a>, count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a substring of <code>input</code> before <code>count</code> occurrences of <code>delim</code>.
+If <code>count</code> is positive, the leftmost part is returned. If <code>count</code> is negative, the rightmost part is returned.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char_with_style"></a><code>to_char_with_style(date: <a href="date.html">date</a>, datestyle: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an date to a string assuming the string is formatted using the given DateStyle.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char_with_style"></a><code>to_char_with_style(interval: <a href="interval.html">interval</a>, style: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an interval to a string using the given IntervalStyle.</p>
