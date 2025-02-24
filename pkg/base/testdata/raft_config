@@ -17,8 +17,7 @@ echo
  RaftMaxCommittedSizePerReady: (uint64) 67108864,
  RaftMaxInflightMsgs: (int) 128,
  RaftMaxInflightBytes: (uint64) 33554432,
- RaftDelaySplitToSuppressSnapshot: (time.Duration) 45s,
- TestingDisablePreCampaignStoreLivenessCheck: (bool) false
+ RaftDelaySplitToSuppressSnapshot: (time.Duration) 45s
 }
 RaftHeartbeatInterval: 1s
 RaftElectionTimeout: 2s

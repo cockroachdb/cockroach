@@ -17,12 +17,19 @@ import (
 
 // CanProvide returns true if the given operator returns rows that can
 // satisfy the given required ordering.
-func CanProvide(expr memo.RelExpr, required *props.OrderingChoice) bool {
+func CanProvide(mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice) bool {
 	if required.Any() {
 		return true
 	}
 	if buildutil.CrdbTestBuild {
 		checkRequired(expr, required)
+	}
+	// Special cases for operators that need to access the memo.
+	switch expr.Op() {
+	case opt.ScanOp:
+		return scanCanProvideOrdering(mem, expr, required)
+	case opt.LookupJoinOp:
+		return lookupJoinCanProvideOrdering(mem, expr, required)
 	}
 	return funcMap[expr.Op()].canProvideOrdering(expr, required)
 }
@@ -55,9 +62,16 @@ func CanEnforce(expr memo.RelExpr, required *props.OrderingChoice) bool {
 // given child in order to satisfy a required ordering. Can only be called if
 // CanProvide is true for the required ordering.
 func BuildChildRequired(
-	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+	mem *memo.Memo, parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
 ) props.OrderingChoice {
-	result := funcMap[parent.Op()].buildChildReqOrdering(parent, required, childIdx)
+	var result props.OrderingChoice
+	switch parent.Op() {
+	// Special cases for operators that need to access the memo.
+	case opt.SelectOp:
+		result = selectBuildChildReqOrdering(mem, parent, required, childIdx)
+	default:
+		result = funcMap[parent.Op()].buildChildReqOrdering(parent, required, childIdx)
+	}
 	if buildutil.CrdbTestBuild && !result.Any() {
 		checkRequired(parent.Child(childIdx).(memo.RelExpr), &result)
 	}
@@ -80,12 +94,23 @@ func BuildChildRequired(
 // This function assumes that the provided orderings have already been set in
 // the children of the expression.
 func BuildProvided(
-	evalCtx *eval.Context, expr memo.RelExpr, required *props.OrderingChoice,
+	evalCtx *eval.Context, mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
 ) opt.Ordering {
 	if required.Any() {
 		return nil
 	}
-	provided := funcMap[expr.Op()].buildProvidedOrdering(expr, required)
+	var provided opt.Ordering
+	switch expr.Op() {
+	// Special cases for operators that need to access the memo.
+	case opt.InsertOp, opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
+		provided = mutationBuildProvided(mem, expr)
+	case opt.LookupJoinOp:
+		provided = lookupJoinBuildProvided(mem, expr, required)
+	case opt.ScanOp:
+		provided = scanBuildProvided(mem, expr, required)
+	default:
+		provided = funcMap[expr.Op()].buildProvidedOrdering(expr, required)
+	}
 	if evalCtx.SessionData().OptimizerUseProvidedOrderingFix {
 		provided = finalizeProvided(provided, required, expr.Relational().OutputCols)
 	}
@@ -120,13 +145,13 @@ func init() {
 		}
 	}
 	funcMap[opt.ScanOp] = funcs{
-		canProvideOrdering:    scanCanProvideOrdering,
+		canProvideOrdering:    nil, // Called directly in CanProvide.
 		buildChildReqOrdering: noChildReqOrdering,
-		buildProvidedOrdering: scanBuildProvided,
+		buildProvidedOrdering: nil, // Called directly in BuildProvided.
 	}
 	funcMap[opt.SelectOp] = funcs{
 		canProvideOrdering:    selectCanProvideOrdering,
-		buildChildReqOrdering: selectBuildChildReqOrdering,
+		buildChildReqOrdering: nil, // Called directly in BuildChildRequired.
 		buildProvidedOrdering: selectBuildProvided,
 	}
 	funcMap[opt.ProjectOp] = funcs{
@@ -170,9 +195,9 @@ func init() {
 		buildProvidedOrdering: indexJoinBuildProvided,
 	}
 	funcMap[opt.LookupJoinOp] = funcs{
-		canProvideOrdering:    lookupJoinCanProvideOrdering,
+		canProvideOrdering:    nil, // Called directly in CanProvide.
 		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
-		buildProvidedOrdering: lookupJoinBuildProvided,
+		buildProvidedOrdering: nil, // Called directly in BuildProvided.
 	}
 	funcMap[opt.InvertedJoinOp] = funcs{
 		canProvideOrdering:    invertedJoinCanProvideOrdering,
@@ -249,22 +274,22 @@ func init() {
 	funcMap[opt.InsertOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
-		buildProvidedOrdering: mutationBuildProvided,
+		buildProvidedOrdering: nil, // Called directly from BuildProvided.
 	}
 	funcMap[opt.UpdateOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
-		buildProvidedOrdering: mutationBuildProvided,
+		buildProvidedOrdering: nil, // Called directly from BuildProvided.
 	}
 	funcMap[opt.UpsertOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
-		buildProvidedOrdering: mutationBuildProvided,
+		buildProvidedOrdering: nil, // Called directly from BuildProvided.
 	}
 	funcMap[opt.DeleteOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
-		buildProvidedOrdering: mutationBuildProvided,
+		buildProvidedOrdering: nil, // Called directly from BuildProvided.
 	}
 	funcMap[opt.LockOp] = funcs{
 		canProvideOrdering:    lockCanProvideOrdering,

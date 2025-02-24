@@ -25,9 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -86,9 +84,6 @@ var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 	settings.Retired,
 )
 
-var ErrBufferedSenderNotSupported = unimplemented.NewWithIssue(
-	126560, "buffered stream sender not supported for production use")
-
 // RangefeedUseBufferedSender controls whether rangefeed uses a node level
 // buffered sender to buffer events instead of buffering events separately in a
 // channel at a per client per registration level.
@@ -98,12 +93,6 @@ var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
 	"use buffered sender for all range feeds instead of buffering events "+
 		"separately per client per range",
 	metamorphic.ConstantWithTestBool("kv.rangefeed.buffered_sender.enabled", false),
-	settings.WithValidateBool(func(_ *settings.Values, b bool) error {
-		if buildutil.CrdbTestBuild || !b {
-			return nil
-		}
-		return ErrBufferedSenderNotSupported
-	}),
 )
 
 func init() {

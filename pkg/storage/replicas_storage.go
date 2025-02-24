@@ -6,14 +6,17 @@
 package storage
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/redact/interfaces"
 )
 
 // TODO(sumeer):
-// Steps:
+// Interface and design:
 // - Pick names for C1-C3 and D1-D2, to make it easier to remember what we are
 //   referring to in various places.
 // - Consider separating RecoveryInconsistentReplica into two different states
@@ -21,6 +24,11 @@ import (
 // - Proof sketch.
 // - Read cockroach debug check-store to see additional assertion ideas/code
 //   we can lift.
+
+// TODO(sumeer):
+// See partial prototype in https://github.com/cockroachdb/cockroach/pull/88606.
+//
+// Implementation:
 // - Implement interface.
 // - Unit tests and randomized tests, including engine restarts that lose
 //   state (using vfs.NewCrashableMem).
@@ -97,6 +105,15 @@ import (
 // as the state machine state. However, it can only be mutated by
 // ReplicasStorage.
 //
+// Note about terminology as pertaining to range-id keys: "range-id local
+// keys" and "range-id keys" are the same thing, since all range-id keys are
+// local. As documented in the keys package, range-id keys can be replicated
+// or unreplicated. All the replicated range-id keys plus the
+// RangeTombstoneKey (which is unreplicated) are referred to as "range-id
+// state machine" keys. All the remaining unreplicated range-id keys belong to
+// raft state and are referred to as "range-id raft" keys or simply "raft"
+// keys (since all raft keys are also unreplicated range-id keys).
+//
 // Note that the interface is not currently designed such that raft log writes
 // avoid syncing to disk as discussed in
 // https://github.com/cockroachdb/cockroach/issues/17500#issuecomment-727094672
@@ -123,7 +140,7 @@ import (
 // interface to construct changes to the state machine state. It applies
 // changes, and requires the caller to obey some simple invariants to not
 // cause inconsistencies. It is aware of the keyspace occupied by a replica
-// and the difference between rangeID keys and range keys -- it needs this
+// and the difference between range-ID keys and range keys -- it needs this
 // awareness to discard (parts of) replica state when replicas are moved or
 // merged away.
 //
@@ -137,7 +154,6 @@ import (
 // committed raft log entries to the state machine in a running system -- this
 // is because state machine application in a running system has complex
 // data-structure side-effects that are outside the scope of ReplicasStorage.
-
 // It is told by the caller to apply a committed entry, which also requires
 // the caller to provide the state machine changes. ReplicasStorage does apply
 // "simple" entries directly to the state machine during Init to fix any
@@ -226,7 +242,8 @@ import (
 // DEFINITION (UninitializedStateMachine): this is a Replica with no state
 // machine, i.e., there is Raft state and possibly a RangeTombstone. In
 // particular, there is no RangeDescriptor and so it has no key span
-// associated with it yet.
+// associated with it yet. The RangeTombstone.NextReplicaID is <=
+// RaftReplicaID.ReplicaID.
 // The HardState{Term,Vote} can have arbitrary values since this replica can
 // vote. However, it has a zero HardState.Commit and no log entries -- this
 // Raft invariant is upheld externally by a combination of mostly external
@@ -237,7 +254,6 @@ import (
 // nonzero applied index >= 10. In particular, prior to receiving the
 // snapshot, no log entries can be sent to the Replica. And etcd/raft only
 // communicates Commit entries for which the recipient has the log entry.
-//
 //
 // Some of the above invariants may be violated when non-durable state is lost
 // due to a crash, but ReplicasStorage.Init is required to fix the persistent
@@ -253,6 +269,11 @@ import (
 // since RaftTruncatedState.{Index,Term} are guaranteed to exist and have
 // values >= RaftInitialLogIndex, RaftInitialLogTerm. ReplicasStorage.Init
 // will transition out of this state into DeletedReplica state.
+// The RecoveryDeletingReplica can also occur when removing a replica in state
+// UninitializedStateMachine. This is because the RangeTombstone is written
+// first to the state machine, and subsequently the raft state is removed.
+// This corresponds to the condition RangeTombstone.NextReplicaID >
+// RaftReplicaID.ReplicaID.
 //
 // DEFINITION (RecoveryInconsistentReplica): This is a Replica that mostly
 // looks like to be in state InitializedStateMachine, but has suffered
@@ -270,7 +291,7 @@ import (
 // Replica state transitions:
 // - Initial state: UninitializedStateMachine
 // - Final state: DeletedReplica
-// - UninitializedStateMachine => DeletedReplica, InitializedStateMachine
+// - UninitializedStateMachine => RecoveryDeletingReplica, InitializedStateMachine
 // - InitializedStateMachine => RecoveryDeletingReplica, RecoveryInconsistentReplica
 // - RecoveryDeletingReplica => DeletedReplica
 // - RecoveryInconsistentReplica => InitializedStateMachine
@@ -297,11 +318,11 @@ import (
 //   {Term:0,Vote:0,Commit:0}. This is a replica in UninitializedStateMachine
 //   state.
 // - [C2*] creation of state machine state (via snapshot or some synthesized
-//   state for rangeID and range local keys in the case of split).
+//   state for range-ID and range local keys in the case of split).
 // - [C3] set RaftTruncatedStateKey with RaftTruncatedState.{Index,Term} equal
 //   to RangeAppliedState.{RaftAppliedIndex,RaftAppliedIndexTerm} and adjust
-//   of RaftHardStateKey (specifically HardState.Commit needs to be set to
-//   RangeAppliedState.RaftAppliedIndex -- see below for details). Also
+//   value of RaftHardStateKey (specifically HardState.Commit needs to be set
+//   to RangeAppliedState.RaftAppliedIndex -- see below for details). Also
 //   discard all raft log entries if any (see below). At this point the
 //   replica is in InitializedStateMachine state.
 //
@@ -341,10 +362,11 @@ import (
 //   is a case where an already initialized lagging replica has a snapshot
 //   being applied.
 // The correctness problem with doing C3 before C2 is that the store violates
-// raft promises it has made earlier. For example, if the state machine had
+// raft promises it has made earlier. For example, say the state machine had
 // applied index 20 and the raft log contained [15, 25), then this store is
-// part of the quorum that causes [21, 25) to commit. If after the crash this
-// store has applied index 20 and has no raft state, it is in effect an
+// part of the quorum that causes [21, 25) to commit. We receive a snapshot
+// for 30, and crash after C3, and since C3 is before C2 in this scenario, we
+// rollback to 20 and have no raft state. Therefore, this is in effect an
 // unavailable replica, since it no longer has [21, 25).
 //
 // Rolling forward if crash after C2 and before C3:
@@ -363,19 +385,20 @@ import (
 // outgoing snapshot only involves reading state machine state (this is a tiny
 // bit related to #72222, in that we are also assuming here that the outgoing
 // snapshot is constructed purely by reading state machine engine state).
+// TODO(sumeer): we can do this on master since RaftAppliedIndexTerm was
+// introduced in 22.1.
 //
 // ============================================================================
 // Replica Deletion:
 //
 // Replica deletion is sequenced as the following steps (* indicates durable
 // writes):
-
+//
 // - [D1*] deletion of state machine state (iff the replica is in state
 //   InitializedStateMachine) and write to the RangeTombstoneKey. If prior to
 //   this step the range was in state InitializedStateMachine, it is now in
 //   state RecoveryDeletingReplica. If it was in state UninitializedStateMachine,
-//   it continues to be in the same state (but with a RangeTombstone that will
-//   prevent this replica from ever transitioning to InitializedStateMachine).
+//   again it is now in the state RecoveryDeletingReplica.
 //   This latter case can occur for various reasons: one cause is this range
 //   is the RHS of a split where the split has not yet happened, but we've
 //   created an uninitialized RHS. So we can't delete the state machine state
@@ -383,8 +406,6 @@ import (
 //   the state machine that could in the future belong to the RHS, but not
 //   yet, and we don't know the span of that future RHS either). By updating
 //   the RangeTombstone, when the split occurs, D1 will be repeated.
-//   - This step will only delete the RangeID local keys, when this replica
-//     deletion is due to a merge (the range itself is being deleted).
 // - [D2] deletion of all Raft state for this RangeID, i.e., RaftHardStateKey,
 //   RaftTruncatedStateKey, log entries, RangeLastReplicaGCTimestampKey.
 //
@@ -393,17 +414,20 @@ import (
 // then crash. On crash recovery we'd find the raft HardState and old state
 // machine state and incorrectly think this is an initialized replica.
 //
+// The merge operation alters step D1 to only write the RangeTombstoneKey and
+// delete the range-id local keys in the RHS.
+//
 // Note that we don't delete the RangeTombstoneKey even when the range itself
 // is being deleted (due to a merge). The replay protection offered by it is
 // more important than the minuscule cost of leaking a RangeTombstoneKey per
 // range. It is possible to have some cleanup of RangeTombstoneKeys for long
 // dead ranges, but it is outside of the scope here.
 //
-// A crash after D1 will result in a replica either in state
-// RecoveryDeletingReplica or UninitializedStateMachine. For the latter, some
-// code above ReplicasStorage will eventually ask for the replica to be
-// cleaned up (see https://github.com/cockroachdb/cockroach/issues/73424 for
-// cleanup improvement). For the former, ReplicasStorage.Init will execute D2.
+// A crash after D1 will result in a replica in state RecoveryDeletingReplica.
+// ReplicasStorage.Init will execute D2. See also
+// https://github.com/cockroachdb/cockroach/issues/73424 which presumably
+// deals with cleaning up UninitializedStateMachine replicas in the absence of
+// a crash.
 //
 // ============================================================================
 // Normal Replica Operation:
@@ -450,14 +474,72 @@ import (
 //   except for splits and merges (we've already mentioned that splits/merges
 //   are made durable at application time).
 //
-// - Log truncation is advised by the caller, based on various signals
-//   relevant to the proper functioning of the distributed raft group, except
-//   that the caller is unaware of what is durable in the state machine. Hence
-//   the advise provided by the caller serves as an upper bound of what can be
-//   truncated. Log truncation does not need to be synced. The implementation
-//   of ReplicasStorage reads the durable state of
-//   RangeAppliedState.RaftAppliedIndex to use as an additional upper bound of
-//   what can be truncated.
+// - Log truncation is done by the caller, based on various signals relevant
+//   to the proper functioning of the distributed raft group. The truncation
+//   is notified via RangeStorage.TruncatedRaftLog. This is breaking the
+//   abstraction, in that the caller has changed the raft log and removed
+//   sideloaded entries without going through RangeStorage, so we should see
+//   if we can do better here. The current log truncation methods are:
+//   - For strongly-coupled truncation (with a single engine): the truncation
+//     happens when applying to the state machine (ApplyCommittedBatch) and we
+//     don't want to leak this information via the MutationBatch that is
+//     supposed to only touch the state machine. See more details below.
+//   - For loosely-coupled truncation (single engine or separate engines): the
+//     truncation happens in raftLogTruncator.tryEnactTruncations which is
+//     mutating only the raft log. For this case we could keep all the
+//     business logic related to deciding what to truncate (which requires
+//     interaction with the Replica object) in raftLogTruncator, while giving
+//     RangeStorage the actual batch (with additional information on what is
+//     being truncated) to commit.
+//   As of https://github.com/cockroachdb/cockroach/pull/80193 the
+//   loosely-coupled raft log truncation is disabled due to a performance
+//   regression in write-heavy workloads (see comment
+//   https://github.com/cockroachdb/cockroach/issues/78412#issuecomment-1119922463
+//   for conclusion of investigation).
+//
+//   TODO(sumeer): the following "revised plan" comment is from Sep 2022 and
+//   probably stale.
+//
+//   The revised plan is to
+//   - Do strongly-coupled truncation in
+//     CanTruncateRaftIfStateMachineIsDurable for a ReplicasStorage
+//     implementation that shares the same engine for the state machine and
+//     raft state. This relies on external code structure for correctness: the
+//     truncation proposal flows through raft, so we have already applied the
+//     state machine changes for the preceding entries. A crash will cause a
+//     suffix of the unsynced changes to be lost, so we cannot lose the state
+//     machine changes while not losing the truncation.
+//
+//     This is the similar to the correctness argument that the code preceding
+//     ReplicasStorage relies on. The separation of the RaftMutationBatch
+//     provided to DoRaftMutation and the MutationBatch provided to
+//     ApplyCommittedBatch is only more formalization of the separation that
+//     already exists: handleRaftReadyRaftMuLocked makes raft changes with one
+//     batch, and replicaAppBatch.ApplyToStateMachine is used to make changes
+//     to the state machine with another batch.
+//     replicaAppBatch.ApplyToStateMachine also does the raft log truncation,
+//     and raft changes for splits and merges, which ReplicasStorage is doing
+//     in a different way, but it does not change the correctness claim. Note
+//     that #38566, a flaw in this correctness argument, has since been fixed.
+//
+//   - Do loosely-coupled truncation for a ReplicasStorage implementation that
+//     has different engines for the state machine and raft state. The
+//     experiments in
+//     https://github.com/cockroachdb/cockroach/issues/16624#issuecomment-1137394935
+//     have demonstrated that we do not have a performance regression. We
+//     speculate that the absence of performance regression is due to:
+//     - With multiple key-value pairs in a batch, the memtable for the raft
+//       engine will be able to store more than the corresponding state
+//       machine memtable where the key-value pairs get individual entries in
+//       the memtable. This is because of the per-entry overhead. This means
+//       there is a decent probability that the state machine memtable will
+//       start getting flushed before the corresponding raft engine memtable
+//       is flushed. If the flush is fast enough, we would be able to truncate
+//       the raft log before the raft log entries are flushed.
+//     - The smaller raft engine will have a higher likelihood that deletes
+//       due to truncation get flushed to L0 while the log entry being deleted
+//       is also in L0. This should reduce the likelihood of wasteful
+//       compaction of raft log entries to lower levels.
 //
 // - Range merges impose an additional requirement: the merge protocol (at a
 //   higher layer) needs the RHS replica of a merge to have applied all raft
@@ -479,12 +561,13 @@ import (
 //   (replica-descriptor) of the current range and then seeking to the end key
 //   of the range's span.
 //   - Note that this way of skipping spans will ensure that we will not find
-//     RangeDescriptors that have overlapping spans, which is ideally an invariant
-//     we should verify. Instead of verifying that invariant, which is expensive,
-//     we can additionally iterate over all the RangeAppliedStateKeys, which are
-//     RangeID local keys -- this iteration can be accomplished by seeking using
-//     current RangeID+1. If we find RangeAppliedStateKeys whose RangeID is not
-//     mentioned in a corresponding RangeDescriptor we have an invariant violation.
+//     RangeDescriptors that have overlapping spans, which is ideally an
+//     invariant we should verify. Instead of verifying that invariant, which
+//     is expensive, we additionally iterate over all the
+//     RangeAppliedStateKeys, which are Range-ID local keys -- this iteration
+//     can be accomplished by seeking using current RangeID+1. If we find
+//     RangeAppliedStateKeys whose RangeID is not mentioned in a corresponding
+//     RangeDescriptor we have an invariant violation.
 // - The set R_s - R_r must be empty, i.e., R_s is a subset of R_r.
 // - The set R_r - R_s are replicas are either in state
 //   UninitializedStateMachine or RecoveryDeletingReplica.
@@ -494,8 +577,8 @@ import (
 //   InitializedStateMachine, though may have been in the middle of that state
 //   transition, or become inconsistent for other reasons mentioned earlier.
 //   That is, they are potentially in RecoveryInconsistentReplica state.
-//   - If RangeAppliedState.RaftAppliedIndex > HardState.Commit (or there is
-//     no HardState), execute the following atomically:
+//   - If RangeAppliedState.RaftAppliedIndex > HardState.Commit (NB: HardState
+//     must exist), execute the following atomically:
 //     - If there are no log entries or all log entries are <
 //       RaftAppliedIndex: remove all log entries and set
 //       RaftTruncatedState.{Index,Term} equal to
@@ -521,7 +604,7 @@ type ReplicaState int
 const (
 	// UninitializedStateMachine is a replica with raft state but no state
 	// machine.
-	UninitializedStateMachine ReplicaState = 0
+	UninitializedStateMachine ReplicaState = iota
 	// InitializedStateMachine is a replica with both raft state and state
 	// machine.
 	InitializedStateMachine
@@ -555,32 +638,49 @@ type ReplicaInfo struct {
 	State ReplicaState
 }
 
-// MutationBatch can be committed to the underlying engine. Additionally it
+// MutationBatch can be committed to the underlying engine. Additionally, it
 // provides access to the underlying Batch. In some cases the implementation
 // of ReplicasStorage will add additional mutations before committing. We
 // expect the caller to know which engine to construct a batch from, in order
 // to update the state machine or the raft state. ReplicasStorage does not
 // hide such details since we expect the caller to mostly do reads using the
 // engine Reader interface.
+//
+// TODO(sumeer): there are some operations that need to use the storage.Batch
+// as a Reader. Be clear on when a storage.Batch can be read from, and whether
+// it includes the changes in the batch or is reading from the underlying DB
+// (see the code in pebbleBatch that selects between the two). Ideally, the
+// supported semantics should be specified via an interface method on
+// storage.Batch, and ReplicasStorage can check that the semantics are what it
+// expects.
 type MutationBatch interface {
 	// Commit writes the mutation to the engine.
 	Commit(sync bool) error
 	// Batch returns the underlying storage.Batch.
-	Batch() *Batch
+	Batch() Batch
 }
 
 // RaftMutationBatch specifies mutations to the raft log entries and/or
 // HardState.
 type RaftMutationBatch struct {
+	// MutationBatch should be created using NewUnindexedBatch(false) so it
+	// can be read from, but the reads will read the underlying engine. It is
+	// important for the reads to not see the state in the batch, since reading
+	// the underlying engine is used to clear stale raft log entries that are
+	// getting overwritten by this batch.
 	MutationBatch
 	// [Lo, Hi) represents the raft log entries, if any in the MutationBatch.
 	// This is appending/overwriting entries in the raft log. That is, if the
 	// log is [a,b,c,d], with a at index 12 and one appends e at index 13, the
-	// result will be [a,e]. We assume the caller is upholding Raft semantics
-	// (such as not overwriting raft log entries that have been committed) --
-	// ReplicasStorage is not in the business of validating that such semantics
-	// are being upheld.
+	// result will be [a,e]. Note that the MutationBatch only contains the write
+	// at index 13, and the removal of indices 14, 15 is done by the callee. The
+	// callee assumes that the entries to remove are from Term-1. We assume the
+	// caller is upholding Raft semantics (such as not overwriting raft log
+	// entries that have been committed) -- ReplicasStorage is not in the
+	// business of validating that such semantics are being upheld.
 	Lo, Hi uint64
+	// Term represents the term of those entries.
+	Term uint64
 	// HardState, if non-nil, specifies the HardState value being set by
 	// MutationBatch.
 	HardState *raftpb.HardState
@@ -592,8 +692,11 @@ type RaftMutationBatch struct {
 // write to the raft state and state machine state. This could have been named
 // ReplicaStorage, but that sounds too similar to ReplicasStorage. Note that,
 // even though a caller can have two different RangeStorage handles for the
-// same range, if it has been added and removed and so has different
+// same range, if the range has been added and removed and so has different
 // ReplicaIDs, at most one of them will be in state != DeletedReplica.
+//
+// Other than the FullReplicaID() method, the methods access mutable state,
+// and so may not execute concurrently.
 type RangeStorage interface {
 	// FullReplicaID returns the FullReplicaID of this replica.
 	FullReplicaID() FullReplicaID
@@ -602,21 +705,21 @@ type RangeStorage interface {
 
 	// CurrentRaftEntriesRange returns [lo, hi) representing the locally stored
 	// raft entries. These are guaranteed to be locally durable.
-	CurrentRaftEntriesRange() (lo uint64, hi uint64, err error)
+	CurrentRaftEntriesRange(ctx context.Context) (lo uint64, hi uint64, err error)
 
 	// GetHardState returns the current HardState. HardState.Commit is not
 	// guaranteed to be durable.
-	GetHardState() (raftpb.HardState, error)
+	GetHardState(ctx context.Context) (raftpb.HardState, error)
 
-	// CanTruncateRaftIfStateMachineIsDurable provides a new upper bound on what
-	// can be truncated.
-	CanTruncateRaftIfStateMachineIsDurable(index uint64)
+	// TruncatedRaftLog provides the inclusive index up to which truncation has
+	// been done.
+	TruncatedRaftLog(index uint64)
 
 	// DoRaftMutation changes the raft state. This will also purge sideloaded
 	// files if any entries are being removed.
 	// REQUIRES: if rBatch.Lo < rBatch.Hi, the range is in state
 	// InitializedStateMachine.
-	DoRaftMutation(rBatch RaftMutationBatch) error
+	DoRaftMutation(ctx context.Context, rBatch RaftMutationBatch) error
 
 	// TODO(sumeer):
 	// - add raft log read methods.
@@ -631,15 +734,16 @@ type RangeStorage interface {
 	// - The replica-descriptor in the snapshot describes the range as equal to
 	//   span.
 	// - The snapshot corresponds to application of the log up to
-	//   raftAppliedIndex. raftAppliedIndexTerm is the term of that log entry.
+	//   raftAppliedIndex.
 	// - sstPaths represent the ssts for this snapshot, and do not include
 	//   anything other than state machine state and do not contain any keys
-	//   outside span (after accounting for range local keys) and RangeID keys.
+	//   outside span (after accounting for range and replicated range-ID local
+	//   keys), or Range-ID keys for other ranges.
 	// - sstPaths include a RANGEDEL that will clear all the existing state
-	//   machine state in the store for span (including local keys) "before"
-	//   adding the snapshot state (see below for additional RANGEDELs that may
-	//   be added by ReplicasStorage if the previous span for this replica was
-	//   wider).
+	//   machine state in the store for span (including range-id and range local
+	//   keys) "before" adding the snapshot state (see below for additional
+	//   RANGEDELs that may be added by ReplicasStorage if the previous span for
+	//   this replica was wider).
 	// NB: the ssts contain RangeAppliedState, RangeDescriptor (including
 	// possibly a provisional RangeDescriptor). Ingestion is the only way to
 	// initialize a range except for the RHS of a split.
@@ -647,7 +751,10 @@ type RangeStorage interface {
 	// Snapshot ingestion will not be accepted in the following cases:
 	// - span overlaps with the (span in the) replica-descriptor of another
 	//   range, unless the range is listed in subsumedRangeIDs. The ranges
-	//   listed in subsumedRangeIDs must have spans that lie wholly within span.
+	//   listed in subsumedRangeIDs must have spans that at least partially
+	//   overlap with span.
+	//   TODO(sumeer): copy the partial overlap example documented in
+	//   replica_raftstorage.go clearSubsumedReplicaDiskData.
 	//   The span of a range can change only via IngestRangeSnapshot,
 	//   SplitReplica, MergeRange, so ReplicasStorage can keep track of all
 	//   spans without resorting to repeated reading from the engine.
@@ -657,7 +764,7 @@ type RangeStorage interface {
 	//
 	// For reference, ReplicasStorage will do:
 	// - If this replica is already initialized compute
-	//   rhsSpan = current span - span provided in this call
+	//   rhsSpan = current span - span provided in this call.
 	//   rhsSpan is non-empty if we are moving the LHS past a split using a
 	//   snapshot. In this case any replica(s) corresponding to rhsSpan cannot
 	//   possibly be in InitializedStateMachine state (since it would be a
@@ -666,9 +773,14 @@ type RangeStorage interface {
 	//     log entries.
 	//   - rebalanced away.
 	//   In either case, it is safe to clear all range local and global keys for
-	//   the rhsSpan. ssts will be added to clear this state.
-	// - Add additional ssts that clear the RangeID keys for the subsumed
-	//   ranges.
+	//   the rhsSpan. ssts will be added to clear this state. Note, that those
+	//   uninitialized ranges cannot have any replicated range-ID local keys.
+	//   They may have a RangeTombstoneKey, but it is not something this method
+	//   needs to touch.
+	// - Add additional ssts that clear the replicated Range-ID keys for the
+	//   subsumed ranges, set the RangeTombstone to mergedTombstoneReplicaID,
+	//   and the non-overlapping replicated range key spans for the subsumed
+	//   range.
 	// - Atomically ingest the ssts. This does step C2 for this range and D1 for
 	//   all subsumed ranges. This is durable. A crash after this step and
 	//   before the next step is rolled forward in ReplicasStorage.Init.
@@ -681,8 +793,9 @@ type RangeStorage interface {
 	// not actually change the stored value of HardState.Commit from what was
 	// already set in IngestRangeSnapshot.
 	IngestRangeSnapshot(
-		span roachpb.Span, raftAppliedIndex uint64, raftAppliedIndexTerm uint64,
-		sstPaths []string, subsumedRangeIDs []roachpb.RangeID) error
+		ctx context.Context, span roachpb.RSpan, raftAppliedIndex uint64,
+		sstPaths []string, subsumedRangeIDs []roachpb.RangeID,
+		sstScratch struct{} /* TODO(sumeer): kvserver.SSTSnapshotStorageScratch */) error
 
 	// ApplyCommittedUsingIngest applies committed changes to the state machine
 	// state by ingesting sstPaths. highestRaftIndex is the highest index whose
@@ -694,7 +807,8 @@ type RangeStorage interface {
 	// call to ApplyCommittedBatch -- this is ok since ReplicasStorage.Init will
 	// replay this idempotent ingest and the following ApplyCommittedBatch.
 	// REQUIRES: replica is in state InitializedStateMachine.
-	ApplyCommittedUsingIngest(sstPaths []string, highestRaftIndex uint64) error
+	ApplyCommittedUsingIngest(
+		ctx context.Context, sstPaths []string, highestRaftIndex uint64) error
 
 	// ApplyCommittedBatch applies committed changes to the state machine state.
 	// Does not sync. Do not use this for applying raft log entries that perform
@@ -707,10 +821,10 @@ type RangeStorage interface {
 	ApplyCommittedBatch(smBatch MutationBatch) error
 
 	// SyncStateMachine is for use by higher-level code that needs to ensure
-	// durability of the RHS of a merge. It simply sync the state machine state
+	// durability of the RHS of a merge. It simply syncs the state machine state
 	// to ensure all previous mutations are durable.
 	// REQUIRES: replica is in state InitializedStateMachine.
-	SyncStateMachine() error
+	SyncStateMachine(ctx context.Context) error
 }
 
 // ReplicasStorage provides an interface to manage the persistent state of a
@@ -719,7 +833,7 @@ type RangeStorage interface {
 type ReplicasStorage interface {
 	// Init will block until all the raft and state machine states have been
 	// made consistent.
-	Init()
+	Init(ctx context.Context) error
 
 	// CurrentRanges returns the replicas in the store. It does not return any
 	// ranges with state DeletedReplica, since it has no knowledge of them.
@@ -727,7 +841,8 @@ type ReplicasStorage interface {
 
 	// GetRangeTombstone returns the nextReplicaID in the range tombstone for
 	// the range, if any.
-	GetRangeTombstone(rangeID roachpb.RangeID) (nextReplicaID roachpb.ReplicaID, err error)
+	GetRangeTombstone(
+		ctx context.Context, rangeID roachpb.RangeID) (nextReplicaID roachpb.ReplicaID, err error)
 
 	// GetHandle returns a handle for a range listed in CurrentRanges().
 	// ReplicasStorage will return the same handle object for a FullReplicaID
@@ -751,17 +866,17 @@ type ReplicasStorage interface {
 	// Typically there will be no state machine state for this range. However it
 	// is possible that a split is delayed and some other store has informed this
 	// store about the RHS of the split, in which case part of the state machine
-	// (except for the RangeID keys, RangeDescriptor) already exist. Note that
+	// (except for the Range-ID keys, RangeDescriptor) already exist. Note that
 	// this locally lagging split case is one where the RHS does not transition
 	// to initialized via anything other than a call to SplitReplica (i.e., does
 	// not apply a snapshot), except when the LHS moves past the split using a
 	// snapshot, in which case the RHS can also then apply a snapshot.
-	CreateUninitializedRange(rr FullReplicaID) (RangeStorage, error)
+	CreateUninitializedRange(ctx context.Context, rr FullReplicaID) (RangeStorage, error)
 
 	// SplitReplica is called to split range r into a LHS and RHS, where the RHS
 	// is represented by rhsRR. The smBatch specifies the state machine state to
 	// modify for the LHS and RHS. For the RHS, the smBatch must be constructing
-	// the appropriate rangeID local state and range local state that doesn't
+	// the appropriate range-ID local state and range local state that doesn't
 	// already exist in the store (including the RangeDescriptor). rhsSpan is
 	// the span in the RangeDescriptor for the RHS. The following cases can
 	// occur:
@@ -779,8 +894,8 @@ type ReplicasStorage interface {
 	// state machine for the RHS. The final state RHS will be in for A11 is
 	// UninitializedStateMachine, for A12 is DeletedReplica. For A2, the smBatch
 	// is not altered and the final RHS state is InitializedStateMachine. If the
-	// final RHS state is not InitializedStateMachine, a nil RangeStorage will
-	// be returned. The application of smBatch is synced.
+	// final RHS state is DeletedReplica, a nil RangeStorage will be returned.
+	// The application of smBatch is synced.
 	//
 	// From our earlier discussion of replica creation and deletion.
 	// - For case A2, the callee will perform step C1 if needed, then commit
@@ -788,7 +903,8 @@ type ReplicasStorage interface {
 	// - For case A11 there is no need to do step C1. Steps C2 and C3 cannot be
 	//   performed since the RHS ReplicaID has changed and the state here is
 	//   stale. All we are doing is cleaning up the state machine state for the
-	//   RHS when committing smBatch.
+	//   RHS when committing smBatch. The callee is doing step D1 of deletion,
+	//   of the RHS for the old replicaID.
 	// - For case A12, the callee is doing step D1 of deletion, by altering and
 	//   committing smBatch. Since the RHS range never transitioned to
 	//   initialized (it never had a RangeDescriptor), the deletion was unable
@@ -801,7 +917,8 @@ type ReplicasStorage interface {
 	//
 	// Called below Raft -- this is being called when the split transaction commits.
 	SplitReplica(
-		r RangeStorage, rhsRR FullReplicaID, rhsSpan roachpb.Span, smBatch MutationBatch,
+		ctx context.Context, r RangeStorage, rhsRR FullReplicaID, rhsSpan roachpb.RSpan,
+		smBatch MutationBatch,
 	) (RangeStorage, error)
 
 	// MergeReplicas is called to merge two range replicas. smBatch contains
@@ -809,8 +926,8 @@ type ReplicasStorage interface {
 	// the intent resolution of the RHS RangeDescriptor.
 	//
 	// It will perform the following steps:
-	// - Alter smBatch to remove all RangeID local keys in the RHS and write the
-	//   RangeTombstone to the RHS with value mergeTombstoneReplicaID.
+	// - Alter smBatch to remove all Range-ID local keys in the RHS and write the
+	//   RangeTombstone to the RHS with value mergedTombstoneReplicaID.
 	//
 	// - Apply and sync smBatch, which transforms the LHS into the merged range,
 	//   and performs step D1 for the RHS. The sync ensures that a crash after
@@ -832,7 +949,8 @@ type ReplicasStorage interface {
 	// know about this yet, the LHS and RHS will be fully colocated.
 	//
 	// Called below Raft -- this is being called when the merge transaction commits.
-	MergeReplicas(lhsRS RangeStorage, rhsRS RangeStorage, smBatch MutationBatch) error
+	MergeReplicas(
+		ctx context.Context, lhsRS RangeStorage, rhsRS RangeStorage, smBatch MutationBatch) error
 
 	// DiscardReplica is called to discard a replica that has been rebalanced
 	// away. The replica is either in UninitializedStateMachine or
@@ -842,12 +960,22 @@ type ReplicasStorage interface {
 	// these multiple callers, ReplicasStorage is not in a position to compute
 	// what the nextReplicaID for the RangeTombstone should be. Therefore, it
 	// expects the caller to provide that value as a parameter.
-	DiscardReplica(r RangeStorage, nextReplicaID roachpb.ReplicaID) error
+	DiscardReplica(
+		ctx context.Context, r RangeStorage, nextReplicaID roachpb.ReplicaID) error
 }
 
+type sideloadedStorageConstructor func(
+	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) struct{} /* TODO(sumeer): SideloadStorage */
+
 // MakeSingleEngineReplicasStorage constructs a ReplicasStorage where the same
-// Engine contains the the raft log and the state machine.
-func MakeSingleEngineReplicasStorage(storeID roachpb.StoreID, eng Engine) ReplicasStorage {
+// Engine contains the raft log and the state machine.
+func MakeSingleEngineReplicasStorage(
+	nodeID roachpb.NodeID,
+	storeID roachpb.StoreID,
+	eng Engine,
+	ssConstructor sideloadedStorageConstructor,
+	st *cluster.Settings,
+) ReplicasStorage {
 	// TODO(sumeer): implement
 	return nil
 }

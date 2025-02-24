@@ -521,7 +521,7 @@ inner-join (cross)
 memo set=reorder_joins_limit=0
 SELECT * FROM bx, cy, dz, abc WHERE x = y AND y = z AND z = a
 ----
-memo (optimized, ~33KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
+memo (optimized, ~32KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
  ├── G1: (inner-join G2 G3 G4) (merge-join G2 G3 G5 inner-join,+2,+6)
  │    └── [presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16]
  │         ├── best: (inner-join G2 G3 G4)
@@ -2774,7 +2774,7 @@ SELECT (
 )
   FROM table80901_1 AS tab_42921;
 ----
-memo (optimized, ~74KB, required=[presentation: ?column?:50])
+memo (optimized, ~73KB, required=[presentation: ?column?:50])
  ├── G1: (project G2 G3)
  │    └── [presentation: ?column?:50]
  │         ├── best: (project G2 G3)

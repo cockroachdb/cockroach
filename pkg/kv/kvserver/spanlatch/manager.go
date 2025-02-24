@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -644,12 +645,12 @@ func (m *Manager) Release(ctx context.Context, lg *Guard) {
 		held = lg.acquireTime.Elapsed()
 	}
 	if held > m.longLatchHoldThreshold() {
-		const msg = "%s has held latch for %d ns. Some possible causes are " +
+		const msg = "%s has held latch for %s. Some possible causes are " +
 			"slow disk reads, slow raft replication, and expensive request processing."
 		if m.everySecondLogger.ShouldLog() {
-			log.Warningf(ctx, msg, lg.baFmt, held)
+			log.Warningf(ctx, msg, lg.baFmt, humanizeutil.Duration(held))
 		} else {
-			log.VEventf(ctx, 2, msg, lg.baFmt, held)
+			log.VEventf(ctx, 2, msg, lg.baFmt, humanizeutil.Duration(held))
 		}
 	}
 }

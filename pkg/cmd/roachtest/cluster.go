@@ -127,7 +127,9 @@ func findBinary(
 ) (abspath string, err error) {
 	// Check to see if binary exists and is a regular file and executable.
 	if fi, err := os.Stat(name); err == nil && fi.Mode().IsRegular() && (fi.Mode()&0111) != 0 {
-		return validateBinaryFormat(name, arch, checkEA)
+		if s, err := validateBinaryFormat(name, arch, checkEA); err == nil {
+			return s, nil
+		}
 	}
 	return findBinaryOrLibrary("bin", name, "", osName, arch, checkEA)
 }
@@ -154,6 +156,7 @@ func findLibrary(libraryName string, os string, arch vm.CPUArch) (string, error)
 
 // findBinaryOrLibrary searches for a binary or library, _first_ in the $PATH, _then_ in the following hardcoded paths,
 //
+//	$PWD/artifacts
 //	$GOPATH/src/github.com/cockroachdb/cockroach/
 //	$GOPATH/src/github.com/cockroachdb/artifacts/
 //	$PWD/binOrLib
@@ -197,6 +200,7 @@ func findBinaryOrLibrary(
 	}
 
 	dirs := []string{
+		filepath.Join(os.ExpandEnv("$PWD"), "artifacts"),
 		filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/"),
 		filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/artifacts/"),
 		filepath.Join(os.ExpandEnv("$PWD"), binOrLib),
@@ -1529,7 +1533,8 @@ func (c *clusterImpl) HealthStatus(
 		return nil, nil // unit tests
 	}
 
-	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, nodes)
+	// Make sure we run the health checks on the KV pod.
+	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, nodes, option.VirtualClusterName(install.SystemInterfaceName))
 	if err != nil {
 		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
 	}
@@ -2174,7 +2179,8 @@ func (c *clusterImpl) StartE(
 
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
-	if err := roachprod.Start(ctx, l, c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
+	nodes := selectedNodesOrDefault(opts, c.CRDBNodes())
+	if err := roachprod.Start(ctx, l, c.MakeNodes(nodes), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
 		return err
 	}
 
@@ -2185,7 +2191,6 @@ func (c *clusterImpl) StartE(
 			return err
 		}
 	}
-	nodes := selectedNodesOrDefault(opts, c.CRDBNodes())
 	// N.B. If `SkipInit` is set, we don't wait for SQL since node(s) may not join the cluster in any definite time.
 	if !startOpts.RoachprodOpts.SkipInit {
 		// Wait for SQL to be ready on all nodes, for 'system' tenant, only.
@@ -2240,7 +2245,7 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	// storage cluster the virtual cluster needs to connect to. If the
 	// user customized the storage cluster in the `StartOpts`, we use
 	// that.
-	storageCluster := c.All()
+	storageCluster := c.CRDBNodes()
 	if len(startOpts.StorageNodes) > 0 {
 		storageCluster = startOpts.StorageNodes
 	}

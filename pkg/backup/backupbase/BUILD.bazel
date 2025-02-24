@@ -2,14 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "backupbase",
-    srcs = [
-        "constants.go",
-        "settings.go",
-    ],
+    srcs = ["constants.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/backup/backupbase",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/settings",
-        "//pkg/util/metamorphic",
-    ],
 )

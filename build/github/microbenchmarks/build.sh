@@ -31,13 +31,6 @@ bazel build "//${TEST_PKG}:tests_test" \
   --remote_download_minimal \
   $(./build/github/engflow-args.sh)
 
-# Build microbenchmark CI utility
-bazel build --config=crosslinux $(./build/github/engflow-args.sh) \
-  --jobs 100 \
-  --bes_keywords integration-test-artifact-build \
-  //pkg/cmd/microbench-ci
-
 # Copy to GCS
 bazel_bin=$(bazel info bazel-bin --config=crosslinux)
-gcloud storage cp "${bazel_bin}/pkg/sql/tests/${pkg_last}_test_/${pkg_last}_test" "${output_url}/${pkg_bin}"
-gcloud storage cp "${bazel_bin}/pkg/cmd/microbench-ci/microbench-ci_/microbench-ci" "${output_url}/microbench-ci"
+gcloud storage cp -n "${bazel_bin}/pkg/sql/tests/${pkg_last}_test_/${pkg_last}_test" "${output_url}/${pkg_bin}"

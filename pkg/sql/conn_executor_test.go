@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -120,12 +121,12 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	{
-		pgURL, cleanup := sqlutils.PGUrl(
+		pgURL, cleanup := pgurlutils.PGUrl(
 			t, s.AdvSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
@@ -150,9 +151,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	for _, state := range tests {
 		t.Run(state, func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
-			pgURL, cleanupDB := sqlutils.PGUrl(
-				t, s.AdvSQLAddr(), state, url.User(username.RootUser))
-			defer cleanupDB()
+			pgURL, cleanup := s.ApplicationLayer().PGUrl(t)
+			defer cleanup()
 			c, err := pq.Open(pgURL.String())
 			if err != nil {
 				t.Fatal(err)
@@ -414,7 +414,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer mutations.ResetMaxBatchSizeForTests()
 	numRows := smallerKvBatchSize + smallerInsertBatchSize + 10
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Insecure = true
 	params.Knobs.DistSQL = &execinfra.TestingKnobs{
 		TableReaderBatchBytesLimit: 10,
@@ -485,7 +485,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Insecure = true
 
 	s := serverutils.StartServerOnly(t, params)
@@ -1019,7 +1019,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	// transaction state evolves appropriately.
 
 	// Use pgx so that we can introspect error codes returned from cockroach.
-	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "", url.User("root"))
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "", url.User("root"))
 	defer cleanup()
 	conf, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -1424,46 +1424,6 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 
 		locked(func() { require.True(t, mu.txnDeadline.Less(fs.Expiration())) })
 	})
-
-	t.Run("single_tenant_ignore_session_expiry", func(t *testing.T) {
-		// In this test, we check that the session expiry is ignored in a single-tenant
-		// environment. To verify this, we deliberately set the session duration to be
-		// less than the lease duration while overriding the cluster sqlliveness.Session.
-		// On multi-tenant environments, the session expiry will override the lease duration
-		// while setting a transaction deadline. However, in a single tenant environment,
-		// the session expiry should be ignored.
-		// Open a DB connection on the server and not the tenant to test that the session
-		// expiry is ignored outside of the multi-tenant environment.
-		dbConn := s.SystemLayer().SQLConn(t)
-		defer dbConn.Close()
-		// Set up a dummy database and table to write into for the test.
-		if _, err := dbConn.Exec(`CREATE DATABASE t1;
-	CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
-	`); err != nil {
-			t.Fatal(err)
-		}
-
-		// Inject an already expired session to observe that it has no effect.
-		fs := &fakeSession{
-			ExpTS: s.Clock().Now().Add(-time.Minute.Nanoseconds(), 0),
-		}
-		defer setClientSessionOverride(fs)()
-		txn, err := dbConn.Begin()
-		if err != nil {
-			t.Fatal(err)
-		}
-		txnID := getTxnID(t, txn)
-		locked(func() { mu.txnID = txnID })
-		_, err = txn.ExecContext(ctx, "INSERT INTO t1.test(k, v) VALUES (1, 'abc')")
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = txn.Commit()
-		require.NoError(t, err)
-
-		// Confirm that the txnDeadline is not equal to the session expiration.
-		locked(func() { require.True(t, fs.Expiration().Less(mu.txnDeadline)) })
-	})
 }
 
 func TestShowLastQueryStatistics(t *testing.T) {
@@ -1725,7 +1685,7 @@ func TestInjectRetryErrors(t *testing.T) {
 
 		// Choose a small results_buffer_size and make sure the statement retry
 		// does not occur.
-		pgURL, cleanupFn := sqlutils.PGUrl(
+		pgURL, cleanupFn := pgurlutils.PGUrl(
 			t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 		defer cleanupFn()
 		q := pgURL.Query()

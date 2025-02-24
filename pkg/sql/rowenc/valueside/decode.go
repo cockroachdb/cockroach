@@ -224,7 +224,7 @@ func DecodeUntaggedDatum(
 		if err != nil {
 			return nil, b, err
 		}
-		vec, err := vector.Decode(data)
+		_, vec, err := vector.Decode(data)
 		if err != nil {
 			return nil, b, err
 		}

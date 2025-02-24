@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -81,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
@@ -588,9 +590,10 @@ func TestBackupRestoreAppend(t *testing.T) {
 	tc, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
 
-	if !tc.ApplicationLayer(0).Codec().ForSystemTenant() {
-		systemRunner := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
-		systemRunner.Exec(t, `ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(
+			ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"})
 	}
 
 	// Ensure that each node has at least one leaseholder. (These splits were
@@ -10710,7 +10713,7 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err := strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err = sqltestutils.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 104, int(dbDesc.GetID()))
@@ -10762,7 +10765,7 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err = strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err = sqltestutils.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1_new")
 		require.NoError(t, err)
 		require.Equal(t, 112, int(dbDesc.GetID()))
@@ -10870,7 +10873,7 @@ $$;
 		require.Equal(t, 1, len(rows[0]))
 		udfID, err := strconv.Atoi(rows[0][0])
 		require.NoError(t, err)
-		err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		err = sqltestutils.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 			require.NoError(t, err)
 			require.Equal(t, 104, int(dbDesc.GetID()))
@@ -10926,7 +10929,7 @@ $$;
 		require.NoError(t, err)
 
 		const startingDescID = 123
-		err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		err = sqltestutils.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 			require.NoError(t, err)
 			require.Equal(t, startingDescID, int(dbDesc.GetID()))

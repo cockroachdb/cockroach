@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/linkedin/goavro/v2"
 )
 
 const (
@@ -42,6 +41,8 @@ type confluentAvroEncoder struct {
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
+
+	enrichedSourceProvider *enrichedSourceProvider
 
 	// resolvedCache doesn't need to be bounded like the other caches because the number of topics
 	// is fixed per changefeed.
@@ -80,6 +81,7 @@ func newConfluentAvroEncoder(
 	targets changefeedbase.Targets,
 	p externalConnectionProvider,
 	sliMetrics *sliMetrics,
+	enrichedSourceProvider *enrichedSourceProvider,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
 		schemaPrefix:            opts.AvroSchemaPrefix,
@@ -92,6 +94,7 @@ func newConfluentAvroEncoder(
 	e.beforeField = opts.Diff
 	e.customKeyColumn = opts.CustomKeyColumn
 	e.mvccTimestampField = opts.MVCCTimestamps
+	e.enrichedSourceProvider = enrichedSourceProvider
 
 	// TODO: Implement this.
 	if opts.KeyInValue {
@@ -272,17 +275,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 				OpField: true, TsField: true, SourceField: true}
 			afterDataSchema = currentSchema
 
-			// TODO(#139689): This will be implemented by the source provider.
-			fields := []*avro.SchemaField{
-				{Name: "changefeed_sink", SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString}},
-			}
-			sourceFn := func(row cdcevent.Row) (map[string]any, error) {
-				return map[string]any{
-					"changefeed_sink": goavro.Union(avro.SchemaTypeString, "kafka"),
-				}, nil
-
-			}
-			if sourceDataSchema, err = avro.NewFunctionalRecord("source", e.schemaPrefix, fields, sourceFn); err != nil {
+			if sourceDataSchema, err = e.enrichedSourceProvider.GetAvro(updatedRow, e.schemaPrefix); err != nil {
 				return nil, err
 			}
 		// key_only handled above, and row is not supported in avro

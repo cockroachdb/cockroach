@@ -58,11 +58,11 @@ func fuzzFrontier(f *testing.F) {
 }
 
 func FuzzBtreeFrontier(f *testing.F) {
-	defer enableBtreeFrontier(true)()
+	defer EnableBtreeFrontier(true)()
 	fuzzFrontier(f)
 }
 
 func FuzzLLRBFrontier(f *testing.F) {
-	defer enableBtreeFrontier(false)()
+	defer EnableBtreeFrontier(false)()
 	fuzzFrontier(f)
 }

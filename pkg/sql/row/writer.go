@@ -200,7 +200,7 @@ func prepareInsertOrUpdateBatch(
 				} else if overwrite {
 					// If the new family contains a NULL value, then we must
 					// delete any pre-existing row.
-					insertDelFn(ctx, batch, kvKey, traceKV)
+					insertDelFn(ctx, batch, kvKey, traceKV, helper.primIndexValDirs)
 				}
 			} else {
 				// We only output non-NULL values. Non-existent column keys are
@@ -261,7 +261,7 @@ func prepareInsertOrUpdateBatch(
 			} else if overwrite {
 				// The family might have already existed but every column in it is being
 				// set to NULL, so delete it.
-				insertDelFn(ctx, batch, kvKey, traceKV)
+				insertDelFn(ctx, batch, kvKey, traceKV, helper.primIndexValDirs)
 			}
 		} else {
 			// Copy the contents of rawValueBuf into the roachpb.Value. This is

@@ -663,14 +663,11 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	if tc.StartedDefaultTestTenant() {
-		systemSqlDB := tc.Server(0).SystemLayer().SQLConn(t, serverutils.DBName("system"))
-		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
-		require.NoError(t, err)
-		serverutils.WaitForTenantCapabilities(t, tc.Server(0), serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanAdminRelocateRange: "true",
-		}, "")
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"})
 	}
+
 	origDB0 := tc.ServerConn(0)
 
 	sqlutils.CreateTable(t, origDB0, "t",

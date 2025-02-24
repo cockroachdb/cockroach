@@ -75,10 +75,6 @@ type scanNode struct {
 	// Is this a full scan of an index?
 	isFull bool
 
-	// Indicates if this scanNode will do a physical data check. This is
-	// only true when running SCRUB commands.
-	isCheck bool
-
 	// estimatedRowCount is the estimated number of rows that this scanNode will
 	// output. When there are no statistics to make the estimation, it will be
 	// set to zero.

@@ -75,7 +75,6 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
-        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

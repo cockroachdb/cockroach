@@ -850,10 +850,10 @@ func (m *MockPeriodicProgressFlusher) EXPECT() *MockPeriodicProgressFlusherMockR
 }
 
 // StartPeriodicUpdates mocks base method.
-func (m *MockPeriodicProgressFlusher) StartPeriodicUpdates(arg0 context.Context, arg1 scexec.BackfillerProgressFlusher) func() error {
+func (m *MockPeriodicProgressFlusher) StartPeriodicUpdates(arg0 context.Context, arg1 scexec.BackfillerProgressFlusher) func() {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartPeriodicUpdates", arg0, arg1)
-	ret0, _ := ret[0].(func() error)
+	ret0, _ := ret[0].(func())
 	return ret0
 }
 

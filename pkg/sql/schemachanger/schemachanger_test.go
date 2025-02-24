@@ -67,9 +67,9 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 				require.NoError(t, err)
 				switch stageIdx {
 				case 0:
-					runningStatus0.Store(job.Progress().RunningStatus)
+					runningStatus0.Store(job.Progress().StatusMessage)
 				case 1:
-					runningStatus1.Store(job.Progress().RunningStatus)
+					runningStatus1.Store(job.Progress().StatusMessage)
 				}
 				return nil
 			},
@@ -1050,6 +1050,11 @@ CREATE TABLE t2(n int);
 			defer s.Stopper().Stop(ctx)
 
 			runner := sqlutils.MakeSQLRunner(sqlDB)
+
+			// Ensure we don't commit any DDLs in a transaction.
+			runner.Exec(t, `SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`)
+			runner.Exec(t, "SET autocommit_before_ddl = false")
+
 			firstConn, err := sqlDB.Conn(ctx)
 			require.NoError(t, err)
 			defer func() {

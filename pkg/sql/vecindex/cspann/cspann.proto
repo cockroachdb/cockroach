@@ -1,0 +1,51 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.vecindex.cspann;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann";
+
+import "gogoproto/gogo.proto";
+
+option (gogoproto.goproto_getters_all) = false;
+
+// ChildKey points to a child partition by its key or to an original full-size
+// vector stored in a primary index. Each quantized vector in a partition is
+// associated with a child key.
+message ChildKey {
+  // PartitionKey references a child partition in the next lower level of the
+  // K-means tree. This field is only set in branch/root partitions.
+  uint64 partition_key = 1 [(gogoproto.casttype) = "PartitionKey"];
+  // KeyBytes references a row in the primary index that stores the original
+  // full-size vector. Its format is store-dependent and typically contains part
+  // or all of the row's primary key. This field is only set in leaf partitions.
+  bytes key_bytes = 2 [(gogoproto.casttype) = "KeyBytes"];
+}
+
+// CVStats track coefficient of variation statistics that measure the "spread"
+// of vectors at a given level of the K-means tree.
+message CVStats {
+  // Mean is the average of CV values at a given level of the K-means tree.
+  double mean = 1;
+  // Variance is the statistical variance of CV values at a given level of the
+  // K-means tree.
+  double variance = 2;
+}
+
+// IndexStats tracks index-wide estimated statistics. As the index is updated,
+// the stats are periodically updated. This is best effort; the statistics are
+// not guaranteed to be exactly accurate.
+message IndexStats {
+  option (gogoproto.goproto_stringer) = false;
+  // NumPartitions tracks the total number of partitions in the index. Unlike
+  // the other statistics, this number is exact rather than an estimate.
+  int64 num_partitions = 1;
+  // VectorsPerPartition is the estimated average number of vectors in each
+  // partition.
+  double vectors_per_partition = 2;
+  // CVStats is a list of statistics for each non-leaf level of the K-means
+  // tree that determine how many partitions to search at each level.
+  repeated CVStats c_v_stats = 3 [(gogoproto.nullable) = false];
+}

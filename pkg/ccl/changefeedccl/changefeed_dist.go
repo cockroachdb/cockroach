@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -385,7 +386,7 @@ func makePlan(
 	initialHighWater hlc.Timestamp,
 	trackedSpans []roachpb.Span,
 	//lint:ignore SA1019 deprecated usage
-	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
+	legacyCheckpoint *jobspb.ChangefeedProgress_Checkpoint,
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -457,13 +458,14 @@ func makePlan(
 		// Use the same checkpoint for all aggregators; each aggregator will only look at
 		// spans that are assigned to it.
 		// We could compute per-aggregator checkpoint, but that's probably an overkill.
+		//lint:ignore SA1019 deprecated usage
 		var aggregatorCheckpoint execinfrapb.ChangeAggregatorSpec_Checkpoint
 		var checkpointSpanGroup roachpb.SpanGroup
 
-		if checkpoint != nil {
-			checkpointSpanGroup.Add(checkpoint.Spans...)
-			aggregatorCheckpoint.Spans = checkpoint.Spans
-			aggregatorCheckpoint.Timestamp = checkpoint.Timestamp
+		if legacyCheckpoint != nil {
+			checkpointSpanGroup.Add(legacyCheckpoint.Spans...)
+			aggregatorCheckpoint.Spans = legacyCheckpoint.Spans
+			aggregatorCheckpoint.Timestamp = legacyCheckpoint.Timestamp
 		}
 		if log.V(2) {
 			log.Infof(ctx, "aggregator checkpoint: %s", aggregatorCheckpoint)
@@ -496,7 +498,7 @@ func makePlan(
 					// from changeAggregator.getInitialHighWaterAndSpans.
 					initialResolved := initialHighWater
 					if checkpointSpanGroup.Encloses(nodeSpan) {
-						initialResolved = checkpoint.Timestamp
+						initialResolved = legacyCheckpoint.Timestamp
 					}
 					watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
 						Span:            nodeSpan,
@@ -528,6 +530,12 @@ func makePlan(
 			JobID:        jobID,
 			UserProto:    execCtx.User().EncodeProto(),
 			Description:  description,
+		}
+
+		if spanLevelCheckpoint != nil {
+			changeFrontierSpec.SpanLevelCheckpoint = spanLevelCheckpoint
+		} else {
+			changeFrontierSpec.SpanLevelCheckpoint = checkpoint.ConvertLegacyCheckpoint(legacyCheckpoint, details.StatementTime, initialHighWater)
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {

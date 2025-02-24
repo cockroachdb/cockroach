@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer !local-mixed-24.3
+# LogicTest: !local-legacy-schema-changer !local-mixed-24.3 !local-mixed-25.1
 
 subtest setup
 
@@ -22,23 +22,6 @@ show session enable_row_level_security;
 ----
 on
 
-subtest legacy_fail
-
-statement ok
-SET use_declarative_schema_changer = 'off';
-
-statement ok
-CREATE TABLE legacy();
-
-statement error pq: CREATE POLICY is only implemented in the declarative schema changer
-CREATE POLICY p1 on legacy;
-
-statement ok
-DROP TABLE legacy;
-
-statement ok
-SET use_declarative_schema_changer = $use_decl_sc;
-
 subtest create_drop_sanity
 
 statement ok
@@ -48,7 +31,7 @@ statement ok
 CREATE POLICY p1 on sanity1 USING (true);
 
 # Verify we log to the event log.
-query T
+query T retry
 select "eventType" from system.eventlog order by timestamp desc limit 1;
 ----
 create_policy
@@ -72,7 +55,7 @@ statement ok
 DROP POLICY p1 on sanity1;
 
 # Verify we log to the event log.
-query T
+query T retry
 select "eventType" from system.eventlog order by timestamp desc limit 1;
 ----
 drop_policy
@@ -525,6 +508,16 @@ CREATE TABLE public.flying_roaches (
 );
 CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)
 
+query T
+select policy_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
+----
+{"CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)"}
+
+query T
+select alter_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
+----
+{}
+
 statement ok
 drop table flying_roaches
 
@@ -562,6 +555,11 @@ roaches  CREATE TABLE public.roaches (
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
 
+query TBB
+select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
+----
+roaches  false  false
+
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -575,6 +573,11 @@ subtest alter_table_rls_force_no_force
 statement ok
 ALTER TABLE roaches FORCE ROW LEVEL SECURITY;
 
+query TBB
+select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
+----
+roaches  false  true
+
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -586,6 +589,11 @@ roaches  CREATE TABLE public.roaches (
 
 statement ok
 ALTER TABLE roaches NO FORCE ROW LEVEL SECURITY;
+
+query TBB
+select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
+----
+roaches  false  false
 
 query TT
 SHOW CREATE TABLE roaches
@@ -609,6 +617,11 @@ roaches  CREATE TABLE public.roaches (
          );
          ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
 
+query TBB
+select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
+----
+roaches  true  true
+
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
 ----
@@ -617,6 +630,19 @@ CREATE TABLE public.roaches (
   CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
 );
 ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
+
+query TT
+select policy_statements, create_nofks from crdb_internal.create_statements where descriptor_name='roaches'
+----
+{}  CREATE TABLE public.roaches (
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+    )
+
+query T
+select alter_statements from crdb_internal.create_statements where descriptor_name='roaches'
+----
+{"ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"}
 
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY;
@@ -636,6 +662,16 @@ CREATE TABLE public.roaches (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
 )
+
+query T
+select policy_statements from crdb_internal.create_statements where descriptor_name='roaches'
+----
+{}
+
+query T
+select alter_statements from crdb_internal.create_statements where descriptor_name='roaches'
+----
+{}
 
 statement ok
 DROP TABLE roaches;
@@ -780,7 +816,7 @@ set role root
 
 # Add policies that apply to other commands. Only SELECT will return rows.
 statement ok
-CREATE POLICY restrict_insert ON bbteams FOR INSERT TO buck USING (false);
+CREATE POLICY restrict_insert ON bbteams FOR INSERT TO buck WITH CHECK (false);
 
 statement ok
 CREATE POLICY restrict_delete ON bbteams FOR DELETE TO buck USING (false);
@@ -861,7 +897,7 @@ statement ok
 DROP POLICY restrict_delete on bbteams;
 
 statement ok
-create policy restrict_delete on bbteams for delete to buck using (is_valid(league) and team = 'tigers' and nextval('seq1') < 1000) with check (true);
+create policy restrict_delete on bbteams for delete to buck using (is_valid(league) and team = 'tigers' and nextval('seq1') < 1000);
 
 statement ok
 set role buck
@@ -887,9 +923,9 @@ bbteams  CREATE TABLE public.bbteams (
          );
          ALTER TABLE public.bbteams ENABLE ROW LEVEL SECURITY;
          CREATE POLICY restrict_select ON public.bbteams AS PERMISSIVE FOR SELECT TO buck, root USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
-         CREATE POLICY restrict_insert ON public.bbteams AS PERMISSIVE FOR INSERT TO buck USING (false);
+         CREATE POLICY restrict_insert ON public.bbteams AS PERMISSIVE FOR INSERT TO buck WITH CHECK (false);
          CREATE POLICY restrict_update ON public.bbteams AS PERMISSIVE FOR UPDATE TO buck USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
-         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8)) WITH CHECK (true)
+         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8))
 
 statement ok
 set role root
@@ -922,7 +958,7 @@ statement ok
 ALTER TABLE animals ENABLE ROW LEVEL SECURITY;
 
 statement ok
-create policy p1 on animals for select to current_user using (class in ('mammals','birds')) with check (class in ('reptiles', 'amphibians'));
+create policy p1 on animals for select to current_user using (class in ('mammals','birds'));
 
 statement ok
 use defaultdb;
@@ -1014,6 +1050,122 @@ DROP FUNCTION my_non_sec_definer_function;
 statement ok
 DROP TABLE sensitive_data_table;
 
+subtest truncate
+
+statement ok
+CREATE TYPE trunc_type AS ENUM('a', 'b', 'c');
+
+statement ok
+CREATE TABLE trunc (a INT, b trunc_type, FAMILY (a, b));
+
+statement ok
+INSERT INTO trunc VALUES (1, 'a'), (2, 'b'), (3, 'c');
+
+statement ok
+CREATE USER deleter;
+
+statement ok
+GRANT ALL ON trunc TO deleter;
+
+statement ok
+ALTER TABLE trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p1 ON trunc FOR SELECT TO deleter USING (a % 2 = 1 and b != 'b');
+
+statement ok
+CREATE POLICY p2 ON trunc FOR DELETE TO deleter USING (false);
+
+statement ok
+CREATE POLICY p3 ON trunc FOR INSERT TO deleter WITH CHECK (true);
+
+statement ok
+SET ROLE deleter;
+
+query IT
+SELECT a, b FROM trunc ORDER BY a;
+----
+1  a
+3  c
+
+# This should not delete anything because the expression for delete is false.
+statement ok
+DELETE FROM trunc;
+
+query IT
+SELECT a, b FROM trunc ORDER BY a;
+----
+1  a
+3  c
+
+query TT
+SHOW CREATE TABLE trunc;
+----
+trunc  CREATE TABLE public.trunc (
+         a INT8 NULL,
+         b public.trunc_type NULL,
+         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+         CONSTRAINT trunc_pkey PRIMARY KEY (rowid ASC),
+         FAMILY fam_0_a_b_rowid (a, b, rowid)
+       );
+       ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+       CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
+       CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
+       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true)
+
+
+# Truncate should be allowed, despite the policy to prevent deletes.
+statement ok
+TRUNCATE TABLE trunc;
+
+query IT
+SELECT a, b FROM trunc ORDER BY a;
+----
+
+# TRUNCATE is implemented by recreating the table. Verify the same policies exist.
+query TT
+SHOW CREATE TABLE trunc;
+----
+trunc  CREATE TABLE public.trunc (
+         a INT8 NULL,
+         b public.trunc_type NULL,
+         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+         CONSTRAINT trunc_pkey PRIMARY KEY (rowid ASC),
+         FAMILY fam_0_a_b_rowid (a, b, rowid)
+       );
+       ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+       CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
+       CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
+       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true)
+
+# Ensure the policies are still enforced.
+statement ok
+INSERT INTO trunc VALUES (7, 'a'), (8, 'b'), (9, 'c');
+
+query IT
+SELECT a, b FROM trunc ORDER BY a;
+----
+7  a
+9  c
+
+statement ok
+DELETE FROM trunc;
+
+query IT
+SELECT a, b FROM TRUNC ORDER BY a;
+----
+7  a
+9  c
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE trunc;
+
+statement ok
+DROP USER deleter;
+
 subtest validate_statement_cache_after_rls_changes
 
 statement ok
@@ -1104,5 +1256,22 @@ SET ROLE root
 
 statement ok
 DROP ROLE rls_cache_user;
+
+subtest block_invalid_expressions
+
+statement ok
+CREATE TABLE blocker();
+
+statement error pq: only WITH CHECK expression allowed for INSERT
+CREATE POLICY p_insert on blocker FOR INSERT USING (1 = 1);
+
+statement error pq: WITH CHECK cannot be applied to SELECT or DELETE
+CREATE POLICY p_select on blocker FOR SELECT WITH CHECK (false);
+
+statement error pq: WITH CHECK cannot be applied to SELECT or DELETE
+CREATE POLICY p_delete on blocker FOR DELETE WITH CHECK (1 = 1);
+
+statement ok
+DROP TABLE blocker;
 
 subtest end

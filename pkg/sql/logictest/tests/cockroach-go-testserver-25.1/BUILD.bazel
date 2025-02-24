@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "cockroach-go-testserver-25_1_test",
+    size = "enormous",
+    srcs = ["generated_test.go"],
+    data = [
+        "//c-deps:libgeos",  # keep
+        "//pkg/cmd/cockroach-short",  # keep
+        "//pkg/sql/logictest:cockroach_predecessor_version",  # keep
+        "//pkg/sql/logictest:testdata",  # keep
+    ],
+    exec_properties = {"test.Pool": "heavy"},
+    shard_count = 8,
+    tags = ["cpu:3"],
+    deps = [
+        "//pkg/base",
+        "//pkg/build/bazel",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/logictest",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+    ],
+)

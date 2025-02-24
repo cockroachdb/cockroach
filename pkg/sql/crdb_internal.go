@@ -1380,8 +1380,8 @@ func makeLegacyJobsTableRows(
 				}
 
 				if s, ok := status.(*tree.DString); ok {
-					if jobs.State(*s) == jobs.StateRunning && len(progress.RunningStatus) > 0 {
-						runningStatus = tree.NewDString(progress.RunningStatus)
+					if jobs.State(*s) == jobs.StateRunning && len(progress.StatusMessage) > 0 {
+						runningStatus = tree.NewDString(progress.StatusMessage)
 					} else if jobs.State(*s) == jobs.StatePaused && payload != nil && payload.PauseReason != "" {
 						errorStr = tree.NewDString(fmt.Sprintf("%s: %s", jobs.PauseRequestExplained, payload.PauseReason))
 					}
@@ -1776,34 +1776,26 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 	},
 }
 
-var crdbInternalSessionBasedLeases = virtualSchemaTable{
+var crdbInternalSessionBasedLeases = virtualSchemaView{
 	schema: `
-CREATE TABLE crdb_internal.kv_session_based_leases (
-  desc_id         INT8,
-  version         INT8,
-  sql_instance_id INT8,
-  session_id      BYTES NOT NULL,
-  crdb_region     BYTES NOT NULL
+CREATE VIEW crdb_internal.kv_session_based_leases (
+  desc_id,
+  version, 
+  sql_instance_id,
+  session_id, 
+  crdb_region
+) AS (
+	SELECT desc_id, version, sql_instance_id, session_id, crdb_region 
+	FROM system.lease
 );
 `,
-	comment: `reads from the internal session based leases table (before the table format is converted)`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
-		return p.InternalSQLTxn().WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable()},
-			func() error {
-				rows, err := p.InternalSQLTxn().QueryBuffered(
-					ctx, "query-leases", p.Txn(),
-					"SELECT desc_id, version, sql_instance_id, session_id, crdb_region FROM system.lease",
-				)
-				if err != nil {
-					return err
-				}
-				for _, d := range rows {
-					if err := addRow(d...); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
+	comment: `reads from the internal session based leases table`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "desc_id", Typ: types.Int},
+		{Name: "version", Typ: types.Int},
+		{Name: "sql_instance_id", Typ: types.Int},
+		{Name: "session_id", Typ: types.Bytes},
+		{Name: "crdb_region", Typ: types.Bytes},
 	},
 }
 
@@ -3967,6 +3959,7 @@ CREATE TABLE crdb_internal.create_statements (
   create_statement              STRING NOT NULL,
   state                         STRING NOT NULL,
   create_nofks                  STRING NOT NULL,
+  policy_statements             STRING[] NOT NULL,
   alter_statements              STRING[] NOT NULL,
   validate_statements           STRING[] NOT NULL,
   create_redactable             STRING NOT NULL,
@@ -3991,6 +3984,7 @@ CREATE TABLE crdb_internal.create_statements (
 		var descType tree.Datum
 		var stmt, createNofk, createRedactable string
 		alterStmts := tree.NewDArray(types.String)
+		policyStmts := tree.NewDArray(types.String)
 		validateStmts := tree.NewDArray(types.String)
 		namePrefix := tree.ObjectNamePrefix{SchemaName: tree.Name(sc.GetName()), ExplicitSchema: true}
 		name := tree.MakeTableNameFromPrefix(namePrefix, tree.Name(table.GetName()))
@@ -4013,16 +4007,24 @@ CREATE TABLE crdb_internal.create_statements (
 		} else {
 			descType = typeTable
 			displayOptions := ShowCreateDisplayOptions{
-				FKDisplayMode: OmitFKClausesFromCreate,
+				FKDisplayMode:       OmitFKClausesFromCreate,
+				IgnoreRLSStatements: true,
 			}
 			createNofk, err = ShowCreateTable(ctx, p, &name, contextName, table, lookup, displayOptions)
 			if err != nil {
 				return err
 			}
+
 			if err := showAlterStatement(ctx, &name, contextName, lookup, table, alterStmts, validateStmts); err != nil {
 				return err
 			}
+
+			if err = showPolicyStatements(ctx, &name, table, p.EvalContext(), &p.semaCtx, p.SessionData(), policyStmts); err != nil {
+				return err
+			}
+
 			displayOptions.FKDisplayMode = IncludeFkClausesInCreate
+			displayOptions.IgnoreRLSStatements = false
 			stmt, err = ShowCreateTable(ctx, p, &name, contextName, table, lookup, displayOptions)
 			if err != nil {
 				return err
@@ -4054,6 +4056,7 @@ CREATE TABLE crdb_internal.create_statements (
 			tree.NewDString(stmt),
 			tree.NewDString(table.GetState().String()),
 			tree.NewDString(createNofk),
+			policyStmts,
 			alterStmts,
 			validateStmts,
 			tree.NewDString(createRedactable),
@@ -4064,6 +4067,29 @@ CREATE TABLE crdb_internal.create_statements (
 		)
 	},
 	nil)
+
+// showPolicyStatements adds the RLS policy statements to the policy_statements column.
+func showPolicyStatements(
+	ctx context.Context,
+	tn *tree.TableName,
+	table catalog.TableDescriptor,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	policyStmts *tree.DArray,
+) error {
+	for _, policy := range table.GetPolicies() {
+		if policyStatement, err := showPolicyStatement(ctx, tn, table, evalCtx, semaCtx, sessionData, policy, false); err != nil {
+			return err
+		} else if len(policyStatement) != 0 {
+			if err := policyStmts.Append(tree.NewDString(policyStatement)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
 
 func showAlterStatement(
 	ctx context.Context,
@@ -4108,6 +4134,16 @@ func showAlterStatement(
 			return err
 		}
 	}
+
+	// Add the row level security ALTER statements to the alter_statements column.
+	if alterRLSStatements, err := showRLSAlterStatement(tn, table, false); err != nil {
+		return err
+	} else if len(alterRLSStatements) != 0 {
+		if err = alterStmts.Append(tree.NewDString(alterRLSStatements)); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -5016,7 +5052,7 @@ CREATE TABLE crdb_internal.zones (
 
 			var table catalog.TableDescriptor
 			if zs.Database != "" {
-				database, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Database(ctx, descpb.ID(id))
+				database, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Database(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
@@ -5026,7 +5062,7 @@ CREATE TABLE crdb_internal.zones (
 					continue
 				}
 			} else if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
-				tableEntry, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutDropped().Get().Table(ctx, descpb.ID(id))
+				tableEntry, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Table(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
@@ -6215,7 +6251,7 @@ func getPayloadAndProgressFromJobsRecord(
 	progressMarshalled, err := protoutil.Marshal(&jobspb.Progress{
 		ModifiedMicros: p.txn.ReadTimestamp().GoTime().UnixMicro(),
 		Details:        jobspb.WrapProgressDetails(job.Progress),
-		RunningStatus:  string(job.RunningStatus),
+		StatusMessage:  string(job.StatusMessage),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -6300,7 +6336,7 @@ SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs
 			return err
 		}
 		mj := marshaledJobMetadata{
-			status:        tree.NewDString(string(record.RunningStatus)),
+			status:        tree.NewDString(string(record.StatusMessage)),
 			payloadBytes:  payloadBytes,
 			progressBytes: progressBytes,
 		}

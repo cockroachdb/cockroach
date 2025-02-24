@@ -265,6 +265,7 @@ insert into foo values (1);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl=off;
 alter table foo add check (i <= 0)
 
 # Verify that SHOW COMMIT TIMESTAMP will wait for the schema changes.

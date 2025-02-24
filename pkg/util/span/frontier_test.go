@@ -73,7 +73,7 @@ func TestSpanFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
-		defer enableBtreeFrontier(useBtreeFrontier)()
+		defer EnableBtreeFrontier(useBtreeFrontier)()
 
 		keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 		keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
@@ -197,7 +197,7 @@ func TestSpanFrontierDisjointSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
-		defer enableBtreeFrontier(useBtreeFrontier)()
+		defer EnableBtreeFrontier(useBtreeFrontier)()
 
 		keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 		keyD, keyE, keyF := roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
@@ -295,7 +295,7 @@ func TestSequentialSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
-		defer enableBtreeFrontier(useBtreeFrontier)()
+		defer EnableBtreeFrontier(useBtreeFrontier)()
 
 		f, err := MakeFrontier(roachpb.Span{Key: roachpb.Key("A"), EndKey: roachpb.Key("Z")})
 		require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestSpanEntries(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
-		defer enableBtreeFrontier(useBtreeFrontier)()
+		defer EnableBtreeFrontier(useBtreeFrontier)()
 
 		t.Run("contiguous frontier", func(t *testing.T) {
 			spAZ := makeSpan("A", "Z")
@@ -410,7 +410,7 @@ func TestForwardInvertedSpan(t *testing.T) {
 
 	spAZ := makeSpan("A", "Z")
 	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
-		defer enableBtreeFrontier(useBtreeFrontier)()
+		defer EnableBtreeFrontier(useBtreeFrontier)()
 
 		f, err := MakeFrontier(spAZ)
 		require.NoError(t, err)
@@ -435,7 +435,7 @@ func TestForwardInvertedSpan(t *testing.T) {
 }
 
 func TestForwardToSameTimestamp(t *testing.T) {
-	defer enableBtreeFrontier(true)() // LLRB frontier fails this test
+	defer EnableBtreeFrontier(true)() // LLRB frontier fails this test
 	spAZ := makeSpan("A", "Z")
 
 	f, err := MakeFrontier(spAZ)
@@ -461,8 +461,8 @@ func TestFrontierImplementationsMatch(t *testing.T) {
 	totalSpan := mkSpan(start, start+total)
 
 	for run := 1; run <= 10; run++ {
-		l := newLLBRFrontier()
-		b := newBTreeFrontier()
+		l := newLLRBFrontier()
+		b := newBtreeFrontier()
 		require.NoError(t, l.AddSpansAt(hlc.Timestamp{}, totalSpan))
 		require.NoError(t, b.AddSpansAt(hlc.Timestamp{}, totalSpan))
 
@@ -499,7 +499,7 @@ func TestAddOverlappingSpans(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
-		defer enableBtreeFrontier(useBtreeFrontier)()
+		defer EnableBtreeFrontier(useBtreeFrontier)()
 
 		f, err := MakeFrontier()
 		require.NoError(t, err)
@@ -518,7 +518,7 @@ func TestBtreeFrontierMergesSpansDuringInitialization(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
-		defer enableBtreeFrontier(useBtreeFrontier)()
+		defer EnableBtreeFrontier(useBtreeFrontier)()
 
 		f, err := MakeFrontier()
 		require.NoError(t, err)
@@ -543,7 +543,7 @@ func TestForwardDeepNestedFrontierEntry(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
-		defer enableBtreeFrontier(useBtreeFrontier)()
+		defer EnableBtreeFrontier(useBtreeFrontier)()
 		f, err := MakeFrontier()
 		require.NoError(t, err)
 
@@ -609,7 +609,7 @@ func BenchmarkFrontier(b *testing.B) {
 
 	for _, enableBtree := range []bool{false, true} {
 		b.Run(fmt.Sprintf("btree=%t/rnd", enableBtree), func(b *testing.B) {
-			defer enableBtreeFrontier(enableBtree)()
+			defer EnableBtreeFrontier(enableBtree)()
 
 			b.StopTimer()
 			// Reset rnd so that we get the same inputs for both benchmarks.
@@ -627,7 +627,7 @@ func BenchmarkFrontier(b *testing.B) {
 		// Bench a case where frontier tracks multiple disjoint spans.
 		for _, numRanges := range []int{128, 1024, 4096, 8192, 16384} {
 			b.Run(fmt.Sprintf("btree=%t/r=%d", enableBtree, numRanges), func(b *testing.B) {
-				defer enableBtreeFrontier(enableBtree)()
+				defer EnableBtreeFrontier(enableBtree)()
 
 				b.StopTimer()
 				// Reset rnd so that we get the same inputs for both benchmarks.

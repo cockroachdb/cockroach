@@ -995,7 +995,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 
 			ptsReader := store.GetStoreConfig().ProtectedTimestampReader
 			require.NoError(t,
-				spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.SystemLayer().Clock().Now()))
+				spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, srv.SystemLayer().Clock().Now()))
 		}
 
 		f, err := rangefeed.NewFactory(ts.AppStopper(), kvDB, ts.ClusterSettings(), nil)

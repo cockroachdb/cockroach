@@ -8,9 +8,11 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
   exit 1
 fi
 
-dd_api_key="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
+if [ -z "${DD_API_KEY}" ]; then
+  DD_API_KEY="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
+fi
 
-if [ -z "${dd_api_key}" ]; then
+if [ -z "${DD_API_KEY}" ]; then
   echo "Missing Datadog API key!"
   exit 1
 fi
@@ -95,16 +97,16 @@ EOF"
 
 drtprod ssh $WORKLOAD_CLUSTER -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
 export DD_SITE=${dd_site}
-export DD_API_KEY=${dd_api_key}
+export DD_API_KEY=${DD_API_KEY}
 export DD_TAGS=env:development,cluster${CLUSTER%:*},team:drt,service:drt-cockroachdb
 EOF"
 
 drtprod opentelemetry-start $WORKLOAD_CLUSTER \
-  --datadog-api-key "${dd_api_key}" \
+  --datadog-api-key "${DD_API_KEY}" \
   --datadog-tags 'service:drt-cockroachdb,team:drt'
 
 drtprod fluent-bit-start $WORKLOAD_CLUSTER \
-  --datadog-api-key "${dd_api_key}" \
+  --datadog-api-key "${DD_API_KEY}" \
   --datadog-service drt-cockroachdb \
   --datadog-tags 'service:drt-cockroachdb,team:drt'
 

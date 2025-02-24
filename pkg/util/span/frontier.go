@@ -106,7 +106,8 @@ type Operation func(roachpb.Span, hlc.Timestamp) (done OpResult)
 var useBtreeFrontier = envutil.EnvOrDefaultBool("COCKROACH_BTREE_SPAN_FRONTIER_ENABLED",
 	metamorphic.ConstantWithTestBool("COCKROACH_BTREE_SPAN_FRONTIER_ENABLED", true))
 
-func enableBtreeFrontier(enabled bool) func() {
+// EnableBtreeFrontier sets useBtreeFrontier for testing purposes.
+func EnableBtreeFrontier(enabled bool) func() {
 	old := useBtreeFrontier
 	useBtreeFrontier = enabled
 	return func() {
@@ -114,19 +115,19 @@ func enableBtreeFrontier(enabled bool) func() {
 	}
 }
 
-func newBTreeFrontier() Frontier {
+func newBtreeFrontier() Frontier {
 	return &btreeFrontier{}
 }
 
-func newLLBRFrontier() Frontier {
+func newLLRBFrontier() Frontier {
 	return &llrbFrontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
 }
 
 func newFrontier() Frontier {
 	if useBtreeFrontier {
-		return newBTreeFrontier()
+		return newBtreeFrontier()
 	}
-	return newLLBRFrontier()
+	return newLLRBFrontier()
 }
 
 // MakeFrontier returns a Frontier that tracks the given set of spans.

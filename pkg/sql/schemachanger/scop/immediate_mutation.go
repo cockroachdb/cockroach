@@ -623,17 +623,19 @@ type RemovePolicyRole struct {
 // SetPolicyUsingExpression will set a new USING expression for a policy.
 type SetPolicyUsingExpression struct {
 	immediateMutationOp
-	TableID  descpb.ID
-	PolicyID descpb.PolicyID
-	Expr     string
+	TableID   descpb.ID
+	PolicyID  descpb.PolicyID
+	Expr      string
+	ColumnIDs descpb.ColumnIDs
 }
 
 // SetPolicyWithCheckExpression will set a new WITH CHECK expression for a policy.
 type SetPolicyWithCheckExpression struct {
 	immediateMutationOp
-	TableID  descpb.ID
-	PolicyID descpb.PolicyID
-	Expr     string
+	TableID   descpb.ID
+	PolicyID  descpb.PolicyID
+	Expr      string
+	ColumnIDs descpb.ColumnIDs
 }
 
 // SetPolicyForwardReferences sets new forward references to relations, types,

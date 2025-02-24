@@ -4,9 +4,8 @@ benchmarks:
     name: "BenchmarkSysbench/SQL/3node/oltp_read_write"
     package: "pkg/sql/tests"
     runner_group: 1
-    measure_count: 10
-    measure:
-      iterations: 3000
+    count: 10
+    iterations: 3000
     thresholds:
       "sec/op": .03
       "B/op": .02
@@ -17,9 +16,8 @@ benchmarks:
     name: "BenchmarkSysbench/KV/1node_local/oltp_read_only"
     package: "pkg/sql/tests"
     runner_group: 2
-    measure_count: 10
-    measure:
-      iterations: 12000
+    count: 10
+    iterations: 12000
     thresholds:
       "sec/op": .02
       "B/op": .015
@@ -30,9 +28,8 @@ benchmarks:
     name: "BenchmarkSysbench/KV/1node_local/oltp_write_only"
     package: "pkg/sql/tests"
     runner_group: 2
-    measure_count: 10
-    measure:
-      iterations: 12000
+    count: 10
+    iterations: 12000
     thresholds:
       "sec/op": .025
       "B/op": .0175

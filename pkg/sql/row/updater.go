@@ -493,7 +493,7 @@ func (ru *Updater) UpdateRow(
 		} else {
 			// Remove all inverted index entries, and re-add them.
 			for j := range ru.oldIndexEntries[i] {
-				if err := ru.Helper.deleteIndexEntry(ctx, batch, index, nil /*valDir*/, &ru.oldIndexEntries[i][j], traceKV); err != nil {
+				if err := ru.Helper.deleteIndexEntry(ctx, batch, index, nil /* valDirs */, &ru.oldIndexEntries[i][j], traceKV); err != nil {
 					return nil, err
 				}
 			}
@@ -529,7 +529,7 @@ func (ru *Updater) UpdateRow(
 
 			if ok {
 				for _, deletedSecondaryIndexEntry := range deletedSecondaryIndexEntries {
-					if err := ru.DeleteHelper.deleteIndexEntry(ctx, batch, index, nil /*valDir*/, &deletedSecondaryIndexEntry, traceKV); err != nil {
+					if err := ru.DeleteHelper.deleteIndexEntry(ctx, batch, index, nil /* valDirs */, &deletedSecondaryIndexEntry, traceKV); err != nil {
 						return nil, err
 					}
 				}

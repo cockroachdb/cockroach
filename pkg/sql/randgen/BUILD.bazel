@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/oidext",
         "//pkg/sql/parser",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/rowenc",
