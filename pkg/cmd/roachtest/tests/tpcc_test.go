@@ -6,11 +6,16 @@
 package tests
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
 func TestTPCCSupportedWarehouses(t *testing.T) {
@@ -45,4 +50,76 @@ func TestTPCCSupportedWarehouses(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetMaxWarehousesAboveEfficiency(t *testing.T) {
+	// Initialize test data structures
+	histograms := &roachtestutil.HistogramMetric{Summaries: make([]*roachtestutil.HistogramSummaryMetric, 0)}
+	wareHouseMetrics := make(map[string][]float64)
+
+	// Base metrics from tpccbench/nodes=3/cpu=4/enc=true
+	const (
+		baseCount   = int64(125)  // Median value
+		baseElapsed = int64(1000) // Average elapsed time per tick
+		startWH     = 635         // Starting warehouse count
+		endWH       = 750         // Ending warehouse count
+		whIncrement = 10          // Warehouse increment step
+	)
+
+	maxWarehouse := 0
+
+	// Generate test data for different warehouse counts
+	for wh := startWH; wh <= endWH; wh += whIncrement {
+		// Add random variation to count (-10 to +30)
+		currCount := baseCount + int64(rand.Intn(41)-10)
+
+		// Create histogram summary
+		histograms.Summaries = append(histograms.Summaries, &roachtestutil.HistogramSummaryMetric{
+			Name:         "newOrder",
+			TotalCount:   currCount,
+			TotalElapsed: baseElapsed,
+			Labels:       []*roachtestutil.Label{{Name: warehouseLabel, Value: fmt.Sprintf("%d", wh)}},
+		})
+
+		// Calculate efficiency metrics
+		tpmc := (float64(currCount) * 60000.0) / float64(baseElapsed)
+		efficiency := (tpmc * 100) / (tpcc.DeckWarehouseFactor * float64(wh))
+
+		// Store metrics for validation
+		wareHouseMetrics[fmt.Sprintf("%d", wh)] = []float64{tpmc, efficiency}
+
+		// Track maximum warehouse count meeting efficiency threshold
+		if efficiency > tpcc.PassingEfficiency {
+			maxWarehouse = wh
+		}
+	}
+
+	// Get aggregated metrics and validate results
+	aggregatedMetrics, err := getMaxWarehousesAboveEfficiency("tpccbench", histograms)
+	require.NoError(t, err)
+
+	t.Run("verify efficiency metrics", func(t *testing.T) {
+		for _, metric := range aggregatedMetrics {
+			// Check metrics with 'efficiency' suffix
+			if strings.HasSuffix(metric.Name, "efficiency") {
+				whLabel := metric.AdditionalLabels[0].Value
+				expectedEfficiency := wareHouseMetrics[whLabel][1]
+				require.Equal(t, expectedEfficiency, float64(metric.Value))
+			}
+		}
+	})
+
+	t.Run("verify tpmc metrics", func(t *testing.T) {
+		for _, metric := range aggregatedMetrics {
+			if strings.HasSuffix(metric.Name, "tpmc") {
+				whLabel := metric.AdditionalLabels[0].Value
+				expectedTpmc := wareHouseMetrics[whLabel][0]
+				require.Equal(t, expectedTpmc, float64(metric.Value))
+			}
+		}
+	})
+
+	t.Run("verify max warehouse", func(t *testing.T) {
+		require.Equal(t, float64(maxWarehouse), float64(aggregatedMetrics[len(aggregatedMetrics)-1].Value) /* The last metric emitted is the max warehouse number */)
+	})
 }
