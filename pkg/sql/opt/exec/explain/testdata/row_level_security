@@ -1,0 +1,173 @@
+# Setup
+# ----------------------------------------------------------------------
+
+exec-ddl
+CREATE USER rls_accessor
+----
+
+exec-ddl
+SET ROLE rls_accessor
+----
+
+exec-ddl
+CREATE TABLE t1 (c1 int);
+----
+
+exec-ddl
+CREATE TABLE t2 (c1 int);
+----
+
+# Ensure non-RLS enabled tables don't show any policy info.
+# ----------------------------------------------------------------------
+
+plan
+select * from t1,t2 where t1.c1 = t2.c1;
+----
+• hash join
+│ equality: (c1) = (c1)
+│
+├── • scan
+│     table: t1@t1_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      table: t2@t2_pkey
+      spans: FULL SCAN
+
+# Enable RLS on only one table (t1)
+# ----------------------------------------------------------------------
+
+exec-ddl
+ALTER TABLE t1 ENABLE ROW LEVEL SECURITY
+----
+
+plan
+select * from t1,t2 where t1.c1 = t2.c1;
+----
+• norows
+  policies: row-level security enabled, no policies applied.
+
+# Enable RLS on both tables (t1 and t2)
+# ----------------------------------------------------------------------
+
+exec-ddl
+ALTER TABLE t2 ENABLE ROW LEVEL SECURITY
+----
+
+plan
+select * from t1,t2 where t1.c1 = t2.c1;
+----
+• norows
+  policies: row-level security enabled, no policies applied.
+
+# Ensure admin shows that we are exempt from all policies
+# ----------------------------------------------------------------------
+
+exec-ddl
+SET ROLE root
+----
+
+plan
+select max(t1.c1) from t1,t2 where t1.c1 = t2.c1;
+----
+• group (scalar)
+│
+└── • hash join
+    │ equality: (c1) = (c1)
+    │
+    ├── • scan
+    │     table: t1@t1_pkey
+    │     spans: FULL SCAN
+    │     policies: exempt for role
+    │
+    └── • scan
+          table: t2@t2_pkey
+          spans: FULL SCAN
+          policies: exempt for role
+
+exec-ddl
+SET ROLE rls_accessor
+----
+
+# Add select policies to each table
+# ----------------------------------------------------------------------
+
+exec-ddl
+CREATE POLICY "policy 1" ON t1 USING (true);
+----
+
+exec-ddl
+CREATE POLICY t2_pol_1 on t2 FOR SELECT USING (true);
+----
+
+plan
+select count(*) from t1,t2 where t1.c1 = t2.c1;
+----
+• group (scalar)
+│
+└── • hash join
+    │ equality: (c1) = (c1)
+    │
+    ├── • scan
+    │     table: t1@t1_pkey
+    │     spans: FULL SCAN
+    │     policies: policy 1
+    │
+    └── • scan
+          table: t2@t2_pkey
+          spans: FULL SCAN
+          policies: t2_pol_1
+
+# Add multiple policies on the same table
+# ----------------------------------------------------------------------
+
+exec-ddl
+CREATE POLICY p2 on t1 USING (true);
+----
+
+exec-ddl
+CREATE POLICY p3 on t1 USING (true);
+----
+
+exec-ddl
+CREATE POLICY r1 on t1 AS RESTRICTIVE USING (true);
+----
+
+exec-ddl
+CREATE POLICY r2 on t1 AS RESTRICTIVE USING (true);
+----
+
+# TODO(136742): We currently only support at most one permissive policy. Update
+# this when we support multiple and restrictive policies.
+plan
+select * from t1
+----
+• scan
+  table: t1@t1_pkey
+  spans: FULL SCAN
+  policies: policy 1
+
+# Show policy information where an index scan is used for one table
+# ----------------------------------------------------------------------
+
+exec-ddl
+CREATE INDEX t1_idx ON t1 (c1)
+----
+
+plan
+select t1.c1 from t1, t2 where t1.c1 = t2.c1 and t1.c1 = 1;
+----
+• cross join
+│
+├── • scan
+│     table: t1@t1_idx
+│     spans: 1+ spans
+│     policies: policy 1
+│
+└── • filter
+    │ filter: c1 = _
+    │
+    └── • scan
+          table: t2@t2_pkey
+          spans: FULL SCAN
+          policies: t2_pol_1

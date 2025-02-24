@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -23,6 +24,11 @@ const (
 type Short struct {
 	b [shortSize]byte
 }
+
+var _ redact.SafeValue = Short{}
+
+// SafeValue implements the redact.SafeValue interface.
+func (s Short) SafeValue() {}
 
 // String returns the 8-character hexidecimal representation of the abbreviated
 // UUID.

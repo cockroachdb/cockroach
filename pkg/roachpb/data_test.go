@@ -2520,9 +2520,9 @@ func TestLockStateInfoSafeFormat(t *testing.T) {
 			"  waiting_txn:<nil> active_waiter:false strength:None wait_duration:17ms",
 		redact.Sprint(lockStateInfo).Redact())
 	require.EqualValues(t,
-		"range_id=35 key=‹×› holder=‹×› durability=Unreplicated duration=5m0s\n"+
+		"range_id=35 key=‹×› holder=deadbeef-0000-0000-0000-000000000000 durability=Unreplicated duration=5m0s\n"+
 			" waiters:\n"+
-			"  waiting_txn:‹×› active_waiter:true strength:Exclusive wait_duration:2m15s\n"+
+			"  waiting_txn:6ba7b810-9dad-11d1-80b4-00c04fd430c8 active_waiter:true strength:Exclusive wait_duration:2m15s\n"+
 			"  waiting_txn:<nil> active_waiter:false strength:None wait_duration:17ms",
 		redact.Sprintf("%+v", lockStateInfo).Redact())
 }

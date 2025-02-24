@@ -78,39 +78,47 @@ type SpanForwarder interface {
 	Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error)
 }
 
-// Restore restores the checkpointed spans progress to the given SpanForwarder.
-// If checkpoint is nil, it uses the oldCheckpointSpans and oldCheckpointTs to
-// restore changefeed progress. Otherwise, it uses the given checkpoint. Returns
-// error if something unexpected happens.
-func Restore(
-	sf SpanForwarder,
-	oldCheckpointSpans []roachpb.Span,
-	oldCheckpointTs hlc.Timestamp,
-	checkpoint *jobspb.TimestampSpansMap,
-) error {
-	if checkpoint == nil {
-		ts := oldCheckpointTs
+// Restore restores the saved progress from a checkpoint to the given SpanForwarder.
+func Restore(sf SpanForwarder, checkpoint *jobspb.TimestampSpansMap) error {
+	for ts, spans := range checkpoint.ToGoMap() {
 		if ts.IsEmpty() {
 			return errors.New("checkpoint timestamp is empty")
 		}
-		for _, checkpointedSp := range oldCheckpointSpans {
-			if _, err := sf.Forward(checkpointedSp, ts); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	for _, entry := range checkpoint.Entries {
-		ts := entry.Timestamp
-		if ts.IsEmpty() {
-			return errors.New("checkpoint timestamp is empty")
-		}
-		for _, checkpointedSp := range entry.Spans {
-			if _, err := sf.Forward(checkpointedSp, ts); err != nil {
+		for _, sp := range spans {
+			if _, err := sf.Forward(sp, ts); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// ConvertLegacyCheckpoint converts a legacy checkpoint into the current
+// checkpoint format.
+func ConvertLegacyCheckpoint(
+	//lint:ignore SA1019 deprecated usage
+	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
+	statementTime hlc.Timestamp,
+	initialHighWater hlc.Timestamp,
+) *jobspb.TimestampSpansMap {
+	if checkpoint == nil || checkpoint.IsZero() {
+		return nil
+	}
+
+	checkpointTS := checkpoint.Timestamp
+
+	// Checkpoint records from 21.2 were used only for backfills and did not store
+	// the timestamp, since in a backfill it must either be the StatementTime for
+	// an initial backfill, or right after the high-water for schema backfills.
+	if checkpointTS.IsEmpty() {
+		if initialHighWater.IsEmpty() {
+			checkpointTS = statementTime
+		} else {
+			checkpointTS = initialHighWater.Next()
+		}
+	}
+
+	return jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+		checkpointTS: checkpoint.Spans,
+	})
 }

@@ -180,7 +180,7 @@ func sendAddRemoteSSTs(
 		return 0, 0, err
 	}
 
-	if err := job.NoTxn().RunningStatus(ctx, "Splitting and distributing spans"); err != nil {
+	if err := job.NoTxn().UpdateStatusMessage(ctx, "Splitting and distributing spans"); err != nil {
 		return 0, 0, err
 	}
 
@@ -192,7 +192,7 @@ func sendAddRemoteSSTs(
 		return 0, 0, err
 	}
 
-	if err := job.NoTxn().RunningStatus(ctx, ""); err != nil {
+	if err := job.NoTxn().UpdateStatusMessage(ctx, ""); err != nil {
 		return 0, 0, err
 	}
 
@@ -482,7 +482,7 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 	// amount we expect to download and persist it so that we can indicate our
 	// progress as that number goes down later.
 	log.Infof(ctx, "calculating total download size (across all stores) to complete restore")
-	if err := r.job.NoTxn().RunningStatus(ctx, "Calculating total download size..."); err != nil {
+	if err := r.job.NoTxn().UpdateStatusMessage(ctx, "Calculating total download size..."); err != nil {
 		return 0, errors.Wrapf(err, "failed to update running status of job %d", r.job.ID())
 	}
 
@@ -502,7 +502,7 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 
 	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		md.Progress.GetRestore().TotalDownloadRequired = total
-		md.Progress.RunningStatus = fmt.Sprintf("Downloading %s of restored data...", sz(total))
+		md.Progress.StatusMessage = fmt.Sprintf("Downloading %s of restored data...", sz(total))
 		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {

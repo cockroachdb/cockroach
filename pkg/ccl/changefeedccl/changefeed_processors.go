@@ -519,8 +519,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Codec:                cfg.Codec,
 		Clock:                cfg.DB.KV().Clock(),
 		Spans:                spans,
-		CheckpointSpans:      ca.spec.Checkpoint.Spans,
-		CheckpointTimestamp:  ca.spec.Checkpoint.Timestamp,
 		SpanLevelCheckpoint:  ca.spec.SpanLevelCheckpoint,
 		Targets:              AllTargets(ca.spec.Feed),
 		Metrics:              &ca.metrics.KVFeedMetrics,
@@ -605,23 +603,31 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, err
 	}
 
-	checkpointedSpanTs := ca.spec.Checkpoint.Timestamp
-
-	// Checkpoint records from 21.2 were used only for backfills and did not store
-	// the timestamp, since in a backfill it must either be the StatementTime for
-	// an initial backfill, or right after the high-water for schema backfills.
-	if checkpointedSpanTs.IsEmpty() {
-		if initialHighWater.IsEmpty() {
-			checkpointedSpanTs = ca.spec.Feed.StatementTime
-		} else {
-			checkpointedSpanTs = initialHighWater.Next()
+	// Convert the legacy checkpoint to the new span-level checkpoint so that we
+	// can ignore it from this point on.
+	if !ca.spec.Checkpoint.IsZero() {
+		if ca.spec.SpanLevelCheckpoint != nil {
+			return nil, errors.New("both legacy and current checkpoint set on change aggregator spec")
 		}
+
+		// This conversion undoes an unnecessary conversion when the spec
+		// was created in the first place.
+		//lint:ignore SA1019 deprecated usage
+		legacyCheckpoint := &jobspb.ChangefeedProgress_Checkpoint{
+			Spans:     ca.spec.Checkpoint.Spans,
+			Timestamp: ca.spec.Checkpoint.Timestamp,
+		}
+		statementTime := ca.spec.Feed.StatementTime
+		ca.spec.SpanLevelCheckpoint = checkpoint.ConvertLegacyCheckpoint(legacyCheckpoint, statementTime, initialHighWater)
+		ca.spec.Checkpoint.Reset()
 	}
+
 	// Checkpointed spans are spans that were above the highwater mark, and we
 	// must preserve that information in the frontier for future checkpointing.
-	if err := checkpoint.Restore(ca.frontier, ca.spec.Checkpoint.Spans, checkpointedSpanTs, ca.spec.SpanLevelCheckpoint); err != nil {
+	if err := checkpoint.Restore(ca.frontier, ca.spec.SpanLevelCheckpoint); err != nil {
 		return nil, err
 	}
+
 	return spans, nil
 }
 
@@ -1336,11 +1342,6 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		}
 
 		// Recover highwater information from job progress.
-		// Checkpoint information from job progress will eventually be sent to the
-		// changeFrontier from the changeAggregators.  Note that the changeFrontier
-		// may save a new checkpoint prior to receiving all spans of the
-		// aggregators' frontier, potentially missing spans that were previously
-		// checkpointed, so it is still possible for job progress to regress.
 		p := job.Progress()
 		if ts := p.GetHighWater(); ts != nil {
 			cf.highWaterAtStart.Forward(*ts)
@@ -1355,7 +1356,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		// not get shutdown immediately after the changefeed starts.
 		cf.latestResolvedKV = timeutil.Now()
 
-		if p.RunningStatus != "" {
+		if p.StatusMessage != "" {
 			// If we had running status set, that means we're probably retrying
 			// due to a transient error.  In that case, keep the previous
 			// running status around for a while before we override it.
@@ -1378,6 +1379,16 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		log.Infof(cf.Ctx(), "change frontier moving to draining due to error setting up frontier: %v", err)
 		cf.MoveToDraining(err)
 		return
+	}
+
+	if err := checkpoint.Restore(cf.frontier, cf.spec.SpanLevelCheckpoint); err != nil {
+		if log.V(2) {
+			log.Infof(cf.Ctx(), "change frontier encountered error on checkpoint restore: %v", err)
+		}
+	}
+
+	if cf.knobs.AfterCoordinatorFrontierRestore != nil {
+		cf.knobs.AfterCoordinatorFrontierRestore(cf.frontier)
 	}
 
 	func() {
@@ -1761,7 +1772,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			}
 
 			if updateRunStatus {
-				progress.RunningStatus = fmt.Sprintf("running: resolved=%s", frontier)
+				progress.StatusMessage = fmt.Sprintf("running: resolved=%s", frontier)
 			}
 
 			ju.UpdateProgress(progress)

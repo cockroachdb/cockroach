@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1248,7 +1249,7 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 			addr = t.tenantAddrs[nodeIdx]
 		}
 		var cleanupFunc func()
-		pgURL, cleanupFunc = sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
+		pgURL, cleanupFunc = pgurlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
 		t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, cleanupFunc)
 	}
 	pgURL.Path = "test"
@@ -1727,12 +1728,6 @@ func (t *logicTest) newCluster(
 
 		capabilities := toa.capabilities
 		if len(capabilities) > 0 {
-			for name, value := range capabilities {
-				query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = $2", name)
-				if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
-					t.Fatal(err)
-				}
-			}
 			capabilityMap := make(map[tenantcapabilities.ID]string, len(capabilities))
 			for k, v := range capabilities {
 				capability, ok := tenantcapabilities.FromName(k)
@@ -1741,7 +1736,7 @@ func (t *logicTest) newCluster(
 				}
 				capabilityMap[capability.ID()] = v
 			}
-			t.cluster.WaitForTenantCapabilities(t.t(), tenantID, capabilityMap)
+			t.cluster.GrantTenantCapabilities(context.Background(), t.t(), tenantID, capabilityMap)
 		}
 	}
 

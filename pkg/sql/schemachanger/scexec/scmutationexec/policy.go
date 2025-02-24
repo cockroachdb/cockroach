@@ -109,6 +109,7 @@ func (i *immediateVisitor) SetPolicyWithCheckExpression(
 		return err
 	}
 	policy.WithCheckExpr = op.Expr
+	policy.WithCheckColumnIDs = op.ColumnIDs
 	return nil
 }
 
@@ -120,6 +121,7 @@ func (i *immediateVisitor) SetPolicyUsingExpression(
 		return err
 	}
 	policy.UsingExpr = op.Expr
+	policy.UsingColumnIDs = op.ColumnIDs
 	return nil
 }
 

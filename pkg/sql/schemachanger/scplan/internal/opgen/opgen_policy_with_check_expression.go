@@ -17,9 +17,10 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.PolicyWithCheckExpr) *scop.SetPolicyWithCheckExpression {
 					return &scop.SetPolicyWithCheckExpression{
-						TableID:  this.TableID,
-						PolicyID: this.PolicyID,
-						Expr:     string(this.Expression.Expr),
+						TableID:   this.TableID,
+						PolicyID:  this.PolicyID,
+						Expr:      string(this.Expression.Expr),
+						ColumnIDs: this.Expression.ReferencedColumnIDs,
 					}
 				}),
 			),
@@ -29,9 +30,10 @@ func init() {
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.PolicyWithCheckExpr) *scop.SetPolicyWithCheckExpression {
 					return &scop.SetPolicyWithCheckExpression{
-						TableID:  this.TableID,
-						PolicyID: this.PolicyID,
-						Expr:     "",
+						TableID:   this.TableID,
+						PolicyID:  this.PolicyID,
+						Expr:      "",
+						ColumnIDs: nil,
 					}
 				}),
 			),

@@ -340,6 +340,8 @@ DROP TABLE unused; DROP TABLE t
 -- NoTxn       -> NoTxn       #  (none)
 
 # Test the same thing, but with the default value of autocommit_before_ddl.
+# The SAVEPOINT will appear outside of a transaction, but it is something we
+# ignore if autocommit_before_ddl is on.
 sql
 BEGIN; CREATE TABLE unused(x INT)
 SAVEPOINT foo
@@ -348,11 +350,11 @@ RELEASE SAVEPOINT foo
 COMMIT
 ----
 1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
--- NoTxn       -> Open        #....  (none)
+-- NoTxn       -> NoTxn       #....  (none)
 2: SAVEPOINT foo -- 0 rows
--- Open        -> Open        ##...  foo
+-- NoTxn       -> NoTxn       ##...  (none)
 3: CREATE TABLE t(x INT) -- 0 rows
--- Open        -> NoTxn       ###..  (none)
+-- NoTxn       -> NoTxn       ###..  (none)
 4: RELEASE SAVEPOINT foo -- 0 rows
 -- NoTxn       -> NoTxn       ####.  (none)
 5: COMMIT -- 0 rows
@@ -435,12 +437,12 @@ DROP TABLE t
 # DDL under a cockroach_restart savepoint cannot
 # be rolled back at high priority, because of #46414.
 sql
-BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
 INSERT INTO t(x) VALUES (1), (2)
 ROLLBACK TO SAVEPOINT cockroach_restart
 ABORT
 ----
-1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+1: BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
 -- NoTxn       -> Open        #...  cockroach_restart(r)
 2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
 -- Open        -> Open        ##..  cockroach_restart(r)
@@ -451,13 +453,13 @@ ABORT
 
 # Same error in the aborted state.
 sql
-BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
 INSERT INTO t(x) VALUES (1), (2)
 SELECT undefined
 ROLLBACK TO SAVEPOINT cockroach_restart
 ABORT
 ----
-1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+1: BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
 -- NoTxn       -> Open        #....  cockroach_restart(r)
 2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
 -- Open        -> Open        ##...  cockroach_restart(r)
@@ -472,13 +474,13 @@ ABORT
 # However it's fine if there's just a release.
 
 sql
-BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
 INSERT INTO t(x) VALUES (1), (2)
 RELEASE SAVEPOINT cockroach_restart
 COMMIT
 SELECT * FROM t
 ----
-1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+1: BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
 -- NoTxn       -> Open        #....  cockroach_restart(r)
 2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
 -- Open        -> Open        ##...  cockroach_restart(r)

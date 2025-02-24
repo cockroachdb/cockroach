@@ -45,7 +45,7 @@ func DownloadLatestPProfFile(
 			return err
 		}
 	}
-	c, err := getClusterFromCache(l, clusterName)
+	c, err := GetClusterFromCache(l, clusterName)
 	if err != nil {
 		return err
 	}

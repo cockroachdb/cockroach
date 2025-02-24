@@ -4397,6 +4397,7 @@ func (h *flowControlTestHelper) waitForConnectedStreams(
 	expConnectedStreams, serverIdx int,
 	lvl ...kvflowcontrol.V2EnabledWhenLeaderLevel,
 ) {
+	h.t.Helper()
 	level := h.resolveLevelArgs(lvl...)
 	testutils.SucceedsSoon(h.t, func() error {
 		state, found := h.getInspectHandlesForLevel(serverIdx, level).LookupInspect(rangeID)
@@ -4404,9 +4405,15 @@ func (h *flowControlTestHelper) waitForConnectedStreams(
 			return fmt.Errorf("handle for %s not found", rangeID)
 		}
 		require.True(h.t, found)
-		if len(state.ConnectedStreams) != expConnectedStreams {
-			return fmt.Errorf("expected %d connected streams, got %d",
-				expConnectedStreams, len(state.ConnectedStreams))
+		var connected int
+		for i := range state.ConnectedStreams {
+			if !state.ConnectedStreams[i].Disconnected {
+				connected++
+			}
+		}
+		if len(state.ConnectedStreams) != expConnectedStreams || connected != expConnectedStreams {
+			return fmt.Errorf("expected %d connected streams, got %d/%d",
+				expConnectedStreams, connected, len(state.ConnectedStreams))
 		}
 		return nil
 	})

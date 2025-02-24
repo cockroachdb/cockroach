@@ -1056,7 +1056,7 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster, 
 	}
 	t.Status(fmt.Sprintf("decommissioning node %d", decommNodeID))
 	e := retry.WithMaxAttempts(ctx, retryOpts, maxAttempts, func() error {
-		o, err := h.decommission(ctx, decommNode, pinnedNodeID, "--wait=none", "--format=csv")
+		o, e, err := h.decommissionExt(ctx, decommNode, pinnedNodeID, "--wait=none", "--format=csv")
 		require.NoError(t, errors.Wrapf(err, "decommission failed"))
 
 		// Check if all the replicas have been transferred.
@@ -1071,6 +1071,15 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster, 
 		if dead {
 			return nil
 		}
+
+		// Check that the cli printed the below message. We do this because the drain
+		// step does not error out the decommission command on failure (to make that
+		// command more resilient to situations in which a node is terminated right
+		// around the time we try to drain it).
+		// This message is emitted in `cli.runDecommissionNodeImpl` and has a
+		// back-referencing comment mentioning that this roachtest matches on
+		// it.
+		require.Contains(t, e, "drained successfully")
 
 		// Check to see if the node has been drained or decommissioned.
 		// If not, queries should not fail.
@@ -1235,11 +1244,21 @@ func (h *decommTestHelper) getLogicalNodeID(ctx context.Context, nodeIdx int) (i
 	return nodeID, nil
 }
 
-// decommission decommissions the given targetNodes, running the process
-// through the specified runNode.
 func (h *decommTestHelper) decommission(
 	ctx context.Context, targetNodes option.NodeListOption, runNode int, verbs ...string,
 ) (string, error) {
+	o, _, err := h.decommissionExt(ctx, targetNodes, runNode, verbs...)
+	return o, err
+}
+
+// decommission decommissions the given targetNodes, running the process
+// through the specified runNode.
+// Returns stdout, stderr, error.
+// Stdout has the tabular decommission process, stderr contains informational
+// updates.
+func (h *decommTestHelper) decommissionExt(
+	ctx context.Context, targetNodes option.NodeListOption, runNode int, verbs ...string,
+) (string, string, error) {
 	args := []string{"node", "decommission"}
 	args = append(args, verbs...)
 
@@ -1250,7 +1269,7 @@ func (h *decommTestHelper) decommission(
 			args = append(args, strconv.Itoa(target))
 		}
 	}
-	return execCLI(ctx, h.t, h.c, runNode, args...)
+	return execCLIExt(ctx, h.t, h.c, runNode, args...)
 }
 
 // recommission recommissions the given targetNodes, running the process
@@ -1479,13 +1498,20 @@ func (h *decommTestHelper) getRandNodeOtherThan(ids ...int) int {
 func execCLI(
 	ctx context.Context, t test.Test, c cluster.Cluster, runNode int, extraArgs ...string,
 ) (string, error) {
+	out, _, err := execCLIExt(ctx, t, c, runNode, extraArgs...)
+	return out, err
+}
+
+func execCLIExt(
+	ctx context.Context, t test.Test, c cluster.Cluster, runNode int, extraArgs ...string,
+) (string, string, error) {
 	args := []string{"./cockroach"}
 	args = append(args, extraArgs...)
 	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
 	args = append(args, fmt.Sprintf("--certs-dir=%s", install.CockroachNodeCertsDir))
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(runNode)), args...)
 	t.L().Printf("%s\n", result.Stdout)
-	return result.Stdout, err
+	return result.Stdout, result.Stderr, err
 }
 
 // Increase the logging verbosity for decommission tests to make life easier

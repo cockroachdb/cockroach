@@ -101,7 +101,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		}
 
 		sb := &statisticsBuilder{}
-		sb.init(context.Background(), &evalCtx, mem.Metadata())
+		sb.init(context.Background(), &evalCtx, &mem)
 
 		// Make the scan.
 		scan := mem.MemoizeScan(&ScanPrivate{Table: tabID, Cols: cols})

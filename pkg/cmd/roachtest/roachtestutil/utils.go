@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -214,4 +216,24 @@ func IfLocal(c cluster.Cluster, trueVal, falseVal string) string {
 		return trueVal
 	}
 	return falseVal
+}
+
+// CheckPortBlocked returns true if a connection from a node to a port on another node
+// can be established. Requires nmap to be installed.
+func CheckPortBlocked(
+	ctx context.Context,
+	l *logger.Logger,
+	c cluster.Cluster,
+	fromNode, toNode option.NodeListOption,
+	port string,
+) (bool, error) {
+	// `nmap -oG` example output:
+	// Host: {IP} {HOST_NAME}	Status: Up
+	// Host: {IP} {HOST_NAME}	Ports: 26257/open/tcp//cockroach///
+	// We care about the port scan result and whether it is filtered or open.
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(fromNode), fmt.Sprintf("nmap -p %s {ip%s} -oG - | awk '/Ports:/{print $5}'", port, toNode))
+	if err != nil {
+		return false, err
+	}
+	return strings.Contains(res.Stdout, "filtered"), nil
 }

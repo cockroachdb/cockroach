@@ -399,6 +399,7 @@ func newRaftConfig(
 	logger raftlogger.Logger,
 	storeLiveness raftstoreliveness.StoreLiveness,
 	metrics *raft.Metrics,
+	testingKnobs *raft.TestingKnobs,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,
@@ -415,12 +416,12 @@ func newRaftConfig(
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
 		Storage:                     strg,
 		Logger:                      logger,
-		TestingDisablePreCampaignStoreLivenessCheck: storeCfg.TestingDisablePreCampaignStoreLivenessCheck,
-		StoreLiveness: storeLiveness,
-		PreVote:       true,
-		CheckQuorum:   storeCfg.RaftEnableCheckQuorum,
-		CRDBVersion:   storeCfg.Settings.Version,
-		Metrics:       metrics,
+		StoreLiveness:               storeLiveness,
+		PreVote:                     true,
+		CheckQuorum:                 storeCfg.RaftEnableCheckQuorum,
+		CRDBVersion:                 storeCfg.Settings.Version,
+		Metrics:                     metrics,
+		TestingKnobs:                testingKnobs,
 	}
 }
 
@@ -3704,6 +3705,7 @@ func (s *Store) computeMetricsLocked(ctx context.Context) (m storage.Metrics, er
 func (s *Store) ComputeMetricsPeriodically(
 	ctx context.Context, prevMetrics *storage.MetricsForInterval, tick int,
 ) (m storage.Metrics, err error) {
+	ctx = s.AnnotateCtx(ctx)
 	m, err = s.computeMetrics(ctx)
 	if err != nil {
 		return m, err
@@ -3778,9 +3780,7 @@ func (s *Store) ComputeMetricsPeriodically(
 	// non-periodic callers of this method don't trigger expensive
 	// stats.
 	if tick%logSSTInfoTicks == 1 /* every 10m */ {
-		// NB: The initial blank line ensures that compaction stats display
-		// will not contain the log prefix.
-		log.Storage.Infof(ctx, "\n%s", m.Metrics)
+		log.Storage.Infof(ctx, "Pebble metrics:\n%s", m.Metrics)
 	}
 	// Periodically emit a store stats structured event to the TELEMETRY channel,
 	// if reporting is enabled. These events are intended to be emitted at low

@@ -61,7 +61,7 @@ func (b *logicalPropsBuilder) init(ctx context.Context, evalCtx *eval.Context, m
 		evalCtx: evalCtx,
 		mem:     mem,
 	}
-	b.sb.init(ctx, evalCtx, mem.Metadata())
+	b.sb.init(ctx, evalCtx, mem)
 }
 
 func (b *logicalPropsBuilder) clear() {
@@ -71,7 +71,7 @@ func (b *logicalPropsBuilder) clear() {
 }
 
 func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relational) {
-	md := scan.Memo().Metadata()
+	md := b.mem.Metadata()
 	hardLimit := scan.HardLimit.RowCount()
 	pred := scan.PartialIndexPredicate(md)
 
@@ -1602,7 +1602,7 @@ func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relation
 func (b *logicalPropsBuilder) buildVectorSearchProps(
 	search *VectorSearchExpr, rel *props.Relational,
 ) {
-	md := search.Memo().Metadata()
+	md := b.mem.Metadata()
 	BuildSharedProps(search, &rel.Shared, b.evalCtx)
 
 	// Output Columns
@@ -1625,8 +1625,13 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	// from the constraint, minus any columns that are not projected by the
 	// VectorSearch operator.
 	rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, search.Table))
-	if search.PrefixConstraint != nil {
-		rel.FuncDeps.AddConstants(search.PrefixConstraint.ExtractConstCols(b.sb.ctx, b.evalCtx))
+	if idx := md.Table(search.Table).Index(search.Index); idx.PrefixColumnCount() > 0 {
+		// Prefix columns are restricted to constant values.
+		var constants opt.ColSet
+		for i := 0; i < idx.PrefixColumnCount(); i++ {
+			constants.Add(search.Table.ColumnID(idx.Column(i).Ordinal()))
+		}
+		rel.FuncDeps.AddConstants(constants)
 	}
 	rel.FuncDeps.ProjectCols(rel.OutputCols)
 
@@ -1640,8 +1645,6 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	rel.Cardinality = props.AnyCardinality
 	if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
-	} else if search.PrefixConstraint != nil {
-		b.updateCardinalityFromConstraint(search.PrefixConstraint, rel)
 	}
 
 	// Statistics
@@ -2338,7 +2341,7 @@ func distinctCountFromType(md *opt.Metadata, typ *types.T) (_ uint64, ok bool) {
 func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *props.Relational {
 	relational := &join.lookupProps
 	if relational.OutputCols.Empty() {
-		md := join.Memo().Metadata()
+		md := sb.mem.Metadata()
 		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
 
 		// Include the key columns in the output columns.
@@ -2372,7 +2375,7 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder) *props.Relational {
 	relational := &join.lookupProps
 	if relational.OutputCols.Empty() {
-		md := join.Memo().Metadata()
+		md := sb.mem.Metadata()
 		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
 		relational.NotNullCols = makeTableNotNullCols(md, join.Table).Copy()
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
@@ -2393,7 +2396,7 @@ func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder)
 // apply to the two sides of the join, as if it were a Scan operator.
 func ensureZigzagJoinInputProps(join *ZigzagJoinExpr, sb *statisticsBuilder) {
 	ensureInputPropsForIndex(
-		join.Memo().Metadata(),
+		sb.mem.Metadata(),
 		join.LeftTable,
 		join.LeftIndex,
 		join.Cols,
@@ -2402,7 +2405,7 @@ func ensureZigzagJoinInputProps(join *ZigzagJoinExpr, sb *statisticsBuilder) {
 	)
 	// For stats purposes, ensure left and right column sets are disjoint.
 	ensureInputPropsForIndex(
-		join.Memo().Metadata(),
+		sb.mem.Metadata(),
 		join.RightTable,
 		join.RightIndex,
 		join.Cols.Difference(join.leftProps.OutputCols),
@@ -2473,6 +2476,7 @@ func addOuterColsToFuncDep(outerCols opt.ColSet, fdset *props.FuncDepSet) {
 // statistics.
 type joinPropsHelper struct {
 	evalCtx  *eval.Context
+	mem      *Memo
 	join     RelExpr
 	joinType opt.Operator
 
@@ -2491,7 +2495,8 @@ type joinPropsHelper struct {
 func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
-	*h = joinPropsHelper{evalCtx: b.evalCtx, join: joinExpr}
+	*h = joinPropsHelper{evalCtx: b.evalCtx, mem: b.mem, join: joinExpr}
+	md := b.mem.Metadata()
 
 	switch join := joinExpr.(type) {
 	case *LookupJoinExpr:
@@ -2504,7 +2509,6 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
 		// Apply the lookup join equalities.
-		md := join.Memo().Metadata()
 		index := md.Table(join.Table).Index(join.Index)
 		for i, colID := range join.KeyCols {
 			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
@@ -2531,7 +2535,6 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
 		// Apply the prefix column equalities.
-		md := join.Memo().Metadata()
 		index := md.Table(join.Table).Index(join.Index)
 		for i, colID := range join.PrefixKeyCols {
 			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
@@ -2737,7 +2740,7 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 // addSelfJoinImpliedFDs adds any extra equality FDs that are implied by a self
 // join equality between key columns on a table.
 func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
-	md := h.join.Memo().Metadata()
+	md := h.mem.Metadata()
 	leftCols, rightCols := h.leftProps.OutputCols, h.rightProps.OutputCols
 	if !rel.FuncDeps.ComputeEquivClosure(leftCols).Intersects(rightCols) {
 		// There are no equalities between left and right columns.

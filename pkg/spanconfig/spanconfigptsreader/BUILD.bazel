@@ -11,10 +11,9 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
-        "//pkg/testutils",
         "//pkg/util/hlc",
+        "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

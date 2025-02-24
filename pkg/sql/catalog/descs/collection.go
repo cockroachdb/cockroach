@@ -9,6 +9,7 @@ package descs
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -1322,6 +1323,49 @@ func (tc *Collection) GetConstraintComment(
 	tableID descpb.ID, constraintID catid.ConstraintID,
 ) (comment string, ok bool) {
 	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(constraintID), catalogkeys.ConstraintCommentType))
+}
+
+// ErrDescCannotBeLeased indicates that the full Get method is needed to
+// lock this descriptor. This can happen if synthetic descriptor or uncommitted
+// descriptors are in play. Or if the leasing layer cannot satisfy the request.
+type ErrDescCannotBeLeased struct {
+	id descpb.ID
+}
+
+// Error implements error.
+func (e ErrDescCannotBeLeased) Error() string {
+	return fmt.Sprintf("descriptor %d cannot be leased", e.id)
+}
+
+// LockDescriptorWithLease locks a descriptor within the lease manager, where the
+// lease is tied to this collection. The underlying descriptor is never returned,
+// since this code path skips validation and hydration required for it to be
+// usable. Returns ErrDescCannotBeLeased if a full Get method is needed to fetch
+// this descriptor.
+func (tc *Collection) LockDescriptorWithLease(
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
+) (uint64, error) {
+	// If synthetic descriptors or uncommitted descriptors exist, always
+	// use full resolution logic.
+	if tc.synthetic.descs.Len() > 0 || tc.uncommitted.uncommitted.Len() > 0 {
+		return 0, ErrDescCannotBeLeased{id: id}
+	}
+	// Handle any virtual objects first, which the lease manager won't
+	// know about.
+	if _, vo := tc.virtual.getObjectByID(id); vo != nil {
+		return uint64(vo.Desc().GetVersion()), nil
+	}
+	// Otherwise, we should be able to lease the relevant object out.
+	desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id)
+	if err != nil {
+		return 0, err
+	}
+	// If we need to read from the store, then the descriptor was not leased
+	// out.
+	if shouldReadFromStore {
+		return 0, ErrDescCannotBeLeased{id: id}
+	}
+	return uint64(desc.GetVersion()), err
 }
 
 // MakeTestCollection makes a Collection that can be used for tests.

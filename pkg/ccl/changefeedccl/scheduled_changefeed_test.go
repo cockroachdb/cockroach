@@ -401,6 +401,7 @@ func TestCreateChangefeedScheduleInExplicitTxnRollback(t *testing.T) {
 	require.NoError(t, res.Err())
 
 	th.sqlDB.Exec(t, "BEGIN;")
+	th.sqlDB.Exec(t, "SET LOCAL autocommit_before_ddl = false;")
 	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR CHANGEFEED TABLE t1 INTO 'null://' WITH initial_scan = 'only' RECURRING '@daily';")
 	th.sqlDB.Exec(t, "ROLLBACK;")
 

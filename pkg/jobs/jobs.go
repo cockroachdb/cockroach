@@ -78,7 +78,7 @@ type Record struct {
 	DescriptorIDs descpb.IDs
 	Details       jobspb.Details
 	Progress      jobspb.ProgressDetails
-	RunningStatus RunningStatus
+	StatusMessage StatusMessage
 	// NonCancelable is used to denote when a job cannot be canceled. This field
 	// will not be respected in mixed version clusters where some nodes have
 	// a version < 20.1, so it can only be used in cases where all nodes having
@@ -147,7 +147,8 @@ func init() {
 
 }
 
-// State represents the state of a job in the system.jobs table.
+// State represents the state of a job in the system.jobs table (e.g. running,
+// paused).
 type State string
 
 // SafeValue implements redact.SafeValue.
@@ -155,14 +156,14 @@ func (s State) SafeValue() {}
 
 var _ redact.SafeValue = State("")
 
-// RunningStatus represents the more detailed status of a running job in
-// the system.jobs table.
-type RunningStatus string
+// StatusMessage represents the more detailed status of a running job in
+// the system.jobs table (e.g. "waiting for table scan").
+type StatusMessage string
 
 // SafeValue implements redact.SafeValue.
-func (s RunningStatus) SafeValue() {}
+func (s StatusMessage) SafeValue() {}
 
-var _ redact.SafeValue = RunningStatus("")
+var _ redact.SafeValue = StatusMessage("")
 
 const (
 	// StatePending is `for jobs that have been created but on which work has
@@ -270,15 +271,13 @@ func (u Updater) CheckState(ctx context.Context) error {
 	})
 }
 
-// RunningStatus updates the detailed status of a job currently in progress.
-// It sets the job's RunningStatus field to the value returned by runningStatusFn
-// and persists runningStatusFn's modifications to the job's details, if any.
-func (u Updater) RunningStatus(ctx context.Context, runningStatus RunningStatus) error {
+// UpdateStatusMessage updates the detailed status of a job currently in progress.
+func (u Updater) UpdateStatusMessage(ctx context.Context, status StatusMessage) error {
 	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
-		md.Progress.RunningStatus = string(runningStatus)
+		md.Progress.StatusMessage = string(status)
 		ju.UpdateProgress(md.Progress)
 		return nil
 	})

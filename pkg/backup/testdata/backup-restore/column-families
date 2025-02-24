@@ -31,9 +31,6 @@ set-cluster-setting setting=bulkio.backup.file_size value=1
 set-cluster-setting setting=kv.bulk_sst.target_size value=1
 ----
 
-set-cluster-setting setting=bulkio.backup.merge_file_buffer_size value=1MiB
-----
-
 exec-sql
 BACKUP cfs INTO 'nodelocal://1/foo';
 ----

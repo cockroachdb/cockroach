@@ -78,9 +78,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] retrieving SQL data for crdb_internal.node_tenant_capabilities_cache: last request failed: ERROR: operation node_tenant_capabilities_cache supported only by system tenant (SQLSTATE XXUUU)
 <dumping SQL tables>
 [node 1] requesting data for debug/cluster/test-tenant/nodes/1/details... received response... writing JSON output: debug/cluster/test-tenant/nodes/1/details.json... done
-[node 1] requesting data for debug/cluster/test-tenant/nodes/1/gossip... received response...
-[node 1] requesting data for debug/cluster/test-tenant/nodes/1/gossip: last request failed: rpc error: ...
-[node 1] requesting data for debug/cluster/test-tenant/nodes/1/gossip: creating error output: debug/cluster/test-tenant/nodes/1/gossip.json.err.txt... done
+[node 1] requesting data for debug/cluster/test-tenant/nodes/1/gossip... received response... writing JSON output: debug/cluster/test-tenant/nodes/1/gossip.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/cluster/test-tenant/nodes/1/stacks.txt... done
 [node 1] requesting stacks with labels... received response... writing binary output: debug/cluster/test-tenant/nodes/1/stacks_with_labels.txt... done
 [node 1] requesting heap profile... received response... writing binary output: debug/cluster/test-tenant/nodes/1/heap.pprof... done

@@ -7,6 +7,7 @@
 package memo
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -643,9 +644,27 @@ func (m *Memo) DisableCheckExpr() {
 	m.disableCheckExpr = true
 }
 
-// EvalContext returns the eval.Context of the current SQL request.
-func (m *Memo) EvalContext() *eval.Context {
-	return m.logPropsBuilder.evalCtx
+// String prints the current expression tree stored in the memo. It should only
+// be used for testing and debugging.
+func (m *Memo) String() string {
+	return m.FormatExpr(m.rootExpr)
+}
+
+// FormatExpr prints the given expression for testing and debugging.
+func (m *Memo) FormatExpr(expr opt.Expr) string {
+	if expr == nil {
+		return ""
+	}
+	f := MakeExprFmtCtxBuffer(
+		context.Background(),
+		&bytes.Buffer{},
+		ExprFmtHideQualifications,
+		false, /* redactableValues */
+		m,
+		nil, /* catalog */
+	)
+	f.FormatExpr(expr)
+	return f.Buffer.String()
 }
 
 // ValuesContainer lets ValuesExpr and LiteralValuesExpr share code.

@@ -100,7 +100,7 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 			span roachpb.Span) func() []hlc.Timestamp {
 			return func() (r []hlc.Timestamp) {
 				require.NoError(t,
-					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.Clock().Now()))
+					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, srv.Clock().Now()))
 				protections, _, err := ptsReader.GetProtectionTimestamps(ctx, span)
 				require.NoError(t, err)
 				return protections
@@ -217,7 +217,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 			span roachpb.Span) func() []hlc.Timestamp {
 			return func() (r []hlc.Timestamp) {
 				require.NoError(t,
-					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.Clock().Now()))
+					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, srv.Clock().Now()))
 				protections, _, err := ptsReader.GetProtectionTimestamps(ctx, span)
 				require.NoError(t, err)
 				return protections
@@ -548,7 +548,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 		t.Logf("updating PTS reader cache to %s", asOf)
 		require.NoError(
 			t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
+			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 		)
 		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
 	}

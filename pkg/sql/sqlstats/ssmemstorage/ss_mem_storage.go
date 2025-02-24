@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -68,14 +67,14 @@ type Container struct {
 	// uniqueServerCount is a server level counter of all the unique fingerprints
 	uniqueServerCount *SQLStatsAtomicCounters
 
+	// acc is the memory account that tracks memory allocations related to stmts
+	// and txns within this Container struct.
+	// Since currently we do not destroy the Container struct when we perform
+	// reset, we never close this account.
+	acc *mon.ConcurrentBoundAccount
+
 	mu struct {
 		syncutil.Mutex
-
-		// acc is the memory account that tracks memory allocations related to stmts
-		// and txns within this Container struct.
-		// Since currently we do not destroy the Container struct when we perform
-		// reset, we never close this account.
-		acc mon.BoundAccount
 
 		stmts map[stmtKey]*stmtStats
 		txns  map[appstatspb.TransactionFingerprintID]*txnStats
@@ -90,8 +89,7 @@ type Container struct {
 	txnCounts transactionCounts
 	mon       *mon.BytesMonitor
 
-	knobs     *sqlstats.TestingKnobs
-	anomalies *insights.AnomalyDetector
+	knobs *sqlstats.TestingKnobs
 }
 
 // New returns a new instance of Container.
@@ -101,19 +99,17 @@ func New(
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
-	anomalies *insights.AnomalyDetector,
 ) *Container {
 	s := &Container{
 		st:                st,
 		appName:           appName,
 		mon:               mon,
 		knobs:             knobs,
-		anomalies:         anomalies,
 		uniqueServerCount: uniqueServerCount,
 	}
 
 	if mon != nil {
-		s.mu.acc = mon.MakeBoundAccount()
+		s.acc = mon.MakeConcurrentBoundAccount()
 	}
 
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
@@ -205,7 +201,6 @@ func NewTempContainerFromExistingStmtStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /*anomalies */
 	)
 
 	for i := range statistics {
@@ -278,7 +273,6 @@ func NewTempContainerFromExistingTxnStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /* anomalies */
 	)
 
 	for i := range statistics {
@@ -310,7 +304,6 @@ func (s *Container) NewApplicationStatsWithInheritedOptions() *Container {
 		s.mon,
 		s.appName,
 		s.knobs,
-		s.anomalies,
 	)
 }
 
@@ -406,27 +399,6 @@ func (s *stmtStats) recordExecStatsLocked(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.MVCCIteratorStats.RangeKeyCount.Record(count, float64(stats.MvccRangeKeyCount))
 	s.mu.data.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.Record(count, float64(stats.MvccRangeKeyContainedPoints))
 	s.mu.data.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Record(count, float64(stats.MvccRangeKeySkippedPoints))
-}
-
-func (s *stmtStats) mergeStatsLocked(statistics *appstatspb.CollectedStatementStatistics) {
-	// This handles all the statistics fields.
-	s.mu.data.Add(&statistics.Stats)
-
-	// Setting all metadata fields.
-	if s.mu.data.SensitiveInfo.LastErr == "" {
-		s.mu.data.SensitiveInfo.LastErr = statistics.Stats.SensitiveInfo.LastErr
-	}
-
-	if s.mu.data.SensitiveInfo.MostRecentPlanTimestamp.Before(statistics.Stats.SensitiveInfo.MostRecentPlanTimestamp) {
-		s.mu.data.SensitiveInfo.MostRecentPlanDescription = statistics.Stats.SensitiveInfo.MostRecentPlanDescription
-		s.mu.data.SensitiveInfo.MostRecentPlanTimestamp = statistics.Stats.SensitiveInfo.MostRecentPlanTimestamp
-	}
-
-	s.mu.vectorized = statistics.Key.Vec
-	s.mu.distSQLUsed = statistics.Key.DistSQL
-	s.mu.fullScan = statistics.Key.FullScan
-	s.mu.database = statistics.Key.Database
-	s.mu.querySummary = statistics.Key.QuerySummary
 }
 
 // getStatsForStmtWithKey returns an instance of stmtStats.
@@ -628,9 +600,10 @@ func (s *Container) clearLocked(ctx context.Context) {
 // presumed to be no longer in use and its actual allocated memory will
 // eventually be GC'd.
 func (s *Container) Free(ctx context.Context) {
+	s.acc.Clear(ctx)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	s.freeLocked(ctx)
 }
 
@@ -638,52 +611,6 @@ func (s *Container) freeLocked(ctx context.Context) {
 	if s.uniqueServerCount != nil {
 		s.uniqueServerCount.freeByCnt(int64(len(s.mu.stmts)), int64(len(s.mu.txns)))
 	}
-
-	s.mu.acc.Clear(ctx)
-}
-
-func (s *Container) MergeApplicationStatementStats(
-	ctx context.Context,
-	other *Container,
-	transactionFingerprintID appstatspb.TransactionFingerprintID,
-) (discardedStats uint64) {
-	if err := other.IterateStatementStats(
-		ctx,
-		sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			statistics.Key.TransactionFingerprintID = transactionFingerprintID
-			key := stmtKey{
-				sampledPlanKey: sampledPlanKey{
-					stmtNoConstants: statistics.Key.Query,
-					implicitTxn:     statistics.Key.ImplicitTxn,
-					database:        statistics.Key.Database,
-				},
-				planHash:                 statistics.Key.PlanHash,
-				transactionFingerprintID: statistics.Key.TransactionFingerprintID,
-			}
-
-			stmtStats, _, throttled := s.tryCreateStatsForStmtWithKey(key, statistics.ID)
-			if throttled {
-				discardedStats++
-				return nil
-			}
-
-			stmtStats.mu.Lock()
-			defer stmtStats.mu.Unlock()
-
-			stmtStats.mergeStatsLocked(statistics)
-
-			return nil
-		},
-	); err != nil {
-		// Calling Iterate.*Stats() function with a visitor function that does not
-		// return error should not cause any error.
-		panic(
-			errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error returned when iterating through application stats"),
-		)
-	}
-
-	return discardedStats
 }
 
 // Add combines one Container into another. Add manages locks on a, so taking
@@ -735,7 +662,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 				if latestErr := func() error {
 					s.mu.Lock()
 					defer s.mu.Unlock()
-					growErr := s.mu.acc.Grow(ctx, estimatedAllocBytes)
+					growErr := s.acc.Grow(ctx, estimatedAllocBytes)
 					if growErr != nil {
 						delete(s.mu.stmts, k)
 					}
@@ -803,10 +730,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 				// We still want to continue this loop to merge stats that are already
 				// present in our map that do not require allocation.
 				if latestErr := func() error {
-					s.mu.Lock()
-					defer s.mu.Unlock()
-
-					growErr := s.mu.acc.Grow(ctx, estimatedAllocBytes)
+					growErr := s.acc.Grow(ctx, estimatedAllocBytes)
 					if growErr != nil {
 						delete(s.mu.txns, k)
 					}

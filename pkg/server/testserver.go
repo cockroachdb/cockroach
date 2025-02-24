@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1266,6 +1265,30 @@ func (t *testTenant) DeploymentMode() serverutils.DeploymentMode {
 	return t.deploymentMode
 }
 
+// GrantTenantCapabilities is part of the serverutils.TenantControlInterface.
+func (ts *testServer) GrantTenantCapabilities(
+	ctx context.Context, tenID roachpb.TenantID, targetCaps map[tenantcapabilities.ID]string,
+) error {
+	conn, err := ts.SQLConnE()
+	if err != nil {
+		return err
+	}
+
+	var parts []string
+	for k, v := range targetCaps {
+		parts = append(parts, k.String()+"="+v)
+	}
+	capabilities := strings.Join(parts, ",")
+
+	if _, err = conn.Exec(fmt.Sprintf(`ALTER TENANT [$1] GRANT CAPABILITY %s`, capabilities),
+		tenID.ToUint64(),
+	); err != nil {
+		return err
+	}
+
+	return ts.WaitForTenantCapabilities(ctx, tenID, targetCaps, "")
+}
+
 // WaitForTenantCapabilities is part of the serverutils.TenantControlInterface.
 func (ts *testServer) WaitForTenantCapabilities(
 	ctx context.Context,
@@ -1293,7 +1316,7 @@ func (ts *testServer) WaitForTenantCapabilities(
 	// the closed timestamp interval required to see new updates.
 	ts.tenantCapabilitiesWatcher.TestingRestart()
 
-	return testutils.SucceedsSoonError(func() error {
+	wrappedFn := func() error {
 		capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(tenID)
 		if !found {
 			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
@@ -1307,7 +1330,8 @@ func (ts *testServer) WaitForTenantCapabilities(
 		}
 
 		return nil
-	})
+	}
+	return retry.ForDuration(200*time.Second, wrappedFn)
 }
 
 // StartSharedProcessTenant is part of the serverutils.TenantControlInterface.

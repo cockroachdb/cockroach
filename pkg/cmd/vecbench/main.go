@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/memstore"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -175,30 +175,32 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 
 	// If index file has not been built, then do so now. Otherwise, load it from
 	// disk.
-	var inMemStore *vecstore.InMemoryStore
-	var index *vecindex.VectorIndex
+	var memStore *memstore.Store
+	var index *cspann.Index
 	_, err := os.Stat(indexFileName)
 	if err != nil {
 		if !oserror.IsNotExist(err) {
 			panic(err)
 		}
 
-		inMemStore, index = buildIndex(ctx, stopper, datasetName)
-		saveStore(inMemStore, indexFileName)
+		memStore, index = buildIndex(ctx, stopper, datasetName)
+		saveStore(memStore, indexFileName)
 	} else {
-		inMemStore = loadStore(indexFileName)
-		index = createIndex(ctx, stopper, inMemStore)
+		memStore = loadStore(indexFileName)
+		index = createIndex(ctx, stopper, memStore)
 	}
 
 	// Load test data.
 	data := loadDataset(searchFileName)
 	fmt.Println()
 
+	var idxCtx cspann.Context
 	doSearch := func(beamSize int) {
 		start := timeutil.Now()
 
 		txn := beginTransaction(ctx, index.Store())
 		defer commitTransaction(ctx, index.Store(), txn)
+		idxCtx.Init(txn)
 
 		// Search for test vectors.
 		var sumMAP, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions float64
@@ -207,23 +209,23 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 			// Calculate truth set for the vector.
 			queryVector := data.Test.At(i)
 
-			searchSet := vecstore.SearchSet{MaxResults: *flagMaxResults}
-			searchOptions := vecindex.SearchOptions{BaseBeamSize: beamSize}
+			searchSet := cspann.SearchSet{MaxResults: *flagMaxResults}
+			searchOptions := cspann.SearchOptions{BaseBeamSize: beamSize}
 
 			// Calculate prediction set for the vector.
-			err = index.Search(ctx, txn, queryVector, &searchSet, searchOptions)
+			err = index.Search(ctx, &idxCtx, queryVector, &searchSet, searchOptions)
 			if err != nil {
 				panic(err)
 			}
 			results := searchSet.PopResults()
 
-			prediction := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+			prediction := make([]cspann.KeyBytes, searchSet.MaxResults)
 			for res := 0; res < len(results); res++ {
-				prediction[res] = results[res].ChildKey.PrimaryKey
+				prediction[res] = results[res].ChildKey.KeyBytes
 			}
 
 			primaryKeys := make([]byte, searchSet.MaxResults*4)
-			truth := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+			truth := make([]cspann.KeyBytes, searchSet.MaxResults)
 			for neighbor := 0; neighbor < searchSet.MaxResults; neighbor++ {
 				primaryKey := primaryKeys[neighbor*4 : neighbor*4+4]
 				binary.BigEndian.PutUint32(primaryKey, uint32(data.Neighbors[i][neighbor]))
@@ -246,7 +248,7 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 	}
 
 	fmt.Printf(White+"%s\n"+Reset, datasetName)
-	trainVectors := inMemStore.GetAllVectors()
+	trainVectors := memStore.GetAllVectors()
 	fmt.Printf(
 		White+"%d train vectors, %d test vectors, %d dimensions, %d/%d min/max partitions, base beam size %d\n"+Reset,
 		len(trainVectors), data.Test.Count, data.Test.Dims,
@@ -378,7 +380,7 @@ func downloadDataset(ctx context.Context, datasetName string) dataset {
 // built index to the tmp directory.
 func buildIndex(
 	ctx context.Context, stopper *stop.Stopper, datasetName string,
-) (*vecstore.InMemoryStore, *vecindex.VectorIndex) {
+) (*memstore.Store, *cspann.Index) {
 	// Ensure dataset file has been downloaded.
 	data := downloadDataset(ctx, datasetName)
 	if *flagBuildCount != 0 {
@@ -391,7 +393,7 @@ func buildIndex(
 	}
 
 	// Create index.
-	store := vecstore.NewInMemoryStore(data.Train.Dims, seed)
+	store := memstore.New(data.Train.Dims, seed)
 	index := createIndex(ctx, stopper, store)
 
 	// Create unique primary key for each vector in a single large byte buffer.
@@ -405,16 +407,17 @@ func buildIndex(
 
 	// Insert block of vectors within the scope of a transaction.
 	var insertCount atomic.Uint64
-	insertBlock := func(start, end int) {
+	insertBlock := func(idxCtx *cspann.Context, start, end int) {
 		txn := beginTransaction(ctx, store)
 		defer commitTransaction(ctx, store, txn)
+		idxCtx.Init(txn)
 
 		for i := start; i < end; i++ {
 			key := primaryKeys[i*4 : i*4+4]
 			vec := data.Train.At(i)
 			store.InsertVector(key, vec)
 			startMono := crtime.NowMono()
-			if err := index.Insert(ctx, txn, vec, key); err != nil {
+			if err := index.Insert(ctx, idxCtx, vec, key); err != nil {
 				panic(err)
 			}
 			estimator.Add(startMono.Elapsed().Seconds())
@@ -441,10 +444,11 @@ func buildIndex(
 	for i := 0; i < data.Train.Count; i += countPerProc {
 		end := min(i+countPerProc, data.Train.Count)
 		go func(start, end int) {
+			var indexCtx cspann.Context
 			// Break vector group into individual transactions that each insert a
 			// block of vectors. Run any pending fixups after each block.
 			for j := start; j < end; j += blockSize {
-				insertBlock(j, min(j+blockSize, end))
+				insertBlock(&indexCtx, j, min(j+blockSize, end))
 			}
 		}(i, end)
 	}
@@ -493,17 +497,15 @@ func buildIndex(
 }
 
 // createIndex returns a vector index created using the given store.
-func createIndex(
-	ctx context.Context, stopper *stop.Stopper, store vecstore.Store,
-) *vecindex.VectorIndex {
-	inMemStore := store.(*vecstore.InMemoryStore)
-	quantizer := quantize.NewRaBitQuantizer(inMemStore.Dims(), seed)
-	options := vecindex.VectorIndexOptions{
+func createIndex(ctx context.Context, stopper *stop.Stopper, store cspann.Store) *cspann.Index {
+	memStore := store.(*memstore.Store)
+	quantizer := quantize.NewRaBitQuantizer(memStore.Dims(), seed)
+	options := cspann.IndexOptions{
 		MinPartitionSize: minPartitionSize,
 		MaxPartitionSize: maxPartitionSize,
 		BaseBeamSize:     *flagBeamSize,
 	}
-	index, err := vecindex.NewVectorIndex(ctx, store, quantizer, seed, &options, stopper)
+	index, err := cspann.NewIndex(ctx, store, quantizer, seed, &options, stopper)
 	if err != nil {
 		panic(err)
 	}
@@ -511,10 +513,10 @@ func createIndex(
 }
 
 // saveStore serializes the store as a protobuf and saves it to the given file.
-func saveStore(inMemStore *vecstore.InMemoryStore, fileName string) {
+func saveStore(memStore *memstore.Store, fileName string) {
 	startTime := timeutil.Now()
 
-	indexBytes, err := inMemStore.MarshalBinary()
+	indexBytes, err := memStore.MarshalBinary()
 	if err != nil {
 		panic(err)
 	}
@@ -535,21 +537,21 @@ func saveStore(inMemStore *vecstore.InMemoryStore, fileName string) {
 }
 
 // loadStore deserializes a previously saved protobuf of a vector store.
-func loadStore(fileName string) *vecstore.InMemoryStore {
+func loadStore(fileName string) *memstore.Store {
 	startTime := timeutil.Now()
 
 	data, err := os.ReadFile(fileName)
 	if err != nil {
 		panic(err)
 	}
-	inMemStore, err := vecstore.LoadInMemoryStore(data)
+	memStore, err := memstore.Load(data)
 	if err != nil {
 		panic(err)
 	}
 
 	elapsed := timeutil.Since(startTime)
 	fmt.Printf(Cyan+"Loaded %s index from disk in %v\n"+Reset, fileName, roundDuration(elapsed))
-	return inMemStore
+	return memStore
 }
 
 // loadDataset deserializes a dataset saved as a gob file.
@@ -574,16 +576,16 @@ func loadDataset(fileName string) dataset {
 	return data
 }
 
-func beginTransaction(ctx context.Context, store vecstore.Store) vecstore.Txn {
-	txn, err := store.Begin(ctx)
+func beginTransaction(ctx context.Context, store cspann.Store) cspann.Txn {
+	txn, err := store.BeginTransaction(ctx)
 	if err != nil {
 		panic(err)
 	}
 	return txn
 }
 
-func commitTransaction(ctx context.Context, store vecstore.Store, txn vecstore.Txn) {
-	if err := store.Commit(ctx, txn); err != nil {
+func commitTransaction(ctx context.Context, store cspann.Store, txn cspann.Txn) {
+	if err := store.CommitTransaction(ctx, txn); err != nil {
 		panic(err)
 	}
 }
@@ -592,7 +594,7 @@ func commitTransaction(ctx context.Context, store vecstore.Store, txn vecstore.T
 // results with the true set of results. Both sets are expected to be of equal
 // length. It returns the percentage overlap of the predicted set with the truth
 // set.
-func findMAP(prediction, truth []vecstore.PrimaryKey) float64 {
+func findMAP(prediction, truth []cspann.KeyBytes) float64 {
 	if len(prediction) != len(truth) {
 		panic(errors.AssertionFailedf("prediction and truth sets are not same length"))
 	}

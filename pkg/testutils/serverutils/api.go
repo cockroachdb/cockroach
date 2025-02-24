@@ -141,6 +141,10 @@ const (
 	ExternalProcess
 )
 
+func (d DeploymentMode) IsExternal() bool {
+	return d == ExternalProcess
+}
+
 // ApplicationLayerInterface defines accessors to the application
 // layer of a test server. Tests written against this interface are
 // effectively agnostic to whether they use a virtual cluster or not.
@@ -505,6 +509,16 @@ type TenantControlInterface interface {
 	// this is called can run into a "missing record" error even
 	// if the tenant record exists in KV.
 	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
+
+	// GrantTenantCapabilities grants a capability to a tenant and waits until the
+	// in-memory cache reflects the change.
+	//
+	// Note: There is no need to call WaitForTenantCapabilities separately.
+	GrantTenantCapabilities(
+		context.Context,
+		roachpb.TenantID,
+		map[tenantcapabilities.ID]string,
+	) error
 
 	// WaitForTenantCapabilities waits until the in-RAM cache of
 	// tenant capabilities has been populated for the given tenant ID

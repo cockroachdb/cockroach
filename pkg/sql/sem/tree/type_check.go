@@ -959,6 +959,7 @@ func (expr *ComparisonExpr) TypeCheck(
 ) (TypedExpr, error) {
 	var leftTyped, rightTyped TypedExpr
 	var cmpOp *CmpOp
+	var cmpOpSym treecmp.ComparisonOperatorSymbol
 	var alwaysNull bool
 	var err error
 	if expr.Operator.Symbol.HasSubOperator() {
@@ -970,11 +971,7 @@ func (expr *ComparisonExpr) TypeCheck(
 			expr.Left,
 			expr.Right,
 		)
-		if err == nil {
-			err = checkRefCursorComparison(
-				expr.SubOperator.Symbol, leftTyped.ResolvedType(), rightTyped.ResolvedType(),
-			)
-		}
+		cmpOpSym = expr.SubOperator.Symbol
 	} else {
 		leftTyped, rightTyped, cmpOp, alwaysNull, err = typeCheckComparisonOp(
 			ctx,
@@ -983,11 +980,11 @@ func (expr *ComparisonExpr) TypeCheck(
 			expr.Left,
 			expr.Right,
 		)
-		if err == nil {
-			err = checkRefCursorComparison(
-				expr.Operator.Symbol, leftTyped.ResolvedType(), rightTyped.ResolvedType(),
-			)
-		}
+		cmpOpSym = expr.Operator.Symbol
+	}
+	if err == nil {
+		err = runValidations(cmpOpSym, leftTyped.ResolvedType(), rightTyped.ResolvedType(),
+			[]types.Family{types.RefCursorFamily, types.JsonpathFamily})
 	}
 	if err != nil {
 		return nil, err
@@ -1645,7 +1642,7 @@ func (expr *NullIfExpr) TypeCheck(
 			leftType, op, rightType)
 		return nil, decorateTypeCheckError(err, "incompatible NULLIF expressions")
 	}
-	err = checkRefCursorComparison(treecmp.EQ, leftType, rightType)
+	err = checkComparison(treecmp.EQ, leftType, rightType, types.RefCursorFamily)
 	if err != nil {
 		return nil, err
 	}
@@ -1738,18 +1735,14 @@ func (expr *RangeCond) TypeCheck(
 ) (TypedExpr, error) {
 	leftFromTyped, fromTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, treecmp.MakeComparisonOperator(treecmp.GT), expr.Left, expr.From)
 	if err == nil {
-		err = checkRefCursorComparison(
-			treecmp.GT, leftFromTyped.ResolvedType(), fromTyped.ResolvedType(),
-		)
+		err = checkComparison(treecmp.GT, leftFromTyped.ResolvedType(), fromTyped.ResolvedType(), types.RefCursorFamily)
 	}
 	if err != nil {
 		return nil, err
 	}
 	leftToTyped, toTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, treecmp.MakeComparisonOperator(treecmp.LT), expr.Left, expr.To)
 	if err == nil {
-		err = checkRefCursorComparison(
-			treecmp.LT, leftToTyped.ResolvedType(), toTyped.ResolvedType(),
-		)
+		err = checkComparison(treecmp.LT, leftToTyped.ResolvedType(), toTyped.ResolvedType(), types.RefCursorFamily)
 	}
 	if err != nil {
 		return nil, err
@@ -2164,6 +2157,12 @@ func (d *DGeometry) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (Ty
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d *DJSON) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
+	return d, nil
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DJsonpath) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
 	return d, nil
 }
 
@@ -3768,17 +3767,19 @@ var CannotAcceptTriggerErr = pgerror.New(pgcode.FeatureNotSupported,
 	"cannot accept a value of type trigger",
 )
 
-// checkRefCursorComparison checks whether the given types are or contain the
-// REFCURSOR data type, which is invalid for comparison. We don't simply remove
+// checkComparison checks whether the given types are or contain the
+// given family, which is invalid for comparison. We don't simply remove
 // the relevant comparison overloads because we rely on their existence in
 // various locations throughout the codebase.
-func checkRefCursorComparison(op treecmp.ComparisonOperatorSymbol, left, right *types.T) error {
+func checkComparison(
+	op treecmp.ComparisonOperatorSymbol, left, right *types.T, family types.Family,
+) error {
 	if (op == treecmp.IsNotDistinctFrom || op == treecmp.IsDistinctFrom) &&
-		(left.Family() == types.RefCursorFamily && right.Family() == types.UnknownFamily) {
-		// Special case: "REFCURSOR IS [NOT] DISTINCT FROM NULL" is allowed.
+		(left.Family() == family && right.Family() == types.UnknownFamily) {
+		// Special case: "<family> IS [NOT] DISTINCT FROM NULL" is allowed.
 		return nil
 	}
-	if left.Family() == types.RefCursorFamily || right.Family() == types.RefCursorFamily {
+	if left.Family() == family || right.Family() == family {
 		return pgerror.Newf(pgcode.UndefinedFunction,
 			"unsupported comparison operator: %s %s %s", left, op, right,
 		)
@@ -3786,7 +3787,7 @@ func checkRefCursorComparison(op treecmp.ComparisonOperatorSymbol, left, right *
 	var checkRecursive func(*types.T) bool
 	checkRecursive = func(typ *types.T) bool {
 		switch typ.Family() {
-		case types.RefCursorFamily:
+		case family:
 			return true
 		case types.TupleFamily:
 			for _, t := range typ.TupleContents() {
@@ -3801,8 +3802,19 @@ func checkRefCursorComparison(op treecmp.ComparisonOperatorSymbol, left, right *
 	}
 	if checkRecursive(left) || checkRecursive(right) {
 		return pgerror.Newf(pgcode.UndefinedFunction,
-			"could not identify a comparison function for type refcursor",
+			"could not identify a comparison function for family %q", family.String(),
 		)
+	}
+	return nil
+}
+
+func runValidations(
+	op treecmp.ComparisonOperatorSymbol, left, right *types.T, families []types.Family,
+) error {
+	for _, family := range families {
+		if err := checkComparison(op, left, right, family); err != nil {
+			return err
+		}
 	}
 	return nil
 }

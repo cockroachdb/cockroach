@@ -336,6 +336,10 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.withBindings = nil
 
 	md.rlsMeta = from.rlsMeta
+	md.rlsMeta.PoliciesApplied = make(map[TableID]PolicyIDSet)
+	for id, policies := range from.rlsMeta.PoliciesApplied {
+		md.rlsMeta.PoliciesApplied[id] = policies.Copy()
+	}
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from
@@ -457,7 +461,7 @@ func (md *Metadata) CheckDependencies(
 		// code path below.
 		upToDate, err = md.leaseObjectsInMetaData(ctx, optCatalog)
 		if err == nil {
-			return upToDate, err
+			return upToDate, nil
 		}
 	}
 
@@ -1312,14 +1316,20 @@ func (md *Metadata) TestingPrivileges() map[cat.StableID]privilegeBitmap {
 
 // SetRLSEnabled will update the metadata to indicate we came across a table
 // that had row-level security enabled.
-func (md *Metadata) SetRLSEnabled(user username.SQLUsername, isAdmin bool) {
+func (md *Metadata) SetRLSEnabled(user username.SQLUsername, isAdmin bool, tableID TableID) {
 	md.rlsMeta.MaybeInit(user, isAdmin)
+	md.rlsMeta.AddTableUse(tableID)
 }
 
 // ClearRLSEnabled will clear out the initialized state for the rls meta. This
 // is used as a test helper.
 func (md *Metadata) ClearRLSEnabled() {
 	md.rlsMeta.Clear()
+}
+
+// GetRLSMeta returns the rls metadata struct
+func (md *Metadata) GetRLSMeta() *RowLevelSecurityMeta {
+	return &md.rlsMeta
 }
 
 // checkRLSDependencies will check the metadata for row-level security

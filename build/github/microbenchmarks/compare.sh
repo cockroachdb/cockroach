@@ -21,12 +21,8 @@ for sha in "${shas[@]}"; do
   gcloud storage cp -r "gs://${storage_bucket}/artifacts/${sha}/${BUILD_ID}/*" "${working_dir}/${sha}/artifacts/"
 done
 
-# Get the microbenchmark CI utility (HEAD version)
-gcloud storage cp "gs://${storage_bucket}/builds/${HEAD_SHA}/bin/microbench-ci" "$working_dir/microbench-ci"
-chmod +x "$working_dir/microbench-ci"
-
 # Compare the microbenchmarks
-"$working_dir/microbench-ci" compare \
+./build/github/microbenchmarks/util.sh compare \
   --working-dir="$working_dir" \
   --summary="$output_dir/summary.json" \
   --github-summary="$output_dir/summary.md" \

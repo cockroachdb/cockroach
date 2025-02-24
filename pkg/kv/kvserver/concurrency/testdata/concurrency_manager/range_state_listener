@@ -112,7 +112,7 @@ on-lease-updated leaseholder=false lease-seq=2
 ----
 [-] transfer lease: released
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -192,7 +192,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ ‹k›
 [7] sequence req2: lock wait-queue event: done waiting
-[7] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[7] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [7] sequence req2: acquiring latches
 [7] sequence req2: waiting to acquire read latch ‹k2›@10.000000000,1 for request Put [‹"k"›], Get [‹"k2"›], [txn: 00000002], held by write latch ‹k2›@10.000000000,1 for request ResolveIntent [‹"k"›], ResolveIntent [‹"k2"›]
 [7] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -306,7 +306,7 @@ on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
 ----
 [-] update lock: committing txn 00000002 @ ‹k›
 [13] sequence req3: lock wait-queue event: done waiting
-[13] sequence req3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[13] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [13] sequence req3: acquiring latches
 [13] sequence req3: waiting to acquire write latch ‹k›@10.000000000,1 for request Put [‹"k"›], [txn: 00000003], held by write latch ‹k›@10.000000000,1 for request ResolveIntent [‹"k"›]
 [13] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -419,7 +419,7 @@ on-split key=a
 [-] split range: complete
 [-] split range: range split returned 1 locks for re-acquistion
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -465,7 +465,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ ‹k›
 [4] sequence req2: lock wait-queue event: done waiting
-[4] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [4] sequence req2: acquiring latches
 [4] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1 for request Put [‹"k"›], [txn: 00000002], held by write latch ‹k›@10.000000000,1 for request ResolveIntent [‹"k"›]
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -636,7 +636,7 @@ on-split key=k2
 [-] split range: complete
 [-] split range: range split returned 1 locks for re-acquistion
 [4] sequence req4: lock wait-queue event: done waiting
-[4] sequence req4: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k3"› for 0.000s
+[4] sequence req4: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k3"› for 0.000s
 [4] sequence req4: acquiring latches
 [4] sequence req4: scanning lock table for conflicting locks
 [4] sequence req4: sequencing complete, returned guard
@@ -668,7 +668,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k1 status=committed
 ----
 [-] update lock: committing txn 00000001 @ ‹k1›
 [3] sequence req3: lock wait-queue event: done waiting
-[3] sequence req3: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k1"› for 0.000s
+[3] sequence req3: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k1"› for 0.000s
 [3] sequence req3: acquiring latches
 [3] sequence req3: waiting to acquire write latch ‹k1›@10.000000000,1 for request Put [‹"k1"›], [txn: 00000003], held by write latch ‹k1›@10.000000000,1 for request ResolveIntent [‹"k1"›]
 [3] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -784,7 +784,7 @@ on-merge
 ----
 [-] merge range: complete
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -871,7 +871,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ ‹k›
 [8] sequence req2: lock wait-queue event: done waiting
-[8] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[8] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [8] sequence req2: acquiring latches
 [8] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1 for request Put [‹"k"›], [txn: 00000002], held by write latch ‹k›@10.000000000,1 for request ResolveIntent [‹"k"›]
 [8] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -982,7 +982,7 @@ on-snapshot-applied
 ----
 [-] snapshot replica: applied
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -1028,7 +1028,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ ‹k›
 [4] sequence req2: lock wait-queue event: done waiting
-[4] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [4] sequence req2: acquiring latches
 [4] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1 for request Put [‹"k"›], [txn: 00000002], held by write latch ‹k›@10.000000000,1 for request ResolveIntent [‹"k"›]
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal

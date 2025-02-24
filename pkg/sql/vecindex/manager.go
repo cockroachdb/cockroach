@@ -13,7 +13,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,9 +37,9 @@ type Manager struct {
 	testingKnobs *VecIndexTestingKnobs
 }
 
-// NewManager returns a new vector index manager which maintains per-node
-// VectorIndex instances. We store a context for creating new VectorIndex
-// objects, since those outlive the context of Get calls..
+// NewManager returns a new vector index manager which maintains per-node vector
+// index instances. We store a context for creating new vector index objects,
+// since those outlive the context of Get calls..
 func NewManager(
 	ctx context.Context, stopper *stop.Stopper, codec keys.SQLCodec, db descs.DB,
 ) *Manager {
@@ -60,9 +61,9 @@ type indexKey struct {
 }
 
 type indexEntry struct {
-	idx *VectorIndex
+	idx *cspann.Index
 	// If mustWait is true, we are in the process of fetching the config and
-	// starting the VectorIndex. Other callers can wait on the waitCond until this
+	// starting the index. Other callers can wait on the waitCond until this
 	// is false.
 	mustWait bool
 	waitCond sync.Cond
@@ -74,11 +75,12 @@ func (m *Manager) SetTestingKnobs(knobs *VecIndexTestingKnobs) {
 	m.testingKnobs = knobs
 }
 
-// Get returns the VectorIndex for the given table and index. If the index does
-// not currently have an active VectorIndex, one is created and cached.
+// Get returns the vector index for the given DB table and index. If the DB
+// index does not currently have an active vector index, one is created and
+// cached.
 func (m *Manager) Get(
 	ctx context.Context, tableID catid.DescID, indexID catid.IndexID,
-) (*VectorIndex, error) {
+) (*cspann.Index, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	idxKey := indexKey{tableID, indexID}
@@ -105,7 +107,7 @@ func (m *Manager) Get(
 	e = &indexEntry{mustWait: true, waitCond: sync.Cond{L: &m.mu}}
 	m.mu.indexes[idxKey] = e
 
-	idx, err := func() (*VectorIndex, error) {
+	idx, err := func() (*cspann.Index, error) {
 		// Unlock while we build the index structure so that concurrent requests can be
 		// serviced. We've already set mustWait to true, so other requests will wait
 		// until we're done setting up the index.
@@ -120,14 +122,15 @@ func (m *Manager) Get(
 		}
 		// TODO(drewk): use the config to populate the index options as well.
 		quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed)
-		store, err := vecstore.NewPersistentStore(ctx, m.db, quantizer, m.codec, tableID, indexID)
+		store, err := vecstore.New(ctx, m.db, quantizer, m.codec, tableID, indexID)
 		if err != nil {
 			return nil, err
 		}
-		// Use the stored context so that the VectorIndex can outlive the context of the
-		// Get call. The fixup process gets a child context from the context passed to
-		// NewVectorIndex, and we don't want that to be the context of the Get call.
-		return NewVectorIndex(m.ctx, store, quantizer, config.Seed, &VectorIndexOptions{}, m.stopper)
+		// Use the stored context so that the vector index can outlive the context
+		// of the Get call. The fixup process gets a child context from the context
+		// passed to cspann.NewIndex, and we don't want that to be the context of
+		// the Get call.
+		return cspann.NewIndex(m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
 	}()
 	e.mustWait = false
 	e.idx, e.err = idx, err

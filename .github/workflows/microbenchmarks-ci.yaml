@@ -6,8 +6,12 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
 env:
-  HEAD: ${{ github.event.pull_request.head.sha || github.ref }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
   BUCKET: "cockroach-microbench-ci"
   PACKAGE: "pkg/sql/tests"
 jobs:
@@ -18,10 +22,8 @@ jobs:
     outputs:
       merge_base: ${{ steps.build.outputs.merge_base }}
     steps:
-      - name: Checkout Head
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ env.HEAD }}
       - name: Build
         id: build
         uses: ./.github/actions/microbenchmark-build
@@ -32,13 +34,9 @@ jobs:
     name: build head
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
-    outputs:
-      merge_base: ${{ steps.build.outputs.merge_base }}
     steps:
-      - name: Checkout Head
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ env.HEAD }}
       - name: Build
         id: build
         uses: ./.github/actions/microbenchmark-build
@@ -50,10 +48,8 @@ jobs:
     timeout-minutes: 30
     needs: [base, head]
     steps:
-      - name: Checkout Head
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ env.HEAD }}
       - name: Run
         uses: ./.github/actions/microbenchmark-run
         with:
@@ -65,10 +61,8 @@ jobs:
     timeout-minutes: 30
     needs: [base, head]
     steps:
-      - name: Checkout Head
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ env.HEAD }}
       - name: Run
         uses: ./.github/actions/microbenchmark-run
         with:
@@ -80,10 +74,10 @@ jobs:
     timeout-minutes: 30
     needs: [base, run-group-1, run-group-2]
     steps:
-      - name: Checkout Head
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ env.HEAD }}
+      - run: ./build/github/get-engflow-keys.sh
+        shell: bash
       - name: Unique Build ID
         run: echo "BUILD_ID=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_ENV
       - name: Compare and Post
@@ -91,6 +85,10 @@ jobs:
         env:
           BASE_SHA: ${{ needs.base.outputs.merge_base }}
           HEAD_SHA: ${{ env.HEAD }}
+      - name: Clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        shell: bash
+        if: always()
   post:
     runs-on: [ self-hosted, basic_runner_group ]
     if: contains(github.event.pull_request.labels.*.name, 'T-microbench-post') # TODO: remove this check once results are confirmed to be stable on CI.
@@ -101,10 +99,8 @@ jobs:
         issues: write
     needs: [ base, compare ]
     steps:
-      - name: Checkout Base
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
       - run: ./build/github/get-engflow-keys.sh
         shell: bash
       - name: Unique Build ID

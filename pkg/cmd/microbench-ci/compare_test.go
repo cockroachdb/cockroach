@@ -9,11 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
+	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,13 +34,31 @@ func emulateBenchExec(
 	t *testing.T, tempDir string, logLines map[logIdentity][]string,
 ) func(cmd *exec.Cmd) ([]byte, error) {
 	return func(cmd *exec.Cmd) ([]byte, error) {
-		var name string
+		var name, outputDir string
+		profiles := make([]string, 0)
 		for idx, arg := range cmd.Args {
-			if strings.Contains(arg, "-test.bench") {
+			if arg == "-test.bench" {
 				name = cmd.Args[idx+1]
-				break
+			}
+			if arg == "-test.outputdir" {
+				outputDir = cmd.Args[idx+1]
+			}
+			if strings.HasSuffix(arg, "profile") {
+				profiles = append(profiles, cmd.Args[idx+1])
 			}
 		}
+
+		// Create stub profile files.
+		for _, profileName := range profiles {
+			profilePath := path.Join(outputDir, profileName)
+			p := &profile.Profile{}
+			f, err := os.Create(profilePath)
+			require.NoError(t, err)
+			require.NoError(t, p.Write(f))
+			require.NoError(t, f.Close())
+		}
+
+		// Determine the log identity based on the path of the benchmark binary.
 		li := logIdentity{
 			path: strings.TrimPrefix(cmd.Args[0], tempDir),
 			name: name,
@@ -62,6 +82,7 @@ func TestRunAndCompare(t *testing.T) {
 		config = &Config{
 			WorkingDir:          tempDir,
 			BenchmarkConfigPath: path.Join(tempDir, "suite.yml"),
+			SummaryPath:         path.Join(tempDir, "summary.json"),
 			GitHubSummaryPath:   path.Join(tempDir, "github-summary.md"),
 		}
 		logLines := make(map[logIdentity][]string)
@@ -88,9 +109,23 @@ func TestRunAndCompare(t *testing.T) {
 				require.NoError(t, err)
 				err = results.writeGitHubSummary(config.GitHubSummaryPath)
 				require.NoError(t, err)
+				err = results.writeJSONSummary(config.SummaryPath)
+				require.NoError(t, err)
 				data, err := os.ReadFile(config.GitHubSummaryPath)
 				require.NoError(t, err)
 				return string(data)
+			case "json":
+				data, err := os.ReadFile(config.SummaryPath)
+				require.NoError(t, err)
+				return string(data)
+			case "tree":
+				sb := strings.Builder{}
+				err := filepath.Walk(tempDir, func(path string, info os.FileInfo, err error) error {
+					sb.WriteString(strings.TrimPrefix(path, tempDir) + "\n")
+					return nil
+				})
+				require.NoError(t, err)
+				return sb.String()
 			}
 			return ""
 		})

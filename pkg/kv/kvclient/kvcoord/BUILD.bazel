@@ -135,6 +135,7 @@ go_test(
         "helpers_test.go",
         "integration_test.go",
         "main_test.go",
+        "partial_partition_test.go",
         "priority_refresh_test.go",
         "range_iter_test.go",
         "replayed_commit_test.go",

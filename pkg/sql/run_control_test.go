@@ -409,7 +409,7 @@ func TestCancelWithSubquery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, conn, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -1113,7 +1113,9 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 						actualNotices[0])
 				} else {
 					txn := conn.Begin(t)
-					_, err := txn.Exec("ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
+					_, err := txn.Exec("SET LOCAL autocommit_before_ddl=off")
+					require.NoError(t, err)
+					_, err = txn.Exec("ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
 					require.NoError(t, err)
 					err = txn.Commit()
 					require.NoError(t, err)

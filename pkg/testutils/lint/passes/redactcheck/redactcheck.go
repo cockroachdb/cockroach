@@ -74,7 +74,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"timing": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/jobs": {
-						"RunningStatus": {},
+						"StatusMessage": {},
 						"State":         {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/jobs/jobspb": {
@@ -258,6 +258,12 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ClockTimestamp":  {},
 						"LegacyTimestamp": {},
 						"Timestamp":       {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/util/uuid": {
+						"Bytes":     {},
+						"Short":     {},
+						"UUID":      {},
+						"Timestamp": {},
 					},
 					"github.com/cockroachdb/pebble": {
 						"FormatMajorVersion": {},

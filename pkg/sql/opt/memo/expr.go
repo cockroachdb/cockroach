@@ -48,9 +48,6 @@ import (
 type RelExpr interface {
 	opt.Expr
 
-	// Memo is the memo which contains this relational expression.
-	Memo() *Memo
-
 	// Relational is the set of logical properties that describe the content and
 	// characteristics of this expression's behavior and results.
 	Relational() *props.Relational
@@ -597,19 +594,19 @@ func (jf JoinFlags) String() string {
 }
 
 func (ij *InnerJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(ij)
+	initJoinMultiplicity(mem, ij)
 }
 
 func (lj *LeftJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(lj)
+	initJoinMultiplicity(mem, lj)
 }
 
 func (fj *FullJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(fj)
+	initJoinMultiplicity(mem, fj)
 }
 
 func (sj *SemiJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(sj)
+	initJoinMultiplicity(mem, sj)
 }
 
 func (lj *LookupJoinExpr) initUnexportedFields(mem *Memo) {

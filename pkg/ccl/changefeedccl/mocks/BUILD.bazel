@@ -48,6 +48,7 @@ go_library(
     visibility = ["//visibility:public"],
     # keep
     deps = [
+        "//pkg/gossip",
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "@com_github_golang_mock//gomock",
