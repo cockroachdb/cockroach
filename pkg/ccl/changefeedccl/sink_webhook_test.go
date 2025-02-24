@@ -709,11 +709,8 @@ func TestWebhookSinkRetryDuration(t *testing.T) {
 	webhookOpts, err := opts.GetWebhookSinkOptions()
 	require.NoError(t, err)
 
-	_, retryCfg, err := (&deprecatedWebhookSink{}).getWebhookSinkConfig(webhookOpts.JSONConfig)
-	require.NoError(t, err)
-	require.Equal(t, retryCfg.MaxBackoff, 30*time.Second)
-
-	_, retryCfg, err = getSinkConfigFromJson(webhookOpts.JSONConfig, sinkJSONConfig{})
+	_, retryCfg, err := getSinkConfigFromJson(webhookOpts.JSONConfig,
+		sinkJSONConfig{})
 	require.NoError(t, err)
 	require.Equal(t, retryCfg.MaxBackoff, 30*time.Second)
 }
