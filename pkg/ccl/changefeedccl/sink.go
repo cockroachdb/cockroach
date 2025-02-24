@@ -183,18 +183,6 @@ func getAndDialSink(
 	return sink, nil
 }
 
-// PubsubV2Enabled determines whether or not the refactored Webhook sink
-// or the deprecated sink should be used.
-var PubsubV2Enabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.new_pubsub_sink_enabled",
-	"if enabled, this setting enables a new implementation of the pubsub sink"+
-		" that allows for a higher throughput",
-	// TODO: delete the original pubsub sink code
-	metamorphic.ConstantWithTestBool("changefeed.new_pubsub_sink.enabled", true),
-	settings.WithName("changefeed.new_pubsub_sink.enabled"),
-)
-
 // KafkaV2Enabled determines whether or not the refactored Kafka sink
 // or the deprecated sink should be used.
 var KafkaV2Enabled = settings.RegisterBoolSetting(
@@ -290,14 +278,10 @@ func getSink(
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 				testingKnobs = knobs
 			}
-			if PubsubV2Enabled.Get(&serverCfg.Settings.SV) {
-				return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg),
-					opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
-					newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-					metricsBuilder, serverCfg.Settings, testingKnobs)
-			} else {
-				return makeDeprecatedPubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered), metricsBuilder, testingKnobs)
-			}
+			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg),
+				opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
+				newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+				metricsBuilder, serverCfg.Settings, testingKnobs)
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				var testingKnobs *TestingKnobs

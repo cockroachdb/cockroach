@@ -8,6 +8,7 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
+	encjson "encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -43,6 +44,12 @@ const GcpScheme = "gcpubsub"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
 const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 const globalGCPEndpoint = "pubsub.googleapis.com:443"
+
+type jsonPayload struct {
+	Key   encjson.RawMessage `json:"key"`
+	Value encjson.RawMessage `json:"value"`
+	Topic string             `json:"topic"`
+}
 
 // isPubsubSink returns true if url contains scheme with valid pubsub sink
 func isPubsubSink(u *url.URL) bool {
