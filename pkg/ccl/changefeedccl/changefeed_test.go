@@ -4113,9 +4113,6 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	defer cleanup()
 	s := cluster.Server(1)
 
-	// Only pubsub v2 emits notices.
-	PubsubV2Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
-
 	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgBase, err := pq.NewConnector(pgURL.String())
@@ -9755,8 +9752,6 @@ func TestChangefeedPubsubResolvedMessages(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		ctx := context.Background()
-		PubsubV2Enabled.Override(ctx, &s.Server.ClusterSettings().SV, true)
 
 		db := sqlutils.MakeSQLRunner(s.DB)
 		db.Exec(t, "CREATE TABLE one (i int)")
@@ -9915,7 +9910,6 @@ func TestParallelIOMetrics(t *testing.T) {
 		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
 
 		db := sqlutils.MakeSQLRunner(s.DB)
-		db.Exec(t, `SET CLUSTER SETTING changefeed.new_pubsub_sink_enabled = true`)
 		db.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 1`)
 		db.Exec(t, `
 		  CREATE TABLE foo (a INT PRIMARY KEY);
@@ -9991,8 +9985,6 @@ func TestPubsubAttributes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		ctx := context.Background()
-		PubsubV2Enabled.Override(ctx, &s.Server.ClusterSettings().SV, true)
 		db := sqlutils.MakeSQLRunner(s.DB)
 
 		// asserts the next message has these attributes and is sent to each of the supplied topics.
