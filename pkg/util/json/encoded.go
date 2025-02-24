@@ -797,12 +797,12 @@ func (j *jsonEncoded) numInvertedIndexEntries() (int, error) {
 	return decoded.numInvertedIndexEntries()
 }
 
-func (j *jsonEncoded) allPaths() ([]JSON, error) {
+func (j *jsonEncoded) allPathsWithDepth(depth int) ([]JSON, error) {
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
 	}
-	return decoded.allPaths()
+	return decoded.allPathsWithDepth(depth)
 }
 
 // HasContainerLeaf implements the JSON interface.
