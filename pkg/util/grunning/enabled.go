@@ -9,12 +9,11 @@
 
 package grunning
 
-import _ "unsafe" // for go:linkname
+import "runtime"
 
-// grunningnanos returns the running time observed by the current goroutine by
-// linking to a private symbol in the (patched) runtime package.
-//
-//go:linkname grunningnanos runtime.grunningnanos
-func grunningnanos() int64
+// grunningnanos returns the running time observed by the current goroutine.
+func grunningnanos() int64 {
+	return runtime.Grunningnanos()
+}
 
 func supported() bool { return true }
