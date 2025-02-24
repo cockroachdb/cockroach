@@ -38,10 +38,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 	return &delayedNode{
 		name: s.String(),
 		constructor: func(ctx context.Context, p *planner) (_ planNode, _ error) {
-			if p.extendedEvalCtx.TxnImplicit {
-				if s.Hold {
-					return nil, unimplemented.NewWithIssue(77101, "DECLARE CURSOR WITH HOLD can only be used in transaction blocks")
-				}
+			if p.extendedEvalCtx.TxnImplicit && !s.Hold {
 				return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
 			}
 
@@ -100,6 +97,13 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				// Cursors with mutations are invalid.
 				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 					"DECLARE CURSOR must not contain data-modifying statements in WITH")
+			}
+			if s.Hold && pt.flags.IsSet(planFlagContainsLocking) {
+				return nil, errors.WithDetail(
+					pgerror.Newf(pgcode.FeatureNotSupported,
+						"DECLARE CURSOR WITH HOLD must not contain locking"),
+					"Holdable cursors must be READ ONLY.",
+				)
 			}
 
 			statement := formatWithPlaceholders(ctx, s.Select, p.EvalContext())
@@ -370,15 +374,11 @@ func (s *sqlCursor) Next(ctx context.Context) (bool, error) {
 // sqlCursors contains a set of active cursors for a session.
 type sqlCursors interface {
 	// closeAll closes cursors in the set according to the following rules:
-	//   * If the reason for closing is txn commit, non-HOLD cursors are closed.
-	//   * If the reason for closing is txn rollback, all cursors created by the
-	//     current transaction are closed.
-	//   * If the reason for closing is an explicit CLOSE ALL or the session
-	//     closing, all cursors are closed unconditionally.
-	//
-	// NOTE: a SQL cursor declared WITH HOLD will currently result in an
-	// "unimplemented" error if the reason for closing is txn commit, since
-	// WITH HOLD is not yet implemented for SQL cursors.
+	//   * An explicit CLOSE ALL or session end closes all cursors.
+	//   * The following rules apply only to cursors opened in the current txn:
+	//   * txnCommit: close non-holdable cursors, persist holdable cursors.
+	//   * txnRollback: close all cursors.
+	//   * txnPrepare: close all cursors, return an error for holdable cursors.
 	closeAll(reason cursorCloseReason) error
 	// closeCursor closes the named cursor, returning an error if that cursor
 	// didn't exist in the set.
@@ -439,27 +439,46 @@ type cursorCloseReason uint8
 const (
 	cursorCloseForTxnCommit cursorCloseReason = iota
 	cursorCloseForTxnRollback
+	cursorCloseForTxnPrepare
 	cursorCloseForExplicitClose
 )
 
-func (c *cursorMap) closeAll(reason cursorCloseReason) error {
+func (c *cursorMap) closeAll(p *planner, reason cursorCloseReason) error {
 	for n, curs := range c.cursors {
 		switch reason {
 		case cursorCloseForTxnCommit:
 			if curs.withHold {
-				if curs.persisted {
-					// Cursors declared using WITH HOLD are not closed at transaction
-					// commit, and become the responsibility of the session.
-					curs.committed = true
-					continue
+				// Cursors declared using WITH HOLD are not closed at transaction
+				// commit, and become the responsibility of the session.
+				curs.committed = true
+				if !curs.persisted {
+					// Execute the cursor's query to completion and persist the result so
+					// that it can survive the transaction's commit.
+					if err := persistCursor(p, curs); err != nil {
+						return err
+					}
 				}
-				return unimplemented.NewWithIssuef(77101, "cursor %s WITH HOLD must be closed before committing", n)
+				continue
 			}
 		case cursorCloseForTxnRollback:
 			if curs.committed {
 				// Transaction rollback should only remove cursors that were created in
 				// the current transaction.
 				continue
+			}
+		case cursorCloseForTxnPrepare:
+			if curs.withHold && !curs.committed {
+				// Disallow preparing a transaction that has created a cursor WITH HOLD.
+				// It's fine for previous transactions to have created holdable cursors.
+				// NOTE: Postgres also disallows this.
+				//
+				// Make sure to close all cursors before returning the error.
+				err := c.closeAll(p, cursorCloseForTxnRollback)
+				return errors.CombineErrors(
+					pgerror.New(pgcode.FeatureNotSupported,
+						"cannot PREPARE a transaction that has created a cursor WITH HOLD"),
+					err,
+				)
 			}
 		}
 		if err := curs.Close(); err != nil {
@@ -522,7 +541,7 @@ type connExCursorAccessor struct {
 }
 
 func (c connExCursorAccessor) closeAll(reason cursorCloseReason) error {
-	return c.ex.extraTxnState.sqlCursors.closeAll(reason)
+	return c.ex.extraTxnState.sqlCursors.closeAll(&c.ex.planner, reason)
 }
 
 func (c connExCursorAccessor) closeCursor(s tree.Name) error {
@@ -558,6 +577,47 @@ func (p *planner) checkNoConflictingCursors(stmt tree.Statement) error {
 		return unimplemented.NewWithIssue(74608, "cannot run schema change "+
 			"in a transaction with open DECLARE cursors")
 	}
+	return nil
+}
+
+// persistCursor runs the given cursor to completion and stores the result in a
+// row container that can outlive the cursor's transaction.
+func persistCursor(p *planner, cursor *sqlCursor) error {
+	// Use context.Background() because the cursor can outlive the context in
+	// which it was created.
+	helper := persistedCursorHelper{
+		ctx:          context.Background(),
+		resultCols:   cursor.Types(),
+		rowsAffected: cursor.RowsAffected(),
+	}
+	mon := p.sessionMonitor
+	if mon == nil {
+		return errors.AssertionFailedf("cannot persist cursor without an active session")
+	}
+	helper.container.InitWithParentMon(
+		helper.ctx,
+		getTypesFromResultColumns(helper.resultCols),
+		mon,
+		p.ExtendedEvalContextCopy(),
+		"persisted_cursor", /* opName */
+	)
+	for {
+		ok, err := cursor.Next(helper.ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+		if err = helper.container.AddRow(helper.ctx, cursor.Cur()); err != nil {
+			return err
+		}
+	}
+	helper.iter = newRowContainerIterator(helper.ctx, helper.container)
+	if err := cursor.Rows.Close(); err != nil {
+		return err
+	}
+	cursor.Rows = &helper
 	return nil
 }
 
