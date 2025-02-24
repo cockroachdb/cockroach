@@ -726,6 +726,18 @@ func (mr *MockClusterMockRecorder) Reformat(arg0, arg1, arg2, arg3 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reformat", reflect.TypeOf((*MockCluster)(nil).Reformat), arg0, arg1, arg2, arg3)
 }
 
+// RegisterClusterHook mocks base method.
+func (m *MockCluster) RegisterClusterHook(arg0 string, arg1 option.ClusterHookType, arg2 func(context.Context) error) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterClusterHook", arg0, arg1, arg2)
+}
+
+// RegisterClusterHook indicates an expected call of RegisterClusterHook.
+func (mr *MockClusterMockRecorder) RegisterClusterHook(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterClusterHook", reflect.TypeOf((*MockCluster)(nil).RegisterClusterHook), arg0, arg1, arg2)
+}
+
 // Run mocks base method.
 func (m *MockCluster) Run(arg0 context.Context, arg1 install.RunOptions, arg2 ...string) {
 	m.ctrl.T.Helper()
