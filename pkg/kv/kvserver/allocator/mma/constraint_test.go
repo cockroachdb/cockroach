@@ -352,7 +352,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "store":
-				desc := parseStoreDescriptor(t, d)
+				desc := parseStoreDescriptor(t, d.Input)
 				cm.setStore(desc)
 				stores[desc.StoreID] = desc
 				return ""

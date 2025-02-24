@@ -60,8 +60,6 @@ type storeLeaseholderMsg struct {
 // iteration.
 type rangeMsg struct {
 	roachpb.RangeID
-	start     roachpb.Key
-	end       roachpb.Key
 	replicas  []storeIDAndReplicaState
 	conf      roachpb.SpanConfig
 	rangeLoad rangeLoad
@@ -81,8 +79,6 @@ var _ = storeLoadMsg{}.secondaryLoad
 var _ = storeLeaseholderMsg{}.StoreID
 var _ = storeLeaseholderMsg{}.ranges
 var _ = rangeMsg{}.RangeID
-var _ = rangeMsg{}.start
-var _ = rangeMsg{}.end
 var _ = rangeMsg{}.replicas
 var _ = rangeMsg{}.conf
 var _ = rangeMsg{}.rangeLoad
