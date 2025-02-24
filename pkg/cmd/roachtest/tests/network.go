@@ -442,17 +442,19 @@ func registerNetwork(r registry.Registry) {
 }
 
 // iptablesPacketsDropped returns the number of packets dropped to a given node due to an iptables rule.
+// TODO(darrylwong): this is mostly just a validation check to make sure we set up the rules correctly.
+// We should remove this in favor for the failure injection library which has it's own validation.
 func iptablesPacketsDropped(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, node option.NodeListOption,
 ) (int, error) {
-	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), "sudo iptables -L -v -n")
+	// Filter for only rules on the SQL port as roachprod adds firewall rules for node_exporter.
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), fmt.Sprintf("sudo iptables -L -x -v -n | grep {pgport%s}", node))
 	if err != nil {
 		return 0, err
 	}
 	rows := strings.Split(res.Stdout, "\n")
-	// iptables -L outputs rows in the order of: chain, fields, and then values.
-	// We care about the values so only look at row 2.
-	values := strings.Fields(rows[2])
+	// There will be an input and output rule, either works.
+	values := strings.Fields(rows[0])
 	if len(values) == 0 {
 		return 0, errors.Errorf("no configured iptables rules found:\n%s", res.Stdout)
 	}
