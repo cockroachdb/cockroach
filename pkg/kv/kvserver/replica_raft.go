@@ -1159,6 +1159,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if err := r.applySnapshot(ctx, inSnap, snap, app.HardState(), subsumedRepls); err != nil {
 				return stats, errors.Wrap(err, "while applying snapshot")
 			}
+
+			r.raftMu.logStorage.TermCache.ResetWithFirst(snap.Metadata.Index, snap.Metadata.Term)
+
 			for _, msg := range app.Responses {
 				// The caller would like to see the MsgAppResp that usually results from
 				// applying the snapshot synchronously, so fish it out.

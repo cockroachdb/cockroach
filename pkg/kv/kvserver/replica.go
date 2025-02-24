@@ -85,7 +85,7 @@ const (
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
 
-	TermCacheSize = 6
+	TermCacheSize = 10
 )
 
 // StrictGCEnforcement controls whether requests are rejected based on the GC
@@ -497,10 +497,6 @@ type Replica struct {
 		// log was checked for truncation or at the time of the last Raft log
 		// truncation.
 		raftLogLastCheckSize int64
-
-		// should be in shMu, because it is accessed in raft operation
-		// and mutated in replica operations
-		termCache *raft.TermCache
 	}
 
 	mu struct {
