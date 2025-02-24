@@ -239,6 +239,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeUpdateTableMetadataCache, nil
 	case *Payload_StandbyReadTsPollerDetails:
 		return TypeStandbyReadTSPoller, nil
+  case *Payload_UaMigrationDetails:
+    return TypeUaMigration, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -292,6 +294,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeLogicalReplication:           LogicalReplicationDetails{},
 	TypeUpdateTableMetadataCache:     UpdateTableMetadataCacheDetails{},
 	TypeStandbyReadTSPoller:          StandbyReadTSPollerDetails{},
+  TypeUaMigration: UaMigrationDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -578,6 +581,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_UpdateTableMetadataCacheDetails{UpdateTableMetadataCacheDetails: &d}
 	case StandbyReadTSPollerDetails:
 		return &Payload_StandbyReadTsPollerDetails{StandbyReadTsPollerDetails: &d}
+  case UaMigrationDetails:
+    return &Payload_UaMigrationDetails{UaMigrationDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -613,7 +618,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 31
+const NumJobTypes = 32
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

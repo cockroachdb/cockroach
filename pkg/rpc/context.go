@@ -494,7 +494,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	}
 
 	if opts.LogicalClusterID == nil {
-		if opts.TenantID.IsSystem() {
+		if opts.TenantID == roachpb.TenantOne { /* check more like this */
 			// We currently expose the storage cluster ID as logical
 			// cluster ID in the system tenant so that someone with
 			// access to the system tenant can extract the storage cluster ID
@@ -2006,14 +2006,14 @@ func (rpcCtx *Context) GRPCDialNode(
 	return rpcCtx.grpcDialNodeInternal(target, remoteNodeID, remoteLocality, class)
 }
 
-// GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
+// GRPCDialInstance wraps GRPCDialNode and treats the `remoteInstanceID`
 // argument as a `NodeID` which it converts. This works because the
 // tenant gRPC server is initialized using the `InstanceID` so it
 // accepts our connection as matching the ID we're dialing.
 //
 // Since GRPCDialNode accepts a separate `target` and `NodeID` it
 // requires no further modification to work between pods.
-func (rpcCtx *Context) GRPCDialPod(
+func (rpcCtx *Context) GRPCDialInstance(
 	target string,
 	remoteInstanceID base.SQLInstanceID,
 	remoteLocality roachpb.Locality,

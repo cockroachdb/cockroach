@@ -7,6 +7,7 @@ package bootstrap
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
@@ -16,7 +17,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27,6 +38,8 @@ type InitialValuesOpts struct {
 	DefaultSystemZoneConfig *zonepb.ZoneConfig
 	OverrideKey             clusterversion.Key
 	Codec                   keys.SQLCodec
+	Txn                     *kv.Txn
+	IsqlTxn                 isql.Txn
 }
 
 // GenerateInitialValues generates the initial values with which to bootstrap a
@@ -37,6 +50,7 @@ func (opts InitialValuesOpts) GenerateInitialValues() ([]roachpb.KeyValue, []roa
 	if opts.OverrideKey != 0 {
 		versionKey = opts.OverrideKey
 	}
+	// TODO(shubham): deal with other `versionKey` later
 	f, ok := initialValuesFactoryByKey[versionKey]
 	if !ok {
 		return nil, nil, errors.Newf("unsupported version %q", versionKey)
@@ -86,7 +100,221 @@ func buildLatestInitialValues(
 ) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error) {
 	schema := MakeMetadataSchema(opts.Codec, opts.DefaultZoneConfig, opts.DefaultSystemZoneConfig)
 	kvs, splits = schema.GetInitialValues()
+
+	if !roachpb.EnableExperimentalUA && opts.Codec.TenantID == roachpb.TenantTwo {
+		copiedKVs, err := copySystemTableKVs(context.Background(), opts.Txn, opts.IsqlTxn, opts.Codec, schema.descsMap)
+		if err != nil {
+			return nil, nil, err
+		}
+		kvs = append(kvs, copiedKVs...)
+	}
+
 	return kvs, splits, nil
+}
+
+func copySystemTableKVs(
+	ctx context.Context,
+	kvTxn *kv.Txn,
+	isqlTxn isql.Txn,
+	targetCodec keys.SQLCodec,
+	descMap map[string]catalog.Descriptor,
+) ([]roachpb.KeyValue, error) {
+	ret := make([]roachpb.KeyValue, 0)
+	sourceCodec := keys.SystemSQLCodec
+
+	if kvs, err := systemTenantTableKVs(
+		ctx, kvTxn, isqlTxn, targetCodec, descMap); err != nil {
+		return nil, err
+	} else {
+		ret = append(ret, kvs...)
+	}
+
+	// Permanent upgrades also populates some of these tables so we have to
+	// ensure there isn't any conflict,
+	// * For `location` table we are good since we check for any existing rows,
+	// and skip if there is any.
+	// * Upgrade for `system.settings` also checks for conflict and do nothing.
+	tables := []catconstants.SystemTableName{
+		catconstants.TenantSettingsTableName,
+		// Latest value for `tenant_id_seq` can be read using `.Scan` because in
+		// `updateTenantIDSequence` we use `.Put` to update instead of
+		// `InternalExecutor`.
+		catconstants.TenantIDSequenceTableName,
+		catconstants.LocationsTableName,
+		catconstants.SettingsTableName,
+		catconstants.RangeEventTableName,
+		catconstants.ReportsMetaTableName,
+		catconstants.SpanConfigurationsTableName,
+	}
+
+	sourceDescMap, err := GetSystemTableDescsID(ctx, isqlTxn)
+	if err != nil {
+		return nil, err
+	}
+	batch := kvTxn.NewBatch()
+	for _, table := range tables {
+		descID, ok := sourceDescMap[string(table)]
+		if !ok {
+			log.Ops.Errorf(ctx, "descID not found for : %s", table)
+			return nil, errors.Errorf("descID not found for : %s", table)
+		}
+
+		span := sourceCodec.TableSpan(descID)
+		batch.Scan(span.Key, span.EndKey)
+	}
+
+	if err := kvTxn.Run(ctx, batch); err != nil {
+		return nil, err
+	}
+
+	if len(batch.Results) != len(tables) {
+		return nil, errors.AssertionFailedf(
+			"unexpected batch result count, expected: %d, found: %d",
+			len(tables),
+			len(batch.Results))
+	}
+
+	for i, result := range batch.Results {
+		if err := result.Err; err != nil {
+			return nil, err
+		}
+		rows := result.Rows
+		// Rewrite the keys
+		tablePrefix := targetCodec.TablePrefix(uint32(descMap[string(tables[i])].GetID()))
+		kvs := make([]roachpb.KeyValue, 0, len(rows))
+		for _, row := range rows {
+			strippedKey, err := keys.StripTablePrefix(row.Key)
+			if err != nil {
+				return nil, err
+			}
+			key := make([]byte, 0, len(tablePrefix)+len(strippedKey))
+			key = append(key, tablePrefix...)
+			key = append(key, strippedKey...)
+			kv := roachpb.KeyValue{
+				Key:   key,
+				Value: *row.Value,
+			}
+
+			kv.Value.ClearChecksum()
+			kvs = append(kvs, kv)
+		}
+		ret = append(ret, kvs...)
+	}
+
+	return ret, nil
+}
+
+func systemTenantTableKVs(
+	ctx context.Context,
+	_ *kv.Txn,
+	isqlTxn isql.Txn,
+	targetCodec keys.SQLCodec,
+	descMap map[string]catalog.Descriptor,
+) ([]roachpb.KeyValue, error) {
+	ret := make([]roachpb.KeyValue, 0)
+
+	tenants, err := GetTenantRecords(ctx, isqlTxn)
+	const expectedTenantsCount = 2
+	if err != nil {
+		return nil, err
+	} else if len(tenants) < expectedTenantsCount {
+		return nil, errors.Errorf(
+			"unexpected tenants count: expected %d, found %d",
+			expectedTenantsCount, len(tenants))
+	}
+
+	tenantOne := tenants[0]
+	if tenantOne.ID != roachpb.TenantOne.ToUint64() {
+		return nil, errors.Errorf(
+			"expected first tenant with id %d", roachpb.TenantOne.ToUint64())
+	}
+	tenantTwo := tenants[1]
+	if tenantTwo.ID != roachpb.TenantTwo.ToUint64() {
+		return nil, errors.Errorf(
+			"expected second tenant with id %d", roachpb.TenantTwo.ToUint64())
+	}
+
+	tenantOne.Name = tenantTwo.Name
+	tenantTwo.Name = catconstants.SystemTenantName
+	tenantTwo.ServiceMode = mtinfopb.ServiceModeShared
+
+	desc := descMap[string(catconstants.TenantsTableName)]
+	tenantsTableWriter := MakeKVWriter(targetCodec, desc.(catalog.TableDescriptor))
+	for _, tenantInfo := range tenants {
+		info := tenantInfo.ProtoInfo
+		infoBytes, err := protoutil.Marshal(&info)
+		if err != nil {
+			panic(err)
+		}
+		kvs, err := tenantsTableWriter.RecordToKeyValues(
+			// ID
+			tree.NewDInt(tree.DInt(tenantInfo.ID)),
+			// active -- deprecated.
+			tree.MakeDBool(true),
+			// info.
+			// TODO(shubham): Deal with some extra data later
+			tree.NewDBytes(tree.DBytes(infoBytes)),
+			// name.
+			tree.NewDString(string(tenantInfo.Name)),
+			// data_state.
+			tree.NewDInt(tree.DInt(tenantInfo.DataState)),
+			// service_mode.
+			tree.NewDInt(tree.DInt(tenantInfo.ServiceMode)),
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		ret = append(ret, kvs...)
+	}
+
+	return ret, nil
+}
+
+// TODO(shubham): We don't need to fetch information for all the tables.
+func GetSystemTableDescsID(ctx context.Context, txn isql.Txn) (map[string]uint32, error) {
+	q := `SELECT table_id, name FROM crdb_internal.tables WHERE database_name = 'system'`
+	rows, err := txn.QueryBufferedEx(ctx, "get-tables-descriptor-ids",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride, q)
+	if err != nil {
+		return nil, err
+	}
+
+	tablesDescInfo := make(map[string]uint32, len(rows))
+	for _, row := range rows {
+		id := uint32(tree.MustBeDInt(row[0]))
+		name := string(tree.MustBeDString(row[1]))
+		tablesDescInfo[name] = id
+	}
+
+	return tablesDescInfo, nil
+}
+
+// GetTenantRecords
+//
+// TODO(shubham): use sql.GetTenantRecordByID instead. It's copied as it is to
+// avoid some dependency headache for the time being. GetTenantRecordByID
+// retrieves a tenant in system.tenants.
+func GetTenantRecords(ctx context.Context, txn isql.Txn) ([]*mtinfopb.TenantInfo, error) {
+	q := `SELECT id, info, name, data_state, service_mode FROM system.tenants ORDER BY id`
+	var arg interface{} = mtinfopb.DataStateDrop
+
+	rows, err := txn.QueryBufferedEx(ctx, "get-tenants-info",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride, q, arg)
+	if err != nil {
+		return nil, err
+	}
+
+	tenants := make([]*mtinfopb.TenantInfo, 0, len(rows))
+	for _, row := range rows {
+		_, info, err := mtinfo.GetTenantInfoFromSQLRow(row)
+		if err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, info)
+	}
+
+	return tenants, nil
 }
 
 // hardCodedInitialValues defines an initialValuesFactoryFn using

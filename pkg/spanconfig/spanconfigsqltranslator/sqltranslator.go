@@ -355,8 +355,8 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		// no data under /Table/{0-2}.
 		// We have named ranges(liveness, meta) before the first table in the
 		// system tenant keyspace, so we use the first table ID.
-		startKey := keys.TableDataMin
-		if !s.codec.ForSystemTenant() {
+		startKey := keys.PrefixlessTableDataMin
+		if s.codec.TenantID != roachpb.TenantOne {
 			// We start the span at the tenant prefix. This effectively installs
 			// the tenant's split boundary at /Tenant/<id> instead of
 			// /Tenant/<id>/Table/3. This doesn't really make a difference given

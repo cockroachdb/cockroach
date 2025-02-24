@@ -136,7 +136,7 @@ func (p *planner) createTenantInternal(
 		return tid, nil
 	}
 
-	return BootstrapTenant(ctx, p.execCfg, p.Txn(), info, initialTenantZoneConfig)
+	return BootstrapTenant(ctx, p.execCfg, p.Txn(), p.InternalSQLTxn(), info, initialTenantZoneConfig)
 }
 
 // BootstrapTenant bootstraps the span of the newly created tenant identified in
@@ -145,6 +145,7 @@ func BootstrapTenant(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
+	isqlTxn isql.Txn,
 	info mtinfopb.TenantInfoWithUsage,
 	zfcg *zonepb.ZoneConfig,
 ) (roachpb.TenantID, error) {
@@ -186,13 +187,15 @@ func BootstrapTenant(
 		DefaultSystemZoneConfig: zfcg,
 		OverrideKey:             bootstrapVersionOverride,
 		Codec:                   codec,
+		IsqlTxn:                 isqlTxn,
+		Txn:                     txn,
 	}
 	kvs, splits, err := initialValuesOpts.GenerateInitialValues()
 	if err != nil {
 		return tid, err
 	}
 
-	{
+	if tid != roachpb.TenantTwo {
 		// Populate the version setting for the tenant. This will allow the tenant
 		// to know what migrations need to be run in the future. The choice to use
 		// the active cluster version here is intentional; it allows tenants

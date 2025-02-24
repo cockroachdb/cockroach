@@ -820,6 +820,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	scKVAccessor := spanconfigkvaccessor.New(
 		db, internalExecutor, cfg.Settings, clock,
 		systemschema.SpanConfigurationsTableName.FQString(),
+		keys.MakeSQLCodec(cfg.SQLConfig.TenantID),
 		spanConfigKnobs,
 	)
 	spanConfig.kvAccessor, spanConfig.kvAccessorForTenantRecords = scKVAccessor, scKVAccessor

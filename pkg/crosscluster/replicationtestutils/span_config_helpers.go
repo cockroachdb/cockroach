@@ -90,7 +90,8 @@ USE d;`)
 		h.SysServer.ClusterSettings(),
 		h.SysServer.Clock(),
 		dummyFQN.String(),
-		nil, /* knobs */
+		keys.SystemSQLCodec, /* TODO(shubham): Incorrect most likely */
+		nil,                 /* knobs */
 	)
 
 	sourceTenantID := roachpb.MustMakeTenantID(uint64(10))

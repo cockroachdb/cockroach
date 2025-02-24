@@ -801,7 +801,6 @@ go_test(
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
-        "//pkg/rpc",
         "//pkg/scheduledjobs",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

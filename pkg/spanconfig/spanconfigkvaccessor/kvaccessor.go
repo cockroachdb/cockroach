@@ -12,11 +12,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -54,6 +57,8 @@ type KVAccessor struct {
 	// but left configurable for ease-of-testing.
 	configurationsTableFQN string
 
+	codec keys.SQLCodec
+
 	knobs *spanconfig.TestingKnobs
 }
 
@@ -66,13 +71,14 @@ func New(
 	settings *cluster.Settings,
 	clock *hlc.Clock,
 	configurationsTableFQN string,
+	codec keys.SQLCodec,
 	knobs *spanconfig.TestingKnobs,
 ) *KVAccessor {
 	if _, err := parser.ParseQualifiedTableName(configurationsTableFQN); err != nil {
 		panic(fmt.Sprintf("unabled to parse configurations table FQN: %s", configurationsTableFQN))
 	}
 
-	return newKVAccessor(db, ie, settings, clock, configurationsTableFQN, knobs, nil /* optionalTxn */)
+	return newKVAccessor(db, ie, settings, clock, configurationsTableFQN, codec, knobs, nil /* optionalTxn */)
 }
 
 // WithTxn is part of the KVAccessor interface.
@@ -80,7 +86,7 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	if k.optionalTxn != nil {
 		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithTxn(...) chained multiple times?)")
 	}
-	return newKVAccessor(k.db, k.ie, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn)
+	return newKVAccessor(k.db, k.ie, k.settings, k.clock, k.configurationsTableFQN, k.codec, k.knobs, txn)
 }
 
 // WithISQLTxn is part of the KVAccessor interface.
@@ -88,7 +94,7 @@ func (k *KVAccessor) WithISQLTxn(ctx context.Context, txn isql.Txn) spanconfig.K
 	if k.optionalTxn != nil {
 		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithISQLTxn(...) chained multiple times?)")
 	}
-	return newKVAccessor(txn.KV().DB(), txn, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn.KV())
+	return newKVAccessor(txn.KV().DB(), txn, k.settings, k.clock, k.configurationsTableFQN, k.codec, k.knobs, txn.KV())
 }
 
 // GetAllSystemSpanConfigsThatApply is part of the spanconfig.KVAccessor
@@ -190,6 +196,7 @@ func newKVAccessor(
 	settings *cluster.Settings,
 	clock *hlc.Clock,
 	configurationsTableFQN string,
+	codec keys.SQLCodec,
 	knobs *spanconfig.TestingKnobs,
 	optionalTxn *kv.Txn,
 ) *KVAccessor {
@@ -308,6 +315,14 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 		return err
 	}
 
+	// TODO(shubham): conditionally initialise
+	desc := systemschema.SpanConfigurationsTable
+	w := bootstrap.MakeKVWriter(
+		keys.MakeSQLCodec(roachpb.TenantTwo), desc)
+	// Changing this to true _may_ cause issue with tenant two as codec stuff
+	// isn't passed down yet.
+	someCondition := false
+
 	if len(toDelete) > 0 {
 		if err := k.paginate(len(toDelete), func(startIdx, endIdx int) error {
 			toDeleteBatch := toDelete[startIdx:endIdx]
@@ -321,6 +336,21 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			}
 			if n != len(toDeleteBatch) {
 				return errors.AssertionFailedf("expected to delete %d row(s), deleted %d", len(toDeleteBatch), n)
+			}
+			if someCondition {
+				batch := txn.NewBatch()
+				for _, target := range toDeleteBatch {
+					encodedSpan := target.Encode()
+					if err := w.Delete(ctx, batch, false, /* kvTrace */
+						tree.NewDBytes(tree.DBytes(encodedSpan.Key)),
+						tree.NewDBytes(tree.DBytes(encodedSpan.EndKey)),
+						tree.NewDBytes(tree.DBytes(""))); err != nil {
+						return err
+					}
+				}
+				if err := txn.Run(ctx, batch); err != nil {
+					return err
+				}
 			}
 			return nil
 		}); err != nil {
@@ -345,6 +375,26 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			return err
 		} else if n != len(toUpsertBatch) {
 			return errors.AssertionFailedf("expected to upsert %d row(s), upserted %d", len(toUpsertBatch), n)
+		}
+		if someCondition {
+			batch := txn.NewBatch()
+			for _, record := range toUpsertBatch {
+				cfg := record.GetConfig()
+				marshaled, err := protoutil.Marshal(&cfg)
+				if err != nil {
+					return err
+				}
+				encodedSpan := record.GetTarget().Encode()
+				if err := w.Insert(ctx, batch, false, /* kvTrace */
+					tree.NewDBytes(tree.DBytes(encodedSpan.Key)),
+					tree.NewDBytes(tree.DBytes(encodedSpan.EndKey)),
+					tree.NewDBytes(tree.DBytes(marshaled))); err != nil {
+					return err
+				}
+			}
+			if err := txn.Run(ctx, batch); err != nil {
+				return err
+			}
 		}
 
 		validationStmt, validationQueryArgs := k.constructValidationStmtAndArgs(toUpsertBatch)
