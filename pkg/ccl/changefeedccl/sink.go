@@ -183,18 +183,6 @@ func getAndDialSink(
 	return sink, nil
 }
 
-// WebhookV2Enabled determines whether or not the refactored Webhook sink
-// or the deprecated sink should be used.
-var WebhookV2Enabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.new_webhook_sink_enabled",
-	"if enabled, this setting enables a new implementation of the webhook sink"+
-		" that allows for a much higher throughput",
-	// TODO: delete the original webhook sink code
-	metamorphic.ConstantWithTestBool("changefeed.new_webhook_sink.enabled", true),
-	settings.WithName("changefeed.new_webhook_sink.enabled"),
-)
-
 // PubsubV2Enabled determines whether or not the refactored Webhook sink
 // or the deprecated sink should be used.
 var PubsubV2Enabled = settings.RegisterBoolSetting(
@@ -292,18 +280,11 @@ func getSink(
 			if err != nil {
 				return nil, err
 			}
-			if WebhookV2Enabled.Get(&serverCfg.Settings.SV) {
-				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-					return makeWebhookSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, webhookOpts,
-						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-						metricsBuilder, serverCfg.Settings)
-				})
-			} else {
-				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-					return makeDeprecatedWebhookSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, webhookOpts,
-						defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
-				})
-			}
+			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+				return makeWebhookSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, webhookOpts,
+					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+					metricsBuilder, serverCfg.Settings)
+			})
 		case isPubsubSink(u):
 			var testingKnobs *TestingKnobs
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
