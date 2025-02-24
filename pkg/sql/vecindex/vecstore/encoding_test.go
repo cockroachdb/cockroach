@@ -16,7 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -44,7 +45,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 }
 
 func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set) {
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	for _, quantizer := range []quantize.Quantizer{
 		quantize.NewUnQuantizer(set.Dims),
 		quantize.NewRaBitQuantizer(set.Dims, rnd.Int63()),
@@ -90,10 +91,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 					}
 
 					// Add some trailing data that should not be processed.
-					trailingData := randutil.RandBytes(rnd, rnd.Intn(32))
-					if trailingData == nil {
-						trailingData = []byte{}
-					}
+					trailingData := testutils.NormalizeSlice(randutil.RandBytes(rnd, rnd.Intn(32)))
 					buf = append(buf, trailingData...)
 
 					// Decode the encoded partition.
@@ -112,7 +110,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 							require.NoError(t, err)
 						}
 						// Verify remaining bytes match trailing data
-						require.Equal(t, trailingData, remainder)
+						require.Equal(t, trailingData, testutils.NormalizeSlice(remainder))
 					case *quantize.RaBitQuantizedVectorSet:
 						decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedCentroid)
 						for range set.Count {
@@ -122,7 +120,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 							require.NoError(t, err)
 						}
 						// Verify remaining bytes match trailing data
-						require.Equal(t, trailingData, remainder)
+						require.Equal(t, trailingData, testutils.NormalizeSlice(remainder))
 					}
 
 					decodedPartition := cspann.NewPartition(

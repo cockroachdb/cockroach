@@ -7,7 +7,7 @@ package cspann
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
@@ -28,7 +28,7 @@ type splitData struct {
 // Init initializes the split information by creating a new partition from the
 // given subset of vectors from the splitting partition.
 func (s *splitData) Init(
-	w *veclib.Workspace,
+	w *workspace.T,
 	quantizer quantize.Quantizer,
 	vectors vector.Set,
 	oldCentroidDistances []float32,

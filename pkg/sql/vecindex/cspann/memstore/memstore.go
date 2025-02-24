@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -142,7 +142,7 @@ func New(dims int, seed int64) *Store {
 	st.mu.nextKey = cspann.RootKey + 1
 
 	// Create empty root partition.
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	var empty vector.Set
 	quantizer := quantize.NewUnQuantizer(dims)
 	quantizedSet := quantizer.Quantize(&workspace, empty)
@@ -166,21 +166,21 @@ func (s *Store) Dims() int {
 	return s.dims
 }
 
-// Begin implements the Store interface.
-func (s *Store) Begin(ctx context.Context, w *veclib.Workspace) (cspann.Txn, error) {
+// BeginTransactionBegin implements the Store interface.
+func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Create new transaction with unique id set to the current logical clock
 	// tick and insert the transaction into the pending list.
 	current := s.tickLocked()
-	txn := memTxn{workspace: w, id: current, current: current, store: s}
+	txn := memTxn{id: current, current: current, store: s}
 	elem := s.mu.pending.PushBack(pendingItem{activeTxn: txn})
 	return &elem.Value.activeTxn, nil
 }
 
-// Commit implements the Store interface.
-func (s *Store) Commit(ctx context.Context, txn cspann.Txn) error {
+// CommitTransaction implements the Store interface.
+func (s *Store) CommitTransaction(ctx context.Context, txn cspann.Txn) error {
 	// Release any exclusive partition locks held by the transaction.
 	tx := txn.(*memTxn)
 	for i := range tx.ownedLocks {
@@ -239,15 +239,15 @@ func (s *Store) Commit(ctx context.Context, txn cspann.Txn) error {
 	return nil
 }
 
-// Abort implements the Store interface.
-func (s *Store) Abort(ctx context.Context, txn cspann.Txn) error {
+// AbortTransaction implements the Store interface.
+func (s *Store) AbortTransaction(ctx context.Context, txn cspann.Txn) error {
 	tx := txn.(*memTxn)
 	if tx.updated {
 		// Abort is only trivially supported by the in-memory store.
 		panic(errors.AssertionFailedf(
 			"in-memory transaction cannot be aborted because state has already been updated"))
 	}
-	return s.Commit(ctx, txn)
+	return s.CommitTransaction(ctx, txn)
 }
 
 // MergeStats implements the Store interface.

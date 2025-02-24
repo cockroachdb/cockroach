@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package veclib
+package workspace
 
 import (
 	"testing"
@@ -12,7 +12,7 @@ import (
 )
 
 func TestWorkspace(t *testing.T) {
-	var workspace Workspace
+	var workspace T
 
 	// Test alloc/free vectors.
 	vectors := workspace.AllocVectorSet(3, 2)

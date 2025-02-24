@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -33,7 +33,7 @@ import (
 func TestPersistentStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var workspace veclib.Workspace
+	var workspace workspace.T
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	internalDB := srv.ApplicationLayer().InternalDB().(descs.DB)
@@ -95,7 +95,7 @@ func TestPersistentStore(t *testing.T) {
 
 	// TODO(mw5h): Figure out where to create the empty root partition.
 	t.Run("create empty root partition", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		emptyRoot := cspann.NewPartition(
@@ -107,7 +107,7 @@ func TestPersistentStore(t *testing.T) {
 	commontest.StoreTests(ctx, t, store, quantizer, testPKs, testVectors)
 
 	t.Run("insert a root partition into the store and read it back", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		vectors := vector.T{4, 3}.AsSet()
@@ -144,7 +144,7 @@ func TestPersistentStore(t *testing.T) {
 	})
 
 	t.Run("insert a partition and then delete it", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		vectors := vector.T{4, 3}.AsSet()
@@ -164,7 +164,7 @@ func TestPersistentStore(t *testing.T) {
 	})
 
 	t.Run("add to root partition", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, &workspace, store)
+		txn := commontest.BeginTransaction(ctx, t, store)
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		emptySet := vector.MakeSet(2)
@@ -175,18 +175,22 @@ func TestPersistentStore(t *testing.T) {
 		require.NoError(t, err)
 
 		// Add to root partition.
-		metadata, err := txn.AddToPartition(ctx, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
+		metadata, err := txn.AddToPartition(
+			ctx, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
 		require.NoError(t, err)
 		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 1)
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{7, 4}, childKey20, valueBytes20)
+		metadata, err = txn.AddToPartition(
+			ctx, cspann.RootKey, vector.T{7, 4}, childKey20, valueBytes20)
 		require.NoError(t, err)
 		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 2)
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{4, 3}, childKey30, valueBytes30)
+		metadata, err = txn.AddToPartition(
+			ctx, cspann.RootKey, vector.T{4, 3}, childKey30, valueBytes30)
 		require.NoError(t, err)
 		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 3)
 
 		// Add duplicate and expect value to be overwritten
-		metadata, err = txn.AddToPartition(ctx, cspann.RootKey, vector.T{5, 5}, childKey30, valueBytes30)
+		metadata, err = txn.AddToPartition(
+			ctx, cspann.RootKey, vector.T{5, 5}, childKey30, valueBytes30)
 		require.NoError(t, err)
 		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 3)
 

@@ -10,7 +10,7 @@ import (
 	"math/bits"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/veclib"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -90,7 +90,7 @@ func (q *RaBitQuantizer) GetDims() int {
 }
 
 // Quantize implements the Quantizer interface.
-func (q *RaBitQuantizer) Quantize(w *veclib.Workspace, vectors vector.Set) QuantizedVectorSet {
+func (q *RaBitQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedVectorSet {
 	var centroid vector.T
 	if vectors.Count == 1 {
 		// If quantizing a single vector, it is the centroid of the set.
@@ -107,7 +107,7 @@ func (q *RaBitQuantizer) Quantize(w *veclib.Workspace, vectors vector.Set) Quant
 
 // QuantizeInSet implements the Quantizer interface.
 func (q *RaBitQuantizer) QuantizeInSet(
-	w *veclib.Workspace, quantizedSet QuantizedVectorSet, vectors vector.Set,
+	w *workspace.T, quantizedSet QuantizedVectorSet, vectors vector.Set,
 ) {
 	q.quantizeHelper(w, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 }
@@ -138,7 +138,7 @@ func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) 
 
 // EstimateSquaredDistances implements the Quantizer interface.
 func (q *RaBitQuantizer) EstimateSquaredDistances(
-	w *veclib.Workspace,
+	w *workspace.T,
 	quantizedSet QuantizedVectorSet,
 	queryVector vector.T,
 	squaredDistances []float32,
@@ -279,7 +279,7 @@ func (q *RaBitQuantizer) EstimateSquaredDistances(
 // quantizeHelper quantizes the given set of vectors and adds the quantization
 // information to the provided quantized vector set.
 func (q *RaBitQuantizer) quantizeHelper(
-	w *veclib.Workspace, qs *RaBitQuantizedVectorSet, vectors vector.Set,
+	w *workspace.T, qs *RaBitQuantizedVectorSet, vectors vector.Set,
 ) {
 	// Extend any existing slices in the vector set.
 	count := vectors.Count
@@ -426,11 +426,11 @@ func (q *RaBitQuantizer) quantizeHelper(
 	}
 }
 
-func allocCodes(w *veclib.Workspace, count, width int) RaBitQCodeSet {
+func allocCodes(w *workspace.T, count, width int) RaBitQCodeSet {
 	tempUints := w.AllocUint64s(count * width)
 	return MakeRaBitQCodeSetFromRawData(tempUints, width)
 }
 
-func freeCodes(w *veclib.Workspace, codeSet RaBitQCodeSet) {
+func freeCodes(w *workspace.T, codeSet RaBitQCodeSet) {
 	w.FreeUint64s(codeSet.Data)
 }
