@@ -338,12 +338,9 @@ func GetEncryptionFromBase(
 	user username.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	baseBackupURI string,
-	encryptionParams jobspb.BackupEncryptionOptions,
+	encryptionParams *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, error) {
-	if encryptionParams.Mode == jobspb.EncryptionMode_None {
-		return nil, nil
-	}
 	exportStore, err := makeCloudStorage(ctx, baseBackupURI, user)
 	if err != nil {
 		return nil, err
@@ -356,10 +353,10 @@ func GetEncryptionFromBase(
 func GetEncryptionFromBaseStore(
 	ctx context.Context,
 	baseStore cloud.ExternalStorage,
-	encryptionParams jobspb.BackupEncryptionOptions,
+	encryptionParams *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, error) {
-	if encryptionParams.Mode == jobspb.EncryptionMode_None {
+	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
 		return nil, nil
 	}
 	opts, err := ReadEncryptionOptions(ctx, baseStore)
