@@ -494,11 +494,11 @@ func DecodeIndexKeyToDatums(
 
 		var lastColID descpb.ColumnID = 0
 		for len(valueBytes) > 0 {
-			typeOffset, dataOffset, colIDDiff, typ, err := encoding.DecodeValueTag(valueBytes)
+			typeOffset, dataOffset, colIDDelta, typ, err := encoding.DecodeValueTag(valueBytes)
 			if err != nil {
 				return nil, err
 			}
-			colID := lastColID + descpb.ColumnID(colIDDiff)
+			colID := lastColID + descpb.ColumnID(colIDDelta)
 			lastColID = colID
 			colOrdinal, ok := colIDs.Get(colID)
 			if !ok {
@@ -1824,16 +1824,16 @@ func SkipColumnNotInPrimaryIndexValue(
 func DecodeValueBytes(
 	colIdxMap catalog.TableColMap, valueBytes []byte, neededValueCols int, row EncDatumRow,
 ) (colOrds intsets.Fast, err error) {
-	var colIDDiff uint32
+	var colIDDelta uint32
 	var lastColID descpb.ColumnID
 	var typeOffset, dataOffset int
 	var typ encoding.Type
 	for len(valueBytes) > 0 && colOrds.Len() < neededValueCols {
-		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
+		typeOffset, dataOffset, colIDDelta, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return intsets.Fast{}, err
 		}
-		colID := lastColID + descpb.ColumnID(colIDDiff)
+		colID := lastColID + descpb.ColumnID(colIDDelta)
 		lastColID = colID
 		idx, ok := colIdxMap.Get(colID)
 		if !ok {
