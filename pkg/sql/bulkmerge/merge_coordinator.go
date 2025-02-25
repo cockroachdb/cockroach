@@ -57,13 +57,22 @@ func parseCoordinatorInput(row rowenc.EncDatumRow) (mergeCoordinatorInput, error
 	if len(row) != 3 {
 		return mergeCoordinatorInput{}, errors.Newf("expected 3 columns, got %d", len(row))
 	}
+	if err := row[0].EnsureDecoded(types.Bytes, nil); err != nil {
+		return mergeCoordinatorInput{}, err
+	}
 	sqlInstanceID, ok := row[0].Datum.(*tree.DBytes)
 	if !ok {
 		return mergeCoordinatorInput{}, errors.Newf("expected bytes column for sqlInstanceID, got %s", row[0].Datum.String())
 	}
+	if err := row[1].EnsureDecoded(types.Int4, nil); err != nil {
+		return mergeCoordinatorInput{}, err
+	}
 	taskID, ok := row[1].Datum.(*tree.DInt)
 	if !ok {
 		return mergeCoordinatorInput{}, errors.Newf("expected int4 column for taskID, got %s", row[1].Datum.String())
+	}
+	if err := row[2].EnsureDecoded(types.Bytes, nil); err != nil {
+		return mergeCoordinatorInput{}, err
 	}
 	outputBytes, ok := row[2].Datum.(*tree.DBytes)
 	if !ok {

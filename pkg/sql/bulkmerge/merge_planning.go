@@ -39,7 +39,12 @@ func newBulkMergePlan(
 	// should use the gateway node by default.
 	coordinatorID := sqlInstanceIDs[0:1]
 
-	router, err := makeInstanceRouter(sqlInstanceIDs)
+	keys := make([][]byte, 0, len(sqlInstanceIDs))
+	for _, sqlInstanceID := range sqlInstanceIDs {
+		keys = append(keys, routingKeyForSQLInstance(sqlInstanceID))
+	}
+
+	router, err := makeKeyRouter(keys)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "unable to make instance router")
 	}
@@ -93,7 +98,7 @@ func newBulkMergePlan(
 	plan.AddSingleGroupStage(ctx, coordinatorID[0], execinfrapb.ProcessorCoreUnion{
 		MergeCoordinator: &execinfrapb.MergeCoordinatorSpec{
 			TaskCount:            int64(taskCount),
-			WorkerSqlInstanceIds: getRoutingKeys(router),
+			WorkerSqlInstanceIds: keys,
 		},
 	}, execinfrapb.PostProcessSpec{}, mergeCoordinatorOutputTypes)
 
@@ -104,21 +109,17 @@ func newBulkMergePlan(
 }
 
 // TODO(jeffswenson): dedupe this with the instance in pkg/backup
-func routingDatumsForSQLInstance(
-	sqlInstanceID base.SQLInstanceID,
-) (rowenc.EncDatum, rowenc.EncDatum) {
-	routingBytes := roachpb.Key(fmt.Sprintf("node%d", sqlInstanceID))
-	startDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
-	endDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
-	return startDatum, endDatum
+func routingKeyForSQLInstance(sqlInstanceID base.SQLInstanceID) roachpb.Key {
+	return roachpb.Key(fmt.Sprintf("node%d", sqlInstanceID))
 }
 
 // routingSpanForSQLInstance provides the mapping to be used during distsql planning
 // when setting up the output router.
 // TODO(jeffswenson): dedupe this with the instance in pkg/backup
-func routingSpanForSQLInstance(sqlInstanceID base.SQLInstanceID) ([]byte, []byte, error) {
+func routingSpanForSQLInstance(key []byte) ([]byte, []byte, error) {
 	var alloc tree.DatumAlloc
-	startDatum, endDatum := routingDatumsForSQLInstance(sqlInstanceID)
+	startDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(key)))
+	endDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(roachpb.Key(key).Next())))
 
 	startBytes, endBytes := make([]byte, 0), make([]byte, 0)
 	startBytes, err := startDatum.Encode(types.Bytes, &alloc, catenumpb.DatumEncoding_ASCENDING_KEY, startBytes)
@@ -133,9 +134,7 @@ func routingSpanForSQLInstance(sqlInstanceID base.SQLInstanceID) ([]byte, []byte
 }
 
 // TODO(jeffswenson): refactor backup/crosscluster to use this function.
-func makeInstanceRouter(
-	ids []base.SQLInstanceID,
-) (execinfrapb.OutputRouterSpec_RangeRouterSpec, error) {
+func makeKeyRouter(keys [][]byte) (execinfrapb.OutputRouterSpec_RangeRouterSpec, error) {
 	var zero execinfrapb.OutputRouterSpec_RangeRouterSpec
 	// TODO(jeffswenson): can I add an assertion if something is routed to the
 	// default stream?
@@ -150,8 +149,8 @@ func makeInstanceRouter(
 			},
 		},
 	}
-	for stream, sqlInstanceID := range ids {
-		startBytes, endBytes, err := routingSpanForSQLInstance(sqlInstanceID)
+	for stream, key := range keys {
+		startBytes, endBytes, err := routingSpanForSQLInstance(key)
 		if err != nil {
 			return zero, err
 		}
@@ -167,12 +166,4 @@ func makeInstanceRouter(
 		return bytes.Compare(a.Start, b.Start)
 	})
 	return rangeRouterSpec, nil
-}
-
-func getRoutingKeys(router execinfrapb.OutputRouterSpec_RangeRouterSpec) []string {
-	keys := make([]string, 0, len(router.Spans))
-	for _, span := range router.Spans {
-		keys = append(keys, string(span.Start), string(span.End))
-	}
-	return keys
 }

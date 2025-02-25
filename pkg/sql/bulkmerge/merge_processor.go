@@ -44,8 +44,9 @@ var bulkMergeProcessorOutputTypes = []*types.T{
 // The last task is to process the input range from [split(len(split)-1), nil).
 type bulkMergeProcessor struct {
 	execinfra.ProcessorBase
-	spec  execinfrapb.BulkMergeSpec
-	input execinfra.RowSource
+	spec    execinfrapb.BulkMergeSpec
+	input   execinfra.RowSource
+	flowCtx *execinfra.FlowCtx
 }
 
 type mergeProcessorInput struct {
@@ -53,7 +54,18 @@ type mergeProcessorInput struct {
 	taskID        taskset.TaskId
 }
 
-func parseMergeProcessorInput(row rowenc.EncDatumRow) (mergeProcessorInput, error) {
+func parseMergeProcessorInput(
+	row rowenc.EncDatumRow, typs []*types.T,
+) (mergeProcessorInput, error) {
+	if len(row) != 2 {
+		return mergeProcessorInput{}, errors.Newf("expected 2 columns, got %d", len(row))
+	}
+	if err := row[0].EnsureDecoded(typs[0], nil); err != nil {
+		return mergeProcessorInput{}, err
+	}
+	if err := row[1].EnsureDecoded(typs[1], nil); err != nil {
+		return mergeProcessorInput{}, err
+	}
 	sqlInstanceID, ok := row[0].Datum.(*tree.DBytes)
 	if !ok {
 		return mergeProcessorInput{}, errors.Newf("expected bytes column for sqlInstanceID, got %s", row[0].Datum.String())
@@ -77,8 +89,9 @@ func newBulkMergeProcessor(
 	input execinfra.RowSource,
 ) (execinfra.Processor, error) {
 	mp := &bulkMergeProcessor{
-		input: input,
-		spec:  spec,
+		input:   input,
+		spec:    spec,
+		flowCtx: flowCtx,
 	}
 	// TODO(jeffswenson): do I need more here?
 	err := mp.Init(ctx, mp, post, bulkMergeProcessorOutputTypes, flowCtx, processorID, nil, execinfra.ProcStateOpts{
@@ -117,7 +130,7 @@ func (m *bulkMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 }
 
 func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
-	input, err := parseMergeProcessorInput(row)
+	input, err := parseMergeProcessorInput(row, m.input.OutputTypes())
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +139,7 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 	results.Ssts = append(results.Ssts, execinfrapb.BulkMergeSpec_SST{
 		// TODO(jeffswenson): replace this with real output. For now we just
 		// want to make sure each task is processed
-		Uri: fmt.Sprintf("nodelocal://%d.sst", input.taskID),
+		Uri: fmt.Sprintf("nodelocal://%d/merger/1337/%d.sst", m.flowCtx.NodeID.SQLInstanceID(), input.taskID),
 	})
 
 	marshaled, err := protoutil.Marshal(&results)
