@@ -222,6 +222,7 @@ go_library(
         "serial.go",
         "session_revival_token.go",
         "session_state.go",
+        "session_var_descriptions.go",
         "set_cluster_setting.go",
         "set_schema.go",
         "set_session_authorization.go",
