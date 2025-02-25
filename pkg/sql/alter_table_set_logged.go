@@ -11,11 +11,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func (p *planner) AlterTableSetLogged(ctx context.Context, n *tree.AlterTableSetLogged) (planNode, error) {
+// AlterTableSetLogged set table as unlogged or logged.
+// No-op since unlogged tables are not supported.
+func (p *planner) AlterTableSetLogged(
+	ctx context.Context, n *tree.AlterTableSetLogged,
+) (planNode, error) {
 	p.BufferClientNotice(
 		ctx, pgnotice.Newf(
-			"ALTER TABLE %s SET %s is not supported and has no effect",
-			n.Name.ToTableName().ObjectName.Normalize(),
+			"ALTER TABLE ... SET %s is not supported and has no effect",
 			map[bool]string{true: "LOGGED", false: "UNLOGGED"}[n.IsLogged],
 		),
 	)
