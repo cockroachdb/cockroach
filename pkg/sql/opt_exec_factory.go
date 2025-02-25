@@ -1281,7 +1281,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	for i := range envOpts.Tables {
 		out.writef("")
 		if err := c.PrintCreateTable(
-			&out.buf, &envOpts.Tables[i], false, /* redactValues */
+			&out.buf, &envOpts.Tables[i], false /* redactValues */, true, /* includeFKReferences */
 		); err != nil {
 			return nil, err
 		}

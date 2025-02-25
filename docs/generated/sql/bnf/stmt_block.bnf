@@ -2077,6 +2077,7 @@ with_comment ::=
 
 opt_show_create_format_options ::=
 	'WITH' 'REDACT'
+	| 'WITH' 'IGNORE_FOREIGN_KEYS'
 
 opt_on_targets_roles ::=
 	'ON' targets_roles

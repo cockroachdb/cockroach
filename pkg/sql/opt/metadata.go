@@ -1092,16 +1092,18 @@ func (md *Metadata) AllViews() []cat.View {
 // getAllReferenceTables returns all the tables referenced by the metadata. This
 // includes all tables that are directly stored in the metadata in md.tables, as
 // well as recursive references from foreign keys (both referenced and
-// referencing). The tables are returned in sorted order so that later tables
-// reference earlier tables. This allows tables to be re-created in order (e.g.,
-// for statement-bundle recreate) using the output from SHOW CREATE TABLE
-// without any errors due to missing tables.
+// referencing), unless includeFKReferences is set to false.
+//
+// The tables are returned in sorted order so that later tables reference
+// earlier tables. This allows tables to be re-created in order (e.g., for
+// statement-bundle recreate) using the output from SHOW CREATE TABLE without
+// any errors due to missing tables.
 // TODO(rytaft): if there is a cycle in the foreign key references,
 // statement-bundle recreate will still hit errors. To handle this case, we
 // would need to first create the tables without the foreign keys, then add the
 // foreign keys later.
 func (md *Metadata) getAllReferenceTables(
-	ctx context.Context, catalog cat.Catalog,
+	ctx context.Context, catalog cat.Catalog, includeFKReferences bool,
 ) []cat.DataSource {
 	var tableSet intsets.Fast
 	var tableList []cat.DataSource
@@ -1134,12 +1136,18 @@ func (md *Metadata) getAllReferenceTables(
 		}
 	}
 	addForeignKeyReferencedTables = func(tab cat.Table) {
+		if !includeFKReferences {
+			return
+		}
 		for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
 			tabID := tab.OutboundForeignKey(i).ReferencedTableID()
 			handleRelatedTables(tabID)
 		}
 	}
 	addForeignKeyReferencingTables = func(tab cat.Table) {
+		if !includeFKReferences {
+			return
+		}
 		for i := 0; i < tab.InboundForeignKeyCount(); i++ {
 			tabID := tab.InboundForeignKey(i).OriginTableID()
 			handleRelatedTables(tabID)
@@ -1164,12 +1172,14 @@ func (md *Metadata) getAllReferenceTables(
 // AllDataSourceNames returns the fully qualified names of all datasources
 // referenced by the metadata. This includes all tables, sequences, and views
 // that are directly stored in the metadata, as well as tables that are
-// recursively referenced from foreign keys (both referenced and referencing).
-// If includeVirtualTables is false, then virtual tables are not returned.
+// recursively referenced from foreign keys (both referenced and referencing),
+// unless includeFKReferences is set to false. If includeVirtualTables is false,
+// then virtual tables are not returned.
 func (md *Metadata) AllDataSourceNames(
 	ctx context.Context,
 	catalog cat.Catalog,
 	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
+	includeFKReferences bool,
 	includeVirtualTables bool,
 ) (tables, sequences, views []tree.TableName, _ error) {
 	// Catalog objects can show up multiple times in our lists, so deduplicate
@@ -1192,7 +1202,7 @@ func (md *Metadata) AllDataSourceNames(
 		return result, nil
 	}
 	var err error
-	refTables := md.getAllReferenceTables(ctx, catalog)
+	refTables := md.getAllReferenceTables(ctx, catalog, includeFKReferences)
 	if !includeVirtualTables {
 		// Update refTables in-place to remove all virtual tables.
 		i := 0

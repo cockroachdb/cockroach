@@ -568,6 +568,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	buf.Reset()
 
+	// We only want to include the FK referenced and referencing tables if
+	// the stmt performs a mutation.
+	// TODO(yuzefovich): support omitting FK references for redacted bundles.
+	// TODO(#142006): be smarter about which tables we include depending on the
+	// mutation stmt.
+	includeFKReferences := b.plan.flags.IsSet(planFlagContainsMutation) || b.flags.RedactValues
+
 	// TODO(#27611): when we support stats on virtual tables, we'll need to
 	// update this logic to not include virtual tables into schema.sql but still
 	// create stats files for them.
@@ -578,6 +585,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			ctx, b.plan.catalog, func(ds cat.DataSource) (cat.DataSourceName, error) {
 				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, ds, txn)
 			},
+			includeFKReferences,
 			false, /* includeVirtualTables */
 		)
 		return err
@@ -663,7 +671,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	for i := range tables {
 		blankLine()
-		if err = c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
+		if err = c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues, includeFKReferences); err != nil {
 			b.printError(fmt.Sprintf("-- error getting schema for table %s: %v", tables[i].FQString(), err), &buf)
 		}
 	}
@@ -981,11 +989,16 @@ func printCreateStatement(w io.Writer, dbName tree.Name, createStatement string)
 }
 
 func (c *stmtEnvCollector) PrintCreateTable(
-	w io.Writer, tn *tree.TableName, redactValues bool,
+	w io.Writer, tn *tree.TableName, redactValues bool, includeFKReferences bool,
 ) error {
+	if redactValues && !includeFKReferences {
+		return errors.AssertionFailedf("redacted values and omitting FK references is currently not allowed")
+	}
 	var formatOption string
 	if redactValues {
 		formatOption = " WITH REDACT"
+	} else if !includeFKReferences {
+		formatOption = " WITH IGNORE_FOREIGN_KEYS"
 	}
 	createStatement, err := c.query(
 		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s%s]", tn.FQString(), formatOption),
