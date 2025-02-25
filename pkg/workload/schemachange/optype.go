@@ -158,6 +158,7 @@ const (
 	// alterTableRenameConstraint        // ALTER TABLE <table> RENAME CONSTRAINT <constraint> TO <constraint>
 	// alterTableResetStorageParams
 	// alterTableSetAudit
+	// alterTableSetLogged
 	// alterTableSetOnUpdate
 	// alterTableSetSchema
 	// alterTableSetStorageParams

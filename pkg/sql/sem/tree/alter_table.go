@@ -714,6 +714,27 @@ func (node *AlterTableSetSchema) TelemetryName() string {
 	return "set_schema"
 }
 
+// AlterTableSetLogged represents an ALTER TABLE SET {LOGGED | UNLOGGED}
+type AlterTableSetLogged struct {
+	Name     *UnresolvedObjectName
+	IfExists bool
+	IsLogged bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetLogged) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TABLE ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
+	if node.IsLogged {
+		ctx.WriteString(" SET LOGGED")
+	} else {
+		ctx.WriteString(" SET UNLOGGED")
+	}
+}
+
 // AlterTableOwner represents an ALTER TABLE OWNER TO command.
 type AlterTableOwner struct {
 	Name           *UnresolvedObjectName
