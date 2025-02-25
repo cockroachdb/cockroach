@@ -501,6 +501,13 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 	inputProps := indexJoin.Input.Relational()
 	md := b.mem.Metadata()
 
+	// Side Effects
+	// ------------
+	// A Locking option is a side effect.
+	if !indexJoin.Locking.IsNoOp() {
+		rel.VolatilitySet.AddVolatile()
+	}
+
 	// Output Columns
 	// --------------
 	rel.OutputCols = indexJoin.Cols
@@ -541,6 +548,13 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 }
 
 func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *props.Relational) {
+	// Side Effects
+	// ------------
+	// A Locking option is a side effect.
+	if !join.Locking.IsNoOp() {
+		rel.VolatilitySet.AddVolatile()
+	}
+
 	b.buildJoinProps(join, rel)
 	if join.Locking.WaitPolicy == tree.LockWaitSkipLocked {
 		// SKIP LOCKED can act like a filter. The minimum cardinality of a scan
@@ -553,10 +567,24 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *pr
 func (b *logicalPropsBuilder) buildInvertedJoinProps(
 	join *InvertedJoinExpr, rel *props.Relational,
 ) {
+	// Side Effects
+	// ------------
+	// A Locking option is a side effect.
+	if !join.Locking.IsNoOp() {
+		rel.VolatilitySet.AddVolatile()
+	}
+
 	b.buildJoinProps(join, rel)
 }
 
 func (b *logicalPropsBuilder) buildZigzagJoinProps(join *ZigzagJoinExpr, rel *props.Relational) {
+	// Side Effects
+	// ------------
+	// A Locking option is a side effect.
+	if !join.LeftLocking.IsNoOp() || !join.RightLocking.IsNoOp() {
+		rel.VolatilitySet.AddVolatile()
+	}
+
 	b.buildJoinProps(join, rel)
 }
 
@@ -1582,6 +1610,11 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 
 func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relational) {
 	BuildSharedProps(lock, &rel.Shared, b.evalCtx)
+
+	// Side Effects
+	// ------------
+	// Locking is a side effect.
+	rel.VolatilitySet.AddVolatile()
 
 	private := lock.Private().(*LockPrivate)
 	inputProps := lock.Child(0).(RelExpr).Relational()
