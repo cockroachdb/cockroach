@@ -14,11 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/pebble/objstorage"
-	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
@@ -32,28 +30,16 @@ func encodeKey(strKey string) []byte {
 }
 
 func TestBulkSSTWriter(t *testing.T) {
-	ctx := context.Background()
+	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	var fileNames []string
-	basePath := "testUnsortedBatcher"
-	env := s.Engines()[0].Env()
+	const writePath = "test_gsst"
+	fs := s.StorageLayer().Engines()[0].Env()
 
-	fileAllocator := func(ctx context.Context, fileID int) (objstorage.Writable, func(), error) {
-		file, err := s.Engines()[0].Env().Create(fmt.Sprintf("%s_%d", basePath, fileID), vfs.WriteCategoryUnspecified)
-		if err != nil {
-			return nil, nil, err
-		}
-		stat, err := file.Stat()
-		if err != nil {
-			return nil, nil, err
-		}
-		fileNames = append(fileNames, stat.Name())
-		return objstorageprovider.NewFileWritable(file), func() { require.NoError(t, file.Close()) }, nil
-	}
-
+	fileAllocator := bulksst.NewVFSFileAllocator(writePath, fs)
 	// Create a new batcher
 	bulksst.BatchSize.Override(ctx, &s.ClusterSettings().SV, 1024)
 	batcher := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator)
@@ -68,15 +54,15 @@ func TestBulkSSTWriter(t *testing.T) {
 			[]byte(fmt.Sprintf("value-%d", i))))
 		expectedSet.Add(i)
 	}
-	require.NoError(t, batcher.Close(ctx))
+	require.NoError(t, batcher.CloseWithError(ctx))
 
 	// Next validate each SST file.
 	set := intsets.MakeFast()
 	lastFileMin := -1
-	for _, fileName := range fileNames {
+	for _, fileName := range fileAllocator.GetFileList() {
 		currFileMin := -1
 		currFileMax := -1
-		values := readKeyValuesFromSST(t, env, fileName)
+		values := readKeyValuesFromSST(t, fs, fileName)
 		for _, value := range values {
 			keyString := string(value.Key.Key)
 			var num int
@@ -100,14 +86,13 @@ func TestBulkSSTWriter(t *testing.T) {
 	}
 	// Ensure we have all the inserted key / values.
 	require.Equal(t, 8192, set.Len())
-	require.Greaterf(t, len(fileNames), 100, "expected multiple files")
+	require.Greaterf(t, len(fileAllocator.GetFileList()), 100, "expected multiple files")
 	require.Zero(t, expectedSet.Difference(set).Len())
 }
 
-func readKeyValuesFromSST(t *testing.T, env *fs.Env, filename string) []storage.MVCCKeyValue {
-	file, err := env.Open(filename, nil)
+func readKeyValuesFromSST(t *testing.T, fs vfs.FS, filename string) []storage.MVCCKeyValue {
+	file, err := fs.Open(filename, nil)
 	require.NoError(t, err)
-
 	readable, err := sstable.NewSimpleReadable(file)
 	require.NoError(t, err)
 

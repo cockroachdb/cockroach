@@ -8,10 +8,15 @@ package bulksst
 import (
 	"context"
 	"sort"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/pebble/objstorage"
 )
 
@@ -20,11 +25,14 @@ import (
 type SSTFileAllocator func(ctx context.Context, fileID int) (writable objstorage.Writable, closer func(), err error)
 
 type Writer struct {
+	mu            sync.Mutex
 	kvData        []byte
 	kv            []storage.MVCCKeyValue
 	fileID        int
-	fileAllocator SSTFileAllocator
+	fileAllocator FileAllocator
 	settings      *cluster.Settings
+	onFlush       func(summary kvpb.BulkOpSummary)
+	writeTS       hlc.Timestamp
 }
 
 var BatchSize = settings.RegisterByteSizeSetting(settings.ApplicationLevel,
@@ -40,8 +48,8 @@ var BatchKeyCount = settings.RegisterIntSetting(settings.ApplicationLevel,
 // NewUnsortedSSTBatcher creates a new SST batcher, a file allocator must be
 // provided which will be used to create new files either locally or remotely
 // to write SST data into.
-func NewUnsortedSSTBatcher(settings *cluster.Settings, allocator SSTFileAllocator) Writer {
-	return Writer{
+func NewUnsortedSSTBatcher(settings *cluster.Settings, allocator FileAllocator) *Writer {
+	return &Writer{
 		kvData:        make([]byte, 0, BatchSize.Get(&settings.SV)),
 		kv:            make([]storage.MVCCKeyValue, 0, BatchKeyCount.Get(&settings.SV)),
 		fileAllocator: allocator,
@@ -49,11 +57,18 @@ func NewUnsortedSSTBatcher(settings *cluster.Settings, allocator SSTFileAllocato
 	}
 }
 
+// SetWriteTS sets the write timestamp for Add.
+func (s *Writer) SetWriteTS(ts hlc.Timestamp) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.writeTS = ts
+}
+
 // flushSST allocates a new file and flushes all KVs. The caller is supposed
 // to sort the input.
 func (s *Writer) flushSST(ctx context.Context) error {
 	// Allocate a new file in storage with the next ID.
-	sstFile, closer, err := s.fileAllocator(ctx, s.fileID)
+	sstFile, closer, err := s.fileAllocator.AddFile(ctx, s.fileID)
 	if err != nil {
 		return err
 	}
@@ -108,6 +123,8 @@ func (s *Writer) flushBuffer(ctx context.Context) error {
 // AddMVCCKey adds key value in memory, and possibly flushed if the buffer
 // is full.
 func (s *Writer) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	// If we are going to exceed the capacity then flush this SST.
 	bytesRequired := len(key.Key) + len(value)
 	if bytesRequired+len(s.kvData) > cap(s.kvData) || len(s.kv) >= cap(s.kv) {
@@ -127,7 +144,60 @@ func (s *Writer) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []by
 	return nil
 }
 
-// Close flushes everything left in memory.
-func (s *Writer) Close(ctx context.Context) error {
+// Add implements kvservebase.BulkAdder.
+func (s *Writer) Add(ctx context.Context, key roachpb.Key, value []byte) error {
+	return s.AddMVCCKey(ctx, storage.MVCCKey{Key: key, Timestamp: s.writeTS}, value)
+}
+
+// Flush implements kvservebase.BulkAdder.
+func (s *Writer) Flush(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.flushBuffer(ctx)
 }
+
+// IsEmpty implements kvservebase.BulkAdder.
+func (s *Writer) IsEmpty() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.kv) == 0
+}
+
+// CurrentBufferFill implements kvservebase.BulkAdder.
+func (s *Writer) CurrentBufferFill() float32 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return 0.0
+}
+
+// GetSummary implements kvservebase.BulkAdder.
+func (s *Writer) GetSummary() kvpb.BulkOpSummary {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return kvpb.BulkOpSummary{
+		DataSize:    int64(len(s.kvData)),
+		SSTDataSize: int64(len(s.kvData)),
+		EntryCounts: make(map[uint64]int64),
+	}
+}
+
+// SetOnFlush implements kvservebase.BulkAdder.
+func (s *Writer) SetOnFlush(f func(summary kvpb.BulkOpSummary)) {
+	// No-op
+}
+
+// CloseWithError flushes everything left in memory.
+func (s *Writer) CloseWithError(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.flushBuffer(ctx)
+}
+
+// Close implements kvservebase.BulkAdder.
+func (s *Writer) Close(ctx context.Context) {
+	if err := s.CloseWithError(ctx); err != nil {
+		panic(err)
+	}
+}
+
+var _ kvserverbase.BulkAdder = &Writer{}
