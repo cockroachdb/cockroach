@@ -18,7 +18,10 @@
 package raft
 
 import (
+	"fmt"
+
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +34,11 @@ type TermCache struct {
 	lastIndex uint64
 	// max size of the term cache slice
 	maxSize uint64
+	// mu is used to protect the term cache from concurrent accesses.
+	// Which can happen for example when the following is called concurrently:
+	// logstore.LoadTerm() in replicaLogStorage.termLocked(),
+	// and ScanAppend() in logstore/storeEntriesAndCommitBatch() concurrently.
+	mu syncutil.RWMutex
 }
 
 // ErrInvalidEntryID is returned when the supplied entryID
@@ -51,6 +59,109 @@ func NewTermCache(size uint64) *TermCache {
 		maxSize:   size,
 		lastIndex: 0,
 	}
+}
+
+// Term returns the entry term based on the given entry index.
+// Returns error if not in the termCache.
+func (tc *TermCache) Term(index uint64) (term uint64, err error) {
+	tc.mu.RLock()
+	defer tc.mu.RUnlock()
+
+	if len(tc.cache) == 0 {
+		return 0, ErrTermCacheEmpty
+	}
+
+	if index < tc.firstEntry().index ||
+		index > tc.lastIndex {
+		return 0, ErrUnavailableInTermCache
+	}
+
+	// in last term of termCache, index <= tc.lastIndex
+	if index >= tc.lastEntry().index {
+		return tc.lastEntry().term, nil
+	}
+
+	for i := len(tc.cache) - 2; i >= 0; i-- {
+		if index >= tc.cache[i].index {
+			return tc.cache[i].term, nil
+		}
+	}
+
+	return 0, ErrUnavailableInTermCache
+}
+
+// ClearTo clears entries from the TermCache with index strictly less than hi.
+// If hi is above the lastIndex, the whole term cache is cleared.
+// Mirrors the clearTo function in raftentry/cache.go
+func (tc *TermCache) ClearTo(hi uint64) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if len(tc.cache) == 0 || hi <= tc.firstEntry().index {
+		return nil
+	}
+
+	// special cases:
+	if hi > tc.lastIndex {
+		tc.reset()
+		return nil
+	}
+
+	// hi is above last entry's index, but lower or equal to lastIndex
+	if hi > tc.lastEntry().index {
+		tc.resetWithFirstNoLock(tc.lastEntry().term, hi)
+		return nil
+	}
+
+	// only keep the last entry
+	if hi == tc.lastEntry().index {
+		tc.cache = tc.cache[len(tc.cache)-1:]
+		return nil
+	}
+
+	// general cases
+	for i := 0; i < len(tc.cache)-1; i++ {
+		// hi matches a term flip index
+		if hi == tc.cache[i].index {
+			tc.cache = tc.cache[i:]
+			return nil
+		}
+
+		// Allow the first entry in the termCache to not represent a term flip point
+		// cache[0] only tells us entries are in term cache[0].term
+		// starting from cache[0].index up to
+		// min(cache[i+1].index-1 /* if not nil*/, lastIndex)
+		if hi > tc.cache[i].index && hi < tc.cache[i+1].index {
+			tc.cache[i].index = hi
+			tc.cache = tc.cache[i:]
+			return nil
+		}
+	}
+	return nil
+}
+
+// ScanAppend appends a list of raft entries to the TermCache
+// It is the caller's responsibility to ensure entries is a valid raftLog.
+func (tc *TermCache) ScanAppend(entries []pb.Entry, truncate bool) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if len(entries) == 0 {
+		return nil
+	}
+
+	if truncate {
+		truncIdx := entries[0].Index
+		_ = tc.truncateFrom(truncIdx)
+	}
+
+	for _, ent := range entries {
+		if err := tc.append(entryID{ent.Term, ent.Index}); errors.Is(err, ErrInvalidEntryID) {
+			// This should never happen
+			panic("invalid entry ID in ScanAppend")
+		}
+	}
+	return nil
 }
 
 // truncateFrom clears all entries from the termCache with index equal to or
@@ -92,76 +203,9 @@ func (tc *TermCache) truncateFrom(lo uint64) error {
 	return nil
 }
 
-// ClearTo clears entries from the TermCache with index strictly less than hi.
-// If hi is above the lastIndex, the whole term cache is cleared.
-// Mirrors the clearTo function in raftentry/cache.go
-func (tc *TermCache) ClearTo(hi uint64) error {
-	if len(tc.cache) == 0 || hi <= tc.firstEntry().index {
-		return nil
-	}
-
-	// special cases:
-	if hi > tc.lastIndex {
-		tc.reset()
-		return nil
-	}
-
-	// hi is above last entry's index, but lower or equal to lastIndex
-	if hi > tc.lastEntry().index {
-		tc.ResetWithFirst(tc.lastEntry().term, hi)
-		return nil
-	}
-
-	// only keep the last entry
-	if hi == tc.lastEntry().index {
-		tc.cache = tc.cache[len(tc.cache)-1:]
-		return nil
-	}
-
-	// general cases
-	for i := 0; i < len(tc.cache)-1; i++ {
-		// hi matches a term flip index
-		if hi == tc.cache[i].index {
-			tc.cache = tc.cache[i:]
-			return nil
-		}
-
-		// Allow the first entry in the termCache to not represent a term flip point
-		// cache[0] only tells us entries are in term cache[0].term
-		// starting from cache[0].index up to
-		// min(cache[i+1].index-1 /* if not nil*/, lastIndex)
-		if hi > tc.cache[i].index && hi < tc.cache[i+1].index {
-			tc.cache = tc.cache[i:]
-			tc.cache[i].index = hi
-			return nil
-		}
-	}
-	return nil
-}
-
-// ScanAppend appends a list of raft entries to the TermCache
-// It is the caller's responsibility to ensure entries is a valid raftLog.
-func (tc *TermCache) ScanAppend(entries []pb.Entry, truncate bool) error {
-	if len(entries) == 0 {
-		return nil
-	}
-
-	if truncate {
-		truncIdx := entries[0].Index
-		_ = tc.truncateFrom(truncIdx)
-	}
-
-	for _, ent := range entries {
-		if err := tc.Append(entryID{ent.Term, ent.Index}); errors.Is(err, ErrInvalidEntryID) {
-			continue
-		}
-	}
-	return nil
-}
-
-// Append adds a new entryID to the cache.
+// append adds a new entryID to the cache.
 // If the cache is full, the oldest entryID is removed.
-func (tc *TermCache) Append(newEntry entryID) error {
+func (tc *TermCache) append(newEntry entryID) error {
 	if len(tc.cache) == 0 {
 		tc.cache = append(tc.cache, newEntry)
 		tc.lastIndex = tc.firstEntry().index
@@ -195,32 +239,6 @@ func (tc *TermCache) Append(newEntry entryID) error {
 	return nil
 }
 
-// Term returns the entry term based on the given entry index.
-// Returns error if not in the termCache.
-func (tc *TermCache) Term(index uint64) (term uint64, err error) {
-	if len(tc.cache) == 0 {
-		return 0, ErrTermCacheEmpty
-	}
-
-	if index < tc.firstEntry().index ||
-		index > tc.lastIndex {
-		return 0, ErrUnavailableInTermCache
-	}
-
-	// in last term of termCache, index <= tc.lastIndex
-	if index >= tc.lastEntry().index {
-		return tc.lastEntry().term, nil
-	}
-
-	for i := len(tc.cache) - 2; i >= 0; i-- {
-		if index >= tc.cache[i].index {
-			return tc.cache[i].term, nil
-		}
-	}
-
-	return 0, ErrUnavailableInTermCache
-}
-
 // lastEntry returns the entryId symbolizing the latest term flip
 // according to the term cache.
 // The unstable log may have more up-to-date term flips.
@@ -237,12 +255,40 @@ func (tc *TermCache) firstEntry() entryID {
 
 // ResetWithFirst clears the term cache and adds the first entry.
 func (tc *TermCache) ResetWithFirst(term uint64, index uint64) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
 	tc.reset()
-	tc.cache = append(tc.cache, entryID{term, index})
+	tc.append(entryID{term, index})
+}
+
+// resetWithFirstNoLock is like ResetWithFirst but does not hold the lock
+func (tc *TermCache) resetWithFirstNoLock(term uint64, index uint64) {
+	tc.reset()
+	tc.append(entryID{term, index})
 }
 
 // reset clears the term cache and resets the lastIndex to 0.
 func (tc *TermCache) reset() {
 	tc.cache = tc.cache[:0]
 	tc.lastIndex = 0
+}
+
+func (tc *TermCache) printTermCache() {
+	fmt.Print("printTermCache")
+	fmt.Print("[")
+	for _, entry := range tc.cache {
+		fmt.Print(" (")
+		fmt.Print(entry.index, entry.term)
+		fmt.Print(")")
+	}
+	fmt.Print("]   ")
+	fmt.Print("lastIndex:")
+	fmt.Println(tc.lastIndex)
+}
+
+// PrintEntries prints a slice of Entry structs without printing the Data field
+func PrintEntries(entries []pb.Entry) {
+	for _, entry := range entries {
+		fmt.Printf("Term: %d, Index: %d, Type: %v\n", entry.Term, entry.Index, entry.Type)
+	}
 }

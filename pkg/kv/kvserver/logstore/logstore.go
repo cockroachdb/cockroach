@@ -398,7 +398,9 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// to be durable and a stable portion for entries that are known to be
 	// durable.
 	s.EntryCache.Add(s.RangeID, m.Entries, true /* truncate */)
+	// lock Replica.mu here
 	_ = s.TermCache.ScanAppend(m.Entries, true /* truncate */)
+	// unlock it
 
 	return state, nil
 }
@@ -667,7 +669,7 @@ func LoadTerm(
 		}
 		if !typ.IsSideloaded() {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
-			_ = tc.ScanAppend([]raftpb.Entry{entry}, false /* truncate */)
+			// _ = tc.ScanAppend([]raftpb.Entry{entry}, false /* truncate */)
 		}
 		return kvpb.RaftTerm(entry.Term), nil
 	}
@@ -787,7 +789,7 @@ func LoadEntries(
 		return nil, 0, 0, err
 	}
 	eCache.Add(rangeID, ents, false /* truncate */)
-	_ = tc.ScanAppend(ents, false /* truncate */)
+	// _ = tc.ScanAppend(ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
 	// Did we hit the size limits? If so, return what we have.

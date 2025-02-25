@@ -62,6 +62,7 @@ func LoadReplicaState(
 	if ls.LastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
 		return LoadedReplicaState{}, err
 	}
+	// read the term of the last en
 	if ls.ReplState, err = sl.Load(ctx, eng, desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
