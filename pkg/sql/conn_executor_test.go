@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1757,6 +1758,330 @@ func TestInjectRetryOnCommitErrors(t *testing.T) {
 		}
 		require.Equal(t, 5, txRes)
 	})
+}
+
+func TestAbortedTxnLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	var TransactionStatus string
+
+	conn1, err := s.SQLConn(t).Conn(ctx)
+	require.NoError(t, err)
+	conn2, err := s.SQLConn(t).Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn1.ExecContext(ctx, `CREATE TABLE t (k INT PRIMARY KEY, v INT)`)
+	require.NoError(t, err)
+
+	t.Run("no savepoints", func(t *testing.T) {
+		_, err = conn1.ExecContext(ctx, `INSERT INTO t VALUES (1,1)`)
+		require.NoError(t, err)
+
+		_, err = conn1.ExecContext(ctx, `BEGIN`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `UPDATE t SET v = 10 WHERE k = 1`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SELECT 1/0`)
+		require.ErrorContains(t, err, "division by zero")
+
+		// Set a statement timeout just to prevent the test from hanging in case
+		// there's a bug.
+		_, err = conn2.ExecContext(ctx, `SET statement_timeout = '1s'`)
+		require.NoError(t, err)
+		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 100 WHERE k = 1`)
+		require.NoError(t, err)
+
+		err = conn1.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
+		require.Equal(t, "Aborted", TransactionStatus)
+		_, err = conn1.ExecContext(ctx, `SELECT 1;`)
+		require.Regexp(t, "current transaction is aborted", err)
+		_, err = conn1.ExecContext(ctx, `ROLLBACK`)
+		require.NoError(t, err)
+
+		var v int
+		err = conn1.QueryRowContext(ctx, `SELECT v FROM t WHERE k = 1`).Scan(&v)
+		require.NoError(t, err)
+		require.Equal(t, 100, v)
+	})
+
+	t.Run("with unreleased savepoint", func(t *testing.T) {
+		_, err = conn1.ExecContext(ctx, `INSERT INTO t VALUES (2,2)`)
+		require.NoError(t, err)
+
+		_, err = conn1.ExecContext(ctx, `BEGIN`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SAVEPOINT s`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `UPDATE t SET v = 20 WHERE k = 2`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SELECT 1/0`)
+		require.ErrorContains(t, err, "division by zero")
+
+		// The second transaction should block and timeout.
+		_, err = conn2.ExecContext(ctx, `SET statement_timeout = '1s'`)
+		require.NoError(t, err)
+		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 200 WHERE k = 2`)
+		require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+
+		err = conn1.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
+		require.Equal(t, "Aborted", TransactionStatus)
+		_, err = conn1.ExecContext(ctx, `SELECT 1;`)
+		require.Regexp(t, "current transaction is aborted", err)
+		_, err = conn1.ExecContext(ctx, `ROLLBACK`)
+		require.NoError(t, err)
+
+		var v int
+		err = conn1.QueryRowContext(ctx, `SELECT v FROM t WHERE k = 2`).Scan(&v)
+		require.NoError(t, err)
+		require.Equal(t, 2, v)
+	})
+
+	t.Run("with released savepoint", func(t *testing.T) {
+		_, err = conn1.ExecContext(ctx, `INSERT INTO t VALUES (3,3)`)
+		require.NoError(t, err)
+
+		_, err = conn1.ExecContext(ctx, `BEGIN`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SAVEPOINT s`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `UPDATE t SET v = 30 WHERE k = 3`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `RELEASE SAVEPOINT s`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SELECT 1/0`)
+		require.ErrorContains(t, err, "division by zero")
+
+		// Set a statement timeout just to prevent the test from hanging in case
+		// there's a bug.
+		_, err = conn2.ExecContext(ctx, `SET statement_timeout = '1s'`)
+		require.NoError(t, err)
+		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 300 WHERE k = 3`)
+		require.NoError(t, err)
+
+		err = conn1.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
+		require.Equal(t, "Aborted", TransactionStatus)
+		_, err = conn1.ExecContext(ctx, `SELECT 1;`)
+		require.Regexp(t, "current transaction is aborted", err)
+		_, err = conn1.ExecContext(ctx, `ROLLBACK`)
+		require.NoError(t, err)
+
+		var v int
+		err = conn1.QueryRowContext(ctx, `SELECT v FROM t WHERE k = 3`).Scan(&v)
+		require.NoError(t, err)
+		require.Equal(t, 300, v)
+	})
+
+	t.Run("with rolled back savepoint", func(t *testing.T) {
+		_, err = conn1.ExecContext(ctx, `INSERT INTO t VALUES (4,4)`)
+		require.NoError(t, err)
+
+		_, err = conn1.ExecContext(ctx, `BEGIN`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SAVEPOINT s`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `UPDATE t SET v = 40 WHERE k = 4`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `ROLLBACK TO SAVEPOINT s`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SELECT 1/0`)
+		require.ErrorContains(t, err, "division by zero")
+
+		// ROLLBACK TO SAVEPOINT does not clear that savepoint from the transaction,
+		// so the lock is still held.
+		_, err = conn2.ExecContext(ctx, `SET statement_timeout = '1s'`)
+		require.NoError(t, err)
+		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 400 WHERE k = 4`)
+		require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+
+		// To release the lock, we ROLLBACK and RELEASE the savepoint.
+		_, err = conn1.ExecContext(ctx, `ROLLBACK TO SAVEPOINT s`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `RELEASE SAVEPOINT s`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SELECT 1/0`)
+		require.ErrorContains(t, err, "division by zero")
+
+		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 400 WHERE k = 4`)
+		require.NoError(t, err)
+
+		err = conn1.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
+		require.Equal(t, "Aborted", TransactionStatus)
+		_, err = conn1.ExecContext(ctx, `SELECT 1;`)
+		require.Regexp(t, "current transaction is aborted", err)
+		_, err = conn1.ExecContext(ctx, `ROLLBACK`)
+		require.NoError(t, err)
+
+		var v int
+		err = conn1.QueryRowContext(ctx, `SELECT v FROM t WHERE k = 4`).Scan(&v)
+		require.NoError(t, err)
+		require.Equal(t, 400, v)
+	})
+
+	t.Run("with cockroach_restart savepoint and advanced retry", func(t *testing.T) {
+		_, err = conn1.ExecContext(ctx, `INSERT INTO t VALUES (5,5), (6,6)`)
+		require.NoError(t, err)
+
+		_, err = conn1.ExecContext(ctx, `BEGIN`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SAVEPOINT cockroach_restart`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SELECT * FROM t WHERE k = 5`)
+		require.NoError(t, err)
+
+		// Update k=5 in order to add a serialization dependency.
+		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 500 WHERE k = 5`)
+		require.NoError(t, err)
+		_, err = conn2.ExecContext(ctx, `SELECT * FROM t WHERE k = 6`)
+		require.NoError(t, err)
+
+		_, err = conn1.ExecContext(ctx, `UPDATE t SET v = 60 WHERE k = 6`)
+		require.NoError(t, err)
+
+		// Send a statement that causes conn2 to block in order to prove that
+		// locks are being held.
+		_, err = conn2.ExecContext(ctx, `SET statement_timeout = '1s'`)
+		require.NoError(t, err)
+		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 600 WHERE k = 6`)
+		require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+
+		_, err = conn1.ExecContext(ctx, `RELEASE SAVEPOINT cockroach_restart`)
+		require.ErrorContains(t, err, "failed preemptive refresh due to encountered recently written committed value")
+
+		// Confirm that a lock is still held after the RELEASE.
+		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 600 WHERE k = 6`)
+		require.ErrorContains(t, err, "query execution canceled due to statement timeout")
+
+		// Simulate the advanced retry on conn1.
+		_, err = conn1.ExecContext(ctx, `ROLLBACK TO SAVEPOINT cockroach_restart`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `SAVEPOINT cockroach_restart`)
+		require.NoError(t, err)
+
+		// conn1 should be able to see the updated value for k=5.
+		var v int
+		err = conn1.QueryRowContext(ctx, `SELECT v FROM t WHERE k = 5`).Scan(&v)
+		require.NoError(t, err)
+		require.Equal(t, 500, v)
+		_, err = conn1.ExecContext(ctx, `UPDATE t SET v = 61 WHERE k = 6`)
+		require.NoError(t, err)
+		_, err = conn1.ExecContext(ctx, `RELEASE SAVEPOINT cockroach_restart`)
+		require.NoError(t, err)
+
+		// conn2 should see the updated value and should no longer block.
+		err = conn2.QueryRowContext(ctx, `SELECT v FROM t WHERE k = 6`).Scan(&v)
+		require.NoError(t, err)
+		require.Equal(t, 61, v)
+
+		_, err = conn1.ExecContext(ctx, `COMMIT`)
+		require.NoError(t, err)
+	})
+}
+
+// TestRetriableErrorDuringUpgradedTransaction ensures that a retriable error
+// that happens during a transaction does not cause the transaction to release
+// the locks it previously held.
+// NOTE: There have been discussions around changing this behavior in the KV
+// layer, but for now this is the expected behavior.
+// See https://github.com/cockroachdb/cockroach/issues/117020.
+func TestRetriableErrorDuringTransactionHoldsLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	filter := newDynamicRequestFilter()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: filter.filter,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	codec := s.ApplicationLayer().Codec()
+
+	conn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
+	testDB := sqlutils.MakeSQLRunner(conn)
+
+	var barTableID uint32
+	testDB.Exec(t, "SET enable_implicit_transaction_for_batch_statements = true")
+	testDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT)")
+	testDB.Exec(t, "INSERT INTO foo VALUES(1, 1)")
+	testDB.Exec(t, "CREATE TABLE bar (a INT PRIMARY KEY)")
+	testDB.QueryRow(t, "SELECT 'bar'::regclass::oid").Scan(&barTableID)
+
+	// Inject an error that will happen during execution.
+	injectedRetry := false
+	var injectedRetryWG, secondConnWG sync.WaitGroup
+	injectedRetryWG.Add(1)
+	secondConnWG.Add(1)
+	filter.setFilter(func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		if ba.Txn == nil {
+			return nil
+		}
+		if req, ok := ba.GetArg(kvpb.ConditionalPut); ok {
+			put := req.(*kvpb.ConditionalPutRequest)
+			_, tableID, err := codec.DecodeTablePrefix(put.Key)
+			if err != nil || tableID != barTableID {
+				return nil
+			}
+			if !injectedRetry {
+				injectedRetry = true
+				defer injectedRetryWG.Done()
+				return kvpb.NewErrorWithTxn(
+					kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected retry error"), ba.Txn,
+				)
+			} else {
+				secondConnWG.Wait()
+			}
+		}
+		return nil
+	})
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		defer secondConnWG.Done()
+		conn2, err := sqlDB.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = conn2.ExecContext(ctx, "SET statement_timeout = '1s'")
+		if err != nil {
+			return err
+		}
+
+		injectedRetryWG.Wait()
+		_, err = conn2.ExecContext(ctx, "UPDATE foo SET b = 100 WHERE a = 1")
+		if !testutils.IsError(err, "query execution canceled due to statement timeout") {
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
+			return errors.Newf("expected a statement timeout error, got: %v", err)
+		}
+
+		return nil
+	})
+
+	fmt.Printf("running txn\n")
+	testDB.Exec(t, "UPDATE foo SET b = 10 WHERE a = 1; INSERT INTO bar VALUES(2); COMMIT;")
+
+	// Verify that the implicit transaction completed successfully, and the second
+	// transaction did not.
+	var x int
+	testDB.QueryRow(t, "SELECT b FROM foo WHERE a = 1").Scan(&x)
+	require.Equal(t, 10, x)
+	testDB.QueryRow(t, "SELECT a FROM bar").Scan(&x)
+	require.Equal(t, 2, x)
+
+	require.NoError(t, g.Wait())
 }
 
 func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {

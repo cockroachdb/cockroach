@@ -1421,6 +1421,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	// is not called.
 	ex.mu.IdleInSessionTimeout.Stop()
 	ex.mu.IdleInTransactionSessionTimeout.Stop()
+	ex.mu.TransactionTimeout.Stop()
 
 	ex.txnFingerprintIDAcc.Close(ctx)
 	if closeType != panicClose {
@@ -1813,6 +1814,11 @@ type connExecutor struct {
 		// cancels the session if the idle time in a transaction exceeds the
 		// idle_in_transaction_session_timeout.
 		IdleInTransactionSessionTimeout timeout
+
+		// TransactionTimeout is configured if the transaction_timeout is set and
+		// the connExecutor is in an explicit transaction. It fires if we are
+		// waiting for the next statement while the timeout is exceeded.
+		TransactionTimeout timeout
 	}
 
 	// curStmtAST is the statement that's currently being prepared or executed, if

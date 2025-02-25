@@ -120,6 +120,7 @@ func (ex *connExecutor) execStmt(
 	// Stop the session idle timeout when a new statement is executed.
 	ex.mu.IdleInSessionTimeout.Stop()
 	ex.mu.IdleInTransactionSessionTimeout.Stop()
+	ex.mu.TransactionTimeout.Stop()
 
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
@@ -203,6 +204,39 @@ func (ex *connExecutor) execStmt(
 			// explicit transaction.
 			if !ex.implicitTxn() {
 				startIdleInTransactionSessionTimeout()
+			}
+		}
+	}
+
+	txnTimeoutRemaining :=
+		ex.sessionData().TransactionTimeout - ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted).Elapsed()
+	if txnTimeoutRemaining > 0 {
+		startTransactionTimeout := func() {
+			switch ast.(type) {
+			case *tree.CommitTransaction, *tree.RollbackTransaction:
+				// Do nothing, the transaction is completed, we do not want to start
+				// an idle timer.
+			default:
+				// The transaction_timeout setting should move the transaction to the
+				// aborted state.
+				// NOTE: In Postgres, the transaction_timeout causes the entire session
+				// to be terminated. We intentionally diverge from that behavior.
+				ex.mu.TransactionTimeout = timeout{time.AfterFunc(
+					txnTimeoutRemaining,
+					func() {
+						// An error is only returned if stmtBuf was closed already, so
+						// there's nothing else to do in that case.
+						_ = ex.stmtBuf.Push(ctx, SendError{Err: sqlerrors.TxnTimeoutError})
+					},
+				)}
+			}
+		}
+		switch ex.machine.CurState().(type) {
+		case stateOpen:
+			// Only start timeout if the statement is executed in an
+			// explicit transaction.
+			if !ex.implicitTxn() {
+				startTransactionTimeout()
 			}
 		}
 	}
@@ -2585,8 +2619,14 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 	ex.recordDDLTxnTelemetry(true /* failed */)
 
-	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
-		log.Warningf(ctx, "txn rollback failed: %s", err)
+	needRollback := true
+	if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
+		needRollback = ex.state.mu.hasSavepoints
+	}
+	if needRollback {
+		if err := ex.state.mu.txn.Rollback(ctx); err != nil {
+			log.Warningf(ctx, "txn rollback failed: %s", err)
+		}
 	}
 	if err := ex.reportSessionDataChanges(func() error {
 		ex.sessionDataStack.PopAll()
