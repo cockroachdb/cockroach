@@ -1282,6 +1282,7 @@ unreserved_keyword ::=
 	| 'LOGICALLY'
 	| 'LOGIN'
 	| 'LOCALITY'
+	| 'LOGGED'
 	| 'LOOKUP'
 	| 'LOW'
 	| 'MATCH'
@@ -1702,6 +1703,7 @@ alter_table_stmt ::=
 	| alter_rename_table_stmt
 	| alter_table_set_schema_stmt
 	| alter_table_locality_stmt
+	| alter_table_logged_stmt
 	| alter_table_owner_stmt
 
 alter_index_stmt ::=
@@ -2273,6 +2275,12 @@ alter_table_set_schema_stmt ::=
 alter_table_locality_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'SET' locality
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' locality
+
+alter_table_logged_stmt ::=
+	'ALTER' 'TABLE' relation_expr 'SET' 'LOGGED'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' 'LOGGED'
+	| 'ALTER' 'TABLE' relation_expr 'SET' 'UNLOGGED'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' 'UNLOGGED'
 
 alter_table_owner_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'OWNER' 'TO' role_spec
@@ -4088,6 +4096,7 @@ bare_label_keywords ::=
 	| 'LOCALTIME'
 	| 'LOCALTIMESTAMP'
 	| 'LOCKED'
+	| 'LOGGED'
 	| 'LOGICAL'
 	| 'LOGICALLY'
 	| 'LOGIN'

@@ -57,6 +57,7 @@ FILES = [
     "alter_table",
     "alter_table_cmds",
     "alter_table_locality_stmt",
+    "alter_table_logged_stmt",
     "alter_table_owner_stmt",
     "alter_table_partition_by",
     "alter_table_reset_storage_param",
