@@ -74,6 +74,7 @@ go_library(
         "@com_github_golang_protobuf//proto",
         "@com_github_golang_snappy//:snappy",
         "@com_github_montanaflynn_stats//:stats",
+        "@com_github_prometheus_client_model//go",
         "@com_github_vividcortex_ewma//:ewma",
         "@io_opentelemetry_go_otel//attribute",
         "@io_storj_drpc//:drpc",
