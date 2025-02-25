@@ -636,6 +636,23 @@ func TestParseSQL(t *testing.T) {
 	}
 }
 
+func TestParse_WithComments(t *testing.T) {
+	sql := `SELECT 1 -- my comment`
+	var p parser.Parser
+
+	testutils.RunTrueAndFalse(t, "WithComments", func(t *testing.T, parseWithComments bool) {
+		stmts, err := p.Parse(sql, parser.WithComments())
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
+		if parseWithComments {
+			require.Len(t, stmts[0].Comments, 1)
+			require.Equal(t, `-- my comment`, stmts[0].Comments[0])
+		} else {
+			require.Len(t, stmts[0].Comments, 0)
+		}
+	})
+}
+
 // TestParseNumPlaceholders verifies that Statement.NumPlaceholders is set
 // correctly.
 func TestParseNumPlaceholders(t *testing.T) {
