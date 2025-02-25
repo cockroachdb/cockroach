@@ -65,6 +65,9 @@ func assertProjOpAgainstRowByRow(
 	columnarizer := NewBufferingColumnarizerForTests(testAllocator, flowCtx, 1 /* processorID */, input)
 	projOp, err := colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, columnarizer, inputTypes, projExpr, testMemAcc,
+		// We don't support some casts to Oid types which requires the fallback
+		// to the row-by-row processors.
+		colexectestutils.AllowProcessorFallback{},
 	)
 	require.NoError(t, err)
 	// We will project out all input columns while keeping only the output

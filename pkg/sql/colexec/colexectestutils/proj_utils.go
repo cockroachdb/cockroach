@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -37,6 +38,12 @@ func (p *MockTypeContext) IndexedVarResolvedType(idx int) *types.T {
 	return p.Typs[idx]
 }
 
+type CreateProjOpOptions interface{}
+
+type AllowProcessorFallback struct{}
+
+var _ CreateProjOpOptions = AllowProcessorFallback{}
+
 // CreateTestProjectingOperator creates a projecting operator that performs
 // projectingExpr on input that has inputTypes as its output columns. It does
 // so by making a noop processor core with post-processing step that passes
@@ -53,6 +60,7 @@ func CreateTestProjectingOperator(
 	inputTypes []*types.T,
 	projectingExpr string,
 	testMemAcc *mon.BoundAccount,
+	opts ...CreateProjOpOptions,
 ) (colexecop.Operator, error) {
 	expr, err := parser.ParseExpr(projectingExpr)
 	if err != nil {
@@ -84,6 +92,12 @@ func CreateTestProjectingOperator(
 		Spec:                spec,
 		Inputs:              []colexecargs.OpWithMetaInfo{{Root: input}},
 		StreamingMemAccount: testMemAcc,
+	}
+	for _, opt := range opts {
+		if _, ok := opt.(AllowProcessorFallback); ok {
+			args.ProcessorConstructor = rowexec.NewProcessor
+			break
+		}
 	}
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	if err != nil {
