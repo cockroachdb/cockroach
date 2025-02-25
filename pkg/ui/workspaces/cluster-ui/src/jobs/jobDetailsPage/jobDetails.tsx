@@ -244,6 +244,14 @@ export class JobDetails extends React.Component<
                 }
               />
             )}
+            <SummaryCardItem
+              label="Coordinator Node"
+              value={
+                job.coordinator_id.isZero()
+                  ? "-"
+                  : job.coordinator_id.toString()
+              }
+            />
           </SummaryCard>
         </Col>
         <Col className="gutter-row" span={16}>
