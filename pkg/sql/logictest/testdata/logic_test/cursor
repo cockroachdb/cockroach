@@ -641,8 +641,26 @@ FETCH 1 a b;
 statement ok
 COMMIT;
 
-statement error DECLARE CURSOR WITH HOLD can only be used in transaction blocks
+# Test holdable cursors.
+subtest holdable
+
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT);
+INSERT INTO t (SELECT t, t%123 FROM generate_series(1, 10000) g(t));
+
+# A holdable cursor can be declared in an implicit transaction.
+statement ok
 DECLARE foo CURSOR WITH HOLD FOR SELECT 1
+
+query I
+FETCH 1 foo;
+----
+1
+
+# A holdable cursor can be declared in an explicit transaction and remain open
+# after commit.
+statement ok
+CLOSE foo;
 
 statement ok
 BEGIN
@@ -662,29 +680,153 @@ statement ok
 CLOSE foo
 
 statement ok
+COMMIT
+
+query I
+FETCH 1 bar
+----
+2
+
+statement ok
 CLOSE bar
 
 statement ok
+BEGIN
+
+statement ok
+DECLARE foo CURSOR WITH HOLD FOR SELECT * FROM generate_series(1, 10)
+
+statement ok
 COMMIT
+
+query I rowsort
+FETCH 2 foo
+----
+1
+2
 
 statement ok
 BEGIN
 
 statement ok
-DECLARE foo CURSOR WITH HOLD FOR SELECT 1
+DECLARE bar CURSOR WITH HOLD FOR SELECT 1
 
-statement error cursor foo WITH HOLD must be closed before committing
-COMMIT
-
-statement ok
-BEGIN
-
-statement ok
-DECLARE foo CURSOR WITH HOLD FOR SELECT 1
-
-# ROLLBACK is fine, since it renders the cursor unusable anyway.
 statement ok
 ROLLBACK
+
+# The rollback should have closed the holdable cursor for that transaction, but
+# not the one from the previous committed transaction.
+query T rowsort
+SELECT name FROM pg_cursors
+----
+foo
+
+query I rowsort
+FETCH 2 foo
+----
+3
+4
+
+statement ok
+CLOSE foo;
+
+# Open a holdable cursor fetching from a table.
+statement ok
+DECLARE foo CURSOR WITH HOLD FOR SELECT * FROM t ORDER BY x
+
+query II rowsort
+FETCH 3 foo
+----
+1  1
+2  2
+3  3
+
+# Same as before, but in an explicit transaction.
+statement ok
+BEGIN;
+DECLARE bar CURSOR WITH HOLD FOR SELECT * FROM t ORDER BY x;
+
+query II rowsort
+FETCH 3 bar
+----
+1  1
+2  2
+3  3
+
+statement ok
+COMMIT
+
+query II rowsort
+FETCH 3 bar
+----
+4  4
+5  5
+6  6
+
+# Fetch again from the cursor declared in the implicit txn.
+query II rowsort
+FETCH 3 foo
+----
+4  4
+5  5
+6  6
+
+# CLOSE ALL should close holdable cursors.
+statement ok
+CLOSE ALL;
+
+query T rowsort
+SELECT name FROM pg_cursors
+----
+
+skipif config local-mixed-24.3
+# A transaction with an active holdable cursor cannot be prepared.
+statement ok
+BEGIN;
+
+skipif config local-mixed-24.3
+statement ok
+DECLARE foo CURSOR WITH HOLD FOR SELECT 1
+
+skipif config local-mixed-24.3
+statement error pgcode 0A000 pq: cannot PREPARE a transaction that has created a cursor WITH HOLD
+PREPARE TRANSACTION 'read-only'
+
+skipif config local-mixed-24.3
+query T rowsort
+SELECT name FROM pg_cursors
+----
+
+skipif config local-mixed-24.3
+statement ok
+BEGIN;
+
+skipif config local-mixed-24.3
+statement ok
+DECLARE foo CURSOR WITH HOLD FOR SELECT 1
+
+skipif config local-mixed-24.3
+statement ok
+CLOSE foo;
+
+skipif config local-mixed-24.3
+statement ok
+PREPARE TRANSACTION 'read-only'
+
+skipif config local-mixed-24.3
+statement ok
+COMMIT PREPARED 'read-only'
+
+# Holdable cursors cannot contain locking.
+statement error pgcode 0A000 pq: DECLARE CURSOR WITH HOLD must not contain locking
+DECLARE foo CURSOR WITH HOLD FOR SELECT * FROM t FOR UPDATE
+
+statement ok
+DROP TABLE t
+
+subtest end
+
+subtest regression
 
 # Regression test for using a SQL cursor that buffers a notice.
 # See https://github.com/cockroachdb/cockroach/issues/94344
@@ -728,3 +870,5 @@ COMMIT
 
 statement ok
 RESET autocommit_before_ddl
+
+subtest end
