@@ -49,9 +49,10 @@ func (s *Container) RecordStatement(
 
 	statementKey := stmtKey{
 		sampledPlanKey: sampledPlanKey{
-			stmtNoConstants: key.Query,
-			implicitTxn:     key.ImplicitTxn,
-			database:        key.Database,
+			stmtNoConstants:  key.Query,
+			sqlCommenterTags: key.SqlCommenterTags,
+			implicitTxn:      key.ImplicitTxn,
+			database:         key.Database,
 		},
 		planHash:                 key.PlanHash,
 		transactionFingerprintID: key.TransactionFingerprintID,

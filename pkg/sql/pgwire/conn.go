@@ -380,7 +380,7 @@ func (c *conn) handleSimpleQuery(
 			},
 		)
 	}
-	stmts, err := c.parser.Parse(query, parser.WithIntType(unqualifiedIntSize))
+	stmts, err := c.parser.Parse(query, parser.WithIntType(unqualifiedIntSize), parser.WithComments(true))
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse simple query: %s", query)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -516,7 +516,7 @@ func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 	}
 
 	startParse := crtime.NowMono()
-	stmts, err := c.parser.Parse(query, parser.WithIntType(nakedIntSize))
+	stmts, err := c.parser.Parse(query, parser.WithIntType(nakedIntSize), parser.WithComments(true))
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse: %s", query)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
