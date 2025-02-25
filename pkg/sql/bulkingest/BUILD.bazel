@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bulkingest",
+    srcs = ["split.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/bulkingest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/sql/execinfrapb",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "bulkingest_test",
+    srcs = [
+        "main_test.go",
+        "split_test.go",
+    ],
+    embed = [":bulkingest"],
+    deps = [
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/execinfrapb",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
