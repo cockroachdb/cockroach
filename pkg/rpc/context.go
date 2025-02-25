@@ -143,6 +143,12 @@ func NewServerEx(
 		})
 	})
 
+	// If the metrics interceptor is set, it should be registered second so
+	// that all other interceptors are included in the response time durations.
+	if o.metricsInterceptor != nil {
+		unaryInterceptor = append(unaryInterceptor, grpc.UnaryServerInterceptor(o.metricsInterceptor))
+	}
+
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,
