@@ -4235,14 +4235,93 @@ var pgCatalogStatProgressBasebackupTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
-var pgCatalogPolicyTable = virtualSchemaTable{
-	comment: "pg_policy was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogPolicy,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+var pgCatalogPolicyTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
+	`stores row-level security policies for tables
+https://www.postgresql.org/docs/17/catalog-pg-policy.html`,
+	vtable.PgCatalogPolicy,
+	virtualCurrentDB, false, /* includesIndexEntries */
+	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+		table catalog.TableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error,
+	) error {
+		for _, policy := range table.GetPolicies() {
+			// get the policy command and convert it to postgres equivalent
+			var cmd string
+			switch policy.Command.String() {
+			case "SELECT":
+				cmd = "r"
+			case "INSERT":
+				cmd = "a"
+			case "UPDATE":
+				cmd = "w"
+			case "DELETE":
+				cmd = "d"
+			case "ALL":
+				cmd = "*"
+			default:
+				panic(errors.AssertionFailedf("unexpected policy command: %s", policy.Command.String()))
+			}
+
+			// loop through role names and get all the role oids
+			h := makeOidHasher()
+			treeRoleOids := tree.NewDArray(types.Oid)
+			for _, roleName := range policy.RoleNames {
+				if roleName == "public" {
+					if err := treeRoleOids.Append(tree.NewDOid(oid.Oid(0))); err != nil {
+						return err
+					}
+					continue
+				}
+
+				sqlUsername, err := username.MakeSQLUsernameFromPreNormalizedStringChecked(roleName)
+				if err != nil {
+					return err
+				}
+
+				if err = treeRoleOids.Append(h.UserOid(sqlUsername)); err != nil {
+					return err
+				}
+			}
+
+			// get the using expression
+			usingExpr := ""
+			if len(policy.UsingExpr) != 0 {
+				if formattedUsingExpr, err := schemaexpr.FormatExprForDisplay(
+					ctx, table, policy.UsingExpr, p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtParsable,
+				); err != nil {
+					return err
+				} else {
+					usingExpr = formattedUsingExpr
+				}
+			}
+
+			// get the check expression
+			checkExpr := ""
+			if len(policy.WithCheckExpr) != 0 {
+				if formattedCheckExpr, err := schemaexpr.FormatExprForDisplay(
+					ctx, table, policy.WithCheckExpr, p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtParsable,
+				); err != nil {
+					return err
+				} else {
+					checkExpr = formattedCheckExpr
+				}
+			}
+
+			if err := addRow(
+				tree.NewDOid(oid.Oid(policy.ID)),                           // oid
+				tree.NewDName(policy.Name),                                 // polname
+				tableOid(table.GetID()),                                    // polrelid
+				tree.NewDString(cmd),                                       // polcmd
+				tree.MakeDBool(policy.Type == catpb.PolicyType_PERMISSIVE), // polpermissive
+				treeRoleOids,                                               // polroles
+				tree.NewDString(usingExpr),                                 // polqual
+				tree.NewDString(checkExpr),                                 // polwithcheck
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
-}
+	nil)
 
 var pgCatalogStatArchiverTable = virtualSchemaTable{
 	comment: "pg_stat_archiver was created for compatibility and is currently unimplemented",
