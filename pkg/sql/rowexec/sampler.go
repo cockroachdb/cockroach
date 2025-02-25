@@ -14,6 +14,7 @@ import (
 	hllNew "github.com/axiomhq/hyperloglog"
 	hllOld "github.com/axiomhq/hyperloglog/000"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -511,6 +513,10 @@ func (s *samplerProcessor) DoesNotUseTxn() bool {
 	return ok && txnUser.DoesNotUseTxn()
 }
 
+var toAppendNull = []byte{0}
+var toAppendBoolFalse = []byte{0}
+var toAppendBoolTrue = []byte{1}
+
 // addRow adds a row to the sketch and updates row counts.
 func (s *sketchInfo) addRow(
 	ctx context.Context, row rowenc.EncDatumRow, typs []*types.T, buf *[]byte,
@@ -524,14 +530,6 @@ func (s *sketchInfo) addRow(
 	*buf = (*buf)[:0]
 	for _, col := range s.spec.Columns {
 		if b := row[col].EncodedBytes(); b != nil && !containsCollatedString(typs[col]) {
-			// If the datum is already encoded and does not contain a collated
-			// string, we can insert the encoded bytes directly into the sketch.
-			// Even though the encoded bytes contain the column ID and type,
-			// this will not break the "loose invariant" that equal datums will
-			// have equal bytes added to the sketch because we are always adding
-			// datums from the same table column, i.e., the column ID and type
-			// should be the same for every value in the column.
-			//
 			// Composite, value encoded datums may have different encodings for
 			// semantically equivalent types, so using the encoded bytes can
 			// skew the cardinality estimate slightly. This should be rare and
@@ -555,7 +553,34 @@ func (s *sketchInfo) addRow(
 			// prevent a really wide value from growing buf. Since the distinct
 			// count is an estimate anyway, truncating the value shouldn't have
 			// any real impact.
-			*buf = append(*buf, b...)
+			toAppend := b
+			if enc, _ := row[col].Encoding(); enc == catenumpb.DatumEncoding_VALUE {
+				// Value encoding includes column ID delta in the prefix which
+				// can differ based on the values of other columns within the
+				// same row (i.e. whether the previous columns had NULL or
+				// non-NULL values). To prevent this detail from artificially
+				// increasing the distinct estimate, we'll remove the column ID
+				// delta as well as value tag from encoding that we use for the
+				// current datum.
+				_, dataOffset, _, typ, err := encoding.DecodeValueTag(b)
+				if err != nil {
+					return err
+				}
+				switch typ {
+				// NULL values are handled separately.
+				case encoding.Null:
+					toAppend = toAppendNull
+				// Bool values are special because they are stored in the value
+				// tag.
+				case encoding.True:
+					toAppend = toAppendBoolTrue
+				case encoding.False:
+					toAppend = toAppendBoolFalse
+				default:
+					toAppend = b[dataOffset:]
+				}
+			}
+			*buf = append(*buf, toAppend...)
 		} else {
 			// Fallback to using the Fingerprint method to generate bytes to
 			// insert into the sketch.
