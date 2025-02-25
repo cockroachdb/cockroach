@@ -358,9 +358,6 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 	// Validate that no region is labeled as unavailable after.
 	for _, node := range killedRegion {
 		tenantDB := c.Conn(ctx, t.L(), node, option.VirtualClusterName(virtualCluster))
-		//nolint:deferloop TODO(#137605)
-		defer tenantDB.Close()
-
 		rows, err := tenantDB.Query("SELECT crdb_region, unavailable_at FROM system.region_liveness")
 		require.NoError(t, err, "error querying region liveness on n%d", node)
 
@@ -380,6 +377,7 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 		if len(unavailableRegions) > 0 {
 			t.Fatalf("unavailable regions on n%d:\n%s", node, strings.Join(unavailableRegions, "\n"))
 		}
+		tenantDB.Close()
 	}
 
 	t.L().Printf("validated region liveness")

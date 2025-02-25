@@ -314,8 +314,6 @@ func (p *tpchVecPerfTest) postTestRunHook(
 				if err != nil {
 					t.Fatal(err)
 				}
-				//nolint:deferloop TODO(#137605)
-				defer tempConn.Close()
 				sqlConnCtx := clisqlclient.Context{}
 				pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{
 					VirtualClusterName: tenantName,
@@ -373,6 +371,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 						t.Fatal(err)
 					}
 				}
+				tempConn.Close()
 			}
 			msg := fmt.Sprintf(
 				"[q%d] ON is slower by %.2f%% than OFF\n ON times: %v\nOFF times: %v",

@@ -236,8 +236,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 			continue
 		}
 		failer.Setup(ctx)
-		//nolint:deferloop TODO(#137605)
-		defer failer.Cleanup(ctx)
+		defer failer.Cleanup(ctx) //nolint:deferloop
 		failers = append(failers, failer)
 	}
 
