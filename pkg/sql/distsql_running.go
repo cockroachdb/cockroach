@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -2624,14 +2625,17 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	if quota := int(dsp.parallelChecksSem.ApproximateQuota()); numParallelChecks > quota {
 		numParallelChecks = quota
 	}
+	var alloc *quotapool.IntAlloc
 	for numParallelChecks > 0 {
-		alloc, err := dsp.parallelLocalScansSem.TryAcquire(ctx, uint64(numParallelChecks))
+		var err error
+		alloc, err = dsp.parallelLocalScansSem.TryAcquire(ctx, uint64(numParallelChecks))
 		if err == nil {
-			//nolint:deferloop TODO(#137605)
-			defer alloc.Release()
 			break
 		}
 		numParallelChecks--
+	}
+	if alloc != nil {
+		defer alloc.Release()
 	}
 
 	log.VEventf(
