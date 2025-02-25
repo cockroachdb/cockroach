@@ -181,6 +181,10 @@ func NewServerEx(
 		streamInterceptor = append(streamInterceptor, grpcinterceptor.StreamServerInterceptor(tracer))
 	}
 
+	if len(o.unaryServerInterceptors) > 0 {
+		unaryInterceptor = append(unaryInterceptor, o.unaryServerInterceptors...)
+	}
+
 	grpcOpts = append(grpcOpts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 

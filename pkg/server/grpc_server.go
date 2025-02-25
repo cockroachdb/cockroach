@@ -27,13 +27,15 @@ type grpcServer struct {
 	mode                   serveMode
 }
 
-func newGRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*grpcServer, error) {
+func newGRPCServer(
+	ctx context.Context, rpcCtx *rpc.Context, grpcMetrics *GrpcServerMetrics,
+) (*grpcServer, error) {
 	s := &grpcServer{}
 	s.mode.set(modeInitializing)
 	srv, dsrv, interceptorInfo, err := rpc.NewServerEx(
 		ctx, rpcCtx, rpc.WithInterceptor(func(path string) error {
 			return s.intercept(path)
-		}))
+		}), rpc.WithUnaryServerInterceptors(grpcMetrics.NewGrpcServerInterceptor()))
 	if err != nil {
 		return nil, err
 	}
