@@ -60,6 +60,7 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 		expectedNulls := expectedVec.Nulls()
 		actualNulls := actualVec.Nulls()
 		oldExpMaybeHasNulls, oldActMaybeHasNulls := expectedNulls.maybeHasNulls, actualNulls.maybeHasNulls
+		//nolint:deferloop TODO(#137605)
 		defer func() {
 			expectedNulls.maybeHasNulls, actualNulls.maybeHasNulls = oldExpMaybeHasNulls, oldActMaybeHasNulls
 		}()

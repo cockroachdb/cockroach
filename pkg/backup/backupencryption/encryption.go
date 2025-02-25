@@ -176,6 +176,7 @@ func ValidateKMSURIsAgainstFullBackup(
 			return nil, err
 		}
 
+		//nolint:deferloop TODO(#137605)
 		defer func() {
 			_ = kms.Close()
 		}()
@@ -453,6 +454,7 @@ func ReadEncryptionOptions(
 		if err != nil {
 			return nil, errors.Wrap(err, encryptionReadErrorMsg)
 		}
+		//nolint:deferloop TODO(#137605)
 		defer r.Close(ctx)
 
 		encInfoBytes, err := ioctx.ReadAll(ctx, r)

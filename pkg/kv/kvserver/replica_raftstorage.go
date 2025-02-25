@@ -930,6 +930,7 @@ func clearSubsumedReplicaDiskData(
 		subsumedReplSST := storage.MakeIngestionSSTWriter(
 			ctx, st, subsumedReplSSTFile,
 		)
+		//nolint:deferloop TODO(#137605)
 		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
 		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
@@ -991,6 +992,7 @@ func clearSubsumedReplicaDiskData(
 			subsumedReplSST := storage.MakeIngestionSSTWriter(
 				ctx, st, subsumedReplSSTFile,
 			)
+			//nolint:deferloop TODO(#137605)
 			defer subsumedReplSST.Close()
 			if err := storage.ClearRangeWithHeuristic(
 				ctx,

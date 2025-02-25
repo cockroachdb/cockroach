@@ -205,6 +205,7 @@ func (t *testdir) dump() error {
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(#137605)
 		defer cleanup()
 		err = testFileTpl.Execute(f, tplCfg)
 		if err != nil {
