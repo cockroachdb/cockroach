@@ -166,7 +166,7 @@ SELECT 2; -- comment ignore, not part of statement
 	var p Parser
 	for _, d := range testData {
 		t.Run(d.in, func(t *testing.T) {
-			stmts, err := p.parseWithDepth(1, d.in, defaultNakedIntType, retainComments)
+			stmts, err := p.ParseWithOptions(d.in, DefaultParseOptions.RetainComments())
 			require.NoError(t, err)
 
 			var res [][]string

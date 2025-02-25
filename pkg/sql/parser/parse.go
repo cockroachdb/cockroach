@@ -43,6 +43,27 @@ type Parser struct {
 	stmtBuf    [1]statements.Statement[tree.Statement]
 }
 
+// ParseOptions contains optional parameters for parsing SQL statements.
+type ParseOptions struct {
+	intType        *types.T
+	retainComments bool
+}
+
+var DefaultParseOptions = ParseOptions{
+	intType:        defaultNakedIntType,
+	retainComments: false,
+}
+
+func (po ParseOptions) RetainComments() ParseOptions {
+	po.retainComments = true
+	return po
+}
+
+func (po ParseOptions) WithIntType(t *types.T) ParseOptions {
+	po.intType = t
+	return po
+}
+
 // INT8 is the historical interpretation of INT. This should be left
 // alone in the future, since there are many sql fragments stored
 // in various descriptors. Any user input that was created after
@@ -63,19 +84,18 @@ func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (statements.Statements, error) {
-	return p.parseWithDepth(1, sql, defaultNakedIntType, discardComments)
+	return p.parseWithDepth(1, sql, DefaultParseOptions)
 }
 
-// ParseWithInt parses a sql statement string and returns a list of
-// Statements. The INT token will result in the specified TInt type.
-func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (statements.Statements, error) {
-	return p.parseWithDepth(1, sql, nakedIntType, discardComments)
+// ParseWithOptions parses the sql with the provided options and returns a list of statements.
+func (p *Parser) ParseWithOptions(sql string, opts ParseOptions) (statements.Statements, error) {
+	return p.parseWithDepth(1, sql, opts)
 }
 
-func (p *Parser) parseOneWithInt(
-	sql string, nakedIntType *types.T, comments commentsMode,
+func (p *Parser) parseOne(
+	sql string, opts ParseOptions,
 ) (statements.Statement[tree.Statement], error) {
-	stmts, err := p.parseWithDepth(1, sql, nakedIntType, comments)
+	stmts, err := p.parseWithDepth(1, sql, opts)
 	if err != nil {
 		return statements.Statement[tree.Statement]{}, err
 	}
@@ -139,25 +159,18 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	}
 }
 
-type commentsMode bool
-
-const (
-	retainComments  commentsMode = true
-	discardComments commentsMode = false
-)
-
 func (p *Parser) parseWithDepth(
-	depth int, sql string, nakedIntType *types.T, cm commentsMode,
+	depth int, sql string, options ParseOptions,
 ) (statements.Statements, error) {
 	stmts := statements.Statements(p.stmtBuf[:0])
 	p.scanner.Init(sql)
-	if cm == retainComments {
+	if options.retainComments {
 		p.scanner.RetainComments()
 	}
 	defer p.scanner.Cleanup()
 	for {
 		sql, tokens, done := p.scanOneStmt()
-		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
+		stmt, err := p.parse(depth+1, sql, tokens, options.intType)
 		if err != nil {
 			return nil, err
 		}
@@ -234,14 +247,14 @@ func unaryNegation(e tree.Expr) tree.Expr {
 
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (statements.Statements, error) {
-	return ParseWithInt(sql, defaultNakedIntType)
+	return ParseWithOptions(sql, DefaultParseOptions)
 }
 
-// ParseWithInt parses a sql statement string and returns a list of
-// Statements. The INT token will result in the specified TInt type.
-func ParseWithInt(sql string, nakedIntType *types.T) (statements.Statements, error) {
+// ParseWithOptions parses a sql statement string with the provided options and
+// returns a list of Statements.
+func ParseWithOptions(sql string, opts ParseOptions) (statements.Statements, error) {
 	var p Parser
-	return p.parseWithDepth(1, sql, nakedIntType, discardComments)
+	return p.ParseWithOptions(sql, opts)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
@@ -249,25 +262,22 @@ func ParseWithInt(sql string, nakedIntType *types.T) (statements.Statements, err
 // interpret the INT and SERIAL types as 64-bit types, since this is
 // used in various internal-execution paths where we might receive
 // bits of SQL from other nodes. In general, we expect that all
-// user-generated SQL has been run through the ParseWithInt() function.
+// user-generated SQL has been run through the ParseWithOptions() function using
+// the DefaultParseOptions.WithIntType() option.
 func ParseOne(sql string) (statements.Statement[tree.Statement], error) {
-	return ParseOneWithInt(sql, defaultNakedIntType)
+	return ParseOneWithOptions(sql, DefaultParseOptions)
 }
 
-// ParseOneRetainComments is similar to ParseOne, but it retains scanned
-// comments in the returned statement's Comment field.
-func ParseOneRetainComments(sql string) (statements.Statement[tree.Statement], error) {
-	var p Parser
-	return p.parseOneWithInt(sql, defaultNakedIntType, retainComments)
-}
-
-// ParseOneWithInt is similar to ParseOn but interprets the INT and SERIAL
-// types as the provided integer type.
-func ParseOneWithInt(
-	sql string, nakedIntType *types.T,
+// ParseOneWithOptions parses a sql statement string with the provided options,
+// ensuring that it contains only a single statement, and returns that
+// Statement. ParseOne will always interpret the INT and SERIAL types as 64-bit
+// types, since this is used in various internal-execution paths where we might
+// receive bits of SQL from other nodes.
+func ParseOneWithOptions(
+	sql string, opts ParseOptions,
 ) (statements.Statement[tree.Statement], error) {
 	var p Parser
-	return p.parseOneWithInt(sql, nakedIntType, discardComments)
+	return p.parseOne(sql, opts)
 }
 
 // ParseQualifiedTableName parses a possibly qualified table name. The
@@ -355,9 +365,25 @@ func ParseTablePattern(sql string) (tree.TablePattern, error) {
 	return un.NormalizeTablePattern()
 }
 
-// parseExprsWithInt parses one or more sql expressions.
-func parseExprsWithInt(exprs []string, nakedIntType *types.T) (tree.Exprs, error) {
-	stmt, err := ParseOneWithInt(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), nakedIntType)
+// ParseExprs parses a comma-delimited sequence of SQL scalar
+// expressions. The caller is responsible for ensuring that the input
+// is, in fact, a comma-delimited sequence of SQL scalar expressions —
+// the results are undefined if the string contains invalid SQL
+// syntax.
+func ParseExprs(exprs []string) (tree.Exprs, error) {
+	return ParseExprsWithOptions(exprs, DefaultParseOptions)
+}
+
+// ParseExprsWithOptions parses a comma-delimited sequence of SQL scalar
+// expressions with the provided options. The caller is responsible for
+// ensuring that the input is, in fact, a comma-delimited sequence of SQL
+// scalar expressions — the results are undefined if the string contains
+// invalid SQL syntax.
+func ParseExprsWithOptions(exprs []string, opts ParseOptions) (tree.Exprs, error) {
+	if len(exprs) == 0 {
+		return tree.Exprs{}, nil
+	}
+	stmt, err := ParseOneWithOptions(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -368,33 +394,12 @@ func parseExprsWithInt(exprs []string, nakedIntType *types.T) (tree.Exprs, error
 	return set.Values, nil
 }
 
-// ParseExprs parses a comma-delimited sequence of SQL scalar
-// expressions. The caller is responsible for ensuring that the input
-// is, in fact, a comma-delimited sequence of SQL scalar expressions —
-// the results are undefined if the string contains invalid SQL
-// syntax.
-func ParseExprs(sql []string) (tree.Exprs, error) {
-	if len(sql) == 0 {
-		return tree.Exprs{}, nil
-	}
-	return parseExprsWithInt(sql, defaultNakedIntType)
-}
-
 // ParseExpr parses a SQL scalar expression. The caller is responsible
 // for ensuring that the input is, in fact, a valid SQL scalar
 // expression — the results are undefined if the string contains
 // invalid SQL syntax.
 func ParseExpr(sql string) (tree.Expr, error) {
-	return ParseExprWithInt(sql, defaultNakedIntType)
-}
-
-// ParseExprWithInt parses a SQL scalar expression, using the given
-// type when INT is used as type name in the SQL syntax. The caller is
-// responsible for ensuring that the input is, in fact, a valid SQL
-// scalar expression — the results are undefined if the string
-// contains invalid SQL syntax.
-func ParseExprWithInt(sql string, nakedIntType *types.T) (tree.Expr, error) {
-	exprs, err := parseExprsWithInt([]string{sql}, nakedIntType)
+	exprs, err := ParseExprs([]string{sql})
 	if err != nil {
 		return nil, err
 	}
