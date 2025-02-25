@@ -767,6 +767,14 @@ type rangeAnalyzedConstraints struct {
 	constraints       analyzedConstraints
 	voterConstraints  analyzedConstraints
 
+	// leasePreferenceIndices[i] is the index of the earliest entry in
+	// normalizedSpanConfig.leasePreferences, matched by the replica at
+	// replicas[voterIndex][i]. If the replica does not match any lease
+	// preference, this is set to math.MaxInt32.
+	leasePreferenceIndices     []int32
+	leaseholderID              roachpb.StoreID
+	leaseholderPreferenceIndex int32
+
 	votersDiversityScore   float64
 	replicasDiversityScore float64
 
@@ -786,6 +794,7 @@ func releaseRangeAnalyzedConstraints(rac *rangeAnalyzedConstraints) {
 	for i := range rac.replicas {
 		rac.replicas[i] = rac.replicas[i][:0]
 	}
+	rac.leasePreferenceIndices = rac.leasePreferenceIndices[:0]
 	*rac = rangeAnalyzedConstraints{
 		replicas:         rac.replicas,
 		constraints:      rac.constraints,
@@ -812,7 +821,9 @@ type storeMatchesConstraintInterface interface {
 }
 
 func (rac *rangeAnalyzedConstraints) finishInit(
-	spanConfig *normalizedSpanConfig, constraintMatcher storeMatchesConstraintInterface,
+	spanConfig *normalizedSpanConfig,
+	constraintMatcher storeMatchesConstraintInterface,
+	leaseholder roachpb.StoreID,
 ) {
 	rac.numNeededReplicas[voterIndex] = spanConfig.numVoters
 	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
@@ -913,6 +924,38 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	if spanConfig.voterConstraints != nil {
 		rac.voterConstraints.constraints = spanConfig.voterConstraints
 		analyzeFunc(&rac.voterConstraints)
+	}
+
+	rac.leaseholderID = leaseholder
+	rac.leaseholderPreferenceIndex = -1
+	matchLeasePreferenceFunc := func(storeID roachpb.StoreID) int32 {
+		for j := range spanConfig.leasePreferences {
+			if constraintMatcher.storeMatches(storeID, spanConfig.leasePreferences[j].constraints) {
+				return int32(j)
+			}
+		}
+		return math.MaxInt32
+	}
+	for i := range rac.replicas[voterIndex] {
+		storeID := rac.replicas[voterIndex][i].StoreID
+		leasePreferenceIndex := matchLeasePreferenceFunc(storeID)
+		rac.leasePreferenceIndices = append(rac.leasePreferenceIndices, leasePreferenceIndex)
+		if storeID == leaseholder {
+			rac.leaseholderPreferenceIndex = leasePreferenceIndex
+		}
+	}
+	if rac.leaseholderPreferenceIndex == -1 {
+		// Must be a VOTER_DEMOTING_NON_VOTER, which we count as a non-voter.
+		for i := range rac.replicas[nonVoterIndex] {
+			storeID := rac.replicas[nonVoterIndex][i].StoreID
+			if storeID == leaseholder {
+				rac.leaseholderPreferenceIndex = matchLeasePreferenceFunc(storeID)
+				break
+			}
+		}
+		if rac.leaseholderPreferenceIndex == -1 {
+			panic("leaseholder not found in replicas")
+		}
 	}
 
 	diversityFunc := func(
@@ -1610,6 +1653,39 @@ func (rac *rangeAnalyzedConstraints) candidatesToReplaceNonVoterForRebalance(
 	}
 	return nil,
 		errors.Errorf("expected replaced store %d to match a constraint", toReplace)
+}
+
+type storeAndLeasePreference struct {
+	// Smaller is better.
+	leasePreferenceIndex int32
+	storeID              roachpb.StoreID
+}
+
+// candidatesToMoveLease will return candidates equal to or better than the
+// current leaseholder wrt satisfaction of lease preferences. The candidates
+// exclude the current leaseholder, and are sorted in non-increasing order of
+// lease preference satisfaction.
+//
+// TODO(sumeer): the computation in this method can be performed once, when
+// constructing rangeAnalyzedConstraints.
+func (rac *rangeAnalyzedConstraints) candidatesToMoveLease() (
+	cands []storeAndLeasePreference,
+	curLeasePreferenceIndex int32,
+) {
+	curLeasePreferenceIndex = rac.leaseholderPreferenceIndex
+	for i := range rac.leasePreferenceIndices {
+		if rac.leasePreferenceIndices[i] <= curLeasePreferenceIndex &&
+			rac.replicas[voterIndex][i].StoreID != rac.leaseholderID {
+			cands = append(cands, storeAndLeasePreference{
+				leasePreferenceIndex: rac.leasePreferenceIndices[i],
+				storeID:              rac.replicas[voterIndex][i].StoreID,
+			})
+		}
+	}
+	slices.SortFunc(cands, func(a, b storeAndLeasePreference) int {
+		return cmp.Compare(a.leasePreferenceIndex, b.leasePreferenceIndex)
+	})
+	return cands, curLeasePreferenceIndex
 }
 
 // Helper for constructing rangeAnalyzedConstraints. Contains initial state
