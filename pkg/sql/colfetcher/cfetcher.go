@@ -1271,7 +1271,7 @@ func (cf *cFetcher) processValueBytes(
 	cf.machine.remainingValueColsByIdx.UnionWith(cf.table.compositeIndexColOrdinals)
 
 	var (
-		colIDDiff      uint32
+		colIDDelta     uint32
 		lastColID      descpb.ColumnID
 		dataOffset     int
 		typ            encoding.Type
@@ -1283,11 +1283,11 @@ func (cf *cFetcher) processValueBytes(
 	// it's expensive to keep calling .Len() in the loop.
 	remainingValueCols := cf.machine.remainingValueColsByIdx.Len()
 	for len(valueBytes) > 0 && remainingValueCols > 0 {
-		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
+		_, dataOffset, colIDDelta, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
-		colID := lastColID + descpb.ColumnID(colIDDiff)
+		colID := lastColID + descpb.ColumnID(colIDDelta)
 		lastColID = colID
 		vecIdx := -1
 		// Find the ordinal into table.cols for the column ID we just decoded,
