@@ -2450,11 +2450,6 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(#141405): Remove this once llrbFrontier starts merging
-	// adjacent spans. The current lack of merging causes issues
-	// with the checks in this test around expected resolved spans.
-	defer span.EnableBtreeFrontier(true)()
-
 	rnd, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)
 
@@ -7439,11 +7434,6 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 func TestChangefeedBackfillCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// TODO(#141405): Remove this once llrbFrontier starts merging
-	// adjacent spans. The current lack of merging causes issues
-	// with the checks in this test around expected resolved spans.
-	defer span.EnableBtreeFrontier(true)()
 
 	skip.UnderRace(t)
 	skip.UnderShort(t)
