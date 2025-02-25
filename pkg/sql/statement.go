@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 )
 
 // Statement contains a statement with optional expected result columns and metadata.
@@ -34,27 +35,44 @@ type Statement struct {
 	// Given that the PreparedStatement can be modified during planning, it is
 	// not safe for use on multiple threads.
 	Prepared *prep.Statement
+
+	SqlCommenterTags []sqlcommenter.Tags
 }
 
 func makeStatement(
 	parserStmt statements.Statement[tree.Statement], queryID clusterunique.ID, fmtFlags tree.FmtFlags,
 ) Statement {
+	comments := parserStmt.Comments
+	cl := len(comments)
+	var tags []sqlcommenter.Tags
+	if cl != 0 {
+		tags = sqlcommenter.ExtractTags(comments[cl-1])
+	}
+
 	return Statement{
-		Statement:       parserStmt,
-		StmtNoConstants: formatStatementHideConstants(parserStmt.AST, fmtFlags),
-		StmtSummary:     formatStatementSummary(parserStmt.AST, fmtFlags),
-		QueryID:         queryID,
+		Statement:        parserStmt,
+		StmtNoConstants:  formatStatementHideConstants(parserStmt.AST, fmtFlags),
+		StmtSummary:      formatStatementSummary(parserStmt.AST, fmtFlags),
+		QueryID:          queryID,
+		SqlCommenterTags: tags,
 	}
 }
 
 func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.ID) Statement {
+	comments := prepared.Comments
+	cl := len(comments)
+	var tags []sqlcommenter.Tags
+	if cl != 0 {
+		tags = sqlcommenter.ExtractTags(comments[cl-1])
+	}
 	return Statement{
-		Statement:       prepared.Statement,
-		Prepared:        prepared,
-		ExpectedTypes:   prepared.Columns,
-		StmtNoConstants: prepared.StatementNoConstants,
-		StmtSummary:     prepared.StatementSummary,
-		QueryID:         queryID,
+		Statement:        prepared.Statement,
+		Prepared:         prepared,
+		ExpectedTypes:    prepared.Columns,
+		StmtNoConstants:  prepared.StatementNoConstants,
+		StmtSummary:      prepared.StatementSummary,
+		QueryID:          queryID,
+		SqlCommenterTags: tags,
 	}
 }
 

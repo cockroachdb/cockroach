@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/redact"
 )
@@ -101,6 +102,7 @@ func makeStmtInsight(value *sqlstats.RecordedStmtStats) *Statement {
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
 		ErrorMsg:             errorMsg,
+		SqlCommenterTags:     toSqlCommentTags(value.SqlCommenterTags),
 	}
 
 	return insight
@@ -112,4 +114,15 @@ func getInsightStatus(statementError error) Statement_Status {
 	}
 
 	return Statement_Failed
+}
+
+func toSqlCommentTags(sqlCommentsTags []sqlcommenter.Tags) []*SqlCommenterTag {
+	commenterTags := make([]*SqlCommenterTag, 0, len(sqlCommentsTags))
+	for _, tag := range sqlCommentsTags {
+		commenterTags = append(commenterTags, &SqlCommenterTag{
+			Name:  tag.Key,
+			Value: string(tag.Value),
+		})
+	}
+	return commenterTags
 }

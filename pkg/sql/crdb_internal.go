@@ -8715,7 +8715,8 @@ CREATE TABLE crdb_internal.%s (
 	implicit_txn               BOOL NOT NULL,
 	cpu_sql_nanos              INT8,
 	error_code                 STRING,
-	last_error_redactable      STRING
+	last_error_redactable      STRING,
+	sql_commenter_tags         JSONB
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -8842,6 +8843,27 @@ func populateStmtInsights(
 				}
 			}
 
+			var keys = []string{"name", "value"}
+			arrayBuilder := json.NewArrayBuilder(len(s.SqlCommenterTags))
+			for _, comment := range s.SqlCommenterTags {
+				builder, err := json.NewFixedKeysObjectBuilder(keys)
+				if err != nil {
+					return err
+				}
+				if err := builder.Set(keys[0], json.FromString(comment.Name)); err != nil {
+					return err
+				}
+				if err := builder.Set(keys[1], json.FromString(comment.Value)); err != nil {
+					return err
+				}
+				json, err := builder.Build()
+				if err != nil {
+					return err
+				}
+				arrayBuilder.Add(json)
+			}
+			commentsJson := arrayBuilder.Build()
+
 			err = errors.CombineErrors(err, addRow(
 				tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
 				tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
@@ -8872,6 +8894,7 @@ func populateStmtInsights(
 				tree.NewDInt(tree.DInt(s.CPUSQLNanos)),
 				errorCode,
 				errorMsg,
+				tree.NewDJSON(commentsJson),
 			))
 		}
 	}
