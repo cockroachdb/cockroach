@@ -494,11 +494,11 @@ func DecodeIndexKeyToDatums(
 
 		var lastColID descpb.ColumnID = 0
 		for len(valueBytes) > 0 {
-			typeOffset, dataOffset, colIDDiff, typ, err := encoding.DecodeValueTag(valueBytes)
+			typeOffset, dataOffset, colIDDelta, typ, err := encoding.DecodeValueTag(valueBytes)
 			if err != nil {
 				return nil, err
 			}
-			colID := lastColID + descpb.ColumnID(colIDDiff)
+			colID := lastColID + descpb.ColumnID(colIDDelta)
 			lastColID = colID
 			colOrdinal, ok := colIDs.Get(colID)
 			if !ok {
