@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sqlcommenter",
         "//pkg/sql/sqlstats",
         "//pkg/util/cache",
         "//pkg/util/intsets",
