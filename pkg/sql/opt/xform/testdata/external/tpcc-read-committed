@@ -130,7 +130,7 @@ lock stock
  ├── lock columns: (20-36)
  ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 5]
- ├── volatile, mutations
+ ├── volatile
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3,8,14-17)
  ├── ordering: +1 opt(2) [actual: +1]
@@ -834,7 +834,7 @@ lock new_order
  ├── lock columns: (6-8)
  ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 1]
- ├── volatile, mutations
+ ├── volatile
  ├── key: ()
  ├── fd: ()-->(1-3)
  └── scan new_order

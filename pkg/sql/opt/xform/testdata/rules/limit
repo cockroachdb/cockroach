@@ -367,7 +367,7 @@ lock partial_index_const
  ├── lock columns: (7-10)
  ├── locking: for-update
  ├── cardinality: [0 - 5]
- ├── volatile, mutations
+ ├── volatile
  ├── key: (4)
  ├── fd: ()-->(2), (4)-->(1,3)
  └── project

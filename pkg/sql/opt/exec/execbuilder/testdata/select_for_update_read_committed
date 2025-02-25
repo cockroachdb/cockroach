@@ -83,6 +83,7 @@ vectorized: true
 │   │ estimated row count: 0 (missing stats)
 │   │ table: supermarket
 │   │ set: aisle
+│   │ auto commit
 │   │
 │   └── • render
 │       │ columns: (person, aisle, starts_with, ends_with, aisle_new)
