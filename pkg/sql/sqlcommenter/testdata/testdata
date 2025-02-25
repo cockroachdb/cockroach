@@ -1,0 +1,169 @@
+# Missing single quotes around value1 and value2
+extract
+key1=value1,key2=value2
+----
+null
+
+# Missing single quotes around value2
+extract
+key1='value1',key2=value2
+----
+null
+
+# Key value pairs should be separated by commas
+extract
+key1='value1' key2='value2' key3='value3'
+----
+null
+
+extract
+/* key1='value1',key2='value2' */
+----
+[
+  {
+    "Key": "key1",
+    "Value": "value1"
+  },
+  {
+    "Key": "key2",
+    "Value": "value2"
+  }
+]
+
+extract
+key1='value%201',key2='value%202'
+----
+[
+  {
+    "Key": "key1",
+    "Value": "value 1"
+  },
+  {
+    "Key": "key2",
+    "Value": "value 2"
+  }
+]
+
+extract
+key1 = 'value1' , key2 = 'value2'
+----
+[
+  {
+    "Key": "key1",
+    "Value": "value1"
+  },
+  {
+    "Key": "key2",
+    "Value": "value2"
+  }
+]
+
+extract
+key%20with%20spaces='value1',another%20key='value2'
+----
+[
+  {
+    "Key": "key with spaces",
+    "Value": "value1"
+  },
+  {
+    "Key": "another key",
+    "Value": "value2"
+  }
+]
+
+extract
+key+with+spaces='value1',another+key='value2'
+----
+[
+  {
+    "Key": "key with spaces",
+    "Value": "value1"
+  },
+  {
+    "Key": "another key",
+    "Value": "value2"
+  }
+]
+
+# Test URL encoded special characters in keys and values
+extract
+key%3Dwith%3Dequals='value%26with%26ampersands',key%2Bwith%2Bplus='value%2Fwith%2Fslashes'
+----
+[
+  {
+    "Key": "key=with=equals",
+    "Value": "value\u0026with\u0026ampersands"
+  },
+  {
+    "Key": "key+with+plus",
+    "Value": "value/with/slashes"
+  }
+]
+
+# Test escaped quotes in values
+extract
+key1='value\'with\'quotes'
+----
+[
+  {
+    "Key": "key1",
+    "Value": "value'with'quotes"
+  }
+]
+
+# Test escaped backslashes in values
+extract
+key1='value\\with\\backslashes'
+----
+[
+  {
+    "Key": "key1",
+    "Value": "value\\\\with\\\\backslashes"
+  }
+]
+
+# Test newlines and tabs in values
+extract
+key1='value\nwith\nnewlines',key2='value\twith\ttabs'
+----
+[
+  {
+    "Key": "key1",
+    "Value": "value\\nwith\\nnewlines"
+  },
+  {
+    "Key": "key2",
+    "Value": "value\\twith\\ttabs"
+  }
+]
+
+# Test SQL comment characters in values
+extract
+key1='value--with--comments',key2='value/*with*/comments'
+----
+[
+  {
+    "Key": "key1",
+    "Value": "value--with--comments"
+  },
+  {
+    "Key": "key2",
+    "Value": "value/*with*/comments"
+  }
+]
+
+# Test with SQL comment markers and escaped characters
+extract
+/* key1='value\'with\'quotes',key2='value\\with\\backslashes' */
+----
+[
+  {
+    "Key": "key1",
+    "Value": "value'with'quotes"
+  },
+  {
+    "Key": "key2",
+    "Value": "value\\\\with\\\\backslashes"
+  }
+]

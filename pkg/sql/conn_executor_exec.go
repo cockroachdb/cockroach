@@ -75,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 	"go.opentelemetry.io/otel/attribute"
@@ -385,6 +386,14 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt = makeStatementFromPrepared(prepared, queryID)
 	} else {
 		stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
+	}
+
+	if len(stmt.SqlCommenterTags) > 0 {
+		tags := &logtags.Buffer{}
+		for _, tag := range stmt.SqlCommenterTags {
+			tags = tags.Add(tag.Key, tag.Value)
+		}
+		ctx = logtags.AddTags(ctx, tags)
 	}
 
 	var queryTimeoutTicker *time.Timer
