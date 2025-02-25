@@ -134,8 +134,7 @@ func ExplainVec(
 				var cleanup func()
 				opChains, cleanup, err = convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, recordingStats)
 				// We need to delay the cleanup until after the tree has been
-				// formatted.
-				//nolint:deferloop TODO(#137605)
+				// formatted. nolint:deferloop
 				defer cleanup()
 				if err != nil {
 					conversionErr = err

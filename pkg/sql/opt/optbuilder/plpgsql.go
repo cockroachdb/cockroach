@@ -503,9 +503,8 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			b.appendPlpgSQLStmts(&blockCon, stmts[i+1:])
 			b.pushContinuation(blockCon)
-			//nolint:deferloop TODO(#137605)
-			defer b.popContinuation()
-			return b.buildBlock(t, s)
+			scope := b.buildBlock(t, s)
+			defer b.popContinuation() //nolint:deferloop
 
 		case *ast.Return:
 			// If the routine has OUT-parameters or a VOID return type, the RETURN
@@ -673,8 +672,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			exitCon := b.makeContinuationWithTyp("loop_exit", t.Label, continuationLoopExit)
 			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
 			b.pushContinuation(exitCon)
-			//nolint:deferloop TODO(#137605)
-			defer b.popContinuation()
+			defer b.popContinuation() //nolint:deferloop
 			switch c := t.Control.(type) {
 			case *ast.IntForLoopControl:
 				// FOR target IN [ REVERSE ] expr .. expr [ BY expr ] LOOP ...
