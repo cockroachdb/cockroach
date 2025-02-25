@@ -36,7 +36,7 @@ message ChangeAggregatorSpec {
     repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
     optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
 
-    // NOTE: When adding fields to this message, make sure to also update IsZero.
+    // NOTE: When adding fields to this message, make sure to also update IsEmpty.
   }
 
   // Change aggregator checkpoint

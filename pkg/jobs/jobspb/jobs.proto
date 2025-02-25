@@ -1212,7 +1212,7 @@ message TimestampSpansMap {
   }
   repeated Entry entries = 1 [(gogoproto.nullable) = false];
 
-  // NOTE: When adding fields to this message, make sure to also update IsZero.
+  // NOTE: When adding fields to this message, make sure to also update IsEmpty.
 }
 
 message ChangefeedProgress {
@@ -1229,7 +1229,7 @@ message ChangefeedProgress {
     repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
     util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
 
-    // NOTE: When adding fields to this message, make sure to also update IsZero.
+    // NOTE: When adding fields to this message, make sure to also update IsEmpty.
   }
 
   reserved 2;

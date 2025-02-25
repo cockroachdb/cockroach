@@ -247,7 +247,7 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			spanLevelCheckpoint: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+			spanLevelCheckpoint: jobspb.NewTimestampSpansMap(jobspb.TimestampSpansGoMap{
 				ts(2).Next(): {tableSpan(codec, 42)},
 			}),
 			events: []kvpb.RangeFeedEvent{
@@ -265,7 +265,7 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			spanLevelCheckpoint: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+			spanLevelCheckpoint: jobspb.NewTimestampSpansMap(jobspb.TimestampSpansGoMap{
 				ts(2).Next(): {makeSpan(codec, 42, "a", "q")},
 			}),
 			events: []kvpb.RangeFeedEvent{

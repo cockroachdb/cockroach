@@ -2402,7 +2402,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		"expected empty highwater or %s,  found %s", cursor, progress.GetHighWater())
 	var spanLevelCheckpoint *jobspb.TimestampSpansMap
 	require.True(t, loadCheckpoint(t, progress, &spanLevelCheckpoint, nil))
-	minCheckpointTS := spanLevelCheckpoint.MinTimestamp()
+	minCheckpointTS := spanLevelCheckpoint.ToGoMap().MinTimestamp()
 	require.True(t, cursor.LessEq(minCheckpointTS))
 
 	var incorrectCheckpointErr error
@@ -2575,7 +2575,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			progress := loadProgress()
 			var spanLevelCheckpoint *jobspb.TimestampSpansMap
 			if loadCheckpoint(t, progress, &spanLevelCheckpoint, &initialCheckpoint) {
-				minCheckpointTS := spanLevelCheckpoint.MinTimestamp()
+				minCheckpointTS := spanLevelCheckpoint.ToGoMap().MinTimestamp()
 				// Checkpoint timestamp should be the timestamp of the spans from the backfill
 				if !minCheckpointTS.Equal(backfillTimestamp.Next()) {
 					return false, changefeedbase.WithTerminalError(

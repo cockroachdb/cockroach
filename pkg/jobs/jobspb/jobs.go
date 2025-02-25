@@ -64,9 +64,35 @@ func (rse ResolvedSpanEntries) Equal(rse2 ResolvedSpanEntries) bool {
 // SafeValue implements the redact.SafeValue interface.
 func (ResolvedSpan_BoundaryType) SafeValue() {}
 
+// TimestampSpansGoMap is a go map from timestamps to spans.
+type TimestampSpansGoMap map[hlc.Timestamp]roachpb.Spans
+
+// MinTimestamp returns the min timestamp in the map.
+// Returns the empty timestamp if map is empty.
+func (m TimestampSpansGoMap) MinTimestamp() hlc.Timestamp {
+	if len(m) == 0 {
+		return hlc.Timestamp{}
+	}
+	minTS := hlc.MaxTimestamp
+	for ts := range m {
+		if ts.Less(minTS) {
+			minTS = ts
+		}
+	}
+	return minTS
+}
+
+// SpanCount returns the number of spans in the map.
+func (m TimestampSpansGoMap) SpanCount() (count int) {
+	for _, sp := range m {
+		count += len(sp)
+	}
+	return count
+}
+
 // NewTimestampSpansMap takes a go timestamp-to-spans map and converts
 // it into a new TimestampSpansMap.
-func NewTimestampSpansMap(m map[hlc.Timestamp]roachpb.Spans) *TimestampSpansMap {
+func NewTimestampSpansMap(m TimestampSpansGoMap) *TimestampSpansMap {
 	if len(m) == 0 {
 		return nil
 	}
@@ -83,30 +109,15 @@ func NewTimestampSpansMap(m map[hlc.Timestamp]roachpb.Spans) *TimestampSpansMap 
 }
 
 // ToGoMap converts a TimestampSpansMap into a go map.
-func (tsm *TimestampSpansMap) ToGoMap() map[hlc.Timestamp]roachpb.Spans {
+func (tsm *TimestampSpansMap) ToGoMap() TimestampSpansGoMap {
 	if tsm == nil {
 		return nil
 	}
-	m := make(map[hlc.Timestamp]roachpb.Spans, len(tsm.Entries))
+	m := make(TimestampSpansGoMap, len(tsm.Entries))
 	for _, entry := range tsm.Entries {
 		m[entry.Timestamp] = entry.Spans
 	}
 	return m
-}
-
-// MinTimestamp returns the min timestamp in the map.
-// Returns the empty timestamp if map is empty.
-func (tsm *TimestampSpansMap) MinTimestamp() hlc.Timestamp {
-	if tsm.IsEmpty() {
-		return hlc.Timestamp{}
-	}
-	minTS := hlc.MaxTimestamp
-	for ts := range tsm.ToGoMap() {
-		if ts.Less(minTS) {
-			minTS = ts
-		}
-	}
-	return minTS
 }
 
 // IsEmpty returns whether the checkpoint is empty.

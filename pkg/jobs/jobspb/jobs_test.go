@@ -26,7 +26,7 @@ func TestTimestampSpansMapRoundTrip(t *testing.T) {
 		}
 	}
 
-	for name, input := range map[string]map[hlc.Timestamp]roachpb.Spans{
+	for name, input := range map[string]jobspb.TimestampSpansGoMap{
 		"nil map": nil,
 		"map with one timestamp": {
 			ts(1): {span("a", "b")},

@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -172,13 +171,9 @@ func (f *CoordinatorFrontier) InBackfill(r jobspb.ResolvedSpan) bool {
 
 // MakeCheckpoint creates a checkpoint based on the current state of the frontier.
 func (f *CoordinatorFrontier) MakeCheckpoint(
-	maxBytes int64, metrics *checkpoint.Metrics, cv clusterversion.Handle,
-) (
-	//lint:ignore SA1019 deprecated usage
-	*jobspb.ChangefeedProgress_Checkpoint,
-	*jobspb.TimestampSpansMap,
-) {
-	return checkpoint.Make(f.Frontier(), f.Entries, maxBytes, metrics, cv)
+	maxBytes int64, metrics *checkpoint.Metrics,
+) *jobspb.TimestampSpansMap {
+	return checkpoint.Make(f.Frontier(), f.Entries, maxBytes, metrics)
 }
 
 // spanFrontier is a type alias to make it possible to embed and forward calls
