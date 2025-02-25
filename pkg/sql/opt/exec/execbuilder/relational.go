@@ -4097,6 +4097,7 @@ func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
 		func(ds cat.DataSource) (cat.DataSourceName, error) {
 			return b.catalog.FullyQualifiedName(b.ctx, ds)
 		},
+		true, /* includeFKReferences */
 		true, /* includeVirtualTables */
 	)
 	return envOpts, err

@@ -280,10 +280,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		}
 	})
 
-	t.Run("foreign keys", func(t *testing.T) {
+	t.Run("foreign keys, mutation", func(t *testing.T) {
 		// All tables should be included in the stmt bundle, regardless of which
-		// one we query because all of them are considered "related" (even
-		// though we don't specify ON DELETE and ON UPDATE actions).
+		// one we delete from because all of them are considered "related".
 		tableNames := []string{"parent", "child1", "child2", "grandchild1", "grandchild2"}
 		r.Exec(t, "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);")
 		r.Exec(t, "CREATE TABLE child1 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
@@ -301,12 +300,58 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			}
 			return nil
 		}
+		expectedFiles := map[string]string{
+			"parent":      "distsql-1-main-query.html distsql-2-postquery.html distsql-3-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt vec-3-postquery-v.txt vec-3-postquery.txt",
+			"child1":      "distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
+			"child2":      "distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
+			"grandchild1": "distsql.html vec.txt vec-v.txt",
+			"grandchild2": "distsql.html vec.txt vec-v.txt",
+		}
 		for _, tableName := range tableNames {
-			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM "+tableName)
+			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) DELETE FROM "+tableName+" WHERE true")
 			checkBundle(
 				t, fmt.Sprint(rows), "child", contentCheck, false, /* expectErrors */
 				base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child1.sql", "stats-defaultdb.public.child2.sql",
-				"stats-defaultdb.public.grandchild1.sql", "stats-defaultdb.public.grandchild2.sql", "distsql.html vec.txt vec-v.txt",
+				"stats-defaultdb.public.grandchild1.sql", "stats-defaultdb.public.grandchild2.sql", expectedFiles[tableName],
+			)
+		}
+	})
+
+	t.Run("foreign keys, read-only", func(t *testing.T) {
+		// Only the target table should be included since we perform a read-only
+		// stmt.
+		tableNames := []string{"parent", "child1", "child2", "grandchild1", "grandchild2"}
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS parent (pk INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS child1 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
+		var tableName string
+		contentCheck := func(name, contents string) error {
+			if name == "schema.sql" {
+				if regexp.MustCompile("USE defaultdb;\nCREATE TABLE public."+tableName).FindString(contents) == "" {
+					return errors.Newf(
+						"could not find 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", tableName, contents)
+				}
+				for _, tableName := range tableNames {
+					if tableName == tableName {
+						continue
+					}
+					if regexp.MustCompile("USE defaultdb;\nCREATE TABLE public."+tableName).FindString(contents) != "" {
+						return errors.Newf(
+							"unexpectedly found 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", tableName, contents)
+					}
+				}
+			}
+			return nil
+		}
+		for _, n := range tableNames {
+			tableName = n
+			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM "+tableName)
+			checkBundle(
+				t, fmt.Sprint(rows), tableName, contentCheck, false, /* expectErrors */
+				base, plans, fmt.Sprintf("stats-defaultdb.public.%s.sql", tableName),
+				"distsql.html vec.txt vec-v.txt",
 			)
 		}
 	})
