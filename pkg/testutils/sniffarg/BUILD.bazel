@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sniffarg",
+    srcs = ["sniffarg.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/sniffarg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_spf13_pflag//:pflag"],
+)
+
+go_test(
+    name = "sniffarg_test",
+    srcs = ["sniffarg_test.go"],
+    embed = [":sniffarg"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
