@@ -718,15 +718,15 @@ func (tr *testRunner) conn(node int, virtualClusterName string) *gosql.DB {
 
 func (tr *testRunner) closeConnections() {
 	for _, service := range tr.allServices() {
-		service.connCache.mu.Lock()
-		//nolint:deferloop TODO(#137605)
-		defer service.connCache.mu.Unlock()
-
-		for _, db := range service.connCache.cache {
-			if db != nil {
-				_ = db.Close()
+		func() {
+			service.connCache.mu.Lock()
+			defer service.connCache.mu.Unlock()
+			for _, db := range service.connCache.cache {
+				if db != nil {
+					_ = db.Close()
+				}
 			}
-		}
+		}()
 	}
 }
 

@@ -363,10 +363,6 @@ func runDecommission(
 				return err
 			}
 
-			db := c.Conn(ctx, l, pinnedNode)
-			//nolint:deferloop TODO(#137605)
-			defer db.Close()
-
 			startOpts := option.NewStartOpts(option.SkipInit)
 			startOpts.RoachprodOpts.JoinTargets = []int{pinnedNode}
 			extraArgs := []string{
