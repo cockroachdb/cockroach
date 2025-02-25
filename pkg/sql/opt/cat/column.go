@@ -24,6 +24,7 @@ type Column struct {
 	// set all fields (even if they are the empty value).
 	ordinal                           int
 	stableID                          StableID
+	pgAttrNum                         uint32
 	name                              tree.Name
 	datumType                         *types.T
 	kind                              ColumnKind
@@ -59,6 +60,11 @@ func (c *Column) ColID() StableID {
 		panic(errors.AssertionFailedf("inverted columns have no StableID"))
 	}
 	return c.stableID
+}
+
+// TODO
+func (c *Column) PGAttrNum() uint32 {
+	return c.pgAttrNum
 }
 
 // ColName returns the name of the column.
@@ -268,6 +274,7 @@ func (c *Column) GeneratedAsIdentityType() GeneratedAsIdentityType {
 func (c *Column) Init(
 	ordinal int,
 	stableID StableID,
+	pgAttrNum uint32,
 	name tree.Name,
 	kind ColumnKind,
 	datumType *types.T,
@@ -290,6 +297,7 @@ func (c *Column) Init(
 	*c = Column{
 		ordinal:                     ordinal,
 		stableID:                    stableID,
+		pgAttrNum:                   pgAttrNum,
 		name:                        name,
 		kind:                        kind,
 		datumType:                   datumType,
@@ -341,6 +349,7 @@ func (c *Column) InitInverted(
 func (c *Column) InitVirtualComputed(
 	ordinal int,
 	stableID StableID,
+	pgAttrNum uint32,
 	name tree.Name,
 	kind ColumnKind,
 	datumType *types.T,
@@ -353,6 +362,7 @@ func (c *Column) InitVirtualComputed(
 	*c = Column{
 		ordinal:                     ordinal,
 		stableID:                    stableID,
+		pgAttrNum:                   pgAttrNum,
 		name:                        name,
 		kind:                        kind,
 		datumType:                   datumType,

@@ -147,6 +147,7 @@ func (f *Factory) AnnotateNode(execNode exec.Node, id exec.ExplainAnnotationID, 
 // ConstructPlan is part of the exec.Factory interface.
 func (f *Factory) ConstructPlan(
 	root exec.Node,
+	cols colinfo.ResultColumns,
 	subqueries []exec.Subquery,
 	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
@@ -182,7 +183,8 @@ func (f *Factory) ConstructPlan(
 	}
 	var err error
 	p.WrappedPlan, err = f.wrappedFactory.ConstructPlan(
-		p.Root.WrappedNode(), wrappedSubqueries, wrappedCascades, wrappedTriggers, wrappedChecks,
+		p.Root.WrappedNode(), cols,
+		wrappedSubqueries, wrappedCascades, wrappedTriggers, wrappedChecks,
 		rootRowCount, flags,
 	)
 	if err != nil {

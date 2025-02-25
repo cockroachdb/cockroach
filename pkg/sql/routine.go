@@ -575,7 +575,7 @@ func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursor
 	}
 	// Use context.Background(), since the cursor can outlive the context in which
 	// it was created.
-	planCols := plan.main.planColumns()
+	planCols := plan.cols
 	cursorHelper := &plpgsqlCursorHelper{
 		ctx:        context.Background(),
 		cursorName: cursorName,

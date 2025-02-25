@@ -2168,6 +2168,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 		columns[i].Init(
 			i,
 			cat.StableID(i+1),
+			0, /* pgAttrNum */
 			tree.Name(colName),
 			cat.Ordinary,
 			colMeta.Type,

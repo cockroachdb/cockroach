@@ -919,6 +919,7 @@ func newOptTable(
 			ot.columns[col.Ordinal()].Init(
 				col.Ordinal(),
 				cat.StableID(col.GetID()),
+				uint32(col.GetPGAttributeNum()),
 				col.ColName(),
 				kind,
 				col.GetType(),
@@ -939,6 +940,7 @@ func newOptTable(
 			ot.columns[col.Ordinal()].InitVirtualComputed(
 				col.Ordinal(),
 				cat.StableID(col.GetID()),
+				uint32(col.GetPGAttributeNum()),
 				col.ColName(),
 				kind,
 				col.GetType(),
@@ -967,6 +969,7 @@ func newOptTable(
 			col.Init(
 				ord,
 				cat.StableID(sysCol.GetID()),
+				uint32(sysCol.GetPGAttributeNum()),
 				sysCol.ColName(),
 				cat.System,
 				sysCol.GetType(),
@@ -2348,6 +2351,7 @@ func newOptVirtualTable(
 	ot.columns[0].Init(
 		0,
 		math.MaxInt64, /* stableID */
+		0,             /* pgAttrNum */
 		"crdb_internal_vtable_pk",
 		cat.Ordinary,
 		types.Int,
@@ -2364,6 +2368,7 @@ func newOptVirtualTable(
 		ot.columns[i+1].Init(
 			i+1,
 			cat.StableID(d.GetID()),
+			uint32(d.GetPGAttributeNum()),
 			tree.Name(d.GetName()),
 			cat.Ordinary,
 			d.GetType(),
