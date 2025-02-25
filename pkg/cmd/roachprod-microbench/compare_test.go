@@ -38,15 +38,19 @@ func metricsToText(metricMaps map[string]*model.MetricMap) string {
 
 			for _, entryKey := range entryKeys {
 				entry := metric.BenchmarkEntries[entryKey]
-				centers := make([]float64, len(entry.Summaries))
+				centers := make([]string, len(entry.Summaries))
 				summaryKeys := maps.Keys(entry.Summaries)
 				sort.Strings(summaryKeys)
 				for i, key := range summaryKeys {
-					centers[i] = entry.Summaries[key].Center
+					centers[i] = fmt.Sprintf("%4f", entry.Summaries[key].Center)
 				}
 				comparison := metric.ComputeComparison(entryKey, "baseline", "experiment")
-				fmt.Fprintf(buf, "BenchmarkEntry %s %s %v %s\n",
-					entryKey, comparison.FormattedDelta, centers, comparison.Distribution.String(),
+				confidenceStr := fmt.Sprintf("%4f %4f %4f",
+					comparison.ConfidenceInterval.Low,
+					comparison.ConfidenceInterval.Center,
+					comparison.ConfidenceInterval.High)
+				fmt.Fprintf(buf, "BenchmarkEntry %s %s %v %s %v\n",
+					entryKey, comparison.FormattedDelta, centers, comparison.Distribution.String(), confidenceStr,
 				)
 			}
 		}
@@ -55,7 +59,7 @@ func metricsToText(metricMaps map[string]*model.MetricMap) string {
 }
 
 func TestCompareBenchmarks(t *testing.T) {
-	ddFilePath := path.Join(datapathutils.TestDataPath(t), "compare")
+	ddFilePath := path.Join(datapathutils.TestDataPath(t), "compare.txt")
 	datadriven.RunTest(t, ddFilePath, func(t *testing.T, d *datadriven.TestData) string {
 		if d.Cmd != "compare" {
 			d.Fatalf(t, "unknown command %s", d.Cmd)
