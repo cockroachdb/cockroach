@@ -4,6 +4,7 @@ go_library(
     name = "model",
     srcs = [
         "builder.go",
+        "math.go",
         "metric.go",
         "options.go",
     ],
