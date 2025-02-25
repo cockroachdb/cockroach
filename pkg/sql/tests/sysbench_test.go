@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -874,7 +875,7 @@ func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 					//
 					// [1]: https://tip.golang.org/doc/go1.24#new-benchmark-function
 					var benchtime string
-					require.NoError(b, sniffArgs(os.Args[1:], "test.benchtime", &benchtime))
+					require.NoError(b, sniffarg.DoEnv("test.benchtime", &benchtime))
 					if strings.HasSuffix(benchtime, "x") && b.N == 1 && benchtime != "1x" {
 						// The Go benchmark harness invokes tests first with b.N == 1 which
 						// helps it adjust the number of iterations to run to the benchtime.
@@ -1012,8 +1013,8 @@ func benchmemFile(b testing.TB) string {
 	b.Helper()
 	var benchMemFile string
 	var outputDir string
-	require.NoError(b, sniffArgs(os.Args[1:], "test.memprofile", &benchMemFile))
-	require.NoError(b, sniffArgs(os.Args[1:], "test.outputdir", &outputDir))
+	require.NoError(b, sniffarg.DoEnv("test.memprofile", &benchMemFile))
+	require.NoError(b, sniffarg.DoEnv("test.outputdir", &outputDir))
 
 	if benchMemFile == "" {
 		return ""
