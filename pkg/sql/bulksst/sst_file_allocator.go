@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/vfs"
@@ -57,4 +58,37 @@ func (f *VFSFileAllocator) AddFile(
 // GetFileList gets all the files created by this file allocator.
 func (f *VFSFileAllocator) GetFileList() []string {
 	return f.fileList
+}
+
+// ExternalFileAllocator allocates external files for SSTs.
+type ExternalFileAllocator struct {
+	es       cloud.ExternalStorage
+	baseURI  string
+	fileList []string
+}
+
+func NewExternalFileAllocator(es cloud.ExternalStorage, baseURI string) FileAllocator {
+	return &ExternalFileAllocator{
+		es:      es,
+		baseURI: baseURI,
+	}
+}
+
+// AddFile creates a new file and stores the URI for tracking.
+func (e *ExternalFileAllocator) AddFile(
+	ctx context.Context, fileIndex int,
+) (objstorage.Writable, func(), error) {
+	fileName := fmt.Sprintf("%s_%d", e.baseURI, fileIndex)
+	writer, err := e.es.Writer(ctx, fileName)
+	if err != nil {
+		return nil, nil, err
+	}
+	remoteWritable := objstorageprovider.NewRemoteWritable(writer)
+	e.fileList = append(e.fileList, fileName)
+	return remoteWritable, func() { writer.Close() }, nil
+}
+
+// GetFileList gets all the files created by this file allocator.
+func (e *ExternalFileAllocator) GetFileList() []string {
+	return e.fileList
 }

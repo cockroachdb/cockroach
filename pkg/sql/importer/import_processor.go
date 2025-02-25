@@ -13,12 +13,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -344,6 +347,11 @@ type tableAndIndex struct {
 	indexID catid.IndexID
 }
 
+var UseDistributedMergeForImport = settings.RegisterBoolSetting(settings.ApplicationLevel,
+	"sql.import.distributed_merge",
+	"enable distributed merge support",
+	false)
+
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
 func ingestKvs(
@@ -357,6 +365,8 @@ func ingestKvs(
 	defer span.Finish()
 
 	defer flowCtx.Cfg.JobRegistry.MarkAsIngesting(spec.Progress.JobID)()
+
+	useDistributedMerge := UseDistributedMergeForImport.Get(&flowCtx.Cfg.Settings.SV)
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
 
@@ -394,37 +404,82 @@ func ingestKvs(
 		}
 	}
 
-	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
-		Name:                     pkAdderName,
-		DisallowShadowingBelow:   writeTS,
-		SkipDuplicates:           true,
-		MinBufferSize:            minBufferSize,
-		MaxBufferSize:            maxBufferSize,
-		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtBatchTimestamp:    true,
-		ImportEpoch:              bulkAdderImportEpoch,
-	})
-	if err != nil {
-		return nil, err
+	// Setup external storage on node local for our generated SSTs.
+	var err error
+	var es cloud.ExternalStorage
+	var uriBase = fmt.Sprintf("nodelocal://%d/import/%d/", flowCtx.Cfg.NodeID.SQLInstanceID(), spec.JobID)
+	if useDistributedMerge {
+		es, err = flowCtx.Cfg.ExternalStorageFromURI(ctx, uriBase, spec.User())
+		if err != nil {
+			return nil, err
+		}
+		defer es.Close()
 	}
-	defer pkIndexAdder.Close(ctx)
+
+	var pkIndexAdder kvserverbase.BulkAdder
+	var pkFileAllocator bulksst.FileAllocator
+	if !useDistributedMerge {
+		pkIndexAdder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
+			Name:                     pkAdderName,
+			DisallowShadowingBelow:   writeTS,
+			SkipDuplicates:           true,
+			MinBufferSize:            minBufferSize,
+			MaxBufferSize:            maxBufferSize,
+			InitialSplitsIfUnordered: int(spec.InitialSplits),
+			WriteAtBatchTimestamp:    true,
+			ImportEpoch:              bulkAdderImportEpoch,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer pkIndexAdder.Close(ctx)
+	} else {
+		// Setup a BulkAdder to generate SSTs into node local.
+		pkFileAllocator = bulksst.NewExternalFileAllocator(es, pkAdderName)
+		t := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, pkFileAllocator)
+		t.SetWriteTS(writeTS)
+		pkIndexAdder = t
+		defer pkIndexAdder.Close(ctx)
+	}
 
 	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
 		false /* isPKAdder */)
-	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
-		Name:                     indexAdderName,
-		DisallowShadowingBelow:   writeTS,
-		SkipDuplicates:           true,
-		MinBufferSize:            minBufferSize,
-		MaxBufferSize:            maxBufferSize,
-		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtBatchTimestamp:    true,
-		ImportEpoch:              bulkAdderImportEpoch,
-	})
-	if err != nil {
-		return nil, err
+	var indexAdder kvserverbase.BulkAdder
+	var indexFileAllocator bulksst.FileAllocator
+	if !useDistributedMerge {
+		indexAdder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
+			Name:                     indexAdderName,
+			DisallowShadowingBelow:   writeTS,
+			SkipDuplicates:           true,
+			MinBufferSize:            minBufferSize,
+			MaxBufferSize:            maxBufferSize,
+			InitialSplitsIfUnordered: int(spec.InitialSplits),
+			WriteAtBatchTimestamp:    true,
+			ImportEpoch:              bulkAdderImportEpoch,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer indexAdder.Close(ctx)
+	} else {
+		// Setup a BulkAdder to generate SSTs into node local.
+		// TODO (fqazi): We can use the same allocator and unsorted sst batcher
+		// for both primary and secondary indexes..
+		indexFileAllocator = bulksst.NewExternalFileAllocator(es, indexAdderName)
+		t := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, indexFileAllocator)
+		t.SetWriteTS(writeTS)
+		indexAdder = t
+		defer indexAdder.Close(ctx)
 	}
-	defer indexAdder.Close(ctx)
+
+	// For the purpose of debugging dump out the list of
+	// SSTs generated.
+	if useDistributedMerge {
+		defer func() {
+			log.Infof(ctx, "Generated SSTs file for primary indexes: %v, URI: %v", pkFileAllocator.GetFileList(), uriBase)
+			log.Infof(ctx, "Generated SSTs file for secondary indexes: %v, URI: %v", indexFileAllocator.GetFileList(), uriBase)
+		}()
+	}
 
 	// Setup progress tracking:
 	//  - offsets maps source file IDs to offsets in the slices below.

@@ -196,6 +196,8 @@ func (s *Writer) CloseWithError(ctx context.Context) error {
 // Close implements kvservebase.BulkAdder.
 func (s *Writer) Close(ctx context.Context) {
 	if err := s.CloseWithError(ctx); err != nil {
+		// TODO(fqazi): Remove panic and find a nicer way to
+		//  surface this error.
 		panic(err)
 	}
 }
