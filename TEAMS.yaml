@@ -88,6 +88,7 @@ cockroachdb/server:
   aliases:
     cockroachdb/cli-prs: other
     cockroachdb/server-prs: other
+  label: T-db-server
   triage_column_id: 2521812
 cockroachdb/obs-prs:
   # The observability team uses Jira for managing issues. So there is no triage column ID.
