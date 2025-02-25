@@ -957,9 +957,10 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 					s := serverutils.StartServerOnly(t, base.TestServerArgs{
 						Knobs: base.TestingKnobs{
 							Store: &kvserver.StoreTestingKnobs{
-								DisableMergeQueue:    true,
-								DisableSplitQueue:    true,
-								TestingRequestFilter: filter,
+								DisableMergeQueue:       true,
+								DisableSplitQueue:       true,
+								DisableConsistencyQueue: true,
+								TestingRequestFilter:    filter,
 							},
 						},
 						Settings: settings,
@@ -1061,8 +1062,7 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 						assertRecomputedStats(t, "LHS2 after second split", snap, lhs2Repl.Desc(), lhs2Stats, s.Clock().PhysicalNow())
 						assertRecomputedStats(t, "RHS1 after second split", snap, rhsRepl.Desc(), rhs1Stats, s.Clock().PhysicalNow())
 						assertRecomputedStats(t, "RHS2 after second split", snap, rhs2Repl.Desc(), rhs2Stats, s.Clock().PhysicalNow())
-					}
-					if expectContainsEstimates {
+					} else {
 						require.Greater(t, lhs1Stats.ContainsEstimates, int64(0))
 						require.Greater(t, lhs2Stats.ContainsEstimates, int64(0))
 						// The range corresponding to rhs1Stats is empty, so the split of the
