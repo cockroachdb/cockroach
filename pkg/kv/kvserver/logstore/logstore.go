@@ -601,6 +601,15 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 
 // LoadTerm returns the term of the entry at the given index for the specified
 // range. The result is loaded from the storage engine if it's not in the cache.
+//
+// There are 3 cases for when the term is not found: (1) the index has been
+// compacted away, (2) the index is higher than LastIndex, or (3) there is a gap
+// in the log. In the first case, we return ErrCompacted, and ErrUnavailable
+// otherwise. Most callers never try to read indices above LastIndex, so an
+// error means (3) which is a serious issue. But if the caller is unsure, they
+// can check the LastIndex to distinguish.
+//
+// TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
 func LoadTerm(
 	ctx context.Context,
 	rsl StateLoader,
@@ -646,28 +655,18 @@ func LoadTerm(
 		}
 		return kvpb.RaftTerm(entry.Term), nil
 	}
-	// Otherwise, the entry at the given index is not found. This can happen if
-	// the index is ahead of lastIndex, or it has been compacted away.
 
-	lastIndex, err := rsl.LoadLastIndex(ctx, reader)
-	if err != nil {
-		return 0, err
-	}
-	if index > lastIndex {
-		return 0, raft.ErrUnavailable
-	}
-
+	// Otherwise, the entry at the given index is not found. See the function
+	// comment for how this case is handled.
 	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return 0, err
-	}
-	if index == ts.Index {
+	} else if index == ts.Index {
 		return ts.Term, nil
+	} else if index < ts.Index {
+		return 0, raft.ErrCompacted
 	}
-	if index > ts.Index {
-		return 0, errors.Errorf("there is a gap at index %d", index)
-	}
-	return 0, raft.ErrCompacted
+	return 0, raft.ErrUnavailable
 }
 
 // LoadEntries retrieves entries from the engine. It inlines the sideloaded
