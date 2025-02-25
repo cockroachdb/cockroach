@@ -180,6 +180,7 @@ func emitInternal(
 				return err
 			}
 			visitedFKsByCascades[fkID] = struct{}{}
+			//nolint:deferloop TODO(#137605)
 			defer delete(visitedFKsByCascades, fkID)
 		}
 		if err = emitPostQuery(cascade, cascadePlan, alreadyEmitted); err != nil {

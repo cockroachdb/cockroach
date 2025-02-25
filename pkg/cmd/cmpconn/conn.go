@@ -181,6 +181,7 @@ func CompareConns(
 		if err != nil {
 			return true, nil //nolint:returnerrcheck
 		}
+		//nolint:deferloop TODO(#137605)
 		defer rows.Close()
 		connRows[name] = rows
 	}

@@ -9,6 +9,7 @@
 package main
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/deferloop"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/deferunlockcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap"
@@ -65,6 +66,7 @@ func main() {
 		nilness.Analyzer,
 		errwrap.Analyzer,
 		deferunlockcheck.Analyzer,
+		deferloop.Analyzer,
 	)
 
 	// Standard go vet analyzers:

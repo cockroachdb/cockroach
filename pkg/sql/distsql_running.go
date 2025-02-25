@@ -2627,6 +2627,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	for numParallelChecks > 0 {
 		alloc, err := dsp.parallelLocalScansSem.TryAcquire(ctx, uint64(numParallelChecks))
 		if err == nil {
+			//nolint:deferloop TODO(#137605)
 			defer alloc.Release()
 			break
 		}

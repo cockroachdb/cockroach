@@ -727,6 +727,7 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 
 		var uiURL *url.URL
 
+		//nolint:deferloop TODO(#137605)
 		defer func() {
 			log.Infof(ctx, "process %d started (db: %s ui: %s)", pid, pgURL, uiURL)
 		}()

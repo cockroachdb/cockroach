@@ -290,6 +290,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		db := g.conn(ctx, t.L(), i)
+		//nolint:deferloop TODO(#137605)
 		defer db.Close()
 		if i == 1 {
 			if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
@@ -306,6 +307,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 		if err != nil {
 			t.Fatal(err)
 		}
+		//nolint:deferloop TODO(#137605)
 		defer rows.Close()
 		var count int
 		if rows.Next() {
@@ -561,6 +563,7 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		db := c.Conn(ctx, t.L(), 1)
+		//nolint:deferloop TODO(#137605)
 		defer db.Close()
 
 		rows, err := db.Query(

@@ -880,6 +880,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
+		//nolint:deferloop TODO(#137605)
 		defer snap.Close()
 		now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		thresh := gc.CalculateThreshold(now, gcTTL)
