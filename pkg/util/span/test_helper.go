@@ -42,9 +42,7 @@ func checkContiguousFrontier(f Frontier) (startKey, endKey []byte, retErr error)
 
 		if s.Key.Equal(prev.s.EndKey) {
 			// Contiguous spans with the same timestamps are expected to be merged.
-			// However, LLRB based frontier has some gaps in its merge logic, so just
-			// let it be.
-			if useBtreeFrontier && ts.Equal(prev.ts) {
+			if ts.Equal(prev.ts) {
 				retErr = errors.Newf("expected ranges with equal timestamp to be merged, found %s and %s: %s", prev.s, s, f)
 				return StopMatch
 			}
