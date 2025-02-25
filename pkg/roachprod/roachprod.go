@@ -823,7 +823,10 @@ func updatePrometheusTargets(
 	for _, node := range c.Nodes {
 
 		// only gce is supported for prometheus
-		reachability := cl.ProviderReachability(c.VMs[node-1].Provider)
+		reachability := promhelperclient.ProviderReachability(
+			c.VMs[node-1].Provider,
+			promhelperclient.CloudEnvironment(c.VMs[node-1].Project),
+		)
 		if reachability == promhelperclient.None {
 			continue
 		}
@@ -847,7 +850,7 @@ func updatePrometheusTargets(
 				nodeIPPorts[nodeID] = []*promhelperclient.NodeInfo{
 					{
 						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.NodeExporterPort),
-						CustomLabels: createLabels(v, "node_exporter", !c.Secure),
+						CustomLabels: createLabels(nodeID, v, "node_exporter", !c.Secure),
 					},
 				}
 			}
@@ -855,7 +858,7 @@ func updatePrometheusTargets(
 				nodeIPPorts[nodeID],
 				&promhelperclient.NodeInfo{
 					Target:       nodeInfo,
-					CustomLabels: createLabels(v, "cockroachdb", !c.Secure),
+					CustomLabels: createLabels(nodeID, v, "cockroachdb", !c.Secure),
 				},
 			)
 			nodeIPPortsMutex.Unlock()
@@ -876,7 +879,7 @@ func updatePrometheusTargets(
 var regionRegEx = regexp.MustCompile("(^.+[0-9]+)(-[a-f]$)")
 
 // createLabels returns the labels to be populated in the target configuration in prometheus
-func createLabels(v vm.VM, job string, insecure bool) map[string]string {
+func createLabels(nodeID int, v vm.VM, job string, insecure bool) map[string]string {
 	labels := map[string]string{
 		"cluster":        v.Labels["cluster"],
 		"instance":       v.Name,
@@ -884,6 +887,7 @@ func createLabels(v vm.VM, job string, insecure bool) map[string]string {
 		"host_public_ip": v.PublicIP,
 		"project":        v.Project,
 		"zone":           v.Zone,
+		"provider":       v.Provider,
 		"job":            job,
 	}
 	match := regionRegEx.FindStringSubmatch(v.Zone)
@@ -907,6 +911,9 @@ func createLabels(v vm.VM, job string, insecure bool) map[string]string {
 		labels["__metrics_path__"] = vm.NodeExporterMetricsPath
 		// node exporter is always scraped over http
 		labels["__scheme__"] = "http"
+
+		// Node ID is exposed by cockroachdb metrics, we add it to node_exporter
+		labels["node_id"] = strconv.Itoa(nodeID)
 	}
 
 	return labels
