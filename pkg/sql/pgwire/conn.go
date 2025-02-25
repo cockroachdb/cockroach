@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -380,7 +381,7 @@ func (c *conn) handleSimpleQuery(
 			},
 		)
 	}
-	stmts, err := c.parser.Parse(query, parser.WithIntType(unqualifiedIntSize))
+	stmts, err := c.parser.Parse(query, parser.WithIntType(unqualifiedIntSize), sqlcommenter.MaybeWithComments(c.sv))
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse simple query: %s", query)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -516,7 +517,7 @@ func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 	}
 
 	startParse := crtime.NowMono()
-	stmts, err := c.parser.Parse(query, parser.WithIntType(nakedIntSize))
+	stmts, err := c.parser.Parse(query, parser.WithIntType(nakedIntSize), sqlcommenter.MaybeWithComments(c.sv))
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse: %s", query)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
