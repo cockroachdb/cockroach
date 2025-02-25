@@ -116,31 +116,31 @@ statement ok
 CREATE TABLE multi_pol_tab1 (c1 INT NOT NULL PRIMARY KEY)
 
 statement ok
-CREATE POLICY "policy 1" ON multi_pol_tab1 AS PERMISSIVE
+CREATE POLICY "policy1" ON multi_pol_tab1 AS PERMISSIVE
 
 statement ok
-CREATE POLICY "policy 2" ON multi_pol_tab1 AS RESTRICTIVE
+CREATE POLICY "policy2" ON multi_pol_tab1 AS RESTRICTIVE
 
 statement ok
-CREATE POLICY "policy 3" ON multi_pol_tab1 FOR ALL
+CREATE POLICY "policy3" ON multi_pol_tab1 FOR ALL
 
 statement ok
-CREATE POLICY "policy 4" ON multi_pol_tab1 FOR INSERT
+CREATE POLICY "policy4" ON multi_pol_tab1 FOR INSERT
 
 statement ok
-CREATE POLICY "policy 5" ON multi_pol_tab1 FOR UPDATE
+CREATE POLICY "policy5" ON multi_pol_tab1 FOR UPDATE
 
 statement ok
-CREATE POLICY "policy 6" ON multi_pol_tab1 FOR DELETE
+CREATE POLICY "policy6" ON multi_pol_tab1 FOR DELETE
 
 statement ok
-CREATE POLICY "policy 7" ON multi_pol_tab1 FOR SELECT
+CREATE POLICY "policy7" ON multi_pol_tab1 FOR SELECT
 
 statement ok
 CREATE USER papa_roach;
 
 statement ok
-CREATE POLICY "policy 8" ON multi_pol_tab1 FOR ALL TO papa_roach, public
+CREATE POLICY "policy8" ON multi_pol_tab1 FOR ALL TO papa_roach, public
 
 query TT
 SHOW CREATE TABLE multi_pol_tab1
@@ -149,23 +149,82 @@ multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                   c1 INT8 NOT NULL,
                   CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
                 );
-                CREATE POLICY "policy 1" ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public;
-                CREATE POLICY "policy 2" ON public.multi_pol_tab1 AS RESTRICTIVE FOR ALL TO public;
-                CREATE POLICY "policy 3" ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public;
-                CREATE POLICY "policy 4" ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
-                CREATE POLICY "policy 5" ON public.multi_pol_tab1 AS PERMISSIVE FOR UPDATE TO public;
-                CREATE POLICY "policy 6" ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
-                CREATE POLICY "policy 7" ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
-                CREATE POLICY "policy 8" ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
+                CREATE POLICY policy1 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public;
+                CREATE POLICY policy2 ON public.multi_pol_tab1 AS RESTRICTIVE FOR ALL TO public;
+                CREATE POLICY policy3 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public;
+                CREATE POLICY policy4 ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
+                CREATE POLICY policy5 ON public.multi_pol_tab1 AS PERMISSIVE FOR UPDATE TO public;
+                CREATE POLICY policy6 ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
+                CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
+                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
+
+query ITITBTTT colnames,rowsort
+select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy
+----
+oid  polname  polrelid  polcmd  polpermissive  polroles       polqual  polwithcheck
+1    policy1  110       *       true           {0}            NULL     NULL
+2    policy2  110       *       false          {0}            NULL     NULL
+3    policy3  110       *       true           {0}            NULL     NULL
+4    policy4  110       a       true           {0}            NULL     NULL
+5    policy5  110       w       true           {0}            NULL     NULL
+6    policy6  110       d       true           {0}            NULL     NULL
+7    policy7  110       r       true           {0}            NULL     NULL
+8    policy8  110       *       true           {0,835509264}  NULL     NULL
 
 statement ok
-DROP POLICY "policy 1" ON multi_pol_tab1
+CREATE TABLE multi_pol_tab2 (c1 INT NOT NULL PRIMARY KEY)
 
 statement ok
-DROP POLICY "policy 3" ON multi_pol_tab1
+CREATE POLICY "policy9" ON multi_pol_tab2 FOR ALL
 
 statement ok
-DROP POLICY "policy 5" ON multi_pol_tab1
+CREATE POLICY "policy10" ON multi_pol_tab2 FOR ALL
+
+statement ok
+CREATE TABLE multi_pol_tab3 (c1 INT NOT NULL PRIMARY KEY)
+
+statement ok
+CREATE POLICY "policy11" ON multi_pol_tab3 FOR ALL
+
+statement ok
+CREATE POLICY "policy12" ON multi_pol_tab3 FOR ALL
+
+skipif config fakedist-vec-off local-vec-off
+query T
+EXPLAIN (PLAN) select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab2'::regclass
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • virtual table
+      table: pg_policy@pg_policy_polrelid_idx
+      spans: [/multi_pol_tab2 - /multi_pol_tab2]
+
+query ITITBTTT colnames,rowsort
+select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab2'::regclass
+----
+oid  polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
+1    policy9   111       *       true           {0}       NULL     NULL
+2    policy10  111       *       true           {0}       NULL     NULL
+
+query ITITBTTT colnames,rowsort
+select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab3'::regclass
+----
+oid  polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
+1    policy11  112       *       true           {0}       NULL     NULL
+2    policy12  112       *       true           {0}       NULL     NULL
+
+
+statement ok
+DROP POLICY "policy1" ON multi_pol_tab1
+
+statement ok
+DROP POLICY "policy3" ON multi_pol_tab1
+
+statement ok
+DROP POLICY "policy5" ON multi_pol_tab1
 
 query TT
 SHOW CREATE TABLE multi_pol_tab1
@@ -174,14 +233,32 @@ multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                   c1 INT8 NOT NULL,
                   CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
                 );
-                CREATE POLICY "policy 2" ON public.multi_pol_tab1 AS RESTRICTIVE FOR ALL TO public;
-                CREATE POLICY "policy 4" ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
-                CREATE POLICY "policy 6" ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
-                CREATE POLICY "policy 7" ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
-                CREATE POLICY "policy 8" ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
+                CREATE POLICY policy2 ON public.multi_pol_tab1 AS RESTRICTIVE FOR ALL TO public;
+                CREATE POLICY policy4 ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
+                CREATE POLICY policy6 ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
+                CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
+                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
+
+statement ok
+DROP POLICY "policy9" ON multi_pol_tab2
+
+statement ok
+DROP POLICY "policy10" ON multi_pol_tab2
+
+statement ok
+DROP POLICY "policy11" ON multi_pol_tab3
+
+statement ok
+DROP POLICY "policy12" ON multi_pol_tab3
 
 statement ok
 DROP TABLE multi_pol_tab1
+
+statement ok
+DROP TABLE multi_pol_tab2
+
+statement ok
+DROP TABLE multi_pol_tab3
 
 subtest drop_role_is_blocked
 
@@ -313,6 +390,11 @@ CREATE TABLE z1 (c1 text);
 statement ok
 CREATE POLICY p1 on z1 WITH CHECK (c1::greeting = 'hi'::greeting);
 
+query T rowsort
+select polwithcheck from pg_catalog.pg_policy
+----
+c1::public.greeting = 'hi':::public.greeting
+
 statement error pq: cannot drop type "greeting" because other objects \(\[db1\.public\.z1\]\) still depend on it
 DROP TYPE greeting;
 
@@ -374,6 +456,11 @@ CREATE TABLE funcref (c1 int);
 
 statement ok
 CREATE POLICY pol1 on funcref USING (is_valid(c1)) WITH CHECK (is_valid(c1));
+
+query T
+select polqual from pg_catalog.pg_policy
+----
+public.is_valid(c1)
 
 statement error pq: cannot drop function "is_valid" because other objects \(\[db1.public.funcref\]\) still depend on it
 DROP FUNCTION is_valid;
