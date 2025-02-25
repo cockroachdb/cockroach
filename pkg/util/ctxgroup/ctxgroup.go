@@ -166,6 +166,16 @@ func WithContext(ctx context.Context) Group {
 	}
 }
 
+// SetLimit limits the number of active goroutines in this group to at most n. A
+// negative value indicates no limit. A limit of zero will prevent any new
+// goroutines from being added. Any subsequent call to the Go method will block
+// until it can add an active goroutine without exceeding the configured limit.
+// The limit must not be modified while any goroutines in the group are active.
+// This delegates to errgroup.Group.SetLimit.
+func (g Group) SetLimit(n int) {
+	g.wrapped.SetLimit(n)
+}
+
 // Go calls the given function in a new goroutine.
 func (g Group) Go(f func() error) {
 	g.wrapped.Go(f)
