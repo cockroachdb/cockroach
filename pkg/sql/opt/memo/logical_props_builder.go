@@ -78,7 +78,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// Side Effects
 	// ------------
 	// A Locking option is a side-effect (we don't want to elide this scan).
-	if !scan.Locking.IsNoOp() {
+	if scan.Locking.IsLocking() {
 		rel.VolatilitySet.AddVolatile()
 	}
 
