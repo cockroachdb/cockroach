@@ -1274,4 +1274,58 @@ CREATE POLICY p_delete on blocker FOR DELETE WITH CHECK (1 = 1);
 statement ok
 DROP TABLE blocker;
 
+subtest block_import
+
+statement ok
+CREATE TABLE importer (c1 INT);
+
+statement ok
+ALTER TABLE importer ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE USER z;
+
+statement ok
+GRANT ALL ON importer TO z;
+
+statement ok
+GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO z;
+
+# Ensure non-admin's are blocked
+statement ok
+SET ROLE z;
+
+let $exp_file
+WITH cte AS (EXPORT INTO CSV 'nodelocal://1/rls-importer' FROM select 99 UNION ALL SELECT 98 UNION ALL SELECT 97) SELECT filename FROM cte;
+
+statement error pq: IMPORT INTO not supported with row-level security for non-admin users
+IMPORT INTO importer CSV DATA ('nodelocal://1/rls-importer/$exp_file');
+
+# Ensure import from the admin role works
+statement
+SET ROLE root;
+
+# In general, IMPORT isn't compatible with the fake span resolver. So we skip
+# in those configs.
+skipif config fakedist fakedist-disk fakedist-vec-off
+statement ok
+IMPORT INTO importer CSV DATA ('nodelocal://1/rls-importer/$exp_file');
+
+skipif config fakedist fakedist-disk fakedist-vec-off
+query I
+SELECT c1 FROM importer ORDER BY c1;
+----
+97
+98
+99
+
+statement ok
+DROP TABLE importer;
+
+statement ok
+REVOKE SYSTEM EXTERNALIOIMPLICITACCESS FROM z;
+
+statement ok
+DROP USER z;
+
 subtest end
