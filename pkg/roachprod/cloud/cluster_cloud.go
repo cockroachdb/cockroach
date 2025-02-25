@@ -494,7 +494,10 @@ func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) 
 
 	for _, node := range c.VMs {
 
-		reachability := cl.ProviderReachability(node.Provider)
+		reachability := promhelperclient.ProviderReachability(
+			node.Provider,
+			promhelperclient.CloudEnvironment(node.Project),
+		)
 		if reachability == promhelperclient.None {
 			continue
 		}

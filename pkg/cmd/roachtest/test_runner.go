@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -1109,7 +1110,15 @@ func (r *testRunner) runTest(
 
 	s := t.Spec().(*registry.TestSpec)
 
-	grafanaAvailable := roachtestflags.Cloud == spec.GCE
+	// Get the Prometheus reachability for the cloud we run the tests on.
+	promReachability := promhelperclient.ProviderReachability(
+		roachtestflags.Cloud.String(),
+		promhelperclient.Default,
+	)
+
+	// If reachability is not None, we can assume that metrics will be scrapped
+	// and that Grafana will display something.
+	grafanaAvailable := promReachability != promhelperclient.None
 	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID, VmLabelTestOwner: t.Owner()}); err != nil {
 		shout(ctx, l, stdout, "failed to add label to cluster [%s] - %s", c.Name(), err)
 		grafanaAvailable = false
