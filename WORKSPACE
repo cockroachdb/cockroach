@@ -224,6 +224,12 @@ http_archive(
     url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel_features-v0.2.0.tar.gz",
 )
 
+# NOTE: After upgrading this library, run `build/scripts/build-bazel-lib-helpers.sh`.
+# The script will print the path to a directory where the binaries are stored,
+# a directory with a path of the form `aspect-bazel-lib-utils-20250224-115548`.
+# Upload this directory into `gs://public-bazel-artifacts/js`, then update
+# the URL and SHA's in `build/nodejs.bzl`.
+# Do this AFTER, not BEFORE, upgrading the library.
 http_archive(
     name = "aspect_bazel_lib",
     sha256 = "d0529773764ac61184eb3ad3c687fb835df5bee01afedf07f0cf1a45515c96bc",
