@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -5615,4 +5617,108 @@ func BenchmarkEmptyRebalance(b *testing.B) {
 		}
 		b.StopTimer()
 	})
+}
+
+func TestLeaseTransferReplicatesLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("cmd_lease=2"))
+
+	// Test Setup:
+	//
+	// txn1: holding lock on key k1
+	// txn2: waiting on lock on key k1
+	//
+	// Test Mutation:
+	//
+	// Lease transfer on leaseholder of range containing k1.
+	//
+	// Test Assertion:
+	//
+	// txn2 is never unblocked (from the perspective of the client).
+	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
+	concurrency.UnreplicatedLockReliability.Override(ctx, &st.SV, true)
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratch := tc.ScratchRange(t)
+	k1 := append(scratch[:len(scratch):len(scratch)], uuid.MakeV4().String()...)
+	// Write a value for the key because at the moment we don't create locks for
+	// non-existent keys.
+	require.NoError(t, tc.Server(1).DB().Put(ctx, k1, "value"))
+
+	desc, err := tc.LookupRange(scratch)
+	require.NoError(t, err)
+
+	// Start with the lease on store 1.
+	t.Logf("transfering to s1")
+	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(0)))
+	t.Logf("done transfering to s1")
+
+	// Txn 1:
+	// - Acquire lock and block until we are are sure txn2 has returned.
+	txn2Started := make(chan struct{})
+	txn2StartedOnce := sync.OnceFunc(func() { close(txn2Started) })
+	txn2Done := make(chan struct{})
+	txn1HasLock := make(chan struct{})
+
+	g := ctxgroup.WithContext(ctx)
+	g.Go(func() error {
+		return tc.Server(1).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := txn.GetForUpdate(ctx, k1, kvpb.BestEffort)
+			if err != nil {
+				return err
+			}
+			close(txn1HasLock)
+			t.Log("txn1: lock acquired, waiting for txn2 cancellation")
+			<-txn2Done
+			t.Log("txn1: done")
+			return nil
+		})
+	})
+
+	// Txn 2:
+	// - Block on txn 1. If it ever unblocks. We lost the lock.
+	txn2Context, txn2Cancel := context.WithCancel(context.Background())
+	g.Go(func() error {
+		defer close(txn2Done)
+		<-txn1HasLock
+		t.Log("txn2: tnx1 lock acquisition observed, starting txn")
+		err := tc.Server(1).DB().Txn(txn2Context, func(ctx context.Context, txn *kv.Txn) error {
+			txn2StartedOnce()
+			_, err := txn.GetForUpdate(ctx, k1, kvpb.BestEffort)
+			if err != nil {
+				return err
+			}
+			// We should never get here.
+			t.Error("txn2: unexpectedly unblocked!")
+			return nil
+		})
+
+		if errors.Is(err, context.Canceled) {
+			return nil
+		} else if err != nil {
+			t.Logf("txn2: unexpected err: %s", err)
+			return err
+		} else {
+			return nil
+		}
+	})
+
+	// Move lease to to store 2 once txn1 and txn2 have both started (txn2 waits
+	// on tx1 to start).
+	<-txn2Started
+
+	t.Log("transfering lease from s1 -> s2")
+	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
+	time.Sleep(250 * time.Millisecond)
+	t.Log("cancelling txn2")
+	txn2Cancel()
+	require.NoError(t, g.Wait())
 }

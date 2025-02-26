@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func newFailedLeaseTrigger(isTransfer bool) result.Result {
@@ -55,6 +56,7 @@ func evalNewLease(
 
 	// Construct the prior read summary if the lease sequence is changing.
 	var priorReadSum *rspb.ReadSummary
+	var locksWritten int
 	if prevLease.Sequence != lease.Sequence {
 		// If the new lease is not equivalent to the old lease, construct a read
 		// summary to instruct the new leaseholder on how to update its timestamp
@@ -66,6 +68,18 @@ func evalNewLease(
 			// allowed to invalidate prior reads.
 			localReadSum := rec.GetCurrentReadSummary(ctx)
 			priorReadSum = &localReadSum
+
+			// If this is a lease transfer, we write out all unreplicated leases to
+			// storage, so that any waiters will discover them on the new leaseholder.
+			acquisitions := rec.GetConcurrencyManager().OnRangeLeaseTransferEval()
+			log.VEventf(ctx, 2, "upgrading durability of %d locks", len(acquisitions))
+			for _, acq := range acquisitions {
+				if err := storage.MVCCAcquireLock(ctx, readWriter,
+					&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, ms, 0, 0); err != nil {
+					return newFailedLeaseTrigger(isTransfer), err
+				}
+			}
+			locksWritten = len(acquisitions)
 		} else {
 			// If the new lease is not equivalent to the old lease (i.e. either the
 			// lease is changing hands or the leaseholder restarted), construct a
@@ -104,6 +118,7 @@ func evalNewLease(
 	}
 
 	pd.Local.Metrics = new(result.Metrics)
+	pd.Local.Metrics.LeaseTransferLocksWritten = locksWritten
 	if isTransfer {
 		pd.Local.Metrics.LeaseTransferSuccess = 1
 	} else {

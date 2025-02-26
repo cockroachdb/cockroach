@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -180,6 +181,7 @@ type MockEvalCtx struct {
 	Lease                  roachpb.Lease
 	RangeLeaseDuration     time.Duration
 	CurrentReadSummary     rspb.ReadSummary
+	ConcurrencyManager     concurrency.Manager
 	ClosedTimestamp        hlc.Timestamp
 	RevokedLeaseSeq        roachpb.LeaseSequence
 	MaxBytes               int64
@@ -215,7 +217,11 @@ func (m *mockEvalCtxImpl) AbortSpan() *abortspan.AbortSpan {
 	return m.MockEvalCtx.AbortSpan
 }
 func (m *mockEvalCtxImpl) GetConcurrencyManager() concurrency.Manager {
-	panic("unimplemented")
+	if m.ConcurrencyManager != nil {
+		return m.ConcurrencyManager
+	} else {
+		panic("ConcurrencyManager not configured")
+	}
 }
 func (m *mockEvalCtxImpl) NodeID() roachpb.NodeID {
 	return m.MockEvalCtx.NodeID
@@ -328,3 +334,23 @@ func (m *mockEvalCtxImpl) AdmissionHeader() kvpb.AdmissionHeader {
 }
 
 func (m *mockEvalCtxImpl) Release() {}
+
+type noopIntentResolver struct{}
+
+func (m *noopIntentResolver) PushTransaction(
+	ctx context.Context, txn *enginepb.TxnMeta, h kvpb.Header, pushType kvpb.PushTxnType,
+) (*roachpb.Transaction, bool, *concurrency.Error) {
+	panic("unimplemented")
+}
+
+func (m *noopIntentResolver) ResolveIntent(
+	ctx context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+) *concurrency.Error {
+	panic("unimplemented")
+}
+
+func (m *noopIntentResolver) ResolveIntents(
+	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+) *concurrency.Error {
+	panic("unimplemented")
+}
