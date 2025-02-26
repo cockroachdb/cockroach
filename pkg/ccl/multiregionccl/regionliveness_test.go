@@ -429,16 +429,16 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	tr := sqlutils.MakeSQLRunner(newRegionSQL)
 	// Validate everything was cleaned bringing up a new node in the down region.
 	require.Equalf(t,
-		tr.QueryStr(t, "SELECT * FROM system.region_liveness"),
 		[][]string{},
+		tr.QueryStr(t, "SELECT * FROM system.region_liveness"),
 		"expected no unavaialble regions.")
 	require.Equalf(t,
-		tr.QueryStr(t, "SELECT count(*) FROM system.sql_instances WHERE session_id IS NOT NULL"),
 		[][]string{{"3"}},
+		tr.QueryStr(t, "SELECT count(*) FROM system.sql_instances WHERE session_id IS NOT NULL"),
 		"extra sql instances are being used.")
 	require.Equalf(t,
-		tr.QueryStr(t, "SELECT count(*) FROM system.sqlliveness"),
 		[][]string{{"3"}},
+		tr.QueryStr(t, "SELECT count(*) FROM system.sqlliveness"),
 		"extra sql sessions detected.")
 	require.NoError(t, err)
 	// Validate that the stuck query will fail once we recover.
