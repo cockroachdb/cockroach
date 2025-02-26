@@ -11072,3 +11072,28 @@ func assertEqualTSNSHLCWalltime(t *testing.T, tsns int64, tshlc string) {
 	tsHLCWallTimeNano := parseTimeToHLC(t, tshlc).WallTime
 	require.EqualValues(t, tsns, tsHLCWallTimeNano)
 }
+
+// TestChangefeedAsSelectForEmptyTable verifies that a changefeed
+// yields a proper user error on an empty table and in the same
+// allows hidden columns to be selected.
+func TestChangefeedAsSelectForEmptyTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE empty()`)
+		sqlDB.Exec(t, `INSERT INTO empty DEFAULT VALUES`)
+		// Should fail when no columns are selected.
+		// Use expectErrCreatingFeed which handles sinkless feeds correctly by
+		// attempting to read from the feed if no error occurs at creation time
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED AS SELECT * FROM empty`, `SELECT yields no columns`)
+
+		// Should succeed when a rowid column is explicitly selected.
+		feed, err := f.Feed(`CREATE CHANGEFEED AS SELECT rowid FROM empty`)
+		require.NoError(t, err)
+		defer closeFeed(t, feed)
+	}
+
+	cdcTest(t, testFn)
+}
