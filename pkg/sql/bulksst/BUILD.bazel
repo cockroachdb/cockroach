@@ -15,6 +15,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/execinfrapb",
         "//pkg/storage",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_pebble//objstorage",

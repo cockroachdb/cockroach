@@ -62,7 +62,10 @@ func TestBulkSSTWriter(t *testing.T) {
 	for _, fileName := range fileAllocator.GetFileList() {
 		currFileMin := -1
 		currFileMax := -1
-		values := readKeyValuesFromSST(t, fs, fileName)
+		values := readKeyValuesFromSST(t, fs, fileName.Uri)
+		// Validate the span of the SST file.
+		require.Equal(t, fileName.StartKey, string(values[0].Key.Key))
+		require.Equal(t, fileName.EndKey, string(values[len(values)-1].Key.Key))
 		for _, value := range values {
 			keyString := string(value.Key.Key)
 			var num int

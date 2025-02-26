@@ -10,6 +10,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/vfs"
@@ -19,17 +21,19 @@ import (
 type FileAllocator interface {
 	// AddFile creates a new file and stores the URI for tracking.
 	AddFile(
-		ctx context.Context, fileIndex int,
+		ctx context.Context, fileIndex int, span roachpb.Span,
 	) (objstorage.Writable, func(), error)
 
 	// GetFileList gets all the files created by this file allocator.
-	GetFileList() []string
+	GetFileList() []FileInfo
 }
+
+type FileInfo = execinfrapb.BulkMergeSpec_SST
 
 // VFSFileAllocator allocates local files for storing SSTs.
 type VFSFileAllocator struct {
 	baseName string
-	fileList []string
+	fileList []FileInfo
 	storage  vfs.FS
 }
 
@@ -43,7 +47,7 @@ func NewVFSFileAllocator(baseName string, storage vfs.FS) FileAllocator {
 
 // AddFile creates a new file and stores the URI for tracking.
 func (f *VFSFileAllocator) AddFile(
-	ctx context.Context, fileIndex int,
+	ctx context.Context, fileIndex int, span roachpb.Span,
 ) (objstorage.Writable, func(), error) {
 	fileName := fmt.Sprintf("%s_%d", f.baseName, fileIndex)
 	writer, err := f.storage.Create(fileName, vfs.WriteCategoryUnspecified)
@@ -51,12 +55,18 @@ func (f *VFSFileAllocator) AddFile(
 		return nil, nil, err
 	}
 	remoteWritable := objstorageprovider.NewRemoteWritable(writer)
-	f.fileList = append(f.fileList, fileName)
+	f.fileList = append(f.fileList,
+		FileInfo{
+			Uri:      fileName,
+			StartKey: string(span.Key),
+			EndKey:   string(span.EndKey),
+		},
+	)
 	return remoteWritable, func() { writer.Close() }, nil
 }
 
 // GetFileList gets all the files created by this file allocator.
-func (f *VFSFileAllocator) GetFileList() []string {
+func (f *VFSFileAllocator) GetFileList() []FileInfo {
 	return f.fileList
 }
 
@@ -64,7 +74,7 @@ func (f *VFSFileAllocator) GetFileList() []string {
 type ExternalFileAllocator struct {
 	es       cloud.ExternalStorage
 	baseURI  string
-	fileList []string
+	fileList []FileInfo
 }
 
 func NewExternalFileAllocator(es cloud.ExternalStorage, baseURI string) FileAllocator {
@@ -76,7 +86,7 @@ func NewExternalFileAllocator(es cloud.ExternalStorage, baseURI string) FileAllo
 
 // AddFile creates a new file and stores the URI for tracking.
 func (e *ExternalFileAllocator) AddFile(
-	ctx context.Context, fileIndex int,
+	ctx context.Context, fileIndex int, span roachpb.Span,
 ) (objstorage.Writable, func(), error) {
 	fileName := fmt.Sprintf("%s_%d", e.baseURI, fileIndex)
 	writer, err := e.es.Writer(ctx, fileName)
@@ -84,11 +94,15 @@ func (e *ExternalFileAllocator) AddFile(
 		return nil, nil, err
 	}
 	remoteWritable := objstorageprovider.NewRemoteWritable(writer)
-	e.fileList = append(e.fileList, fileName)
+	e.fileList = append(e.fileList, FileInfo{
+		Uri:      fileName,
+		StartKey: string(span.Key),
+		EndKey:   string(span.EndKey),
+	})
 	return remoteWritable, func() { writer.Close() }, nil
 }
 
 // GetFileList gets all the files created by this file allocator.
-func (e *ExternalFileAllocator) GetFileList() []string {
+func (e *ExternalFileAllocator) GetFileList() []FileInfo {
 	return e.fileList
 }

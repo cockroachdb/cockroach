@@ -32,6 +32,7 @@ type Writer struct {
 	fileAllocator FileAllocator
 	settings      *cluster.Settings
 	onFlush       func(summary kvpb.BulkOpSummary)
+	totalSummary  kvpb.BulkOpSummary
 	writeTS       hlc.Timestamp
 }
 
@@ -66,9 +67,9 @@ func (s *Writer) SetWriteTS(ts hlc.Timestamp) {
 
 // flushSST allocates a new file and flushes all KVs. The caller is supposed
 // to sort the input.
-func (s *Writer) flushSST(ctx context.Context) error {
+func (s *Writer) flushSST(ctx context.Context, span roachpb.Span) error {
 	// Allocate a new file in storage with the next ID.
-	sstFile, closer, err := s.fileAllocator.AddFile(ctx, s.fileID)
+	sstFile, closer, err := s.fileAllocator.AddFile(ctx, s.fileID, span)
 	if err != nil {
 		return err
 	}
@@ -111,8 +112,17 @@ func (s *Writer) flushBuffer(ctx context.Context) error {
 		return s.kv[i].Key.Compare(s.kv[j].Key) < 0
 	})
 	// Add a SSTable based on this data.
-	if err := s.flushSST(ctx); err != nil {
+	start := s.kv[0].Key.Clone()
+	end := s.kv[len(s.kv)-1].Key.Next().Clone()
+	span := roachpb.Span{Key: start.Key, EndKey: end.Key}
+	if err := s.flushSST(ctx, span); err != nil {
 		return err
+	}
+	// If the user has set a callback, call it with the summary.
+	if s.onFlush != nil {
+		summary := s.getCurrentBufferSummary()
+		s.totalSummary.Add(summary)
+		s.onFlush(summary)
 	}
 	// Reset the buffer for re-use.
 	s.kv = s.kv[:0]
@@ -167,13 +177,10 @@ func (s *Writer) IsEmpty() bool {
 func (s *Writer) CurrentBufferFill() float32 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return 0.0
+	return float32(len(s.kvData)) / float32(cap(s.kvData))
 }
 
-// GetSummary implements kvservebase.BulkAdder.
-func (s *Writer) GetSummary() kvpb.BulkOpSummary {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *Writer) getCurrentBufferSummary() kvpb.BulkOpSummary {
 	return kvpb.BulkOpSummary{
 		DataSize:    int64(len(s.kvData)),
 		SSTDataSize: int64(len(s.kvData)),
@@ -181,9 +188,18 @@ func (s *Writer) GetSummary() kvpb.BulkOpSummary {
 	}
 }
 
+// GetSummary implements kvservebase.BulkAdder.
+func (s *Writer) GetSummary() kvpb.BulkOpSummary {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.totalSummary
+}
+
 // SetOnFlush implements kvservebase.BulkAdder.
 func (s *Writer) SetOnFlush(f func(summary kvpb.BulkOpSummary)) {
-	// No-op
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onFlush = f
 }
 
 // CloseWithError flushes everything left in memory.
