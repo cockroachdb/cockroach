@@ -569,10 +569,18 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	buf.Reset()
 
+	// We only want to include the FK referenced and referencing tables if
+	// the stmt performs a mutation.
+	// TODO(yuzefovich): support omitting FK references for redacted bundles.
+	// TODO(#142006): be smarter about which tables we include depending on the
+	// mutation stmt.
+	includeAllFKReferenceTables := b.plan.flags.IsSet(planFlagContainsMutation) || b.flags.RedactValues
+
 	// TODO(#27611): when we support stats on virtual tables, we'll need to
 	// update this logic to not include virtual tables into schema.sql but still
 	// create stats files for them.
 	var tables, sequences, views []tree.TableName
+	var addFKs []*tree.AlterTable
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Catalog objects can show up multiple times in our lists, so
 		// deduplicate them.
@@ -593,17 +601,30 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			return names, nil
 		}
 
+		// referencedByMetadata contains IDs of tables that are referenced by
+		// the metadata. These include all tables explicitly mentioned in the
+		// query as well as tables against which we need to perform FK
+		// constraint checks. Note that FK cascades aren't included here.
+		var referencedByMetadata intsets.Fast
+		for _, table := range mem.Metadata().AllTables() {
+			referencedByMetadata.Add(int(table.Table.ID()))
+		}
 		var refTables []cat.Table
 		var refTableIncluded intsets.Fast
 		opt.VisitFKReferenceTables(
 			ctx,
 			b.plan.catalog,
 			mem.Metadata().AllTables(),
-			func(cat.Table, cat.ForeignKeyConstraint) (exploreFKs bool) {
-				return true
+			func(table cat.Table, _ cat.ForeignKeyConstraint) (exploreFKs bool) {
+				return includeAllFKReferenceTables || referencedByMetadata.Contains(int(table.ID()))
 			},
 			func(table cat.Table, _ cat.ForeignKeyConstraint) {
 				if table.IsVirtualTable() {
+					return
+				}
+				// For read-only queries, when unredacted bundle is requested,
+				// only include referenced by the metadata tables.
+				if !includeAllFKReferenceTables && !referencedByMetadata.Contains(int(table.ID())) {
 					return
 				}
 				if refTableIncluded.Contains(int(table.ID())) {
@@ -613,6 +634,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 				refTableIncluded.Add(int(table.ID()))
 			},
 		)
+		addFKs = opt.GetAllFKsAmongTables(refTables, func(t cat.Table) (tree.TableName, error) {
+			return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, t, txn)
+		})
 		var err error
 		tables, err = getNames(len(refTables), func(i int) cat.DataSource {
 			return refTables[i]
@@ -708,6 +732,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		blankLine()
 		if err = c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
 			b.printError(fmt.Sprintf("-- error getting schema for table %s: %v", tables[i].FQString(), err), &buf)
+		}
+	}
+	if !b.flags.RedactValues {
+		// PrintCreateTable above omitted the FK constraints from the schema, so
+		// we need to add them separately.
+		for _, addFK := range addFKs {
+			fmt.Fprintf(&buf, "%s;\n", addFK)
 		}
 	}
 	for i := range views {
@@ -1023,10 +1054,14 @@ func printCreateStatement(w io.Writer, dbName tree.Name, createStatement string)
 	fmt.Fprintf(w, "%s;\n", createStatement)
 }
 
+// PrintCreateTable writes the CREATE TABLE stmt into w. If redactValues is
+// false, then the foreign key constraints are **not** included in the output,
+// and the output is unredacted; if redactValues is true, then the FK constraint
+// are included and the output is redacted.
 func (c *stmtEnvCollector) PrintCreateTable(
 	w io.Writer, tn *tree.TableName, redactValues bool,
 ) error {
-	var formatOption string
+	formatOption := " WITH IGNORE_FOREIGN_KEYS"
 	if redactValues {
 		formatOption = " WITH REDACT"
 	}
