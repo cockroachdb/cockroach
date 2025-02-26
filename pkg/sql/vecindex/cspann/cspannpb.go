@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-
-	_ "github.com/gogo/protobuf/gogoproto"
 )
 
 // Clone returns a deep copy of the stats. Changes to the original or clone do

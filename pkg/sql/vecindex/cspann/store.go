@@ -24,7 +24,7 @@ var ErrPartitionNotFound = errors.New("partition not found")
 // been refreshed.
 var ErrRestartOperation = errors.New("conflict detected, restart operation")
 
-// VectorWithKey contains a original, full-size vector and its referencing key.
+// VectorWithKey contains an original, full-size vector and its referencing key.
 type VectorWithKey struct {
 	// Key is a partition key (for an interior partition) or a primary key (for
 	// a leaf partition). If a partition key, the vector is the centroid of the
@@ -167,5 +167,7 @@ type Txn interface {
 	// by the given child keys and stores them in "refs". If a vector has been
 	// deleted, then its corresponding reference will be set to nil. If a
 	// partition cannot be found, GetFullVectors returns ErrPartitionNotFound.
+	// TODO(andyk): what if the row exists but the vector column is NULL? Worth
+	// clarifying?
 	GetFullVectors(ctx context.Context, refs []VectorWithKey) error
 }

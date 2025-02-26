@@ -84,7 +84,7 @@ func NewRaBitQuantizer(dims int, seed int64) Quantizer {
 	}
 }
 
-// GetOriginalDims implements the Quantizer interface.
+// GetDims implements the Quantizer interface.
 func (q *RaBitQuantizer) GetDims() int {
 	return q.dims
 }
