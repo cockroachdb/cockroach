@@ -1065,6 +1065,17 @@ func (tt *Table) IsHypothetical() bool {
 	return false
 }
 
+// LookupColumnOrdinal is part of the cat.Table interface.
+func (tt *Table) LookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
+	for i, col := range tt.Columns {
+		if descpb.ColumnID(col.ColID()) == colID {
+			return i, nil
+		}
+	}
+	return 0, pgerror.Newf(pgcode.UndefinedColumn,
+		"column [%d] does not exist", colID)
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {
@@ -1140,44 +1151,56 @@ func (tt *Table) Trigger(i int) cat.Trigger {
 // IsRowLevelSecurityEnabled is part of the cat.Table interface.
 func (tt *Table) IsRowLevelSecurityEnabled() bool { return tt.rlsEnabled }
 
-// PolicyCount is part of the cat.Table interface
-func (tt *Table) PolicyCount(polType tree.PolicyType) int {
-	switch polType {
-	case tree.PolicyTypeRestrictive:
-		return len(tt.policies.Restrictive)
-	default:
-		return len(tt.policies.Permissive)
-	}
-}
-
-// Policy is part of the cat.Table interface
-func (tt *Table) Policy(policyType tree.PolicyType, index int) cat.Policy {
-	var policies []cat.Policy
-	switch policyType {
-	case tree.PolicyTypeRestrictive:
-		policies = tt.policies.Restrictive
-	default:
-		policies = tt.policies.Permissive
-	}
-	if index >= len(policies) {
-		panic(errors.AssertionFailedf("policy of type %v at index %d not found", policyType, index))
-	}
-	return policies[index]
+// Policies is part of the cat.Table interface.
+func (tt *Table) Policies() *cat.Policies {
+	return &tt.policies
 }
 
 // findPolicyByName will lookup the policy by its name. It returns it's policy
 // type and index within that policy type slice so that callers can do removal
 // if needed.
 func (tt *Table) findPolicyByName(policyName tree.Name) (*cat.Policy, tree.PolicyType, int) {
-	for _, pt := range []tree.PolicyType{tree.PolicyTypePermissive, tree.PolicyTypeRestrictive} {
-		for i := range tt.PolicyCount(pt) {
-			p := tt.Policy(pt, i)
-			if p.Name == policyName {
-				return &p, pt, i
-			}
+	for i, p := range tt.policies.Permissive {
+		if p.Name == policyName {
+			return &p, tree.PolicyTypePermissive, i
+		}
+	}
+	for i, p := range tt.policies.Restrictive {
+		if p.Name == policyName {
+			return &p, tree.PolicyTypeRestrictive, i
 		}
 	}
 	return nil, tree.PolicyTypePermissive, -1
+}
+
+// addRLSConstraint will add a special constraint in the table to enforce
+// policies for new rows.
+func (tt *Table) addRLSConstraint() {
+	if tt.findRLSConstraint() >= 0 {
+		panic(errors.AssertionFailedf("table already has an RLS constraint"))
+	}
+	tt.Checks = append(tt.Checks, &CheckConstraint{
+		isRLSConstraint: true,
+	})
+}
+
+// removeRLSConstraint will remove the special row-level constraint in the table.
+func (tt *Table) removeRLSConstraint() {
+	i := tt.findRLSConstraint()
+	if i < 0 {
+		panic(errors.AssertionFailedf("table does not have the RLS constraint to remove"))
+	}
+	tt.Checks = append(tt.Checks[:i], tt.Checks[i+1:]...)
+}
+
+// findRLSConstraint returns the index in tt.Checks of the RLS constraint.
+func (tt *Table) findRLSConstraint() int {
+	for i := range tt.Checks {
+		if tt.Checks[i].IsRLSConstraint() {
+			return i
+		}
+	}
+	return -1
 }
 
 // Index implements the cat.Index interface for testing purposes.
@@ -1420,9 +1443,10 @@ func (p *Partition) SetDatums(datums []tree.Datums) {
 // CheckConstraint implements cat.CheckConstraint. See that interface
 // for more information on the fields.
 type CheckConstraint struct {
-	constraint     string
-	validated      bool
-	columnOrdinals []int
+	constraint      string
+	validated       bool
+	columnOrdinals  []int
+	isRLSConstraint bool
 }
 
 var _ cat.CheckConstraint = &CheckConstraint{}
@@ -1446,6 +1470,9 @@ func (c *CheckConstraint) ColumnCount() int {
 func (c *CheckConstraint) ColumnOrdinal(i int) int {
 	return c.columnOrdinals[i]
 }
+
+// IsRLSConstraint is part of the cat.CheckConstraint interface.
+func (c *CheckConstraint) IsRLSConstraint() bool { return c.isRLSConstraint }
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.
 type TableStat struct {

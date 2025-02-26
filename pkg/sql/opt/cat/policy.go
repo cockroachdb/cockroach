@@ -44,10 +44,16 @@ type Policy struct {
 	// read operations. If the policy does not define a USING expression, this is
 	// an empty string.
 	UsingExpr string
+	// UsingColumnIDs is a set of column IDs that are referenced in the USING
+	// expression.
+	UsingColumnIDs descpb.ColumnIDs
 	// WithCheckExpr is the optional validation expression applied to new rows
 	// during write operations. If the policy does not define a WITH CHECK expression,
 	// this is an empty string.
 	WithCheckExpr string
+	// WithCheckColumnIDs is a set of column IDs that are referenced in the WITH
+	// CHECK expression.
+	WithCheckColumnIDs descpb.ColumnIDs
 	// Command is the command that the policy was defined for.
 	Command catpb.PolicyCommand
 	// roles are the roles the applies to. If the policy applies to all roles (aka
