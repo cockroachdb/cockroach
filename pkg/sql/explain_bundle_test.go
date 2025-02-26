@@ -274,16 +274,15 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		}
 	})
 
-	t.Run("foreign keys", func(t *testing.T) {
-		// All tables should be included in the stmt bundle, regardless of which
-		// one we query because all of them are considered "related" (even
-		// though we don't specify ON DELETE and ON UPDATE actions).
+	t.Run("foreign keys, mutation", func(t *testing.T) {
 		tableNames := []string{"parent", "child1", "child2", "grandchild1", "grandchild2"}
 		r.Exec(t, "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);")
 		r.Exec(t, "CREATE TABLE child1 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
 		r.Exec(t, "CREATE TABLE child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
 		r.Exec(t, "CREATE TABLE grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
 		r.Exec(t, "CREATE TABLE grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
+		// All tables should be included in the stmt bundle, regardless of which
+		// one we delete from because all of them are considered "related".
 		contentCheck := func(name, contents string) error {
 			if name == "schema.sql" {
 				for _, tableName := range tableNames {
@@ -295,14 +294,121 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			}
 			return nil
 		}
+		expectedFiles := map[string]string{
+			"parent":      "distsql-1-main-query.html distsql-2-postquery.html distsql-3-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt vec-3-postquery-v.txt vec-3-postquery.txt",
+			"child1":      "distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
+			"child2":      "distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
+			"grandchild1": "distsql.html vec.txt vec-v.txt",
+			"grandchild2": "distsql.html vec.txt vec-v.txt",
+		}
 		for _, tableName := range tableNames {
-			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM "+tableName)
+			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) DELETE FROM "+tableName+" WHERE true")
 			checkBundle(
 				t, fmt.Sprint(rows), "child", contentCheck, false, /* expectErrors */
 				base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child1.sql", "stats-defaultdb.public.child2.sql",
-				"stats-defaultdb.public.grandchild1.sql", "stats-defaultdb.public.grandchild2.sql", "distsql.html vec.txt vec-v.txt",
+				"stats-defaultdb.public.grandchild1.sql", "stats-defaultdb.public.grandchild2.sql", expectedFiles[tableName],
 			)
 		}
+	})
+
+	t.Run("foreign keys, read-only", func(t *testing.T) {
+		tableNames := []string{"parent", "child1", "child2", "grandchild1", "grandchild2"}
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS parent (pk INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS child1 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
+		r.Exec(t, "CREATE TABLE IF NOT EXISTS grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
+		// Only the target tables should be included since we perform a
+		// read-only stmt.
+		getContentCheckFn := func(targetTableNames, targetFKs []string) func(name, contents string) error {
+			return func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, targetTableName := range targetTableNames {
+						if regexp.MustCompile("USE defaultdb;\nCREATE TABLE public."+targetTableName).FindString(contents) == "" {
+							return errors.Newf(
+								"could not find target table 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", targetTableName, contents)
+						}
+					}
+					for _, tableName := range tableNames {
+						var isTarget bool
+						for _, targetTableName := range targetTableNames {
+							if targetTableName == tableName {
+								isTarget = true
+								break
+							}
+						}
+						if isTarget {
+							continue
+						}
+						if regexp.MustCompile("USE defaultdb;\nCREATE TABLE public."+tableName).FindString(contents) != "" {
+							return errors.Newf(
+								"unexpectedly found non-target table 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", tableName, contents)
+						}
+					}
+					// Now confirm that only relevant FKs are included.
+					numFoundFKs := strings.Count(contents, "FOREIGN KEY")
+					if numFoundFKs != len(targetFKs) {
+						return errors.Newf("found %d FKs, expected %d\n%s", numFoundFKs, len(targetFKs), contents)
+					}
+					for _, fk := range targetFKs {
+						if !strings.Contains(contents, fk) {
+							return errors.Newf("didn't find target FK: %s\n%s", fk, contents)
+						}
+					}
+				}
+				return nil
+			}
+		}
+		// First read each table separately.
+		for _, tableName := range tableNames {
+			targetTableName := tableName
+			// There should be no FKs included.
+			contentCheck := getContentCheckFn([]string{targetTableName}, nil /* targetFKs */)
+			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM "+targetTableName)
+			checkBundle(
+				t, fmt.Sprint(rows), targetTableName, contentCheck, false, /* expectErrors */
+				base, plans, fmt.Sprintf("stats-defaultdb.public.%s.sql", targetTableName),
+				"distsql.html vec.txt vec-v.txt",
+			)
+		}
+		// Now read different combinations of tables which will influence
+		// whether ADD CONSTRAINT ... FOREIGN KEY statements are included.
+		contentCheck := getContentCheckFn([]string{"parent", "child1"}, []string{"ALTER TABLE defaultdb.public.child1 ADD CONSTRAINT"})
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child1")
+		checkBundle(
+			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.child1.sql distsql.html vec.txt vec-v.txt",
+		)
+
+		// There should be no FKs since there isn't a direct link between the
+		// tables.
+		contentCheck = getContentCheckFn([]string{"parent", "grandchild1"}, nil /* targetFKs */)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, grandchild1")
+		checkBundle(
+			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.grandchild1.sql distsql.html vec.txt vec-v.txt",
+		)
+
+		// Note that we omit the FK from grandchild1 since the FK referenced
+		// table isn't being read.
+		contentCheck = getContentCheckFn([]string{"parent", "child2", "grandchild1"}, []string{"ALTER TABLE defaultdb.public.child2 ADD CONSTRAINT"})
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child2, grandchild1")
+		checkBundle(
+			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.child2.sql stats-defaultdb.public.grandchild1.sql distsql.html vec.txt vec-v.txt",
+		)
+
+		contentCheck = getContentCheckFn(
+			[]string{"parent", "child1", "grandchild1"},
+			[]string{
+				"ALTER TABLE defaultdb.public.child1 ADD CONSTRAINT",
+				"ALTER TABLE defaultdb.public.grandchild1 ADD CONSTRAINT",
+			})
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child1, grandchild1")
+		checkBundle(
+			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.child1.sql stats-defaultdb.public.grandchild1.sql distsql.html vec.txt vec-v.txt",
+		)
 	})
 
 	t.Run("redact", func(t *testing.T) {
