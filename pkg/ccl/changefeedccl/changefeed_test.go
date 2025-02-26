@@ -7578,6 +7578,12 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			return false, nil
 		}
 
+		var actualFrontierStr atomic.Value
+		knobs.AfterCoordinatorFrontierRestore = func(frontier *resolvedspan.CoordinatorFrontier) {
+			require.NotNil(t, frontier)
+			actualFrontierStr.Store(frontier.String())
+		}
+
 		// Resume job.
 		require.NoError(t, jobFeed.Resume())
 
@@ -7589,14 +7595,14 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			t.Fatal(err)
 		}
 		assert.NoError(t, checkpoint.Restore(expectedFrontier, timestampSpansMap))
-
-		var checkedCoordinatorFrontier atomic.Bool
-
-		knobs.AfterCoordinatorFrontierRestore = func(frontier *resolvedspan.CoordinatorFrontier) {
-			require.NotNil(t, frontier)
-			require.Equal(t, expectedFrontier.String(), frontier.String())
-			checkedCoordinatorFrontier.Store(true)
-		}
+		expectedFrontierStr := expectedFrontier.String()
+		testutils.SucceedsSoon(t, func() error {
+			if s := actualFrontierStr.Load(); s != nil {
+				require.Equal(t, expectedFrontierStr, s)
+				return nil
+			}
+			return errors.New("waiting for frontier to be restored")
+		})
 
 		// Wait for the high water mark to be non-zero.
 		testutils.SucceedsSoon(t, func() error {
@@ -7606,11 +7612,6 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			}
 			return errors.New("waiting for highwater")
 		})
-
-		// Now that we've checked that our checkpoint progress is loaded on resume,
-		// do not make further checks.
-		require.True(t, checkedCoordinatorFrontier.Load())
-		knobs.AfterCoordinatorFrontierRestore = nil
 
 		// At this point, highwater mark should be set, and previous checkpoint should be gone.
 		progress = loadProgress()
@@ -7644,7 +7645,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 	// TODO(ssd): Tenant testing disabled because of use of DB()
 	for _, sz := range []int64{100 << 20, 100} {
 		maxCheckpointSize = sz
-		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestForceSink("webhook"))
+		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestEnterpriseSinks)
 	}
 }
 
