@@ -38,7 +38,6 @@ go_library(
         "//pkg/util/vector",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//gogoproto",
         "@org_gonum_v1_gonum//stat",
     ],
 )
