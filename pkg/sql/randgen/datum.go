@@ -576,7 +576,7 @@ func randJSONSimpleDepth(rng *rand.Rand, depth int) json.JSON {
 	}
 }
 
-const charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+const charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // TODO(normanchenn): Add support for more complex jsonpath queries.
 func randJsonpath(rng *rand.Rand) string {

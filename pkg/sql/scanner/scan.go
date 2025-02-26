@@ -606,6 +606,40 @@ func (s *Scanner) ScanComment(lval ScanSymType) (present, ok bool) {
 	return false, true
 }
 
+func (s *Scanner) normalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool) {
+	s.lastAttemptedID = int32(lexbase.IDENT)
+	s.pos--
+	start := s.pos
+	isASCII := true
+
+	// Consume the Scanner character by character, stopping after the last legal
+	// identifier character. By the end of this function, we need to
+	// unicode normalize this identifier, which is expensive if there are actual
+	// unicode characters in it. If not, it's quite cheap - there's no work to do.
+	// Therefore, we keep track of whether the string is only ASCII for later.
+	for {
+		ch := s.peek()
+		if ch >= utf8.RuneSelf {
+			isASCII = false
+		}
+
+		if !isIdentMiddle(ch) {
+			break
+		}
+
+		s.pos++
+	}
+
+	if isASCII {
+		// We know that the identifier we've seen so far is ASCII, so we don't need
+		// to normalize.
+		lval.SetStr(s.in[start:s.pos])
+	} else {
+		// The string has unicode in it. No choice but to run Normalize.
+		lval.SetStr(lexbase.NormalizeString(s.in[start:s.pos]))
+	}
+}
+
 func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool) {
 	s.lastAttemptedID = int32(lexbase.IDENT)
 	s.pos--
