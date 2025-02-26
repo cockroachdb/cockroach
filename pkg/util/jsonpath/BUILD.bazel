@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "jsonpath",
+    srcs = ["expr.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/jsonpath",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/sem/tree"],
+)

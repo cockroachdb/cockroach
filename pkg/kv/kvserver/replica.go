@@ -935,6 +935,10 @@ type Replica struct {
 		// raftTracer is used to trace raft messages that are sent with a
 		// tracing context.
 		raftTracer rafttrace.RaftTracer
+
+		// lastTickTimestamp records the timestamp captured before the last tick of
+		// this replica.
+		lastTickTimestamp hlc.ClockTimestamp
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own

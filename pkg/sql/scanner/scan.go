@@ -47,13 +47,13 @@ type ScanSymType interface {
 	SetUnionVal(interface{})
 }
 
-// Scanner lexes SQL statements.
+// Scanner lexes statements.
 type Scanner struct {
 	in            string
 	pos           int
 	bytesPrealloc []byte
 
-	// Comments is the list of parsed comments from the SQL statement.
+	// Comments is the list of parsed comments from the statement.
 	Comments []string
 
 	// lastAttemptedID indicates the ID of the last attempted
@@ -606,7 +606,7 @@ func (s *Scanner) ScanComment(lval ScanSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType) {
+func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool) {
 	s.lastAttemptedID = int32(lexbase.IDENT)
 	s.pos--
 	start := s.pos
@@ -627,7 +627,7 @@ func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType) {
 			isLower = false
 		}
 
-		if !lexbase.IsIdentMiddle(ch) {
+		if !isIdentMiddle(ch) {
 			break
 		}
 
@@ -656,7 +656,7 @@ func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType) {
 }
 
 func (s *Scanner) scanIdent(lval ScanSymType) {
-	s.lowerCaseAndNormalizeIdent(lval)
+	s.lowerCaseAndNormalizeIdent(lval, lexbase.IsIdentMiddle)
 
 	isExperimental := false
 	kw := lval.Str()
