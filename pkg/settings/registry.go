@@ -260,6 +260,8 @@ var retiredSettings = map[InternalKey]struct{}{
 	// removed as of 25.2
 	"sql.catalog.experimental_use_session_based_leasing": {},
 	"bulkio.backup.merge_file_buffer_size":               {},
+	"changefeed.new_webhook_sink_enabled":                {},
+	"changefeed.new_webhook_sink.enabled":                {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
