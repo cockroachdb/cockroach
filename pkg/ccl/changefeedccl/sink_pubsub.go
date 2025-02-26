@@ -252,8 +252,6 @@ func (p *deprecatedPubsubSink) Flush(ctx context.Context) error {
 }
 
 func (p *deprecatedPubsubSink) flush(ctx context.Context) error {
-	defer p.metrics.recordFlushRequestCallback()()
-
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

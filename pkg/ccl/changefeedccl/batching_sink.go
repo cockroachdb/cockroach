@@ -115,7 +115,6 @@ type rowEvent struct {
 // Flush implements the Sink interface, returning the first error that has
 // occured in the past EmitRow calls.
 func (s *batchingSink) Flush(ctx context.Context) error {
-	defer s.metrics.recordFlushRequestCallback()()
 	flushWaiter := make(chan struct{})
 	select {
 	case <-ctx.Done():
