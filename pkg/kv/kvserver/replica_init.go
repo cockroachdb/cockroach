@@ -309,8 +309,8 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 		r.flowControlV2.ForceFlushIndexChangedLocked(context.TODO(), r.shMu.state.ForceFlushIndex.Index)
 	}
 	r.shMu.raftTruncState = s.TruncState
-	r.shMu.lastIndexNotDurable = s.LastIndex
-	r.shMu.lastTermNotDurable = invalidLastTerm
+	r.shMu.lastIndexNotDurable = s.LastEntryID.Index
+	r.shMu.lastTermNotDurable = s.LastEntryID.Term
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.
