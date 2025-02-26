@@ -51,7 +51,7 @@ import (
 const (
 	// Use a low probe timeout number, but intentionally only manipulate to
 	// this value when *failures* are expected.
-	testingRegionLivenessProbeTimeout = time.Second * 2
+	testingRegionLivenessProbeTimeout = time.Second * 1
 	// Use a long probe timeout by default when running this test (since CI
 	// can easily hit query timeouts).
 	testingRegionLivenessProbeTimeoutLong = time.Minute
@@ -104,9 +104,10 @@ func TestRegionLivenessProber(t *testing.T) {
 		func() {
 			// Timeout attempts to probe intentionally.
 			if blockProbeQuery.Swap(false) {
-				time.Sleep(testingRegionLivenessProbeTimeout)
+				time.Sleep(2 * testingRegionLivenessProbeTimeout)
 			}
-		})()
+		},
+	)()
 
 	for _, s := range testCluster.Servers {
 		tenantArgs := base.TestTenantArgs{
@@ -258,14 +259,16 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	targetCount := atomic.Int64{}
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
-	defer regionliveness.TestingSetProbeLivenessTimeout(func() {
-		if !detectLeaseWait.Load() {
-			return
-		}
-		time.Sleep(testingRegionLivenessProbeTimeout)
-		targetCount.Swap(0)
-		detectLeaseWait.Swap(false)
-	})()
+	defer regionliveness.TestingSetProbeLivenessTimeout(
+		func() {
+			if !detectLeaseWait.Load() {
+				return
+			}
+			time.Sleep(2 * testingRegionLivenessProbeTimeout)
+			targetCount.Swap(0)
+			detectLeaseWait.Swap(false)
+		},
+	)()
 
 	var keyToBlockMu syncutil.Mutex
 	var keyToBlock roachpb.Key
@@ -326,7 +329,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 							keyToBlockMu.Lock()
 							keyToBlock = tenant.Codec().TablePrefix(uint32(systemschema.RegionLivenessTable.GetID()))
 							keyToBlockMu.Unlock()
-							time.Sleep(testingRegionLivenessProbeTimeout)
+							time.Sleep(2 * testingRegionLivenessProbeTimeout)
 						}
 					},
 				},
@@ -528,9 +531,10 @@ func TestRegionLivenessProberForSQLInstances(t *testing.T) {
 		func() {
 			// Timeout attempts to probe intentionally.
 			if blockProbeQuery.Swap(false) {
-				time.Sleep(testingRegionLivenessProbeTimeout)
+				time.Sleep(2 * testingRegionLivenessProbeTimeout)
 			}
-		})()
+		},
+	)()
 
 	for _, s := range testCluster.Servers {
 		tenantArgs := base.TestTenantArgs{
