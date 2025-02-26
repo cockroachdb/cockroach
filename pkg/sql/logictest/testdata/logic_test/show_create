@@ -127,6 +127,28 @@ c  CREATE TABLE public.c (
    COMMENT ON COLUMN public.c.a IS 'column';
    COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
 
+query TT
+SHOW CREATE c WITH IGNORE_FOREIGN_KEYS
+----
+c  CREATE TABLE public.c (
+     a INT8 NOT NULL,
+     b INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
+     INDEX c_a_b_idx (a ASC, b ASC),
+     UNIQUE INDEX unique_a (a ASC),
+     FAMILY fam_0_a_rowid (a, rowid),
+     FAMILY fam_1_b (b),
+     CONSTRAINT check_b CHECK (b IN (1:::INT8, 2:::INT8, 3:::INT8)),
+     CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
+     CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > 0:::INT8,
+     CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b),
+     CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
+   );
+   COMMENT ON TABLE public.c IS 'table';
+   COMMENT ON COLUMN public.c.a IS 'column';
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
+
 subtest alter_column_type_not_break_show_create
 
 onlyif config local-legacy-schema-changer local-mixed-24.3

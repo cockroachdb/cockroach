@@ -808,6 +808,10 @@ type ShowCreateFormatOption int
 const (
 	ShowCreateFormatOptionNone ShowCreateFormatOption = iota
 	ShowCreateFormatOptionRedactedValues
+	ShowCreateFormatOptionIgnoreFKs
+	// TODO(yuzefovich): consider adding an option that both has redacted values
+	// and ignores the FKs. This will require addition of a new column to
+	// crdb_internal.create_statements virtual table.
 )
 
 // ShowCreate represents a SHOW CREATE statement.
@@ -834,6 +838,8 @@ func (node *ShowCreate) Format(ctx *FmtCtx) {
 	switch node.FmtOpt {
 	case ShowCreateFormatOptionRedactedValues:
 		ctx.WriteString(" WITH REDACT")
+	case ShowCreateFormatOptionIgnoreFKs:
+		ctx.WriteString(" WITH IGNORE_FOREIGN_KEYS")
 	}
 }
 
