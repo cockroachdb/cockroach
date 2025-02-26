@@ -3913,6 +3913,12 @@ func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
 			refTableIncluded.Add(int(table.ID()))
 		},
 	)
+	envOpts.AddFKs = opt.GetAllFKsAmongTables(
+		refTables,
+		func(t cat.Table) (tree.TableName, error) {
+			return b.catalog.FullyQualifiedName(b.ctx, t)
+		},
+	)
 	var err error
 	envOpts.Tables, err = getNames(len(refTables), func(i int) cat.DataSource {
 		return refTables[i]
