@@ -164,7 +164,22 @@ func PlanCDCExpression(
 	}
 
 	if len(presentation) == 0 {
-		return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
+		hasHiddenColumns := false
+		// There are no columns to return, let's try to find out if there are hidden columns.
+		cdcPlan.CollectPlanColumns(func(column colinfo.ResultColumn) bool {
+			if column.Hidden {
+				hasHiddenColumns = true
+				return false
+			}
+
+			return true
+		})
+
+		// If there are no columns in the family (including hidden columns), this likely
+		// indicates a bug in the query formulation or column family structure.
+		if !hasHiddenColumns {
+			return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
+		}
 	}
 
 	if len(p.curPlan.subqueryPlans) > 0 || len(p.curPlan.cascades) > 0 ||

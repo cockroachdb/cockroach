@@ -10197,3 +10197,27 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
 }
+
+// TestChangefeedDiffEmptyTable verifies that a changefeed with the diff option
+// correctly captures changes on an initially empty table. It ensures changefeed
+// behavior is consistent when tables start with no data.
+func TestChangefeedDiffEmptyTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE empty()`)
+		var rowid int
+		sqlDB.QueryRow(t, `INSERT INTO empty DEFAULT VALUES RETURNING rowid`).Scan(&rowid)
+
+		empty := feed(t, f, `CREATE CHANGEFEED FOR empty WITH diff`)
+		defer closeFeed(t, empty)
+
+		assertPayloads(t, empty, []string{
+			fmt.Sprintf(`empty: [%d]->{"after": {"rowid": %d}, "before": null}`, rowid, rowid),
+		})
+	}
+
+	cdcTest(t, testFn)
+}
