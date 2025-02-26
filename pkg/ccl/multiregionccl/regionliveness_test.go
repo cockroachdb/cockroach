@@ -100,7 +100,7 @@ func TestRegionLivenessProber(t *testing.T) {
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
 	blockProbeQuery := atomic.Bool{}
-	defer regionliveness.TestingSetProbeLivenessTimeout(
+	defer regionliveness.TestingSetBeforeProbeLivenessHook(
 		func() {
 			// Timeout attempts to probe intentionally.
 			if blockProbeQuery.Swap(false) {
@@ -254,7 +254,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	targetCount := atomic.Int64{}
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
-	defer regionliveness.TestingSetProbeLivenessTimeout(
+	defer regionliveness.TestingSetBeforeProbeLivenessHook(
 		func() {
 			if !detectLeaseWait.Load() {
 				return
@@ -522,7 +522,7 @@ func TestRegionLivenessProberForSQLInstances(t *testing.T) {
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
 	blockProbeQuery := atomic.Bool{}
-	defer regionliveness.TestingSetProbeLivenessTimeout(
+	defer regionliveness.TestingSetBeforeProbeLivenessHook(
 		func() {
 			// Timeout attempts to probe intentionally.
 			if blockProbeQuery.Swap(false) {
