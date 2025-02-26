@@ -34,6 +34,7 @@ type constraintMatcher struct {
 	// is no removal from this map, but if needed we could evict based on size
 	// using LRU.
 	constraints map[internedConstraint]*matchedSet
+	allStores   *matchedSet
 }
 
 type matchedConstraints struct {
@@ -50,6 +51,7 @@ func newConstraintMatcher(interner *stringInterner) *constraintMatcher {
 		interner:    interner,
 		stores:      map[roachpb.StoreID]*matchedConstraints{},
 		constraints: map[internedConstraint]*matchedSet{},
+		allStores:   &matchedSet{},
 	}
 }
 
@@ -61,6 +63,7 @@ func (cm *constraintMatcher) setStore(store roachpb.StoreDescriptor) {
 			matched: map[internedConstraint]struct{}{},
 		}
 		cm.stores[store.StoreID] = mc
+		cm.allStores.insert(store.StoreID)
 	}
 	mc.descriptor = store
 	// Update the matching info for the existing constraints.
@@ -96,6 +99,7 @@ func (cm *constraintMatcher) removeStore(storeID roachpb.StoreID) {
 	if mc == nil {
 		return
 	}
+	cm.allStores.remove(storeID)
 	delete(cm.stores, storeID)
 	for c := range mc.matched {
 		matchedSet := cm.constraints[c]
@@ -111,6 +115,7 @@ func (cm *constraintMatcher) removeStore(storeID roachpb.StoreID) {
 	}
 }
 
+// storeMatchesConstraint is an internal helper method.
 func (cm *constraintMatcher) storeMatchesConstraint(
 	store roachpb.StoreDescriptor, c internedConstraint,
 ) bool {
@@ -141,6 +146,7 @@ func (cm *constraintMatcher) storeMatchesConstraint(
 	return matches
 }
 
+// getMatchedSetForConstraint is an internal helper method.
 func (cm *constraintMatcher) getMatchedSetForConstraint(c internedConstraint) *matchedSet {
 	ms, ok := cm.constraints[c]
 	if !ok {
@@ -165,6 +171,10 @@ func (cm *constraintMatcher) constrainStoresForConjunction(
 	constraints []internedConstraint, storeSet *storeIDPostingList,
 ) {
 	*storeSet = (*storeSet)[:0]
+	if len(constraints) == 0 {
+		*storeSet = append(*storeSet, cm.allStores.storeIDPostingList...)
+		return
+	}
 	for i := range constraints {
 		matchedSet := cm.getMatchedSetForConstraint(constraints[i])
 		if i == 0 {
@@ -205,6 +215,10 @@ func (cm *constraintMatcher) storeMatches(
 func (cm *constraintMatcher) constrainStoresForExpr(
 	expr constraintsDisj, storeSet *storeIDPostingList,
 ) {
+	if len(expr) == 0 {
+		*storeSet = append(*storeSet, cm.allStores.storeIDPostingList...)
+		return
+	}
 	// Optimize for a single conjunction, by using storeSet directly in the call
 	// to constrainStoresForConjunction.
 	var scratch storeIDPostingList
