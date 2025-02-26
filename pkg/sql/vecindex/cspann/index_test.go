@@ -112,29 +112,19 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "min-partition-size":
-			require.Len(s.T, arg.Vals, 1)
-			s.Options.MinPartitionSize, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			s.Options.MinPartitionSize = s.parseInt(arg)
 
 		case "max-partition-size":
-			require.Len(s.T, arg.Vals, 1)
-			s.Options.MaxPartitionSize, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			s.Options.MaxPartitionSize = s.parseInt(arg)
 
 		case "quality-samples":
-			require.Len(s.T, arg.Vals, 1)
-			s.Options.QualitySamples, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			s.Options.QualitySamples = s.parseInt(arg)
 
 		case "dims":
-			require.Len(s.T, arg.Vals, 1)
-			dims, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			dims = s.parseInt(arg)
 
 		case "beam-size":
-			require.Len(s.T, arg.Vals, 1)
-			s.Options.BaseBeamSize, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			s.Options.BaseBeamSize = s.parseInt(arg)
 		}
 	}
 
@@ -155,9 +145,18 @@ func (s *testState) FormatTree(d *datadriven.TestData) string {
 	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 	defer commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
+	var treeKey cspann.TreeKey
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "tree":
+			treeKey = s.parseTreeID(arg)
+		}
+	}
+
 	var idxCtx cspann.Context
 	idxCtx.Init(txn)
-	tree, err := s.Index.Format(s.Ctx, &idxCtx, cspann.FormatOptions{PrimaryKeyStrings: true})
+	tree, err := s.Index.Format(
+		s.Ctx, &idxCtx, treeKey, cspann.FormatOptions{PrimaryKeyStrings: true})
 	require.NoError(s.T, err)
 	return tree
 }
@@ -167,28 +166,23 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	searchSet := cspann.SearchSet{MaxResults: 1}
 	options := cspann.SearchOptions{}
 
-	var err error
+	var treeKey cspann.TreeKey
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "use-feature":
-			require.Len(s.T, arg.Vals, 1)
-			offset, err := strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
-			vec = s.Features.At(offset)
+			vec = s.parseUseFeature(arg)
 
 		case "max-results":
-			require.Len(s.T, arg.Vals, 1)
-			searchSet.MaxResults, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			searchSet.MaxResults = s.parseInt(arg)
 
 		case "beam-size":
-			require.Len(s.T, arg.Vals, 1)
-			options.BaseBeamSize, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			options.BaseBeamSize = s.parseInt(arg)
 
 		case "skip-rerank":
-			require.Len(s.T, arg.Vals, 0)
-			options.SkipRerank = true
+			options.SkipRerank = s.parseFlag(arg)
+
+		case "tree":
+			treeKey = s.parseTreeID(arg)
 		}
 	}
 
@@ -201,7 +195,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	var idxCtx cspann.Context
 	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 	idxCtx.Init(txn)
-	err = s.Index.Search(s.Ctx, &idxCtx, vec, &searchSet, options)
+	err := s.Index.Search(s.Ctx, &idxCtx, treeKey, vec, &searchSet, options)
 	require.NoError(s.T, err)
 	commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -232,14 +226,14 @@ func (s *testState) Search(d *datadriven.TestData) string {
 func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 	var vec vector.T
 
-	var err error
+	var treeKey cspann.TreeKey
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "use-feature":
-			require.Len(s.T, arg.Vals, 1)
-			offset, err := strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
-			vec = s.Features.At(offset)
+			vec = s.parseUseFeature(arg)
+
+		case "tree":
+			treeKey = s.parseTreeID(arg)
 		}
 	}
 
@@ -252,7 +246,7 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 	var idxCtx cspann.Context
 	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 	idxCtx.Init(txn)
-	result, err := s.Index.SearchForInsert(s.Ctx, &idxCtx, vec)
+	result, err := s.Index.SearchForInsert(s.Ctx, &idxCtx, treeKey, vec)
 	require.NoError(s.T, err)
 	commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -278,6 +272,13 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 
 func (s *testState) SearchForDelete(d *datadriven.TestData) string {
 	var buf bytes.Buffer
+	var treeKey cspann.TreeKey
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "tree":
+			treeKey = s.parseTreeID(arg)
+		}
+	}
 
 	var idxCtx cspann.Context
 	for _, line := range strings.Split(d.Input, "\n") {
@@ -291,7 +292,7 @@ func (s *testState) SearchForDelete(d *datadriven.TestData) string {
 		// Search within a transaction.
 		txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 		idxCtx.Init(txn)
-		result, err := s.Index.SearchForDelete(s.Ctx, &idxCtx, vec, key)
+		result, err := s.Index.SearchForDelete(s.Ctx, &idxCtx, treeKey, vec, key)
 		require.NoError(s.T, err)
 		commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -309,24 +310,23 @@ func (s *testState) SearchForDelete(d *datadriven.TestData) string {
 }
 
 func (s *testState) Insert(d *datadriven.TestData) string {
-	var err error
 	hideTree := false
 	noFixups := false
 	count := 0
+	var treeKey cspann.TreeKey
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "load-features":
-			require.Len(s.T, arg.Vals, 1)
-			count, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			count = s.parseInt(arg)
 
 		case "hide-tree":
-			require.Len(s.T, arg.Vals, 0)
-			hideTree = true
+			hideTree = s.parseFlag(arg)
 
 		case "no-fixups":
-			require.Len(s.T, arg.Vals, 0)
-			noFixups = true
+			noFixups = s.parseFlag(arg)
+
+		case "tree":
+			treeKey = s.parseTreeID(arg)
 		}
 	}
 
@@ -365,7 +365,8 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 		idxCtx.Init(txn)
 		s.InMemStore.InsertVector(childKeys[i].KeyBytes, vectors.At(i))
-		require.NoError(s.T, s.Index.Insert(s.Ctx, &idxCtx, vectors.At(i), childKeys[i].KeyBytes))
+		require.NoError(s.T,
+			s.Index.Insert(s.Ctx, &idxCtx, treeKey, vectors.At(i), childKeys[i].KeyBytes))
 		commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 		if (i+1)%step == 0 && !noFixups {
@@ -391,11 +392,14 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 
 func (s *testState) Delete(d *datadriven.TestData) string {
 	notFound := false
+	var treeKey cspann.TreeKey
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "not-found":
-			require.Len(s.T, arg.Vals, 0)
-			notFound = true
+			notFound = s.parseFlag(arg)
+
+		case "tree":
+			treeKey = s.parseTreeID(arg)
 		}
 	}
 
@@ -415,7 +419,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 		// the primary index, but it cannot be found in the secondary index.
 		if !notFound {
 			idxCtx.Init(txn)
-			err := s.Index.Delete(s.Ctx, &idxCtx, vec, key)
+			err := s.Index.Delete(s.Ctx, &idxCtx, treeKey, vec, key)
 			require.NoError(s.T, err)
 		}
 		s.InMemStore.DeleteVector(key)
@@ -436,26 +440,24 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 
 func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 	var parentPartitionKey, partitionKey cspann.PartitionKey
+	var treeKey cspann.TreeKey
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "parent-partition-key":
-			require.Len(s.T, arg.Vals, 1)
-			val, err := strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
-			parentPartitionKey = cspann.PartitionKey(val)
+			parentPartitionKey = cspann.PartitionKey(s.parseInt(arg))
 
 		case "partition-key":
-			require.Len(s.T, arg.Vals, 1)
-			val, err := strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
-			partitionKey = cspann.PartitionKey(val)
+			partitionKey = cspann.PartitionKey(s.parseInt(arg))
+
+		case "tree":
+			treeKey = s.parseTreeID(arg)
 		}
 	}
 
 	if d.Cmd == "force-split" {
-		s.Index.ForceSplit(s.Ctx, parentPartitionKey, partitionKey)
+		s.Index.ForceSplit(s.Ctx, treeKey, parentPartitionKey, partitionKey)
 	} else {
-		s.Index.ForceMerge(s.Ctx, parentPartitionKey, partitionKey)
+		s.Index.ForceMerge(s.Ctx, treeKey, parentPartitionKey, partitionKey)
 	}
 
 	// Ensure the fixup runs.
@@ -471,35 +473,29 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	var samples []int
 	seed := 42
 	var err error
+	var treeKey cspann.TreeKey
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "use-feature":
 			// Use single designated sample.
-			require.Len(s.T, arg.Vals, 1)
-			offset, err := strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			offset := s.parseInt(arg)
 			numSamples = 1
 			samples = []int{offset}
 
 		case "samples":
-			require.Len(s.T, arg.Vals, 1)
-			numSamples, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			numSamples = s.parseInt(arg)
 
 		case "seed":
-			require.Len(s.T, arg.Vals, 1)
-			seed, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			seed = s.parseInt(arg)
 
 		case "topk":
-			require.Len(s.T, arg.Vals, 1)
-			searchSet.MaxResults, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			searchSet.MaxResults = s.parseInt(arg)
 
 		case "beam-size":
-			require.Len(s.T, arg.Vals, 1)
-			options.BaseBeamSize, err = strconv.Atoi(arg.Vals[0])
-			require.NoError(s.T, err)
+			options.BaseBeamSize = s.parseInt(arg)
+
+		case "tree":
+			treeKey = s.parseTreeID(arg)
 		}
 	}
 
@@ -558,7 +554,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		truth := calcTruth(queryVector, data)
 
 		// Calculate prediction set for the vector.
-		err = s.Index.Search(s.Ctx, &idxCtx, queryVector, &searchSet, options)
+		err = s.Index.Search(s.Ctx, &idxCtx, treeKey, queryVector, &searchSet, options)
 		require.NoError(s.T, err)
 		results := searchSet.PopResults()
 
@@ -589,13 +585,21 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
 	defer commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
+	var treeKey cspann.TreeKey
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "tree":
+			treeKey = s.parseTreeID(arg)
+		}
+	}
+
 	vectorCount := 0
 	partitionKeys := []cspann.PartitionKey{cspann.RootKey}
 	for {
 		// Get all child keys for next level.
 		var childKeys []cspann.ChildKey
 		for _, key := range partitionKeys {
-			partition, err := txn.GetPartition(s.Ctx, key)
+			partition, err := txn.GetPartition(s.Ctx, treeKey, key)
 			require.NoError(s.T, err)
 			childKeys = append(childKeys, partition.ChildKeys()...)
 		}
@@ -609,7 +613,7 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 		for i := range childKeys {
 			refs[i].Key = childKeys[i]
 		}
-		err := txn.GetFullVectors(s.Ctx, refs)
+		err := txn.GetFullVectors(s.Ctx, treeKey, refs)
 		require.NoError(s.T, err)
 		for i := range refs {
 			require.NotNil(s.T, refs[i].Vector)
@@ -629,6 +633,26 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 	}
 
 	return fmt.Sprintf("Validated index with %d vectors.\n", vectorCount)
+}
+
+func (s *testState) parseInt(arg datadriven.CmdArg) int {
+	require.Len(s.T, arg.Vals, 1)
+	val, err := strconv.Atoi(arg.Vals[0])
+	require.NoError(s.T, err)
+	return val
+}
+
+func (s *testState) parseFlag(arg datadriven.CmdArg) bool {
+	require.Len(s.T, arg.Vals, 0)
+	return true
+}
+
+func (s *testState) parseTreeID(arg datadriven.CmdArg) cspann.TreeKey {
+	return memstore.ToTreeKey(memstore.TreeID(s.parseInt(arg)))
+}
+
+func (s *testState) parseUseFeature(arg datadriven.CmdArg) vector.T {
+	return s.Features.At(s.parseInt(arg))
 }
 
 // parseVector parses a vector string in this form: (1.5, 6, -4).
@@ -748,9 +772,9 @@ func TestRandomizeVector(t *testing.T) {
 	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
 }
 
-// TestVectorIndexConcurrency builds an index on multiple goroutines, with
-// background splits and merges enabled.
-func TestVectorIndexConcurrency(t *testing.T) {
+// TestIndexConcurrency builds an index on multiple goroutines, with background
+// splits and merges enabled.
+func TestIndexConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -803,7 +827,8 @@ func buildIndex(
 			txn := commontest.BeginTransaction(ctx, t, store)
 			idxCtx.Init(txn)
 			store.InsertVector(primaryKeys[i], vectors.At(i))
-			require.NoError(t, index.Insert(ctx, idxCtx, vectors.At(i), primaryKeys[i]))
+			require.NoError(t,
+				index.Insert(ctx, idxCtx, nil /* treeKey */, vectors.At(i), primaryKeys[i]))
 			commontest.CommitTransaction(ctx, t, store, txn)
 		}
 	}
@@ -836,6 +861,7 @@ func buildIndex(
 func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int {
 	txn := commontest.BeginTransaction(ctx, t, store)
 	defer commontest.CommitTransaction(ctx, t, store, txn)
+	treeKey := memstore.ToTreeKey(memstore.TreeID(0))
 
 	vectorCount := 0
 	partitionKeys := []cspann.PartitionKey{cspann.RootKey}
@@ -843,10 +869,7 @@ func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int
 		// Get all child keys for next level.
 		var childKeys []cspann.ChildKey
 		for _, key := range partitionKeys {
-			partition, err := txn.GetPartition(ctx, key)
-			if err != nil {
-				panic(err)
-			}
+			partition, err := txn.GetPartition(ctx, treeKey, key)
 			require.NoError(t, err)
 			childKeys = append(childKeys, partition.ChildKeys()...)
 		}
@@ -860,7 +883,7 @@ func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int
 		for i := range childKeys {
 			refs[i].Key = childKeys[i]
 		}
-		err := txn.GetFullVectors(ctx, refs)
+		err := txn.GetFullVectors(ctx, treeKey, refs)
 		require.NoError(t, err)
 		for i := range refs {
 			if refs[i].Vector == nil {

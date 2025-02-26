@@ -25,12 +25,13 @@ message StoreProto {
 
 // PartitionProto serializes the fields of a partition.
 message PartitionProto {
-  uint64 partition_key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.PartitionKey"];
-  quantize.RaBitQuantizedVectorSet ra_bit_q = 2;
-  quantize.UnQuantizedVectorSet un_quantized = 3;
-  repeated cspann.ChildKey child_keys = 4 [(gogoproto.nullable) = false];
-  repeated bytes value_bytes = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.ValueBytes"];
-  uint64 level = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.Level"];
+  uint64 tree_id = 1 [(gogoproto.casttype) = "TreeID"];
+  uint64 partition_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.PartitionKey"];
+  quantize.RaBitQuantizedVectorSet ra_bit_q = 3;
+  quantize.UnQuantizedVectorSet un_quantized = 4;
+  repeated cspann.ChildKey child_keys = 5 [(gogoproto.nullable) = false];
+  repeated bytes value_bytes = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.ValueBytes"];
+  uint64 level = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.Level"];
 }
 
 // Vector serializes an original, full-size vector and its key bytes.

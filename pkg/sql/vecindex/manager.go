@@ -88,8 +88,8 @@ func (m *Manager) Get(
 	if e != nil {
 		if e.mustWait {
 			// We are in the process of grabbing the index config and starting the
-			// VectorIndex. Wait until that is complete, at which point e.idx will be
-			// populated.
+			// vector index. Wait until that is complete, at which point e.idx will
+			// be populated.
 			log.VEventf(ctx, 1, "waiting for config for index %d of table %d", indexID, tableID)
 			if m.testingKnobs != nil && m.testingKnobs.BeforeVecIndexWait != nil {
 				m.testingKnobs.BeforeVecIndexWait()

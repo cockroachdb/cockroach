@@ -1,0 +1,101 @@
+new-index min-partition-size=2 max-partition-size=4 beam-size=2 tree=0
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+----
+• 1 (0, 0)
+│
+├───• vec1 (1, 2)
+├───• vec2 (7, 4)
+└───• vec3 (4, 3)
+
+# Insert into the same index, but a different tree.
+insert tree=2
+vec4: (8, 11)
+vec5: (14, 1)
+vec6: (0, 0)
+----
+• 1 (0, 0)
+│
+├───• vec4 (8, 11)
+├───• vec5 (14, 1)
+└───• vec6 (0, 0)
+
+# Split tree #2.
+insert tree=2
+vec7: (0, 4)
+vec8: (-2, 8)
+----
+• 1 (4.5, 4.0833)
+│
+├───• 2 (2, 7.6667)
+│   │
+│   ├───• vec4 (8, 11)
+│   ├───• vec8 (-2, 8)
+│   └───• vec7 (0, 4)
+│
+└───• 3 (7, 0.5)
+    │
+    ├───• vec6 (0, 0)
+    └───• vec5 (14, 1)
+
+# Search tree #2
+search tree=2
+(5, 5)
+----
+vec7: 26 (centroid=4.18)
+5 leaf vectors, 7 vectors, 5 full vectors, 3 partitions
+
+# Delete from tree #2.
+delete tree=2
+vec6
+----
+• 1 (4.5, 4.0833)
+│
+├───• 2 (2, 7.6667)
+│   │
+│   ├───• vec4 (8, 11)
+│   ├───• vec8 (-2, 8)
+│   └───• vec7 (0, 4)
+│
+└───• 3 (7, 0.5)
+    │
+    └───• vec5 (14, 1)
+
+# Merge partition in tree #2.
+force-merge partition-key=3 parent-partition-key=1 tree=2
+----
+• 1 (4.5, 4.0833)
+│
+└───• 2 (2, 7.6667)
+    │
+    ├───• vec4 (8, 11)
+    ├───• vec8 (-2, 8)
+    ├───• vec7 (0, 4)
+    └───• vec5 (14, 1)
+
+# Validate tree #2.
+validate-tree tree=2
+----
+Validated index with 4 vectors.
+
+# Search for insert into tree #2.
+search-for-insert tree=2
+(5, 5)
+----
+partition 2, centroid=(2, 7.6667), sqdist=16.1111
+
+# Search for delete from tree #2.
+search-for-delete tree=2
+vec8
+----
+vec8: partition 2
+
+# Ensure that tree #1 remains undisturbed.
+format-tree
+----
+• 1 (0, 0)
+│
+├───• vec1 (1, 2)
+├───• vec2 (7, 4)
+└───• vec3 (4, 3)

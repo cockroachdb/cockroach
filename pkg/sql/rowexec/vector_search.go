@@ -125,11 +125,10 @@ func (v *vectorSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 func (v *vectorSearchProcessor) search() error {
 	// An index-join + top-k operation will handle the re-ranking later, so we
 	// skip doing it in the vector-search operator.
-	// TODO(drewk): once the vector indexing library supports it, pass the prefix
-	// key.
 	searchOptions := cspann.SearchOptions{SkipRerank: true}
 	searchSet := cspann.SearchSet{MaxResults: int(v.targetCount)}
-	err := v.idx.Search(v.Ctx(), &v.idxCtx, v.queryVector, &searchSet, searchOptions)
+	err := v.idx.Search(
+		v.Ctx(), &v.idxCtx, cspann.TreeKey(v.prefixKey), v.queryVector, &searchSet, searchOptions)
 	if err != nil {
 		return err
 	}
@@ -300,17 +299,11 @@ func (v *vectorMutationSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb
 			v.MoveToDraining(err)
 			break
 		}
-		if len(prefix) > 0 {
-			// TODO(drewk): once the vector indexing library supports it, pass the
-			// encoded prefix.
-			v.MoveToDraining(unimplemented.New("prefix columns",
-				"searching a vector index with prefix columns is not yet supported"))
-			break
-		}
 		if row[v.queryVectorColOrd].Datum != tree.DNull {
 			queryVector := tree.MustBeDPGVector(row[v.queryVectorColOrd].Datum).T
 			if v.isIndexPut {
-				searchRes, err := v.idx.SearchForInsert(v.Ctx(), &v.idxCtx, queryVector)
+				searchRes, err := v.idx.SearchForInsert(
+					v.Ctx(), &v.idxCtx, cspann.TreeKey(prefix), queryVector)
 				if err != nil {
 					v.MoveToDraining(err)
 					break
@@ -329,7 +322,8 @@ func (v *vectorMutationSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb
 					v.MoveToDraining(err)
 					break
 				}
-				searchRes, err := v.idx.SearchForDelete(v.Ctx(), &v.idxCtx, queryVector, pk)
+				searchRes, err := v.idx.SearchForDelete(
+					v.Ctx(), &v.idxCtx, cspann.TreeKey(prefix), queryVector, pk)
 				if err != nil {
 					v.MoveToDraining(err)
 					break
