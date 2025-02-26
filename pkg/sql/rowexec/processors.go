@@ -418,7 +418,15 @@ func NewProcessor(
 		}
 		return NewMergeLoopbackProcessor(ctx, flowCtx, processorID, *core.MergeLoopback, post)
 	}
-
+	if core.IngestFile != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewIngestFileProcessor == nil {
+			return nil, errors.New("IngestFile processor unimplemented")
+		}
+		return NewIngestFileProcessor(ctx, flowCtx, processorID, *core.IngestFile, post)
+	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
@@ -436,6 +444,8 @@ var NewBulkMergeProcessor func(context.Context, *execinfra.FlowCtx, int32, execi
 var NewMergeCoordinatorProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.MergeCoordinatorSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource) (execinfra.Processor, error)
 
 var NewMergeLoopbackProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.MergeLoopbackSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+var NewIngestFileProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestFileSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewBackupDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)

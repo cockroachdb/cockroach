@@ -88,14 +88,14 @@ func NewExternalFileAllocator(es cloud.ExternalStorage, baseURI string) FileAllo
 func (e *ExternalFileAllocator) AddFile(
 	ctx context.Context, fileIndex int, span roachpb.Span,
 ) (objstorage.Writable, func(), error) {
-	fileName := fmt.Sprintf("%s_%d", e.baseURI, fileIndex)
+	fileName := fmt.Sprintf("%d.sst", fileIndex)
 	writer, err := e.es.Writer(ctx, fileName)
 	if err != nil {
 		return nil, nil, err
 	}
 	remoteWritable := objstorageprovider.NewRemoteWritable(writer)
 	e.fileList = append(e.fileList, FileInfo{
-		Uri:      fileName,
+		Uri:      e.baseURI + fileName,
 		StartKey: string(span.Key),
 		EndKey:   string(span.EndKey),
 	})

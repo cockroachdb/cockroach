@@ -126,6 +126,7 @@ message ProcessorCoreUnion {
   optional BulkMergeSpec bulkMerge = 47;
   optional MergeCoordinatorSpec mergeCoordinator = 48;
   optional MergeLoopbackSpec mergeLoopback = 49;
+  optional IngestFileSpec ingestFile = 50;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
   // NEXT ID: 47.
