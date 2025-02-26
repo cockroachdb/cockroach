@@ -45,7 +45,7 @@ func largeSchemaBackupRestore(r registry.Registry, numTables int) {
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
-		Timeout:          12 * time.Hour,
+		Timeout:          48 * time.Hour, // Each layer takes ~1hr, and we have 24 of them.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			const numTablesPerDB = 100
 			numDbs := numTables/numTablesPerDB + 1
@@ -57,17 +57,11 @@ func largeSchemaBackupRestore(r registry.Registry, numTables int) {
 			defer conn.Close()
 
 			t.L().Printf("Creating tables")
-			// Normally it's a bit risky to do schema changes in a transaction, but it is much faster.
-			// Since this is a very contrived test, it's a fine optimization.
-			tx, err := conn.BeginTx(ctx, nil)
-			require.NoError(t, err)
-			_, err = tx.ExecContext(ctx, "SET LOCAL autocommit_before_ddl = false")
-			require.NoError(t, err)
 			for i := range numDbs {
 				t.L().Printf("Building database %d of %d", i+1, numDbs)
 				dbName := fmt.Sprintf("test_db_%d", i)
 				dbs[i] = dbName
-				_, err := tx.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", dbName))
+				_, err := conn.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", dbName))
 				require.NoError(t, err)
 
 				for j := range numTablesPerDB {
@@ -77,48 +71,37 @@ func largeSchemaBackupRestore(r registry.Registry, numTables int) {
 					}
 					tableName := fmt.Sprintf("%s.kv_%d", dbs[i], j)
 					tables[tableIndex] = tableName
-					_, err := tx.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s (key STRING NOT NULL PRIMARY KEY, value STRING NOT NULL)", tableName))
+					_, err := conn.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s (key STRING NOT NULL PRIMARY KEY, value STRING NOT NULL)", tableName))
 					require.NoError(t, err)
 				}
 			}
-			require.NoError(t, tx.Commit())
 
 			dest := destinationName(c)
 			uri := `gs://` + backupTestingBucket + `/` + dest + `?AUTH=implicit`
 			t.L().Printf("Backing up to %s\n", uri)
-			_, err = conn.ExecContext(ctx, "BACKUP INTO $1 WITH REVISION_HISTORY", uri)
+			_, err := conn.ExecContext(ctx, "BACKUP INTO $1 WITH REVISION_HISTORY", uri)
 			require.NoError(t, err)
 
 			const numLayers = 24
 			for i := range numLayers {
 				t.L().Printf("Building layer %d of %d", i+1, numLayers)
-				tx, err = conn.BeginTx(ctx, nil)
-				require.NoError(t, err)
-				_, err = tx.ExecContext(ctx, "SET LOCAL autocommit_before_ddl = false")
-				require.NoError(t, err)
+
 				for _, tableName := range tables {
-					_, err := tx.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s", tableName))
+					_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s", tableName))
 					require.NoError(t, err)
-					_, err = tx.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s (key STRING NOT NULL PRIMARY KEY, value STRING NOT NULL)", tableName))
+					_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s (key STRING NOT NULL PRIMARY KEY, value STRING NOT NULL)", tableName))
 					require.NoError(t, err)
 				}
-				require.NoError(t, tx.Commit())
 
 				_, err = conn.Exec("BACKUP INTO LATEST IN $1 WITH REVISION_HISTORY", uri)
 				require.NoError(t, err)
-
 			}
 
 			t.L().Printf("Dropping databases\n") // Needed to do the full cluster restore.
-			tx, err = conn.BeginTx(ctx, nil)
-			require.NoError(t, err)
-			_, err = tx.ExecContext(ctx, "SET LOCAL autocommit_before_ddl = false")
-			require.NoError(t, err)
 			for _, dbName := range dbs {
-				_, err = tx.Exec("DROP DATABASE " + dbName + " CASCADE")
+				_, err = conn.Exec("DROP DATABASE " + dbName + " CASCADE")
 				require.NoError(t, err)
 			}
-			require.NoError(t, tx.Commit())
 
 			t.L().Printf("Restoring from %s\n", uri)
 			_, err = conn.Exec("RESTORE FROM LATEST IN $1", uri)
