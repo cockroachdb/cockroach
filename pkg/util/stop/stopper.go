@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
-	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -430,6 +429,38 @@ type TaskOpts struct {
 // RunAsyncTaskEx is like RunTask, except the callback f is run in a goroutine.
 // The call doesn't block for the callback to finish execution.
 func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
+	ctx, hdl, err := s.GetHandle(ctx, opt)
+	if err != nil {
+		return err
+	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		f(ctx)
+	}(ctx)
+	return nil
+}
+
+// GetHandle returns a Handle or (if the context is cancelled or the Stopper is
+// draining or stopped), an error. A Handle represents permission and obligation
+// to launch a task (a goroutine) decorated with the handle's Activate and
+// Release functions. See ExampleStopper_GetHandle for usage.
+//
+// A Handle must only be used as shown in the example. In particular, it is illegal
+// to access the handle outside of the single spawned goroutine that activates
+// it. Handles must always be released.
+//
+// A handle always returns a valid Context derived from the input, even on
+// error.
+//
+// The example pattern allocates only once (`go` always allocates) save for any
+// context or execution trace region allocations that may occur when such
+// functionality is enabled.
+//
+// Importantly, the fact that the caller's code launches the async task improves
+// observability because it records the caller's call frame as the creating
+// goroutine (as opposed to some location in the stopper code). This makes it
+// straightforward to discover spawned goroutines in Go execution traces.
+func (s *Stopper) GetHandle(ctx context.Context, opt TaskOpts) (context.Context, *Handle, error) {
 	var alloc *quotapool.IntAlloc
 	taskStarted := false
 	if opt.Sem != nil {
@@ -446,7 +477,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 			err = ErrUnavailable
 		}
 		if err != nil {
-			return err
+			return ctx, nil, err
 		}
 		defer func() {
 			// If the task is started, the alloc will be released async.
@@ -458,20 +489,19 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		// Check for canceled context: it's possible to get the semaphore even
 		// if the context is canceled.
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return ctx, nil, ctx.Err()
 		}
 	}
 
 	if !s.runPrelude() {
-		return ErrUnavailable
+		return ctx, nil, ErrUnavailable
 	}
 
 	// If the caller has a span, the task gets a child span.
 	//
-	// Note that we have to create the child in this parent goroutine; we can't
-	// defer the creation to the spawned async goroutine since the parent span
-	// might get Finish()ed by then. However, we'll update the child's goroutine
-	// ID.
+	// Because we're in the spawned async goroutine, the parent span might get
+	// Finish()ed by then. That's okay, if the parent goes away without waiting
+	// for the child, it will not collect the child anyway.
 	var sp *tracing.Span
 	switch opt.SpanOpt {
 	case FollowsFromSpan:
@@ -486,20 +516,19 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
-	go func(taskName string) {
-		growstack.Grow()
-		defer s.runPostlude()
-		defer s.startRegion(ctx, taskName).End()
-		defer sp.Finish()
-		defer s.recover(ctx)
-		if alloc != nil {
-			defer alloc.Release()
-		}
 
-		sp.UpdateGoroutineIDToCurrent()
-		f(ctx)
-	}(opt.TaskName)
-	return nil
+	hdl := handlePool.Get().(*Handle)
+	*hdl = Handle{
+		s:        s,
+		taskName: opt.TaskName,
+		spanOpt:  opt.SpanOpt,
+		alloc:    alloc,
+		sp:       sp,
+
+		region: nil, // in Activate
+	}
+
+	return ctx, hdl, nil
 }
 
 func (s *Stopper) runPrelude() bool {
