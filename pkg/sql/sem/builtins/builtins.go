@@ -1174,20 +1174,34 @@ var regularBuiltins = map[string]builtinDefinition{
 				sep := string(tree.MustBeDString(args[1]))
 				field := int(tree.MustBeDInt(args[2]))
 
-				if field <= 0 {
+				if field == 0 {
 					return nil, pgerror.Newf(
-						pgcode.InvalidParameterValue, "field position %d must be greater than zero", field)
+						pgcode.InvalidParameterValue, "field position must not be zero")
+				}
+
+				if sep == "" {
+					// Return the entire text if requesting the first or last field.
+					if field == 1 || field == -1 {
+						return tree.NewDString(text), nil
+					}
+					return tree.NewDString(""), nil
 				}
 
 				splits := strings.Split(text, sep)
-				if field > len(splits) {
+				if field > len(splits) || -1*field > len(splits) {
 					return tree.NewDString(""), nil
 				}
+
+				// If field is negative, select from the end
+				if field < 0 {
+					return tree.NewDString(splits[len(splits)+field]), nil
+				}
+				// Otherwise, return from the beginning (1-based index)
 				return tree.NewDString(splits[field-1]), nil
 			},
-			Info: "Splits `input` on `delimiter` and return the value in the `return_index_pos`  " +
-				"position (starting at 1). \n\nFor example, `split_part('123.456.789.0','.',3)`" +
-				"returns `789`.",
+			Info: "Splits `input` using `delimiter` and returns the field at `return_index_pos` (starting from 1). " +
+				"If `return_index_pos` is negative, it returns the |`return_index_pos`|'th field from the end. " +
+				"\n\nFor example, `split_part('123.456.789.0', '.', 3)` returns `789`.",
 			Volatility: volatility.Immutable,
 		},
 	),
