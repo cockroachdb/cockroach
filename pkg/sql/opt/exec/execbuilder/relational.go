@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -4092,12 +4093,16 @@ func (b *Builder) applyPresentation(
 func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
 	envOpts := exec.ExplainEnvData{ShowEnv: true}
 	var err error
-	envOpts.Tables, envOpts.Sequences, envOpts.Views, err = b.mem.Metadata().AllDataSourceNames(
-		b.ctx, b.catalog,
+	envOpts.Tables, envOpts.Sequences, envOpts.Views, envOpts.AddFKs, err = b.mem.Metadata().AllDataSourceNames(
+		b.ctx,
+		b.catalog,
+		func(table cat.Table, referencedByMetadata intsets.Fast) bool {
+			// Include all FK reference tables.
+			return true
+		},
 		func(ds cat.DataSource) (cat.DataSourceName, error) {
 			return b.catalog.FullyQualifiedName(b.ctx, ds)
 		},
-		true, /* includeVirtualTables */
 	)
 	return envOpts, err
 }
