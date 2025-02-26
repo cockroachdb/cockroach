@@ -10,13 +10,9 @@ package mma
 // (e.g. storeIDPostingList). There is no removal from the map since the memo
 // is built up during an allocator round and then cleared for the next round.
 // The key-value pairs are stored in a mapEntry, which the caller is
-// responsible for initializing. The mapEntrySlice and its mapEntries are reused
-// (via the mapEntrySlicePool), since the contents of mapEntry may be allocation heavy.
-//
-// TODO(sumeer): remove the following example when we start using this map.
-//
-// For a concrete example, see the meansMemo.means in
-// https://github.com/cockroachdb/cockroach/pull/99977
+// responsible for initializing. The mapEntrySlice and its mapEntries are
+// reused (via the mapEntrySlicePool), since the contents of mapEntry may be
+// allocation heavy.
 type clearableMemoMap[K mapKey, T mapEntry] struct {
 	entryAlloc mapEntryAllocator[T]
 	slicePool  mapEntrySlicePool[T]
@@ -127,4 +123,12 @@ func (cmm *clearableMemoMap[K, T]) clear() {
 		cmm.slicePool.releaseEntry(v)
 		delete(cmm.entryMap, k)
 	}
+}
+
+func (cmm *clearableMemoMap[K, T]) lenForTesting() int {
+	var n int
+	for _, v := range cmm.entryMap {
+		n += len(v.entries)
+	}
+	return n
 }

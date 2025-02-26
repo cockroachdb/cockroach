@@ -23,6 +23,7 @@ go_library(
 go_test(
     name = "mma_test",
     srcs = [
+        "allocator_state_test.go",
         "constraint_matcher_test.go",
         "constraint_test.go",
         "load_test.go",
