@@ -7,8 +7,11 @@ package mma
 
 import (
 	"cmp"
+	"math"
+	"math/rand"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -26,9 +29,20 @@ type allocatorState struct {
 	meansMemo            *meansMemo
 	diversityScoringMemo *diversityScoringMemo
 
-	// TODO(kvoli,sumeer): initialize and use.
-	changeRangeLimiter *storeChangeRateLimiter
+	changeRateLimiter *storeChangeRateLimiter
+
+	changeIDCounter changeID
+
+	rand *rand.Rand
 }
+
+// TODO(sumeer): temporary constants.
+const (
+	rebalanceInterval           time.Duration = 10 * time.Second
+	rateChangeLimiterGCInterval               = 15 * time.Second
+	numAllocators                             = 20
+	maxFractionPendingThreshold               = 0.1
+)
 
 func newAllocatorState(ts timeutil.TimeSource) *allocatorState {
 	interner := newStringInterner()
@@ -38,17 +52,36 @@ func newAllocatorState(ts timeutil.TimeSource) *allocatorState {
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
 		meansMemo:              newMeansMemo(cs, cs.constraintMatcher),
 		diversityScoringMemo:   newDiversityScoringMemo(),
+		changeRateLimiter:      newStoreChangeRateLimiter(rateChangeLimiterGCInterval),
 	}
 }
 
+// TODO(sumeer): lease shedding:
+//
+// - treat CPU as a special load dimension since that is the only dimension
+//   we can shed by moving the leaseholder.
+//
+// - make gossip should propagate the number of leases along with the load.
+//   And the aggregate non-raft cpu.
+//
+// - remote store: don't start moving ranges for a cpu overloaded remote store
+//   if it still has leases. Give it the opportunity to shed *all* its leases
+//   first, or have its aggregate non-raft cpu fall to a level where it doesn't
+//   change the fact that it is cpu overloaded.
+//
+// - allocatorState needs to know the difference between local and remote stores.
+//   For local store, the allocator will obviously shed leases first in the case
+//   of cpu overload.
+
 // Called periodically, say every 10s.
-func (a *allocatorState) computeChanges() []*pendingReplicaChange {
-	// TODO(sumeer): rebalancing. To select which stores are overloaded, we will
-	// use a notion of overload that is based on cluster means (and of course
-	// individual store/node capacities). We do not want to loop through all
-	// ranges in the cluster, and for each range and its constraints expression
-	// decide whether any of the replica stores is overloaded, since
-	// O(num-ranges) work during each allocator pass is not scalable.
+func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
+	now := timeutil.Now()
+	// To select which stores are overloaded, we use a notion of overload that
+	// is based on cluster means (and of course individual store/node
+	// capacities). We do not want to loop through all ranges in the cluster,
+	// and for each range and its constraints expression decide whether any of
+	// the replica stores is overloaded, since O(num-ranges) work during each
+	// allocator pass is not scalable.
 	//
 	// If cluster mean is too low, more will be considered overloaded. This is
 	// ok, since then when we look at ranges we will have a different mean for
@@ -61,7 +94,196 @@ func (a *allocatorState) computeChanges() []*pendingReplicaChange {
 	// responsible for equalizing load across two nodes that have 30% and 50%
 	// cpu utilization while the cluster mean is 70% utilization (as an
 	// example).
-	return nil
+	clusterMeans := a.meansMemo.getMeans(nil)
+	a.changeRateLimiter.initForRebalancePass(numAllocators, clusterMeans.storeLoad)
+	type sheddingStore struct {
+		roachpb.StoreID
+		storeLoadSummary
+	}
+	var sheddingStores []sheddingStore
+	// TODO: change clusterState load stuff so that cpu util is distributed
+	// across the stores. If cpu util of a node is higher than the mean across
+	// nodes of the cluster, then cpu util of at least one store on that node
+	// will be higher than the mean across all stores in the cluster (since the
+	// cpu util of a node is simply the mean across all its stores). The
+	// following code assumes this has already been done.
+
+	for storeID, ss := range a.cs.stores {
+		a.changeRateLimiter.updateForRebalancePass(&ss.adjusted.enactedHistory, now)
+		sls := a.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
+		if (sls.sls <= overloadSlow && ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
+			ss.maxFractionPending < maxFractionPendingThreshold) || sls.fd >= fdDrain {
+			sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
+		}
+	}
+	// We have used storeLoadSummary.sls to filter above. But when sorting, we
+	// first compare using nls. Consider the following scenario with 4 stores
+	// per node: node n1 is at 90% cpu utilization and has 4 stores each
+	// contributing 22.5% cpu utilization. Node n2 is at 60% utilization, and
+	// has 1 store contributing all 60%. When looking at rebalancing, we want to
+	// first shed load from the stores of n1, before we shed load from the store
+	// on n2.
+	slices.SortFunc(sheddingStores, func(a, b sheddingStore) int {
+		return cmp.Or(cmp.Compare(b.fd, a.fd), cmp.Compare(a.nls, b.nls), cmp.Compare(a.sls, b.sls))
+	})
+	var changes []*pendingReplicaChange
+	var disj [1]constraintsConj
+	var storesToExclude storeIDPostingList
+	var storesToExcludeForRange storeIDPostingList
+	for _, store := range sheddingStores {
+		// TODO(sumeer): lease shedding for local stores first. And for remote
+		// stores that are cpu overloaded, wait for them to shed leases first. See
+		// earlier longer to do.
+
+		ss := a.cs.stores[store.StoreID]
+		// If the node is cpu overloaded, or the store/node is not fdOK, exclude
+		// the other stores on this node from receiving replicas shed by this
+		// store.
+		excludeStoresOnNode := store.nls < overloadSlow || store.fd != fdOK
+		storesToExclude = storesToExclude[:0]
+		if excludeStoresOnNode {
+			nodeID := ss.NodeID
+			for _, storeID := range a.cs.nodes[nodeID].stores {
+				storesToExclude.insert(storeID)
+			}
+		} else {
+			// This store is excluded of course.
+			storesToExclude.insert(store.StoreID)
+		}
+		var loadSheddingStore roachpb.StoreID
+		if store.fd != fdDead {
+			// We only shed replicas (not just leases), for non-overloaded stores,
+			// when they are dead. Since this store is not dead, it must be trying
+			// to shed due to load.
+			loadSheddingStore = store.StoreID
+		}
+		doneShedding := false
+		// Iterate over top-K ranges first and try to move them.
+		//
+		// TODO: Don't include rangeLoad as the value in the topKRanges map -- we
+		// don't need it since we lookup rangeState anyway.
+		for rangeID := range ss.adjusted.topKRanges {
+			// TODO(sumeer): the following code belongs in a closure, since we will
+			// repeat it for some random selection of non topKRanges.
+			rstate := a.cs.ranges[rangeID]
+			if len(rstate.pendingChanges) > 0 {
+				// If the range has pending changes, don't make more changes.
+				continue
+			}
+			if rstate.constraints == nil {
+				// Populate the constraints.
+				rac := newRangeAnalyzedConstraints()
+				buf := rstate.constraints.stateForInit()
+				leaseholder := roachpb.StoreID(-1)
+				for _, replica := range rstate.replicas {
+					buf.tryAddingStore(replica.StoreID, replica.replicaIDAndType.replicaType.replicaType,
+						a.cs.stores[replica.StoreID].localityTiers)
+					if replica.isLeaseholder {
+						leaseholder = replica.StoreID
+					}
+				}
+				if leaseholder < 0 {
+					// Very dubious why the leaseholder (which must be a local store since there
+					// are no pending changes) is not known.
+					// TODO(sumeer): log an error.
+					releaseRangeAnalyzedConstraints(rac)
+					continue
+				}
+				rac.finishInit(rstate.conf, a.cs.constraintMatcher, leaseholder)
+				rstate.constraints = rac
+			}
+			isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
+			if !isVoter && !isNonVoter {
+				panic("mma internal state inconsistency")
+			}
+			var conj constraintsConj
+			var err error
+			if isVoter {
+				conj, err = rstate.constraints.candidatesToReplaceVoterForRebalance(store.StoreID)
+			} else {
+				conj, err = rstate.constraints.candidatesToReplaceNonVoterForRebalance(store.StoreID)
+			}
+			if err != nil {
+				// This range has some constraints that are violated. Let those be
+				// fixed first.
+				continue
+			}
+			disj[0] = conj
+			storesToExcludeForRange = append(storesToExcludeForRange[:0], storesToExclude...)
+			// Also exclude all stores on nodes that have existing replicas.
+			for _, replica := range rstate.replicas {
+				storeID := replica.StoreID
+				nodeID := a.cs.stores[storeID].NodeID
+				for _, storeID := range a.cs.nodes[nodeID].stores {
+					storesToExcludeForRange.insert(storeID)
+				}
+			}
+			// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
+			cands := a.computeCandidatesForRange(disj[:], storesToExcludeForRange, loadSheddingStore)
+			n := len(cands.candidates)
+			for i := 0; i < n; {
+				if cands.candidates[i].fd != fdOK {
+					// Remove it.
+					n--
+					cands.candidates[i], cands.candidates[n] = cands.candidates[n], cands.candidates[i]
+					continue
+				}
+				i++
+			}
+			if len(cands.candidates) == 0 {
+				continue
+			}
+			var rlocalities replicasLocalityTiers
+			if isVoter {
+				rlocalities = rstate.constraints.voterLocalityTiers
+			} else {
+				rlocalities = rstate.constraints.replicaLocalityTiers
+			}
+			localities := a.diversityScoringMemo.getExistingReplicaLocalities(rlocalities.replicas)
+			// Set the diversity score of the candidates.
+			for _, cand := range cands.candidates {
+				cand.diversityScore = localities.getScoreChangeForRebalance(
+					ss.localityTiers, a.cs.stores[cand.StoreID].localityTiers)
+			}
+			targetStoreID := sortTargetCandidateSetAndPick(cands, a.rand)
+			if targetStoreID == 0 {
+				continue
+			}
+			targetSS := a.cs.stores[targetStoreID]
+			isLeaseholder := rstate.constraints.leaseholderID == store.StoreID
+			addedLoad := rstate.load.load
+			if !isLeaseholder {
+				addedLoad[cpu] = rstate.load.raftCPU
+			}
+			if !a.cs.canAddLoad(targetSS, rstate.load.load, cands.means) {
+				continue
+			}
+			replicaChanges := makeRebalanceReplicaChanges(
+				rangeID, rstate.replicas, rstate.load, targetStoreID, ss.StoreID)
+			pendingChanges := a.cs.createPendingChanges(rangeID, replicaChanges[:]...)
+			changes = append(changes, pendingChanges[:]...)
+			doneShedding := ss.maxFractionPending >= maxFractionPendingThreshold
+			if doneShedding {
+				break
+			}
+		}
+		// TODO(sumeer): continue with non-top-K iteration for fdDead. For regular
+		// rebalancing, we will wait until those top-K move and then continue with
+		// the rest. There is a risk that the top-K have some constraint that
+		// prevents rebalancing, while the rest can be moved. Running with
+		// underprovisioned clusters and expecting load-based rebalancing to work
+		// well is not in scope.
+		if doneShedding {
+			continue
+		}
+	}
+	return changes
+}
+
+func (a *allocatorState) allocChangeID() changeID {
+	changeID := a.changeIDCounter
+	a.changeIDCounter++
+	return changeID
 }
 
 // TODO(sumeer): look at support methods for allocatorState.tryMovingRange in
@@ -69,15 +291,81 @@ func (a *allocatorState) computeChanges() []*pendingReplicaChange {
 
 type candidateInfo struct {
 	roachpb.StoreID
-	sls            loadSummary
-	nls            loadSummary
-	fd             failureDetectionSummary
+	storeLoadSummary
 	diversityScore float64
 }
 
 type candidateSet struct {
 	candidates []candidateInfo
 	means      *meansForStoreSet
+}
+
+//
+// TODO:
+
+// Once have that set, it is in non-increasing order of load. None of
+// these decrease diversity. We need to group ones that are similar in
+// terms of load and pick a random one. See candidateList.selectBest in
+// allocator_scorer.go. Our enum for loadSummary is quite coarse. This
+// has pros and cons: the pro is that the coarseness increases the
+// probability that we do eventually find something that can handle the
+// multi-dimensional load of this range. The con is that we may not
+// select the candidate that is the very best. For instance if a new
+// store is added it will also be loadLow like many others, but we want
+// more ranges to go to it. One refinement we can try is to make the
+// summary more fine-grained, and increment a count of times this store
+// has tried to shed this range and failed, and widen the scope of what
+// we pick from after some failures.
+//
+// TODO(sumeer): implement that refinement after some initial
+// experimentation and learnings.
+func sortTargetCandidateSetAndPick(cands candidateSet, rng *rand.Rand) roachpb.StoreID {
+	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
+		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
+			// Since we have already excluded overloaded nodes, we only consider sls.
+			return -cmp.Compare(a.sls, b.sls)
+		}
+		return -cmp.Compare(a.diversityScore, b.diversityScore)
+	})
+	bestDiversity := cands.candidates[0].diversityScore
+	j := 0
+	// Iterate over candidates with the same diversity. First such set that is
+	// not disk capacity constrained is where we stop. Even if they can't accept
+	// because they have too many pending changes or can't handle the addition
+	// of the range. That is, we are not willing to reduce diversity when
+	// rebalancing.
+	for _, cand := range cands.candidates {
+		if !diversityScoresAlmostEqual(bestDiversity, cand.diversityScore) {
+			if j == 0 {
+				// Don't have any candidates yet.
+				bestDiversity = cand.diversityScore
+			} else {
+				// Have a set of candidates.
+				break
+			}
+		}
+		// Diversity is the same. Include if not reaching disk capacity.
+		if !cand.highDiskSpaceUtilization {
+			cands.candidates[j] = cand
+			j++
+		}
+	}
+	if j == 0 {
+		return 0
+	}
+	cands.candidates = cands.candidates[:j]
+	// TODO: see the to do in computeCandidatesForRange about early filtering.
+	// If we haven't filtered for overloaded stores, need to do that now by
+	// looking at the value of lowestLoad.
+	lowestLoad := cands.candidates[0].sls
+	for j := 1; j < len(cands.candidates); j++ {
+		if cands.candidates[j].sls != lowestLoad {
+			break
+		}
+	}
+	cands.candidates = cands.candidates[:j]
+	j = rng.Intn(j)
+	return cands.candidates[j].StoreID
 }
 
 // Consider the core logic for a change, rebalancing or recovery.
@@ -162,6 +450,13 @@ func (a *allocatorState) computeCandidatesForRange(
 		}
 	}
 	// Not going to try to add to stores that are <= sheddingThreshold.
+	//
+	// TODO: Early filtering based on sheddingThreshold is not desirable when we
+	// are unwilling to reduce diversity. For instance, we are already not
+	// filtering below based on maxFractionPending. Figure out which situations
+	// are ok with early filtering and only do those here (based on a parameter
+	// to computeCandidatesForRange). For others, the only filtering would be
+	// storesToExclude.
 	var cset candidateSet
 	for _, storeID := range means.stores {
 		if storesToExclude.contains(storeID) {
@@ -173,10 +468,8 @@ func (a *allocatorState) computeCandidatesForRange(
 			continue
 		}
 		cset.candidates = append(cset.candidates, candidateInfo{
-			StoreID: storeID,
-			sls:     csls.sls,
-			nls:     csls.nls,
-			fd:      csls.fd,
+			StoreID:          storeID,
+			storeLoadSummary: csls,
 		})
 	}
 	cset.means = means
@@ -319,6 +612,8 @@ func newDiversityScoringMemo() *diversityScoringMemo {
 
 // getExistingReplicaLocalities returns the existingReplicaLocalities object
 // for the given replicas. The parameter can be mutated by the callee.
+//
+// TODO(sumeer): change parameter to replicaLocalityTiers.
 func (dsm *diversityScoringMemo) getExistingReplicaLocalities(
 	existingReplicas []localityTiers,
 ) *existingReplicaLocalities {
@@ -398,12 +693,25 @@ func (erl *existingReplicaLocalities) getScoreSum(replica localityTiers) float64
 	return score
 }
 
+func diversityScoresAlmostEqual(score1, score2 float64) bool {
+	return math.Abs(score1-score2) < epsilon
+}
+
+// This is a somehow arbitrary chosen upper bound on the relative error to be
+// used when comparing doubles for equality. The assumption that comes with it
+// is that any sequence of operations on doubles won't produce a result with
+// accuracy that is worse than this relative error. There is no guarantee
+// however that this will be the case. A programmer writing code using
+// floating point numbers will still need to be aware of the effect of the
+// operations on the results and the possible loss of accuracy.
+// More info https://en.wikipedia.org/wiki/Machine_epsilon
+// https://en.wikipedia.org/wiki/Floating-point_arithmetic
+const epsilon = 1e-10
+
 // Avoid unused lint errors.
 
 var _ = newAllocatorState
-var _ = (&allocatorState{}).computeChanges
-var _ = (&allocatorState{}).computeCandidatesForRange
-var _ = allocatorState{}.changeRangeLimiter
+var _ = allocatorState{}.changeRateLimiter
 var _ = (&existingReplicaLocalities{}).clear
 var _ = replicasLocalityTiers{}.hash
 var _ = replicasLocalityTiers{}.isEqual
