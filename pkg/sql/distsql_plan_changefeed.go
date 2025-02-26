@@ -127,8 +127,16 @@ func PlanCDCExpression(
 
 	// The top node contains the list of columns to return.
 	presentation := planColumns(p.curPlan.main.planNode)
+
+	// SELECT statement provided by the user yields zero columns.
+	// If some user actually wants to have a changefeed for the
+	// hidden rowid column of a zero-column table, then they can be explicit
+	// about it: CREATE CHANGEFEED ... SELECT rowid ....
 	if len(presentation) == 0 {
-		return CDCExpressionPlan{}, errors.AssertionFailedf("unable to determine result columns")
+		return CDCExpressionPlan{}, errors.WithHintf(
+			errors.New("SELECT yields no columns"),
+			"Specify at least one column in your SELECT statement or use SELECT rowid if you need a changefeed for the hidden rowid column of a zero-column table.",
+		)
 	}
 
 	// Walk the plan, perform sanity checks and extract information we need.
