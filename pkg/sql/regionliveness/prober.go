@@ -119,7 +119,7 @@ var testingUnavailableAtTTLOverride time.Duration
 func TestingSetProbeLivenessTimeout(probeCallbackFn func()) func() {
 	testingProbeQueryCallbackFunc = probeCallbackFn
 	return func() {
-		probeCallbackFn = nil
+		testingProbeQueryCallbackFunc = nil
 	}
 }
 
