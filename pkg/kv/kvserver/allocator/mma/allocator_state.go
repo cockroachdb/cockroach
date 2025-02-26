@@ -6,6 +6,8 @@
 package mma
 
 import (
+	"cmp"
+	"slices"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -214,27 +216,63 @@ func (erl *existingReplicaLocalities) clear() {
 
 var _ mapEntry = &existingReplicaLocalities{}
 
+// replicasLocalityTiers represents the set of localityTiers corresponding to
+// a set of replicas (one localityTiers per replica).
 type replicasLocalityTiers struct {
-	// replicas are sorted in ascending order of localityTiers.str.
+	// replicas are sorted in ascending order of localityTiers.str (this is
+	// a set, so the order doesn't semantically matter).
 	replicas []localityTiers
 }
 
-func makeReplicasLocalityTiers(replicas []localityTiers) replicasLocalityTiers {
-	// TODO(sumeer): remember to sort.
-	return replicasLocalityTiers{}
-}
-
-func (rlt replicasLocalityTiers) hash() uint64 {
-	// TODO(sumeer):
-	return 0
-}
-
-func (rlt replicasLocalityTiers) isEqual(b mapKey) bool {
-	// TODO(sumeer):
-	return false
-}
-
 var _ mapKey = replicasLocalityTiers{}
+
+func makeReplicasLocalityTiers(replicas []localityTiers) replicasLocalityTiers {
+	slices.SortFunc(replicas, func(a, b localityTiers) int {
+		return cmp.Compare(a.str, b.str)
+	})
+	return replicasLocalityTiers{replicas: replicas}
+}
+
+// hash implements the mapKey interface, using the FNV-1a hash algorithm.
+func (rlt replicasLocalityTiers) hash() uint64 {
+	h := uint64(offset64)
+	for i := range rlt.replicas {
+		for _, code := range rlt.replicas[i].tiers {
+			h ^= uint64(code)
+			h *= prime64
+		}
+		// Separator between different replicas. This is equivalent to
+		// encountering the 0 code, which is the empty string. We don't expect to
+		// see an empty string in a locality.
+		h *= prime64
+	}
+	return h
+}
+
+// isEqual implements the mapKey interface.
+func (rlt replicasLocalityTiers) isEqual(b mapKey) bool {
+	other := b.(replicasLocalityTiers)
+	if len(rlt.replicas) != len(other.replicas) {
+		return false
+	}
+	for i := range rlt.replicas {
+		if len(rlt.replicas[i].tiers) != len(other.replicas[i].tiers) {
+			return false
+		}
+		for j := range rlt.replicas[i].tiers {
+			if rlt.replicas[i].tiers[j] != other.replicas[i].tiers[j] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (rlt replicasLocalityTiers) clone() replicasLocalityTiers {
+	var r replicasLocalityTiers
+	r.replicas = append(r.replicas, rlt.replicas...)
+	return r
+}
 
 var existingReplicaLocalitiesSlicePool = sync.Pool{
 	New: func() interface{} {
@@ -265,6 +303,8 @@ func (a existingReplicaLocalitiesAllocator) ensureNonNilMapEntry(
 	return entry
 }
 
+// diversityScoringMemo provides support for efficiently scoring the diversity
+// for a set of replicas, and for adding/removing replicas.
 type diversityScoringMemo struct {
 	replicasMap *clearableMemoMap[replicasLocalityTiers, *existingReplicaLocalities]
 }
@@ -276,6 +316,8 @@ func newDiversityScoringMemo() *diversityScoringMemo {
 	}
 }
 
+// getExistingReplicaLocalities returns the existingReplicaLocalities object
+// for the given replicas. The parameter can be mutated by the callee.
 func (dsm *diversityScoringMemo) getExistingReplicaLocalities(
 	existingReplicas []localityTiers,
 ) *existingReplicaLocalities {
@@ -284,45 +326,62 @@ func (dsm *diversityScoringMemo) getExistingReplicaLocalities(
 	if ok {
 		return erl
 	}
-	erl.replicasLocalityTiers = lt
+	erl.replicasLocalityTiers = lt.clone()
 	erl.scoreSums = map[string]float64{}
 	return erl
 }
 
-// If this is a NON_VOTER being added, then existingReplicaLocalities
-// represents VOTER and NON_VOTER replicas and replicaToAdd is not an existing
-// VOTER. For the case where replicaToAdd is an existing VOTER, there is no
-// score change.
+// If this is a NON_VOTER being added, then existingReplicaLocalities must
+// represent both VOTER and NON_VOTER replicas, and replicaToAdd must not be
+// an existing VOTER. Note that for the case where replicaToAdd is an existing
+// VOTER, there is no score change, so this method should not be called.
 //
-// If this is a VOTER being added, then existingReplicaLocalities represents
-// VOTER replicas.
+// If this is a VOTER being added, then existingReplicaLocalities must
+// represent only VOTER replicas.
 func (erl *existingReplicaLocalities) getScoreChangeForNewReplica(
 	replicaToAdd localityTiers,
 ) float64 {
 	return erl.getScoreSum(replicaToAdd)
 }
 
+// If this is a NON_VOTER being removed, then existingReplicaLocalities must
+// represent both VOTER and NON_VOTER replicas.
+//
+// If this is a VOTER being removed, then existingReplicaLocalities must
+// represent only VOTER replicas.
 func (erl *existingReplicaLocalities) getScoreChangeForReplicaRemoval(
 	replicaToRemove localityTiers,
 ) float64 {
+	// NB: we don't need to compensate for counting the pair-wise score of
+	// replicaToRemove with itself, because that score is 0.
 	return -erl.getScoreSum(replicaToRemove)
 }
 
-// If this is a VOTER being added and removed, it doesn't matter if the one
-// being added is already a NON_VOTER.
+// If this is a VOTER being added and removed, replicaToRemove is of course a
+// VOTER, and it doesn't matter if the one being added is already a NON_VOTER
+// (since the existingReplicaLocalities represents only VOTERs).
 //
-// If this a NON_VOTER being added and removed, the replicaToAdd is not an
+// If this a NON_VOTER being added and removed, existingReplicaLocalities represents
+// all VOTERs and NON_VOTERs. The replicaToAdd must not be an
 // existing VOTER. For the case where replicaToAdd is an existing VOTER, there
-// is no score change for the addition, and
-// getScoreChangeForReplicaRemoval(replicaToRemove) should be called (if
-// replicaToRemove is not becoming a VOTER).
+// is no score change for the addition (to the full set of replicas), and:
 //
-// TODO(sumeer): these interfaces probably need reworking when we start
-// using them.
+//   - If replicaToRemove is not becoming a VOTER,
+//     getScoreChangeForReplicaRemoval(replicaToRemove) should be called.
+//
+//   - If replicaToRemove is becoming a VOTER, the score change is 0 for the
+//     full set of replicas.
+//
+// In the preceding cases where the VOTER set is also changing, of course the
+// score change to the existingReplicaLocalities that represents only the
+// VOTERs must also be considered.
 func (erl *existingReplicaLocalities) getScoreChangeForRebalance(
 	replicaToRemove localityTiers, replicaToAdd localityTiers,
 ) float64 {
 	score := erl.getScoreSum(replicaToAdd) - erl.getScoreSum(replicaToRemove)
+	// We have included the pair-wise diversity of (replicaToRemove,
+	// replicaToAdd) above, but since replicaToRemove is being removed, we need
+	// to subtract that pair.
 	score -= replicaToRemove.diversityScore(replicaToAdd)
 	return score
 }
