@@ -30,6 +30,11 @@ var libPQBlocklist = blocklist{
 	"pq.TestRowsColumnTypes":                         "41688",
 	"pq.TestRuntimeParameters":                       "12137",
 	"pq.TestStringWithNul":                           "26366",
+	// The following tests fail because they weren't designed for the
+	// autocommit_before_ddl behaviour in CRDB.
+	"pq.TestCopyInWrongType":      "unknown",
+	"pq.TestCopyInMultipleValues": "unknown",
+	"pq.TestCopyFromError":        "unknown",
 }
 
 // The test names here do not include "pq." since `go test -list` returns
