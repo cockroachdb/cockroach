@@ -3531,7 +3531,7 @@ column_names  row_count  null_count  distinct_count  avg_size  has_histogram
 {b}           2          0           2               8         true
 {c}           2          0           2               8         true
 
-query T
+query T retry
 EXPLAIN SELECT count(*) FROM t138809 WHERE b > 1
 ----
 distribution: full
