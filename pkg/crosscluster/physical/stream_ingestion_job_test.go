@@ -275,7 +275,8 @@ func TestTenantStreamingFailback(t *testing.T) {
 	sqlB.ExpectErr(t, "cannot specify EXPIRATION WINDOW option while starting a physical replication stream", "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1 WITH EXPIRATION WINDOW = '1ms'", serverAURL.String())
 	t.Logf("starting replication f->g")
 	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1", serverAURL.String())
-	_, consumerGJobID = replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("g"))
+	var producerFJobID int
+	producerFJobID, consumerGJobID = replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("g"))
 	t.Logf("waiting for g@%s", ts3)
 	replicationtestutils.WaitUntilReplicatedTime(t,
 		replicationtestutils.DecimalTimeToHLC(t, ts3),
@@ -292,6 +293,20 @@ func TestTenantStreamingFailback(t *testing.T) {
 	defer tenF2DB.Close()
 	sqlTenF = sqlutils.MakeSQLRunner(tenF2DB)
 	sqlTenF.CheckQueryResults(t, "SELECT max(k) FROM test.t", [][]string{{"555"}})
+
+	// Ensure failback fails if pts has expired
+	sqlB.Exec(t, `ALTER TENANT g COMPLETE REPLICATION TO LATEST`)
+	jobutils.WaitForJobToSucceed(t, sqlB, jobspb.JobID(consumerGJobID))
+
+	sqlA.Exec(t, `ALTER TENANT f SET REPLICATION EXPIRATION WINDOW ='10ms'`)
+	jobutils.WaitForJobToSucceed(t, sqlA, jobspb.JobID(producerFJobID))
+	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f STOP SERVICE")
+	waitUntilTenantServerStopped(t, serverA.SystemLayer(), "f")
+
+	// THIS SHOULD FAIL, BUT IT CURRENTLY SUCCEEDS!!
+	sqlA.ExpectErr(t, `cannot resume replication into tenant`,
+		`ALTER TENANT f START REPLICATION OF g ON $1`, serverBURL.String())
+
 }
 
 // TestReplicationJobResumptionStartTime tests that a replication job picks the
