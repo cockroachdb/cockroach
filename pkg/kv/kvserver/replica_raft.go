@@ -1470,6 +1470,10 @@ func (r *Replica) tick(
 	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
 
 	storeClockTimestamp := r.store.Clock().NowAsClockTimestamp()
+
+	// Update lastTickTimestamp so that we don't have to redo the work multiple
+	// times during the tick.
+	r.mu.lastTickTimestamp = storeClockTimestamp
 	leaseStatus := r.leaseStatusAtRLocked(ctx, storeClockTimestamp)
 	// TODO(pav-kv): modify the quiescence and sleep criteria so that we don't
 	// quiesce or fall asleep if RACv2 holds some send tokens.
