@@ -544,6 +544,7 @@ go_test(
         "//pkg/sql/pgwire",
         "//pkg/sql/roleoption",
         "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
