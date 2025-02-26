@@ -406,41 +406,48 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeoutLong)
 	}
 	require.NoError(t, lm.WaitForNoVersion(ctx, descpb.ID(tableID), cachedDatabaseRegions, retry.Options{}))
+
+	// Use a closure so that we unconditionally wait for the recovery to finish.
 	grp := ctxgroup.WithContext(ctx)
-	grp.GoCtx(func(ctx context.Context) error {
-		_, err = tx.Exec("INSERT INTO t2 VALUES(5)")
-		return err
-	})
-	// Add a new region which will execute a recovery and clean up dead rows.
-	keyToBlockMu.Lock()
-	keyToBlock = nil
-	keyToBlockMu.Unlock()
-	tenantArgs := base.TestTenantArgs{
-		Settings: makeSettings(),
-		TenantID: id,
-		Locality: testCluster.Servers[0].Locality(),
-	}
-	_, newRegionSQL := serverutils.StartTenant(t, testCluster.Servers[0], tenantArgs)
-	tr := sqlutils.MakeSQLRunner(newRegionSQL)
-	// Validate everything was cleaned bringing up a new node in the down region.
-	require.Equalf(t,
-		[][]string{},
-		tr.QueryStr(t, "SELECT * FROM system.region_liveness"),
-		"expected no unavaialble regions.")
-	require.Equalf(t,
-		[][]string{{"3"}},
-		tr.QueryStr(t, "SELECT count(*) FROM system.sql_instances WHERE session_id IS NOT NULL"),
-		"extra sql instances are being used.")
-	require.Equalf(t,
-		[][]string{{"3"}},
-		tr.QueryStr(t, "SELECT count(*) FROM system.sqlliveness"),
-		"extra sql sessions detected.")
-	require.NoError(t, err)
+	func() {
+		grp.GoCtx(func(ctx context.Context) error {
+			_, err = tx.Exec("INSERT INTO t2 VALUES(5)")
+			return err
+		})
+		defer func() {
+			<-recoveryStart
+			time.Sleep(slbase.DefaultTTL.Default())
+			recoveryBlock <- struct{}{}
+			require.NoError(t, grp.Wait())
+		}()
+		// Add a new region which will execute a recovery and clean up dead rows.
+		keyToBlockMu.Lock()
+		keyToBlock = nil
+		keyToBlockMu.Unlock()
+		tenantArgs := base.TestTenantArgs{
+			Settings: makeSettings(),
+			TenantID: id,
+			Locality: testCluster.Servers[0].Locality(),
+		}
+		_, newRegionSQL := serverutils.StartTenant(t, testCluster.Servers[0], tenantArgs)
+		tr := sqlutils.MakeSQLRunner(newRegionSQL)
+		// Validate everything was cleaned bringing up a new node in the down region.
+		require.Equalf(t,
+			[][]string{},
+			tr.QueryStr(t, "SELECT * FROM system.region_liveness"),
+			"expected no unavaialble regions.")
+		require.Equalf(t,
+			[][]string{{"3"}},
+			tr.QueryStr(t, "SELECT count(*) FROM system.sql_instances WHERE session_id IS NOT NULL"),
+			"extra sql instances are being used.")
+		require.Equalf(t,
+			[][]string{{"3"}},
+			tr.QueryStr(t, "SELECT count(*) FROM system.sqlliveness"),
+			"extra sql sessions detected.")
+		require.NoError(t, err)
+	}()
+
 	// Validate that the stuck query will fail once we recover.
-	<-recoveryStart
-	time.Sleep(slbase.DefaultTTL.Default())
-	recoveryBlock <- struct{}{}
-	require.NoError(t, grp.Wait())
 	_, err = tx.Exec("INSERT INTO t2 VALUES(5)")
 	// If the txn failed, no commit is needed.
 	const expectedTxnErr = "restart transaction: TransactionRetryWithProtoRefreshError"
