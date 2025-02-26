@@ -98,16 +98,26 @@ func distImport(
 			corePlacement[i].SQLInstanceID = sqlInstanceIDs[i%len(sqlInstanceIDs)]
 			corePlacement[i].Core.ReadImport = inputSpecs[i]
 		}
+		// When using distributed merge the processor will emit the SST's and their
+		// start and end keys.
+		useDistributedMerge := UseDistributedMergeForImport.Get(&execCtx.ExecCfg().Settings.SV)
+		outputTypes := []*types.T{types.Bytes, types.Bytes}
+		if useDistributedMerge {
+			outputTypes = []*types.T{types.Bytes, types.Bytes, types.BytesArray}
+		}
 		p.AddNoInputStage(
 			corePlacement,
 			execinfrapb.PostProcessSpec{},
 			// The direct-ingest readers will emit a binary encoded BulkOpSummary.
-			[]*types.T{types.Bytes, types.Bytes},
+			outputTypes,
 			execinfrapb.Ordering{},
 		)
-
-		p.PlanToStreamColMap = []int{0, 1}
-
+		// Map the output directly back.
+		colMap := make([]int, len(outputTypes))
+		for i := range colMap {
+			colMap[i] = i
+		}
+		p.PlanToStreamColMap = colMap
 		sql.FinalizePlan(ctx, planCtx, p)
 		return p, planCtx, nil
 	}

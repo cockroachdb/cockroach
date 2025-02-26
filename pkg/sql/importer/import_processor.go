@@ -49,6 +49,12 @@ var csvOutputTypes = []*types.T{
 	types.Bytes,
 }
 
+var distributedMergeOutputTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
+	types.BytesArray,
+}
+
 const readImportDataProcessorName = "readImportDataProcessor"
 
 var progressUpdateInterval = time.Second * 10
@@ -128,8 +134,10 @@ type readImportDataProcessor struct {
 
 	seqChunkProvider *row.SeqChunkProvider
 
-	importErr error
-	summary   *kvpb.BulkOpSummary
+	importErr   error
+	summary     *kvpb.BulkOpSummary
+	files       []bulksst.FileInfo
+	currentFile int64
 }
 
 var (
@@ -148,7 +156,12 @@ func newReadImportDataProcessor(
 		spec:   spec,
 		progCh: make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 	}
-	if err := idp.Init(ctx, idp, post, csvOutputTypes, flowCtx, processorID, nil, /* memMonitor */
+	useDistributedMerge := UseDistributedMergeForImport.Get(&flowCtx.Cfg.Settings.SV)
+	outputTypes := csvOutputTypes
+	if useDistributedMerge {
+		outputTypes = distributedMergeOutputTypes
+	}
+	if err := idp.Init(ctx, idp, post, outputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,
@@ -184,7 +197,7 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	idp.wg = ctxgroup.WithContext(grpCtx)
 	idp.wg.GoCtx(func(ctx context.Context) error {
 		defer close(idp.progCh)
-		idp.summary, idp.importErr = runImport(ctx, idp.FlowCtx, &idp.spec, idp.progCh,
+		idp.summary, idp.files, idp.importErr = runImport(ctx, idp.FlowCtx, &idp.spec, idp.progCh,
 			idp.seqChunkProvider)
 		return nil
 	})
@@ -219,11 +232,30 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 	if err != nil {
 		return nil, idp.DrainHelper()
 	}
-
-	return rowenc.EncDatumRow{
+	// When using distributed merge, the processor will emit the SST's and their
+	// start and end keys.
+	var fileDataums rowenc.EncDatumRow
+	if len(idp.files) > 0 {
+		sstInfo := tree.NewDArray(types.Bytes)
+		for _, file := range idp.files {
+			fileBytes, err := protoutil.Marshal(&file)
+			if err != nil {
+				idp.MoveToDraining(err)
+				return nil, idp.DrainHelper()
+			}
+			if err := sstInfo.Append(tree.NewDBytes(tree.DBytes(fileBytes))); err != nil {
+				idp.MoveToDraining(err)
+				return nil, idp.DrainHelper()
+			}
+		}
+		fileDataums = rowenc.EncDatumRow{
+			rowenc.DatumToEncDatum(types.BytesArray, sstInfo),
+		}
+	}
+	return append(rowenc.EncDatumRow{
 		rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 		rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-	}, nil
+	}, fileDataums...), nil
 }
 
 func (idp *readImportDataProcessor) ConsumerClosed() {
@@ -360,7 +392,7 @@ func ingestKvs(
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
-) (*kvpb.BulkOpSummary, error) {
+) (*kvpb.BulkOpSummary, []bulksst.FileInfo, error) {
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
 
@@ -400,18 +432,19 @@ func ingestKvs(
 		if bulkAdderImportEpoch == 0 {
 			bulkAdderImportEpoch = v.Desc.ImportEpoch
 		} else if bulkAdderImportEpoch != v.Desc.ImportEpoch {
-			return nil, errors.AssertionFailedf("inconsistent import epoch on multi-table import")
+			return nil, nil, errors.AssertionFailedf("inconsistent import epoch on multi-table import")
 		}
 	}
 
 	// Setup external storage on node local for our generated SSTs.
 	var err error
 	var es cloud.ExternalStorage
-	var uriBase = fmt.Sprintf("nodelocal://%d/import/%d/", flowCtx.Cfg.NodeID.SQLInstanceID(), spec.JobID)
+	var uriBase string
 	if useDistributedMerge {
+		uriBase = fmt.Sprintf("nodelocal://%d/import/%d/", flowCtx.Cfg.NodeID.SQLInstanceID(), spec.JobID)
 		es, err = flowCtx.Cfg.ExternalStorageFromURI(ctx, uriBase, spec.User())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		defer es.Close()
 	}
@@ -430,7 +463,7 @@ func ingestKvs(
 			ImportEpoch:              bulkAdderImportEpoch,
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		defer pkIndexAdder.Close(ctx)
 	} else {
@@ -458,7 +491,7 @@ func ingestKvs(
 			ImportEpoch:              bulkAdderImportEpoch,
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		defer indexAdder.Close(ctx)
 	} else {
@@ -644,26 +677,34 @@ func ingestKvs(
 	})
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := pkIndexAdder.Flush(ctx); err != nil {
 		if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
-			return nil, errors.Wrap(err, "duplicate key in primary index")
+			return nil, nil, errors.Wrap(err, "duplicate key in primary index")
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := indexAdder.Flush(ctx); err != nil {
 		if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
-			return nil, errors.Wrap(err, "duplicate key in index")
+			return nil, nil, errors.Wrap(err, "duplicate key in index")
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	addedSummary := pkIndexAdder.GetSummary()
 	addedSummary.Add(indexAdder.GetSummary())
-	return &addedSummary, nil
+	var files []bulksst.FileInfo
+	if useDistributedMerge {
+		files = pkFileAllocator.GetFileList()
+		files = append(files, indexFileAllocator.GetFileList()...)
+		for i := range files {
+			files[i].Uri = uriBase + files[i].Uri
+		}
+	}
+	return &addedSummary, files, nil
 }
 
 func init() {

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -50,7 +51,7 @@ func runImport(
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	seqChunkProvider *row.SeqChunkProvider,
-) (*kvpb.BulkOpSummary, error) {
+) (*kvpb.BulkOpSummary, []bulksst.FileInfo, error) {
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
 
@@ -60,7 +61,7 @@ func runImport(
 	for _, table := range spec.Tables {
 		cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
 		if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		table.Desc = cpy.TableDesc()
 	}
@@ -70,7 +71,7 @@ func runImport(
 	semaCtx := tree.MakeSemaContext(importResolver)
 	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider, flowCtx.Cfg.DB.KV())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// This group holds the go routines that are responsible for producing KV batches.
@@ -105,13 +106,14 @@ func runImport(
 	// Ingest the KVs that the producer group emitted to the chan and the row result
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *kvpb.BulkOpSummary
+	var files []bulksst.FileInfo
 	group.GoCtx(func(ctx context.Context) error {
-		summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
+		summary, files, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
 		return err
 	})
 
 	if err = group.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
@@ -123,9 +125,9 @@ func runImport(
 	}
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	case progCh <- prog:
-		return summary, nil
+		return summary, files, nil
 	}
 }
 
