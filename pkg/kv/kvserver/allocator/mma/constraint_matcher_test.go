@@ -34,14 +34,19 @@ func parseStoreDescriptor(t *testing.T, d *datadriven.TestData) roachpb.StoreDes
 	}
 	var lts string
 	d.ScanArgs(t, "locality-tiers", &lts)
+	desc.Node.Locality = parseLocalityTiers(t, d, lts)
+	return desc
+}
+
+func parseLocalityTiers(t *testing.T, d *datadriven.TestData, lts string) roachpb.Locality {
+	var locality roachpb.Locality
 	for _, v := range strings.Split(lts, ",") {
 		v = strings.TrimSpace(v)
 		kv := strings.Split(v, "=")
 		require.Equal(t, 2, len(kv))
-		desc.Node.Locality.Tiers = append(
-			desc.Node.Locality.Tiers, roachpb.Tier{Key: kv[0], Value: kv[1]})
+		locality.Tiers = append(locality.Tiers, roachpb.Tier{Key: kv[0], Value: kv[1]})
 	}
-	return desc
+	return locality
 }
 
 func TestConstraintMatcher(t *testing.T) {
