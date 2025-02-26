@@ -233,6 +233,18 @@ func (p *planner) SetClusterSetting(
 		return nil, err
 	}
 
+	if name == "sql.ttl.default_delete_rate_limit" {
+		ttlDocDetail := "See the documentation for additional details:" +
+			docs.URL("row-level-ttl")
+		p.BufferClientNotice(
+			ctx,
+			errors.WithDetail(
+				pgnotice.Newf("The TTL rate limit is not per leaseholder."),
+				ttlDocDetail,
+			),
+		)
+	}
+
 	csNode := setClusterSettingNode{
 		name:    name,
 		st:      st,
