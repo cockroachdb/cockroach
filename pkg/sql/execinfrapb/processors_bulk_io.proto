@@ -178,7 +178,7 @@ message BulkMergeSpec {
 	// splits are the keys that seperate the spans that should be merged. E.g.
 	// the merge task `n` is to merge all the input data that overlaps with
 	// [splits[n-1], splits[n]).
-	repeated string splits = 2;
+  repeated bytes splits = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 
 	// output_uri is a URI like 'nodelocal://1/<job_id>/merger'. The uri should
 	// use this as the base for all output files. So an output file would be
@@ -190,9 +190,9 @@ message BulkMergeSpec {
 		// 'nodelocal://2/<job_id>/input/0.sst'
 		optional string uri = 1 [(gogoproto.nullable) = false];
 		// start_key is the first key in the SST.
-		optional string start_key = 2 [(gogoproto.nullable) = false];
+		optional bytes start_key = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 		// end_key is the last key in the SST.
-		optional string end_key = 3 [(gogoproto.nullable) = false];
+		optional bytes end_key = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 	};
 
   message Output {
