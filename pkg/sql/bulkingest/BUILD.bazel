@@ -3,17 +3,20 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "bulkingest",
     srcs = [
+        "ingest_strategy.go",
         "split.go",
         "split_picker.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/bulkingest",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/sql/execinfrapb",
         "//pkg/util/log",
+        "//pkg/util/taskset",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -21,6 +24,7 @@ go_library(
 go_test(
     name = "bulkingest_test",
     srcs = [
+        "ingest_strategy_test.go",
         "main_test.go",
         "split_picker_test.go",
         "split_test.go",
@@ -43,6 +47,8 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/taskset",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
     ],
 )
