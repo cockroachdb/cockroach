@@ -59,7 +59,13 @@ var asyncpgBlocklist = blocklist{
 	`test_prepare.TestPrepare.test_prepare_28_max_args`:                                                   "unknown",
 	`test_prepare.TestPrepare.test_prepare_statement_invalid`:                                             "experimental feature - https://github.com/cockroachdb/cockroach/issues/49329",
 	`test_timeout.TestTimeout.test_timeout_06`:                                                            "unknown",
-	`test_utils.TestUtils.test_mogrify_simple`:                                                            "multi-dim arrays - https://github.com/cockroachdb/cockroach/issues/32552",
+	// The test_transaction* tests fail when attempting to check if we are in an
+	// active transaction. This occurs due to the autocommit_before_ddl behavior.
+	// The transaction they have open creates a table right after opening, which
+	// causes the transaction to close.
+	"test_transaction.TestTransaction.test_transaction_nested":  "142048",
+	"test_transaction.TestTransaction.test_transaction_regular": "142048",
+	`test_utils.TestUtils.test_mogrify_simple`:                  "multi-dim arrays - https://github.com/cockroachdb/cockroach/issues/32552",
 }
 
 var asyncpgIgnoreList = blocklist{
