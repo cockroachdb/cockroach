@@ -7,11 +7,11 @@ package memstore
 
 import (
 	"context"
+	"encoding/binary"
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -49,12 +49,53 @@ import (
 // calculations.
 const storeStatsAlpha = 0.05
 
+// TreeID identifies a K-means tree in a vector index. The set of partitions in
+// a particular tree are independent from those in any other tree in the index.
+type TreeID uint64
+
+// ToTreeKey converts a tree ID to a cspann.TreeKey. If the ID is zero, it is
+// converted to nil (the default tree).
+func ToTreeKey(treeID TreeID) cspann.TreeKey {
+	if treeID == 0 {
+		return nil
+	}
+
+	// Pre-allocate exactly 8 bytes for uint64
+	key := make(cspann.TreeKey, 8)
+	binary.BigEndian.PutUint64(key, uint64(treeID))
+	return key
+}
+
+// FromTreeKey converts a cspann.TreeKey to a tree ID. A nil tree key gets
+// converted to zero.
+func FromTreeKey(treeKey cspann.TreeKey) TreeID {
+	if treeKey == nil {
+		return 0
+	}
+	return TreeID(binary.BigEndian.Uint64(treeKey))
+}
+
+// qualifiedPartitionKey uniquely identifies a partition within a K-means tree
+// in vector index. Because every tree uses the same well-known partition key
+// for its root partition, the tree ID is needed in order to disambiguate.
+type qualifiedPartitionKey struct {
+	treeID       TreeID
+	partitionKey cspann.PartitionKey
+}
+
+// makeQualifiedPartitionKey constructs a new qualified partition key.
+func makeQualifiedPartitionKey(
+	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) qualifiedPartitionKey {
+	return qualifiedPartitionKey{treeID: FromTreeKey(treeKey), partitionKey: partitionKey}
+}
+
 // memPartition wraps the partition data structure in order to add more
 // information, such as its key, creation time, and whether it is deleted.
 type memPartition struct {
 	// key is the unique identifier for the partition. It is immutable and can
 	// be accessed without a lock.
-	key cspann.PartitionKey
+	key qualifiedPartitionKey
 
 	// lock is a read-write lock that callers must acquire before accessing any
 	// of the fields.
@@ -77,8 +118,9 @@ type memPartition struct {
 // creation time, then the partition is not visible. This latter check is
 // necessary because the root partition is modified in-place, unlike other
 // partitions which are never reused after their deletion.
+// NOTE: Callers must acquire p.lock before calling this.
 func (p *memPartition) isVisibleLocked(current uint64) bool {
-	return !p.lock.deleted && (p.key != cspann.RootKey || current > p.lock.created)
+	return !p.lock.deleted && (p.key.partitionKey != cspann.RootKey || current > p.lock.created)
 }
 
 // pendingItem tracks currently active transactions as well as partitions that
@@ -94,11 +136,12 @@ type pendingItem struct {
 // vectors. This is only used for testing and benchmarking. As such, it is
 // packed with assertions and extra validation intended to catch bugs.
 type Store struct {
-	dims int
-	seed int64
+	dims          int
+	seed          int64
+	rootQuantizer quantize.Quantizer
 
 	// structureLock must be acquired by transactions that intend to modify the
-	// structure of the tree, e.g. splitting or merging a partition. This ensures
+	// structure of a tree, e.g. splitting or merging a partition. This ensures
 	// that only one split or merge can be running at any given time, so that
 	// deadlocks are not possible.
 	structureLock memLock
@@ -107,7 +150,7 @@ type Store struct {
 		syncutil.Mutex
 
 		// partitions stores all partitions in the store.
-		partitions map[cspann.PartitionKey]*memPartition
+		partitions map[qualifiedPartitionKey]*memPartition
 		// vectors stores all original, full-sized vectors in the store, indexed
 		// by primary key (bytes converted to a string).
 		vectors map[string]vector.T
@@ -135,27 +178,15 @@ var _ cspann.Store = (*Store)(nil)
 // from disk.
 func New(dims int, seed int64) *Store {
 	st := &Store{
-		dims: dims,
-		seed: seed,
+		dims:          dims,
+		seed:          seed,
+		rootQuantizer: quantize.NewUnQuantizer(dims),
 	}
-	st.mu.partitions = make(map[cspann.PartitionKey]*memPartition)
-	st.mu.nextKey = cspann.RootKey + 1
 
-	// Create empty root partition.
-	var workspace workspace.T
-	var empty vector.Set
-	quantizer := quantize.NewUnQuantizer(dims)
-	quantizedSet := quantizer.Quantize(&workspace, empty)
-	memPart := &memPartition{
-		key: cspann.RootKey,
-	}
-	memPart.lock.partition = cspann.NewPartition(
-		quantizer, quantizedSet, []cspann.ChildKey{}, []cspann.ValueBytes{}, cspann.LeafLevel)
-	memPart.lock.created = 1
-	st.mu.partitions[cspann.RootKey] = memPart
-
-	st.mu.clock = 2
+	st.mu.partitions = make(map[qualifiedPartitionKey]*memPartition)
 	st.mu.vectors = make(map[string]vector.T)
+	st.mu.clock = 2
+	st.mu.nextKey = cspann.RootKey + 1
 	st.mu.stats.NumPartitions = 1
 	st.mu.pending.Init()
 	return st
@@ -291,8 +322,8 @@ func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMe
 }
 
 // InsertVector inserts a new full-size vector into the in-memory store,
-// associated with the given primary key. This mimics inserting a vector into
-// the primary index, and is used during testing and benchmarking.
+// associated with the given tree key and primary key. This mimics inserting a
+// vector into the primary index, and is used during testing and benchmarking.
 func (s *Store) InsertVector(key cspann.KeyBytes, vec vector.T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -352,14 +383,15 @@ func (s *Store) MarshalBinary() (data []byte, err error) {
 	}
 
 	// Remap partitions to protobufs.
-	for partitionKey, memPart := range s.mu.partitions {
+	for qkey, memPart := range s.mu.partitions {
 		func() {
 			memPart.lock.AcquireShared(0)
 			defer memPart.lock.ReleaseShared()
 
 			partition := memPart.lock.partition
 			partitionProto := PartitionProto{
-				PartitionKey: partitionKey,
+				TreeId:       qkey.treeID,
+				PartitionKey: qkey.partitionKey,
 				ChildKeys:    partition.ChildKeys(),
 				ValueBytes:   partition.ValueBytes(),
 				Level:        partition.Level(),
@@ -401,7 +433,7 @@ func Load(data []byte) (*Store, error) {
 		seed: storeProto.Config.Seed,
 	}
 	inMemStore.mu.clock = 2
-	inMemStore.mu.partitions = make(map[cspann.PartitionKey]*memPartition, len(storeProto.Partitions))
+	inMemStore.mu.partitions = make(map[qualifiedPartitionKey]*memPartition, len(storeProto.Partitions))
 	inMemStore.mu.nextKey = storeProto.NextKey
 	inMemStore.mu.vectors = make(map[string]vector.T, len(storeProto.Vectors))
 	inMemStore.mu.stats = storeProto.Stats
@@ -414,7 +446,10 @@ func Load(data []byte) (*Store, error) {
 	for i := range storeProto.Partitions {
 		partitionProto := &storeProto.Partitions[i]
 		var memPart = &memPartition{
-			key: partitionProto.PartitionKey,
+			key: qualifiedPartitionKey{
+				treeID:       partitionProto.TreeId,
+				partitionKey: partitionProto.PartitionKey,
+			},
 		}
 		memPart.lock.created = 1
 
@@ -431,7 +466,7 @@ func Load(data []byte) (*Store, error) {
 		memPart.lock.partition = cspann.NewPartition(quantizer, quantizedSet,
 			partitionProto.ChildKeys, partitionProto.ValueBytes, partitionProto.Level)
 
-		inMemStore.mu.partitions[partitionProto.PartitionKey] = memPart
+		inMemStore.mu.partitions[memPart.key] = memPart
 	}
 
 	// Insert vectors into the in-memory store.
@@ -443,17 +478,18 @@ func Load(data []byte) (*Store, error) {
 	return inMemStore, nil
 }
 
-// getPartition returns a partition by its key, or ErrPartitionNotFound if no
-// such partition exists.
-func (s *Store) getPartition(partitionKey cspann.PartitionKey) (*memPartition, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	partition, ok := s.mu.partitions[partitionKey]
-	if !ok {
-		return nil, cspann.ErrPartitionNotFound
-	}
-	return partition, nil
+// insertPartitionLocked adds the given partition to the set of partitions
+// managed by the store.
+// NOTE: Callers must have locked the s.mu mutex.
+func (s *Store) insertPartitionLocked(
+	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, partition *cspann.Partition,
+) *memPartition {
+	qkey := makeQualifiedPartitionKey(treeKey, partitionKey)
+	memPart := &memPartition{key: qkey}
+	memPart.lock.partition = partition
+	memPart.lock.created = s.tickLocked()
+	s.mu.partitions[qkey] = memPart
+	return memPart
 }
 
 // tickLocked returns the current value of the logical clock and advances its
@@ -487,4 +523,24 @@ func (s *Store) reportPartitionSizeLocked(count int) {
 		s.mu.stats.VectorsPerPartition = (1 - storeStatsAlpha) * s.mu.stats.VectorsPerPartition
 		s.mu.stats.VectorsPerPartition += storeStatsAlpha * float64(count)
 	}
+}
+
+// getPartition returns a partition by its key, or ErrPartitionNotFound if no
+// such partition exists.
+func (s *Store) getPartition(
+	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) (memPart *memPartition, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getPartitionLocked(treeKey, partitionKey)
+}
+
+// getPartitionLocked returns a partition by its key, or ErrPartitionNotFound if
+// no such partition exists.
+// NOTE: Callers must have locked the s.mu mutex.
+func (s *Store) getPartitionLocked(
+	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) (memPart *memPartition, ok bool) {
+	memPart, ok = s.mu.partitions[makeQualifiedPartitionKey(treeKey, partitionKey)]
+	return memPart, ok
 }

@@ -89,20 +89,20 @@ type Txn interface {
 	// ErrPartitionNotFound if the key cannot be found. The returned partition
 	// can be modified by the caller in the scope of the transaction with a
 	// guarantee it won't be changed by other agents.
-	GetPartition(ctx context.Context, partitionKey PartitionKey) (*Partition, error)
+	GetPartition(ctx context.Context, treeKey TreeKey, partitionKey PartitionKey) (*Partition, error)
 
 	// SetRootPartition makes the given partition the root partition in the store.
 	// If the root partition already exists, it is replaced, else it is newly
 	// inserted into the store.
-	SetRootPartition(ctx context.Context, partition *Partition) error
+	SetRootPartition(ctx context.Context, treeKey TreeKey, partition *Partition) error
 
 	// InsertPartition inserts the given partition into the store and returns a
 	// new key that identifies it.
-	InsertPartition(ctx context.Context, partition *Partition) (PartitionKey, error)
+	InsertPartition(ctx context.Context, treeKey TreeKey, partition *Partition) (PartitionKey, error)
 
 	// DeletePartition deletes the partition with the given key from the store,
 	// or returns ErrPartitionNotFound if the key cannot be found.
-	DeletePartition(ctx context.Context, partitionKey PartitionKey) error
+	DeletePartition(ctx context.Context, treeKey TreeKey, partitionKey PartitionKey) error
 
 	// GetPartitionMetadata returns metadata for the given partition, including
 	// its size, its centroid, and its level in the K-means tree. If "forUpdate"
@@ -112,7 +112,7 @@ type Txn interface {
 	// ErrRestartOperation if the caller should retry the operation that triggered
 	// this call.
 	GetPartitionMetadata(
-		ctx context.Context, partitionKey PartitionKey, forUpdate bool,
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, forUpdate bool,
 	) (PartitionMetadata, error)
 
 	// AddToPartition adds the given vector and its associated child key and value
@@ -124,6 +124,7 @@ type Txn interface {
 	// triggered this call.
 	AddToPartition(
 		ctx context.Context,
+		treeKey TreeKey,
 		partitionKey PartitionKey,
 		vec vector.T,
 		childKey ChildKey,
@@ -138,7 +139,7 @@ type Txn interface {
 	// ErrRestartOperation if the caller should retry the delete operation that
 	// triggered this call.
 	RemoveFromPartition(
-		ctx context.Context, partitionKey PartitionKey, childKey ChildKey,
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, childKey ChildKey,
 	) (PartitionMetadata, error)
 
 	// SearchPartitions finds vectors that are closest to the given query vector.
@@ -157,6 +158,7 @@ type Txn interface {
 	// the search operation that triggered this call.
 	SearchPartitions(
 		ctx context.Context,
+		treeKey TreeKey,
 		partitionKey []PartitionKey,
 		queryVector vector.T,
 		searchSet *SearchSet,
@@ -171,7 +173,6 @@ type Txn interface {
 	// TODO(andyk): what if the row exists but the vector column is NULL? Right
 	// now, this whole library expects vectors passed to it to be non-nil and have
 	// the same number of dims. We should look into how pgvector handles NULL
-	// values - could we just treat them as if they were the zero vector, for
-	// example?
-	GetFullVectors(ctx context.Context, refs []VectorWithKey) error
+	// values - could we just treat them as if they were missing, for example?
+	GetFullVectors(ctx context.Context, treeKey TreeKey, refs []VectorWithKey) error
 }

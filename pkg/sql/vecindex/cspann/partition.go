@@ -25,6 +25,10 @@ const (
 	RootKey PartitionKey = 1
 )
 
+// TreeKey identifies a particular K-means tree among the forest of trees that
+// make up a C-SPANN index. This enables partitioning of the index.
+type TreeKey []byte
+
 // KeyBytes refers to the unique row in the primary index that contains the
 // indexed vector. It typically contains part or all of the primary key for the
 // row.
@@ -233,4 +237,13 @@ func (p *Partition) Find(childKey ChildKey) int {
 		}
 	}
 	return -1
+}
+
+// CreateEmptyPartition returns an empty partition for the given quantizer and
+// level.
+func CreateEmptyPartition(quantizer quantize.Quantizer, level Level) *Partition {
+	var workspace workspace.T
+	var empty vector.Set
+	quantizedSet := quantizer.Quantize(&workspace, empty)
+	return NewPartition(quantizer, quantizedSet, []ChildKey(nil), []ValueBytes(nil), level)
 }
