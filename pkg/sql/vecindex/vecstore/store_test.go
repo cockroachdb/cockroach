@@ -78,7 +78,6 @@ func TestPersistentStore(t *testing.T) {
 
 	quantizer := quantize.NewUnQuantizer(2)
 	store, err := NewWithColumnID(
-		ctx,
 		internalDB,
 		quantizer,
 		codec,
