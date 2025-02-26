@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/trace"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -430,6 +431,21 @@ type TaskOpts struct {
 // RunAsyncTaskEx is like RunTask, except the callback f is run in a goroutine.
 // The call doesn't block for the callback to finish execution.
 func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
+	ctx, ref, err := s.RunAsyncTaskEx2(ctx, opt)
+	if err != nil {
+		return err
+	}
+	go func(ctx context.Context) {
+		defer ref.Activate(ctx).Release()
+		f(ctx)
+	}(ctx)
+	return nil
+}
+
+// RunAsyncTaskEx2 is .
+func (s *Stopper) RunAsyncTaskEx2(
+	ctx context.Context, opt TaskOpts,
+) (context.Context, *Ref, error) {
 	var alloc *quotapool.IntAlloc
 	taskStarted := false
 	if opt.Sem != nil {
@@ -446,7 +462,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 			err = ErrUnavailable
 		}
 		if err != nil {
-			return err
+			return ctx, nil, err
 		}
 		defer func() {
 			// If the task is started, the alloc will be released async.
@@ -458,12 +474,12 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		// Check for canceled context: it's possible to get the semaphore even
 		// if the context is canceled.
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return ctx, nil, ctx.Err()
 		}
 	}
 
 	if !s.runPrelude() {
-		return ErrUnavailable
+		return ctx, nil, ErrUnavailable
 	}
 
 	// If the caller has a span, the task gets a child span.
@@ -486,20 +502,62 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
-	go func(taskName string) {
-		growstack.Grow()
-		defer s.runPostlude()
-		defer s.startRegion(ctx, taskName).End()
-		defer sp.Finish()
-		defer s.recover(ctx)
-		if alloc != nil {
-			defer alloc.Release()
-		}
 
-		sp.UpdateGoroutineIDToCurrent()
-		f(ctx)
-	}(opt.TaskName)
-	return nil
+	ref := refPool.Get().(*Ref)
+	*ref = Ref{
+		ctx:      ctx, // this ctx now has the span
+		s:        s,
+		alloc:    alloc,
+		sp:       sp,
+		region:   nil, // later
+		taskName: opt.TaskName,
+	}
+
+	return ctx, ref, nil
+}
+
+var refPool = sync.Pool{New: func() interface{} {
+	return &Ref{}
+}}
+
+type Ref struct {
+	ctx      context.Context
+	s        *Stopper
+	alloc    *quotapool.IntAlloc // possibly nil
+	sp       *tracing.Span
+	region   region
+	taskName string
+}
+
+func (r *Ref) Activate(ctx context.Context) ActiveRef {
+	growstack.Grow()
+	r.ctx = ctx
+	r.region = r.s.startRegion(ctx, r.taskName)
+	r.sp.UpdateGoroutineIDToCurrent()
+
+	return (*activeRef)(r)
+}
+
+func (r *Ref) release() {
+	r.s.recover(r.ctx)
+	r.sp.Finish()
+	r.region.End()
+	if r.alloc != nil {
+		r.alloc.Release()
+	}
+	r.s.runPostlude()
+	*r = Ref{}
+	refPool.Put(r)
+}
+
+type activeRef Ref
+
+func (ar *activeRef) Release() {
+	(*Ref)(ar).release()
+}
+
+type ActiveRef interface {
+	Release()
 }
 
 func (s *Stopper) runPrelude() bool {
