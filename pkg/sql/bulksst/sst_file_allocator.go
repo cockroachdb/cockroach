@@ -112,7 +112,7 @@ func (e *ExternalFileAllocator) AddFile(ctx context.Context) (objstorage.Writabl
 		return nil, "", err
 	}
 	remoteWritable := objstorageprovider.NewRemoteWritable(writer)
-	return remoteWritable, e.baseURI + fileName, nil
+	return remoteWritable, e.baseURI + "/" + fileName, nil
 }
 
 // CommitFile records metadata for a successfully written SST file.
