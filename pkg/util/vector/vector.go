@@ -8,6 +8,7 @@ package vector
 import (
 	"math"
 	"math/rand"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -69,16 +70,16 @@ func (v T) AsSet() Set {
 	return Set{
 		Dims:  len(v),
 		Count: 1,
-		Data:  v[:len(v):len(v)],
+		Data:  slices.Clip(v),
 	}
 }
 
 // String implements the fmt.Stringer interface.
 func (v T) String() string {
 	var sb strings.Builder
-	sb.WriteString("[")
 	// Pre-grow by a reasonable amount to avoid multiple allocations.
-	sb.Grow(len(v) * 8)
+	sb.Grow(len(v)*8 + 2)
+	sb.WriteString("[")
 	for i, v := range v {
 		if i > 0 {
 			sb.WriteString(",")
@@ -191,7 +192,7 @@ func CosDistance(t T, t2 T) (float64, error) {
 	return 1 - similarity, nil
 }
 
-// InnerProduct returns the negative inner product of t1 and t2.
+// InnerProduct returns the inner product of t1 and t2.
 func InnerProduct(t T, t2 T) (float64, error) {
 	if err := checkDims(t, t2); err != nil {
 		return 0, err
@@ -202,7 +203,7 @@ func InnerProduct(t T, t2 T) (float64, error) {
 // NegInnerProduct returns the negative inner product of t1 and t2.
 func NegInnerProduct(t T, t2 T) (float64, error) {
 	p, err := InnerProduct(t, t2)
-	return p * -1, err
+	return -p, err
 }
 
 // Norm returns the L2 norm of t.
