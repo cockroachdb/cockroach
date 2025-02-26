@@ -11019,3 +11019,28 @@ func assertReasonableMVCCTimestamp(t *testing.T, ts string) {
 	now := timeutil.Now()
 	require.GreaterOrEqual(t, epochNanos, now.Add(-1*time.Hour).UnixNano())
 }
+
+// TestChangefeedAsSelectForEmptyTable verifies that a changefeed
+// yields a proper user error on an empty table and in the same
+// allows hidden columns to be selected.
+func TestChangefeedAsSelectForEmptyTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE empty()`)
+
+		// Should fail when no columns are selected.
+		// Use expectErrCreatingFeed which handles sinkless feeds correctly by
+		// attempting to read from the feed if no error occurs at creation time
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED AS SELECT * FROM empty`, `SELECT yields no columns`)
+
+		// Should succeed when a rowid column is explicitly selected.
+		feed, err := f.Feed(`CREATE CHANGEFEED AS SELECT rowid FROM empty`)
+		require.NoError(t, err)
+		defer closeFeed(t, feed)
+	}
+
+	cdcTest(t, testFn)
+}
