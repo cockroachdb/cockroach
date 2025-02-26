@@ -81,6 +81,11 @@ func FormatTable(
 	}
 
 	for i := 0; i < tab.CheckCount(); i++ {
+		// We only show constraints that are constant and known when the catalog is
+		// built. For this reason, skip the one we add for row-level security.
+		if tab.Check(i).IsRLSConstraint() {
+			continue
+		}
 		child.Childf("CHECK (%s)", MaybeMarkRedactable(tab.Check(i).Constraint(), redactableValues))
 	}
 
