@@ -3,12 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package bulkmerge
+package bulkmerge_test
 
 import (
 	"os"
 	"testing"
 
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
