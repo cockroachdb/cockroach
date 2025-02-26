@@ -7,6 +7,7 @@ package vecstore
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -64,39 +65,39 @@ func newStoreCodec(quantizer quantize.Quantizer) storeCodec {
 
 // clear resets the codec's internal vector set to start a new encode / decode
 // operation.
-func (cs *storeCodec) clear(minCapacity int, centroid vector.T) {
-	if cs.tmpVectorSet == nil {
-		cs.tmpVectorSet = cs.quantizer.NewQuantizedVectorSet(minCapacity, centroid)
+func (sc *storeCodec) clear(minCapacity int, centroid vector.T) {
+	if sc.tmpVectorSet == nil {
+		sc.tmpVectorSet = sc.quantizer.NewQuantizedVectorSet(minCapacity, centroid)
 	} else {
-		cs.tmpVectorSet.Clear(centroid)
+		sc.tmpVectorSet.Clear(centroid)
 	}
 }
 
 // getVectorSet returns the internal vector set cache. These will be invalidated
 // when the clear method is called.
-func (cs *storeCodec) getVectorSet() quantize.QuantizedVectorSet {
-	return cs.tmpVectorSet
+func (sc *storeCodec) getVectorSet() quantize.QuantizedVectorSet {
+	return sc.tmpVectorSet
 }
 
 // decodeVector decodes a single vector to the codec's internal vector set. It
 // returns the remainder of the input buffer.
-func (cs *storeCodec) decodeVector(encodedVector []byte) ([]byte, error) {
-	switch cs.quantizer.(type) {
+func (sc *storeCodec) decodeVector(encodedVector []byte) ([]byte, error) {
+	switch sc.quantizer.(type) {
 	case *quantize.UnQuantizer:
-		return DecodeUnquantizedVectorToSet(encodedVector, cs.tmpVectorSet.(*quantize.UnQuantizedVectorSet))
+		return DecodeUnquantizedVectorToSet(encodedVector, sc.tmpVectorSet.(*quantize.UnQuantizedVectorSet))
 	case *quantize.RaBitQuantizer:
-		return DecodeRaBitQVectorToSet(encodedVector, cs.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet))
+		return DecodeRaBitQVectorToSet(encodedVector, sc.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet))
 	}
-	return nil, errors.Errorf("unknown quantizer type %T", cs.quantizer)
+	return nil, errors.Errorf("unknown quantizer type %T", sc.quantizer)
 }
 
 // encodeVector encodes a single vector. This method invalidates the internal
 // vector set.
-func (cs *storeCodec) encodeVector(w *workspace.T, v vector.T, centroid vector.T) ([]byte, error) {
-	cs.clear(1, centroid)
+func (sc *storeCodec) encodeVector(w *workspace.T, v vector.T, centroid vector.T) ([]byte, error) {
+	sc.clear(1, centroid)
 	input := v.AsSet()
-	cs.quantizer.QuantizeInSet(w, cs.tmpVectorSet, input)
-	return cs.encodeVectorFromSet(cs.tmpVectorSet, 0 /* idx */)
+	sc.quantizer.QuantizeInSet(w, sc.tmpVectorSet, input)
+	return sc.encodeVectorFromSet(sc.tmpVectorSet, 0 /* idx */)
 }
 
 // encodeVectorFromSet encodes the vector indicated by 'idx' from an external
@@ -207,7 +208,7 @@ func (tx *storeTxn) decodePartition(
 		codec.quantizer, codec.getVectorSet(), tx.tmpChildKeys, tx.tmpValueBytes, level), nil
 }
 
-// GetPartition is part of the vecstore.Txn interface. Read the partition
+// GetPartition is part of the cspann.Txn interface. Read the partition
 // indicated by `partitionKey` and build a Partition data structure, which is
 // returned.
 func (tx *storeTxn) GetPartition(
@@ -220,6 +221,15 @@ func (tx *storeTxn) GetPartition(
 
 	// GetPartition is used by fixup to split and merge partitions, so we want to
 	// block concurrent writes.
+	//
+	// TODO(andyk): this is grabbing an exclusive lock on all keys in the
+	// partition, not just the metadata key. Mutations of the partition will all
+	// grab a lock (either shared or exclusive) on the metadata key, so locking
+	// the child keys as well is unnecessary. We should be able to change this to:
+	//
+	//   b.GetForUpdate(startKey, tx.lockDurability)
+	//   b.Scan(startKey.Next(), endKey)
+	//
 	b.ScanForUpdate(startKey, endKey, tx.lockDurability)
 	err := tx.kv.Run(ctx, b)
 	if err != nil {
@@ -257,7 +267,7 @@ func (tx *storeTxn) insertPartition(
 	for i := 0; i < partition.QuantizedSet().GetCount(); i++ {
 		// The child key gets appended to 'key' here.
 		// Cap the metadata key so that the append allocates a new slice for the child key.
-		key = key[:len(key):len(key)]
+		key = slices.Clip(key)
 		k := EncodeChildKey(key, childKeys[i])
 		encodedValue, err := codec.encodeVectorFromSet(partition.QuantizedSet(), i)
 		if err != nil {
@@ -270,7 +280,7 @@ func (tx *storeTxn) insertPartition(
 	return tx.kv.Run(ctx, b)
 }
 
-// SetRootPartition implements the vecstore.Txn interface.
+// SetRootPartition implements the cspann.Txn interface.
 func (tx *storeTxn) SetRootPartition(ctx context.Context, partition *cspann.Partition) error {
 	if err := tx.DeletePartition(ctx, cspann.RootKey); err != nil {
 		return err
@@ -278,7 +288,7 @@ func (tx *storeTxn) SetRootPartition(ctx context.Context, partition *cspann.Part
 	return tx.insertPartition(ctx, cspann.RootKey, partition)
 }
 
-// InsertPartition implements the vecstore.Txn interface.
+// InsertPartition implements the cspann.Txn interface.
 func (tx *storeTxn) InsertPartition(
 	ctx context.Context, partition *cspann.Partition,
 ) (cspann.PartitionKey, error) {
@@ -287,7 +297,7 @@ func (tx *storeTxn) InsertPartition(
 	return partitionID, tx.insertPartition(ctx, partitionID, partition)
 }
 
-// DeletePartition implements the vecstore.Txn interface.
+// DeletePartition implements the cspann.Txn interface.
 func (tx *storeTxn) DeletePartition(ctx context.Context, partitionKey cspann.PartitionKey) error {
 	b := tx.kv.NewBatch()
 
@@ -298,7 +308,7 @@ func (tx *storeTxn) DeletePartition(ctx context.Context, partitionKey cspann.Par
 	return tx.kv.Run(ctx, b)
 }
 
-// GetPartitionMetadata implements the vecstore.Txn interface.
+// GetPartitionMetadata implements the cspann.Txn interface.
 func (tx *storeTxn) GetPartitionMetadata(
 	ctx context.Context, partitionKey cspann.PartitionKey, forUpdate bool,
 ) (cspann.PartitionMetadata, error) {
@@ -330,7 +340,7 @@ func (tx *storeTxn) GetPartitionMetadata(
 	return metadata, nil
 }
 
-// AddToPartition implements the vecstore.Txn interface.
+// AddToPartition implements the cspann.Txn interface.
 func (tx *storeTxn) AddToPartition(
 	ctx context.Context,
 	partitionKey cspann.PartitionKey,
@@ -360,7 +370,7 @@ func (tx *storeTxn) AddToPartition(
 
 	// Cap the metadata key so that the append allocates a new slice for the
 	// child key.
-	prefix := metadataKey[:len(metadataKey):len(metadataKey)]
+	prefix := slices.Clip(metadataKey)
 	entryKey := EncodeChildKey(prefix, childKey)
 
 	b = tx.kv.NewBatch()
@@ -388,7 +398,7 @@ func (tx *storeTxn) AddToPartition(
 	return metadata, nil
 }
 
-// RemoveFromPartition implements the vecstore.Txn interface.
+// RemoveFromPartition implements the cspann.Txn interface.
 func (tx *storeTxn) RemoveFromPartition(
 	ctx context.Context, partitionKey cspann.PartitionKey, childKey cspann.ChildKey,
 ) (cspann.PartitionMetadata, error) {
@@ -399,7 +409,7 @@ func (tx *storeTxn) RemoveFromPartition(
 	b.GetForShare(metadataKey, tx.lockDurability)
 
 	// Cap the metadata key so that the append allocates a new slice for the child key.
-	prefix := metadataKey[:len(metadataKey):len(metadataKey)]
+	prefix := slices.Clip(metadataKey)
 	entryKey := EncodeChildKey(prefix, childKey)
 	b.Del(entryKey)
 
@@ -426,7 +436,7 @@ func (tx *storeTxn) RemoveFromPartition(
 	return metadata, nil
 }
 
-// SearchPartitions implements the vecstore.Txn interface.
+// SearchPartitions implements the cspann.Txn interface.
 func (tx *storeTxn) SearchPartitions(
 	ctx context.Context,
 	partitionKeys []cspann.PartitionKey,
@@ -522,7 +532,7 @@ func (tx *storeTxn) getFullVectorsFromPK(
 
 		var data [1]tree.Datum
 		for {
-			ok, refIdx, err := fetcher.NextRowDecodedInto(ctx, data[0:], tx.store.colIdxMap)
+			ok, refIdx, err := fetcher.NextRowDecodedInto(ctx, data[:], tx.store.colIdxMap)
 			if err != nil {
 				return err
 			}
@@ -577,7 +587,7 @@ func (tx *storeTxn) getFullVectorsFromPartitionMetadata(
 	return numPKLookups, nil
 }
 
-// GetFullVectors implements the Store interface.
+// GetFullVectors implements the cspann.Txn interface.
 func (tx *storeTxn) GetFullVectors(ctx context.Context, refs []cspann.VectorWithKey) error {
 	numPKLookups, err := tx.getFullVectorsFromPartitionMetadata(ctx, refs)
 	if err != nil {
