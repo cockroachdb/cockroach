@@ -606,41 +606,7 @@ func (s *Scanner) ScanComment(lval ScanSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *Scanner) normalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool) {
-	s.lastAttemptedID = int32(lexbase.IDENT)
-	s.pos--
-	start := s.pos
-	isASCII := true
-
-	// Consume the Scanner character by character, stopping after the last legal
-	// identifier character. By the end of this function, we need to
-	// unicode normalize this identifier, which is expensive if there are actual
-	// unicode characters in it. If not, it's quite cheap - there's no work to do.
-	// Therefore, we keep track of whether the string is only ASCII for later.
-	for {
-		ch := s.peek()
-		if ch >= utf8.RuneSelf {
-			isASCII = false
-		}
-
-		if !isIdentMiddle(ch) {
-			break
-		}
-
-		s.pos++
-	}
-
-	if isASCII {
-		// We know that the identifier we've seen so far is ASCII, so we don't need
-		// to normalize.
-		lval.SetStr(s.in[start:s.pos])
-	} else {
-		// The string has unicode in it. No choice but to run Normalize.
-		lval.SetStr(lexbase.NormalizeString(s.in[start:s.pos]))
-	}
-}
-
-func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool) {
+func (s *Scanner) normalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool, toLower bool) {
 	s.lastAttemptedID = int32(lexbase.IDENT)
 	s.pos--
 	start := s.pos
@@ -668,11 +634,8 @@ func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType, isIdentMiddle fun
 		s.pos++
 	}
 
-	if isLower && isASCII {
-		// Already lowercased - nothing to do.
-		lval.SetStr(s.in[start:s.pos])
-	} else if isASCII {
-		// We know that the identifier we've seen so far is ASCII, so we don't need
+	if toLower && !isLower && isASCII {
+		// We know that the identifier we've seen so far is ASCII, so we don't
 		// to unicode normalize. Instead, just lowercase as normal.
 		b := s.allocBytes(s.pos - start)
 		_ = b[s.pos-start-1] // For bounds check elimination.
@@ -683,14 +646,20 @@ func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType, isIdentMiddle fun
 			b[i] = byte(c)
 		}
 		lval.SetStr(*(*string)(unsafe.Pointer(&b)))
-	} else {
-		// The string has unicode in it. No choice but to run Normalize.
+	} else if toLower && !isASCII {
+		// The string has unicode in it. No choice but to normalize and lowercase.
 		lval.SetStr(lexbase.NormalizeName(s.in[start:s.pos]))
+	} else if !toLower && !isASCII {
+		// The string has unicode in it. No choice but to normalize.
+		lval.SetStr(lexbase.NormalizeString(s.in[start:s.pos]))
+	} else {
+		// Don't do anything.
+		lval.SetStr(s.in[start:s.pos])
 	}
 }
 
 func (s *Scanner) scanIdent(lval ScanSymType) {
-	s.lowerCaseAndNormalizeIdent(lval, lexbase.IsIdentMiddle)
+	s.normalizeIdent(lval, lexbase.IsIdentMiddle, true)
 
 	isExperimental := false
 	kw := lval.Str()

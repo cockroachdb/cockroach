@@ -433,6 +433,6 @@ func (s *PLpgSQLScanner) scanNumber(lval ScanSymType, ch int) {
 
 // scanIdent is similar to Scanner.scanIdent, but uses PL/pgSQL tokens.
 func (s *PLpgSQLScanner) scanIdent(lval ScanSymType) {
-	s.lowerCaseAndNormalizeIdent(lval, sqllex.IsIdentMiddle)
+	s.normalizeIdent(lval, sqllex.IsIdentMiddle, true)
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))
 }

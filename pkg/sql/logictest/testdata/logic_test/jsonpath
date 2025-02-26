@@ -22,11 +22,6 @@ SELECT '$'::JSONPATH
 $
 
 query T
-SELECT '$.*'::JSONPATH
-----
-$.*
-
-query T
 SELECT 'strict $'::JSONPATH
 ----
 strict $
@@ -34,67 +29,12 @@ strict $
 query T
 SELECT 'lax $'::JSONPATH
 ----
-lax $
-
-query T
-SELECT '$.1a[*]'::JSONPATH
-----
-$.1a[*]
+$
 
 query T
 SELECT '$.a1[*]'::JSONPATH
 ----
 $.a1[*]
-
-query T
-SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH
-----
-$.a[*] ? (@.b == 1 && @.c != 1)
-
-query T
-SELECT '$.a[*] ? (@.b != 1)'::JSONPATH
-----
-$.a[*] ? (@.b != 1)
-
-query T
-SELECT '$.a[*] ? (@.b < 1)'::JSONPATH
-----
-$.a[*] ? (@.b < 1)
-
-query T
-SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH
-----
-$.a[*] ? (@.b <= 1)
-
-query T
-SELECT '$.a[*] ? (@.b > 1)'::JSONPATH
-----
-$.a[*] ? (@.b > 1)
-
-query T
-SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH
-----
-$.a[*] ? (@.b >= 1)
-
-query T
-SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH
-----
-$.a ? (@.b == 1).c ? (@.d == 2)
-
-query T
-SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH
-----
-$.a?(@.b==1).c?(@.d==2)
-
-query T
-SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH
-----
-$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )
-
-query T
-SELECT '$.a.type()'::JSONPATH
-----
-$.a.type()
 
 query B
 SELECT '$'::JSONPATH IS NULL
@@ -105,9 +45,6 @@ query B
 SELECT '$'::JSONPATH IS NOT NULL
 ----
 true
-
-statement error invalid jsonpath
-SELECT ''::JSONPATH
 
 statement error pq: unsupported comparison operator: jsonpath IS NOT DISTINCT FROM jsonpath
 SELECT '$'::JSONPATH IS NOT DISTINCT FROM '$'::JSONPATH
@@ -125,25 +62,26 @@ SELECT '$'::JSONPATH IS DISTINCT FROM NULL
 ----
 true
 
+statement error pq: could not parse "" as type jsonpath: at or near "EOF": syntax error
+SELECT ''::JSONPATH
+
+statement error pq: could not parse "\$\.1a\[\*\]" as type jsonpath: at or near "1": syntax error
+SELECT '$.1a[*]'::JSONPATH
+
+query T
+SELECT '$.abc[*].DEF.ghi[*]'::JSONPATH
+----
+$.abc[*].DEF.ghi[*]
+
+query T
+SELECT '$.ABC[*].DEF.GHI[*]'::JSONPATH
+----
+$.ABC[*].DEF.GHI[*]
+
+## When we allow table creation
+
 # statement ok
 # SELECT * FROM a WHERE j IS NULL
-
-## Jsonpath checks that shouldn't work when the type is fully implemented
-
-query T
-SELECT '$.'::JSONPATH
-----
-$.
-
-query T
-SELECT 'word $'::JSONPATH
-----
-word $
-
-query T
-SELECT '$a'::JSONPATH;
-----
-$a
 
 # statement ok
 # INSERT INTO a VALUES ('$.something'), ('$.other.thing'), ('$.another.thing'), ('$.a[*].b.c[*]')
@@ -164,3 +102,60 @@ $a
 
 # statement error unsupported comparison operator
 # SELECT * FROM a WHERE j = '$.a'
+
+## Unsupported Jsonpath
+
+# query T
+# SELECT '$.*'::JSONPATH
+# ----
+# $.*
+
+# query T
+# SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH
+# ----
+# $.a[*] ? (@.b == 1 && @.c != 1)
+
+# query T
+# SELECT '$.a[*] ? (@.b != 1)'::JSONPATH
+# ----
+# $.a[*] ? (@.b != 1)
+
+# query T
+# SELECT '$.a[*] ? (@.b < 1)'::JSONPATH
+# ----
+# $.a[*] ? (@.b < 1)
+
+# query T
+# SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH
+# ----
+# $.a[*] ? (@.b <= 1)
+
+# query T
+# SELECT '$.a[*] ? (@.b > 1)'::JSONPATH
+# ----
+# $.a[*] ? (@.b > 1)
+
+# query T
+# SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH
+# ----
+# $.a[*] ? (@.b >= 1)
+
+# query T
+# SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH
+# ----
+# $.a ? (@.b == 1).c ? (@.d == 2)
+
+# query T
+# SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH
+# ----
+# $.a?(@.b==1).c?(@.d==2)
+
+# query T
+# SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH
+# ----
+# $  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )
+
+# query T
+# SELECT '$.a.type()'::JSONPATH
+# ----
+# $.a.type()

@@ -27,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	// TODO(normanchenn): temporarily import the parser here to ensure that
+	// init() is called.
+	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -847,16 +850,16 @@ func getRandInterestingDatums(typ types.Family) ([]tree.Datum, bool) {
 					"$",
 					"strict $",
 					"lax $",
-					"$.*",
-					"$.1a[*]",
 					"$.a1[*]",
-					"$.a ? (@.b == 1)",
-					"$.a ? (@.b == 1).b",
-					"$.a ? (@.b == 'true').c",
-					"$.a ? (@.b == 1).c ? (@.d == 2)",
-					"$.a?(@.b==1).c?(@.d==2)",
-					"$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  ",
-					"$.a.type()",
+					// "$.*",
+					// "$.1a[*]",
+					// "$.a ? (@.b == 1)",
+					// "$.a ? (@.b == 1).b",
+					// "$.a ? (@.b == 'true').c",
+					// "$.a ? (@.b == 1).c ? (@.d == 2)",
+					// "$.a?(@.b==1).c?(@.d==2)",
+					// "$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  ",
+					// "$.a.type()",
 				} {
 					d, err := tree.ParseDJsonpath(s)
 					if err != nil {
