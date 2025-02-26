@@ -15,6 +15,8 @@ option (gogoproto.goproto_getters_all) = false;
 // RaBitQCodeSet is a set of RaBitQ quantization codes. Each code represents a
 // quantized vector.
 message RaBitQCodeSet {
+  option (gogoproto.equal) = true;
+
   // Count is the number of codes in the set.
   int64 count = 1 [(gogoproto.casttype) = "int"];
   // Width is the number of uint64 values that store a single code.
@@ -28,6 +30,8 @@ message RaBitQCodeSet {
 // includes enough information to estimate the distance from the original
 // full-size vectors to a user-provided query vector.
 message RaBitQuantizedVectorSet {
+  option (gogoproto.equal) = true;
+
   // Centroid is the average of vectors in the set, representing its "center of
   // mass". Note that the centroid is computed when a vector set is created and
   // is not updated when vectors are added or removed.
@@ -49,6 +53,8 @@ message RaBitQuantizedVectorSet {
 // storing the original full-size vectors without quantization. This is used in
 // testing and for the root partition, which is never quantized.
 message UnQuantizedVectorSet {
+  option (gogoproto.equal) = true;
+
   // Centroid is the average of vectors in the set, representing its "center of
   // mass". Note that the centroid is computed when a vector set is created and
   // is not updated when vectors are added or removed.
