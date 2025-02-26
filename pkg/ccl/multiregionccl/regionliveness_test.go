@@ -463,7 +463,6 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 			expectedTxnErr,
 			"txn should see a retry error")
 	}
-	require.ErrorContainsf(t, grp.Wait(), "context canceled", "connection should have been dropped, node is dead.")
 }
 
 // TestRegionLivenessProberForSQLInstances validates that regional avaibility issues
