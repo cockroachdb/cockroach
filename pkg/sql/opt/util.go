@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -26,11 +27,6 @@ import (
 // Note that the same table can be visited multiple times; however, once a table
 // is recursed into, it won't be recursed into or visited again in the future
 // (i.e. it is marked as "fully processed").
-//
-// TODO(rytaft): if there is a cycle in the foreign key references,
-// statement-bundle recreate will still hit errors. To handle this case, we
-// would need to first create the tables without the foreign keys, then add the
-// foreign keys later.
 func VisitFKReferenceTables(
 	ctx context.Context,
 	catalog cat.Catalog,
@@ -103,4 +99,60 @@ func VisitFKReferenceTables(
 			visitTable(tabMeta.Table, nil /* fk */, recurse)
 		}
 	}
+}
+
+// GetAllFKsAmongTables returns a list of ALTER statements that corresponds to
+// all FOREIGN KEY constraints where both the origin and the referenced tables
+// are present in the given set of tables. tables are assumed to be unique.
+func GetAllFKsAmongTables(
+	tables []cat.Table, fullyQualifiedName func(cat.Table) (tree.TableName, error),
+) []*tree.AlterTable {
+	idToTable := make(map[cat.StableID]cat.Table)
+	for _, table := range tables {
+		idToTable[table.ID()] = table
+	}
+	var addFKs []*tree.AlterTable
+	for _, origTable := range tables {
+		for i := 0; i < origTable.OutboundForeignKeyCount(); i++ {
+			fk := origTable.OutboundForeignKey(i)
+			refTable, ok := idToTable[fk.ReferencedTableID()]
+			if !ok {
+				// The referenced table is not included in the result, so we
+				// skip this FK constraint.
+				continue
+			}
+			fromCols, toCols := make(tree.NameList, fk.ColumnCount()), make(tree.NameList, fk.ColumnCount())
+			for j := range fromCols {
+				fromCols[j] = origTable.Column(fk.OriginColumnOrdinal(origTable, j)).ColName()
+				toCols[j] = refTable.Column(fk.ReferencedColumnOrdinal(refTable, j)).ColName()
+			}
+			origTableName, err := fullyQualifiedName(origTable)
+			if err != nil {
+				continue
+			}
+			refTableName, err := fullyQualifiedName(refTable)
+			if err != nil {
+				continue
+			}
+			addFKs = append(addFKs, &tree.AlterTable{
+				Table: origTableName.ToUnresolvedObjectName(),
+				Cmds: []tree.AlterTableCmd{
+					&tree.AlterTableAddConstraint{
+						ConstraintDef: &tree.ForeignKeyConstraintTableDef{
+							Name:     tree.Name(fk.Name()),
+							Table:    refTableName,
+							FromCols: fromCols,
+							ToCols:   toCols,
+							Actions: tree.ReferenceActions{
+								Delete: fk.DeleteReferenceAction(),
+								Update: fk.UpdateReferenceAction(),
+							},
+							Match: fk.MatchMethod(),
+						},
+					},
+				},
+			})
+		}
+	}
+	return addFKs
 }

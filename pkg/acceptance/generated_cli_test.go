@@ -377,6 +377,13 @@ func TestDockerCLI_test_sb_recreate(t *testing.T) {
 	runTestDockerCLI(t, "test_sb_recreate", "../cli/interactive_tests/test_sb_recreate.tcl")
 }
 
+func TestDockerCLI_test_sb_recreate_fks(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_sb_recreate_fks", "../cli/interactive_tests/test_sb_recreate_fks.tcl")
+}
+
 func TestDockerCLI_test_sb_recreate_mr(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
