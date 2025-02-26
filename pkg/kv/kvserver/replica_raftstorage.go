@@ -38,11 +38,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// invalidLastTerm is an out-of-band value for r.mu.lastTermNotDurable that
-// invalidates lastTermNotDurable caching and forces retrieval of
-// Term(lastIndexNotDurable) from the raftEntryCache/Pebble.
-const invalidLastTerm = 0
-
 var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.snapshot.ingest_as_write_threshold",
@@ -741,14 +736,9 @@ func (r *Replica) applySnapshot(
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
 	// TODO(pav-kv): the above comment seems stale, and needs an update.
-	//
-	// TODO(sumeer): We should be able to set the last term to
-	// nonemptySnap.Metadata.Term. See
-	// https://github.com/cockroachdb/cockroach/pull/75675#pullrequestreview-867926687
-	// for a discussion regarding this.
 	r.asLogStorage().updateStateRaftMuLockedMuLocked(logstore.RaftState{
 		LastIndex: state.RaftAppliedIndex,
-		LastTerm:  invalidLastTerm,
+		LastTerm:  state.RaftAppliedIndexTerm,
 		ByteSize:  0, // the log is empty now
 	})
 	r.shMu.raftTruncState = truncState
