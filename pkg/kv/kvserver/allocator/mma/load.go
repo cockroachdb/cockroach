@@ -179,9 +179,12 @@ type meanNodeLoad struct {
 }
 
 type storeLoadSummary struct {
-	sls        loadSummary
-	nls        loadSummary
-	fd         failureDetectionSummary
+	sls                      loadSummary
+	nls                      loadSummary
+	highDiskSpaceUtilization bool
+	fd                       failureDetectionSummary
+	maxFractionPending       float64
+
 	loadSeqNum uint64
 }
 
@@ -379,6 +382,10 @@ func (mm *meansMemo) getStoreLoadSummary(
 // use an enum.
 type loadSummary uint8
 
+// TODO(sumeer): it is odd that overload ordering is most overloaded first in
+// the enum, while failureDetectionSummary ordering is most dead as last in
+// the enum. The latter is more natural when writing code like failureSummary
+// > fdDrain or loadSummary > overloadSlow. So change the following enum.
 const (
 	// The two overload states represent the degree of overload.
 	overloadUrgent loadSummary = iota
@@ -447,6 +454,15 @@ func loadSummaryForDimension(
 		}
 	}
 	return loadSummary
+}
+
+func highDiskSpaceUtilization(load loadValue, capacity loadValue) bool {
+	if capacity == unknownCapacity {
+		// TODO(sumeer): log an error.
+		return false
+	}
+	fractionUsed := float64(load) / float64(capacity)
+	return fractionUsed > 0.9
 }
 
 // Avoid unused lint errors.

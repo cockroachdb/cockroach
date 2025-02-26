@@ -766,6 +766,9 @@ type rangeAnalyzedConstraints struct {
 	replicas          [numReplicaKinds][]storeAndLocality
 	constraints       analyzedConstraints
 	voterConstraints  analyzedConstraints
+	// TODO(sumeer): add unit test for these.
+	replicaLocalityTiers replicasLocalityTiers
+	voterLocalityTiers   replicasLocalityTiers
 
 	// leasePreferenceIndices[i] is the index of the earliest entry in
 	// normalizedSpanConfig.leasePreferences, matched by the replica at
@@ -777,6 +780,8 @@ type rangeAnalyzedConstraints struct {
 
 	votersDiversityScore   float64
 	replicasDiversityScore float64
+	// TODO: need []localityTiers for voters and all replicas so can call into
+	// diversityScoringMemo.
 
 	buf analyzeConstraintsBuf
 }
@@ -785,6 +790,10 @@ var rangeAnalyzedConstraintsPool = sync.Pool{
 	New: func() interface{} {
 		return &rangeAnalyzedConstraints{}
 	},
+}
+
+func newRangeAnalyzedConstraints() *rangeAnalyzedConstraints {
+	return rangeAnalyzedConstraintsPool.Get().(*rangeAnalyzedConstraints)
 }
 
 func releaseRangeAnalyzedConstraints(rac *rangeAnalyzedConstraints) {
@@ -958,6 +967,17 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 		}
 	}
 
+	var replicaLocalityTiers, voterLocalityTiers []localityTiers
+	for i := range rac.replicas[voterIndex] {
+		replicaLocalityTiers = append(replicaLocalityTiers, rac.replicas[voterIndex][i].localityTiers)
+		voterLocalityTiers = append(voterLocalityTiers, rac.replicas[voterIndex][i].localityTiers)
+	}
+	for i := range rac.replicas[nonVoterIndex] {
+		replicaLocalityTiers = append(replicaLocalityTiers, rac.replicas[nonVoterIndex][i].localityTiers)
+	}
+	rac.replicaLocalityTiers = makeReplicasLocalityTiers(replicaLocalityTiers)
+	rac.voterLocalityTiers = makeReplicasLocalityTiers(voterLocalityTiers)
+
 	diversityFunc := func(
 		stores1 []storeAndLocality, stores2 []storeAndLocality, sameStores bool,
 	) (sumScore float64, numSamples int) {
@@ -1038,6 +1058,22 @@ func (cd constraintsDisj) isEqual(b mapKey) bool {
 }
 
 var _ mapKey = constraintsDisj{}
+
+func (rac *rangeAnalyzedConstraints) replicaRole(
+	storeID roachpb.StoreID,
+) (isVoter bool, isNonVoter bool) {
+	for _, s := range rac.replicas[voterIndex] {
+		if s.StoreID == storeID {
+			return true, false
+		}
+	}
+	for _, s := range rac.replicas[nonVoterIndex] {
+		if s.StoreID == storeID {
+			return false, true
+		}
+	}
+	return false, false
+}
 
 // Usage for a range that may need attention:
 //
@@ -1727,6 +1763,13 @@ func (acb *analyzeConstraintsBuf) clear() {
 func (acb *analyzeConstraintsBuf) tryAddingStore(
 	storeID roachpb.StoreID, replicaType roachpb.ReplicaType, locality localityTiers,
 ) {
+	// We ae ignoring LEARNER and VOTER_DEMOTING_LEARNER, since these are
+	// in the process of going away.
+	//
+	// TODO(sumeer): if we are in a joint config with VOTER_DEMOTING_LEARNER,
+	// and ignore it here, we may propose another change. Will that happen after
+	// exiting from the joint config, or can that race ahead and confuse the
+	// joint config situation?
 	switch replicaType {
 	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING:
 		acb.replicas[voterIndex] = append(
