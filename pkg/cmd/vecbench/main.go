@@ -213,7 +213,7 @@ func searchIndex(ctx context.Context, stopper *stop.Stopper, datasetName string)
 			searchOptions := cspann.SearchOptions{BaseBeamSize: beamSize}
 
 			// Calculate prediction set for the vector.
-			err = index.Search(ctx, &idxCtx, queryVector, &searchSet, searchOptions)
+			err = index.Search(ctx, &idxCtx, nil /* treeKey */, queryVector, &searchSet, searchOptions)
 			if err != nil {
 				panic(err)
 			}
@@ -419,7 +419,7 @@ func buildIndex(
 			vec := data.Train.At(i)
 			store.InsertVector(key, vec)
 			startMono := crtime.NowMono()
-			if err := index.Insert(ctx, idxCtx, vec, key); err != nil {
+			if err := index.Insert(ctx, idxCtx, nil /* treeKey */, vec, key); err != nil {
 				panic(err)
 			}
 			estimator.Add(startMono.Elapsed().Seconds())

@@ -53,7 +53,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
-        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
@@ -71,5 +70,6 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",
+        "@com_github_stretchr_testify//suite",
     ],
 )
