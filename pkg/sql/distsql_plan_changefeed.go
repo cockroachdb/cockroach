@@ -163,10 +163,6 @@ func PlanCDCExpression(
 		return cdcPlan, errors.AssertionFailedf("expected at least 1 span to scan")
 	}
 
-	if len(presentation) == 0 {
-		return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
-	}
-
 	if len(p.curPlan.subqueryPlans) > 0 || len(p.curPlan.cascades) > 0 ||
 		len(p.curPlan.checkPlans) > 0 || len(p.curPlan.triggers) > 0 {
 		return cdcPlan, errors.AssertionFailedf("unexpected query structure")
