@@ -128,6 +128,7 @@ func PlanCDCExpression(
 	// Walk the plan, perform sanity checks and extract information we need.
 	var spans roachpb.Spans
 	var presentation colinfo.ResultColumns
+	var hasPublicColumns bool
 
 	if err := walkPlan(ctx, p.curPlan.main.planNode, planObserver{
 		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
@@ -143,6 +144,8 @@ func PlanCDCExpression(
 						"expect scan of primary index, found scan of %d", n.index.GetID())
 				}
 				spans = n.spans
+				// Check if the scan has any public columns.
+				hasPublicColumns = len(n.desc.PublicColumns()) > 0
 			case *zeroNode:
 				return false, errors.Newf(
 					"changefeed expression %s does not match any rows", tree.AsString(cdcExpr))
@@ -164,7 +167,11 @@ func PlanCDCExpression(
 		return cdcPlan, errors.AssertionFailedf("expected at least 1 span to scan")
 	}
 
-	if len(presentation) == 0 {
+	// Even if the SELECTed columns would be empty, as long as the scan node has
+	// public columns, we'll still get at least a key out of the changefeed.
+	// However, if both result columns and public columns are empty, this is likely a bug.
+	// This additional check was added specifcaly for the scanNode case.
+	if len(presentation) == 0 && !hasPublicColumns {
 		return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
 	}
 
