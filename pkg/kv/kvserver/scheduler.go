@@ -307,21 +307,25 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 
 	for _, shard := range s.shards {
 		s.done.Add(shard.numWorkers)
+		f := func(ctx context.Context, ref *stop.Ref) {
+			defer ref.Activate(ctx).Release()
+			defer s.done.Done()
+			shard.worker(ctx, s.processor, s.metrics)
+		}
+
 		for i := 0; i < shard.numWorkers; i++ {
-			if err := stopper.RunAsyncTaskEx(ctx,
+			ctx := ctx
+			ctx, ref, err := stopper.RunAsyncTaskEx2(ctx,
 				stop.TaskOpts{
 					TaskName: "raft-worker",
 					// This task doesn't reference a parent because it runs for the server's
 					// lifetime.
 					SpanOpt: stop.SterileRootSpan,
-				},
-				func(ctx context.Context) {
-					shard.worker(ctx, s.processor, s.metrics)
-					s.done.Done()
-				},
-			); err != nil {
+				})
+			if err != nil {
 				s.done.Done()
 			}
+			go f(ctx, ref)
 		}
 	}
 }
