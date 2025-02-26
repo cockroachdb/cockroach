@@ -1089,22 +1089,40 @@ func (md *Metadata) AllViews() []cat.View {
 	return md.views
 }
 
-// getAllReferenceTables returns all the tables referenced by the metadata. This
-// includes all tables that are directly stored in the metadata in md.tables, as
-// well as recursive references from foreign keys (both referenced and
-// referencing). The tables are returned in sorted order so that later tables
-// reference earlier tables. This allows tables to be re-created in order (e.g.,
-// for statement-bundle recreate) using the output from SHOW CREATE TABLE
-// without any errors due to missing tables.
-// TODO(rytaft): if there is a cycle in the foreign key references,
-// statement-bundle recreate will still hit errors. To handle this case, we
-// would need to first create the tables without the foreign keys, then add the
-// foreign keys later.
-func (md *Metadata) getAllReferenceTables(
-	ctx context.Context, catalog cat.Catalog,
-) []cat.DataSource {
-	var tableSet intsets.Fast
-	var tableList []cat.DataSource
+// getAllReferenceTablesAndFKs returns all the tables referenced by the
+// metadata. This includes all tables that are directly stored in the metadata
+// in md.tables, as well as recursive references from foreign keys (both
+// referenced and referencing).
+//
+// shouldIncludeTable controls whether a particular table should be included. If
+// a table isn't included, then all its reference tables aren't included either.
+//
+// The tables are returned in sorted order so that later tables reference
+// earlier tables. This allows tables to be re-created in order (e.g., for
+// statement-bundle recreate) using the output from SHOW CREATE TABLE without
+// any errors due to missing tables.
+//
+// The second return parameter is a set of ALTER TABLE ... ADD FOREIGN KEY stmts
+// that includes only FKs for which both the origin and the reference tables are
+// included in the result.
+func (md *Metadata) getAllReferenceTablesAndFKs(
+	ctx context.Context,
+	catalog cat.Catalog,
+	shouldIncludeTable func(table cat.Table, directlyReferenced intsets.Fast) bool,
+	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
+) ([]cat.Table, []*tree.AlterTable) {
+	// directlyReferenced contains IDs of tables that are directly referenced by
+	// the metadata.
+	var directlyReferenced intsets.Fast
+	for _, table := range md.tables {
+		directlyReferenced.Add(int(table.Table.ID()))
+	}
+	// tableSeen tracks which tables we've already processed.
+	var tableSeen intsets.Fast
+	var result []cat.Table
+	// idToTable is a mapping from table ID to the table itself. Only tables
+	// included into result are present here.
+	idToTable := make(map[cat.StableID]cat.Table)
 	var addForeignKeyReferencedTables func(tab cat.Table)
 	var addForeignKeyReferencingTables func(tab cat.Table)
 	// handleRelatedTables is a helper function that processes the given table
@@ -1112,8 +1130,8 @@ func (md *Metadata) getAllReferenceTables(
 	// table of the given one, including via transient (recursive) FK
 	// relationships.
 	handleRelatedTables := func(tabID cat.StableID) {
-		if !tableSet.Contains(int(tabID)) {
-			tableSet.Add(int(tabID))
+		if !tableSeen.Contains(int(tabID)) {
+			tableSeen.Add(int(tabID))
 			ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
 			if err != nil {
 				// This is a best-effort attempt to get all the tables, so don't
@@ -1126,10 +1144,16 @@ func (md *Metadata) getAllReferenceTables(
 				// error.
 				return
 			}
+			if !shouldIncludeTable(refTab, directlyReferenced) {
+				// The caller is not interested in this table, so we won't
+				// include any of its dependencies either.
+				return
+			}
+			idToTable[tabID] = refTab
 			// We want to include all tables that we reference before adding
 			// ourselves, followed by all tables that reference us.
 			addForeignKeyReferencedTables(refTab)
-			tableList = append(tableList, ds)
+			result = append(result, refTab)
 			addForeignKeyReferencingTables(refTab)
 		}
 	}
@@ -1146,32 +1170,89 @@ func (md *Metadata) getAllReferenceTables(
 		}
 	}
 	for i := range md.tables {
-		tabMeta := md.tables[i]
-		tabID := tabMeta.Table.ID()
-		if !tableSet.Contains(int(tabID)) {
-			tableSet.Add(int(tabID))
+		table := md.tables[i].Table
+		tabID := table.ID()
+		if !tableSeen.Contains(int(tabID)) {
+			tableSeen.Add(int(tabID))
+			if !shouldIncludeTable(table, directlyReferenced) {
+				// The caller is not interested in this table, so we won't
+				// include any of its dependencies either.
+				continue
+			}
+			idToTable[tabID] = table
 			// The order of addition here is important: namely, we want to add
 			// all tables that we reference first, then ourselves, and only then
 			// tables that reference us.
-			addForeignKeyReferencedTables(tabMeta.Table)
-			tableList = append(tableList, tabMeta.Table)
-			addForeignKeyReferencingTables(tabMeta.Table)
+			addForeignKeyReferencedTables(table)
+			result = append(result, table)
+			addForeignKeyReferencingTables(table)
 		}
 	}
-	return tableList
+	// Now that we've accumulated all tables, populate the ADD FOREIGN KEY
+	// constraints array.
+	var addFKs []*tree.AlterTable
+	for _, origTable := range result {
+		for i := 0; i < origTable.OutboundForeignKeyCount(); i++ {
+			fk := origTable.OutboundForeignKey(i)
+			refTable, ok := idToTable[fk.ReferencedTableID()]
+			if !ok {
+				// The referenced table is not included in the result, so we
+				// skip this FK constraint.
+				continue
+			}
+			fromCols, toCols := make(tree.NameList, fk.ColumnCount()), make(tree.NameList, fk.ColumnCount())
+			for j := range fromCols {
+				fromCols[j] = origTable.Column(fk.OriginColumnOrdinal(origTable, j)).ColName()
+				toCols[j] = refTable.Column(fk.ReferencedColumnOrdinal(refTable, j)).ColName()
+			}
+			origTableName, err := fullyQualifiedName(origTable)
+			if err != nil {
+				continue
+			}
+			refTableName, err := fullyQualifiedName(refTable)
+			if err != nil {
+				continue
+			}
+			addFKs = append(addFKs, &tree.AlterTable{
+				Table: origTableName.ToUnresolvedObjectName(),
+				Cmds: []tree.AlterTableCmd{
+					&tree.AlterTableAddConstraint{
+						ConstraintDef: &tree.ForeignKeyConstraintTableDef{
+							Name:     tree.Name(fk.Name()),
+							Table:    refTableName,
+							FromCols: fromCols,
+							ToCols:   toCols,
+							Actions: tree.ReferenceActions{
+								Delete: fk.DeleteReferenceAction(),
+								Update: fk.UpdateReferenceAction(),
+							},
+							Match: fk.MatchMethod(),
+						},
+					},
+				},
+			})
+		}
+	}
+	return result, addFKs
 }
 
-// AllDataSourceNames returns the fully qualified names of all datasources
+// AllDataSourceNames returns the fully qualified names of all data sources
 // referenced by the metadata. This includes all tables, sequences, and views
 // that are directly stored in the metadata, as well as tables that are
 // recursively referenced from foreign keys (both referenced and referencing).
-// If includeVirtualTables is false, then virtual tables are not returned.
+//
+// shouldIncludeTable controls whether a particular table should be included. If
+// a table isn't included, then all its reference tables aren't included either.
+//
+// addFKs return parameter is a set of ALTER TABLE ... ADD FOREIGN KEY stmts
+// that includes only FKs for which both the origin and the reference tables are
+// included in the result.
 func (md *Metadata) AllDataSourceNames(
 	ctx context.Context,
 	catalog cat.Catalog,
+	shouldIncludeTable func(table cat.Table, directlyReferenced intsets.Fast) bool,
 	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
-	includeVirtualTables bool,
-) (tables, sequences, views []tree.TableName, _ error) {
+) (tables, sequences, views []tree.TableName, addFKs []*tree.AlterTable, _ error) {
 	// Catalog objects can show up multiple times in our lists, so deduplicate
 	// them.
 	seen := make(map[tree.TableName]struct{})
@@ -1192,37 +1273,26 @@ func (md *Metadata) AllDataSourceNames(
 		return result, nil
 	}
 	var err error
-	refTables := md.getAllReferenceTables(ctx, catalog)
-	if !includeVirtualTables {
-		// Update refTables in-place to remove all virtual tables.
-		i := 0
-		for j := 0; j < len(refTables); j++ {
-			if t, ok := refTables[j].(cat.Table); !ok || !t.IsVirtualTable() {
-				refTables[i] = refTables[j]
-				i++
-			}
-		}
-		refTables = refTables[:i]
-	}
+	refTables, addFKs := md.getAllReferenceTablesAndFKs(ctx, catalog, shouldIncludeTable, fullyQualifiedName)
 	tables, err = getNames(len(refTables), func(i int) cat.DataSource {
 		return refTables[i]
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	sequences, err = getNames(len(md.sequences), func(i int) cat.DataSource {
 		return md.sequences[i]
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	views, err = getNames(len(md.views), func(i int) cat.DataSource {
 		return md.views[i]
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	return tables, sequences, views, nil
+	return tables, sequences, views, addFKs, nil
 }
 
 // WithID uniquely identifies a With expression within the scope of a query.

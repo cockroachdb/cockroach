@@ -568,17 +568,38 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	buf.Reset()
 
+	// We only want to include the FK referenced and referencing tables if
+	// the stmt performs a mutation.
+	// TODO(yuzefovich): support omitting FK references for redacted bundles.
+	// TODO(#142006): be smarter about which tables we include depending on the
+	// mutation stmt.
+	includeAllFKReferenceTables := b.plan.flags.IsSet(planFlagContainsMutation) || b.flags.RedactValues
+
 	// TODO(#27611): when we support stats on virtual tables, we'll need to
 	// update this logic to not include virtual tables into schema.sql but still
 	// create stats files for them.
 	var tables, sequences, views []tree.TableName
+	var addFKs []*tree.AlterTable
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		tables, sequences, views, err = mem.Metadata().AllDataSourceNames(
-			ctx, b.plan.catalog, func(ds cat.DataSource) (cat.DataSourceName, error) {
+		tables, sequences, views, addFKs, err = mem.Metadata().AllDataSourceNames(
+			ctx,
+			b.plan.catalog,
+			func(table cat.Table, directlyReferenced intsets.Fast) bool {
+				if table.IsVirtualTable() {
+					// Omit virtual tables since we don't need to create them.
+					return false
+				}
+				if includeAllFKReferenceTables {
+					return true
+				}
+				// For read-only queries, when unredacted bundle is requested,
+				// only include directly referenced by metadata tables.
+				return directlyReferenced.Contains(int(table.ID()))
+			},
+			func(ds cat.DataSource) (cat.DataSourceName, error) {
 				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, ds, txn)
 			},
-			false, /* includeVirtualTables */
 		)
 		return err
 	})
@@ -665,6 +686,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		blankLine()
 		if err = c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
 			b.printError(fmt.Sprintf("-- error getting schema for table %s: %v", tables[i].FQString(), err), &buf)
+		}
+	}
+	if !b.flags.RedactValues {
+		// PrintCreateTable above omitted the FK constraints from the schema, so
+		// we need to add them separately.
+		for _, addFK := range addFKs {
+			fmt.Fprintf(&buf, "%s;\n", addFK)
 		}
 	}
 	for i := range views {
@@ -980,10 +1008,14 @@ func printCreateStatement(w io.Writer, dbName tree.Name, createStatement string)
 	fmt.Fprintf(w, "%s;\n", createStatement)
 }
 
+// PrintCreateTable writes the CREATE TABLE stmt into w. If redactValues is
+// false, then the foreign key constraints are **not** included in the output,
+// and the output is unredacted; if redactValues is true, then the FK constraint
+// are included and the output is redacted.
 func (c *stmtEnvCollector) PrintCreateTable(
 	w io.Writer, tn *tree.TableName, redactValues bool,
 ) error {
-	var formatOption string
+	formatOption := " WITH IGNORE_FOREIGN_KEYS"
 	if redactValues {
 		formatOption = " WITH REDACT"
 	}
