@@ -181,7 +181,9 @@ func TestRegionLivenessProber(t *testing.T) {
 			// Attempt to keep on pushing out the unavailable_at time,
 			// these calls should be no-ops.
 			blockProbeQuery.Store(true)
-			require.NoError(t, regionProber.ProbeLiveness(ctx, expectedRegions[1]))
+			if err := regionProber.ProbeLiveness(ctx, expectedRegions[1]); err != nil {
+				return err
+			}
 			// Check if the time has expired yet.
 			regions, err := regionProber.QueryLiveness(ctx, txn)
 			if err != nil {
