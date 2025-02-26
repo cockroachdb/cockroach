@@ -864,6 +864,7 @@ go_test(
         "//pkg/sql/privilege",
         "//pkg/sql/querycache",
         "//pkg/sql/randgen",
+        "//pkg/sql/regions",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
