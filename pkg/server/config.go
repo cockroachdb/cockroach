@@ -869,9 +869,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	if fileCache != nil {
 		// Unref the table cache now that the engines hold references to it.
-		if err := fileCache.Unref(); err != nil {
-			return nil, err
-		}
+		fileCache.Unref()
 	}
 
 	log.Infof(ctx, "%d storage engine%s initialized",
