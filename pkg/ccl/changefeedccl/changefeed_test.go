@@ -10774,3 +10774,27 @@ func assertReasonableMVCCTimestamp(t *testing.T, ts string) {
 	now := timeutil.Now()
 	require.GreaterOrEqual(t, epochNanos, now.Add(-1*time.Hour).UnixNano())
 }
+
+// TestChangefeedAsSelectForEmptyTable verifies that a changefeed with the diff option
+// correctly captures changes on an initially empty table. It ensures changefeed
+// behavior is consistent when tables start with no data.
+func TestChangefeedAsSelectForEmptyTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE empty()`)
+		var rowid int
+		sqlDB.QueryRow(t, `INSERT INTO empty DEFAULT VALUES RETURNING rowid`).Scan(&rowid)
+
+		empty := feed(t, f, `CREATE CHANGEFEED AS SELECT * FROM empty`)
+		defer closeFeed(t, empty)
+
+		assertPayloads(t, empty, []string{
+			fmt.Sprintf(`empty: [%d]->{}`, rowid),
+		})
+	}
+
+	cdcTest(t, testFn)
+}
