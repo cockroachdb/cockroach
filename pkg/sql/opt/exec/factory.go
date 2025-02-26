@@ -248,6 +248,7 @@ type ExplainEnvData struct {
 	Tables    []tree.TableName
 	Sequences []tree.TableName
 	Views     []tree.TableName
+	AddFKs    []*tree.AlterTable
 }
 
 // KVOption represents information about a statement option
