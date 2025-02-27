@@ -267,6 +267,10 @@ type ClientOperationConfig struct {
 	AddSSTable int
 	// Barrier is an operation that waits for in-flight writes to complete.
 	Barrier int
+
+	// FlushLockTable is an operation that moves unreplicated locks in the
+	// in-memory lock table into the
+	FlushLockTable int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -407,6 +411,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		DeleteRangeUsingTombstone:                          1,
 		AddSSTable:                                         1,
 		Barrier:                                            1,
+		FlushLockTable:                                     1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -542,6 +547,11 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.CommitBatchOps.Barrier = 0
 	config.Ops.ClosureTxn.TxnClientOps.Barrier = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.Barrier = 0
+
+	config.Ops.Batch.Ops.FlushLockTable = 0
+	config.Ops.ClosureTxn.CommitBatchOps.FlushLockTable = 0
+	config.Ops.ClosureTxn.TxnClientOps.FlushLockTable = 0
+	config.Ops.ClosureTxn.TxnBatchOps.Ops.FlushLockTable = 0
 	return config
 }
 
@@ -839,6 +849,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 	addOpGen(allowed, randAddSSTable, c.AddSSTable)
 	addOpGen(allowed, randBarrier, c.Barrier)
+	addOpGen(allowed, randFlushLockTable, c.FlushLockTable)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -1142,6 +1153,19 @@ func randBarrier(g *generator, rng *rand.Rand) Operation {
 		key, endKey = randSpan(rng)
 	}
 	return barrier(key, endKey, withLAI)
+}
+
+func randFlushLockTable(g *generator, rng *rand.Rand) Operation {
+	// FlushLockTable can't span multiple ranges. We want to test a combination of
+	// requests that span the entire range and those that span part of a range.
+	key, endKey := randRangeSpan(rng, g.currentSplits)
+
+	wholeRange := rng.Float64() < 0.5
+	if !wholeRange {
+		key = randKeyBetween(rng, key, endKey)
+	}
+
+	return flushLockTable(key, endKey)
 }
 
 func randScan(g *generator, rng *rand.Rand) Operation {
@@ -1983,6 +2007,13 @@ func barrier(key, endKey string, withLAI bool) Operation {
 		Key:                   []byte(key),
 		EndKey:                []byte(endKey),
 		WithLeaseAppliedIndex: withLAI,
+	}}
+}
+
+func flushLockTable(key, endKey string) Operation {
+	return Operation{FlushLockTable: &FlushLockTableOperation{
+		Key:    []byte(key),
+		EndKey: []byte(endKey),
 	}}
 }
 
