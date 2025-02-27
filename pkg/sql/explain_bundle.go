@@ -537,6 +537,13 @@ func (b *stmtBundleBuilder) printError(errString string, buf *bytes.Buffer) {
 	b.errorStrings = append(b.errorStrings, errString)
 }
 
+var stmtBundleIncludeAllFKReferences = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.statement_bundle.include_all_references.enabled",
+	"controls whether all FK reference tables are included",
+	false,
+)
+
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	c := makeStmtEnvCollector(ctx, b.p, b.ie)
 
@@ -569,12 +576,10 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	buf.Reset()
 
-	// We only want to include the FK referenced and referencing tables if
-	// the stmt performs a mutation.
+	// We currently don't support SHOW CREATE TABLE ... with both REDACT and
+	// IGNORE_FOREIGN_KEYS options, so we'll include all FK reference tables.
 	// TODO(yuzefovich): support omitting FK references for redacted bundles.
-	// TODO(#142006): be smarter about which tables we include depending on the
-	// mutation stmt.
-	includeAllFKReferenceTables := b.plan.flags.IsSet(planFlagContainsMutation) || b.flags.RedactValues
+	includeAll := stmtBundleIncludeAllFKReferences.Get(b.sv) || b.flags.RedactValues
 
 	// TODO(#27611): when we support stats on virtual tables, we'll need to
 	// update this logic to not include virtual tables into schema.sql but still
@@ -601,6 +606,14 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			return names, nil
 		}
 
+		// TODO(yuzefovich): consider refactoring opt.Metadata so that we could
+		// know exactly when tables are INSERTed into, DELETEd from, etc.
+		hasMutation := b.plan.flags.IsSet(planFlagContainsMutation)
+		hasDelete := b.plan.flags.IsSet(planFlagContainsDelete)
+		hasInsert := b.plan.flags.IsSet(planFlagContainsInsert)
+		hasUpdate := b.plan.flags.IsSet(planFlagContainsUpdate)
+		hasUpsert := b.plan.flags.IsSet(planFlagContainsUpsert)
+
 		// referencedByMetadata contains IDs of tables that are referenced by
 		// the metadata. These include all tables explicitly mentioned in the
 		// query as well as tables against which we need to perform FK
@@ -615,23 +628,133 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			ctx,
 			b.plan.catalog,
 			mem.Metadata().AllTables(),
-			func(table cat.Table, _ cat.ForeignKeyConstraint) (recurse bool) {
-				return includeAllFKReferenceTables || referencedByMetadata.Contains(int(table.ID()))
+			func(table cat.Table, fk cat.ForeignKeyConstraint) (recurse bool) {
+				if includeAll {
+					return true
+				}
+				if referencedByMetadata.Contains(int(table.ID())) {
+					// For read-only queries we don't want to recurse into the
+					// referenced by metadata tables.
+					return hasMutation
+				}
+				if fk == nil {
+					// This should never happen since nil FK parameter is
+					// provided only for referenced by metadata tables, but
+					// we'll lean on the safe side.
+					return true
+				}
+				// For the code below, we'll use the following example to
+				// indicate the reasoning:
+				//   CREATE TABLE parent (pk INT PRIMARY KEY, v INT);
+				//   CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));
+				//   CREATE TABLE grandchild (pk INT PRIMARY KEY, fk INT REFERENCES child(pk));
+				if table.ID() == fk.ReferencedTableID() {
+					// The table we're considering for recursing into is a
+					// referenced table of a FK constraint where the referencing
+					// (origin) table has already been visited.
+					//
+					// In our example, we've already visited 'child' and are
+					// considering recursing into 'parent', but we never want
+					// to recurse into it.
+					return false
+				}
+				// The table we're considering for recursing into is an origin
+				// table of a FK constraint where the referenced table has
+				// already been visited.
+				//
+				// In our example, we've already visited 'parent' and are
+				// considering recursing into 'child'.
+				if hasDelete && fk.DeleteReferenceAction() == tree.Cascade {
+					// We deleted from 'parent', and we have the ON DELETE
+					// CASCADE action of the 'child' FK, so we need to recurse
+					// in order to additionally visit 'grandchild'.
+					return true
+				}
+				if (hasUpdate || hasUpsert) && fk.UpdateReferenceAction() == tree.Cascade {
+					// We updated the 'parent', and we have the ON UPDATE
+					// CASCADE action of the 'child' FK, so we need to recurse
+					// in order to additionally visit 'grandchild'.
+					//
+					// We don't know whether UPSERT resulted in an UPDATE or an
+					// INSERT, but we'll assume the former to be on the safer
+					// side (i.e. visit more).
+					return true
+				}
+				return false
 			},
-			func(table cat.Table, _ cat.ForeignKeyConstraint) {
+			func(table cat.Table, fk cat.ForeignKeyConstraint) {
 				if table.IsVirtualTable() {
 					return
 				}
-				// For read-only queries, when unredacted bundle is requested,
-				// only include referenced by the metadata tables.
-				if !includeAllFKReferenceTables && !referencedByMetadata.Contains(int(table.ID())) {
+				// The 'include' value - when the callback returns - controls
+				// whether the table is included into the result.
+				var include bool
+				defer func() {
+					if include {
+						if refTableIncluded.Contains(int(table.ID())) {
+							return
+						}
+						refTables = append(refTables, table)
+						refTableIncluded.Add(int(table.ID()))
+					}
+				}()
+				if includeAll {
+					include = true
 					return
 				}
-				if refTableIncluded.Contains(int(table.ID())) {
+				// We always want to include directly referenced tables.
+				// TODO(yuzefovich): note that some of the FK references are
+				// already referenced by the metadata, so we will end up
+				// including an extra "layer" of FK references. Avoiding that
+				// seems quite tricky.
+				if referencedByMetadata.Contains(int(table.ID())) {
+					include = true
 					return
 				}
-				refTables = append(refTables, table)
-				refTableIncluded.Add(int(table.ID()))
+				if fk == nil {
+					// This should never happen since nil FK parameter is
+					// provided only for referenced by metadata tables, but
+					// we'll lean on the safe side.
+					include = true
+					return
+				}
+				// For the code below, we'll use the following example to
+				// indicate the reasoning:
+				//   CREATE TABLE parent (pk INT PRIMARY KEY, v INT);
+				//   CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));
+				if table.ID() == fk.ReferencedTableID() {
+					// The table we're visiting is a referenced table of a FK
+					// constraint where the referencing (origin) table has
+					// already been visited.
+					//
+					// In our example, we've already visited 'child' and are
+					// visiting 'parent'.
+					//
+					// When inserting into 'child', we need to perform the FK
+					// check in 'parent', so we want to include the latter.
+					//
+					// The same reasoning applies to updates and upserts.
+					// TODO(yuzefovich): for updates we only need to include the
+					// referenced table if the FK columns in the origin are
+					// actually modified, but it seems tricky to get that logic
+					// right.
+					//
+					// When deleting from 'child', 'parent' is unaffected, so no
+					// need to include 'parent'.
+					include = hasInsert || hasUpdate || hasUpsert
+					return
+				}
+				// The table we're visiting is an origin table of a FK
+				// constraint where the referenced table has already been
+				// visited.
+				//
+				// In our example, we've already visited 'parent' and are
+				// visiting 'child'.
+				//
+				// Whenever 'parent' is modified, we always need to at least
+				// perform constraint check, so we always want to include
+				// 'child' (unless we have an INSERT).
+				include = hasDelete || hasUpdate || hasUpsert
 			},
 		)
 		addFKs = opt.GetAllFKsAmongTables(refTables, func(t cat.Table) (tree.TableName, error) {
