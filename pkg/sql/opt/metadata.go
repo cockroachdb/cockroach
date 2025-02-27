@@ -1119,21 +1119,44 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 	for _, table := range md.tables {
 		directlyReferenced.Add(int(table.Table.ID()))
 	}
-	// tableSeen tracks which tables we've already processed.
-	var tableSeen intsets.Fast
+	// tableRecursed tracks which tables we've already recursed into. Once a
+	// table is recursed into, it is considered "fully processed" and we
+	// effectively ignore it from now on. If a table is included into the result
+	// but is not recursed into, we still might want to recurse into it later
+	// (because we might get to it via a different FK that requires recursing).
+	var tableRecursed intsets.Fast
 	var result []cat.Table
 	// idToTable is a mapping from table ID to the table itself. Only tables
 	// included into result are present here.
 	idToTable := make(map[cat.StableID]cat.Table)
 	var addForeignKeyReferencedTables func(tab cat.Table)
 	var addForeignKeyReferencingTables func(tab cat.Table)
+	// processTable is a helper function that "visits" the given table.
+	processTable := func(table cat.Table, recurse bool) {
+		tabID := table.ID()
+		if recurse {
+			tableRecursed.Add(int(tabID))
+		}
+		// The order of addition here is important: namely, we want to add
+		// all tables that we reference first, then ourselves, and only then
+		// tables that reference us.
+		if recurse {
+			addForeignKeyReferencedTables(table)
+		}
+		if _, alreadyIncluded := idToTable[tabID]; !alreadyIncluded {
+			idToTable[tabID] = table
+			result = append(result, table)
+		}
+		if recurse {
+			addForeignKeyReferencingTables(table)
+		}
+	}
 	// handleRelatedTables is a helper function that processes the given table
-	// if it hasn't been handled yet by adding all referenced and referencing
-	// table of the given one, including via transient (recursive) FK
-	// relationships.
+	// if it hasn't been recursed into yet by adding the necessary referenced
+	// and referencing table of the given one, including via transient
+	// (recursive) FK relationships.
 	handleRelatedTables := func(tabID cat.StableID, fk cat.ForeignKeyConstraint) {
-		if !tableSeen.Contains(int(tabID)) {
-			tableSeen.Add(int(tabID))
+		if !tableRecursed.Contains(int(tabID)) {
 			ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
 			if err != nil {
 				// This is a best-effort attempt to get all the tables, so don't
@@ -1152,16 +1175,7 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 				// include any of its dependencies either.
 				return
 			}
-			idToTable[tabID] = refTab
-			// We want to include all tables that we reference before adding
-			// ourselves, followed by all tables that reference us.
-			if recurse {
-				addForeignKeyReferencedTables(refTab)
-			}
-			result = append(result, refTab)
-			if recurse {
-				addForeignKeyReferencingTables(refTab)
-			}
+			processTable(refTab, recurse)
 		}
 	}
 	addForeignKeyReferencedTables = func(tab cat.Table) {
@@ -1176,28 +1190,18 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 			handleRelatedTables(fk.OriginTableID(), fk)
 		}
 	}
+
 	for i := range md.tables {
 		table := md.tables[i].Table
 		tabID := table.ID()
-		if !tableSeen.Contains(int(tabID)) {
-			tableSeen.Add(int(tabID))
+		if !tableRecursed.Contains(int(tabID)) {
 			include, recurse := shouldIncludeTable(table, directlyReferenced, nil /* fk */)
 			if !include {
 				// The caller is not interested in this table, so we won't
 				// include any of its dependencies either.
 				continue
 			}
-			idToTable[tabID] = table
-			// The order of addition here is important: namely, we want to add
-			// all tables that we reference first, then ourselves, and only then
-			// tables that reference us.
-			if recurse {
-				addForeignKeyReferencedTables(table)
-			}
-			result = append(result, table)
-			if recurse {
-				addForeignKeyReferencingTables(table)
-			}
+			processTable(table, recurse)
 		}
 	}
 	// Now that we've accumulated all tables, populate the ADD FOREIGN KEY

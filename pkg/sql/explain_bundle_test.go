@@ -483,6 +483,18 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				tableName:     "parent",
 				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 3 /* numPostqueries */),
 			},
+			{
+				// When we have an FK cycle, we still want to pull in most
+				// tables.
+				name:      "DELETE FROM parent, FK cycle",
+				query:     "DELETE FROM parent WHERE true",
+				setup:     []string{addChildFKCascade, "ALTER TABLE parent ADD CONSTRAINT fk FOREIGN KEY (v) REFERENCES child1(pk) ON DELETE CASCADE"},
+				cleanup:   []string{dropChildFK, "ALTER TABLE parent DROP CONSTRAINT fk"},
+				tableName: "parent",
+				// Note that here the CASCADE is short-circuited, so we omit its
+				// postquery.
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 1 /* numPostqueries */),
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				defer func() {

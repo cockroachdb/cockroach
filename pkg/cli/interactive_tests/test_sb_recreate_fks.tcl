@@ -183,6 +183,19 @@ eexpect root@
 
 file_exists "stmt-bundle-$w5.zip"
 
+# This bundle will pull in all tables too.
+send "EXPLAIN ANALYZE (DEBUG) DELETE FROM parent WHERE true;\r"
+eexpect "Statement diagnostics bundle generated."
+expect -re "SQL shell: \\\\statement-diag download (\\d+)" {
+  set w6 $expect_out(1,string)
+}
+
+send "\\statement-diag download $w6\r"
+eexpect "Bundle saved to"
+eexpect root@
+
+file_exists "stmt-bundle-$w6.zip"
+
 send_eof
 eexpect eof
 
@@ -346,5 +359,17 @@ eexpect "defaultdb>"
 send_eof
 eexpect eof
 
+set python "python2.7"
+set pyfile [file join [file dirname $argv0] unzip.py]
+system "mkdir bundle_w6"
+system "$python $pyfile stmt-bundle-$w6.zip bundle_w6"
+
+spawn $argv debug sb recreate bundle_w6
+eexpect "Statement was:"
+eexpect "DELETE"
+eexpect "defaultdb>"
+
+send_eof
+eexpect eof
 
 end_test
