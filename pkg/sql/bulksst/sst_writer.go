@@ -7,8 +7,10 @@ package bulksst
 
 import (
 	"context"
+	"math/rand"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -28,6 +30,7 @@ type Writer struct {
 	mu            sync.Mutex
 	kvData        []byte
 	kv            []storage.MVCCKeyValue
+	rowPicker     *rand.Rand
 	fileID        int
 	fileAllocator FileAllocator
 	settings      *cluster.Settings
@@ -55,6 +58,7 @@ func NewUnsortedSSTBatcher(settings *cluster.Settings, allocator FileAllocator) 
 		kv:            make([]storage.MVCCKeyValue, 0, BatchKeyCount.Get(&settings.SV)),
 		fileAllocator: allocator,
 		settings:      settings,
+		rowPicker:     rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -67,9 +71,9 @@ func (s *Writer) SetWriteTS(ts hlc.Timestamp) {
 
 // flushSST allocates a new file and flushes all KVs. The caller is supposed
 // to sort the input.
-func (s *Writer) flushSST(ctx context.Context, span roachpb.Span) error {
+func (s *Writer) flushSST(ctx context.Context, span roachpb.Span, rowSample roachpb.Key) error {
 	// Allocate a new file in storage with the next ID.
-	sstFile, closer, err := s.fileAllocator.AddFile(ctx, s.fileID, span)
+	sstFile, closer, err := s.fileAllocator.AddFile(ctx, s.fileID, span, rowSample, uint64(len(s.kvData)))
 	if err != nil {
 		return err
 	}
@@ -111,11 +115,12 @@ func (s *Writer) flushBuffer(ctx context.Context) error {
 	sort.Slice(s.kv, func(i, j int) bool {
 		return s.kv[i].Key.Compare(s.kv[j].Key) < 0
 	})
-	// Add a SSTable based on this data.
+	// Pick a random key to sample.
+	rowSample := s.kv[s.rowPicker.Intn(len(s.kv))].Key
 	start := s.kv[0].Key.Clone()
 	end := s.kv[len(s.kv)-1].Key.Next().Clone()
 	span := roachpb.Span{Key: start.Key, EndKey: end.Key}
-	if err := s.flushSST(ctx, span); err != nil {
+	if err := s.flushSST(ctx, span, rowSample.Key); err != nil {
 		return err
 	}
 	// If the user has set a callback, call it with the summary.

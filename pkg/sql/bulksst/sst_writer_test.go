@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -59,13 +60,14 @@ func TestBulkSSTWriter(t *testing.T) {
 	// Next validate each SST file.
 	set := intsets.MakeFast()
 	lastFileMin := -1
-	for _, fileName := range fileAllocator.GetFileList() {
+	sstFiles := fileAllocator.GetFileList()
+	for idx, sstInfo := range sstFiles.SST {
 		currFileMin := -1
 		currFileMax := -1
-		values := readKeyValuesFromSST(t, fs, fileName.Uri)
+		values := readKeyValuesFromSST(t, fs, sstInfo.URI)
 		// Validate the span of the SST file.
-		require.Equal(t, fileName.StartKey, string(values[0].Key.Key))
-		require.Equal(t, fileName.EndKey, string(values[len(values)-1].Key.Key))
+		require.Equal(t, sstInfo.StartKey, string(values[0].Key.Key))
+		require.Equal(t, sstInfo.EndKey, string(values[len(values)-1].Key.Key))
 		for _, value := range values {
 			keyString := string(value.Key.Key)
 			var num int
@@ -80,6 +82,13 @@ func TestBulkSSTWriter(t *testing.T) {
 				currFileMax = num
 			}
 		}
+		// Validate the row sample is within the span of the SST file.
+		fileSpan := roachpb.Span{
+			Key:    roachpb.Key(sstInfo.StartKey),
+			EndKey: roachpb.Key(sstInfo.EndKey).Next(),
+		}
+		require.True(t, fileSpan.ContainsKey(roachpb.Key(sstFiles.RowSamples[idx])),
+			"row sample key should be within the span of the SST files span: %v, row sample: %v", fileSpan, sstFiles.RowSamples[idx])
 		// Ensure continuity between SSTs, where the minimum on the
 		// previous file should continue to this file.
 		if lastFileMin > 0 {
@@ -89,7 +98,7 @@ func TestBulkSSTWriter(t *testing.T) {
 	}
 	// Ensure we have all the inserted key / values.
 	require.Equal(t, 8192, set.Len())
-	require.Greaterf(t, len(fileAllocator.GetFileList()), 100, "expected multiple files")
+	require.Greaterf(t, len(fileAllocator.GetFileList().SST), 100, "expected multiple files")
 	require.Zero(t, expectedSet.Difference(set).Len())
 }
 

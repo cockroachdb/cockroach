@@ -52,7 +52,7 @@ var csvOutputTypes = []*types.T{
 var distributedMergeOutputTypes = []*types.T{
 	types.Bytes,
 	types.Bytes,
-	types.BytesArray,
+	types.Bytes,
 }
 
 const readImportDataProcessorName = "readImportDataProcessor"
@@ -136,7 +136,7 @@ type readImportDataProcessor struct {
 
 	importErr   error
 	summary     *kvpb.BulkOpSummary
-	files       []bulksst.FileInfo
+	files       *bulksst.SSTFiles
 	currentFile int64
 }
 
@@ -235,21 +235,15 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 	// When using distributed merge, the processor will emit the SST's and their
 	// start and end keys.
 	var fileDataums rowenc.EncDatumRow
-	if len(idp.files) > 0 {
-		sstInfo := tree.NewDArray(types.Bytes)
-		for _, file := range idp.files {
-			fileBytes, err := protoutil.Marshal(&file)
-			if err != nil {
-				idp.MoveToDraining(err)
-				return nil, idp.DrainHelper()
-			}
-			if err := sstInfo.Append(tree.NewDBytes(tree.DBytes(fileBytes))); err != nil {
-				idp.MoveToDraining(err)
-				return nil, idp.DrainHelper()
-			}
+	if idp.files != nil {
+		bytes, err := protoutil.Marshal(idp.files)
+		if err != nil {
+			idp.MoveToDraining(err)
+			return nil, idp.DrainHelper()
 		}
+		sstInfo := tree.NewDBytes(tree.DBytes(bytes))
 		fileDataums = rowenc.EncDatumRow{
-			rowenc.DatumToEncDatum(types.BytesArray, sstInfo),
+			rowenc.DatumToEncDatum(types.Bytes, sstInfo),
 		}
 	}
 	return append(rowenc.EncDatumRow{
@@ -392,7 +386,7 @@ func ingestKvs(
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
-) (*kvpb.BulkOpSummary, []bulksst.FileInfo, error) {
+) (*kvpb.BulkOpSummary, *bulksst.SSTFiles, error) {
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
 
@@ -696,12 +690,15 @@ func ingestKvs(
 
 	addedSummary := pkIndexAdder.GetSummary()
 	addedSummary.Add(indexAdder.GetSummary())
-	var files []bulksst.FileInfo
+	var files *bulksst.SSTFiles
 	if useDistributedMerge {
 		files = pkFileAllocator.GetFileList()
-		files = append(files, indexFileAllocator.GetFileList()...)
-		for i := range files {
-			files[i].Uri = uriBase + files[i].Uri
+		indexFile := indexFileAllocator.GetFileList()
+		files.RowSamples = append(files.RowSamples, indexFile.RowSamples...)
+		files.TotalSize += indexFile.TotalSize
+		files.SST = append(files.SST, indexFile.SST...)
+		for i := range files.SST {
+			files.SST[i].URI = uriBase + files.SST[i].URI
 		}
 	}
 	return &addedSummary, files, nil

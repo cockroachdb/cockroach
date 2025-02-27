@@ -103,7 +103,7 @@ func distImport(
 		useDistributedMerge := UseDistributedMergeForImport.Get(&execCtx.ExecCfg().Settings.SV)
 		outputTypes := []*types.T{types.Bytes, types.Bytes}
 		if useDistributedMerge {
-			outputTypes = []*types.T{types.Bytes, types.Bytes, types.BytesArray}
+			outputTypes = []*types.T{types.Bytes, types.Bytes, types.Bytes}
 		}
 		p.AddNoInputStage(
 			corePlacement,

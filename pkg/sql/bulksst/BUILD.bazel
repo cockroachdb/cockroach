@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -6,6 +8,7 @@ go_library(
         "sst_file_allocator.go",
         "sst_writer.go",
     ],
+    embed = [":bulksst_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/bulksst",
     visibility = ["//visibility:public"],
     deps = [
@@ -15,7 +18,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/execinfrapb",
         "//pkg/storage",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_pebble//objstorage",
@@ -33,6 +35,7 @@ go_test(
     deps = [
         ":bulksst",
         "//pkg/base",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -46,4 +49,21 @@ go_test(
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+proto_library(
+    name = "bulksst_proto",
+    srcs = ["sst_info.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "bulksst_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/bulksst",
+    proto = ":bulksst_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
