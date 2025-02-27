@@ -51,6 +51,10 @@ type EngineMetrics struct {
 	// FailureCount counts non-retriable errors in open transactions.
 	FailureCount *metric.Counter
 
+	// StatementTimeoutCount tracks the number of statement failures due
+	// to exceeding the statement timeout.
+	StatementTimeoutCount *metric.Counter
+
 	// FullTableOrIndexScanCount counts the number of full table or index scans.
 	FullTableOrIndexScanCount *metric.Counter
 

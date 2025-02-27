@@ -165,9 +165,9 @@ func (ex *connExecutor) execStmt(
 				return err
 			})
 		}
-		switch ev.(type) {
-		case eventNonRetriableErr:
-			ex.recordFailure()
+		switch p := payload.(type) {
+		case eventNonRetriableErrPayload:
+			ex.recordFailure(p)
 		}
 
 	case stateAborted:
@@ -221,8 +221,11 @@ func (ex *connExecutor) startIdleInSessionTimeout() {
 	}
 }
 
-func (ex *connExecutor) recordFailure() {
+func (ex *connExecutor) recordFailure(p eventNonRetriableErrPayload) {
 	ex.metrics.EngineMetrics.FailureCount.Inc(1)
+	if errors.Is(p.errorCause(), sqlerrors.QueryTimeoutError) {
+		ex.metrics.EngineMetrics.StatementTimeoutCount.Inc(1)
+	}
 }
 
 // execPortal executes a prepared statement. It is a "wrapper" around execStmt
