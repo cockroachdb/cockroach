@@ -96,6 +96,7 @@ import (
 
 const (
 	logPrefix                  = "mixed-version-test"
+	beforeClusterStartLabel    = "run before cluster start hooks"
 	startupLabel               = "run startup hooks"
 	backgroundLabel            = "start background hooks"
 	mixedVersionLabel          = "run mixed-version hooks"
@@ -311,6 +312,7 @@ type (
 	// testHooks groups hooks associated with a mixed-version test in
 	// its different stages: startup, mixed-version, and after-test.
 	testHooks struct {
+		beforeClusterStart    hooks
 		startup               hooks
 		background            hooks
 		mixedVersion          hooks
@@ -694,6 +696,18 @@ func (t *Test) InMixedVersion(desc string, fn stepFunc) {
 	}
 
 	t.hooks.AddMixedVersion(versionUpgradeHook{name: desc, predicate: predicate, fn: fn})
+}
+
+// BeforeClusterStart registers a callback that is run before cluster
+// initialization. In the case of multitenant deployments, hooks
+// will be run for both the system and tenant cluster startup. If
+// only one of the two is desired, the caller can check the upgrade
+// stage.
+func (t *Test) BeforeClusterStart(desc string, fn stepFunc) {
+	// Since the callbacks here are only referenced in the setup steps
+	// of the planner, there is no need to have a predicate function
+	// gating them.
+	t.hooks.AddBeforeClusterStart(versionUpgradeHook{name: desc, fn: fn})
 }
 
 // OnStartup registers a callback that is run once the cluster is
@@ -1227,6 +1241,10 @@ func (h hooks) AsSteps(prng *rand.Rand, testContext *Context, stopChans []should
 	return steps
 }
 
+func (th *testHooks) AddBeforeClusterStart(hook versionUpgradeHook) {
+	th.beforeClusterStart = append(th.beforeClusterStart, hook)
+}
+
 func (th *testHooks) AddStartup(hook versionUpgradeHook) {
 	th.startup = append(th.startup, hook)
 }
@@ -1241,6 +1259,10 @@ func (th *testHooks) AddMixedVersion(hook versionUpgradeHook) {
 
 func (th *testHooks) AddAfterUpgradeFinalized(hook versionUpgradeHook) {
 	th.afterUpgradeFinalized = append(th.afterUpgradeFinalized, hook)
+}
+
+func (th *testHooks) BeforeClusterStartSteps(testContext *Context, rng *rand.Rand) []testStep {
+	return th.beforeClusterStart.AsSteps(rng, testContext, nil)
 }
 
 func (th *testHooks) StartupSteps(testContext *Context, rng *rand.Rand) []testStep {
