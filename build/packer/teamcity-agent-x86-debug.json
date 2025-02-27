@@ -6,6 +6,7 @@
   "builders": [{
       "type": "googlecompute",
       "account_file": "gcp_credentials.json",
+      "tags": ["ssh-server"],
       "project_id": "crl-teamcity-agents-debug",
       "source_image_family": "ubuntu-2004-lts",
       "zone": "us-east1-b",
