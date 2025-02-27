@@ -10,18 +10,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
-
-func TestServerTest(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-}
 
 func BenchmarkTestServerStartup(b *testing.B) {
 	defer leaktest.AfterTest(b)()
@@ -40,8 +35,10 @@ func BenchmarkTestServerStartup(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				s := serverutils.StartServerOnly(b, base.TestServerArgs{
+
+				args := base.TestServerArgs{
 					DefaultTestTenant: tc.tenantOpt,
+					Settings:          cluster.MakeTestingClusterSettings(),
 					Knobs: base.TestingKnobs{
 						SQLEvalContext: &eval.TestingKnobs{
 							// We disable the randomization of some batch sizes to get consistent
@@ -49,9 +46,42 @@ func BenchmarkTestServerStartup(b *testing.B) {
 							ForceProductionValues: true,
 						},
 					},
-				})
+				}
+				// Disable leader fortification as it currently causes large variability in runtime.
+				kvserver.RaftLeaderFortificationFractionEnabled.Override(context.Background(), &args.Settings.SV, 0.0)
+
+				s := serverutils.StartServerOnly(b, args)
 				s.Stopper().Stop(context.Background())
 			}
+		})
+	}
+}
+
+func TestServerStartup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name      string
+		tenantOpt base.DefaultTestTenantOptions
+	}{
+		{"SharedTenant", base.SharedTestTenantAlwaysEnabled},
+		{"ExternalTenant", base.ExternalTestTenantAlwaysEnabled},
+		{"SystemTenantOnly", base.TestControlsTenantsExplicitly},
+	}
+
+	for _, tc := range testCases {
+
+		args := base.TestServerArgs{
+			DefaultTestTenant: tc.tenantOpt,
+			Settings:          cluster.MakeTestingClusterSettings(),
+		}
+		// Disable leader fortification as it currently causes large variability in runtime.
+		kvserver.RaftLeaderFortificationFractionEnabled.Override(context.Background(), &args.Settings.SV, 0.0)
+
+		t.Run(tc.name, func(t *testing.T) {
+			s := serverutils.StartServerOnly(t, args)
+			s.Stopper().Stop(context.Background())
 		})
 	}
 }

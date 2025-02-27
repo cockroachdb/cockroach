@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -83,6 +84,9 @@ func TestConstraintMatcher(t *testing.T) {
 					printPostingList(b, pl.storeIDPostingList)
 					fmt.Fprintf(b, "\n")
 				}
+				fmt.Fprintf(b, "all-stores: ")
+				printPostingList(b, cm.allStores.storeIDPostingList)
+				fmt.Fprintf(b, "\n")
 				err := cm.checkConsistency()
 				require.NoError(t, err)
 			}
@@ -106,24 +110,39 @@ func TestConstraintMatcher(t *testing.T) {
 			case "store-matches":
 				var storeID int
 				d.ScanArgs(t, "store-id", &storeID)
-				cc := parseConstraints(t, strings.Fields(strings.Split(d.Input, "\n")[0]))
+				lines := strings.Split(d.Input, "\n")
+				require.Greater(t, 2, len(lines))
+				var cc []roachpb.Constraint
+				if len(lines) == 1 {
+					cc = parseConstraints(t, strings.Fields(strings.TrimSpace(lines[0])))
+				}
 				matches := cm.storeMatches(roachpb.StoreID(storeID), interner.internConstraintsConj(cc))
 				return fmt.Sprintf("%t", matches)
 
 			case "match-stores":
 				var disj constraintsDisj
 				for _, line := range strings.Split(d.Input, "\n") {
-					parts := strings.Fields(line)
+					parts := strings.Fields(strings.TrimSpace(line))
 					if len(parts) == 0 {
 						continue
 					}
 					cc := parseConstraints(t, parts)
-					disj = append(disj, interner.internConstraintsConj(cc))
+					if len(cc) > 0 {
+						disj = append(disj, interner.internConstraintsConj(cc))
+					}
 				}
 				var pl storeIDPostingList
-				if len(disj) == 1 {
-					cm.constrainStoresForConjunction(disj[0], &pl)
-				} else {
+				if len(disj) <= 1 {
+					if randutil.FastUint32()%2 == 0 {
+						var conj []internedConstraint
+						if len(disj) == 1 {
+							conj = disj[0]
+						}
+						cm.constrainStoresForConjunction(conj, &pl)
+					} else {
+						cm.constrainStoresForExpr(disj, &pl)
+					}
+				} else if len(disj) > 1 {
 					cm.constrainStoresForExpr(disj, &pl)
 				}
 				var b strings.Builder

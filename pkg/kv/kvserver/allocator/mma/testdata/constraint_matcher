@@ -1,8 +1,10 @@
 store store-id=5 attrs=ssd,green locality-tiers=region=us-west
 ----
+all-stores: 5
 
 remove-store store-id=2
 ----
+all-stores: 5
 
 store-matches store-id=5
 +region=us-west
@@ -12,6 +14,7 @@ true
 print
 ----
 +region=us-west: 5
+all-stores: 5
 
 store-matches store-id=5
 +=ssd
@@ -33,6 +36,7 @@ print
 +green: 5
 +blue:
 +region=us-west: 5
+all-stores: 5
 
 store store-id=2 attrs=slow-disk,purple locality-tiers=continent=na,region=us-west
 ----
@@ -40,6 +44,7 @@ store store-id=2 attrs=slow-disk,purple locality-tiers=continent=na,region=us-we
 +green: 5
 +blue:
 +region=us-west: 2, 5
+all-stores: 2, 5
 
 match-stores
 +=blue
@@ -56,6 +61,7 @@ print
 +purple: 2
 +region=us-west: 2, 5
 +continent=na: 2
+all-stores: 2, 5
 
 store store-id=4 attrs=slow-disk,blue locality-tiers=continent=na,region=us-east
 ----
@@ -65,6 +71,7 @@ store store-id=4 attrs=slow-disk,blue locality-tiers=continent=na,region=us-east
 +purple: 2
 +region=us-west: 2, 5
 +continent=na: 2, 4
+all-stores: 2, 4, 5
 
 store-matches store-id=5
 -=slow-disk
@@ -80,6 +87,7 @@ print
 +region=us-west: 2, 5
 +continent=na: 2, 4
 -slow-disk: 5
+all-stores: 2, 4, 5
 
 store-matches store-id=5
 +=slow-disk
@@ -96,6 +104,7 @@ print
 +region=us-west: 2, 5
 +continent=na: 2, 4
 -slow-disk: 5
+all-stores: 2, 4, 5
 
 store-matches store-id=5
 +region=us-east
@@ -113,6 +122,7 @@ print
 +region=us-east: 4
 +continent=na: 2, 4
 -slow-disk: 5
+all-stores: 2, 4, 5
 
 store store-id=5 attrs=slow-disk,green locality-tiers=region=us-east
 ----
@@ -125,6 +135,27 @@ store store-id=5 attrs=slow-disk,green locality-tiers=region=us-east
 +region=us-east: 4, 5
 +continent=na: 2, 4
 -slow-disk:
+all-stores: 2, 4, 5
+
+# No conjunction, so matches.
+store-matches store-id=2
+----
+true
+
+# No conjunction, so matches.
+store-matches store-id=4
+----
+true
+
+# No conjunction, so matches.
+store-matches store-id=5
+----
+true
+
+# No conjunction, so everything matches.
+match-stores
+----
+2, 4, 5
 
 remove-store store-id=4
 ----
@@ -137,3 +168,4 @@ remove-store store-id=4
 +region=us-east: 5
 +continent=na: 2
 -slow-disk:
+all-stores: 2, 5
