@@ -15,6 +15,7 @@ go_library(
         "test_utils.go",
         "tracer.go",
         "tracer_snapshots.go",
+        "tracing_aggregator.go",
         "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing",
