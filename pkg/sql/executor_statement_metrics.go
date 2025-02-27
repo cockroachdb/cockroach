@@ -55,6 +55,10 @@ type EngineMetrics struct {
 	// to exceeding the statement timeout.
 	StatementTimeoutCount *metric.Counter
 
+	// TransactionTimeoutCount tracks the number of statement failures due
+	// to exceeding the transaction timeout.
+	TransactionTimeoutCount *metric.Counter
+
 	// FullTableOrIndexScanCount counts the number of full table or index scans.
 	FullTableOrIndexScanCount *metric.Counter
 
