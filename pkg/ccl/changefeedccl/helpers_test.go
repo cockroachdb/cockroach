@@ -1388,6 +1388,21 @@ func checkChangefeedFailedLogs(t *testing.T, startTime int64) []eventpb.Changefe
 	return matchingEntries
 }
 
+func checkChangefeedCanceledLogs(t *testing.T, startTime int64) []eventpb.ChangefeedCanceled {
+	var matchingEntries []eventpb.ChangefeedCanceled
+
+	for _, m := range checkStructuredLogs(t, "changefeed_canceled", startTime) {
+		jsonPayload := []byte(m)
+		var event eventpb.ChangefeedCanceled
+		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
+			t.Errorf("unmarshalling %q: %v", m, err)
+		}
+		matchingEntries = append(matchingEntries, event)
+	}
+
+	return matchingEntries
+}
+
 func checkS3Credentials(t *testing.T) (bucket string, accessKey string, secretKey string) {
 	accessKey = os.Getenv("AWS_ACCESS_KEY_ID")
 	if accessKey == "" {
