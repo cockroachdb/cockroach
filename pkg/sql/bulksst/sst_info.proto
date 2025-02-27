@@ -1,0 +1,27 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.bulksst;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/bulksst";
+
+import "gogoproto/gogo.proto";
+
+message SSTFileInfo {
+    required string uri = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URI"];;
+    required string start_key = 2 [(gogoproto.nullable) = false];
+    required string end_key = 3 [(gogoproto.nullable) = false];
+    required uint64 file_size = 4 [(gogoproto.nullable) = false];
+}
+
+
+message SSTFiles {
+    repeated SSTFileInfo sst = 1 [(gogoproto.customname) = "SST"];
+    repeated string row_samples = 2 [(gogoproto.nullable) = false];
+    required uint64 total_size = 3 [(gogoproto.nullable) = false];
+}
