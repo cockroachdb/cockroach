@@ -2619,11 +2619,14 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 	ex.recordDDLTxnTelemetry(true /* failed */)
 
-	needRollback := true
+	// A non-retryable error automatically rolls-back the transaction if there
+	// are no savepoints. In that case, we can skip rolling-back the transaction
+	// here.
+	wasRolledback := false
 	if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
-		needRollback = ex.state.mu.hasSavepoints
+		wasRolledback = !ex.state.mu.hasSavepoints
 	}
-	if needRollback {
+	if !wasRolledback {
 		if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 			log.Warningf(ctx, "txn rollback failed: %s", err)
 		}
