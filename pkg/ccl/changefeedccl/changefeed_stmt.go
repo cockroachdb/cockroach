@@ -724,21 +724,25 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 	var resolved time.Duration
+	resolvedStr := " by default"
 	if resolvedOpt != nil {
 		resolved = *resolvedOpt
+		resolvedStr = ""
 	}
 	freqOpt, err := opts.GetMinCheckpointFrequency()
 	if err != nil {
 		return nil, err
 	}
 	freq := changefeedbase.DefaultMinCheckpointFrequency
+	freqStr := "default"
 	if freqOpt != nil {
 		freq = *freqOpt
+		freqStr = "configured"
 	}
 	if emit && (resolved < freq) {
-		p.BufferClientNotice(ctx, errors.Newf("resolved (%s) messages will not be emitted "+
-			"more frequently than the configured min_checkpoint_frequency (%s), but may be emitted "+
-			"less frequently", resolved, freq))
+		p.BufferClientNotice(ctx, pgnotice.Newf("resolved (%s%s) messages will not be emitted "+
+			"more frequently than the %s min_checkpoint_frequency (%s), but may be emitted "+
+			"less frequently", resolved, resolvedStr, freqStr, freq))
 	}
 
 	ptsExpiration, err := opts.GetPTSExpiration()
