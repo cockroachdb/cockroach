@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -53,8 +54,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -135,11 +138,28 @@ func initTraceDir(dir string) error {
 	return nil
 }
 
+func configureSlimTestServer(params base.TestServerArgs) base.TestServerArgs {
+	cfg := params.SlimTestSeverConfig
+	if !cfg.Options.EnableTimeseries {
+		ts.TimeseriesStorageEnabled.Override(context.Background(), &params.Settings.SV, false)
+	}
+	if !cfg.Options.EnableAutoStats {
+		stats.AutomaticStatisticsClusterMode.Override(context.Background(), &params.Settings.SV, false)
+	}
+	if !cfg.Options.EnableSpanConfigJob {
+		spanconfigmanager.JobEnabledSetting.Override(context.Background(), &params.Settings.SV, false)
+	}
+	return params
+}
+
 // makeTestConfigFromParams creates a Config from a TestServerParams.
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st := params.Settings
 	if params.Settings == nil {
 		st = cluster.MakeClusterSettings()
+	}
+	if params.SlimTestSeverConfig != nil {
+		params = configureSlimTestServer(params)
 	}
 
 	tr := params.Tracer
