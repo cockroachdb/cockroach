@@ -845,11 +845,15 @@ func recordAdmissionWorkQueueStats(
 	if span == nil {
 		return
 	}
+	var deadlineExceededCount int32
+	if deadlineExceeded {
+		deadlineExceededCount = 1
+	}
 	span.RecordStructured(&admissionpb.AdmissionWorkQueueStats{
-		WaitDurationNanos: waitDur,
-		QueueKind:         string(queueKind),
-		DeadlineExceeded:  deadlineExceeded,
-		WorkPriority:      admissionpb.WorkPriorityDict[workPriority],
+		WaitDurationNanos:     waitDur,
+		QueueKind:             string(queueKind),
+		DeadlineExceededCount: deadlineExceededCount,
+		WorkPriority:          int32(workPriority),
 	})
 }
 
