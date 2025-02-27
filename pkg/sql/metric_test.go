@@ -47,6 +47,7 @@ type queryCounter struct {
 	restartSavepointCount           int64
 	releaseRestartSavepointCount    int64
 	rollbackToRestartSavepointCount int64
+	statementTimeoutCount           int64
 }
 
 func TestQueryCounts(t *testing.T) {
@@ -104,6 +105,11 @@ func TestQueryCounts(t *testing.T) {
 		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
 		{query: "COPY mt.n(num) FROM STDIN", copyCount: 1, expectError: true},
+		{
+			query:       "BEGIN; SET LOCAL statement_timeout = '10ms'; SELECT pg_sleep(10)",
+			expectError: true, txnBeginCount: 1, selectCount: 1, miscCount: 1,
+			miscExecutedCount: 1, failureCount: 1, statementTimeoutCount: 1,
+		},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -163,6 +169,9 @@ func TestQueryCounts(t *testing.T) {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.fallbackCount, err = checkCounterDelta(s, sql.MetaSQLOptFallback, accum.fallbackCount, tc.fallbackCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.statementTimeoutCount, err = checkCounterDelta(s, sql.MetaStatementTimeout, accum.statementTimeoutCount, tc.statementTimeoutCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 		})
