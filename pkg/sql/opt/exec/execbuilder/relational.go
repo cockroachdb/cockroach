@@ -143,7 +143,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	}
 
 	if opt.IsMutationOp(e) {
-		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.setMutationFlags(e)
 		// Raise error if mutation op is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
 			switch tag := b.statementTag(e); tag {
@@ -3490,8 +3490,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 
 	for _, s := range udf.Def.Body {
 		if s.Relational().CanMutate {
-			b.flags.Set(exec.PlanFlagContainsMutation)
-			break
+			b.setMutationFlags(s)
 		}
 	}
 
