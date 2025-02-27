@@ -15,7 +15,7 @@ import (
 
 type invertedJoinNode struct {
 	singleInputPlanNode
-	table *scanNode
+	fetch fetchPlanningInfo
 
 	// joinType is one of INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI.
 	joinType descpb.JoinType
@@ -57,5 +57,4 @@ func (ij *invertedJoinNode) Values() tree.Datums {
 
 func (ij *invertedJoinNode) Close(ctx context.Context) {
 	ij.input.Close(ctx)
-	ij.table.Close(ctx)
 }

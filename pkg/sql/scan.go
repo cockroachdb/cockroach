@@ -39,20 +39,7 @@ type scanNode struct {
 	_ util.NoCopy
 
 	zeroInputPlanNode
-
-	desc  catalog.TableDescriptor
-	index catalog.Index
-
-	colCfg scanColumnsConfig
-	// The table columns, possibly including ones currently in schema changes.
-	// TODO(radu/knz): currently we always load the entire row from KV and only
-	// skip unnecessary decodes to Datum. Investigate whether performance is to
-	// be gained (e.g. for tables with wide rows) by reading only certain
-	// columns from KV using point lookups instead of a single range lookup for
-	// the entire row.
-	cols []catalog.Column
-	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns colinfo.ResultColumns
+	fetchPlanningInfo
 
 	spans   []roachpb.Span
 	reverse bool
@@ -78,18 +65,36 @@ type scanNode struct {
 	// set to zero.
 	estimatedRowCount uint64
 
-	// lockingStrength, lockingWaitPolicy, and lockingDurability represent the
-	// row-level locking mode of the Scan.
-	lockingStrength   descpb.ScanLockingStrength
-	lockingWaitPolicy descpb.ScanLockingWaitPolicy
-	lockingDurability descpb.ScanLockingDurability
-
 	// localityOptimized is true if this scan is part of a locality optimized
 	// search strategy, which uses a limited UNION ALL operator to try to find a
 	// row on nodes in the gateway's region before fanning out to remote nodes. In
 	// order for this optimization to work, the DistSQL planner must create a
 	// local plan.
 	localityOptimized bool
+}
+
+// fetchPlanningInfo contains information common to operators that fetch rows
+// from KV, like scanNode, indexJoinNode, etc.
+type fetchPlanningInfo struct {
+	desc  catalog.TableDescriptor
+	index catalog.Index
+
+	colCfg scanColumnsConfig
+	// The table columns, possibly including ones currently in schema changes.
+	// TODO(radu/knz): currently we always load the entire row from KV and only
+	// skip unnecessary decodes to Datum. Investigate whether performance is to
+	// be gained (e.g. for tables with wide rows) by reading only certain
+	// columns from KV using point lookups instead of a single range lookup for
+	// the entire row.
+	cols []catalog.Column
+	// There is a 1-1 correspondence between cols and resultColumns.
+	resultColumns colinfo.ResultColumns
+
+	// lockingStrength, lockingWaitPolicy, and lockingDurability represent the
+	// row-level locking mode of the Scan.
+	lockingStrength   descpb.ScanLockingStrength
+	lockingWaitPolicy descpb.ScanLockingWaitPolicy
+	lockingDurability descpb.ScanLockingDurability
 }
 
 // scanColumnsConfig controls the "schema" of a scan node.
@@ -146,8 +151,10 @@ func (n *scanNode) Values() tree.Datums {
 	panic("scanNode can't be run in local mode")
 }
 
-// Initializes a scanNode with a table descriptor.
-func (n *scanNode) initDescDefaults(desc catalog.TableDescriptor, colCfg scanColumnsConfig) error {
+// Initializes a fetchPlanningInfo with a table descriptor.
+func (n *fetchPlanningInfo) initDescDefaults(
+	desc catalog.TableDescriptor, colCfg scanColumnsConfig,
+) error {
 	n.desc = desc
 	n.colCfg = colCfg
 	n.index = n.desc.GetPrimaryIndex()
