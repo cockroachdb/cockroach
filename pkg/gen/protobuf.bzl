@@ -53,6 +53,7 @@ PROTOBUF_SRCS = [
     "//pkg/server/status/statuspb:statuspb_go_proto",
     "//pkg/settings:settings_go_proto",
     "//pkg/sql/appstatspb:appstatspb_go_proto",
+    "//pkg/sql/bulksst:bulksst_go_proto",
     "//pkg/sql/catalog/catenumpb:catenumpb_go_proto",
     "//pkg/sql/catalog/catpb:catpb_go_proto",
     "//pkg/sql/catalog/descpb:descpb_go_proto",
