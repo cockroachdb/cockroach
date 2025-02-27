@@ -83,12 +83,13 @@ func (p *Parser) Parse(jsonpath string) (statements.JsonpathStatement, error) {
 	defer p.scanner.Cleanup()
 
 	query, tokens, done := p.scan()
+	if !done {
+		return statements.JsonpathStatement{}, errors.AssertionFailedf("invalid jsonpath query: %s", jsonpath)
+	}
+
 	stmt, err := p.parse(query, tokens)
 	if err != nil {
 		return statements.JsonpathStatement{}, err
-	}
-	if !done {
-		return statements.JsonpathStatement{}, errors.AssertionFailedf("invalid jsonpath query: %s", jsonpath)
 	}
 	return stmt, nil
 }

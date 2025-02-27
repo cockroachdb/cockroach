@@ -129,6 +129,16 @@ DETAIL: source SQL:
 $.1e
   ^
 
+parse
+$.abc.ABC
+----
+$.abc.ABC
+
+parse
+$.mLmTGLKZsrNL.ZawfwNmnfbFoRsISbQXD[*].JgTODFNN
+----
+$.mLmTGLKZsrNL.ZawfwNmnfbFoRsISbQXD[*].JgTODFNN
+
 # parse
 # $.1a
 # ----
