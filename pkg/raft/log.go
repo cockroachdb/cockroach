@@ -447,7 +447,15 @@ func (l LogSnapshot) term(index uint64) (uint64, error) {
 	term, err := l.storage.Term(index)
 	if err == nil {
 		return term, nil
-	} else if err == ErrCompacted || err == ErrUnavailable {
+	} else if err == ErrCompacted {
+		return 0, err
+	} else if err == ErrUnavailable {
+		// Invariant: the log is contiguous in [l.first-1, lastIndex]. Except in
+		// rare cases when there is a concurrent log truncation, and ErrCompacted is
+		// returned. The ErrUnavailable here means the supposedly contiguous part of
+		// this interval (note that we verified the boundaries above) in storage has
+		// a missing entry, and not because of being compacted. So there is a gap.
+		l.logger.Panicf("gap in the log at index %d", index)
 		return 0, err
 	}
 	panic(err) // TODO(pav-kv): return the error and handle it up the stack.
