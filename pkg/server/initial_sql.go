@@ -11,9 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // RunInitialSQL concerns itself with running "initial SQL" code when
@@ -34,18 +31,6 @@ func (s *topLevelServer) RunInitialSQL(
 	if !newCluster || s.cfg.DisableSQLServer {
 		// The initial SQL code only runs the first time the cluster is initialized.
 		return nil
-	}
-
-	if startSingleNode {
-		// For start-single-node, set the default replication factor to
-		// 1 so as to avoid warning messages and unnecessary rebalance
-		// churn.
-		if err := s.disableReplication(ctx); err != nil {
-			log.Ops.Errorf(ctx, "could not disable replication: %v", err)
-			return err
-		}
-		log.Ops.Infof(ctx, "Replication was disabled for this cluster.\n"+
-			"When/if adding nodes in the future, update zone configurations to increase the replication factor.")
 	}
 
 	if adminUser != "" && !s.Insecure() {
@@ -78,48 +63,4 @@ func (s *topLevelServer) createAdminUser(
 	// TODO(knz): Demote the admin user to an operator privilege with fewer options.
 	_, err = ie.Exec(ctx, "admin-user", nil, fmt.Sprintf("GRANT admin TO %s", tree.Name(adminUser)))
 	return err
-}
-
-// disableReplication changes the replication factor on
-// all defined zones to become 1. This is used by start-single-node
-// and demo to define single-node clusters, so as to avoid
-// churn in the log files.
-//
-// The change is effected using the internal SQL interface of the
-// given server object.
-func (s *topLevelServer) disableReplication(ctx context.Context) (retErr error) {
-	ie := s.sqlServer.internalExecutor
-
-	it, err := ie.QueryIteratorEx(ctx, "get-zones", nil, sessiondata.NodeUserSessionDataOverride,
-		"SELECT target FROM crdb_internal.zones")
-	if err != nil {
-		return err
-	}
-
-	// We have to make sure to close the iterator since we might return
-	// from the for loop early (before Next() returns false).
-	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
-
-	// TODO(#125882): For now, we need to cache the zones before we can
-	// modify them. This is because the iterator will open a transaction that
-	// holds a lease to the system database, which will block the ALTER DATABASE
-	// system schema change in declarative-schema-changer-land.
-	var ok bool
-	var zones []string
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		zone := string(*it.Cur()[0].(*tree.DString))
-		zones = append(zones, zone)
-	}
-	if err != nil {
-		return err
-	}
-
-	for _, zone := range zones {
-		if _, err := ie.Exec(ctx, "set-zone", nil,
-			fmt.Sprintf("ALTER %s CONFIGURE ZONE USING num_replicas = 1", zone)); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
