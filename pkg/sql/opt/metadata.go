@@ -1096,6 +1096,8 @@ func (md *Metadata) AllViews() []cat.View {
 //
 // shouldIncludeTable controls whether a particular table should be included. If
 // a table isn't included, then all its reference tables aren't included either.
+// The second return parameter indicates whether we need to "recurse" into the
+// table (meaning explore its FK references).
 //
 // The tables are returned in sorted order so that later tables reference
 // earlier tables. This allows tables to be re-created in order (e.g., for
@@ -1108,7 +1110,7 @@ func (md *Metadata) AllViews() []cat.View {
 func (md *Metadata) getAllReferenceTablesAndFKs(
 	ctx context.Context,
 	catalog cat.Catalog,
-	shouldIncludeTable func(table cat.Table, directlyReferenced intsets.Fast) bool,
+	shouldIncludeTable func(table cat.Table, directlyReferenced intsets.Fast, fk cat.ForeignKeyConstraint) (include, recurse bool),
 	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
 ) ([]cat.Table, []*tree.AlterTable) {
 	// directlyReferenced contains IDs of tables that are directly referenced by
@@ -1129,7 +1131,7 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 	// if it hasn't been handled yet by adding all referenced and referencing
 	// table of the given one, including via transient (recursive) FK
 	// relationships.
-	handleRelatedTables := func(tabID cat.StableID) {
+	handleRelatedTables := func(tabID cat.StableID, fk cat.ForeignKeyConstraint) {
 		if !tableSeen.Contains(int(tabID)) {
 			tableSeen.Add(int(tabID))
 			ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
@@ -1144,7 +1146,8 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 				// error.
 				return
 			}
-			if !shouldIncludeTable(refTab, directlyReferenced) {
+			include, recurse := shouldIncludeTable(refTab, directlyReferenced, fk)
+			if !include {
 				// The caller is not interested in this table, so we won't
 				// include any of its dependencies either.
 				return
@@ -1152,21 +1155,25 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 			idToTable[tabID] = refTab
 			// We want to include all tables that we reference before adding
 			// ourselves, followed by all tables that reference us.
-			addForeignKeyReferencedTables(refTab)
+			if recurse {
+				addForeignKeyReferencedTables(refTab)
+			}
 			result = append(result, refTab)
-			addForeignKeyReferencingTables(refTab)
+			if recurse {
+				addForeignKeyReferencingTables(refTab)
+			}
 		}
 	}
 	addForeignKeyReferencedTables = func(tab cat.Table) {
 		for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
-			tabID := tab.OutboundForeignKey(i).ReferencedTableID()
-			handleRelatedTables(tabID)
+			fk := tab.OutboundForeignKey(i)
+			handleRelatedTables(fk.ReferencedTableID(), fk)
 		}
 	}
 	addForeignKeyReferencingTables = func(tab cat.Table) {
 		for i := 0; i < tab.InboundForeignKeyCount(); i++ {
-			tabID := tab.InboundForeignKey(i).OriginTableID()
-			handleRelatedTables(tabID)
+			fk := tab.InboundForeignKey(i)
+			handleRelatedTables(fk.OriginTableID(), fk)
 		}
 	}
 	for i := range md.tables {
@@ -1174,7 +1181,8 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 		tabID := table.ID()
 		if !tableSeen.Contains(int(tabID)) {
 			tableSeen.Add(int(tabID))
-			if !shouldIncludeTable(table, directlyReferenced) {
+			include, recurse := shouldIncludeTable(table, directlyReferenced, nil /* fk */)
+			if !include {
 				// The caller is not interested in this table, so we won't
 				// include any of its dependencies either.
 				continue
@@ -1183,9 +1191,13 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 			// The order of addition here is important: namely, we want to add
 			// all tables that we reference first, then ourselves, and only then
 			// tables that reference us.
-			addForeignKeyReferencedTables(table)
+			if recurse {
+				addForeignKeyReferencedTables(table)
+			}
 			result = append(result, table)
-			addForeignKeyReferencingTables(table)
+			if recurse {
+				addForeignKeyReferencingTables(table)
+			}
 		}
 	}
 	// Now that we've accumulated all tables, populate the ADD FOREIGN KEY
@@ -1243,6 +1255,8 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 //
 // shouldIncludeTable controls whether a particular table should be included. If
 // a table isn't included, then all its reference tables aren't included either.
+// The second return parameter indicates whether we need to "recurse" into the
+// table (meaning explore its FK references).
 //
 // addFKs return parameter is a set of ALTER TABLE ... ADD FOREIGN KEY stmts
 // that includes only FKs for which both the origin and the reference tables are
@@ -1250,7 +1264,7 @@ func (md *Metadata) getAllReferenceTablesAndFKs(
 func (md *Metadata) AllDataSourceNames(
 	ctx context.Context,
 	catalog cat.Catalog,
-	shouldIncludeTable func(table cat.Table, directlyReferenced intsets.Fast) bool,
+	shouldIncludeTable func(table cat.Table, directlyReferenced intsets.Fast, fk cat.ForeignKeyConstraint) (include, recurse bool),
 	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
 ) (tables, sequences, views []tree.TableName, addFKs []*tree.AlterTable, _ error) {
 	// Catalog objects can show up multiple times in our lists, so deduplicate

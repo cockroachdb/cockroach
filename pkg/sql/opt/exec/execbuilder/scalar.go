@@ -966,8 +966,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 
 	for _, s := range udf.Def.Body {
 		if s.Relational().CanMutate {
-			b.flags.Set(exec.PlanFlagContainsMutation)
-			break
+			b.setMutationFlags(s)
 		}
 	}
 
