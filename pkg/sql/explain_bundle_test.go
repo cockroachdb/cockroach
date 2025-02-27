@@ -280,50 +280,257 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		}
 	})
 
-	t.Run("foreign keys, mutation", func(t *testing.T) {
-		tableNames := []string{"parent", "child1", "child2", "grandchild1", "grandchild2"}
+	t.Run("foreign keys, mutations", func(t *testing.T) {
+		// Use the following hierarchy of tables:
+		//
+		//               parent
+		//            ?/       \
+		//         child1     child2
+		//          /            \
+		//     grandchild1     grandchild2
+		//         /
+		//   greatgrandchild1
+		//
+		// Presence of and type of the FK from 'child1' to 'parent' changes
+		// between test cases.
 		r.Exec(t, "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);")
-		r.Exec(t, "CREATE TABLE child1 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE child1 (pk INT PRIMARY KEY, fk INT);")
 		r.Exec(t, "CREATE TABLE child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
 		r.Exec(t, "CREATE TABLE grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
 		r.Exec(t, "CREATE TABLE grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
-		// All tables should be included in the stmt bundle, regardless of which
-		// one we delete from because all of them are considered "related".
-		contentCheck := func(name, contents string) error {
-			if name == "schema.sql" {
-				for _, tableName := range tableNames {
-					if regexp.MustCompile("USE defaultdb;\nCREATE TABLE public."+tableName).FindString(contents) == "" {
-						return errors.Newf(
-							"could not find 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", tableName, contents)
-					}
-				}
+		r.Exec(t, "CREATE TABLE greatgrandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES grandchild1(pk));")
+		addChildFKDefault := "ALTER TABLE child1 ADD CONSTRAINT fk FOREIGN KEY(fk) REFERENCES parent(pk);"
+		addChildFKCascade := "ALTER TABLE child1 ADD CONSTRAINT fk FOREIGN KEY(fk) REFERENCES parent(pk) ON DELETE CASCADE ON UPDATE CASCADE;"
+		dropChildFK := "ALTER TABLE child1 DROP CONSTRAINT fk;"
+		insertIntoParent := "INSERT INTO parent VALUES (1, 1)"
+		getExpectedFiles := func(tables []string, numPostqueries int) string {
+			var sb strings.Builder
+			// We always have the main query.
+			if numPostqueries > 0 {
+				sb.WriteString("distsql-1-main-query.html vec-1-main-query-v.txt vec-1-main-query.txt")
+			} else {
+				sb.WriteString("distsql.html vec-v.txt vec.txt")
 			}
-			return nil
+			// Each postquery gets these files too.
+			for i := 0; i < numPostqueries; i++ {
+				sb.WriteString(fmt.Sprintf(" distsql-%[1]d-postquery.html vec-%[1]d-postquery-v.txt vec-%[1]d-postquery.txt", i+2))
+			}
+			// Every table gets a stats file.
+			for _, table := range tables {
+				sb.WriteString(fmt.Sprintf(" stats-defaultdb.public.%s.sql", table))
+			}
+			return sb.String()
 		}
-		expectedFiles := map[string]string{
-			"parent":      "distsql-1-main-query.html distsql-2-postquery.html distsql-3-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt vec-3-postquery-v.txt vec-3-postquery.txt",
-			"child1":      "distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
-			"child2":      "distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
-			"grandchild1": "distsql.html vec.txt vec-v.txt",
-			"grandchild2": "distsql.html vec.txt vec-v.txt",
-		}
-		for _, tableName := range tableNames {
-			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) DELETE FROM "+tableName+" WHERE true")
-			checkBundle(
-				t, fmt.Sprint(rows), "child", contentCheck, false, /* expectErrors */
-				base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child1.sql", "stats-defaultdb.public.child2.sql",
-				"stats-defaultdb.public.grandchild1.sql", "stats-defaultdb.public.grandchild2.sql", expectedFiles[tableName],
-			)
+
+		for _, tc := range []struct {
+			name          string
+			query         string
+			setup         []string
+			cleanup       []string
+			tableName     string
+			expectedFiles string
+		}{
+			// Modifying 'child1', i.e. the origin table. Main focus in these
+			// test cases is on whether the referenced table 'parent' is
+			// included or not. We also make sure to not pull in 'child2' which
+			// is a "sibling".
+			{
+				// Need to perform FK check only on 'grandchild1'. Because
+				// 'grandchild1' is directly referenced by the metadata, we also
+				// pull in 'greatgrandchild1' which isn't actually needed.
+				name:          "DELETE FROM child",
+				query:         "DELETE FROM child1 WHERE true",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK},
+				tableName:     "child1",
+				expectedFiles: getExpectedFiles([]string{"child1", "grandchild1", "greatgrandchild1"}, 1 /* numPostqueries */),
+			},
+			{
+				// With no FK, inserting into 'child1' shouldn't pull in
+				// 'parent'.
+				name:          "INSERT INTO child, no FK",
+				query:         "INSERT INTO child1 VALUES (1, 1)",
+				setup:         []string{insertIntoParent},
+				cleanup:       []string{"DELETE FROM child1 WHERE true", "DELETE FROM parent WHERE true"},
+				tableName:     "child1",
+				expectedFiles: getExpectedFiles([]string{"child1"}, 0 /* numPostqueries */),
+			},
+			{
+				// With FK, inserting into 'child1' should pull in 'parent'.
+				name:  "INSERT INTO child",
+				query: "INSERT INTO child1 VALUES (1, 1)",
+				// Disable insert fast path so that the FK check got planned as
+				// a postquery.
+				setup:         []string{addChildFKDefault, insertIntoParent, "SET enable_insert_fast_path = false;"},
+				cleanup:       []string{dropChildFK, "DELETE FROM child1 WHERE true", "DELETE FROM parent WHERE true"},
+				tableName:     "child1",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1"}, 1 /* numPostqueries */),
+			},
+			{
+				// 'child1' and 'grandchild1' are directly referenced by the
+				// metadata. We also pull in 'greatgrandchild1' which isn't
+				// actually needed. Additionally, even though this particular
+				// UPDATE doesn't modify 'child1.fk', we still pull in 'parent'.
+				name:          "UPDATE child",
+				query:         "UPDATE child1 SET pk = pk + 1 WHERE true",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK},
+				tableName:     "child1",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "grandchild1", "greatgrandchild1"}, 1 /* numPostqueries */),
+			},
+
+			// Modifying 'parent', i.e. the referenced table.
+			{
+				// Need to perform FK check only on 'child2'. Because 'child2'
+				// is directly referenced by the metadata, we also pull in
+				// 'grandchild2' which isn't actually needed.
+				name:          "DELETE FROM parent, no FK",
+				query:         "DELETE FROM parent WHERE true",
+				setup:         []string{},
+				cleanup:       []string{},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child2", "grandchild2"}, 1 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check on 'child1' and 'child2'. Because
+				// both tables are directly referenced by the metadata, we also
+				// pull in 'grandchild1' and 'grandchild2' which aren't actually
+				// needed.
+				name:          "DELETE FROM parent, default FK",
+				query:         "DELETE FROM parent WHERE true",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 2 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check on 'child1' and 'child2'. Because
+				// 'child2' is directly referenced by the metadata, we also pull
+				// in 'grandchild2' which isn't actually needed.
+				name:      "DELETE FROM parent, short-circuited CASCADE FK",
+				query:     "DELETE FROM parent WHERE true",
+				setup:     []string{addChildFKCascade},
+				cleanup:   []string{dropChildFK},
+				tableName: "parent",
+				// Note that here the CASCADE is short-circuited, so we omit its
+				// postquery.
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 1 /* numPostqueries */),
+			},
+			{
+				// Same as above but the CASCADE is actually executed, so we get
+				// a CASCADE postquery as well as the FK check for
+				// 'grandchild1'.
+				name:          "DELETE FROM parent, CASCADE FK",
+				query:         "DELETE FROM parent WHERE true",
+				setup:         []string{addChildFKCascade, insertIntoParent},
+				cleanup:       []string{dropChildFK},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 3 /* numPostqueries */),
+			},
+			{
+				// Inserting into 'parent' shouldn't pull in any other tables.
+				name:          "INSERT INTO parent",
+				query:         "INSERT INTO parent VALUES (1, 1)",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK, "DELETE FROM parent WHERE true"},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent"}, 0 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check only on 'child2'. Because 'child2'
+				// is directly referenced by the metadata, we also pull in
+				// 'grandchild2' which isn't actually needed.
+				name:          "UPDATE parent, no FK",
+				query:         "UPDATE parent SET pk = pk + 1 WHERE true",
+				setup:         []string{},
+				cleanup:       []string{},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child2", "grandchild2"}, 1 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check on 'child1' and 'child2'. Because
+				// both tables are directly referenced by the metadata, we also
+				// pull in 'grandchild1' and 'grandchild2' which aren't actually
+				// needed.
+				name:          "UPDATE parent, default FK",
+				query:         "UPDATE parent SET pk = pk + 1 WHERE true",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 2 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check on 'child1' and 'child2'. Because
+				// 'child2' is directly referenced by the metadata, we also pull
+				// in 'grandchild2' which isn't actually needed.
+				name:      "UPDATE parent, short-circuited CASCADE FK",
+				query:     "UPDATE parent SET pk = pk + 1 WHERE true",
+				setup:     []string{addChildFKCascade},
+				cleanup:   []string{dropChildFK},
+				tableName: "parent",
+				// Note that here the CASCADE is short-circuited, so we omit its
+				// postquery.
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 1 /* numPostqueries */),
+			},
+			{
+				// Same as above but the CASCADE is actually executed, so we get
+				// a CASCADE postquery as well as the FK check for
+				// 'grandchild1'.
+				name:          "UPDATE parent, CASCADE FK",
+				query:         "UPDATE parent SET pk = pk + 1 WHERE true",
+				setup:         []string{addChildFKCascade, insertIntoParent},
+				cleanup:       []string{dropChildFK, "DELETE FROM parent WHERE true"},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 3 /* numPostqueries */),
+			},
+			{
+				// When we have an FK cycle, we still want to pull in most
+				// tables.
+				name:      "DELETE FROM parent, FK cycle",
+				query:     "DELETE FROM parent WHERE true",
+				setup:     []string{addChildFKCascade, "ALTER TABLE parent ADD CONSTRAINT fk FOREIGN KEY (v) REFERENCES child1(pk) ON DELETE CASCADE"},
+				cleanup:   []string{dropChildFK, "ALTER TABLE parent DROP CONSTRAINT fk"},
+				tableName: "parent",
+				// Note that here the CASCADE is short-circuited, so we omit its
+				// postquery.
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 1 /* numPostqueries */),
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				defer func() {
+					for _, q := range tc.cleanup {
+						r.Exec(t, q)
+					}
+				}()
+				for _, q := range tc.setup {
+					r.Exec(t, q)
+				}
+				rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) "+tc.query)
+				// Note that in this subtest we have nil contentCheck because we
+				// rely on the presence of stats files to indicate which tables
+				// are included. We also assume that necessary FKs are included
+				// in the schema.sql file too.
+				checkBundle(
+					t, fmt.Sprint(rows), tc.tableName, nil /* contentCheck */, false, /* expectErrors */
+					base, plans, tc.expectedFiles,
+				)
+			})
 		}
 	})
 
 	t.Run("foreign keys, read-only", func(t *testing.T) {
 		tableNames := []string{"parent", "child1", "child2", "grandchild1", "grandchild2"}
-		r.Exec(t, "CREATE TABLE IF NOT EXISTS parent (pk INT PRIMARY KEY, v INT);")
-		r.Exec(t, "CREATE TABLE IF NOT EXISTS child1 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
-		r.Exec(t, "CREATE TABLE IF NOT EXISTS child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
-		r.Exec(t, "CREATE TABLE IF NOT EXISTS grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
-		r.Exec(t, "CREATE TABLE IF NOT EXISTS grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
+		r.Exec(t, "DROP TABLE IF EXISTS greatgrandchild1;")
+		r.Exec(t, "DROP TABLE IF EXISTS grandchild2;")
+		r.Exec(t, "DROP TABLE IF EXISTS grandchild1;")
+		r.Exec(t, "DROP TABLE IF EXISTS child2;")
+		r.Exec(t, "DROP TABLE IF EXISTS child1;")
+		r.Exec(t, "DROP TABLE IF EXISTS parent;")
+		r.Exec(t, "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE child1 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
+		r.Exec(t, "CREATE TABLE grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
 		// Only the target tables should be included since we perform a
 		// read-only stmt.
 		getContentCheckFn := func(targetTableNames, targetFKs []string) func(name, contents string) error {
