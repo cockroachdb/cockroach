@@ -71,7 +71,7 @@ func (ex *connExecutor) execPrepareTransactionInOpenStateInternal(
 	// TODO(nvanbenschoten): why are these needed here (and in the equivalent
 	// functions for commit and rollback)? Shouldn't they be handled by
 	// connExecutor.resetExtraTxnState?
-	if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForTxnCommit); err != nil {
+	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnPrepare); err != nil {
 		return err
 	}
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)

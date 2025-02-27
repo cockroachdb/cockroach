@@ -32,6 +32,7 @@ func (env *InteractionEnv) handleStabilize(t *testing.T, d datadriven.TestData) 
 		for i := range arg.Vals {
 			switch arg.Key {
 			case "log-level":
+				//nolint:deferloop
 				defer func(old int) {
 					env.Output.Lvl = old
 				}(env.Output.Lvl)

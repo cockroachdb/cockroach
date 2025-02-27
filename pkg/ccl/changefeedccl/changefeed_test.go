@@ -35,7 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // multi-tenant tests
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"    // locality-related table mutations
@@ -75,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -4045,7 +4048,7 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 	defer cleanup()
 	s := cluster.Server(1)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgBase, err := pq.NewConnector(pgURL.String())
 	if err != nil {
@@ -4113,7 +4116,7 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	// Only pubsub v2 emits notices.
 	PubsubV2Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgBase, err := pq.NewConnector(pgURL.String())
 	if err != nil {
@@ -5126,14 +5129,14 @@ func TestChangefeedRetryableError(t *testing.T) {
 		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
 		job, err := registry.LoadJob(context.Background(), jobID)
 		require.NoError(t, err)
-		require.Contains(t, job.Progress().RunningStatus, "synthetic retryable error")
+		require.Contains(t, job.Progress().StatusMessage, "synthetic retryable error")
 
 		// Verify `SHOW JOBS` also shows this information.
-		var runningStatus string
+		var statusMessage string
 		sqlDB.QueryRow(t,
 			`SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
-		).Scan(&runningStatus)
-		require.Contains(t, runningStatus, "synthetic retryable error")
+		).Scan(&statusMessage)
+		require.Contains(t, statusMessage, "synthetic retryable error")
 
 		// Fix the sink and insert another row. Check that nothing funky happened.
 		atomic.StoreInt64(&failEmit, 0)
@@ -5981,8 +5984,8 @@ func TestChangefeedErrors(t *testing.T) {
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `this sink is incompatible with option compression`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='gzip'`,
+		t, `unknown compression: invalid, valid values are 'gzip' and 'zstd'`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='invalid'`,
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErrWithTimeout(
@@ -6024,6 +6027,12 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErrWithTimeout(
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
+		`kafka://nope`)
+
+	// Sanity check for options compatibility validation.
+	sqlDB.ExpectErrWithTimeout(
+		t, `this sink is incompatible with option compression`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH compression='gzip'`,
 		`kafka://nope`)
 
 	sqlDB.ExpectErrWithTimeout(
@@ -6090,7 +6099,7 @@ func TestChangefeedDescription(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, status status)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-	sink, cleanup := sqlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
+	sink, cleanup := pgurlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	sink.Scheme = changefeedbase.SinkSchemeExperimentalSQL
 	sink.Path = `d`
@@ -7557,8 +7566,8 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		jobCheckpoint := progress.GetChangefeed().Checkpoint
 		require.Less(t, 0, len(jobCheckpoint.Spans))
-		var checkpoint roachpb.SpanGroup
-		checkpoint.Add(jobCheckpoint.Spans...)
+		var checkpointSpanGroup roachpb.SpanGroup
+		checkpointSpanGroup.Add(jobCheckpoint.Spans...)
 
 		// Collect spans we attempt to resolve after when we resume.
 		var resolved []roachpb.Span
@@ -7572,6 +7581,23 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// Resume job.
 		require.NoError(t, jobFeed.Resume())
 
+		// Verify that the resumed job has restored the progress from the checkpoint
+		// to the change frontier.
+		timestampSpansMap := checkpoint.ConvertLegacyCheckpoint(jobCheckpoint, hlc.Timestamp{}, hlc.Timestamp{})
+		expectedFrontier, err := resolvedspan.NewCoordinatorFrontier(jobCheckpoint.Timestamp, *h, tableSpan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.NoError(t, checkpoint.Restore(expectedFrontier, timestampSpansMap))
+
+		var checkedCoordinatorFrontier atomic.Bool
+
+		knobs.AfterCoordinatorFrontierRestore = func(frontier *resolvedspan.CoordinatorFrontier) {
+			require.NotNil(t, frontier)
+			require.Equal(t, expectedFrontier.String(), frontier.String())
+			checkedCoordinatorFrontier.Store(true)
+		}
+
 		// Wait for the high water mark to be non-zero.
 		testutils.SucceedsSoon(t, func() error {
 			prog := loadProgress()
@@ -7581,6 +7607,11 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			return errors.New("waiting for highwater")
 		})
 
+		// Now that we've checked that our checkpoint progress is loaded on resume,
+		// do not make further checks.
+		require.True(t, checkedCoordinatorFrontier.Load())
+		knobs.AfterCoordinatorFrontierRestore = nil
+
 		// At this point, highwater mark should be set, and previous checkpoint should be gone.
 		progress = loadProgress()
 		require.NotNil(t, progress.GetChangefeed())
@@ -7588,7 +7619,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Verify that none of the resolved spans after resume were checkpointed.
 		for _, sp := range resolved {
-			require.Falsef(t, checkpoint.Contains(sp.Key), "span should not have been resolved: %s", sp)
+			require.Falsef(t, checkpointSpanGroup.Contains(sp.Key), "span should not have been resolved: %s", sp)
 		}
 
 		// Consume all potentially buffered kv events
@@ -7596,7 +7627,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		if err := g.Wait(); err != nil {
 			require.NotRegexp(t, "unexpected epoch resolved event", err)
 		}
-		err := drainUntilTimestamp(foo, *progress.GetHighWater())
+		err = drainUntilTimestamp(foo, *progress.GetHighWater())
 		require.NoError(t, err)
 
 		// Verify that the checkpoint does not affect future scans
@@ -7878,7 +7909,7 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 
 		// check that running status correctly updates with retryable error
 		testutils.SucceedsSoon(t, func() error {
-			status, err := feedJob.FetchRunningStatus()
+			status, err := feedJob.FetchStatusMessage()
 			if err != nil {
 				return err
 			}
@@ -7929,7 +7960,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 			registry := s.Server.JobRegistry().(*jobs.Registry)
 			job, err := registry.LoadJob(context.Background(), jobID)
 			require.NoError(t, err)
-			require.Contains(t, job.Progress().RunningStatus, "job failed (should fail with custom error) but is being paused because of on_error=pause")
+			require.Contains(t, job.Progress().StatusMessage, "job failed (should fail with custom error) but is being paused because of on_error=pause")
 			knobs.BeforeEmitRow = nil
 
 			require.NoError(t, feedJob.Resume())
@@ -9328,7 +9359,7 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 
 				// check that running status correctly updates with retryable error
 				testutils.SucceedsSoon(t, func() error {
-					status, err := feedJob.FetchRunningStatus()
+					status, err := feedJob.FetchStatusMessage()
 					if err != nil {
 						return err
 					}

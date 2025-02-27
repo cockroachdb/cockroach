@@ -175,6 +175,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/distsqlutils",
         "//pkg/testutils/jobutils",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",

@@ -60,9 +60,7 @@ type descriptorVersionState struct {
 		// when the version isn't associated with a lease.
 		expiration hlc.Timestamp
 
-		// The session that was used to acquire this descriptor version, which is
-		// only populated when the session based leasing mode is *at least* dual
-		// write.
+		// The session that was used to acquire this descriptor version.
 		session sqlliveness.Session
 
 		refcount int
@@ -106,6 +104,13 @@ func (s *descriptorVersionState) stringLocked() redact.RedactableString {
 		sessionID = s.mu.session.ID().String()
 	}
 	return redact.Sprintf("%d(%q,%s) ver=%d:%s, refcount=%d", s.GetID(), s.GetName(), redact.SafeString(sessionID), s.GetVersion(), s.mu.expiration, s.mu.refcount)
+}
+
+// getSessionID returns the current session ID from the lease.
+func (s *descriptorVersionState) getSessionID() sqlliveness.SessionID {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.session.ID()
 }
 
 // hasExpired checks if the descriptor is too old to be used (by a txn

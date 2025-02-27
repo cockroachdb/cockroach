@@ -526,12 +526,7 @@ func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
 func (oc *optCatalog) LeaseByStableID(ctx context.Context, stableID cat.StableID) (uint64, error) {
 	// Lease the descriptor, so that schema changes cannot move forward
 	// after the current version.
-	desc, err := oc.planner.byIDGetterBuilder().WithoutNonPublic().Get().Desc(ctx, descpb.ID(stableID))
-	if err != nil {
-		return 0, err
-	}
-	// Return the current version of the descriptor.
-	return uint64(desc.GetVersion()), nil
+	return oc.planner.Descriptors().LockDescriptorWithLease(ctx, oc.planner.txn, descpb.ID(stableID))
 }
 
 // GetDependencyDigest is part of the cat.Catalog interface.
@@ -3014,6 +3009,7 @@ func getOptPolicies(descPolicies []descpb.PolicyDescriptor) cat.Policies {
 		descPolicy := &descPolicies[i]
 		policy := cat.Policy{
 			Name:          tree.Name(descPolicy.Name),
+			ID:            descPolicy.ID,
 			UsingExpr:     descPolicy.UsingExpr,
 			WithCheckExpr: descPolicy.WithCheckExpr,
 			Command:       descPolicy.Command,

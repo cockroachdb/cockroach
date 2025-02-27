@@ -259,6 +259,7 @@ var retiredSettings = map[InternalKey]struct{}{
 
 	// removed as of 25.2
 	"sql.catalog.experimental_use_session_based_leasing": {},
+	"bulkio.backup.merge_file_buffer_size":               {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults

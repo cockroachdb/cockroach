@@ -47,8 +47,7 @@ runs:
       shell: bash
       env:
         TEST_PKG: ${{ inputs.pkg }}
-    - name: Checkout # required for post job cleanup (if still on the base ref)
-      if: inputs.ref == 'base'
+    - name: Checkout # required for post job cleanup
       uses: actions/checkout@v4
     - name: Clean up
       run: ./build/github/cleanup-engflow-keys.sh

@@ -59,25 +59,28 @@ func Set(
 		// Cast these as strings.
 		expr := paramparse.UnresolvedNameToStrVal(sp.Value)
 
-		// Storage params handle their own scalar arguments, with no help from the
-		// optimizer. As such, they cannot contain subqueries.
-		defer semaCtx.Properties.Restore(semaCtx.Properties)
-		semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
+		err := func() error {
+			// Storage params handle their own scalar arguments, with no help from the
+			// optimizer. As such, they cannot contain subqueries.
+			defer semaCtx.Properties.Restore(semaCtx.Properties)
+			semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
 
-		// Convert the expressions to a datum.
-		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
-		if err != nil {
-			return err
-		}
-		if typedExpr, err = normalize.Expr(ctx, evalCtx, typedExpr); err != nil {
-			return err
-		}
-		datum, err := eval.Expr(ctx, evalCtx, typedExpr)
-		if err != nil {
-			return err
-		}
+			// Convert the expressions to a datum.
+			typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
+			if err != nil {
+				return err
+			}
+			if typedExpr, err = normalize.Expr(ctx, evalCtx, typedExpr); err != nil {
+				return err
+			}
+			datum, err := eval.Expr(ctx, evalCtx, typedExpr)
+			if err != nil {
+				return err
+			}
+			return setter.Set(ctx, semaCtx, evalCtx, key, datum)
+		}()
 
-		if err := setter.Set(ctx, semaCtx, evalCtx, key, datum); err != nil {
+		if err != nil {
 			return err
 		}
 	}

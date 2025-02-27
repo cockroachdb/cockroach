@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -931,16 +932,10 @@ func (r *testRunner) runWorker(
 				}
 
 				// 50% chance of enabling the rangefeed buffered sender. Disabled by
-				// default. This is the reason we check for run time assertions rather
-				// than using rand:
-				// 1. The cluster setting RangefeedUseBufferedSender validation will fail
-				// if buildutil.CrdbTestBuild tag is not set.
-				// 2. There is a 50% chance that the cockroach binary used in roachtests
-				// includes the buildutil.CrdbTestBuild tag. And runtime assertion is
-				// enabled if and only if cockroach binaries used in roachtests include
-				// the buildutil.CrdbTestBuild tag.
-				useBufferedSender := roachtestutil.UsingRuntimeAssertions(t)
-				if useBufferedSender {
+				// default. Disabled for mixed-version tests since this cluster setting
+				// is only supported in >= v25.2.
+				useBufferedSender := prng.Intn(2) == 0
+				if !t.spec.Suites.Contains(registry.MixedVersion) && useBufferedSender {
 					c.clusterSettings["kv.rangefeed.buffered_sender.enabled"] = "true"
 				}
 				c.status(fmt.Sprintf("metamorphically using buffered sender: %t", useBufferedSender))
@@ -1115,7 +1110,15 @@ func (r *testRunner) runTest(
 
 	s := t.Spec().(*registry.TestSpec)
 
-	grafanaAvailable := roachtestflags.Cloud == spec.GCE
+	// Get the Prometheus reachability for the cloud we run the tests on.
+	promReachability := promhelperclient.ProviderReachability(
+		roachtestflags.Cloud.String(),
+		promhelperclient.Default,
+	)
+
+	// If reachability is not None, we can assume that metrics will be scrapped
+	// and that Grafana will display something.
+	grafanaAvailable := promReachability != promhelperclient.None
 	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID, VmLabelTestOwner: t.Owner()}); err != nil {
 		shout(ctx, l, stdout, "failed to add label to cluster [%s] - %s", c.Name(), err)
 		grafanaAvailable = false

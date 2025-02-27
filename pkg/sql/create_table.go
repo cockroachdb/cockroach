@@ -1902,6 +1902,7 @@ func NewTableDesc(
 			// virtual columns. If the txn ends up retrying, then this change is not
 			// syntactically valid, since the virtual column is only added in the descriptor
 			// and not in the AST.
+			//nolint:deferloop
 			defer copyIndexElemListAndRestore(&d.Columns)()
 			if err := replaceExpressionElemsWithVirtualCols(
 				ctx,
@@ -2028,6 +2029,7 @@ func NewTableDesc(
 			// virtual columns. If the txn ends up retrying, then this change is not
 			// syntactically valid, since the virtual descriptor is only added in the descriptor
 			// and not in the AST.
+			//nolint:deferloop
 			defer copyIndexElemListAndRestore(&d.Columns)()
 			if err := replaceExpressionElemsWithVirtualCols(
 				ctx,

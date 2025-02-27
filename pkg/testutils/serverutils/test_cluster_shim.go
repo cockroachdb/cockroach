@@ -185,6 +185,11 @@ type TestClusterInterface interface {
 		t TestFataler, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 	)
 
+	// MaybeWaitForLeaseUpgrade waits until the lease held for the given range
+	// descriptor is upgraded to an epoch-based or leader lease, but only if we
+	// expect the lease to be upgraded.
+	MaybeWaitForLeaseUpgrade(_ context.Context, _ TestFataler, _ roachpb.RangeDescriptor)
+
 	// MoveRangeLeaseNonCooperatively performs a non-cooperative transfer of the
 	// lease for a range from whoever has it to a particular store. That store
 	// must already have a replica of the range. If that replica already has the
@@ -250,6 +255,11 @@ type TestClusterInterface interface {
 	// cluster.
 	StorageLayer(idx int) StorageLayerInterface
 
+	// DefaultTenantDeploymentMode returns the deployment mode of the default
+	// server or tenant, which can be single-tenant (system-only),
+	// shared-process, or external-process.
+	DefaultTenantDeploymentMode() DeploymentMode
+
 	// SplitTable splits a range in the table, creates a replica for the right
 	// side of the split on TargetNodeIdx, and moves the lease for the right
 	// side of the split to TargetNodeIdx for each SplitPoint. This forces the
@@ -258,6 +268,17 @@ type TestClusterInterface interface {
 	// TODO(radu): we should verify that the queries in tests using SplitTable
 	// are indeed distributed as intended.
 	SplitTable(t TestFataler, desc catalog.TableDescriptor, sps []SplitPoint)
+
+	// GrantTenantCapabilities grants a capability to a tenant and waits until all
+	// servers have the in-memory cache reflects the change.
+	//
+	// Note: There is no need to call WaitForTenantCapabilities separately.
+	GrantTenantCapabilities(
+		context.Context,
+		TestFataler,
+		roachpb.TenantID,
+		map[tenantcapabilities.ID]string,
+	)
 
 	// WaitForTenantCapabilities waits until all servers have the specified
 	// tenant capabilities for the specified tenant ID.

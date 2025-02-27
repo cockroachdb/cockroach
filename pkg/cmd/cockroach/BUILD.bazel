@@ -18,6 +18,7 @@ disallowed_imports_test(
     "cockroach_lib",
     [
         "//pkg/sql/randgen",
+        "//pkg/testutils",
         "//pkg/testutils/testcluster",
     ],
 )

@@ -348,6 +348,9 @@ INSERT INTO t VALUES (1, 2, NULL, NULL)
 statement ok
 BEGIN
 
+statement ok
+SET LOCAL autocommit_before_ddl=off;
+
 # Place i on the mutations queue in a delete only state.
 statement ok
 CREATE INDEX i ON t (y) STORING (z, w)

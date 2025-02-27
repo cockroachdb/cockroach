@@ -257,6 +257,7 @@ func (s *server) gossipReceiver(
 					createdAt: timeutil.Now(),
 				}
 
+				//nolint:deferloop TODO(#137605)
 				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
 					log.VEventf(ctx, 2, "removing n%d from incoming set", args.NodeID)
 					s.mu.incoming.removeNode(nodeID)

@@ -49,6 +49,7 @@ go_test(
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/isql",
         "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sqltestutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

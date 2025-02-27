@@ -26,7 +26,8 @@ echo
       "tracked_deductions": [
       ],
       "total_eval_deducted_tokens": "0",
-      "total_send_deducted_tokens": "0"
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
     }
   ]
 }
@@ -65,7 +66,8 @@ echo
         }
       ],
       "total_eval_deducted_tokens": "0",
-      "total_send_deducted_tokens": "0"
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
     }
   ]
 }
@@ -104,7 +106,8 @@ echo
         }
       ],
       "total_eval_deducted_tokens": "0",
-      "total_send_deducted_tokens": "0"
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
     },
     {
       "stream": {
@@ -128,7 +131,8 @@ echo
         }
       ],
       "total_eval_deducted_tokens": "0",
-      "total_send_deducted_tokens": "0"
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
     },
     {
       "stream": {
@@ -152,7 +156,8 @@ echo
         }
       ],
       "total_eval_deducted_tokens": "0",
-      "total_send_deducted_tokens": "0"
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
     }
   ]
 }
@@ -191,7 +196,8 @@ echo
         }
       ],
       "total_eval_deducted_tokens": "0",
-      "total_send_deducted_tokens": "0"
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
     },
     {
       "stream": {
@@ -215,7 +221,8 @@ echo
         }
       ],
       "total_eval_deducted_tokens": "0",
-      "total_send_deducted_tokens": "0"
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
     }
   ]
 }
@@ -238,7 +245,8 @@ echo
       "tracked_deductions": [
       ],
       "total_eval_deducted_tokens": "0",
-      "total_send_deducted_tokens": "0"
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
     },
     {
       "stream": {
@@ -254,7 +262,8 @@ echo
       "tracked_deductions": [
       ],
       "total_eval_deducted_tokens": "0",
-      "total_send_deducted_tokens": "0"
+      "total_send_deducted_tokens": "0",
+      "disconnected": false
     }
   ]
 }

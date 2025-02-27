@@ -48,6 +48,13 @@ func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
 		}
 	})
 
+	// Depending on the command for the policy, some expressions are blocked.
+	if n.Cmd == tree.PolicyCommandInsert && n.Exprs.Using != nil {
+		panic(pgerror.Newf(pgcode.Syntax, "only WITH CHECK expression allowed for INSERT"))
+	} else if (n.Cmd == tree.PolicyCommandDelete || n.Cmd == tree.PolicyCommandSelect) && n.Exprs.WithCheck != nil {
+		panic(pgerror.Newf(pgcode.Syntax, "WITH CHECK cannot be applied to SELECT or DELETE"))
+	}
+
 	policyID := b.NextTablePolicyID(tbl.TableID)
 	policy := &scpb.Policy{
 		TableID:  tbl.TableID,

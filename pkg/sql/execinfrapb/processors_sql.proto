@@ -1089,3 +1089,49 @@ message InsertSpec {
   // Whether the insert should be autocommitted.
   optional bool auto_commit = 4 [(gogoproto.nullable) = false];
 }
+
+// VectorSearchSpec is the specification for a vector-search operator, which
+// traverses a CSPANN index tree to find candidate nearest neighbors for a query
+// vector. It returns the primary keys of the candidate rows.
+message VectorSearchSpec {
+  optional sqlbase.IndexFetchSpec fetch_spec = 1 [(gogoproto.nullable) = false];
+
+  // PrefixKey constrains the prefix index columns to a single value. It is
+  // empty for an index without prefix columns.
+  optional bytes prefix_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  // QueryVector is the vector to search for.
+  repeated float query_vector = 3;
+
+  // TargetNeighborCount is the number of nearest neighbors to search for.
+  optional uint64 target_neighbor_count = 4 [(gogoproto.nullable) = false];
+}
+
+// VectorMutationSearchSpec is the specification for a vector-mutation-search
+// operator, which traverses a CSPANN index tree to find the partitions where
+// input query vectors belong, so that the vectors can be added to or removed
+// from the index. It returns the set of input columns, plus the key of the
+// discovered partition, and optionally the quantized vector.
+message VectorMutationSearchSpec {
+  optional sqlbase.IndexFetchSpec fetch_spec = 1 [(gogoproto.nullable) = false];
+
+  // PrefixKeyColumnOrdinals and PrefixKeyColumns are set for an index with
+  // prefix columns. They identify the input columns that will be used to
+  // constrain each prefix column to a single value for the search.
+  repeated uint32 prefix_key_column_ordinals = 2;
+  repeated cockroach.sql.sqlbase.IndexFetchSpec.KeyColumn prefix_key_columns = 3 [(gogoproto.nullable) = false];
+
+  // QueryVectorColumnOrdinal identifies the vectors that will be inserted into
+  // or removed from the vector index.
+  optional uint32 query_vector_column_ordinal = 4 [(gogoproto.nullable) = false];
+
+  // SuffixKeyColumnOrdinals and SuffixKeyColumns are set for an index del.
+  // They identify a subset of the primary key columns to be used in locating
+  // the vector index entry for a specific row.
+  repeated uint32 suffix_key_column_ordinals = 5;
+  repeated cockroach.sql.sqlbase.IndexFetchSpec.KeyColumn suffix_key_columns = 6 [(gogoproto.nullable) = false];
+
+  // IsIndexPut is true if the search is being conducted for an index put,
+  // instead of an index del.
+  optional bool is_index_put = 7 [(gogoproto.nullable) = false];
+}

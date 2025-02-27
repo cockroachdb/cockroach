@@ -25,7 +25,7 @@ func TestErrorCounts(t *testing.T) {
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -69,7 +69,7 @@ func TestTransactionRetryErrorCounts(t *testing.T) {
 	// in pgwire (pgwire.convertToErrWithPGCode). Make sure we're
 	// reporting errors at a level that allows this code to be recorded.
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 

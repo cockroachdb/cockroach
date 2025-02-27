@@ -241,43 +241,39 @@ func (sp *csvWriter) Run(ctx context.Context, output execinfra.RowReceiver) {
 				return errors.Wrap(err, "failed to flush csv writer")
 			}
 
-			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
+			res, err := func() (rowenc.EncDatumRow, error) {
+				conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
+				if err != nil {
+					return nil, err
+				}
+				es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
+				if err != nil {
+					return nil, err
+				}
+				defer es.Close()
+
+				part := fmt.Sprintf("n%d.%d", uniqueID, chunk)
+				chunk++
+				filename := writer.FileName(sp.spec, part)
+				// Close writer to ensure buffer and any compression footer is flushed.
+				err = writer.Close()
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to close exporting writer")
+				}
+
+				size := writer.Len()
+
+				if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
+					return nil, err
+				}
+				return rowenc.EncDatumRow{
+					rowenc.DatumToEncDatum(types.String, tree.NewDString(filename)),
+					rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rows))),
+					rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(size))),
+				}, nil
+			}()
 			if err != nil {
 				return err
-			}
-			es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
-			if err != nil {
-				return err
-			}
-			defer es.Close()
-
-			part := fmt.Sprintf("n%d.%d", uniqueID, chunk)
-			chunk++
-			filename := writer.FileName(sp.spec, part)
-			// Close writer to ensure buffer and any compression footer is flushed.
-			err = writer.Close()
-			if err != nil {
-				return errors.Wrapf(err, "failed to close exporting writer")
-			}
-
-			size := writer.Len()
-
-			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
-				return err
-			}
-			res := rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(
-					types.String,
-					tree.NewDString(filename),
-				),
-				rowenc.DatumToEncDatum(
-					types.Int,
-					tree.NewDInt(tree.DInt(rows)),
-				),
-				rowenc.DatumToEncDatum(
-					types.Int,
-					tree.NewDInt(tree.DInt(size)),
-				),
 			}
 
 			cs, err := sp.out.EmitRow(ctx, res, output)

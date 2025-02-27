@@ -71,7 +71,6 @@ go_library(
         "create_stats.go",
         "create_table.go",
         "create_tenant.go",
-        "create_trigger.go",
         "create_type.go",
         "create_view.go",
         "created_sequence.go",
@@ -285,6 +284,7 @@ go_library(
         "user.go",
         "values.go",
         "vars.go",
+        "vector_search.go",
         "views.go",
         "virtual_schema.go",
         "virtual_table.go",
@@ -539,7 +539,6 @@ go_library(
         "//pkg/sql/vtable",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/testutils/serverutils",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
         "//pkg/util",
@@ -603,6 +602,7 @@ go_library(
         "//pkg/util/uint128",
         "//pkg/util/unique",
         "//pkg/util/uuid",
+        "//pkg/util/vector",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
@@ -907,6 +907,7 @@ go_test(
         "//pkg/testutils/jobutils",
         "//pkg/testutils/kvclientutils",
         "//pkg/testutils/pgtest",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -1008,4 +1009,7 @@ disallowed_imports_test(
     "sql",
     # TODO(#81380): This should be flipped to "True".
     disallow_cdeps = False,
+    disallowed_list = [
+        "//pkg/testutils",
+    ],
 )

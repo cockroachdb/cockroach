@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -229,7 +228,7 @@ func updateReplicationStreamProgress(
 	}
 
 	status, err = updateJob()
-	if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
+	if jobs.HasJobNotFoundError(err) {
 		status.StreamStatus = streampb.StreamReplicationStatus_STREAM_INACTIVE
 		err = nil
 	}
@@ -368,12 +367,12 @@ func completeReplicationStream(
 			if successfulIngestion {
 				md.Progress.GetStreamReplication().StreamIngestionStatus =
 					jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY
-				md.Progress.RunningStatus = "succeeding this producer job as the corresponding " +
+				md.Progress.StatusMessage = "succeeding this producer job as the corresponding " +
 					"stream ingestion finished successfully"
 			} else {
 				md.Progress.GetStreamReplication().StreamIngestionStatus =
 					jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY
-				md.Progress.RunningStatus = "canceling this producer job as the corresponding " +
+				md.Progress.StatusMessage = "canceling this producer job as the corresponding " +
 					"stream ingestion did not finish successfully"
 			}
 			ju.UpdateProgress(md.Progress)

@@ -125,7 +125,7 @@ func (t *descriptorState) upsertLeaseLocked(
 	desc catalog.Descriptor,
 	session sqlliveness.Session,
 	regionEnumPrefix []byte,
-) (createdDescriptorVersionState *descriptorVersionState, _ error) {
+) error {
 	if t.mu.maxVersionSeen < desc.GetVersion() {
 		t.mu.maxVersionSeen = desc.GetVersion()
 	}
@@ -136,10 +136,28 @@ func (t *descriptorState) upsertLeaseLocked(
 		}
 		descState := newDescriptorVersionState(t, desc, hlc.Timestamp{}, session, regionEnumPrefix, true /* isLease */)
 		t.mu.active.insert(descState)
-		return descState, nil
+		t.m.names.insert(ctx, descState)
+		return nil
 	}
-	// If the version already exists, nothing needs to be done.
-	return nil, nil
+	// If the version already exists and the session ID matches nothing
+	// needs to be done.
+	if s.getSessionID() == session.ID() {
+		return nil
+	}
+
+	// Otherwise, we need to update the existing lease to fix the session ID. The
+	// previously stored lease also needs to be deleted.
+	var existingLease storedLease
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		existingLease = *s.mu.lease
+		s.mu.lease.sessionID = session.ID().UnsafeBytes()
+		s.mu.session = session
+	}()
+	// Delete the existing lease on behalf of the caller.
+	t.m.storage.release(ctx, t.m.stopper, &existingLease)
+	return nil
 }
 
 var _ redact.SafeFormatter = (*descriptorVersionState)(nil)
@@ -163,13 +181,12 @@ func newDescriptorVersionState(
 			version: int(desc.GetVersion()),
 		}
 		descState.mu.lease.sessionID = session.ID().UnsafeBytes()
-		descState.mu.session = session
-
 		if buildutil.CrdbTestBuild && !expiration.IsEmpty() {
 			panic(errors.AssertionFailedf("expiration should always be empty for "+
 				"session based leases (got: %s on Desc: %s(%d))", expiration.String(), desc.GetName(), desc.GetID()))
 		}
 	}
+	descState.mu.session = session
 	descState.mu.expiration = expiration
 
 	return descState

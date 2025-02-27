@@ -73,7 +73,7 @@ func initTest(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
 	c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("curl '%s' -o /tmp/lineitem-table.csv", csv))
 }
 
-func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
+func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string, atomic bool) {
 	var err error
 	var start time.Time
 	var det install.RunResultDetails
@@ -94,9 +94,20 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 			t.L().Printf("err: %v\n", err)
 			t.L().Printf("stdout:\n%v\n", det.Stdout)
 			t.L().Printf("stderr:\n%v\n", det.Stderr)
-			t.Fatal(err)
+			if atomic {
+				// With atomic COPY we're more likely to encounter an error, and
+				// in the ideal world that error should have 40001 error code
+				// set ("serialization failure"), but we might be stripping that
+				// information in the roachtest infra. We don't think there is
+				// anything wrong with the COPY, so we allow retries for atomic
+				// COPY unconditionally.
+				t.L().Printf("retrying atomic COPY due to an error: \n%s\n", err)
+			} else {
+				t.Fatal(err)
+			}
+		} else {
+			t.L().Printf("retrying due to retryable error: \n%s\n", err)
 		}
-		t.L().Printf("retrying due to retryable error: \n%s\n", err)
 	}
 	if !succeeded {
 		t.Fatalf("exceeded the limit of retries for serializable errors")
@@ -129,7 +140,7 @@ func runCopyFromPG(ctx context.Context, t test.Test, c cluster.Cluster, sf int) 
 	initTest(ctx, t, c, sf)
 	c.Run(ctx, option.WithNodes(c.Node(1)), "sudo -i -u postgres psql -c 'DROP TABLE IF EXISTS lineitem'")
 	c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("sudo -i -u postgres psql -c '%s'", lineitemSchema))
-	runTest(ctx, t, c, "sudo -i -u postgres psql")
+	runTest(ctx, t, c, "sudo -i -u postgres psql", false /* atomic */)
 }
 
 func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int, atomic bool) {
@@ -165,7 +176,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 		urlstr = u.String()
 		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql '%s' -c 'SELECT 1'", urlstr))
 		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql '%s' -c '%s'", urlstr, lineitemSchema))
-		runTest(ctx, t, c, fmt.Sprintf("psql '%s'", urlstr))
+		runTest(ctx, t, c, fmt.Sprintf("psql '%s'", urlstr), atomic)
 		return nil
 	})
 	m.Wait()
@@ -190,7 +201,7 @@ func registerCopyFrom(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runCopyFromCRDB(ctx, t, c, tc.sf, true /*atomic*/)
+				runCopyFromCRDB(ctx, t, c, tc.sf, true /* atomic */)
 			},
 		})
 		r.Add(registry.TestSpec{
@@ -202,7 +213,7 @@ func registerCopyFrom(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runCopyFromCRDB(ctx, t, c, tc.sf, false /*atomic*/)
+				runCopyFromCRDB(ctx, t, c, tc.sf, false /* atomic */)
 			},
 		})
 		r.Add(registry.TestSpec{

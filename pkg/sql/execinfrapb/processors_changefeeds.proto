@@ -97,4 +97,8 @@ message ChangeFrontierSpec {
 
   // Description is the description of the changefeed. Used for structured logging.
   optional string description = 5 [(gogoproto.nullable) = false];
+
+  // SpanLevelCheckpoint is a map from timestamps to lists of spans that captures
+  // the changefeed progress and is used to initialize the frontier on resume.
+  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 6;
 }

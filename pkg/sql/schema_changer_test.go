@@ -1557,7 +1557,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// just waiting for the lease to expire.
 		timeoutCtx, cancel := context.WithTimeout(ctx, base.DefaultDescriptorLeaseDuration/2)
 		defer cancel()
-		if err := sql.TestingDescsTxn(timeoutCtx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		if err := sqltestutils.TestingDescsTxn(timeoutCtx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			tbl, err := col.MutableByID(txn.KV()).Table(ctx, tableDesc.GetID())
 			if err != nil {
 				return err
@@ -4062,6 +4062,10 @@ func TestSchemaChangeErrorOnCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := tx.Exec(`SET LOCAL autocommit_before_ddl = off;`); err != nil {
+		t.Fatal(err)
+	}
+
 	// This schema change is invalid because of the duplicate v, but its error is
 	// only reported later.
 	if _, err := tx.Exec("ALTER TABLE t.test ADD CONSTRAINT v_unique UNIQUE (v)"); err != nil {
@@ -4462,7 +4466,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			}
 			if tc.isGC {
 				testutils.SucceedsSoon(t, func() error {
-					return jobutils.VerifyRunningSystemJob(t, sqlDB, gcIdx*2, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingForMVCCGC, jobRecord)
+					return jobutils.VerifyRunningSystemJob(t, sqlDB, gcIdx*2, jobspb.TypeSchemaChangeGC, sql.StatusWaitingForMVCCGC, jobRecord)
 				})
 				gcIdx++
 			}
@@ -5526,7 +5530,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 	runBeforeConstraintValidation = func() error {
 		// TODO (lucy): Maybe this test API should use an offset starting
 		// from the most recent job instead.
-		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.StatusValidation, jobs.Record{
 			Username:    username.RootUserName(),
 			Description: "ALTER TABLE t.public.test ADD COLUMN a INT8 AS (v - 1) STORED, ADD CHECK ((a < v) AND (a IS NOT NULL))",
 			DescriptorIDs: descpb.IDs{

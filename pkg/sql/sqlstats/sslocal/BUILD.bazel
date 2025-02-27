@@ -72,6 +72,7 @@ go_test(
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
         "//pkg/sql/sqlstats/ssmemstorage",
         "//pkg/testutils",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

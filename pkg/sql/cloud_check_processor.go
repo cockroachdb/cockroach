@@ -91,9 +91,9 @@ func checkURI(
 			total.error = errors.Wrapf(err, "opening external storage").Error()
 			return total
 		}
-		defer store.Close()
 
 		res, err := checkStorage(ctx, store, transferSize)
+		store.Close()
 		if err != nil {
 			res.error = err.Error()
 		}

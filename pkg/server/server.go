@@ -593,9 +593,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	db.AdmissionPacerFactory = gcoords.Elastic
 	goschedstats.RegisterSettings(st)
 	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
-	stopper.AddCloser(stop.CloserFn(func() {
-		goschedstats.UnregisterRunnableCountCallback(cbID)
-	}))
+	if cbID >= 0 {
+		stopper.AddCloser(stop.CloserFn(func() {
+			goschedstats.UnregisterRunnableCountCallback(cbID)
+		}))
+	}
 	stopper.AddCloser(gcoords)
 
 	var admissionControl struct {
@@ -1876,15 +1878,12 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	// Begin recording runtime statistics.
 	if err := startSampleEnvironment(workersCtx,
-		s.ClusterSettings(),
+		&s.cfg.BaseConfig,
+		s.cfg.CacheSize,
 		s.stopper,
-		s.cfg.GoroutineDumpDirName,
-		s.cfg.HeapProfileDirName,
-		s.cfg.CPUProfileDirName,
 		s.runtime,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,
-		s.cfg.TestingKnobs,
 	); err != nil {
 		return err
 	}

@@ -454,7 +454,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
-		insightsProvider.Anomalies(),
 	)
 	reportedSQLStatsController := reportedSQLStats.GetController(cfg.SQLStatusServer)
 	memSQLStats := sslocal.New(
@@ -466,7 +465,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
-		insightsProvider.Anomalies(),
 	)
 	s := &Server{
 		cfg:                     cfg,
@@ -1346,7 +1344,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
-	if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForExplicitClose); err != nil {
+	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForExplicitClose); err != nil {
 		log.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
@@ -2186,11 +2184,16 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 	)
 
 	// Close all (non HOLD) cursors.
-	closeReason := cursorCloseForTxnCommit
-	if ev.eventType != txnCommit {
+	var closeReason cursorCloseReason
+	switch ev.eventType {
+	case txnCommit:
+		closeReason = cursorCloseForTxnCommit
+	case txnPrepare:
+		closeReason = cursorCloseForTxnPrepare
+	default:
 		closeReason = cursorCloseForTxnRollback
 	}
-	if err := ex.extraTxnState.sqlCursors.closeAll(closeReason); err != nil {
+	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, closeReason); err != nil {
 		log.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
@@ -2660,7 +2663,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			// txnState.finishSQLTxn() is being called, as the underlying resources of
 			// pausable portals hasn't been cleared yet.
 			ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
-			if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForTxnRollback); err != nil {
+			if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnRollback); err != nil {
 				log.Warningf(ctx, "error closing cursors: %v", err)
 			}
 		}
@@ -4035,14 +4038,9 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err != nil {
 				return advanceInfo{}, err
 			}
-
 			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
 				ex.extraTxnState.txnFinishClosure.implicit = false
-				if err = ex.statsCollector.UpgradeImplicitTxn(ex.Ctx()); err != nil {
-					return advanceInfo{}, err
-				}
 			}
-
 		}
 	case txnStart:
 		ex.recordTransactionStart(advInfo.txnEvent.txnID)

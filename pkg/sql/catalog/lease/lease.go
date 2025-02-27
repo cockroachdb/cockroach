@@ -774,8 +774,14 @@ func (m *Manager) readOlderVersionForTimestamp(
 
 // Insert descriptor versions. The versions provided are not in
 // any particular order.
-func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDescriptor) {
+func (m *Manager) insertDescriptorVersions(
+	ctx context.Context, id descpb.ID, versions []historicalDescriptor,
+) error {
 	t := m.findDescriptorState(id, false /* create */)
+	session, err := m.storage.livenessProvider.Session(ctx)
+	if err != nil {
+		return err
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for i := range versions {
@@ -785,9 +791,10 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 		existingVersion := t.mu.active.findVersion(versions[i].desc.GetVersion())
 		if existingVersion == nil {
 			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, nil, false))
+				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, session, nil, false))
 		}
 	}
+	return nil
 }
 
 // AcquireFreshestFromStore acquires a new lease from the store and
@@ -853,15 +860,17 @@ func acquireNodeLease(
 			}
 			newest := m.findNewest(id)
 			var currentVersion descpb.DescriptorVersion
+			var currentSessionID sqlliveness.SessionID
 			if newest != nil {
 				currentVersion = newest.GetVersion()
+				currentSessionID = newest.getSessionID()
 			}
 			// A session will always be populated, since we use session based leasing.
 			session, err := m.storage.livenessProvider.Session(ctx)
 			if err != nil {
 				return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
 			}
-			desc, regionPrefix, err := m.storage.acquire(ctx, session, id, currentVersion)
+			desc, regionPrefix, err := m.storage.acquire(ctx, session, id, currentVersion, currentSessionID)
 			if err != nil {
 				return nil, err
 			}
@@ -877,13 +886,9 @@ func acquireNodeLease(
 			t.mu.Lock()
 			t.mu.takenOffline = false
 			defer t.mu.Unlock()
-			var newDescVersionState *descriptorVersionState
-			newDescVersionState, err = t.upsertLeaseLocked(ctx, desc, session, regionPrefix)
+			err = t.upsertLeaseLocked(ctx, desc, session, regionPrefix)
 			if err != nil {
 				return nil, err
-			}
-			if newDescVersionState != nil {
-				m.names.insert(ctx, newDescVersionState)
 			}
 			return true, nil
 		})
@@ -993,7 +998,6 @@ func purgeOldVersions(
 				if sessionExpiry := leaseToExpire.mu.session.Expiration(); leaseDuration > 0 && leaseToExpire.mu.expiration.Less(sessionExpiry) {
 					leaseToExpire.mu.expiration = sessionExpiry
 				}
-				leaseToExpire.mu.session = nil
 				if leaseToExpire.mu.lease != nil {
 					m.storage.sessionBasedLeasesWaitingToExpire.Inc(1)
 					m.mu.leasesToExpire = append(m.mu.leasesToExpire, leaseToExpire)
@@ -1474,8 +1478,10 @@ func (m *Manager) Acquire(
 			if errRead != nil {
 				return nil, errRead
 			}
-			m.insertDescriptorVersions(id, versions)
-
+			errRead = m.insertDescriptorVersions(ctx, id, versions)
+			if errRead != nil {
+				return nil, errRead
+			}
 		default:
 			return nil, err
 		}

@@ -180,7 +180,7 @@ func emitInternal(
 				return err
 			}
 			visitedFKsByCascades[fkID] = struct{}{}
-			defer delete(visitedFKsByCascades, fkID)
+			defer delete(visitedFKsByCascades, fkID) //nolint:deferloop
 		}
 		if err = emitPostQuery(cascade, cascadePlan, alreadyEmitted); err != nil {
 			return err
@@ -433,6 +433,8 @@ var nodeNames = [...]string{
 	updateOp:               "update",
 	upsertOp:               "upsert",
 	valuesOp:               "", // This node does not have a fixed name.
+	vectorSearchOp:         "vector search",
+	vectorMutationSearchOp: "vector mutation search",
 	windowOp:               "window",
 	zigzagJoinOp:           "zigzag join",
 }
@@ -704,11 +706,19 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 		e.emitLockingPolicy(a.Params.Locking)
 
+		if val, ok := n.annotations[exec.PolicyInfoID]; ok {
+			e.emitPolicies(ob, a.Table, val.(*exec.RLSPoliciesApplied))
+		}
+
 	case valuesOp:
 		a := n.args.(*valuesArgs)
-		// Don't emit anything for the "norows" and "emptyrow" cases.
+		// Don't emit anything, except policy info, for the "norows" and "emptyrow" cases.
 		if len(a.Rows) > 0 && (len(a.Rows) > 1 || len(a.Columns) > 0) {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Columns))
+		} else if len(a.Rows) == 0 {
+			if val, ok := n.annotations[exec.PolicyInfoID]; ok {
+				e.emitPolicies(ob, nil, val.(*exec.RLSPoliciesApplied))
+			}
 		}
 
 	case filterOp:
@@ -923,6 +933,35 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 	case scanBufferOp:
 		a := n.args.(*scanBufferArgs)
 		ob.Attr("label", a.Label)
+
+	case vectorSearchOp:
+		a := n.args.(*vectorSearchArgs)
+		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
+		ob.Attr("target count", a.TargetNeighborCount)
+		if ob.flags.Verbose {
+			if !a.PrefixKey.IsEmpty() {
+				ob.Attr("prefix key", a.PrefixKey)
+			}
+			ob.Expr("query vector", a.QueryVector, nil /* varColumns */)
+		}
+
+	case vectorMutationSearchOp:
+		a := n.args.(*vectorMutationSearchArgs)
+		if a.IsIndexPut {
+			ob.Attr("mutation type", "put")
+		} else {
+			ob.Attr("mutation type", "del")
+		}
+		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
+		if ob.flags.Verbose {
+			if len(a.PrefixKeyCols) > 0 {
+				e.ob.Attr("prefix key cols", printColumnList(a.Input.Columns(), a.PrefixKeyCols))
+			}
+			e.ob.Attr("query vector col", a.Input.Columns()[a.QueryVectorCol].Name)
+			if len(a.SuffixKeyCols) > 0 {
+				e.ob.Attr("suffix key cols", printColumnList(a.Input.Columns(), a.SuffixKeyCols))
+			}
+		}
 
 	case insertOp:
 		a := n.args.(*insertArgs)
@@ -1343,6 +1382,32 @@ func (e *emitter) emitJoinAttributes(
 		}
 	}
 	e.ob.Expr("pred", extraOnCond, appendColumns(leftCols, rightCols...))
+}
+
+func (e *emitter) emitPolicies(
+	ob *OutputBuilder, table cat.Table, applied *exec.RLSPoliciesApplied,
+) {
+	if !ob.flags.ShowPolicyInfo {
+		return
+	}
+
+	if applied.PoliciesSkippedForRole {
+		ob.AddField("policies", "exempt for role")
+	} else if applied.Policies.Len() == 0 {
+		ob.AddField("policies", "row-level security enabled, no policies applied.")
+	} else {
+		var sb strings.Builder
+		for i := 0; i < table.PolicyCount(tree.PolicyTypePermissive); i++ {
+			policy := table.Policy(tree.PolicyTypePermissive, i)
+			if applied.Policies.Contains(policy.ID) {
+				if sb.Len() > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(policy.Name.Normalize())
+			}
+		}
+		ob.AddField("policies", sb.String())
+	}
 }
 
 func printColumns(inputCols colinfo.ResultColumns) string {

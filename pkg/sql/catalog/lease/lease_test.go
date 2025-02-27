@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -94,7 +95,7 @@ func init() {
 	lease.MoveTablePrimaryIndexIDtoTarget = func(
 		ctx context.Context, t *testing.T, s serverutils.ApplicationLayerInterface, id descpb.ID, indexID descpb.IndexID,
 	) {
-		require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		require.NoError(t, sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			t, err := col.MutableByID(txn.KV()).Table(ctx, id)
 			if err != nil {
 				return err
@@ -1854,6 +1855,11 @@ func TestLeaseAcquisitionDoesntBlock(t *testing.T) {
 			schemaCh <- err
 			return
 		}
+		_, err = tx.Exec("SET LOCAL autocommit_before_ddl = off")
+		if err != nil {
+			schemaCh <- err
+			return
+		}
 		_, err = tx.Exec("ALTER TABLE t.test ADD COLUMN v2 CHAR")
 		schemaCh <- err
 		if err != nil {
@@ -1906,6 +1912,11 @@ func TestLeaseAcquisitionByNameDoesntBlock(t *testing.T) {
 			schemaCh <- err
 			return
 		}
+		_, err = tx.Exec("SET LOCAL autocommit_before_ddl = off")
+		if err != nil {
+			schemaCh <- err
+			return
+		}
 		_, err = tx.Exec("CREATE TABLE t.test()")
 		schemaCh <- err
 		if err != nil {
@@ -1950,9 +1961,13 @@ func TestIntentOnSystemConfigDoesNotPreventSchemaChange(t *testing.T) {
 	require.NoError(t, err)
 
 	// Lay down an intent on the system config span.
+	_, err = txA.Exec("SET LOCAL autocommit_before_ddl = off")
+	require.NoError(t, err)
 	_, err = txA.Exec("CREATE TABLE bar (i INT PRIMARY KEY)")
 	require.NoError(t, err)
 
+	_, err = txB.Exec("SET LOCAL autocommit_before_ddl = off")
+	require.NoError(t, err)
 	_, err = txB.Exec("ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 2")
 	require.NoError(t, err)
 

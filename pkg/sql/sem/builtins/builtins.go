@@ -199,14 +199,14 @@ func init() {
 	}
 }
 
-var CompactBackups func(
+var StartCompactionJob func(
 	ctx context.Context,
-	exCtx interface{},
+	planner interface{},
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
 	start, end hlc.Timestamp,
-) error
+) (jobspb.JobID, error)
 
 // builtins contains the built-in functions indexed by name.
 //
@@ -386,6 +386,50 @@ var regularBuiltins = map[string]builtinDefinition{
 
 	"substr":    makeSubStringImpls(),
 	"substring": makeSubStringImpls(),
+
+	"substring_index": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "input", Typ: types.String},
+				{Name: "delim", Typ: types.String},
+				{Name: "count", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				input := string(tree.MustBeDString(args[0]))
+				delim := string(tree.MustBeDString(args[1]))
+				count := int(tree.MustBeDInt(args[2]))
+
+				// Handle empty input.
+				if input == "" || delim == "" || count == 0 {
+					return tree.NewDString(""), nil
+				}
+
+				parts := strings.Split(input, delim)
+				length := len(parts)
+
+				// If count is positive, return the first 'count' parts joined by delim
+				if count > 0 {
+					if count >= length {
+						return tree.NewDString(input), nil // If count exceeds occurrences, return the full string
+					}
+					result := strings.Join(parts[:count], delim)
+					return tree.NewDString(result), nil
+				}
+
+				// If count is negative, return the last 'abs(count)' parts joined by delim
+				count = -count
+				if count >= length {
+					return tree.NewDString(input), nil // If count exceeds occurrences, return the full string
+				}
+				return tree.NewDString(strings.Join(parts[length-count:], delim)), nil
+			},
+			Info: "Returns a substring of `input` before `count` occurrences of `delim`.\n" +
+				"If `count` is positive, the leftmost part is returned. If `count` is negative, the rightmost part is returned.",
+			Volatility: volatility.Immutable,
+		},
+	),
 
 	// concat concatenates the text representations of all the arguments.
 	// NULL arguments are ignored.
@@ -4079,13 +4123,13 @@ value if you rely on the HLC for accuracy.`,
 	// The behavior of both the JSON and JSONB data types in CockroachDB is
 	// similar to the behavior of the JSONB data type in Postgres.
 
-	"jsonb_path_exists":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
-	"jsonb_path_exists_opr":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
-	"jsonb_path_match":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
-	"jsonb_path_match_opr":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
-	"jsonb_path_query":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
-	"jsonb_path_query_array": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
-	"jsonb_path_query_first": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_exists":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_exists_opr":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_match":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_match_opr":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_query":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_query_array": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_query_first": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
 
 	"json_remove_path": makeBuiltin(jsonProps(),
 		tree.Overload{
@@ -8963,7 +9007,10 @@ WHERE object_id = table_descriptor_id
 		},
 	),
 	"crdb_internal.backup_compaction": makeBuiltin(
-		tree.FunctionProperties{Undocumented: true},
+		tree.FunctionProperties{
+			Undocumented: true,
+			ReturnLabels: []string{"job_id"},
+		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "collection_uri", Typ: types.StringArray},
@@ -8972,9 +9019,9 @@ WHERE object_id = table_descriptor_id
 				{Name: "start_time", Typ: types.Decimal},
 				{Name: "end_time", Typ: types.Decimal},
 			},
-			ReturnType: tree.FixedReturnType(types.Void),
+			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if CompactBackups == nil {
+				if StartCompactionJob == nil {
 					return nil, errors.Newf("missing CompactBackups")
 				}
 				ary := *tree.MustBeDArray(args[0])
@@ -9000,11 +9047,14 @@ WHERE object_id = table_descriptor_id
 				if err != nil {
 					return nil, err
 				}
-				return tree.DVoidDatum, CompactBackups(
-					ctx, evalCtx.JobExecContext, collectionURI, nil, fullPath, encryption, startTs, endTs,
+				evalCtx.Planner.ExecutorConfig()
+				jobID, err := StartCompactionJob(
+					ctx, evalCtx.Planner, collectionURI, nil, fullPath,
+					encryption, startTs, endTs,
 				)
+				return tree.NewDInt(tree.DInt(jobID)), err
 			},
-			Info:       "Compacts the chain of incremental backups described by the start and end times.",
+			Info:       "Compacts the chain of incremental backups described by the start and end times (nanosecond epoch).",
 			Volatility: volatility.Volatile,
 		},
 	),

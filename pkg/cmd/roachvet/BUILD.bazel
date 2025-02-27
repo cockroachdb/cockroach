@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachvet",
     visibility = ["//visibility:private"],
     deps = [
+        "//pkg/testutils/lint/passes/deferloop",
         "//pkg/testutils/lint/passes/deferunlockcheck",
         "//pkg/testutils/lint/passes/errcmp",
         "//pkg/testutils/lint/passes/errwrap",

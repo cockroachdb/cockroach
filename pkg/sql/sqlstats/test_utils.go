@@ -5,7 +5,20 @@
 
 package sqlstats
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+)
+
+type FlushFn func(ctx context.Context,
+	stopper *stop.Stopper,
+	aggregatedTs time.Time,
+	stmtStats []*appstatspb.CollectedStatementStatistics,
+	txnStats []*appstatspb.CollectedTransactionStatistics,
+)
 
 // TestingKnobs provides hooks and knobs for unit tests.
 type TestingKnobs struct {
@@ -38,11 +51,8 @@ type TestingKnobs struct {
 	// the Zone Config TTL setup.
 	SkipZoneConfigBootstrap bool
 
-	// ConsumeStmtStatsInterceptor intercepts consumed stmt stats.
-	ConsumeStmtStatsInterceptor StatementVisitor
-
-	// ConsumeTxnStatsInterceptor intercepts consumed transaction stats.
-	ConsumeTxnStatsInterceptor TransactionVisitor
+	// FlushInterceptor intercepts persistedsqlstats flush operation.
+	FlushInterceptor FlushFn
 
 	// OnAfterClear is invoked right after in-memory SQLStats stats cleared.
 	// It can be useful to invoke assertions right after in-memory stats flushed

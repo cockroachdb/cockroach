@@ -1230,6 +1230,7 @@ func (g *Gossip) getNextBootstrapAddressLocked() util.UnresolvedAddr {
 	for range g.addresses {
 		g.addressIdx++
 		g.addressIdx %= len(g.addresses)
+		//nolint:deferloop TODO(#137605)
 		defer func(idx int) { g.addressesTried[idx] = struct{}{} }(g.addressIdx)
 		addr := g.addresses[g.addressIdx]
 		addrStr := addr.String()
