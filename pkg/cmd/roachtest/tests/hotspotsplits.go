@@ -13,13 +13,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 func registerHotSpotSplits(r registry.Registry) {
@@ -31,24 +32,23 @@ func registerHotSpotSplits(r registry.Registry) {
 
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload init kv --drop {pgurl:1}`)
 
-		var m *errgroup.Group // see comment in version.go
-		m, ctx = errgroup.WithContext(ctx)
+		m := t.NewGroup(task.WithContext(ctx))
 
-		m.Go(func() error {
-			t.L().Printf("starting load generator\n")
+		m.Go(func(ctx context.Context, l *logger.Logger) error {
+			l.Printf("starting load generator\n")
 
 			const blockSize = 1 << 18 // 256 KB
 			return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(
 				"./cockroach workload run kv --read-percent=0 --tolerate-errors --concurrency=%d "+
 					"--min-block-bytes=%d --max-block-bytes=%d --duration=%s {pgurl%s}",
 				concurrency, blockSize, blockSize, duration.String(), c.CRDBNodes()))
-		})
+		}, task.Name("load-generator"))
 
-		m.Go(func() error {
+		m.Go(func(ctx context.Context, l *logger.Logger) error {
 			t.Status("starting checks for range sizes")
 			const sizeLimit = 3 * (1 << 29) // 3*512 MB (512 mb is default size)
 
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, l, 1)
 			defer db.Close()
 
 			var size = float64(0)
@@ -73,10 +73,8 @@ func registerHotSpotSplits(r registry.Registry) {
 			}
 
 			return nil
-		})
-		if err := m.Wait(); err != nil {
-			t.Fatal(err)
-		}
+		}, task.Name("range-size-checks"))
+		m.Wait()
 	}
 
 	minutes := 10 * time.Minute

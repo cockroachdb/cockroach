@@ -343,18 +343,40 @@ func (mr *MockTestMockRecorder) Name() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockTest)(nil).Name))
 }
 
-// NewGroup mocks base method.
-func (m *MockTest) NewGroup() task.Group {
+// NewErrorGroup mocks base method.
+func (m *MockTest) NewErrorGroup(arg0 ...task.Option) task.ErrorGroup {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewGroup")
+	varargs := []interface{}{}
+	for _, a := range arg0 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "NewErrorGroup", varargs...)
+	ret0, _ := ret[0].(task.ErrorGroup)
+	return ret0
+}
+
+// NewErrorGroup indicates an expected call of NewErrorGroup.
+func (mr *MockTestMockRecorder) NewErrorGroup(arg0 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewErrorGroup", reflect.TypeOf((*MockTest)(nil).NewErrorGroup), arg0...)
+}
+
+// NewGroup mocks base method.
+func (m *MockTest) NewGroup(arg0 ...task.Option) task.Group {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{}
+	for _, a := range arg0 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "NewGroup", varargs...)
 	ret0, _ := ret[0].(task.Group)
 	return ret0
 }
 
 // NewGroup indicates an expected call of NewGroup.
-func (mr *MockTestMockRecorder) NewGroup() *gomock.Call {
+func (mr *MockTestMockRecorder) NewGroup(arg0 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewGroup", reflect.TypeOf((*MockTest)(nil).NewGroup))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewGroup", reflect.TypeOf((*MockTest)(nil).NewGroup), arg0...)
 }
 
 // PerfArtifactsDir mocks base method.
