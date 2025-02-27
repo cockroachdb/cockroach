@@ -35,6 +35,11 @@ message ChangefeedFailed {
   string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
+// ChangefeedCanceled is an event for any changefeed cancellations.
+message ChangefeedCanceled {
+  CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
 // ChangefeedEmittedBytes is an event representing the bytes emitted by a changefeed over an interval.
 message ChangefeedEmittedBytes {
   CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
