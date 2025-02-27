@@ -6,15 +6,22 @@
 package bulkmerge
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"net/url"
+	"path"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
@@ -135,12 +142,10 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 		return nil, err
 	}
 
-	results := execinfrapb.BulkMergeSpec_Output{}
-	results.Ssts = append(results.Ssts, execinfrapb.BulkMergeSpec_SST{
-		// TODO(jeffswenson): replace this with real output. For now we just
-		// want to make sure each task is processed
-		Uri: fmt.Sprintf("nodelocal://%d/merger/1337/%d.sst", m.flowCtx.NodeID.SQLInstanceID(), input.taskID),
-	})
+	results, err := m.mergeSSTs(m.Ctx(), input.taskID)
+	if err != nil {
+		return nil, err
+	}
 
 	marshaled, err := protoutil.Marshal(&results)
 	if err != nil {
@@ -156,8 +161,113 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 
 // Start implements execinfra.RowSource.
 func (m *bulkMergeProcessor) Start(ctx context.Context) {
-	m.StartInternal(ctx, "bulkMergeProcessor")
-	m.input.Start(ctx)
+	ctx = m.StartInternal(ctx, "bulkMergeProcessor")
+}
+
+func getKeysForTask(task int64, splits []roachpb.Key) (roachpb.Key, roachpb.Key) {
+	if task == 0 {
+		if len(splits) == 0 {
+			return nil, roachpb.KeyMax
+		}
+		return nil, splits[0]
+	}
+	last := int64(len(splits) - 1)
+	if task == last {
+		return splits[task], roachpb.KeyMax
+	}
+	if task > last {
+		panic(errors.AssertionFailedf("bad"))
+	}
+	return splits[task-1], splits[task]
+}
+
+// This is stolen from roachpb/data.go where we check if spans overlap.
+func isOverlapping(startKey, endKey roachpb.Key, sst execinfrapb.BulkMergeSpec_SST) bool {
+	otherStartKey, otherEndKey := sst.StartKey, sst.EndKey
+	if len(endKey) == 0 {
+		return bytes.Compare(startKey, otherStartKey) >= 0 && bytes.Compare(startKey, otherEndKey) < 0
+	}
+	return bytes.Compare(endKey, otherStartKey) > 0 && bytes.Compare(startKey, otherEndKey) < 0
+}
+
+func (m *bulkMergeProcessor) mergeSSTs(
+	ctx context.Context, taskID taskset.TaskId,
+) (execinfrapb.BulkMergeSpec_Output, error) {
+	startKey, endKey := getKeysForTask(int64(taskID), m.spec.Splits)
+	var storeFiles []storageccl.StoreFile
+	dest, err := m.flowCtx.Cfg.ExternalStorageFromURI(ctx, *m.spec.OutputUri, username.RootUserName())
+	if err != nil {
+		return execinfrapb.BulkMergeSpec_Output{}, err
+	}
+	// Find the ssts that overlap with the given task's key range.
+	for _, sst := range m.spec.Ssts {
+		uri, err := url.Parse(sst.Uri)
+		if err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+		baseURI := uri.Scheme + "://" + uri.Host + path.Dir(uri.Path) + "/"
+		sstFile := path.Base(sst.Uri)
+
+		if isOverlapping(startKey, endKey, sst) {
+			store, err := m.flowCtx.Cfg.ExternalStorageFromURI(ctx, baseURI, username.RootUserName())
+			if err != nil {
+				return execinfrapb.BulkMergeSpec_Output{}, err
+			}
+			storeFiles = append(storeFiles, storageccl.StoreFile{Store: store, FilePath: sstFile})
+		}
+	}
+	iterOpts := storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: startKey,
+		UpperBound: endKey,
+	}
+	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
+	if err != nil {
+		return execinfrapb.BulkMergeSpec_Output{}, err
+	}
+	defer iter.Close()
+
+	destSSTBase := fmt.Sprintf("/%d.sst", taskID)
+	mergedSST, err := dest.Writer(ctx, destSSTBase)
+	if err != nil {
+		return execinfrapb.BulkMergeSpec_Output{}, err
+	}
+
+	sstWriter := storage.MakeIngestionSSTWriter(ctx, m.flowCtx.EvalCtx.Settings, storage.NoopFinishAbortWritable(mergedSST))
+	defer sstWriter.Close()
+
+	var mergedSSTs execinfrapb.BulkMergeSpec_Output
+	// Write all KVs
+	for iter.SeekGE(storage.MVCCKey{Key: startKey}); ; iter.NextKey() {
+		ok, err := iter.Valid()
+		if err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+		if !ok {
+			break
+		}
+		key := iter.UnsafeKey()
+		val, err := iter.UnsafeValue()
+		if err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+		// TODO(annie): flush once > 128MiB
+		if err := sstWriter.PutRawMVCC(key, val); err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+	}
+
+	// Finish writing the SST
+	if err := sstWriter.Finish(); err != nil {
+		return execinfrapb.BulkMergeSpec_Output{}, err
+	}
+
+	mergedSSTs.Ssts = append(mergedSSTs.Ssts, execinfrapb.BulkMergeSpec_SST{
+		StartKey: startKey,
+		EndKey:   endKey,
+		Uri:      *m.spec.OutputUri + destSSTBase,
+	})
+	return mergedSSTs, nil
 }
 
 func init() {

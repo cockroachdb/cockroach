@@ -24,7 +24,7 @@ import (
 )
 
 func newBulkMergePlan(
-	ctx context.Context, execCtx sql.JobExecContext, taskCount int,
+	ctx context.Context, execCtx sql.JobExecContext, spec execinfrapb.BulkMergeSpec,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	// NOTE: This implementation is inspired by the physical plan created by
 	// restore in `pkg/backup/restore_processor_planning.go`
@@ -74,9 +74,7 @@ func newBulkMergePlan(
 					ColumnTypes: mergeLoopbackOutputTypes,
 				}},
 				Core: execinfrapb.ProcessorCoreUnion{
-					BulkMerge: &execinfrapb.BulkMergeSpec{
-						// TODO(jeffswenson): fill in the rest of the spec
-					},
+					BulkMerge: &spec,
 				},
 				Post: execinfrapb.PostProcessSpec{},
 				Output: []execinfrapb.OutputRouterSpec{{
@@ -97,7 +95,7 @@ func newBulkMergePlan(
 
 	plan.AddSingleGroupStage(ctx, coordinatorID[0], execinfrapb.ProcessorCoreUnion{
 		MergeCoordinator: &execinfrapb.MergeCoordinatorSpec{
-			TaskCount:            int64(taskCount),
+			TaskCount:            int64(len(spec.Splits) + 1),
 			WorkerSqlInstanceIds: keys,
 		},
 	}, execinfrapb.PostProcessSpec{}, mergeCoordinatorOutputTypes)
