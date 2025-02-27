@@ -589,17 +589,12 @@ func checkSupportForPlanNode(
 		return rec.compose(aggRec), nil
 
 	case *indexJoinNode:
-		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+		if n.fetch.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Index joins that are performing row-level locking cannot
 			// currently be distributed because their locks would not be
 			// propagated back to the root transaction coordinator.
 			// TODO(nvanbenschoten): lift this restriction.
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
-		}
-		// n.table doesn't have meaningful spans, but we need to check support (e.g.
-		// for any filtering expression).
-		if _, err := checkSupportForPlanNode(ctx, n.table, distSQLVisitor, sd); err != nil {
-			return cannotDistribute, err
 		}
 		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 
@@ -607,7 +602,7 @@ func checkSupportForPlanNode(
 		return checkSupportForInvertedFilterNode(ctx, n, distSQLVisitor, sd)
 
 	case *invertedJoinNode:
-		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+		if n.fetch.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Inverted joins that are performing row-level locking cannot
 			// currently be distributed because their locks would not be
 			// propagated back to the root transaction coordinator.
@@ -662,7 +657,7 @@ func checkSupportForPlanNode(
 			// This is a locality optimized join.
 			return cannotDistribute, localityOptimizedOpNotDistributableErr
 		}
-		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+		if n.fetch.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Lookup joins that are performing row-level locking cannot
 			// currently be distributed because their locks would not be
 			// propagated back to the root transaction coordinator.
@@ -825,7 +820,7 @@ func checkSupportForPlanNode(
 
 	case *zigzagJoinNode:
 		for _, side := range n.sides {
-			if side.scan.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+			if side.fetch.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 				// ZigZag joins that are performing row-level locking cannot
 				// currently be distributed because their locks would not be
 				// propagated back to the root transaction coordinator.
@@ -3299,9 +3294,9 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Type:              descpb.InnerJoin,
-		LockingStrength:   n.table.lockingStrength,
-		LockingWaitPolicy: n.table.lockingWaitPolicy,
-		LockingDurability: n.table.lockingDurability,
+		LockingStrength:   n.fetch.lockingStrength,
+		LockingWaitPolicy: n.fetch.lockingWaitPolicy,
+		LockingDurability: n.fetch.lockingDurability,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
 		LimitHint:         n.limitHint,
 	}
@@ -3312,18 +3307,18 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		fetchColIDs[i] = n.cols[i].GetID()
 		fetchOrdinals.Add(n.cols[i].Ordinal())
 	}
-	index := n.table.desc.GetPrimaryIndex()
+	index := n.fetch.desc.GetPrimaryIndex()
 	if err := rowenc.InitIndexFetchSpec(
 		&joinReaderSpec.FetchSpec,
 		planCtx.ExtendedEvalCtx.Codec,
-		n.table.desc,
+		n.fetch.desc,
 		index,
 		fetchColIDs,
 	); err != nil {
 		return nil, err
 	}
 
-	splitter := span.MakeSplitter(n.table.desc, index, fetchOrdinals)
+	splitter := span.MakeSplitter(n.fetch.desc, index, fetchOrdinals)
 	joinReaderSpec.SplitFamilyIDs = splitter.FamilyIDs()
 
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(fetchColIDs))
@@ -3377,9 +3372,9 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Type:              n.joinType,
-		LockingStrength:   n.table.lockingStrength,
-		LockingWaitPolicy: n.table.lockingWaitPolicy,
-		LockingDurability: n.table.lockingDurability,
+		LockingStrength:   n.fetch.lockingStrength,
+		LockingWaitPolicy: n.fetch.lockingWaitPolicy,
+		LockingDurability: n.fetch.lockingDurability,
 		// TODO(sumeer): specifying ordering here using isFirstJoinInPairedJoiner
 		// is late in the sense that the cost of this has not been taken into
 		// account. Make this decision earlier in CustomFuncs.GenerateLookupJoins.
@@ -3392,17 +3387,17 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		RemoteOnlyLookups:                 n.remoteOnlyLookups,
 	}
 
-	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
+	fetchColIDs := make([]descpb.ColumnID, len(n.fetch.cols))
 	var fetchOrdinals intsets.Fast
-	for i := range n.table.cols {
-		fetchColIDs[i] = n.table.cols[i].GetID()
-		fetchOrdinals.Add(n.table.cols[i].Ordinal())
+	for i := range n.fetch.cols {
+		fetchColIDs[i] = n.fetch.cols[i].GetID()
+		fetchOrdinals.Add(n.fetch.cols[i].Ordinal())
 	}
 	if err := rowenc.InitIndexFetchSpec(
 		&joinReaderSpec.FetchSpec,
 		planCtx.ExtendedEvalCtx.Codec,
-		n.table.desc,
-		n.table.index,
+		n.fetch.desc,
+		n.fetch.index,
 		fetchColIDs,
 	); err != nil {
 		return nil, err
@@ -3411,9 +3406,9 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	var splitter span.Splitter
 	if joinReaderSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE &&
 		planCtx.ExtendedEvalCtx.TxnIsoLevel != isolation.Serializable {
-		splitter = span.MakeSplitterForSideEffect(n.table.desc, n.table.index, fetchOrdinals)
+		splitter = span.MakeSplitterForSideEffect(n.fetch.desc, n.fetch.index, fetchOrdinals)
 	} else {
-		splitter = span.MakeSplitter(n.table.desc, n.table.index, fetchOrdinals)
+		splitter = span.MakeSplitter(n.fetch.desc, n.fetch.index, fetchOrdinals)
 	}
 	joinReaderSpec.SplitFamilyIDs = splitter.FamilyIDs()
 
@@ -3513,26 +3508,26 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		Type:                              n.joinType,
 		MaintainOrdering:                  len(n.reqOrdering) > 0,
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
-		LockingStrength:                   n.table.lockingStrength,
-		LockingWaitPolicy:                 n.table.lockingWaitPolicy,
-		LockingDurability:                 n.table.lockingDurability,
+		LockingStrength:                   n.fetch.lockingStrength,
+		LockingWaitPolicy:                 n.fetch.lockingWaitPolicy,
+		LockingDurability:                 n.fetch.lockingDurability,
 	}
 
-	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
-	for i := range n.table.cols {
-		fetchColIDs[i] = n.table.cols[i].GetID()
+	fetchColIDs := make([]descpb.ColumnID, len(n.fetch.cols))
+	for i := range n.fetch.cols {
+		fetchColIDs[i] = n.fetch.cols[i].GetID()
 	}
 	if err := rowenc.InitIndexFetchSpec(
 		&invertedJoinerSpec.FetchSpec,
 		planCtx.ExtendedEvalCtx.Codec,
-		n.table.desc,
-		n.table.index,
+		n.fetch.desc,
+		n.fetch.index,
 		fetchColIDs,
 	); err != nil {
 		return nil, err
 	}
 
-	invCol, err := catalog.MustFindColumnByID(n.table.desc, n.table.index.InvertedColumnID())
+	invCol, err := catalog.MustFindColumnByID(n.fetch.desc, n.fetch.index.InvertedColumnID())
 	if err != nil {
 		return nil, err
 	}
@@ -3603,14 +3598,14 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		}
 
 		sides[i] = zigzagPlanningSide{
-			desc:              side.scan.desc,
-			index:             side.scan.index,
-			cols:              side.scan.cols,
+			desc:              side.fetch.desc,
+			index:             side.fetch.index,
+			cols:              side.fetch.cols,
 			eqCols:            side.eqCols,
 			fixedValues:       valuesSpec,
-			lockingStrength:   side.scan.lockingStrength,
-			lockingWaitPolicy: side.scan.lockingWaitPolicy,
-			lockingDurability: side.scan.lockingDurability,
+			lockingStrength:   side.fetch.lockingStrength,
+			lockingWaitPolicy: side.fetch.lockingWaitPolicy,
+			lockingDurability: side.fetch.lockingDurability,
 		}
 	}
 

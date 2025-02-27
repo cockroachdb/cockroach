@@ -325,7 +325,8 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	colCfg.wantedColumns = append(colCfg.wantedColumns, column.GetID())
 
 	// Initialize a dummy scanNode for the requested statistic.
-	scan := scanNode{desc: desc}
+	var scan scanNode
+	scan.desc = desc
 	err = scan.initDescSpecificCol(colCfg, column)
 	if err != nil {
 		return nil, err

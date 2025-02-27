@@ -15,7 +15,7 @@ import (
 
 type lookupJoinNode struct {
 	singleInputPlanNode
-	table *scanNode
+	fetch fetchPlanningInfo
 
 	// joinType is either INNER, LEFT_OUTER, LEFT_SEMI, or LEFT_ANTI.
 	joinType descpb.JoinType
@@ -88,5 +88,4 @@ func (lj *lookupJoinNode) Values() tree.Datums {
 
 func (lj *lookupJoinNode) Close(ctx context.Context) {
 	lj.input.Close(ctx)
-	lj.table.Close(ctx)
 }
