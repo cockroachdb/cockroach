@@ -281,6 +281,11 @@ $input
 =>
 $value
 
+[EliminateUDFValueSubquery, Normalize]
+(Subquery (Values [ (Tuple [ (UDFCall $args:* $private:*) ]) ]))
+=>
+(UDFCall $args $private)
+
 # SimplifyCaseWhenConstValue removes branches known to not match. Any
 # branch known to match is used as the ELSE and further WHEN conditions
 # are skipped. If all WHEN conditions have been removed, the ELSE
