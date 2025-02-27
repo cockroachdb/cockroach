@@ -16,10 +16,8 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -94,40 +92,17 @@ const (
 	StopMatch OpResult = true
 )
 
-func (r OpResult) asBool() bool {
-	return bool(r)
-}
-
 // An Operation is a function that operates on a frontier spans. If done is returned true, the
 // Operation is indicating that no further work needs to be done and so the DoMatching function
 // should traverse no further.
 type Operation func(roachpb.Span, hlc.Timestamp) (done OpResult)
 
-var useBtreeFrontier = envutil.EnvOrDefaultBool("COCKROACH_BTREE_SPAN_FRONTIER_ENABLED",
-	metamorphic.ConstantWithTestBool("COCKROACH_BTREE_SPAN_FRONTIER_ENABLED", true))
-
-// EnableBtreeFrontier sets useBtreeFrontier for testing purposes.
-func EnableBtreeFrontier(enabled bool) func() {
-	old := useBtreeFrontier
-	useBtreeFrontier = enabled
-	return func() {
-		useBtreeFrontier = old
-	}
-}
-
 func newBtreeFrontier() Frontier {
 	return &btreeFrontier{}
 }
 
-func newLLRBFrontier() Frontier {
-	return &llrbFrontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
-}
-
 func newFrontier() Frontier {
-	if useBtreeFrontier {
-		return newBtreeFrontier()
-	}
-	return newLLRBFrontier()
+	return newBtreeFrontier()
 }
 
 // MakeFrontier returns a Frontier that tracks the given set of spans.

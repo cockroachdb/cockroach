@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -1359,11 +1358,6 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// TODO(#141405): Remove this once llrbFrontier starts merging
-	// adjacent spans. The current lack of merging causes issues
-	// with the checks in this test around expected resolved spans.
-	defer span.EnableBtreeFrontier(true)()
 
 	var rndMu struct {
 		syncutil.Mutex

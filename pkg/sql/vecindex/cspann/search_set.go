@@ -34,7 +34,7 @@ type SearchResult struct {
 	// from the query vector.
 	QuerySquaredDistance float32
 	// ErrorBound captures the uncertainty of the distance estimate, which is
-	// highly likely to fall within QuerySquaredDistance +- ErrorBound.
+	// highly likely to fall within QuerySquaredDistance ± ErrorBound.
 	ErrorBound float32
 	// CentroidDistance is the (non-squared) exact distance of the data vector
 	// from its partition's centroid.
@@ -67,6 +67,15 @@ func (r *SearchResult) MaybeCloser(r2 *SearchResult) bool {
 // distances are equal, then the highest error bound breaks ties. If error
 // bounds are equal, then the child key breaks ties.
 func (r *SearchResult) Compare(r2 *SearchResult) int {
+	// Equivalent to the following, but with lazy comparisons:
+	//
+	//  return cmp.Or(
+	//  	cmp.Compare(r.QuerySquaredDistance, r2.QuerySquaredDistance),
+	//  	cmp.Compare(r.ErrorBound, r2.ErrorBound),
+	//  	r.ChildKey.Compare(r2.ChildKey),
+	//  )
+	//
+
 	// Compare distances.
 	distance1 := r.QuerySquaredDistance
 	distance2 := r2.QuerySquaredDistance
@@ -174,11 +183,11 @@ type SearchSet struct {
 	// MaxExtraResults is the maximum number of additional candidates (beyond
 	// MaxResults) that will be returned by the search process for reranking and
 	// statistics. These results are within the error threshold of being among the
-	// the best results.
+	// best results.
 	MaxExtraResults int
 
-	// MatchKey, if non-nil, filters out all search candidates that do not have
-	// a matching primary key.
+	// MatchKey, if non-nil, filters out all search candidates that do not have a
+	// matching primary key.
 	MatchKey KeyBytes
 
 	// Stats tracks useful information about the search, such as how many vectors
@@ -200,15 +209,15 @@ func (ss *SearchSet) Add(candidate *SearchResult) {
 
 	// Fast path where no pruning is necessary.
 	if len(ss.results) < ss.MaxResults {
-		heap.Push[*SearchResult](&ss.results, candidate)
+		heap.Push(&ss.results, candidate)
 		return
 	}
 
 	// Candidate needs to be inserted into the results list. In this case, a
-	// previous candidate may need to go the extra results list.
+	// previous candidate may need to go in the extra results list.
 	if candidate.QuerySquaredDistance <= ss.results[0].QuerySquaredDistance {
 		heap.Push(&ss.results, candidate)
-		candidate = heap.Pop[*SearchResult](&ss.results)
+		candidate = heap.Pop(&ss.results)
 	}
 
 	if ss.MaxExtraResults == 0 {
@@ -221,16 +230,16 @@ func (ss *SearchSet) Add(candidate *SearchResult) {
 		heap.Push(&ss.extraResults, candidate)
 		if len(ss.extraResults) > ss.MaxExtraResults {
 			// Respect max extra results.
-			heap.Pop[*SearchResult](&ss.extraResults)
+			heap.Pop(&ss.extraResults)
 		}
 	}
 
 	// Ensure that extra results within the error bound are still within it.
 	// NB: This potentially discards results it should not, as the heaps are
-	// sorted by distance rather than by distance +- error bounds. However,
-	// the error bounds are not exact anyway, so the impact should be minimal.
+	// sorted by distance rather than by distance ± error bounds. However, the
+	// error bounds are not exact anyway, so the impact should be minimal.
 	for len(ss.extraResults) > 0 && !ss.extraResults[0].MaybeCloser(&ss.results[0]) {
-		heap.Pop[*SearchResult](&ss.extraResults)
+		heap.Pop(&ss.extraResults)
 	}
 }
 

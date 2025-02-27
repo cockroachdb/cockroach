@@ -52,7 +52,7 @@ type fixup struct {
 	// operates on a partition.
 	PartitionKey PartitionKey
 	// ParentPartitionKey is the key of the parent of the fixup's target
-	// partition, if the fixup operates on a partition
+	// partition, if the fixup operates on a partition.
 	ParentPartitionKey PartitionKey
 	// VectorKey is the primary key of the fixup vector.
 	VectorKey KeyBytes
@@ -392,6 +392,9 @@ func (fp *FixupProcessor) removeFixup(toRemove fixup) {
 
 	case vectorDeleteFixup:
 		delete(fp.mu.pendingVectors, string(toRemove.VectorKey))
+
+	default:
+		panic(errors.AssertionFailedf("unknown fixup %d", toRemove.Type))
 	}
 
 	fp.mu.runningWorkers--

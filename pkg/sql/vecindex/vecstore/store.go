@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/errors"
 )
 
 // Store implements the cspann.Store interface for KV backed vector indices.
@@ -43,12 +44,11 @@ type Store struct {
 
 var _ cspann.Store = (*Store)(nil)
 
-// Create a Store for an index on the provided table descriptor using the
-// provided column ID as the vector column for the index. This is used in unit
-// tests where full vector index creation capabilities aren't necessarily
-// available.
+// NewWithColumnID creates a Store for an index on the provided table descriptor
+// using the provided column ID as the vector column for the index. This is used
+// in unit tests where full vector index creation capabilities aren't
+// necessarily available.
 func NewWithColumnID(
-	ctx context.Context,
 	db descs.DB,
 	quantizer quantize.Quantizer,
 	codec keys.SQLCodec,
@@ -61,8 +61,8 @@ func NewWithColumnID(
 		codec:         codec,
 		tableID:       tableDesc.GetID(),
 		indexID:       indexID,
-		quantizer:     quantizer,
 		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims()),
+		quantizer:     quantizer,
 	}
 
 	pk := tableDesc.GetPrimaryIndex()
@@ -107,10 +107,13 @@ func New(
 			break
 		}
 	}
+	if index == nil {
+		return nil, errors.AssertionFailedf("index %d not found in table %d", indexID, tableID)
+	}
 
 	vectorColumnID := index.VectorColumnID()
 
-	return NewWithColumnID(ctx, db, quantizer, codec, tableDesc, indexID, vectorColumnID)
+	return NewWithColumnID(db, quantizer, codec, tableDesc, indexID, vectorColumnID)
 }
 
 // BeginTransaction is part of the cspann.Store interface. Begin creates a new
