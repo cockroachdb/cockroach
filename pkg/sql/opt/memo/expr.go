@@ -746,6 +746,8 @@ type UDFDefinition struct {
 	// Body. It is only populated when verbose tracing is enabled.
 	BodyStmts []string
 
+	BodyASTs []tree.Statement
+
 	// ExceptionBlock contains information needed for exception-handling when the
 	// body of this routine returns an error. It can be unset.
 	ExceptionBlock *ExceptionBlock
