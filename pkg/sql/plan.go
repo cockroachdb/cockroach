@@ -680,6 +680,13 @@ const (
 	// planFlagDistributedExecution is set if execution of any part of the plan
 	// was distributed.
 	planFlagDistributedExecution
+
+	// These flags indicate whether at least one DELETE, INSERT, UPDATE, or
+	// UPSERT stmt was found in the whole plan.
+	planFlagContainsDelete
+	planFlagContainsInsert
+	planFlagContainsUpdate
+	planFlagContainsUpsert
 )
 
 // IsSet returns true if the receiver has all of the given flags set.

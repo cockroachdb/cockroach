@@ -15,8 +15,9 @@ spawn $argv demo --no-line-editor --empty --log-dir=logs
 eexpect "defaultdb>"
 
 send "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);\r"
-send "CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));\r"
-send "CREATE TABLE grandchild (pk INT PRIMARY KEY, fk INT REFERENCES child(pk));\r"
+send "CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk) ON DELETE CASCADE ON UPDATE CASCADE);\r"
+send "CREATE TABLE grandchild (pk INT PRIMARY KEY, fk INT REFERENCES child(pk) ON DELETE CASCADE ON UPDATE CASCADE);\r"
+send "CREATE TABLE greatgrandchild (pk INT PRIMARY KEY, fk INT REFERENCES grandchild(pk));\r"
 eexpect "defaultdb>"
 
 
@@ -140,7 +141,7 @@ file_exists "stmt-bundle-$r6.zip"
 
 # Now add a FK cycle and collect another bundle.
 
-send "ALTER TABLE parent ADD CONSTRAINT fk FOREIGN KEY (v) REFERENCES child(pk);\r"
+send "ALTER TABLE parent ADD CONSTRAINT fk FOREIGN KEY (v) REFERENCES child(pk) ON DELETE CASCADE ON UPDATE CASCADE;\r"
 send "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child;\r"
 eexpect "Statement diagnostics bundle generated."
 expect -re "SQL shell: \\\\statement-diag download (\\d+)" {
@@ -152,6 +153,35 @@ eexpect "Bundle saved to"
 eexpect root@
 
 file_exists "stmt-bundle-$r7.zip"
+
+
+# Now perform some writes that result in CASCADEs.
+
+# This bundle should only pull in 'child'.
+send "EXPLAIN ANALYZE (DEBUG) UPDATE parent SET pk = pk + 1 WHERE true;\r"
+eexpect "Statement diagnostics bundle generated."
+expect -re "SQL shell: \\\\statement-diag download (\\d+)" {
+  set w4 $expect_out(1,string)
+}
+
+send "\\statement-diag download $w4\r"
+eexpect "Bundle saved to"
+eexpect root@
+
+file_exists "stmt-bundle-$w4.zip"
+
+# This bundle will pull in all tables.
+send "EXPLAIN ANALYZE (DEBUG) UPDATE child SET pk = pk + 1 WHERE true;\r"
+eexpect "Statement diagnostics bundle generated."
+expect -re "SQL shell: \\\\statement-diag download (\\d+)" {
+  set w5 $expect_out(1,string)
+}
+
+send "\\statement-diag download $w5\r"
+eexpect "Bundle saved to"
+eexpect root@
+
+file_exists "stmt-bundle-$w5.zip"
 
 send_eof
 eexpect eof
@@ -289,5 +319,32 @@ eexpect "defaultdb>"
 
 send_eof
 eexpect eof
+
+set python "python2.7"
+set pyfile [file join [file dirname $argv0] unzip.py]
+system "mkdir bundle_w4"
+system "$python $pyfile stmt-bundle-$w4.zip bundle_w4"
+
+spawn $argv debug sb recreate bundle_w4
+eexpect "Statement was:"
+eexpect "UPDATE"
+eexpect "defaultdb>"
+
+send_eof
+eexpect eof
+
+set python "python2.7"
+set pyfile [file join [file dirname $argv0] unzip.py]
+system "mkdir bundle_w5"
+system "$python $pyfile stmt-bundle-$w5.zip bundle_w5"
+
+spawn $argv debug sb recreate bundle_w5
+eexpect "Statement was:"
+eexpect "UPDATE"
+eexpect "defaultdb>"
+
+send_eof
+eexpect eof
+
 
 end_test
