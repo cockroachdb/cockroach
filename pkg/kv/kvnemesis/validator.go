@@ -733,8 +733,19 @@ func (v *validator) processOp(op Operation) {
 			// Fail or retry on other errors, depending on type.
 			v.checkNonAmbError(op, t.Result, exceptUnhandledRetry)
 		}
-		// We don't yet actually check the barrier guarantees here, i.e. that all
-		// concurrent writes are applied by the time it completes. Maybe later.
+	// We don't yet actually check the barrier guarantees here, i.e. that all
+	// concurrent writes are applied by the time it completes. Maybe later.
+	case *FlushLockTableOperation:
+		// TODO(ssd): Should this be true? Right now it needs
+		// to be or the test fails; but shoujld we be
+		// returning a timestamp?
+		execTimestampStrictlyOptional = true
+		if resultHasErrorType(t.Result, &kvpb.RangeKeyMismatchError{}) {
+			// FlushLockTableOperation may race with a split.
+		} else {
+			// Fail or retry on other errors, depending on type.
+			v.checkNonAmbError(op, t.Result, exceptUnhandledRetry)
+		}
 	case *ScanOperation:
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break

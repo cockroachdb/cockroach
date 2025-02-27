@@ -98,6 +98,12 @@ message BarrierOperation {
   Result result = 4 [(gogoproto.nullable) = false];
 }
 
+message FlushLockTableOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 message SplitOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -183,6 +189,7 @@ message Operation {
   SavepointReleaseOperation savepoint_release = 21;
   SavepointRollbackOperation savepoint_rollback = 22;
   BarrierOperation barrier = 23;
+  FlushLockTableOperation flush_lock_table = 24;
 }
 
 enum ResultType {
