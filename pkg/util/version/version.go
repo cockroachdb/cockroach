@@ -32,9 +32,9 @@ const (
 // a major version, written as "vX.Y" (which is typically the year and release number
 // within the year), and a patch version (the "Z" in "vX.Y.Z"). There are a number of
 // phases, sub-phases, and other suffixes that can complicate version numbers, and
-// especially correct ordering of version numbers. CRDB versions are not semantic
-// versions! You must use this package to parse and compare versions, in order to
-// account for the variety of versions currently or historically in use.
+// especially correct ordering of version numbers. CockroachDB versions are not
+// semantic versions! You must use this package to parse and compare versions, in
+// order to account for the variety of versions currently or historically in use.
 type Version struct {
 	// A version is composed of many (possible) fields. See [Parse] for details of
 	// how a version string becomes these many fields. For comparison purposes, versions
@@ -53,7 +53,7 @@ type Version struct {
 
 // Major returns the version's MajorVersion (the "vX.Y" part)
 func (v Version) Major() MajorVersion {
-	return MajorVersion{v.year, v.ordinal}
+	return MajorVersion{Year: v.year, Ordinal: v.ordinal}
 }
 
 // Patch returns the version's patch number.
@@ -241,7 +241,11 @@ func Parse(str string) (Version, error) {
 
 			// handle -alpha.1, -rc.3, etc
 			if phase := submatch(pat, matches, "phase"); phase != "" {
-				v.phase = preReleasePhase[phase]
+				if phaseName, ok := preReleasePhase[phase]; !ok {
+					return Version{}, errors.Newf("unknown phase '%s", phaseName)
+				} else {
+					v.phase = phaseName
+				}
 
 				if ord := submatch(pat, matches, "phaseOrdinal"); ord != "" {
 					v.phaseOrdinal, _ = strconv.Atoi(ord)
@@ -283,9 +287,9 @@ func MustParse(str string) Version {
 
 // Compare returns -1, 0, or +1 indicating the relative ordering of versions.
 //
-// CRDB versions are not semantic versions. SemVer treats suffixes after the
-// major.minor.patch quite generically; we have specific, known cases that have
-// well-defined ordering requirements:
+// CockroachDB versions are not semantic versions. SemVer treats suffixes after
+// the major.minor.patch quite generically; we have specific, known cases that
+// have well-defined ordering requirements:
 //
 // There are 4 known named prerelease phases. In order, they are: alpha, beta,
 // rc, cloudonly. Pre-release versions will look like "v24.1.0-cloudonly.1"

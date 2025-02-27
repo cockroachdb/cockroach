@@ -3,12 +3,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "version",
     srcs = [
+        "format.go",
         "major_version.go",
         "version.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/version",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
 )
 
 go_test(

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// A MajorVersion represents a CockroachDB major version or relesae series, ie "v25.1".
 type MajorVersion struct {
 	Year, Ordinal int
 }
@@ -21,7 +22,7 @@ type MajorVersion struct {
 func ParseMajorVersion(versionStr string) (MajorVersion, error) {
 	majorVersionRE := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.([1-9][0-9]*)$`)
 	if !majorVersionRE.MatchString(versionStr) {
-		return MajorVersion{}, errors.Newf("not a valid CRDB major version: %s", versionStr)
+		return MajorVersion{}, errors.Newf("not a valid CockroachDB major version: %s", versionStr)
 	}
 	groups := majorVersionRE.FindStringSubmatch(versionStr)
 	year, _ := strconv.Atoi(groups[1])
