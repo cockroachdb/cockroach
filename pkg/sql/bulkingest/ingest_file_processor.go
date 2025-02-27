@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -17,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var ingestFileProcessorOutputTypes = []*types.T{
@@ -30,9 +33,10 @@ var (
 
 type ingestFileProcessor struct {
 	execinfra.ProcessorBase
-	spec    execinfrapb.IngestFileSpec
-	flowCtx *execinfra.FlowCtx
-	ctx     context.Context
+	spec     execinfrapb.IngestFileSpec
+	flowCtx  *execinfra.FlowCtx
+	cloudMux *bulkutil.CloudStorageMux
+	ctx      context.Context
 
 	buffer []byte
 }
@@ -69,38 +73,39 @@ func (p *ingestFileProcessor) claimLease(ctx context.Context, span roachpb.Span)
 func (p *ingestFileProcessor) doIngest(
 	ctx context.Context, sst execinfrapb.BulkMergeSpec_SST,
 ) error {
-	// TODO(jeffswenson): cache the external storage between objects.
-	storage, err := p.flowCtx.Cfg.ExternalStorageFromURI(ctx, sst.Uri, p.flowCtx.EvalCtx.SessionData().User())
+	file, err := p.cloudMux.StoreFile(ctx, sst.Uri)
 	if err != nil {
 		return err
 	}
 
 	db := p.flowCtx.Cfg.DB.KV()
 	err = func() error {
-		reader, _, err := storage.ReadFile(ctx, "", cloud.ReadOptions{})
+		reader, _, err := file.Store.ReadFile(ctx, file.FilePath, cloud.ReadOptions{})
 		if err != nil {
 			return err
 		}
 		defer reader.Close(ctx)
 
-		// TODO(jeffswenson): okay, we probably do want to share this buffer
-		// across to ingest. So we need a long running flow after all.
-		var bytes []byte
-		bytes, err = ioctx.ReadAll(ctx, reader)
+		p.buffer, err = ioctx.ReadAllWithScratch(ctx, reader, p.buffer)
 		if err != nil {
 			return err
 		}
 
-		end := roachpb.Key(sst.EndKey).Next()
-
 		// TODO(jeffswenson): how to handle replays?
-		_, _, err = db.AddSSTable(ctx, sst.StartKey, end, bytes, false, hlc.Timestamp{}, nil, false, hlc.Timestamp{})
+		_, _, err = db.AddSSTable(ctx, sst.StartKey, sst.EndKey.Next(), p.buffer, false, hlc.Timestamp{}, nil, false, hlc.Timestamp{})
 		return err
 	}()
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func (p *ingestFileProcessor) Close(ctx context.Context) {
+	if err := p.cloudMux.Close(); err != nil {
+		log.Errorf(ctx, "failed to close cloud storage mux: %v", err)
+	}
+	p.ProcessorBase.Close(ctx)
 }
 
 func newIngestFileProcessor(
@@ -113,6 +118,8 @@ func newIngestFileProcessor(
 	ip := &ingestFileProcessor{
 		spec:    spec,
 		flowCtx: flowCtx,
+		// TODO(jeffswenson): should this use the root user or the user executing the job?
+		cloudMux: bulkutil.NewCloudStorageMux(flowCtx.Cfg.ExternalStorageFromURI, username.RootUserName()),
 	}
 	err := ip.Init(ctx, ip, post, ingestFileProcessorOutputTypes, flowCtx, processorID, nil, execinfra.ProcStateOpts{})
 	if err != nil {

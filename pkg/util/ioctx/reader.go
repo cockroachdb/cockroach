@@ -109,21 +109,30 @@ func (r ioReadCloserAdapter) Close(context.Context) error {
 // - it terminates successfully on errors that wrap io.EOF, not just on io.EOF
 // itself.
 func ReadAll(ctx context.Context, r ReaderCtx) ([]byte, error) {
-	b := make([]byte, 0, 512)
+	return ReadAllWithScratch(ctx, r, nil)
+}
+
+func ReadAllWithScratch(ctx context.Context, r ReaderCtx, scratch []byte) ([]byte, error) {
+	if scratch == nil {
+		scratch = make([]byte, 0, 512)
+	} else {
+		scratch = scratch[:0]
+	}
 	for {
-		if len(b) == cap(b) {
+		if len(scratch) == cap(scratch) {
 			// Add more capacity (let append pick how much).
-			b = append(b, 0)[:len(b)]
+			scratch = append(scratch, 0)[:len(scratch)]
 		}
-		n, err := r.Read(ctx, b[len(b):cap(b)])
-		b = b[:len(b)+n]
+		n, err := r.Read(ctx, scratch[len(scratch):cap(scratch)])
+		scratch = scratch[:len(scratch)+n]
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				err = nil
 			}
-			return b, err
+			return scratch, err
 		}
 	}
+
 }
 
 // NopCloser returns a ReadCloser with a no-op Close method wrapping

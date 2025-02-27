@@ -9,12 +9,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
-	"path"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
@@ -51,9 +51,10 @@ var bulkMergeProcessorOutputTypes = []*types.T{
 // The last task is to process the input range from [split(len(split)-1), nil).
 type bulkMergeProcessor struct {
 	execinfra.ProcessorBase
-	spec    execinfrapb.BulkMergeSpec
-	input   execinfra.RowSource
-	flowCtx *execinfra.FlowCtx
+	spec     execinfrapb.BulkMergeSpec
+	input    execinfra.RowSource
+	flowCtx  *execinfra.FlowCtx
+	cloudMux *bulkutil.CloudStorageMux
 }
 
 type mergeProcessorInput struct {
@@ -99,6 +100,8 @@ func newBulkMergeProcessor(
 		input:   input,
 		spec:    spec,
 		flowCtx: flowCtx,
+		// TODO(jeffswenson): should this use the root user or the user executing the job?
+		cloudMux: bulkutil.NewCloudStorageMux(flowCtx.Cfg.ExternalStorageFromURI, username.RootUserName()),
 	}
 	// TODO(jeffswenson): do I need more here?
 	err := mp.Init(ctx, mp, post, bulkMergeProcessorOutputTypes, flowCtx, processorID, nil, execinfra.ProcStateOpts{
@@ -164,6 +167,14 @@ func (m *bulkMergeProcessor) Start(ctx context.Context) {
 	ctx = m.StartInternal(ctx, "bulkMergeProcessor")
 }
 
+func (m *bulkMergeProcessor) Close(ctx context.Context) {
+	err := m.cloudMux.Close()
+	if err != nil {
+		log.Errorf(ctx, "failed to close cloud storage mux: %v", err)
+	}
+	m.ProcessorBase.Close(ctx)
+}
+
 func getKeysForTask(task int64, splits []roachpb.Key) (roachpb.Key, roachpb.Key) {
 	if task == 0 {
 		if len(splits) == 0 {
@@ -195,27 +206,23 @@ func (m *bulkMergeProcessor) mergeSSTs(
 ) (execinfrapb.BulkMergeSpec_Output, error) {
 	startKey, endKey := getKeysForTask(int64(taskID), m.spec.Splits)
 	var storeFiles []storageccl.StoreFile
-	dest, err := m.flowCtx.Cfg.ExternalStorageFromURI(ctx, *m.spec.OutputUri, username.RootUserName())
+	dest, err := m.flowCtx.Cfg.ExternalStorageFromURI(ctx, m.spec.OutputUri, username.RootUserName())
 	if err != nil {
 		return execinfrapb.BulkMergeSpec_Output{}, err
 	}
+
 	// Find the ssts that overlap with the given task's key range.
 	for _, sst := range m.spec.Ssts {
-		uri, err := url.Parse(sst.Uri)
+		if !isOverlapping(startKey, endKey, sst) {
+			continue
+		}
+		file, err := m.cloudMux.StoreFile(ctx, sst.Uri)
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
-		baseURI := uri.Scheme + "://" + uri.Host + path.Dir(uri.Path) + "/"
-		sstFile := path.Base(sst.Uri)
-
-		if isOverlapping(startKey, endKey, sst) {
-			store, err := m.flowCtx.Cfg.ExternalStorageFromURI(ctx, baseURI, username.RootUserName())
-			if err != nil {
-				return execinfrapb.BulkMergeSpec_Output{}, err
-			}
-			storeFiles = append(storeFiles, storageccl.StoreFile{Store: store, FilePath: sstFile})
-		}
+		storeFiles = append(storeFiles, file)
 	}
+
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: startKey,
@@ -265,7 +272,7 @@ func (m *bulkMergeProcessor) mergeSSTs(
 	mergedSSTs.Ssts = append(mergedSSTs.Ssts, execinfrapb.BulkMergeSpec_SST{
 		StartKey: startKey,
 		EndKey:   endKey,
-		Uri:      *m.spec.OutputUri + destSSTBase,
+		Uri:      m.spec.OutputUri + destSSTBase,
 	})
 	return mergedSSTs, nil
 }

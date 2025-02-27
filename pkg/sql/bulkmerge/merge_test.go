@@ -41,7 +41,7 @@ func TestDistributedMergeOneNode(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 
-	testMergeProcessors(t, srv.ApplicationLayer(), srv.Engines())
+	testMergeProcessors(t, srv.ApplicationLayer())
 }
 
 func TestDistributedMergeThreeNodes(t *testing.T) {
@@ -50,13 +50,26 @@ func TestDistributedMergeThreeNodes(t *testing.T) {
 
 	ctx := context.Background()
 	instanceCount := 3
-	tc := testcluster.StartTestCluster(t, instanceCount, base.TestClusterArgs{})
+
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	args := base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{},
+	}
+	for i := 0; i < 3; i++ {
+		args.ServerArgsPerNode[i] = base.TestServerArgs{
+			ExternalIODir: fmt.Sprintf("%s/node-%d", dir, i),
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, instanceCount, args)
 	defer tc.Stopper().Stop(ctx)
 
 	// Pick a random node to connect to
 	nodeIdx := rand.Intn(instanceCount)
 	srv := tc.Server(nodeIdx)
-	testMergeProcessors(t, srv, srv.Engines())
+	testMergeProcessors(t, srv)
 }
 
 func randIntSlice(n int) []int {
@@ -108,9 +121,19 @@ func newTestServerAllocator(
 	}
 }
 
-func testMergeProcessors(
-	t *testing.T, s serverutils.ApplicationLayerInterface, engines []storage.Engine,
-) {
+func importToMerge(mapFiles *bulksst.SSTFiles) []execinfrapb.BulkMergeSpec_SST {
+	ssts := make([]execinfrapb.BulkMergeSpec_SST, 0, len(mapFiles.SST))
+	for i := range mapFiles.SST {
+		ssts = append(ssts, execinfrapb.BulkMergeSpec_SST{
+			Uri:      mapFiles.SST[i].URI,
+			StartKey: []byte(mapFiles.SST[i].StartKey),
+			EndKey:   []byte(mapFiles.SST[i].EndKey),
+		})
+	}
+	return ssts
+}
+
+func testMergeProcessors(t *testing.T, s serverutils.ApplicationLayerInterface) {
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	tsa := newTestServerAllocator(t, ctx, s)
@@ -122,12 +145,10 @@ func testMergeProcessors(
 	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri)
 	batcher := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator)
 	writeSSTs(t, ctx, batcher, 11)
-	outputURI := "nodelocal://1/merge/out"
-	spec := execinfrapb.BulkMergeSpec{
-		Ssts:      fileAllocator.GetFileList(),
-		OutputUri: &outputURI,
-	}
-	plan, planCtx, err := newBulkMergePlan(ctx, jobExecCtx, spec)
+	ssts := importToMerge(fileAllocator.GetFileList())
+	plan, planCtx, err := newBulkMergePlan(ctx, jobExecCtx, ssts, nil, func(instanceID base.SQLInstanceID) string {
+		return fmt.Sprintf("nodelocal://%d/merge/out", instanceID)
+	})
 	require.NoError(t, err)
 	defer plan.Release()
 
@@ -165,5 +186,5 @@ func testMergeProcessors(
 	// TODO(annie): Generate splits (random sample of the keys we wrote).
 	require.Equal(t, len(result.Ssts), 1)
 	// Read that all merge uris contain what we expect.
-	require.Equal(t, "nodelocal://1/merge/out/0.sst", result.Ssts[0].Uri)
+	require.Regexp(t, "nodelocal://.*/merge/out/0.sst", result.Ssts[0].Uri)
 }

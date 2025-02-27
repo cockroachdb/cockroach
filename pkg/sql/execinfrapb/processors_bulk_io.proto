@@ -183,7 +183,7 @@ message BulkMergeSpec {
 	// output_uri is a URI like 'nodelocal://1/<job_id>/merger'. The uri should
 	// use this as the base for all output files. So an output file would be
 	// 'nodelocal://1/<job_id>/merger/0.sst'
-	optional string output_uri = 3;
+	optional string output_uri = 3 [(gogoproto.nullable) = false];
 
 	message SST {
 		// uri is a fully qualifed URI to the SST file. It will look something like

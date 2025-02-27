@@ -100,7 +100,12 @@ func writeSST(
 
 	require.NoError(t, sstWriter.CloseWithError(context.Background()))
 
-	return allocator.GetFileList()[0]
+	sst := allocator.GetFileList().SST[0]
+	return execinfrapb.BulkMergeSpec_SST{
+		StartKey: tableEncoder.tableSpan().Key,
+		EndKey:   tableEncoder.tableSpan().EndKey,
+		Uri:      sst.URI,
+	}
 }
 
 func getEncoder(exec sql.ExecutorConfig, tableName string) encoder {
