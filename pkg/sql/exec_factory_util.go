@@ -321,15 +321,6 @@ func constructVirtualScan(
 	return n, nil
 }
 
-func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
-	for _, id := range colCfg.wantedColumns {
-		if colinfo.IsColIDSystemColumn(id) {
-			return true
-		}
-	}
-	return false
-}
-
 func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {
 	o, ok := metadata.(*opaqueMetadata)
 	if !ok {
