@@ -2496,6 +2496,7 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 
 	if !params.PartOfCluster {
 		ts.Cfg.DefaultZoneConfig.NumReplicas = proto.Int32(1)
+		ts.Cfg.DefaultSystemZoneConfig.NumReplicas = proto.Int32(1)
 	}
 
 	// Needs to be called before NewServer to ensure resolvers are initialized.
