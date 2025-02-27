@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -634,6 +635,14 @@ func (desc *Mutable) MaybeFillColumnID(
 func (desc *Mutable) AllocateIDs(ctx context.Context, version clusterversion.ClusterVersion) error {
 	if err := desc.AllocateIDsWithoutValidation(ctx, true /*createMissingPrimaryKey*/); err != nil {
 		return err
+	}
+
+	// The virtual table descriptors are entirely under our control. Since
+	// validating is expensive, skip it for virtual tables if this code is running
+	// in a test environment. This step was found to be a bottleneck in TestServer
+	// startup.
+	if desc.IsVirtualTable() && buildutil.CrdbTestBuild {
+		return nil
 	}
 
 	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
