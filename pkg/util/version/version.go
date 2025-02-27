@@ -28,11 +28,10 @@ const (
 	custom    = releasePhase(6)
 )
 
-// Version represents a CockroachDB version. Versions consist of two "main" parts:
+// Version represents a CockroachDB (binary) version. Versions consist of three parts:
 // a major version, written as "vX.Y" (which is typically the year and release number
-// within the year), and a patch version (the "Z" in "vX.Y.Z"). There are a number of
-// phases, sub-phases, and other suffixes that can complicate version numbers, and
-// especially correct ordering of version numbers. CockroachDB versions are not
+// within the year), a patch version (the "Z" in "vX.Y.Z"), and sometimes one or more
+// phases, sub-phases, and other suffixes. Note that CockroachDB versions are not
 // semantic versions! You must use this package to parse and compare versions, in
 // order to account for the variety of versions currently or historically in use.
 type Version struct {

@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// A MajorVersion represents a CockroachDB major version or relesae series, ie "v25.1".
+// A MajorVersion represents a CockroachDB major version or release series, ie "v25.1".
 type MajorVersion struct {
 	Year, Ordinal int
 }
