@@ -23,7 +23,7 @@ type indexJoinNode struct {
 	// Indices of the PK columns in the input plan.
 	keyCols []int
 
-	table *scanNode
+	fetch fetchPlanningInfo
 
 	// The columns returned by this node.
 	cols []catalog.Column
@@ -49,5 +49,4 @@ func (n *indexJoinNode) Values() tree.Datums {
 
 func (n *indexJoinNode) Close(ctx context.Context) {
 	n.input.Close(ctx)
-	n.table.Close(ctx)
 }

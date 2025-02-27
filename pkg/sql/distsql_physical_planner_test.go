@@ -1997,7 +1997,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
 				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
-				table:               &scanNode{desc: makeTableDesc()},
+				fetch:               fetchPlanningInfo{desc: makeTableDesc()},
 			}}},
 			hasScanNodeToParallelize: true,
 		},
