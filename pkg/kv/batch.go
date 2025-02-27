@@ -300,6 +300,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *kvpb.MigrateRequest:
 			case *kvpb.QueryResolvedTimestampRequest:
 			case *kvpb.BarrierRequest:
+			case *kvpb.FlushLockTableRequest:
 			case *kvpb.LinkExternalSSTableRequest:
 			default:
 				if result.Err == nil {
@@ -1144,6 +1145,27 @@ func (b *Batch) barrier(s, e interface{}, withLAI bool) {
 			EndKey: end,
 		},
 		WithLeaseAppliedIndex: withLAI,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) flushLockTable(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &kvpb.FlushLockTableRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

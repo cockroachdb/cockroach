@@ -899,6 +899,23 @@ func (db *DB) Barrier(ctx context.Context, begin, end interface{}) (hlc.Timestam
 	return resp.Timestamp, nil
 }
 
+func (db *DB) FlushLockTable(ctx context.Context, begin, end interface{}) error {
+	b := &Batch{}
+	b.flushLockTable(begin, end)
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
+		return err
+	}
+	if l := len(b.response.Responses); l != 1 {
+		return errors.Errorf("got %d responses for FlushLockTable", l)
+	}
+	resp := b.response.Responses[0].GetFlushLockTable()
+	if resp == nil {
+		return errors.Errorf("unexpected response %T for FlushLockTable",
+			b.response.Responses[0].GetInner())
+	}
+	return nil
+}
+
 // BarrierWithLAI is like Barrier, but also returns the lease applied index and
 // range descriptor at which the barrier was applied. In this case, the barrier
 // can't span multiple ranges, otherwise a RangeKeyMismatchError is returned.
