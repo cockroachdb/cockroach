@@ -424,12 +424,7 @@ func (l *raftLog) acceptUnstable() { l.unstable.acceptInProgress() }
 
 // lastEntryID returns the ID of the last entry in the log.
 func (l *raftLog) lastEntryID() entryID {
-	index := l.lastIndex()
-	t, err := l.term(index)
-	if err != nil {
-		l.logger.Panicf("unexpected error when getting the last term at %d: %v", index, err)
-	}
-	return entryID{term: t, index: index}
+	return l.unstable.lastEntryID()
 }
 
 func (l *raftLog) term(i uint64) (uint64, error) {
