@@ -177,6 +177,7 @@ type slimOptions struct {
 	EnableSpanConfigJob bool
 	EnableAutoStats     bool
 	EnableTimeseries    bool
+	EnableAllUpgrades   bool
 }
 
 type SlimServerOption func(*slimOptions)
@@ -196,6 +197,12 @@ func WithAutoStats() SlimServerOption {
 func WithTimeseries() SlimServerOption {
 	return func(o *slimOptions) {
 		o.EnableTimeseries = true
+	}
+}
+
+func WithAllUpgrades() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableAllUpgrades = true
 	}
 }
 

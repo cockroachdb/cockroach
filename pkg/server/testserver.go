@@ -149,6 +149,13 @@ func configureSlimTestServer(params base.TestServerArgs) base.TestServerArgs {
 	if !cfg.Options.EnableSpanConfigJob {
 		spanconfigmanager.JobEnabledSetting.Override(context.Background(), &params.Settings.SV, false)
 	}
+	if !cfg.Options.EnableAllUpgrades {
+		if params.Knobs.UpgradeManager == nil {
+			params.Knobs.UpgradeManager = &upgradebase.TestingKnobs{}
+		}
+		params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = true
+	}
+
 	return params
 }
 
