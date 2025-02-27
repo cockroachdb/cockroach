@@ -262,6 +262,8 @@ var retiredSettings = map[InternalKey]struct{}{
 	"bulkio.backup.merge_file_buffer_size":               {},
 	"changefeed.new_webhook_sink_enabled":                {},
 	"changefeed.new_webhook_sink.enabled":                {},
+	"changefeed.new_pubsub_sink_enabled":                 {},
+	"changefeed.new_pubsub_sink.enabled":                 {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
