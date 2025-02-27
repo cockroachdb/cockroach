@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -84,4 +85,17 @@ func TestServerStartup(t *testing.T) {
 			s.Stopper().Stop(context.Background())
 		})
 	}
+}
+
+func TestServerProperties(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sql, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(sql)
+
+	// Ensure all ranges have 1 replica
+	sqlDB.CheckQueryResults(t, "select count(*) from [show cluster ranges] where replicas = '{1}'", sqlDB.QueryStr(t, "select count(*) from [show cluster ranges]"))
 }
