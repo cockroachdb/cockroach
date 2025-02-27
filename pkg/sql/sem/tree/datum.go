@@ -3956,10 +3956,11 @@ func (d *DJsonpath) Format(ctx *FmtCtx) {
 }
 
 func ParseDJsonpath(s string) (Datum, error) {
-	if s == "" {
-		return nil, MakeParseError("invalid jsonpath", types.Jsonpath, nil)
+	jp, err := ValidateJSONPath(s)
+	if err != nil {
+		return nil, MakeParseError(s, types.Jsonpath, err)
 	}
-	return NewDJsonpath(s), nil
+	return NewDJsonpath(jp), nil
 }
 
 // DJSON is the JSON Datum.
