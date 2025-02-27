@@ -26,13 +26,7 @@ func L1Distance(s []float32, t []float32) float32 {
 // L2Distance returns the L2 norm of s - t, which is the Euclidean distance
 // between the two vectors. It panics if the argument lengths do not match.
 func L2Distance(s, t []float32) float32 {
-	checkDims(s, t)
-	var distance float32
-	for i := range s {
-		diff := s[i] - t[i]
-		distance += diff * diff
-	}
-	return Sqrt(distance)
+	return Sqrt(L2SquaredDistance(s, t))
 }
 
 // L2SquaredDistance returns the squared L2 norm of s - t, which is the squared
@@ -153,9 +147,7 @@ func Sum(x []float32) float32 {
 //
 //gcassert:inline
 func Zero(dst []float32) {
-	for i := range dst {
-		dst[i] = 0.0
-	}
+	clear(dst)
 }
 
 // Round sets every element of the "dst" slice to its rounded value, using
@@ -164,7 +156,7 @@ func Zero(dst []float32) {
 // NB: Upcasting from float32 to float64 to perform the rounding can cause
 // precision issues that affect the result.
 func Round(dst []float32, prec int) {
-	for i := 0; i < len(dst); i++ {
+	for i := range dst {
 		val2 := float64(dst[i])
 		val := scalar.Round(val2, prec)
 		dst[i] = float32(val)

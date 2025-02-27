@@ -129,7 +129,7 @@ func (p *Partition) Centroid() vector.T {
 
 // ChildKeys point to the location of the full-size vectors that are quantized
 // in this partition. If this is a leaf partition, then these are primary keys
-// that point to rows in the primary index. If this is a branch/leaf partition,
+// that point to rows in the primary index. If this is a branch/root partition,
 // then these are the keys of child partitions.
 func (p *Partition) ChildKeys() []ChildKey {
 	return p.childKeys
@@ -205,8 +205,10 @@ func (p *Partition) ReplaceWithLast(offset int) {
 	p.quantizedSet.ReplaceWithLast(offset)
 	newCount := len(p.childKeys) - 1
 	p.childKeys[offset] = p.childKeys[newCount]
+	p.childKeys[newCount] = ChildKey{} // for GC
 	p.childKeys = p.childKeys[:newCount]
 	p.valueBytes[offset] = p.valueBytes[newCount]
+	p.valueBytes[newCount] = nil // for GC
 	p.valueBytes = p.valueBytes[:newCount]
 }
 

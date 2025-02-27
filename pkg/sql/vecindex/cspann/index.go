@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -307,7 +308,8 @@ func (vi *Index) Close() {
 // into the index. To minimize this possibility, callers should call Delete
 // before Insert when a vector is updated. Even then, it's not guaranteed that
 // Delete will find the old vector. Vector index methods handle this rare case
-// by checking for duplicates when returning search results.
+// by checking for duplicates when returning search results. For details, see
+// Index.pruneDuplicates.
 func (vi *Index) Insert(ctx context.Context, idxCtx *Context, vec vector.T, key KeyBytes) error {
 	// Potentially throttle insert operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
@@ -327,8 +329,9 @@ func (vi *Index) Insert(ctx context.Context, idxCtx *Context, vec vector.T, key 
 //
 // NOTE: Delete may not be able to locate the vector in the index, meaning a
 // "dangling vector" reference will be left in the tree. Vector index methods
-// handle this rare case by checking for duplicates when returning search
-// results.
+// handle this rare case by joining quantized vectors in the tree with their
+// corresponding full vector from the primary index (which cannot "dangle")
+// before returning search results. For details, see Index.getRerankVectors.
 func (vi *Index) Delete(ctx context.Context, idxCtx *Context, vec vector.T, key KeyBytes) error {
 	result, err := vi.SearchForDelete(ctx, idxCtx, vec, key)
 	if err != nil {
@@ -459,7 +462,7 @@ func (vi *Index) ForceMerge(
 // setupInsertContext sets up the given context for an insert operation. Before
 // performing an insert, we need to search for the best partition with the
 // closest centroid to the query vector. The partition in which to insert the
-// vector is at the parent of of the leaf level.
+// vector is at the parent of the leaf level.
 func (vi *Index) setupInsertContext(idxCtx *Context, vec vector.T) {
 	// Perform the search using quantized vectors rather than full vectors (i.e.
 	// skip reranking).
@@ -748,6 +751,7 @@ func (vi *Index) searchChildPartitions(
 // pruneDuplicates removes candidates with duplicate child keys. This is rare,
 // but it can happen when a vector updated in the primary index cannot be
 // located in the secondary index.
+// NOTE: This logic will reorder the candidates slice.
 // NOTE: This logic can remove the "wrong" duplicate, with a quantized distance
 // that doesn't correspond to the true distance. However, this has no impact as
 // long as we rerank candidates using the original full-size vectors. Even if
@@ -764,20 +768,16 @@ func (vi *Index) pruneDuplicates(candidates []SearchResult) []SearchResult {
 		return candidates
 	}
 
-	dups := make(map[string]bool, len(candidates))
-	for i := 0; i < len(candidates); i++ {
-		key := candidates[i].ChildKey.KeyBytes
-		if _, ok := dups[string(key)]; ok {
-			// Found duplicate, so remove it by replacing it with the last
-			// candidate.
-			candidates[i] = candidates[len(candidates)-1]
-			candidates = candidates[:len(candidates)-1]
-			i--
-			continue
-		}
-		dups[string(key)] = true
-	}
-	return candidates
+	// TODO DURING REVIEW: this is O(n * log(n)) instead of O(n) like the previous
+	// code, but is probably faster in practice for small values of n because it
+	// is allocation free. It is also cleaner and easier to understand. Choose an
+	// approach.
+	slices.SortFunc(candidates, func(a, b SearchResult) int {
+		return bytes.Compare(a.ChildKey.KeyBytes, b.ChildKey.KeyBytes)
+	})
+	return slices.CompactFunc(candidates, func(a, b SearchResult) bool {
+		return bytes.Equal(a.ChildKey.KeyBytes, b.ChildKey.KeyBytes)
+	})
 }
 
 // rerankSearchResults updates the given set of candidates with their exact
@@ -829,7 +829,7 @@ func (vi *Index) getRerankVectors(
 ) ([]SearchResult, error) {
 	// Prepare vector references.
 	idxCtx.tempVectorsWithKeys = ensureSliceLen(idxCtx.tempVectorsWithKeys, len(candidates))
-	for i := 0; i < len(candidates); i++ {
+	for i := range candidates {
 		idxCtx.tempVectorsWithKeys[i].Key = candidates[i].ChildKey
 	}
 
@@ -852,6 +852,7 @@ func (vi *Index) getRerankVectors(
 			// of slice by one.
 			idxCtx.tempVectorsWithKeys[i] = idxCtx.tempVectorsWithKeys[len(candidates)-1]
 			candidates[i] = candidates[len(candidates)-1]
+			candidates[len(candidates)-1] = SearchResult{} // for GC
 			candidates = candidates[:len(candidates)-1]
 			i--
 		}

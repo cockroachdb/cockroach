@@ -6,7 +6,6 @@ go_library(
     srcs = [
         "doc.go",
         "frontier.go",
-        "llrb_frontier.go",
         "test_helper.go",
         ":btreefrontierentry_interval_btree.go",  #keep
     ],
@@ -16,10 +15,8 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/util/buildutil",
-        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
-        "//pkg/util/metamorphic",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -38,7 +35,6 @@ go_test(
     deps = [
         "//pkg/roachpb",
         "//pkg/testutils",
-        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

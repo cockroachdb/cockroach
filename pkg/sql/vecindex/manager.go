@@ -39,7 +39,7 @@ type Manager struct {
 
 // NewManager returns a new vector index manager which maintains per-node vector
 // index instances. We store a context for creating new vector index objects,
-// since those outlive the context of Get calls..
+// since those outlive the context of Get calls.
 func NewManager(
 	ctx context.Context, stopper *stop.Stopper, codec keys.SQLCodec, db descs.DB,
 ) *Manager {

@@ -75,6 +75,9 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 			if err != nil {
 				err = errors.Wrap(err, "deleting vector")
 			}
+
+		default:
+			panic(errors.AssertionFailedf("unknown fixup %d", next.Type))
 		}
 
 		if err != nil {
@@ -291,8 +294,8 @@ func (fw *fixupWorker) splitPartition(
 		// the parent level.
 		idxCtx := fw.reuseIndexContext(txn)
 		idxCtx.level = parentPartition.Level() + 1
-		idxCtx.randomized = leftSplit.Partition.Centroid()
 
+		idxCtx.randomized = leftSplit.Partition.Centroid()
 		childKey := ChildKey{PartitionKey: leftPartitionKey}
 		err = fw.index.insertHelper(ctx, idxCtx, childKey, ValueBytes{})
 		if err != nil {
@@ -420,6 +423,9 @@ func (fw *fixupWorker) moveVectorsToSiblings(
 		vector := split.Vectors.At(i)
 
 		// If distance to new centroid is <= distance to old centroid, then skip.
+		// Only vectors that are now further from their new centroid than they were
+		// to the old centroid must be considered for moving to a sibling partition.
+		// This encodes the condition in Equation 1 from the SPFresh paper.
 		newCentroidDistance := split.Partition.QuantizedSet().GetCentroidDistances()[i]
 		if newCentroidDistance <= split.OldCentroidDistances[i] {
 			continue
@@ -432,7 +438,9 @@ func (fw *fixupWorker) moveVectorsToSiblings(
 		}
 
 		// Check whether the vector is closer to a sibling centroid than its own
-		// new centroid.
+		// new centroid. Note that the pre-split partition has already been removed
+		// from the parent partition by this point, so its centroid is not included
+		// in parentVectors.
 		minDistanceOffset := -1
 		for parent := 0; parent < parentVectors.Count; parent++ {
 			squaredDistance := num32.L2Distance(parentVectors.At(parent), vector)
