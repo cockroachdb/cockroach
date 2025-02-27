@@ -681,17 +681,16 @@ func (ef *execFactory) ConstructIndexJoin(
 	colCfg := makeScanColumnsConfig(table, tableCols)
 	cols := makeColList(table, tableCols)
 
-	tableScan := ef.planner.Scan()
-
-	if err := tableScan.initDescDefaults(tabDesc, colCfg); err != nil {
+	var fetch fetchPlanningInfo
+	if err := fetch.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
 	idx := tabDesc.GetPrimaryIndex()
-	tableScan.index = idx
-	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
-	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
-	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
+	fetch.index = idx
+	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -703,7 +702,7 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	n := &indexJoinNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		table:               tableScan,
+		fetch:               fetch,
 		cols:                cols,
 		resultColumns:       colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols),
 		reqOrdering:         ReqOrdering(reqOrdering),
@@ -743,16 +742,16 @@ func (ef *execFactory) ConstructLookupJoin(
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
 	colCfg := makeScanColumnsConfig(table, lookupCols)
-	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initDescDefaults(tabDesc, colCfg); err != nil {
+	var fetch fetchPlanningInfo
+	if err := fetch.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
-	tableScan.index = idx
-	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
-	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
-	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
+	fetch.index = idx
+	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -764,7 +763,7 @@ func (ef *execFactory) ConstructLookupJoin(
 
 	n := &lookupJoinNode{
 		singleInputPlanNode:        singleInputPlanNode{input.(planNode)},
-		table:                      tableScan,
+		fetch:                      fetch,
 		joinType:                   joinType,
 		eqColsAreKey:               eqColsAreKey,
 		isFirstJoinInPairedJoiner:  isFirstJoinInPairedJoiner,
@@ -777,7 +776,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	for i, c := range eqCols {
 		n.eqCols[i] = int(c)
 	}
-	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), planColumns(tableScan))
+	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), fetch.resultColumns)
 	n.lookupExpr = lookupExpr
 	n.remoteLookupExpr = remoteLookupExpr
 	if onCond != tree.DBoolTrue {
@@ -879,15 +878,15 @@ func (ef *execFactory) ConstructInvertedJoin(
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
 	colCfg := makeScanColumnsConfig(table, lookupCols)
-	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initDescDefaults(tabDesc, colCfg); err != nil {
+	var fetch fetchPlanningInfo
+	if err := fetch.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
-	tableScan.index = idx
-	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
-	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
-	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
+	fetch.index = idx
+	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -899,7 +898,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 
 	n := &invertedJoinNode{
 		singleInputPlanNode:       singleInputPlanNode{input.(planNode)},
-		table:                     tableScan,
+		fetch:                     fetch,
 		joinType:                  joinType,
 		invertedExpr:              invertedExpr,
 		isFirstJoinInPairedJoiner: isFirstJoinInPairedJoiner,
@@ -918,7 +917,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	inputCols := planColumns(input.(planNode))
 	var scanCols colinfo.ResultColumns
 	if joinType.ShouldIncludeRightColsInOutput() {
-		scanCols = planColumns(tableScan)
+		scanCols = fetch.resultColumns
 	}
 	numCols := len(inputCols) + len(scanCols)
 	if isFirstJoinInPairedJoiner {
@@ -933,28 +932,28 @@ func (ef *execFactory) ConstructInvertedJoin(
 	return n, nil
 }
 
-// Helper function to create a scanNode from just a table / index descriptor
-// and requested cols.
-func (ef *execFactory) constructScanForZigzag(
+// Helper function to create a fetchPlanningInfo struct from just a
+// table / index descriptor and requested cols.
+func (ef *execFactory) constructFetchForZigzag(
 	table cat.Table,
 	index cat.Index,
 	cols exec.TableColumnOrdinalSet,
 	eqCols []exec.TableColumnOrdinal,
 	locking opt.Locking,
-) (_ *scanNode, eqColOrdinals []int, _ error) {
+) (_ fetchPlanningInfo, eqColOrdinals []int, _ error) {
 	colCfg := makeScanColumnsConfig(table, cols)
 
 	var err error
 	eqColOrdinals, err = tableToScanOrdinals(cols, eqCols)
 	if err != nil {
-		return nil, nil, err
+		return fetchPlanningInfo{}, nil, err
 	}
 
 	tableDesc := table.(*optTable).desc
 	idxDesc := index.(*optIndex).idx
-	scan := ef.planner.Scan()
-	if err := scan.initDescDefaults(tableDesc, colCfg); err != nil {
-		return nil, nil, err
+	var fetch fetchPlanningInfo
+	if err := fetch.initDescDefaults(tableDesc, colCfg); err != nil {
+		return fetchPlanningInfo{}, nil, err
 	}
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
@@ -965,12 +964,12 @@ func (ef *execFactory) constructScanForZigzag(
 		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
 	}
 
-	scan.index = idxDesc
-	scan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
-	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
-	scan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
+	fetch.index = idxDesc
+	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
-	return scan, eqColOrdinals, nil
+	return fetch, eqColOrdinals, nil
 }
 
 // ConstructZigzagJoin is part of the exec.Factory interface.
@@ -999,11 +998,15 @@ func (ef *execFactory) ConstructZigzagJoin(
 		reqOrdering: ReqOrdering(reqOrdering),
 	}
 	var err error
-	n.sides[0].scan, n.sides[0].eqCols, err = ef.constructScanForZigzag(leftTable, leftIndex, leftCols, leftEqCols, leftLocking)
+	n.sides[0].fetch, n.sides[0].eqCols, err = ef.constructFetchForZigzag(
+		leftTable, leftIndex, leftCols, leftEqCols, leftLocking,
+	)
 	if err != nil {
 		return nil, err
 	}
-	n.sides[1].scan, n.sides[1].eqCols, err = ef.constructScanForZigzag(rightTable, rightIndex, rightCols, rightEqCols, rightLocking)
+	n.sides[1].fetch, n.sides[1].eqCols, err = ef.constructFetchForZigzag(
+		rightTable, rightIndex, rightCols, rightEqCols, rightLocking,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1017,10 +1020,10 @@ func (ef *execFactory) ConstructZigzagJoin(
 	n.columns = make(
 		colinfo.ResultColumns,
 		0,
-		len(n.sides[0].scan.resultColumns)+len(n.sides[1].scan.resultColumns),
+		len(n.sides[0].fetch.resultColumns)+len(n.sides[1].fetch.resultColumns),
 	)
-	n.columns = append(n.columns, n.sides[0].scan.resultColumns...)
-	n.columns = append(n.columns, n.sides[1].scan.resultColumns...)
+	n.columns = append(n.columns, n.sides[0].fetch.resultColumns...)
+	n.columns = append(n.columns, n.sides[1].fetch.resultColumns...)
 
 	// Fixed values are the values fixed for a prefix of each side's index columns.
 	// See the comment in pkg/sql/rowexec/zigzagjoiner.go for how they are used.

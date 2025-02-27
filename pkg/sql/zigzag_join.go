@@ -43,9 +43,7 @@ type zigzagJoinNode struct {
 // join. Note that the length of all eqCols in one zigzagJoinNode should
 // be the same.
 type zigzagJoinSide struct {
-	// scan references a scan node containing index/table descriptor references
-	// for this side of the join.
-	scan *scanNode
+	fetch fetchPlanningInfo
 
 	// eqCols is an int slice containing the equated columns for this side
 	// of the zigzag join (as ordinals into scan.cols).
