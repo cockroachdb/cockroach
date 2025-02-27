@@ -536,6 +536,13 @@ func (b *stmtBundleBuilder) printError(errString string, buf *bytes.Buffer) {
 	b.errorStrings = append(b.errorStrings, errString)
 }
 
+var stmtBundleIncludeAllFKReferences = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.statement_bundle.include_all_references.enabled",
+	"controls whether all FK reference tables are included",
+	false,
+)
+
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	c := makeStmtEnvCollector(ctx, b.p, b.ie)
 
@@ -568,12 +575,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	buf.Reset()
 
-	// We only want to include the FK referenced and referencing tables if
-	// the stmt performs a mutation.
-	// TODO(yuzefovich): support omitting FK references for redacted bundles.
-	// TODO(#142006): be smarter about which tables we include depending on the
-	// mutation stmt.
-	includeAllFKReferenceTables := b.plan.flags.IsSet(planFlagContainsMutation) || b.flags.RedactValues
+	includeAll := stmtBundleIncludeAllFKReferences.Get(b.sv)
 
 	// TODO(#27611): when we support stats on virtual tables, we'll need to
 	// update this logic to not include virtual tables into schema.sql but still
@@ -581,21 +583,105 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	var tables, sequences, views []tree.TableName
 	var addFKs []*tree.AlterTable
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// TODO(yuzefovich): consider refactoring opt.Metadata so that we could
+		// know exactly when tables are INSERTed into, DELETEd from, etc.
+		hasMutation := b.plan.flags.IsSet(planFlagContainsMutation)
+		hasDelete := b.plan.flags.IsSet(planFlagContainsDelete)
+		hasInsert := b.plan.flags.IsSet(planFlagContainsInsert)
+		hasUpdate := b.plan.flags.IsSet(planFlagContainsUpdate)
+		hasUpsert := b.plan.flags.IsSet(planFlagContainsUpsert)
+
 		var err error
 		tables, sequences, views, addFKs, err = mem.Metadata().AllDataSourceNames(
 			ctx,
 			b.plan.catalog,
-			func(table cat.Table, referencedByMetadata intsets.Fast) bool {
+			func(table cat.Table, referencedByMetadata intsets.Fast, fk cat.ForeignKeyConstraint) (include, recurse bool) {
 				if table.IsVirtualTable() {
 					// Omit virtual tables since we don't need to create them.
-					return false
+					return false, false
 				}
-				if includeAllFKReferenceTables {
-					return true
+				if includeAll {
+					return true, true
 				}
-				// For read-only queries, when unredacted bundle is requested,
-				// only include referenced by the metadata tables.
-				return referencedByMetadata.Contains(int(table.ID()))
+				if b.flags.RedactValues {
+					// We currently don't support SHOW CREATE TABLE ... with
+					// both REDACT and IGNORE_FOREIGN_KEYS options, so we'll
+					// include all FK reference tables.
+					// TODO(yuzefovich): support omitting FK references for
+					// redacted bundles.
+					return true, true
+				}
+				// TODO(yuzefovich): note that some of the FK references are
+				// referenced by the metadata, so we will end up including an
+				// extra "layer" of FK references. Avoiding that seems quite
+				// tricky.
+				if referencedByMetadata.Contains(int(table.ID())) {
+					// We always want to include tables referenced by the
+					// metadata. For read-only queries we only want to include
+					// those and nothing else, so we don't recurse.
+					recurse = hasMutation
+					return true, recurse
+				}
+				if fk == nil {
+					// This should never happen since nil FK parameter is
+					// provided only for directly referenced tables, but we'll
+					// lean on the safe side.
+					return true, true
+				}
+				// For the code below, we'll use the following example to
+				// indicate the reasoning:
+				//   CREATE TABLE parent (pk INT PRIMARY KEY, v INT);
+				//   CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));
+				//   CREATE TABLE grandchild (pk INT PRIMARY KEY, fk INT REFERENCES child(pk));
+				if table.ID() == fk.ReferencedTableID() {
+					// The table we're considering for inclusion is a referenced
+					// table of a FK constraint where the referencing (origin)
+					// table has already been included.
+					//
+					// In our example, we've already included 'child' and are
+					// considering 'parent'.
+					if hasInsert || hasUpdate || hasUpsert {
+						// When inserting into 'child', we need to perform the
+						// FK check in 'parent', so we want to include it, but
+						// there is no need to recurse into 'parent'.
+						//
+						// The same reasoning applies to updates and upserts.
+						// TODO(yuzefovich): for updates we only need to include
+						// the referenced table if the FK columns in the origin
+						// are actually modified, but it seems tricky to get
+						// that logic right.
+						return true, false
+					}
+					// When deleting from 'child', 'parent' is unaffected, so no
+					// need to include 'parent'.
+					return false, false
+				}
+				// The table we're considering for inclusion is an origin table
+				// of a FK constraint where the referenced table has already
+				// been included.
+				//
+				// In our example, we've already included 'parent' and are
+				// considering 'child'. Whenever 'parent' is modified, we always
+				// need to at least perform constraint check, so we always want
+				// to include 'child' (unless we have an INSERT). The question
+				// is whether we need to recurse into child's FKs.
+				if hasDelete && fk.DeleteReferenceAction() == tree.Cascade {
+					// We deleted from 'parent', and we have the ON DELETE
+					// CASCADE action of the 'child' FK, so we need to recurse
+					// in order to additionally include 'grandchild'.
+					return true, true
+				}
+				if (hasUpdate || hasUpsert) && fk.UpdateReferenceAction() == tree.Cascade {
+					// We updated the 'parent', and we have the ON UPDATE
+					// CASCADE action of the 'child' FK, so we need to recurse
+					// in order to additionally include 'grandchild'.
+					//
+					// We don't know whether UPSERT resulted in an UPDATE or an
+					// INSERT, but we'll assume the former to be on the safer
+					// side (i.e. include more).
+					return true, true
+				}
+				return hasDelete || hasUpdate || hasUpsert, false
 			},
 			func(ds cat.DataSource) (cat.DataSourceName, error) {
 				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, ds, txn)
