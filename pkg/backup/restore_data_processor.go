@@ -76,7 +76,7 @@ type restoreDataProcessor struct {
 
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// restoreDataProcessors' trace recording.
-	agg      *bulkutil.TracingAggregator
+	agg      *tracing.TracingAggregator
 	aggTimer timeutil.Timer
 
 	// qp is a MemoryBackedQuotaPool that restricts the amount of memory that
@@ -180,7 +180,7 @@ func newRestoreDataProcessor(
 // Start is part of the RowSource interface.
 func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", rd.spec.JobID)
-	rd.agg = bulkutil.TracingAggregatorForContext(ctx)
+	rd.agg = tracing.TracingAggregatorForContext(ctx)
 	// If the aggregator is nil, we do not want the timer to fire.
 	if rd.agg != nil {
 		rd.aggTimer.Reset(15 * time.Second)
