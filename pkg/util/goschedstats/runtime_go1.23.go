@@ -178,8 +178,8 @@ func releasem(*m)
 //go:linkname allp runtime.allp
 var allp []*p
 
-//go:linkname sched runtime.sched
-var sched schedt
+//go:linkname goschedstats_sched sched
+var goschedstats_sched schedt
 
 //go:linkname lock runtime.lock
 func lock(l *mutex)
@@ -190,8 +190,8 @@ func unlock(l *mutex)
 func numRunnableGoroutines() (numRunnable int, numProcs int) {
 	// Disable preemption.
 	mp := acquirem()
-	lock(&sched.lock)
-	numRunnable = int(sched.runqsize)
+	lock(&goschedstats_sched.lock)
+	numRunnable = int(goschedstats_sched.runqsize)
 	numProcs = len(allp)
 
 	// Note that holding sched.lock prevents the number of Ps from changing, so
@@ -214,7 +214,7 @@ func numRunnableGoroutines() (numRunnable int, numProcs int) {
 			break
 		}
 	}
-	unlock(&sched.lock)
+	unlock(&goschedstats_sched.lock)
 	releasem(mp)
 	return numRunnable, numProcs
 }
