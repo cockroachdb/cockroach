@@ -653,6 +653,9 @@ const (
 	planFlagContainsLargeFullIndexScan
 
 	// planFlagContainsMutation is set if the plan has any mutations.
+	// TODO(yuzefovich): in addition to DELETE, INSERT, UPDATE, and UPSERT this
+	// flag is also set for different ALTER and CREATE statements. Audit usages
+	// of this flag to see whether it's desirable.
 	planFlagContainsMutation
 
 	// planFlagContainsLocking is set if the plan has a node with locking.
@@ -678,6 +681,13 @@ const (
 	// planFlagDistributedExecution is set if execution of any part of the plan
 	// was distributed.
 	planFlagDistributedExecution
+
+	// These flags indicate whether at least one DELETE, INSERT, UPDATE, or
+	// UPSERT stmt was found in the whole plan.
+	planFlagContainsDelete
+	planFlagContainsInsert
+	planFlagContainsUpdate
+	planFlagContainsUpsert
 )
 
 // IsSet returns true if the receiver has all of the given flags set.
