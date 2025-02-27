@@ -386,8 +386,8 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		}
 	}
 
-	// Update raft log entry cache. We clear any older, uncommitted log entries
-	// and cache the latest ones.
+	// Update both the term cache and raft log entry cache.
+	// We clear any older, uncommitted log entries and cache the latest ones.
 	//
 	// In the blocking log sync case, these entries are already durable. In the
 	// non-blocking case, these entries have been written to the pebble engine (so
@@ -397,10 +397,8 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// splitting its log into an unstable portion for entries that are not known
 	// to be durable and a stable portion for entries that are known to be
 	// durable.
+	s.TermCache.ScanAppend(ctx, m.Entries)
 	s.EntryCache.Add(s.RangeID, m.Entries, true /* truncate */)
-	// lock Replica.mu here
-	_ = s.TermCache.ScanAppend(m.Entries, true /* truncate */)
-	// unlock it
 
 	return state, nil
 }
@@ -630,7 +628,7 @@ func LoadTerm(
 	metrics Metrics,
 ) (kvpb.RaftTerm, error) {
 	metrics.TermCacheAccesses.Inc(1)
-	term, err := tc.Term(uint64(index))
+	term, err := tc.Term(ctx, uint64(index))
 	if err == nil {
 		// found
 		metrics.TermCacheHits.Inc(1)

@@ -22,6 +22,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/kv/kvpb",
         "//pkg/raft/confchange",
         "//pkg/raft/quorum",
         "//pkg/raft/raftlogger",
@@ -29,6 +30,7 @@ go_library(
         "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
         "//pkg/util/hlc",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
