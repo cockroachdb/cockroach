@@ -76,6 +76,8 @@ type TestingKnobs struct {
 	// ForceCheckLicenseViolation is true if we want the v24_3_check_license_violation.go
 	// task to continue even though we are in a test environment.
 	ForceCheckLicenseViolation bool
+
+	SkipSomeUpgradeSteps bool
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.
