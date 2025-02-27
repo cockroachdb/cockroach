@@ -12,6 +12,7 @@ import "gogoproto/gogo.proto";
 // AdmissionWorkQueueStats is recorded for work items waiting in the admission
 // work queue.
 message AdmissionWorkQueueStats {
+  option (gogoproto.goproto_stringer) = false;
   // Duration spent waiting.
   int64 wait_duration_nanos = 1 [(gogoproto.casttype) = "time.Duration"];
   // String representation of admission queue kind.

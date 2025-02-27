@@ -6,10 +6,16 @@
 package admissionpb
 
 import (
+	fmt "fmt"
 	"math"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // WorkPriority represents the priority of work. In an WorkQueue, it is only
@@ -237,6 +243,63 @@ func (w WorkClass) SafeFormat(p redact.SafePrinter, verb rune) {
 		p.SafeString("elastic")
 	default:
 		p.SafeString("<unknown-class>")
+	}
+}
+
+var _ tracing.AggregatorEvent = &AdmissionWorkQueueStats{}
+
+// Identity implements the tracing.AggregatorEvent interface.
+func (s *AdmissionWorkQueueStats) Identity() tracing.AggregatorEvent {
+	return &AdmissionWorkQueueStats{}
+}
+
+// Combine implements the tracing.AggregatorEvent interface.
+func (s *AdmissionWorkQueueStats) Combine(other tracing.AggregatorEvent) {
+	otherStats, ok := other.(*AdmissionWorkQueueStats)
+	if !ok {
+		panic(errors.Newf("`other` is not of type AdmissionWorkQueueStats: %T", other))
+	}
+	s.WaitDurationNanos += otherStats.WaitDurationNanos
+	s.DeadlineExceeded = s.DeadlineExceeded || otherStats.DeadlineExceeded
+
+	if otherStats.WorkPriority != "" {
+		if s.WorkPriority == "" {
+			s.WorkPriority = otherStats.WorkPriority
+		} else if !strings.Contains(s.WorkPriority, otherStats.WorkPriority) {
+			s.WorkPriority += "," + otherStats.WorkPriority
+		}
+	}
+
+	if otherStats.QueueKind != "" {
+		if s.QueueKind == "" {
+			s.QueueKind = otherStats.QueueKind
+		} else if !strings.Contains(s.QueueKind, otherStats.QueueKind) {
+			s.QueueKind += "," + otherStats.QueueKind
+		}
+	}
+}
+
+// ProtoName implements the tracing.AggregatorEvent interface.
+func (s *AdmissionWorkQueueStats) ProtoName() string {
+	return proto.MessageName(s)
+}
+
+func (s *AdmissionWorkQueueStats) ToText() []byte {
+	return []byte(s.String())
+}
+
+func (s *AdmissionWorkQueueStats) String() string {
+	return fmt.Sprintf("queue (%s/%s) wait: %s ",
+		s.QueueKind, s.WorkPriority, humanizeutil.Duration(s.WaitDurationNanos),
+	)
+}
+
+// Render implements the AggregatorEvent interface.
+func (s *AdmissionWorkQueueStats) Render() []attribute.KeyValue {
+	return []attribute.KeyValue{
+		{Key: "queue_wait", Value: attribute.StringValue(string(humanizeutil.Duration(s.WaitDurationNanos)))},
+		{Key: "queue_kind", Value: attribute.StringValue(s.QueueKind)},
+		{Key: "queue_priority", Value: attribute.StringValue(s.WorkPriority)},
 	}
 }
 
