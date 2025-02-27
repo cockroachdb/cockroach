@@ -327,7 +327,8 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	colCfg.wantedColumns = append(colCfg.wantedColumns, column.GetID())
 
 	// Initialize a dummy scanNode for the requested statistic.
-	scan := scanNode{desc: desc}
+	var scan scanNode
+	scan.desc = desc
 	err = scan.initDescSpecificCol(colCfg, column)
 	if err != nil {
 		return nil, err
@@ -537,14 +538,14 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	// Create the table readers; for this we initialize a dummy scanNode.
-	scan := scanNode{desc: desc}
+	var scan scanNode
 	if colCfg.wantedColumns == nil {
 		// wantedColumns cannot be left nil, and if it is nil at this point,
 		// then we only have virtual computed columns, so we'll allocate an
 		// empty slice.
 		colCfg.wantedColumns = []tree.ColumnID{}
 	}
-	err := scan.initDescDefaults(colCfg)
+	err := scan.initDescDefaults(desc, colCfg)
 	if err != nil {
 		return nil, err
 	}

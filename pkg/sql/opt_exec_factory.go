@@ -138,7 +138,7 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	if err := scan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
+	if err := scan.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -683,13 +683,12 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
+	if err := tableScan.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
 	idx := tabDesc.GetPrimaryIndex()
 	tableScan.index = idx
-	tableScan.disableBatchLimit()
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
@@ -746,7 +745,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
+	if err := tableScan.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -828,7 +827,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	// Set up a scanNode that we won't actually use, just to get the needed
 	// column analysis.
 	colCfg := makeScanColumnsConfig(table, lookupCols)
-	if err := tableScan.initTable(ef.ctx, ef.planner, tableDesc, colCfg); err != nil {
+	if err := tableScan.initDescDefaults(tableDesc, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -882,7 +881,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
+	if err := tableScan.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -954,7 +953,7 @@ func (ef *execFactory) constructScanForZigzag(
 	tableDesc := table.(*optTable).desc
 	idxDesc := index.(*optIndex).idx
 	scan := ef.planner.Scan()
-	if err := scan.initTable(ef.ctx, ef.planner, tableDesc, colCfg); err != nil {
+	if err := scan.initDescDefaults(tableDesc, colCfg); err != nil {
 		return nil, nil, err
 	}
 
