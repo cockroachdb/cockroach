@@ -206,8 +206,11 @@ func ValidateKMSURIsAgainstFullBackup(
 // MakeNewEncryptionOptions returns a new jobspb.BackupEncryptionOptions based
 // on the passed in encryption parameters.
 func MakeNewEncryptionOptions(
-	ctx context.Context, encryptionParams jobspb.BackupEncryptionOptions, kmsEnv cloud.KMSEnv,
+	ctx context.Context, encryptionParams *jobspb.BackupEncryptionOptions, kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, *jobspb.EncryptionInfo, error) {
+	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
+		return nil, nil, nil
+	}
 	var encryptionOptions *jobspb.BackupEncryptionOptions
 	var encryptionInfo *jobspb.EncryptionInfo
 	switch encryptionParams.Mode {
@@ -339,10 +342,10 @@ func GetEncryptionFromBase(
 	user username.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	baseBackupURI string,
-	encryptionParams jobspb.BackupEncryptionOptions,
+	encryptionParams *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, error) {
-	if encryptionParams.Mode == jobspb.EncryptionMode_None {
+	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
 		return nil, nil
 	}
 	exportStore, err := makeCloudStorage(ctx, baseBackupURI, user)
@@ -357,10 +360,10 @@ func GetEncryptionFromBase(
 func GetEncryptionFromBaseStore(
 	ctx context.Context,
 	baseStore cloud.ExternalStorage,
-	encryptionParams jobspb.BackupEncryptionOptions,
+	encryptionParams *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, error) {
-	if encryptionParams.Mode == jobspb.EncryptionMode_None {
+	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
 		return nil, nil
 	}
 	opts, err := ReadEncryptionOptions(ctx, baseStore)

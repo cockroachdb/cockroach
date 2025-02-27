@@ -135,7 +135,7 @@ func compactBackups(
 		execCtx.User(),
 	)
 	encryption, err := backupencryption.GetEncryptionFromBaseStore(
-		ctx, baseStores[0], *details.EncryptionOptions, &kmsEnv,
+		ctx, baseStores[0], details.EncryptionOptions, &kmsEnv,
 	)
 	if err != nil {
 		return err
@@ -458,7 +458,7 @@ func makeCompactionBackupDetails(
 		var err error
 		_, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(
 			ctx,
-			*encryption,
+			encryption,
 			kmsEnv,
 		)
 		if err != nil {

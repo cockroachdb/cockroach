@@ -1679,7 +1679,7 @@ func updateBackupDetails(
 	// need to generate encryption specific data.
 	var encryptionInfo *jobspb.EncryptionInfo
 	if encryptionOptions == nil {
-		encryptionOptions, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(ctx, *details.EncryptionOptions, kmsEnv)
+		encryptionOptions, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(ctx, details.EncryptionOptions, kmsEnv)
 		if err != nil {
 			return jobspb.BackupDetails{}, err
 		}
@@ -1722,7 +1722,7 @@ func getBackupDetailAndManifest(
 	if len(backupDestination.PrevBackupURIs) != 0 {
 		var err error
 		baseEncryptionOptions, err = backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage,
-			backupDestination.PrevBackupURIs[0], *initialDetails.EncryptionOptions, &kmsEnv)
+			backupDestination.PrevBackupURIs[0], initialDetails.EncryptionOptions, &kmsEnv)
 		if err != nil {
 			return jobspb.BackupDetails{}, nil, err
 		}
