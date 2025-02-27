@@ -1160,6 +1160,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				return stats, errors.Wrap(err, "while applying snapshot")
 			}
 
+			// Successfully applied the snapshot,
+			// update the term cache to reflect the new state.
 			r.raftMu.logStorage.TermCache.ResetWithFirst(snap.Metadata.Term, snap.Metadata.Index)
 
 			for _, msg := range app.Responses {
