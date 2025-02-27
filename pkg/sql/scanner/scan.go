@@ -606,7 +606,10 @@ func (s *Scanner) ScanComment(lval ScanSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool) {
+// normalizeIdent takes in a function that determines if a character is a legal
+// identifier character, and a boolean toLower that indicates whether to set the
+// identifier to lowercase when normalizing.
+func (s *Scanner) normalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool, toLower bool) {
 	s.lastAttemptedID = int32(lexbase.IDENT)
 	s.pos--
 	start := s.pos
@@ -634,11 +637,8 @@ func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType, isIdentMiddle fun
 		s.pos++
 	}
 
-	if isLower && isASCII {
-		// Already lowercased - nothing to do.
-		lval.SetStr(s.in[start:s.pos])
-	} else if isASCII {
-		// We know that the identifier we've seen so far is ASCII, so we don't need
+	if toLower && !isLower && isASCII {
+		// We know that the identifier we've seen so far is ASCII, so we don't
 		// to unicode normalize. Instead, just lowercase as normal.
 		b := s.allocBytes(s.pos - start)
 		_ = b[s.pos-start-1] // For bounds check elimination.
@@ -649,14 +649,20 @@ func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType, isIdentMiddle fun
 			b[i] = byte(c)
 		}
 		lval.SetStr(*(*string)(unsafe.Pointer(&b)))
-	} else {
-		// The string has unicode in it. No choice but to run Normalize.
+	} else if toLower && !isASCII {
+		// The string has unicode in it. No choice but to normalize and lowercase.
 		lval.SetStr(lexbase.NormalizeName(s.in[start:s.pos]))
+	} else if !toLower && !isASCII {
+		// The string has unicode in it. No choice but to normalize.
+		lval.SetStr(lexbase.NormalizeString(s.in[start:s.pos]))
+	} else {
+		// Don't do anything.
+		lval.SetStr(s.in[start:s.pos])
 	}
 }
 
 func (s *Scanner) scanIdent(lval ScanSymType) {
-	s.lowerCaseAndNormalizeIdent(lval, lexbase.IsIdentMiddle)
+	s.normalizeIdent(lval, lexbase.IsIdentMiddle, true /* toLower */)
 
 	isExperimental := false
 	kw := lval.Str()
