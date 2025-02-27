@@ -81,6 +81,7 @@ cockroachdb/server:
   aliases:
     cockroachdb/cli-prs: other
     cockroachdb/server-prs: other
+  label: T-db-server
   triage_column_id: 2521812
 cockroachdb/jobs:
   aliases:
