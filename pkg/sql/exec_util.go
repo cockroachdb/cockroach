@@ -842,6 +842,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaStatementTimeout = metric.Metadata{
+		Name:        "sql.statement_timeout.count",
+		Help:        "Count of statements that failed because they exceeded the statement timeout",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaSQLTxnLatency = metric.Metadata{
 		Name:        "sql.txn.latency",
 		Help:        "Latency of SQL transactions",
