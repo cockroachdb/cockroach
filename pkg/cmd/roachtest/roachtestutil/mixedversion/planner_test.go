@@ -113,6 +113,8 @@ func TestTestPlanner(t *testing.T) {
 				}
 			case "mixed-version-test":
 				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs)
+			case "in-cluster-init":
+				mvt.InClusterInit(d.CmdArgs[0].Vals[0], dummyHook)
 			case "on-startup":
 				mvt.OnStartup(d.CmdArgs[0].Vals[0], dummyHook)
 			case "in-mixed-version":
