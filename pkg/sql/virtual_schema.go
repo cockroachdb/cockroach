@@ -41,10 +41,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -444,9 +446,6 @@ type VirtualSchemaHolder struct {
 	orderedNames  []string
 
 	catalogCache nstree.MutableCatalog
-	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
-	// Remove in v23.2.
-	st *cluster.Settings
 }
 
 var _ VirtualTabler = (*VirtualSchemaHolder)(nil)
@@ -930,10 +929,6 @@ func NewVirtualSchemaHolder(
 		schemasByID:   make(map[descpb.ID]*virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames:  make([]string, len(virtualSchemas)),
 		defsByID:      make(map[descpb.ID]*virtualDefEntry, math.MaxUint32-catconstants.MinVirtualID),
-
-		// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
-		// Remove in v23.2.
-		st: st,
 	}
 
 	order := 0
@@ -985,16 +980,29 @@ func NewVirtualSchemaHolder(
 			return tableDesc, entry, nil
 		}
 
+		// Initialize virtual tables concurrently. This happens all at once during
+		// server startup, which is a bottleneck for startup time, especially in
+		// the TestServer used by unit tests. Adding concurrency here speeds up
+		// TestServer startup by about 7% in SharedTenant mode.
+		g := ctxgroup.WithContext(ctx)
+		var mu syncutil.Mutex
 		for id, def := range schema.tableDefs {
-			tableDesc, entry, err := doTheWork(id, def, false /* bumpVersion */)
-			if err != nil {
-				return nil, err
-			}
-			defs[tableDesc.Name] = entry
-			vs.defsByID[tableDesc.ID] = entry
-			orderedDefNames = append(orderedDefNames, tableDesc.Name)
+			g.GoCtx(func(ctx context.Context) error {
+				tableDesc, entry, err := doTheWork(id, def, false /* bumpVersion */)
+				if err != nil {
+					return err
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				defs[tableDesc.Name] = entry
+				vs.defsByID[tableDesc.ID] = entry
+				orderedDefNames = append(orderedDefNames, tableDesc.Name)
+				return nil
+			})
 		}
-
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
 		sort.Strings(orderedDefNames)
 
 		vse := &virtualSchemaEntry{
