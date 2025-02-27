@@ -199,8 +199,11 @@ func (ex *connExecutor) startIdleInSessionTimeout() {
 
 func (ex *connExecutor) recordFailure(p eventNonRetriableErrPayload) {
 	ex.metrics.EngineMetrics.FailureCount.Inc(1)
-	if errors.Is(p.errorCause(), sqlerrors.QueryTimeoutError) {
+	switch {
+	case errors.Is(p.errorCause(), sqlerrors.QueryTimeoutError):
 		ex.metrics.EngineMetrics.StatementTimeoutCount.Inc(1)
+	case errors.Is(p.errorCause(), sqlerrors.TxnTimeoutError):
+		ex.metrics.EngineMetrics.TransactionTimeoutCount.Inc(1)
 	}
 }
 
