@@ -51,7 +51,7 @@ import (
 const (
 	// Use a low probe timeout number, but intentionally only manipulate to
 	// this value when *failures* are expected.
-	testingRegionLivenessProbeTimeout = time.Second * 2
+	testingRegionLivenessProbeTimeout = time.Second * 1
 	// Use a long probe timeout by default when running this test (since CI
 	// can easily hit query timeouts).
 	testingRegionLivenessProbeTimeoutLong = time.Minute
@@ -100,13 +100,14 @@ func TestRegionLivenessProber(t *testing.T) {
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
 	blockProbeQuery := atomic.Bool{}
-	defer regionliveness.TestingSetProbeLivenessTimeout(
+	defer regionliveness.TestingSetBeforeProbeLivenessHook(
 		func() {
 			// Timeout attempts to probe intentionally.
 			if blockProbeQuery.Swap(false) {
-				time.Sleep(testingRegionLivenessProbeTimeout)
+				time.Sleep(2 * testingRegionLivenessProbeTimeout)
 			}
-		})()
+		},
+	)()
 
 	for _, s := range testCluster.Servers {
 		tenantArgs := base.TestTenantArgs{
@@ -176,7 +177,9 @@ func TestRegionLivenessProber(t *testing.T) {
 			// Attempt to keep on pushing out the unavailable_at time,
 			// these calls should be no-ops.
 			blockProbeQuery.Store(true)
-			require.NoError(t, regionProber.ProbeLiveness(ctx, expectedRegions[1]))
+			if err := regionProber.ProbeLiveness(ctx, expectedRegions[1]); err != nil {
+				return err
+			}
 			// Check if the time has expired yet.
 			regions, err := regionProber.QueryLiveness(ctx, txn)
 			if err != nil {
@@ -251,14 +254,16 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	targetCount := atomic.Int64{}
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
-	defer regionliveness.TestingSetProbeLivenessTimeout(func() {
-		if !detectLeaseWait.Load() {
-			return
-		}
-		time.Sleep(testingRegionLivenessProbeTimeout)
-		targetCount.Swap(0)
-		detectLeaseWait.Swap(false)
-	})()
+	defer regionliveness.TestingSetBeforeProbeLivenessHook(
+		func() {
+			if !detectLeaseWait.Load() {
+				return
+			}
+			time.Sleep(2 * testingRegionLivenessProbeTimeout)
+			targetCount.Swap(0)
+			detectLeaseWait.Swap(false)
+		},
+	)()
 
 	var keyToBlockMu syncutil.Mutex
 	var keyToBlock roachpb.Key
@@ -319,7 +324,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 							keyToBlockMu.Lock()
 							keyToBlock = tenant.Codec().TablePrefix(uint32(systemschema.RegionLivenessTable.GetID()))
 							keyToBlockMu.Unlock()
-							time.Sleep(testingRegionLivenessProbeTimeout)
+							time.Sleep(2 * testingRegionLivenessProbeTimeout)
 						}
 					},
 				},
@@ -401,41 +406,48 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeoutLong)
 	}
 	require.NoError(t, lm.WaitForNoVersion(ctx, descpb.ID(tableID), cachedDatabaseRegions, retry.Options{}))
+
+	// Use a closure so that we unconditionally wait for the recovery to finish.
 	grp := ctxgroup.WithContext(ctx)
-	grp.GoCtx(func(ctx context.Context) error {
-		_, err = tx.Exec("INSERT INTO t2 VALUES(5)")
-		return err
-	})
-	// Add a new region which will execute a recovery and clean up dead rows.
-	keyToBlockMu.Lock()
-	keyToBlock = nil
-	keyToBlockMu.Unlock()
-	tenantArgs := base.TestTenantArgs{
-		Settings: makeSettings(),
-		TenantID: id,
-		Locality: testCluster.Servers[0].Locality(),
-	}
-	_, newRegionSQL := serverutils.StartTenant(t, testCluster.Servers[0], tenantArgs)
-	tr := sqlutils.MakeSQLRunner(newRegionSQL)
-	// Validate everything was cleaned bringing up a new node in the down region.
-	require.Equalf(t,
-		tr.QueryStr(t, "SELECT * FROM system.region_liveness"),
-		[][]string{},
-		"expected no unavaialble regions.")
-	require.Equalf(t,
-		tr.QueryStr(t, "SELECT count(*) FROM system.sql_instances WHERE session_id IS NOT NULL"),
-		[][]string{{"3"}},
-		"extra sql instances are being used.")
-	require.Equalf(t,
-		tr.QueryStr(t, "SELECT count(*) FROM system.sqlliveness"),
-		[][]string{{"3"}},
-		"extra sql sessions detected.")
-	require.NoError(t, err)
+	func() {
+		grp.GoCtx(func(ctx context.Context) error {
+			_, err = tx.Exec("INSERT INTO t2 VALUES(5)")
+			return err
+		})
+		defer func() {
+			<-recoveryStart
+			time.Sleep(slbase.DefaultTTL.Default())
+			recoveryBlock <- struct{}{}
+			require.NoError(t, grp.Wait())
+		}()
+		// Add a new region which will execute a recovery and clean up dead rows.
+		keyToBlockMu.Lock()
+		keyToBlock = nil
+		keyToBlockMu.Unlock()
+		tenantArgs := base.TestTenantArgs{
+			Settings: makeSettings(),
+			TenantID: id,
+			Locality: testCluster.Servers[0].Locality(),
+		}
+		_, newRegionSQL := serverutils.StartTenant(t, testCluster.Servers[0], tenantArgs)
+		tr := sqlutils.MakeSQLRunner(newRegionSQL)
+		// Validate everything was cleaned bringing up a new node in the down region.
+		require.Equalf(t,
+			[][]string{},
+			tr.QueryStr(t, "SELECT * FROM system.region_liveness"),
+			"expected no unavaialble regions.")
+		require.Equalf(t,
+			[][]string{{"3"}},
+			tr.QueryStr(t, "SELECT count(*) FROM system.sql_instances WHERE session_id IS NOT NULL"),
+			"extra sql instances are being used.")
+		require.Equalf(t,
+			[][]string{{"3"}},
+			tr.QueryStr(t, "SELECT count(*) FROM system.sqlliveness"),
+			"extra sql sessions detected.")
+		require.NoError(t, err)
+	}()
+
 	// Validate that the stuck query will fail once we recover.
-	<-recoveryStart
-	time.Sleep(slbase.DefaultTTL.Default())
-	recoveryBlock <- struct{}{}
-	require.NoError(t, grp.Wait())
 	_, err = tx.Exec("INSERT INTO t2 VALUES(5)")
 	// If the txn failed, no commit is needed.
 	const expectedTxnErr = "restart transaction: TransactionRetryWithProtoRefreshError"
@@ -451,7 +463,6 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 			expectedTxnErr,
 			"txn should see a retry error")
 	}
-	require.ErrorContainsf(t, grp.Wait(), "context canceled", "connection should have been dropped, node is dead.")
 }
 
 // TestRegionLivenessProberForSQLInstances validates that regional avaibility issues
@@ -517,13 +528,14 @@ func TestRegionLivenessProberForSQLInstances(t *testing.T) {
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
 	blockProbeQuery := atomic.Bool{}
-	defer regionliveness.TestingSetProbeLivenessTimeout(
+	defer regionliveness.TestingSetBeforeProbeLivenessHook(
 		func() {
 			// Timeout attempts to probe intentionally.
 			if blockProbeQuery.Swap(false) {
-				time.Sleep(testingRegionLivenessProbeTimeout)
+				time.Sleep(2 * testingRegionLivenessProbeTimeout)
 			}
-		})()
+		},
+	)()
 
 	for _, s := range testCluster.Servers {
 		tenantArgs := base.TestTenantArgs{
