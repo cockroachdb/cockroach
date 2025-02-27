@@ -67,8 +67,6 @@ type scanNode struct {
 	// (non-zero), softLimit must be unset (zero).
 	softLimit int64
 
-	disableBatchLimits bool
-
 	// See exec.Factory.ConstructScan.
 	parallelize bool
 
@@ -85,10 +83,6 @@ type scanNode struct {
 	lockingStrength   descpb.ScanLockingStrength
 	lockingWaitPolicy descpb.ScanLockingWaitPolicy
 	lockingDurability descpb.ScanLockingDurability
-
-	// containsSystemColumns holds whether or not this scan is expected to
-	// produce any system columns.
-	containsSystemColumns bool
 
 	// localityOptimized is true if this scan is part of a locality optimized
 	// search strategy, which uses a limited UNION ALL operator to try to find a
@@ -152,24 +146,21 @@ func (n *scanNode) Values() tree.Datums {
 	panic("scanNode can't be run in local mode")
 }
 
-// disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
-// where we scan batches of unordered spans.
-func (n *scanNode) disableBatchLimit() {
-	n.disableBatchLimits = true
-	n.hardLimit = 0
-	n.softLimit = 0
-}
-
 // Initializes a scanNode with a table descriptor.
-func (n *scanNode) initTable(
-	ctx context.Context, p *planner, desc catalog.TableDescriptor, colCfg scanColumnsConfig,
-) error {
+func (n *scanNode) initDescDefaults(desc catalog.TableDescriptor, colCfg scanColumnsConfig) error {
 	n.desc = desc
+	n.colCfg = colCfg
+	n.index = n.desc.GetPrimaryIndex()
 
-	// Check if any system columns are requested, as they need special handling.
-	n.containsSystemColumns = scanContainsSystemColumns(&colCfg)
+	var err error
+	n.cols, err = initColsForScan(n.desc, n.colCfg)
+	if err != nil {
+		return err
+	}
 
-	return n.initDescDefaults(colCfg)
+	// Set up the rest of the scanNode.
+	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
+	return nil
 }
 
 // initColsForScan initializes cols according to desc and colCfg.
@@ -197,22 +188,6 @@ func initColsForScan(
 	}
 
 	return cols, nil
-}
-
-// Initializes the column structures.
-func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
-	n.colCfg = colCfg
-	n.index = n.desc.GetPrimaryIndex()
-
-	var err error
-	n.cols, err = initColsForScan(n.desc, n.colCfg)
-	if err != nil {
-		return err
-	}
-
-	// Set up the rest of the scanNode.
-	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
-	return nil
 }
 
 // initDescSpecificCol initializes the column structures with the
