@@ -872,6 +872,7 @@ type iterator struct {
 	pos int16
 	s   iterStack
 	o   overlapScan
+	ro  reverseOverlapScan
 }
 
 func (i *iterator) reset() {
@@ -1076,6 +1077,66 @@ type overlapScan struct {
 	constrMaxPos int16
 }
 
+// A reverseOverlapScan is a scan over all items that overlap with the provided
+// item in reverse order of overlapping items' start keys. The goal of the scan
+// is to minimize the number of key comparisons performed in total. The
+// algorithim operates based on the following two invariants maintained by the
+// augmented interval btree:
+//  1. all items are sorted in the btree based on their start key.
+//  2. all btree nodes maintain the upper bound end key of all items
+//     in their subtree.
+//
+// The scan algorithm starts in a "unconstrained minimum" and "unconstrained
+// maximum" state. To enter the "constrained maximum" state, the scan must reach
+// items in the tree with start keys below the search range's end key. Once the
+// scan enters the "constrained maximum" state, it will remain there. To enter
+// the "constrained minimum" state, the scan must reach items in the tree with
+// start keys above the search range's start key. To enter a "constrained
+// minimum" state, the scan must determine the first child btree node in a given
+// subtree that can have items with start keys less than the search range's
+// start key. The scan then remains in the "constrained minimum" state, until it
+// traverses into this child node, at which point it moves to the "unconstrained
+// minimum" state again.
+//
+// The scan algorithm works like a standard btree reverse scan with the
+// following augmentations:
+// 1. before traversing the tree, the scan performs a binary search on the root
+// node's items to determine a "soft" lower-bound constraint position and a
+// "hard" upper-bound constraint position in the root's children.
+// 2. when traversing into a child node in the lower or upper bound constraint
+// position the constraint is refined by searching the child's items.
+// 3. the initial traversal down the tree follows the right-most children whose
+// upper bound end keys are equal to or greater than the start key of the search
+// range. The children followed will be equal to or less than the hard
+// upper-bound constraint.
+// 4. once the initial traversal completes and the scan is in the right-most
+// btree node whose upper bound overlaps the search range, the jumps directly to
+// the first item before the upper bound constraint position. This is because
+// the upper bound constraint position is exclusive.
+// 5. as long as the scan hasn't reached the lower bound constraint position
+// (the first item with a start key equal or greater than the search range's
+// start key), it can continue scanning without performing key comparisions.
+// This is allowed because all items until the lower bound constraint position
+// is reached will have end keys greater than the search range's start key, and
+// we know that all items in the tree have start keys less than the search
+// range's end key.
+// 6. once the scan reaches the lower bound constraint position, key comparisons
+// must be performed with each item in the tree. This is necessary because even
+// though the scan is dealing with items that have start keys less than the
+// serach range's start key, it is possible that these items have end keys that
+// cause them to overlap with the search range.
+type reverseOverlapScan struct {
+	// The "soft" upper-bound constraint.
+	constrMaxN       *node
+	constrMaxPos     int16
+	reachedConstrMax bool
+
+	// The "hard" lower-bound constraint.
+	constrMinN   *node
+	constrMinPos int16
+	inConstrMin  bool
+}
+
 // FirstOverlap seeks to the first item in the btree that overlaps with the
 // provided search item.
 func (i *iterator) FirstOverlap(item *keyLocks) {
@@ -1090,6 +1151,20 @@ func (i *iterator) FirstOverlap(item *keyLocks) {
 	i.findNextOverlap(item)
 }
 
+// LastOverlap seeks to the last item in the btree that overlaps with the
+// provided search item.
+func (i *iterator) LastOverlap(item *keyLocks) {
+	i.reset()
+	if i.n == nil {
+		return
+	}
+	i.pos = i.n.count
+	i.ro = reverseOverlapScan{}
+	i.constrainMinSearchBounds(item)
+	i.constrainMaxSearchBounds(item)
+	i.findPrevOverlap(item)
+}
+
 // NextOverlap positions the iterator to the item immediately following
 // its current position that overlaps with the search item.
 func (i *iterator) NextOverlap(item *keyLocks) {
@@ -1100,6 +1175,15 @@ func (i *iterator) NextOverlap(item *keyLocks) {
 	i.findNextOverlap(item)
 }
 
+// PrevOverlap positions the iterator to the item immediately preceding
+// its current position that overlaps with the search item.
+func (i *iterator) PrevOverlap(item *keyLocks) {
+	if i.n == nil {
+		return
+	}
+	i.findPrevOverlap(item)
+}
+
 func (i *iterator) constrainMinSearchBounds(item *keyLocks) {
 	k := item.Key()
 	j := sort.Search(int(i.n.count), func(j int) bool {
@@ -1107,6 +1191,8 @@ func (i *iterator) constrainMinSearchBounds(item *keyLocks) {
 	})
 	i.o.constrMinN = i.n
 	i.o.constrMinPos = int16(j)
+	i.ro.constrMinN = i.n
+	i.ro.constrMinPos = int16(j)
 }
 
 func (i *iterator) constrainMaxSearchBounds(item *keyLocks) {
@@ -1116,6 +1202,8 @@ func (i *iterator) constrainMaxSearchBounds(item *keyLocks) {
 	})
 	i.o.constrMaxN = i.n
 	i.o.constrMaxPos = int16(j)
+	i.ro.constrMaxN = i.n
+	i.ro.constrMaxPos = int16(j)
 }
 
 func (i *iterator) findNextOverlap(item *keyLocks) {
@@ -1166,5 +1254,85 @@ func (i *iterator) findNextOverlap(item *keyLocks) {
 			}
 		}
 		i.pos++
+	}
+}
+
+func (i *iterator) findPrevOverlap(item *keyLocks) {
+	for {
+		if i.pos < 0 {
+			if i.s.len() > 0 {
+				// Iterate up tree, if possible.
+				i.ascend()
+			} else {
+				// We've reached the root, so there's no more ascending to do;
+				// the iterator is already invalid, so simply return.
+				return
+			}
+		} else if !i.n.leaf() {
+			// Iterate down tree, but only if there's any hope of finding an
+			// overlap. In particular, if the max key found in the child subtree
+			// is less than the search item's start key, there's no way we'll
+			// find an overlap.
+			if i.ro.inConstrMin || i.n.children[i.pos].max().contains(item) {
+				par := i.n
+				pos := i.pos
+				i.descend(par, pos)
+				// Position the iterator to the last child. It's fine if we
+				// descended to a leaf node; we'll be positioned to the last
+				// item in the leaf node in the next iteration.
+				i.pos = i.n.count
+
+				// Refine the constraint bounds, if necessary.
+				if par == i.ro.constrMinN && pos == i.ro.constrMinPos {
+					i.constrainMinSearchBounds(item)
+				}
+				if par == i.ro.constrMaxN && pos == i.ro.constrMaxPos {
+					i.constrainMaxSearchBounds(item)
+				}
+				continue
+			}
+		}
+
+		if i.n == i.ro.constrMaxN && i.pos > i.ro.constrMaxPos {
+			// The item at i.ro.constrMaxPos is the first item with a start key
+			// that's greater than the search range's end key. As such, it is
+			// the first item that does not overlap with the search range -- we
+			// want to jump straight to the preceding position. However, we
+			// can't just position the iterator to i.ro.constrMaxPos - 1; if
+			// this is an inner node, we might need to descend to the child on
+			// the right first. So, we set the position to that of the child
+			// node, and let the loop decide whether to descend further or not.
+			i.pos = i.ro.constrMaxPos
+			continue
+		}
+
+		if i.n == i.ro.constrMaxN && i.pos == i.ro.constrMaxPos {
+			i.ro.reachedConstrMax = true
+		}
+
+		if i.n == i.ro.constrMinN && i.pos > i.ro.constrMinPos {
+			i.ro.inConstrMin = true
+		} else {
+			i.ro.inConstrMin = false
+		}
+
+		i.pos--
+
+		// Iterate across node.
+		if i.pos >= 0 && i.ro.reachedConstrMax {
+			if i.ro.inConstrMin {
+				// Fast-path to avoid span comparison. i.o.constrMinReached
+				// tells us that the item has a start key that's greater than
+				// the search range's start key.
+				return
+			}
+			if upperBound(i.n.items[i.pos]).contains(item) {
+				// We're not in the constrained minimum state, which means the
+				// item's start key is less than the search range's start key.
+				// We must check if the item's end key results in an overlap
+				// (i.e. if the end key is contained in the search range).
+				return
+			}
+		}
 	}
 }
