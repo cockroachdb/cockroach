@@ -728,17 +728,11 @@ func (r *Replica) applySnapshot(
 	// without risking a lock-ordering deadlock.
 	r.store.mu.Unlock()
 
-	// We set the persisted last index to the last applied index. This is
-	// not a correctness issue, but means that we may have just transferred
-	// some entries we're about to re-request from the leader and overwrite.
-	// However, raft.MultiNode currently expects this behavior, and the
-	// performance implications are not likely to be drastic. If our
-	// feelings about this ever change, we can add a LastIndex field to
-	// raftpb.SnapshotMetadata.
-	// TODO(pav-kv): the above comment seems stale, and needs an update.
+	// The log has been cleared and reset to start at the snapshot's applied
+	// index/term. Update the in-memory metadata accordingly.
 	r.asLogStorage().updateStateRaftMuLockedMuLocked(logstore.RaftState{
-		LastIndex: state.RaftAppliedIndex,
-		LastTerm:  state.RaftAppliedIndexTerm,
+		LastIndex: truncState.Index,
+		LastTerm:  truncState.Term,
 		ByteSize:  0, // the log is empty now
 	})
 	r.shMu.raftTruncState = truncState
