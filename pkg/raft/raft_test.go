@@ -5102,6 +5102,96 @@ func TestFortificationMetrics(t *testing.T) {
 	require.Equal(t, int64(1), n1.metrics.SkippedFortificationDueToLackOfSupport.Count())
 }
 
+// TestAllPeersForgetLeaderWhenQuorumIsLost ensures that all peers forget the
+// leader when quorum is lost.
+func TestAllPeersForgetLeaderWhenQuorumIsLost(t *testing.T) {
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testAllPeersForgetLeaderWhenQuorumIsLost(t, storeLivenessEnabled)
+		})
+}
+
+func testAllPeersForgetLeaderWhenQuorumIsLost(t *testing.T, storeLivenessEnabled bool) {
+	var n1, n2, n3 *raft
+	var fabric *raftstoreliveness.LivenessFabric
+
+	if storeLivenessEnabled {
+		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(1)))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(2)))
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(3)))
+	} else {
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+	}
+
+	n1.becomeFollower(1, None)
+	n2.becomeFollower(1, None)
+	n3.becomeFollower(1, None)
+
+	n1.preVote = true
+	n2.preVote = true
+	n3.preVote = true
+
+	n1.checkQuorum = true
+	n2.checkQuorum = true
+	n3.checkQuorum = true
+
+	// Randomly select a leader between node 1, 2, and 3.
+	leader := pb.PeerID(rand.Intn(3) + 1)
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
+	nt.send(pb.Message{From: leader, To: leader, Type: pb.MsgHup})
+
+	// Iterate over all peers and check that they have the same leader.
+	for _, peer := range nt.peers {
+		sm := peer.(*raft)
+		require.Equal(t, leader, sm.lead)
+	}
+
+	// Isolate the nodes from each other.
+	nt.isolate(1)
+	nt.isolate(2)
+	nt.isolate(3)
+
+	if storeLivenessEnabled {
+		nt.livenessFabric.SetSupportExpired(1, true)
+		nt.livenessFabric.SetSupportExpired(2, true)
+		nt.livenessFabric.SetSupportExpired(3, true)
+		nt.livenessFabric.Isolate(1)
+		nt.livenessFabric.Isolate(2)
+		nt.livenessFabric.Isolate(3)
+	}
+
+	// Tick all nodes until all nodes are followers and have forgotten the leader.
+	for _, peer := range nt.peers {
+		sm := peer.(*raft)
+		for i := int64(0); i < sm.randomizedElectionTimeout*2; i++ {
+			sm.tick()
+		}
+	}
+
+	// Iterate over all peers and check if they have forgotten the leader.
+	for _, peer := range nt.peers {
+		sm := peer.(*raft)
+		// If storeliveness is enabled, the follower will never beecome a
+		// pre-candidate since it's not supported by a quorum. However, if
+		// storeliveness is disabled, the follower may become a pre-candidate.
+		if storeLivenessEnabled {
+			require.Equal(t, pb.StateFollower, sm.state)
+		} else {
+			require.True(t, sm.state == pb.StateFollower || sm.state == pb.StatePreCandidate)
+		}
+		require.Equal(t, None, sm.lead)
+	}
+}
+
 func expectOneMessage(t *testing.T, r *raft) pb.Message {
 	msgs := r.readMessages()
 	require.Len(t, msgs, 1, "expect one message")

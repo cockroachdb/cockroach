@@ -1202,6 +1202,15 @@ func (r *raft) tickElection() {
 	}
 
 	if r.atRandomizedElectionTimeout() {
+		// At this point we know that we want to campaign, and we don't support a
+		// leader. We should be able to safely forget the leader as we've already
+		// verified that campaigning won't violate any fortification promises.
+		// Resetting the leader is particularly important in quorum loss
+		// scenarios, as it ensures all followers eventually forget who the leader
+		// was, mirroring the behavior of the ex-leader (who forgets that is was
+		// the leader in those scenarios). This helps upper layers correctly
+		// detect ranges that have lost quorum.
+		r.resetLead()
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
 			r.logger.Debugf("error occurred during election: %v", err)
 		}
