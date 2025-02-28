@@ -38,11 +38,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// invalidLastTerm is an out-of-band value for r.mu.lastTermNotDurable that
-// invalidates lastTermNotDurable caching and forces retrieval of
-// Term(lastIndexNotDurable) from the raftEntryCache/Pebble.
-const invalidLastTerm = 0
-
 var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.snapshot.ingest_as_write_threshold",
@@ -733,22 +728,11 @@ func (r *Replica) applySnapshot(
 	// without risking a lock-ordering deadlock.
 	r.store.mu.Unlock()
 
-	// We set the persisted last index to the last applied index. This is
-	// not a correctness issue, but means that we may have just transferred
-	// some entries we're about to re-request from the leader and overwrite.
-	// However, raft.MultiNode currently expects this behavior, and the
-	// performance implications are not likely to be drastic. If our
-	// feelings about this ever change, we can add a LastIndex field to
-	// raftpb.SnapshotMetadata.
-	// TODO(pav-kv): the above comment seems stale, and needs an update.
-	//
-	// TODO(sumeer): We should be able to set the last term to
-	// nonemptySnap.Metadata.Term. See
-	// https://github.com/cockroachdb/cockroach/pull/75675#pullrequestreview-867926687
-	// for a discussion regarding this.
+	// The log has been cleared and reset to start at the snapshot's applied
+	// index/term. Update the in-memory metadata accordingly.
 	r.asLogStorage().updateStateRaftMuLockedMuLocked(logstore.RaftState{
-		LastIndex: state.RaftAppliedIndex,
-		LastTerm:  invalidLastTerm,
+		LastIndex: truncState.Index,
+		LastTerm:  truncState.Term,
 		ByteSize:  0, // the log is empty now
 	})
 	r.shMu.raftTruncState = truncState
