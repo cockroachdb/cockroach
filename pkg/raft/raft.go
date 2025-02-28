@@ -1214,6 +1214,12 @@ func (r *raft) tickElection() {
 	}
 
 	if r.atRandomizedElectionTimeout() {
+		// At this point we know that we want to campaign, and we don't support a
+		// leader. We should be able to safely forget the leader as we've already
+		// verified that campaigning won't violate any fortification promises.
+		// Resetting the leader is important to allow upper layers to correctly
+		// detect ranges that don't have raft availability.
+		r.resetLead()
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
 			r.logger.Debugf("error occurred during election: %v", err)
 		}
