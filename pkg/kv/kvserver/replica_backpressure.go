@@ -118,11 +118,14 @@ func canBackpressureBatch(ba *kvpb.BatchRequest) bool {
 	return false
 }
 
-// signallerForBatch returns the signaller to use for this batch. This is the
-// Replica's breaker's signaller except if any request in the batch uses
-// poison.Policy_Wait, in which case it's a neverTripSignaller. In particular,
-// `(signaller).C() == nil` signals that the request bypasses the circuit
-// breakers.
+// signallerForBatch returns the signaller to use for this batch in the
+// following priorities:
+// 1. If the batch contains a request uses poison.Policy_Wait, we will return
+// neverTripSignaller.
+// 2. If the replica is leaderless for a time longer than the threshold in
+// `kv.replica_raft.leaderless_unavailable_threshold`, use the
+// leaderlessWatcher signal.
+// 3. Otherwise, use the replica's breaker's signaller
 func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
@@ -130,6 +133,14 @@ func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 			return neverTripSignaller{}
 		}
 	}
+
+	// If the leaderless watcher indicates that this replica is leaderless for a
+	// long time, use it as the signal.
+	if r.LeaderlessWatcher.IsUnavailable() {
+		return r.LeaderlessWatcher
+	}
+
+	// Otherwise, use the replica's breaker.
 	return r.breaker.Signal()
 }
 

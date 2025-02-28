@@ -232,6 +232,11 @@ func (lw *leaderlessWatcher) IsUnavailable() bool {
 	return lw.mu.unavailable
 }
 
+func (lw *leaderlessWatcher) resetLocked() {
+	lw.mu.leaderlessTimestamp = time.Time{}
+	lw.mu.unavailable = false
+}
+
 // ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
 // usages specific to the replica mutex.
 type ReplicaMutex syncutil.RWMutex
