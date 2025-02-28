@@ -159,25 +159,33 @@ func (tx *storeTxn) getCodecForPartitionKey(partitionKey cspann.PartitionKey) *s
 
 // decodePartition decodes the KV row set into an ephemeral partition. This
 // partition will become invalid when the codec is next reset, so it needs to be
-// cloned if it will be used outside of the store.
+// cloned if it will be used outside of the store. metadataResult is the result
+// of the KV request that contains the encoded metadata for the partition. The
+// partdataResult is the result of the KV request that contains the encoded
+// vectors for the partition and may be the same as the metadataResult. The
+// partdataOffset is the offset into the partdataResult where the vectors start
+// (generally 1 if partdataResult and metadataResult are the same, 0 otherwise).
 func (tx *storeTxn) decodePartition(
-	codec *storeCodec, result *kv.Result,
+	codec *storeCodec, metadataResult *kv.Result, partdataResult *kv.Result, partdataOffset int,
 ) (*cspann.Partition, error) {
-	if result.Err != nil {
-		return nil, result.Err
+	if metadataResult.Err != nil {
+		return nil, metadataResult.Err
 	}
-	if len(result.Rows) == 0 {
+	if partdataResult.Err != nil {
+		return nil, partdataResult.Err
+	}
+	if len(metadataResult.Rows) == 0 {
 		return nil, cspann.ErrPartitionNotFound
 	}
 
 	// Partition metadata is stored in /Prefix/PartitionID, with vector data
 	// following in /Prefix/PartitionID/ChildKey.
-	level, centroid, err := DecodePartitionMetadata(result.Rows[0].ValueBytes())
+	level, centroid, err := DecodePartitionMetadata(metadataResult.Rows[0].ValueBytes())
 	if err != nil {
 		return nil, err
 	}
-	metaKeyLen := len(result.Rows[0].Key)
-	vectorEntries := result.Rows[1:]
+	metaKeyLen := len(metadataResult.Rows[0].Key)
+	vectorEntries := partdataResult.Rows[partdataOffset:]
 
 	// Clear and ensure storage for the vector entries, child keys, and value
 	// bytes.
@@ -221,23 +229,15 @@ func (tx *storeTxn) GetPartition(
 
 	// GetPartition is used by fixup to split and merge partitions, so we want to
 	// block concurrent writes.
-	//
-	// TODO(andyk): this is grabbing an exclusive lock on all keys in the
-	// partition, not just the metadata key. Mutations of the partition will all
-	// grab a lock (either shared or exclusive) on the metadata key, so locking
-	// the child keys as well is unnecessary. We should be able to change this to:
-	//
-	//   b.GetForUpdate(startKey, tx.lockDurability)
-	//   b.Scan(startKey.Next(), endKey)
-	//
-	b.ScanForUpdate(startKey, endKey, tx.lockDurability)
+	b.GetForUpdate(startKey, tx.lockDurability)
+	b.Scan(startKey.Next(), endKey)
 	err := tx.kv.Run(ctx, b)
 	if err != nil {
 		return nil, err
 	}
 
 	codec := tx.getCodecForPartitionKey(partitionKey)
-	partition, err := tx.decodePartition(codec, &b.Results[0])
+	partition, err := tx.decodePartition(codec, &b.Results[0], &b.Results[1], 0 /* partdataOffset */)
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +459,7 @@ func (tx *storeTxn) SearchPartitions(
 	level := cspann.InvalidLevel
 	codec := tx.getCodecForPartitionKey(partitionKeys[0])
 	for i, result := range b.Results {
-		partition, err := tx.decodePartition(codec, &result)
+		partition, err := tx.decodePartition(codec, &result, &result, 1 /* partdataOffset */)
 		if err != nil {
 			return cspann.InvalidLevel, err
 		}
