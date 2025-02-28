@@ -4073,7 +4073,7 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='20ms'`)
 		defer closeFeed(t, testFeed)
 		// Note: default min_checkpoint_frequency is set to 100ms in startTestCluster.
-		require.Equal(t, `resolved (20ms) messages will not be emitted more frequently than the configured min_checkpoint_frequency (100ms), but may be emitted less frequently`, actual)
+		require.Equal(t, `resolved (20ms) messages will not be emitted more frequently than the default min_checkpoint_frequency (100ms), but may be emitted less frequently`, actual)
 	})
 	t.Run("resolved=min_checkpoint_frequency", func(t *testing.T) {
 		actual = "(no notice)"
@@ -4094,7 +4094,7 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved, min_checkpoint_frequency='10s'`)
 		defer closeFeed(t, testFeed)
-		require.Equal(t, `resolved (0s) messages will not be emitted more frequently than the configured min_checkpoint_frequency (10s), but may be emitted less frequently`, actual)
+		require.Equal(t, `resolved (0s by default) messages will not be emitted more frequently than the configured min_checkpoint_frequency (10s), but may be emitted less frequently`, actual)
 	})
 }
 
