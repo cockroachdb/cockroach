@@ -954,7 +954,7 @@ func (rf *Fetcher) processKV(
 			if err != nil {
 				break
 			}
-			prettyKey, prettyValue, err = rf.processValueBytes(ctx, table, kv, tupleBytes, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueBytes(table, tupleBytes, prettyKey)
 		default:
 			var familyID uint64
 			_, familyID, err = encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
@@ -984,7 +984,7 @@ func (rf *Fetcher) processKV(
 							errors.Errorf("single entry value with no default column id for key %s", prettyKey)
 					}
 				} else {
-					prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, defaultColumnID, kv, prettyKey)
+					prettyKey, prettyValue, err = rf.processValueSingle(table, defaultColumnID, kv, prettyKey)
 				}
 			}
 		}
@@ -1033,9 +1033,7 @@ func (rf *Fetcher) processKV(
 		}
 
 		if len(valueBytes) > 0 {
-			prettyKey, prettyValue, err = rf.processValueBytes(
-				ctx, table, kv, valueBytes, prettyKey,
-			)
+			prettyKey, prettyValue, err = rf.processValueBytes(table, valueBytes, prettyKey)
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
@@ -1052,20 +1050,13 @@ func (rf *Fetcher) processKV(
 // processValueSingle processes the given value (of column colID), setting
 // values in table.row accordingly. The key is only used for logging.
 func (rf *Fetcher) processValueSingle(
-	ctx context.Context,
-	table *tableInfo,
-	colID descpb.ColumnID,
-	kv roachpb.KeyValue,
-	prettyKeyPrefix string,
+	table *tableInfo, colID descpb.ColumnID, kv roachpb.KeyValue, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	idx, ok := table.colIdxMap.Get(colID)
 	if !ok {
 		// No need to unmarshal the column value. Either the column was part of
 		// the index key or it isn't needed.
-		if DebugRowFetch {
-			log.Infof(ctx, "Scan %s -> [%d] (skipped)", kv.Key, colID)
-		}
 		return prettyKey, "", nil
 	}
 
@@ -1089,18 +1080,11 @@ func (rf *Fetcher) processValueSingle(
 		prettyValue = value.String()
 	}
 	table.row[idx] = rowenc.DatumToEncDatum(typ, value)
-	if DebugRowFetch {
-		log.Infof(ctx, "Scan %s -> %v", kv.Key, value)
-	}
 	return prettyKey, prettyValue, nil
 }
 
 func (rf *Fetcher) processValueBytes(
-	ctx context.Context,
-	table *tableInfo,
-	kv roachpb.KeyValue,
-	valueBytes []byte,
-	prettyKeyPrefix string,
+	table *tableInfo, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	if rf.args.TraceKV {
@@ -1129,9 +1113,6 @@ func (rf *Fetcher) processValueBytes(
 				return "", "", err
 			}
 			valueBytes = valueBytes[numBytes:]
-			if DebugRowFetch {
-				log.Infof(ctx, "Scan %s -> [%d] (skipped)", kv.Key, colID)
-			}
 			continue
 		}
 
@@ -1154,9 +1135,6 @@ func (rf *Fetcher) processValueBytes(
 		}
 		table.row[idx] = encValue
 		rf.valueColsFound++
-		if DebugRowFetch {
-			log.Infof(ctx, "Scan %d -> %v", idx, encValue)
-		}
 	}
 	if rf.args.TraceKV {
 		prettyValue = rf.prettyValueBuf.String()
