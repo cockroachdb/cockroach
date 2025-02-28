@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 var ingestFileProcessorOutputTypes = []*types.T{
@@ -96,7 +97,7 @@ func (p *ingestFileProcessor) doIngest(
 		return err
 	}()
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to ingest SST (uri: %s, start: %s, end: %s)", sst.Uri, sst.StartKey, sst.EndKey)
 	}
 	return nil
 }

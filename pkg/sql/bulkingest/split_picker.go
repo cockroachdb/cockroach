@@ -11,6 +11,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func newSSTError(message string, sst1, sst2 execinfrapb.BulkMergeSpec_SST) error {
+	return errors.Newf(
+		"%s: (uri:'%s'[start:%s, end:%s]) and (uri:'%s'[start:%s, end:%s])",
+		message, sst1.Uri, sst1.StartKey, sst1.EndKey, sst2.Uri, sst2.StartKey, sst2.EndKey,
+	)
+}
+
 // pickSplits picks which spans to split on based on the input SSTs. The splits are chosen
 // so that each SST is contained within exactly one output span. The output spans are contiguous
 // and non-overlapping. Splits are chosen based on the start key of the following SST.
@@ -44,10 +51,10 @@ func pickSplits(
 	for i := 1; i < len(ssts); i++ {
 		prev, curr := (ssts[i-1].StartKey), ssts[i].StartKey
 		if !less(prev, curr) {
-			return nil, errors.Newf("SSTs not in order: %s >= %s", prev, curr)
+			return nil, newSSTError("out of order ingest sst", ssts[i-1], ssts[i])
 		}
 		if overlaps(spanFromSST(ssts[i-1]), spanFromSST(ssts[i])) {
-			return nil, errors.Newf("overlapping SSTs: %s overlaps with %s", ssts[i-1].EndKey, ssts[i].StartKey)
+			return nil, newSSTError("overlapping ingest sst", ssts[i-1], ssts[i])
 		}
 	}
 

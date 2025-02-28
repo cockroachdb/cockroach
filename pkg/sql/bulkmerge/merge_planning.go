@@ -27,7 +27,7 @@ func newBulkMergePlan(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	ssts []execinfrapb.BulkMergeSpec_SST,
-	splits []roachpb.Key,
+	spans []roachpb.Span,
 	outputURI func(sqlInstance base.SQLInstanceID) string,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	// NOTE: This implementation is inspired by the physical plan created by
@@ -80,7 +80,7 @@ func newBulkMergePlan(
 				Core: execinfrapb.ProcessorCoreUnion{
 					BulkMerge: &execinfrapb.BulkMergeSpec{
 						Ssts:      ssts,
-						Splits:    splits,
+						Spans:     spans,
 						OutputUri: outputURI(sqlInstanceID),
 					},
 				},
@@ -103,7 +103,7 @@ func newBulkMergePlan(
 
 	plan.AddSingleGroupStage(ctx, coordinatorID[0], execinfrapb.ProcessorCoreUnion{
 		MergeCoordinator: &execinfrapb.MergeCoordinatorSpec{
-			TaskCount:            int64(len(splits) + 1),
+			TaskCount:            int64(len(spans)),
 			WorkerSqlInstanceIds: keys,
 		},
 	}, execinfrapb.PostProcessSpec{}, mergeCoordinatorOutputTypes)

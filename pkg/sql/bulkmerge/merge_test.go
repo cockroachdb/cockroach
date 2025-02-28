@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
@@ -145,7 +146,10 @@ func testMergeProcessors(t *testing.T, s serverutils.ApplicationLayerInterface) 
 	batcher := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator)
 	writeSSTs(t, ctx, batcher, 11)
 	ssts := importToMerge(fileAllocator.GetFileList())
-	plan, planCtx, err := newBulkMergePlan(ctx, jobExecCtx, ssts, nil, func(instanceID base.SQLInstanceID) string {
+	plan, planCtx, err := newBulkMergePlan(ctx, jobExecCtx, ssts, []roachpb.Span{{
+		Key:    nil,
+		EndKey: roachpb.KeyMax,
+	}}, func(instanceID base.SQLInstanceID) string {
 		return fmt.Sprintf("nodelocal://%d/merge/out", instanceID)
 	})
 	require.NoError(t, err)

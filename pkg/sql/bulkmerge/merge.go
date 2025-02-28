@@ -6,7 +6,9 @@
 package bulkmerge
 
 import (
+	"bytes"
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,12 +24,14 @@ func Merge(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	ssts []execinfrapb.BulkMergeSpec_SST,
-	splits []roachpb.Key,
+	spans []roachpb.Span,
 	outputURI func(sqlInstance base.SQLInstanceID) string,
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
+	// TODO(jeffswenson): validate the splits are in order
+
 	execCfg := execCtx.ExecCfg()
 
-	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, splits, outputURI)
+	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, outputURI)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +64,13 @@ func Merge(
 	if err := rowWriter.Err(); err != nil {
 		return nil, err
 	}
+
+	// Sort the SSTs by their range start key. Ingest requires that SSTs are
+	// sorted an non-overlapping. The output of merge is not sorted because SSTs
+	// are emitted as their task is completed.
+	slices.SortFunc(result.Ssts, func(i, j execinfrapb.BulkMergeSpec_SST) int {
+		return bytes.Compare(i.StartKey, j.StartKey)
+	})
 
 	return result.Ssts, nil
 }

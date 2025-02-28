@@ -176,21 +176,6 @@ func (m *bulkMergeProcessor) Close(ctx context.Context) {
 	m.ProcessorBase.Close(ctx)
 }
 
-func getSpanForTask(task int64, splits []roachpb.Key) roachpb.Span {
-	start := roachpb.KeyMin
-	end := roachpb.KeyMax
-	if task != 0 {
-		start = splits[task-1]
-	}
-	if task != int64(len(splits)) {
-		end = splits[task]
-	}
-	if len(splits) < int(task) {
-		panic(errors.AssertionFailedf("task %d is out of range", task))
-	}
-	return roachpb.Span{Key: start, EndKey: end}
-}
-
 // isOverlapping returns true if the sst may contribute keys to the merge span.
 // The merge span is a [start, end) range. The SST is a [start, end] range.
 func isOverlapping(mergeSpan roachpb.Span, sst execinfrapb.BulkMergeSpec_SST) bool {
@@ -210,7 +195,7 @@ func isOverlapping(mergeSpan roachpb.Span, sst execinfrapb.BulkMergeSpec_SST) bo
 func (m *bulkMergeProcessor) mergeSSTs(
 	ctx context.Context, taskID taskset.TaskId,
 ) (execinfrapb.BulkMergeSpec_Output, error) {
-	mergeSpan := getSpanForTask(int64(taskID), m.spec.Splits)
+	mergeSpan := m.spec.Spans[taskID]
 	var storeFiles []storageccl.StoreFile
 	dest, err := m.flowCtx.Cfg.ExternalStorageFromURI(ctx, m.spec.OutputUri, username.RootUserName())
 	if err != nil {

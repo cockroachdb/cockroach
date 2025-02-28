@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -300,18 +301,33 @@ func distImport(
 			return nil
 		}
 
-		inputSSTs, splits := bulksst.CombineFileInfo(processorOutput)
+		spans := make([]roachpb.Span, 0, len(tables))
+		for _, table := range tables {
+			// TODO(jeffswenson): this isn't complete. We don't actually want to
+			// generate splits for each index. What we want to do is generate splits
+			// for each span config produced by the table that does not coalesce. For
+			// example, a single RBR index would get split points between each of the
+			// ranges.
+			//
+			// We should also consider making bulkingest tolerate ingesting an SST
+			// that has data for multiple ranges. At the very least that will handle
+			// the case where KV decides to run splits we were not expecting.
+			table.Desc.ForEachPublicIndex(func(index *descpb.IndexDescriptor) {
+				prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(execCfg.Codec, table.Desc.ID, index.ID))
+				spans = append(spans, roachpb.Span{
+					Key:    prefix,
+					EndKey: prefix.PrefixEnd(),
+				})
+			})
+		}
 
-		merged, err := bulkmerge.Merge(ctx, execCtx, inputSSTs, splits, func(instanceID base.SQLInstanceID) string {
+		inputSSTs, mergeSpans := bulksst.CombineFileInfo(processorOutput, spans)
+
+		merged, err := bulkmerge.Merge(ctx, execCtx, inputSSTs, mergeSpans, func(instanceID base.SQLInstanceID) string {
 			return fmt.Sprintf("nodelocal://%d/job/%d/merge", instanceID, job.ID())
 		})
 		if err != nil {
 			return err
-		}
-
-		spans := make([]roachpb.Span, 0, len(tables))
-		for _, table := range tables {
-			spans = append(spans, execCfg.Codec.TableSpan(uint32(table.Desc.ID)))
 		}
 
 		return bulkingest.IngestFiles(ctx, execCtx, spans, merged)

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func splitAndScatterSpans(ctx context.Context, db *kv.DB, spans []roachpb.Span) error {
@@ -21,7 +22,7 @@ func splitAndScatterSpans(ctx context.Context, db *kv.DB, spans []roachpb.Span) 
 	for _, span := range spans {
 		expirationTime := db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 		if err := db.AdminSplit(ctx, span.Key, expirationTime); err != nil {
-			return err
+			return errors.Wrapf(err, "failed to split span [%s,%s)", span.Key, span.EndKey)
 		}
 	}
 	for _, span := range spans {

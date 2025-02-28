@@ -52,6 +52,7 @@ go_test(
         "//pkg/cloud",
         "//pkg/cloud/externalconn/providers",
         "//pkg/kv/kvclient/kvtenant",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",

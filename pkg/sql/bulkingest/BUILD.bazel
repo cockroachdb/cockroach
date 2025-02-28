@@ -38,6 +38,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/taskset",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_pkg_errors//:errors",
     ],
 )
 

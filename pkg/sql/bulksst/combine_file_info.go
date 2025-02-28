@@ -6,12 +6,17 @@
 package bulksst
 
 import (
+	"bytes"
+	"slices"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // CombineFileInfo combines the SST files and picks splits based on the key sample.
-func CombineFileInfo(files []SSTFiles) ([]execinfrapb.BulkMergeSpec_SST, []roachpb.Key) {
+func CombineFileInfo(
+	files []SSTFiles, tableSpans []roachpb.Span,
+) ([]execinfrapb.BulkMergeSpec_SST, []roachpb.Span) {
 	result := make([]execinfrapb.BulkMergeSpec_SST, 0)
 	samples := make([]roachpb.Key, 0)
 	for _, file := range files {
@@ -26,5 +31,50 @@ func CombineFileInfo(files []SSTFiles) ([]execinfrapb.BulkMergeSpec_SST, []roach
 			samples = append(samples, roachpb.Key(sample))
 		}
 	}
-	return result, samples
+	// BUGFIX: We need to sort the samples for merge, otherwise the merge can end
+	// up with overlapping spans and duplicate data.
+	slices.SortFunc(samples, func(i, j roachpb.Key) int {
+		return bytes.Compare(i, j)
+	})
+
+	spans := getMergeSpans(tableSpans, samples)
+
+	return result, spans
+}
+
+// getMergeSpans determines which spans should be used as merge tasks. The
+// output spans must fully cover the input spans. The samples are used to
+// determine where schema spans should be split.
+func getMergeSpans(schemaSpans []roachpb.Span, sortedSample []roachpb.Key) []roachpb.Span {
+	// TODO(jeffswenson): validate that every sample is contained within a schema span
+	result := make([]roachpb.Span, 0, len(schemaSpans)+len(sortedSample))
+
+	for _, span := range schemaSpans {
+		samples := getCoveredSamples(span, sortedSample)
+		sortedSample = sortedSample[len(samples):]
+
+		startKey := span.Key
+		for _, sample := range samples {
+			result = append(result, roachpb.Span{
+				Key:    startKey,
+				EndKey: sample,
+			})
+			startKey = sample
+		}
+		result = append(result, roachpb.Span{
+			Key:    startKey,
+			EndKey: span.EndKey,
+		})
+	}
+
+	return result
+}
+
+func getCoveredSamples(span roachpb.Span, sortedSamples []roachpb.Key) []roachpb.Key {
+	for i, sample := range sortedSamples {
+		if bytes.Compare(span.EndKey, sample) <= 0 {
+			return sortedSamples[:i]
+		}
+	}
+	return sortedSamples
 }

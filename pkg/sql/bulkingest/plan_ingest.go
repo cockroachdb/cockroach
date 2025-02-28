@@ -44,12 +44,17 @@ func planIngest(
 // TODO(jeffswenson): unit test this
 func taskSlice[T any](tasks []T, workerId, numWorkers int) []T {
 	// Split the tasks across the workers.
-	taskPerWorker := (len(tasks) + numWorkers - 1) / numWorkers
+	taskPerWorker := max((len(tasks)+numWorkers-1)/numWorkers, 1)
 
 	start := workerId * taskPerWorker
 	end := start + taskPerWorker
 	if workerId == numWorkers-1 {
 		end = len(tasks)
+	}
+
+	if len(tasks) <= start {
+		// There may be more workers than tasks.
+		return nil
 	}
 
 	return tasks[start:end]

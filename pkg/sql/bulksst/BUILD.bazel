@@ -31,11 +31,12 @@ go_library(
 go_test(
     name = "bulksst_test",
     srcs = [
+        "combine_file_info_test.go",
         "main_test.go",
         "sst_writer_test.go",
     ],
+    embed = [":bulksst"],
     deps = [
-        ":bulksst",
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

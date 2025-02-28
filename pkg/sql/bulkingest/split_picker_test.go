@@ -65,7 +65,7 @@ func TestPickSplits(t *testing.T) {
 				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
 				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 			},
-			expectedError: "SSTs not in order",
+			expectedError: "out of order ingest sst: (uri:''[start:\"c\", end:\"d\"]) and (uri:''[start:\"a\", end:\"b\"])",
 		},
 		{
 			name: "overlapping ssts",
@@ -76,7 +76,7 @@ func TestPickSplits(t *testing.T) {
 				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 				{StartKey: roachpb.Key("b"), EndKey: roachpb.Key("d")},
 			},
-			expectedError: "overlapping SSTs",
+			expectedError: "overlapping ingest sst: (uri:''[start:\"a\", end:\"c\"]) and (uri:''[start:\"b\", end:\"d\"])",
 		},
 		{
 			name: "sst extends beyond span",
