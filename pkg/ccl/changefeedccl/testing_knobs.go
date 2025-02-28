@@ -76,6 +76,10 @@ type TestingKnobs struct {
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}
 
+	// PreservePTSTargets is used to prevent a changefeed from upgrading
+	// its PTS record to include all required targets.
+	PreservePTSTargets func() bool
+
 	// TimeSource is used to override the time source used by the changefeed (currently only used by the usage metric goroutine).
 	TimeSource timeutil.TimeSource
 

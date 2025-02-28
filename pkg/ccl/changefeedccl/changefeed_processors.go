@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1805,6 +1806,19 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 			return false, err
 		}
 
+		// If we've identified more tables that need to be protected since this
+		// changefeed was created, it will be missing here. If so, we "migrate" it
+		// to include all the appropriate targets.
+		if targets := AllTargets(cf.spec.Feed); rec.Target != nil && !makeTargetToProtect(targets).Equal(rec.Target) {
+			if preservePTSTargets := cf.knobs.PreservePTSTargets != nil && cf.knobs.PreservePTSTargets(); preservePTSTargets {
+				return false, nil
+			}
+			if err := cf.remakePTSRecord(ctx, pts, progress, highWater); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+
 		// Only update the PTS timestamp if it is lagging behind the high
 		// watermark. This is to prevent a rush of updates to the PTS if the
 		// changefeed restarts, which can cause contention and second order effects
@@ -1816,6 +1830,29 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		log.VEventf(ctx, 2, "updating protected timestamp %v at %v", recordID, highWater)
 		return true, pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, highWater)
 	}
+}
+func (cf *changeFrontier) remakePTSRecord(
+	ctx context.Context,
+	pts protectedts.Storage,
+	progress *jobspb.ChangefeedProgress,
+	resolved hlc.Timestamp,
+) error {
+	prevRecordId := progress.ProtectedTimestampRecord
+	ptr := createProtectedTimestampRecord(
+		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), resolved,
+	)
+	if err := pts.Protect(ctx, ptr); err != nil {
+		return err
+	}
+	progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
+	if err := pts.Release(ctx, prevRecordId); err != nil {
+		return err
+	}
+
+	log.Eventf(ctx, "created new pts record %v to replace old pts record %v at %v",
+		progress.ProtectedTimestampRecord, prevRecordId, resolved)
+
+	return nil
 }
 
 func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
