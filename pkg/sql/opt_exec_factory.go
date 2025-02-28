@@ -241,11 +241,13 @@ func (ef *execFactory) ConstructInvertedFilter(
 	copy(columns, inputCols)
 	n = &invertedFilterNode{
 		singleInputPlanNode: singleInputPlanNode{n.(planNode)},
-		expression:          invFilter,
-		preFiltererExpr:     preFiltererExpr,
-		preFiltererType:     preFiltererType,
-		invColumn:           int(invColumn),
 		resultColumns:       columns,
+		invertedFilterPlanningInfo: invertedFilterPlanningInfo{
+			expression:      invFilter,
+			preFiltererExpr: preFiltererExpr,
+			preFiltererType: preFiltererType,
+			invColumn:       int(invColumn),
+		},
 	}
 	return n, nil
 }
@@ -679,7 +681,6 @@ func (ef *execFactory) ConstructIndexJoin(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, tableCols)
-	cols := makeColList(table, tableCols)
 
 	var fetch fetchPlanningInfo
 	if err := fetch.initDescDefaults(tabDesc, colCfg); err != nil {
@@ -702,16 +703,13 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	n := &indexJoinNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		fetch:               fetch,
-		cols:                cols,
-		resultColumns:       colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols),
-		reqOrdering:         ReqOrdering(reqOrdering),
-		limitHint:           limitHint,
-	}
-
-	n.keyCols = make([]int, len(keyCols))
-	for i, c := range keyCols {
-		n.keyCols[i] = int(c)
+		resultColumns:       fetch.resultColumns,
+		indexJoinPlanningInfo: indexJoinPlanningInfo{
+			fetch:       fetch,
+			keyCols:     keyCols,
+			reqOrdering: ReqOrdering(reqOrdering),
+			limitHint:   limitHint,
+		},
 	}
 
 	return n, nil
@@ -737,7 +735,9 @@ func (ef *execFactory) ConstructLookupJoin(
 	remoteOnlyLookups bool,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
-		return ef.constructVirtualTableLookupJoin(joinType, input, table, index, eqCols, lookupCols, onCond)
+		return constructVirtualTableLookupJoin(
+			ef.planner, joinType, input, table, index, eqCols, lookupCols, onCond,
+		)
 	}
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
@@ -762,26 +762,25 @@ func (ef *execFactory) ConstructLookupJoin(
 	}
 
 	n := &lookupJoinNode{
-		singleInputPlanNode:        singleInputPlanNode{input.(planNode)},
-		fetch:                      fetch,
-		joinType:                   joinType,
-		eqColsAreKey:               eqColsAreKey,
-		isFirstJoinInPairedJoiner:  isFirstJoinInPairedJoiner,
-		isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
-		reqOrdering:                ReqOrdering(reqOrdering),
-		limitHint:                  limitHint,
-		remoteOnlyLookups:          remoteOnlyLookups,
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+		lookupJoinPlanningInfo: lookupJoinPlanningInfo{
+			fetch:                      fetch,
+			joinType:                   joinType,
+			eqCols:                     eqCols,
+			eqColsAreKey:               eqColsAreKey,
+			lookupExpr:                 lookupExpr,
+			remoteLookupExpr:           remoteLookupExpr,
+			isFirstJoinInPairedJoiner:  isFirstJoinInPairedJoiner,
+			isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
+			reqOrdering:                ReqOrdering(reqOrdering),
+			limitHint:                  limitHint,
+			remoteOnlyLookups:          remoteOnlyLookups,
+		},
 	}
-	n.eqCols = make([]int, len(eqCols))
-	for i, c := range eqCols {
-		n.eqCols[i] = int(c)
-	}
-	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), fetch.resultColumns)
-	n.lookupExpr = lookupExpr
-	n.remoteLookupExpr = remoteLookupExpr
 	if onCond != tree.DBoolTrue {
 		n.onCond = onCond
 	}
+	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), fetch.resultColumns)
 	if isFirstJoinInPairedJoiner {
 		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
 	}
@@ -789,7 +788,8 @@ func (ef *execFactory) ConstructLookupJoin(
 	return n, nil
 }
 
-func (ef *execFactory) constructVirtualTableLookupJoin(
+func constructVirtualTableLookupJoin(
+	p *planner,
 	joinType descpb.JoinType,
 	input exec.Node,
 	table cat.Table,
@@ -797,13 +797,13 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	eqCols []exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
-) (exec.Node, error) {
+) (planNode, error) {
 	tn := &table.(*optVirtualTable).name
-	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn, ef.planner)
+	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn, p)
 	if err != nil {
 		return nil, err
 	}
-	if !canQueryVirtualTable(ef.planner.EvalContext(), virtual) {
+	if !canQueryVirtualTable(p.EvalContext(), virtual) {
 		return nil, newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
 	}
 	if len(eqCols) > 1 {
@@ -897,39 +897,46 @@ func (ef *execFactory) ConstructInvertedJoin(
 	}
 
 	n := &invertedJoinNode{
-		singleInputPlanNode:       singleInputPlanNode{input.(planNode)},
-		fetch:                     fetch,
-		joinType:                  joinType,
-		invertedExpr:              invertedExpr,
-		isFirstJoinInPairedJoiner: isFirstJoinInPairedJoiner,
-		reqOrdering:               ReqOrdering(reqOrdering),
-	}
-	if len(prefixEqCols) > 0 {
-		n.prefixEqCols = make([]int, len(prefixEqCols))
-		for i, c := range prefixEqCols {
-			n.prefixEqCols[i] = int(c)
-		}
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+		invertedJoinPlanningInfo: invertedJoinPlanningInfo{
+			fetch:                     fetch,
+			joinType:                  joinType,
+			prefixEqCols:              prefixEqCols,
+			invertedExpr:              invertedExpr,
+			isFirstJoinInPairedJoiner: isFirstJoinInPairedJoiner,
+			reqOrdering:               ReqOrdering(reqOrdering),
+		},
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onExpr = onCond
 	}
 	// Build the result columns.
-	inputCols := planColumns(input.(planNode))
+	n.columns = invertedJoinResultCols(
+		joinType, planColumns(input.(planNode)), fetch.resultColumns, isFirstJoinInPairedJoiner,
+	)
+	return n, nil
+}
+
+func invertedJoinResultCols(
+	joinType descpb.JoinType,
+	inputCols, fetchCols colinfo.ResultColumns,
+	isFirstJoinInPairedJoiner bool,
+) colinfo.ResultColumns {
 	var scanCols colinfo.ResultColumns
 	if joinType.ShouldIncludeRightColsInOutput() {
-		scanCols = fetch.resultColumns
+		scanCols = fetchCols
 	}
 	numCols := len(inputCols) + len(scanCols)
 	if isFirstJoinInPairedJoiner {
 		numCols++
 	}
-	n.columns = make(colinfo.ResultColumns, 0, numCols)
-	n.columns = append(n.columns, inputCols...)
-	n.columns = append(n.columns, scanCols...)
+	columns := make(colinfo.ResultColumns, 0, numCols)
+	columns = append(columns, inputCols...)
+	columns = append(columns, scanCols...)
 	if isFirstJoinInPairedJoiner {
-		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
+		columns = append(columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
 	}
-	return n, nil
+	return columns
 }
 
 // Helper function to create a fetchPlanningInfo struct from just a
@@ -1153,14 +1160,17 @@ func (ef *execFactory) ConstructProjectSet(
 
 // ConstructWindow is part of the exec.Factory interface.
 func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec.Node, error) {
+	partitionIdxs := make([]uint32, len(wi.Partition))
+	for i, idx := range wi.Partition {
+		partitionIdxs[i] = uint32(idx)
+	}
 	p := &windowNode{
 		singleInputPlanNode: singleInputPlanNode{root.(planNode)},
-		columns:             wi.Cols,
-	}
-
-	partitionIdxs := make([]int, len(wi.Partition))
-	for i, idx := range wi.Partition {
-		partitionIdxs[i] = int(idx)
+		windowPlanningInfo: windowPlanningInfo{
+			columns:        wi.Cols,
+			partitionIdxs:  partitionIdxs,
+			columnOrdering: wi.Ordering,
+		},
 	}
 
 	p.funcs = make([]*windowFuncHolder, len(wi.Exprs))
@@ -1171,14 +1181,12 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 		}
 
 		p.funcs[i] = &windowFuncHolder{
-			expr:           wi.Exprs[i],
-			args:           wi.Exprs[i].Exprs,
-			argsIdxs:       argsIdxs,
-			filterColIdx:   wi.FilterIdxs[i],
-			outputColIdx:   wi.OutputIdxs[i],
-			partitionIdxs:  partitionIdxs,
-			columnOrdering: wi.Ordering,
-			frame:          wi.Exprs[i].WindowDef.Frame,
+			expr:         wi.Exprs[i],
+			args:         wi.Exprs[i].Exprs,
+			argsIdxs:     argsIdxs,
+			filterColIdx: wi.FilterIdxs[i],
+			outputColIdx: wi.OutputIdxs[i],
+			frame:        wi.Exprs[i].WindowDef.Frame,
 		}
 		if len(wi.Ordering) == 0 {
 			frame := p.funcs[i].frame
@@ -1866,13 +1874,15 @@ func (ef *execFactory) ConstructVectorSearch(
 		return nil, err
 	}
 	return &vectorSearchNode{
-		table:               tabDesc,
-		index:               indexDesc,
-		prefixKey:           encPrefixKey,
-		queryVector:         queryVector,
-		targetNeighborCount: targetNeighborCount,
-		cols:                cols,
-		resultCols:          resultCols,
+		vectorSearchPlanningInfo: vectorSearchPlanningInfo{
+			table:               tabDesc,
+			index:               indexDesc,
+			prefixKey:           encPrefixKey,
+			queryVector:         queryVector,
+			targetNeighborCount: targetNeighborCount,
+			cols:                cols,
+			resultCols:          resultCols,
+		},
 	}, nil
 }
 
@@ -1899,13 +1909,15 @@ func (ef *execFactory) ConstructVectorMutationSearch(
 
 	return &vectorMutationSearchNode{
 		singleInputPlanNode: singleInputPlanNode{input: inputPlan},
-		table:               table.(*optTable).desc,
-		index:               index.(*optIndex).idx,
-		prefixKeyCols:       prefixKeyCols,
-		queryVectorCol:      queryVectorCol,
-		suffixKeyCols:       suffixKeyCols,
-		isIndexPut:          isIndexPut,
-		columns:             cols,
+		vectorMutationSearchPlanningInfo: vectorMutationSearchPlanningInfo{
+			table:          table.(*optTable).desc,
+			index:          index.(*optIndex).idx,
+			prefixKeyCols:  prefixKeyCols,
+			queryVectorCol: queryVectorCol,
+			suffixKeyCols:  suffixKeyCols,
+			isIndexPut:     isIndexPut,
+		},
+		columns: cols,
 	}, nil
 }
 

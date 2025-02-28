@@ -10,11 +10,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type lookupJoinNode struct {
 	singleInputPlanNode
+	lookupJoinPlanningInfo
+
+	// columns are the produced columns, namely the input columns and (unless the
+	// join type is semi or anti join) the columns fetched from the table.
+	// It includes an additional continuation column when IsFirstJoinInPairedJoin
+	// is true.
+	columns colinfo.ResultColumns
+}
+
+type lookupJoinPlanningInfo struct {
 	fetch fetchPlanningInfo
 
 	// joinType is either INNER, LEFT_OUTER, LEFT_SEMI, or LEFT_ANTI.
@@ -25,7 +36,7 @@ type lookupJoinNode struct {
 	// eqCols identifies the columns from the input which are used for the
 	// lookup. These correspond to a prefix of the index columns (of the index we
 	// are looking up into).
-	eqCols []int
+	eqCols []exec.NodeColumnOrdinal
 
 	// eqColsAreKey is true when each lookup can return at most one row.
 	eqColsAreKey bool
@@ -49,12 +60,6 @@ type lookupJoinNode struct {
 	// remote nodes. If a local match is not found for all input rows, the
 	// execution engine uses remoteLookupExpr to search remote nodes.
 	remoteLookupExpr tree.TypedExpr
-
-	// columns are the produced columns, namely the input columns and (unless the
-	// join type is semi or anti join) the columns in the table scanNode. It
-	// includes an additional continuation column when IsFirstJoinInPairedJoin
-	// is true.
-	columns colinfo.ResultColumns
 
 	// onCond is any ON condition to be used in conjunction with the implicit
 	// equality condition on eqCols or the conditions in lookupExpr.
