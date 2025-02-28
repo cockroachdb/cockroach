@@ -1461,6 +1461,15 @@ func (r *Replica) tick(
 	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
 
 	storeClockTimestamp := r.store.Clock().NowAsClockTimestamp()
+
+	// Update lastTickTimestamp so that we don't have to redo the work multiple
+	// times during the tick. For example, raft's leader will check whether
+	// the support is expired or not by calling:
+	// (*replicaRLockedStoreLiveness).SupportExpired(). If we don't cache the
+	// value here, we will end up calling r.store.Clock().NowAsClockTimestamp()
+	// multiple times during the tick, which showed to cause a clock mutex
+	// contention.
+	r.mu.lastTickTimestamp = storeClockTimestamp
 	leaseStatus := r.leaseStatusAtRLocked(ctx, storeClockTimestamp)
 	// TODO(pav-kv): modify the quiescence criterion so that we don't quiesce if
 	// RACv2 holds some send tokens.
