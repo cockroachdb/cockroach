@@ -640,7 +640,7 @@ func updateCompactionBackupDetails(
 	var encryptionInfo *jobspb.EncryptionInfo
 	if encryption != nil {
 		var err error
-		encryption, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(
+		_, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(
 			ctx, encryption, kmsEnv,
 		)
 		if err != nil {
