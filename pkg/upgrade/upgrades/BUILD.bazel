@@ -19,6 +19,7 @@ go_library(
         "v25_1_add_jobs_tables.go",
         "v25_1_prepared_transactions_table.go",
         "v25_2_add_sql_activity_flush_job.go",
+        "v25_2_system_plan_hints.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgrades",
     visibility = ["//visibility:public"],

@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -9070,6 +9071,61 @@ WHERE object_id = table_descriptor_id
 			},
 			Info:       "Compacts the chain of incremental backups described by the start and end times (nanosecond epoch).",
 			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.query_id_for_hint": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryTesting,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "query", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return nil, pgerror.New(
+						pgcode.NullValueNotAllowed, "query string must be non-null",
+					)
+				}
+				stmts, err := parser.Parse(string(tree.MustBeDString(args[0])))
+				if err != nil {
+					return tree.DNull, err
+				}
+				stmtNoConstants := stmts.StringWithFlags(tree.FmtHideConstants)
+				fnv := util.MakeFNV64()
+				for _, c := range stmtNoConstants {
+					fnv.Add(uint64(c))
+				}
+				return tree.NewDInt(tree.DInt(fnv.Sum())), nil
+			},
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+		},
+	),
+	"crdb_internal.hint_setting": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryTesting,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "queryID", Typ: types.Int},
+				{Name: "settingName", Typ: types.String},
+				{Name: "settingValue", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull || args[2] == tree.DNull {
+					return nil, pgerror.New(
+						pgcode.NullValueNotAllowed,
+						"query string, setting name, and setting value must be non-null",
+					)
+				}
+				queryID := uint64(tree.MustBeDInt(args[0]))
+				settingName := string(tree.MustBeDString(args[1]))
+				settingValue := string(tree.MustBeDString(args[2]))
+				return tree.DNull, evalCtx.Planner.HintSetting(ctx, queryID, settingName, settingValue)
+			},
+			Volatility:        volatility.Volatile,
+			CalledOnNullInput: true,
 		},
 	),
 }

@@ -107,6 +107,7 @@ const (
 	TxnExecInsightsTableName               SystemTableName = "transaction_execution_insights"
 	TableMetadata                          SystemTableName = "table_metadata"
 	PreparedTransactionsTableName          SystemTableName = "prepared_transactions"
+	PlanHintsTableName                     SystemTableName = "plan_hints"
 )
 
 // Oid for virtual database and table.
