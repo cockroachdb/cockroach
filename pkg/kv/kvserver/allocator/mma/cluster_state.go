@@ -1140,20 +1140,26 @@ func (cs *clusterState) computeLoadSummary(
 	ns := cs.nodes[ss.NodeID]
 	sls := loadLow
 	var highDiskSpaceUtil bool
+	var cpuSummary loadSummary
 	for i := range msl.load {
 		// TODO(kvoli,sumeerbhola): Handle negative adjusted store/node loads.
 		ls := loadSummaryForDimension(ss.adjusted.load[i], ss.capacity[i], msl.load[i], msl.util[i])
 		if ls < sls {
 			sls = ls
 		}
-		if loadDimension(i) == byteSize {
+		switch loadDimension(i) {
+		case byteSize:
 			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
+		case cpu:
+			cpuSummary = ls
 		}
+
 	}
 	nls := loadSummaryForDimension(ns.adjustedCPU, ns.capacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
 		sls:                      sls,
 		nls:                      nls,
+		storeCPUSummary:          cpuSummary,
 		highDiskSpaceUtilization: highDiskSpaceUtil,
 		fd:                       ns.fdSummary,
 		maxFractionPending:       ss.maxFractionPending,
