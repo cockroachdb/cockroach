@@ -1110,16 +1110,16 @@ func (rf *Fetcher) processValueBytes(
 		rf.prettyValueBuf.Reset()
 	}
 
-	var colIDDiff uint32
+	var colIDDelta uint32
 	var lastColID descpb.ColumnID
 	var typeOffset, dataOffset int
 	var typ encoding.Type
 	for len(valueBytes) > 0 && rf.valueColsFound < table.neededValueCols {
-		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
+		typeOffset, dataOffset, colIDDelta, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
-		colID := lastColID + descpb.ColumnID(colIDDiff)
+		colID := lastColID + descpb.ColumnID(colIDDelta)
 		lastColID = colID
 		idx, ok := table.colIdxMap.Get(colID)
 		if !ok {
