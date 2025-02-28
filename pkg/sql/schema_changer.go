@@ -373,6 +373,16 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			return err
 		}
 
+		// If we are backfilling with AS OF SYSTEM TIME, we must update the
+		// evalCtx for the new planner that was created.
+		asOf, err := localPlanner.isAsOf(ctx, stmt.AST)
+		if err != nil {
+			return err
+		}
+		if asOf != nil {
+			localPlanner.extendedEvalCtx.AsOfSystemTime = asOf
+		}
+
 		localPlanner.MaybeReallocateAnnotations(stmt.NumAnnotations)
 		// Construct an optimized logical plan of the AS source stmt.
 		localPlanner.stmt = makeStatement(stmt, clusterunique.ID{}, /* queryID */
