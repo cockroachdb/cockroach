@@ -12,81 +12,55 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type Expr interface {
-	fmt.Stringer
-	tree.NodeFormatter
-}
-
-// Identical to Expr for now.
-type Accessor interface {
-	Expr
-}
-
 type Jsonpath struct {
-	Query  Query
 	Strict bool
+	Path   Path
 }
-
-var _ Expr = Jsonpath{}
 
 func (j Jsonpath) String() string {
 	var mode string
 	if j.Strict {
 		mode = "strict "
 	}
-	return mode + j.Query.String()
+	return mode + j.Path.String()
 }
 
 func (j Jsonpath) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(j.String())
 }
 
-type Query struct {
-	Accessors []Accessor
-}
-
-var _ Expr = Query{}
-
-func (q Query) String() string {
-	var sb strings.Builder
-	for _, accessor := range q.Accessors {
-		sb.WriteString(accessor.String())
-	}
-	return sb.String()
-}
-
-func (q Query) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(q.String())
+type Path interface {
+	fmt.Stringer
 }
 
 type Root struct{}
 
-var _ Accessor = Root{}
+var _ Path = &Root{}
 
 func (r Root) String() string { return "$" }
-
-func (r Root) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(r.String())
-}
 
 type Key struct {
 	Key string
 }
 
-var _ Accessor = Key{}
+var _ Path = &Key{}
 
 func (k Key) String() string { return "." + k.Key }
 
-func (k Key) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(k.String())
-}
-
 type Wildcard struct{}
 
-var _ Accessor = Wildcard{}
+var _ Path = &Wildcard{}
 
 func (w Wildcard) String() string { return "[*]" }
 
-func (w Wildcard) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(w.String())
+type Paths []Path
+
+var _ Path = &Paths{}
+
+func (p Paths) String() string {
+	var sb strings.Builder
+	for _, i := range p {
+		sb.WriteString(i.String())
+	}
+	return sb.String()
 }
