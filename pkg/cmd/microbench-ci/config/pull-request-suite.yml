@@ -6,6 +6,7 @@ benchmarks:
     runner_group: 1
     count: 10
     iterations: 3000
+    compare_alpha: 0.025
     metrics:
       - "sec/op"
       - "allocs/op"
@@ -17,6 +18,7 @@ benchmarks:
     runner_group: 2
     count: 10
     iterations: 12000
+    compare_alpha: 0.025
     metrics:
       - "sec/op"
       - "allocs/op"
@@ -28,6 +30,7 @@ benchmarks:
     runner_group: 2
     count: 10
     iterations: 12000
+    compare_alpha: 0.025
     metrics:
       - "sec/op"
       - "allocs/op"

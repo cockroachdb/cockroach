@@ -19,14 +19,15 @@ import (
 
 type (
 	Benchmark struct {
-		DisplayName string   `yaml:"display_name"`
-		Package     string   `yaml:"package"`
-		Labels      []string `yaml:"labels"`
-		Name        string   `yaml:"name"`
-		RunnerGroup int      `yaml:"runner_group"`
-		Count       int      `yaml:"count"`
-		Iterations  int      `yaml:"iterations"`
-		Metrics     []string `yaml:"metrics"`
+		DisplayName  string   `yaml:"display_name"`
+		Package      string   `yaml:"package"`
+		Labels       []string `yaml:"labels"`
+		Name         string   `yaml:"name"`
+		RunnerGroup  int      `yaml:"runner_group"`
+		Count        int      `yaml:"count"`
+		Iterations   int      `yaml:"iterations"`
+		CompareAlpha float64  `yaml:"compare_alpha"`
+		Metrics      []string `yaml:"metrics"`
 	}
 	Benchmarks  []Benchmark
 	ProfileType string
