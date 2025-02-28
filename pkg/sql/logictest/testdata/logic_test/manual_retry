@@ -114,7 +114,10 @@ subtest schema_change_with_rollback
 # See #24785.
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
 
 statement ok
 SAVEPOINT cockroach_restart

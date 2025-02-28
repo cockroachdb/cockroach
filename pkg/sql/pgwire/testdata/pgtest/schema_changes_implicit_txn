@@ -1,0 +1,113 @@
+# This test exercises running schema changes in an implicit transaction using
+# the extended protocol with Bind operations. This is a regression test for
+# issue #82921.
+
+send
+Query {"String": "DROP TABLE IF EXISTS \"User\""}
+Query {"String": "CREATE TABLE \"User\"\r\n(\r\n  \"UserID\" integer primary key\r\n);"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "ALTER TABLE \"User\" ADD \"SponsorID\" INT NULL;"}
+Bind
+Execute
+Parse {"Query": "CREATE INDEX User_SponsorID_IDX ON \"User\" (\"SponsorID\");"}
+Bind
+Describe {"ObjectType": "P", "Name": ""}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"auto-committing transaction before processing DDL due to autocommit_before_ddl setting","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAutoCommitBeforeDDL","UnknownFields":null}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"CREATE INDEX"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"CREATE INDEX"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# This is a reproduction of the issue reported in GH #141576. It ensures that
+# auto-commit occurs during the bind phase, which is necessary when using
+# prepared statements.
+subtest autocommit_for_bind
+
+send
+Query {"String": "DROP TABLE IF EXISTS t"}
+Query {"String": "CREATE TABLE t (a INT PRIMARY KEY)"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "ddl_stmt_t", "Query": "DROP TABLE t"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Bind {"PreparedStatement": "ddl_stmt_t"}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"auto-committing transaction before processing DDL due to autocommit_before_ddl setting","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAutoCommitBeforeDDL","UnknownFields":null}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+subtest end

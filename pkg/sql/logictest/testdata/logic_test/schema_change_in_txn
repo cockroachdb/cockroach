@@ -2034,3 +2034,91 @@ SQLSTATE: 25P01
 
 statement ok
 DROP TABLE t1
+
+# Test to confirm that with 'autocommit_before_ddl' enabled, all DDL operations
+# utilize the DSC where applicable.
+subtest drop_with_autocommit
+
+let $autocommit_orig
+SHOW autocommit_before_ddl
+
+statement ok
+set autocommit_before_ddl=on
+
+statement ok
+CREATE TABLE dropme_1();
+
+statement ok
+CREATE TABLE dropme_2();
+
+# This test must default to serializable isolation. Otherwise, with weaker
+# isolation levels, an extra NOTICE will appear, indicating that the
+# transaction isolation was upgraded due to the schema change.
+let $iso
+SHOW default_transaction_isolation;
+
+statement ok
+SET default_transaction_isolation = 'serializable';
+
+statement ok
+BEGIN
+
+# Drop the table. This will cause an autocommit because we are in an explicit transaction.
+query T noticetrace
+DROP TABLE dropme_1;
+----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+
+# Drop another table. This will be in an implicit transaction, so it doesn't need an autocommit.
+query T noticetrace
+DROP TABLE dropme_2;
+----
+
+# If not legacy schema changer, verify that the DSC was used for both drops.
+skipif config local-legacy-schema-changer
+query TT
+select job_type, description from [show jobs] where description like 'DROP TABLE%dropme%' ORDER BY description LIMIT 2
+----
+NEW SCHEMA CHANGE  DROP TABLE db_87672.public.dropme_1
+NEW SCHEMA CHANGE  DROP TABLE db_87672.public.dropme_2
+
+statement ok
+set autocommit_before_ddl = $autocommit_orig;
+
+statement ok
+set default_transaction_isolation = '$iso';
+
+# Redo the test with 'autocommit_before_ddl' disabled to ensure that we stick
+# with the legacy schema changer.
+statement ok
+CREATE TABLE dropme_3();
+
+statement ok
+CREATE TABLE dropme_4();
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+# Only turn off autocommit for the current transaction.
+statement ok
+SET LOCAL autocommit_before_ddl = false;
+
+query T noticetrace
+DROP TABLE dropme_3;
+----
+
+query T noticetrace
+DROP TABLE dropme_4;
+----
+
+# If not legacy schema changer, verify that the DSC was used for both drops.
+skipif config local-legacy-schema-changer
+query TT
+select job_type, description from [show jobs] where description like 'DROP TABLE%dropme%' ORDER BY description LIMIT 4
+----
+NEW SCHEMA CHANGE  DROP TABLE db_87672.public.dropme_1
+NEW SCHEMA CHANGE  DROP TABLE db_87672.public.dropme_2
+SCHEMA CHANGE      DROP TABLE db_87672.public.dropme_3
+SCHEMA CHANGE      DROP TABLE db_87672.public.dropme_4
+
+subtest end
