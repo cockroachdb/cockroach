@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -46,41 +47,47 @@ func TestBackupCompaction(t *testing.T) {
 	)
 	defer cleanupDB()
 
-	startCompaction := func(start, end string) jobspb.JobID {
-		compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY['nodelocal://1/backup'], 'LATEST', ''::BYTES, '%s'::DECIMAL, '%s'::DECIMAL)"
-		row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, start, end))
+	// Expects start/end to be nanosecond epoch.
+	startCompaction := func(bucket int, start, end int64) jobspb.JobID {
+		compactionBuiltin := `SELECT crdb_internal.backup_compaction(
+ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
+)`
+		row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, bucket, start, end))
 		var jobID jobspb.JobID
 		row.Scan(&jobID)
 		return jobID
 	}
-	fullBackupAostCmd := "BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'"
-	incBackupCmd := "BACKUP INTO LATEST IN 'nodelocal://1/backup'"
-	incBackupAostCmd := "BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'"
+	// Note: Each subtest should create their backups in their own subdirectory to
+	// avoid false negatives from subtests relying on backups from other subtests.
+	fullBackupAostCmd := "BACKUP INTO 'nodelocal://1/backup/%d' AS OF SYSTEM TIME '%d'"
+	incBackupCmd := "BACKUP INTO LATEST IN 'nodelocal://1/backup/%d'"
+	incBackupAostCmd := "BACKUP INTO LATEST IN 'nodelocal://1/backup/%d' AS OF SYSTEM TIME '%d'"
+
 	t.Run("basic operations insert, update, and delete", func(t *testing.T) {
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		start := getTime()
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, start))
+		start := getTime(t)
+		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 1, start))
 		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/1'").Scan(&backupPath)
 
 		// Run twice to test compaction on top of compaction.
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			db.Exec(t, "INSERT INTO foo VALUES (2, 2), (3, 3)")
-			db.Exec(t, incBackupCmd)
+			db.Exec(t, fmt.Sprintf(incBackupCmd, 1))
 			db.Exec(t, "UPDATE foo SET b = b + 1 WHERE a = 2")
-			db.Exec(t, incBackupCmd)
+			db.Exec(t, fmt.Sprintf(incBackupCmd, 1))
 			db.Exec(t, "DELETE FROM foo WHERE a = 3")
-			end := getTime()
+			end := getTime(t)
 			db.Exec(
 				t,
-				fmt.Sprintf(incBackupAostCmd, end),
+				fmt.Sprintf(incBackupAostCmd, 1, end),
 			)
-			waitForSuccessfulJob(t, tc, startCompaction(start, end))
-			validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
+			waitForSuccessfulJob(t, tc, startCompaction(1, start, end))
+			validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/1'", start, end)
 			start = end
 		}
 
@@ -89,7 +96,7 @@ func TestBackupCompaction(t *testing.T) {
 		db.QueryRow(
 			t,
 			"SELECT count(DISTINCT (start_time, end_time)) FROM "+
-				"[SHOW BACKUP FROM $1 IN 'nodelocal://1/backup']",
+				"[SHOW BACKUP FROM $1 IN 'nodelocal://1/backup/1']",
 			backupPath,
 		).Scan(&numBackups)
 		require.Equal(t, 9, numBackups)
@@ -101,40 +108,41 @@ func TestBackupCompaction(t *testing.T) {
 		}()
 		db.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT)")
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		start := getTime()
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, start))
+		start := getTime(t)
+		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 2, start))
 
 		db.Exec(t, "CREATE TABLE bar (a INT, b INT)")
 		db.Exec(t, "INSERT INTO bar VALUES (1, 1)")
-		db.Exec(t, incBackupCmd)
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 2))
 
 		db.Exec(t, "INSERT INTO bar VALUES (2, 2)")
-		db.Exec(t, incBackupCmd)
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 2))
 
 		db.Exec(t, "CREATE TABLE baz (a INT, b INT)")
 		db.Exec(t, "INSERT INTO baz VALUES (3, 3)")
-		end := getTime()
+		end := getTime(t)
 		db.Exec(
 			t,
-			fmt.Sprintf(incBackupAostCmd, end),
+			fmt.Sprintf(incBackupAostCmd, 2, end),
 		)
-		waitForSuccessfulJob(t, tc, startCompaction(start, end))
+		waitForSuccessfulJob(t, tc, startCompaction(2, start, end))
 		validateCompactedBackupForTables(
 			t, db,
 			[]string{"foo", "bar", "baz"},
-			"'nodelocal://1/backup'",
+			"'nodelocal://1/backup/2'",
+			start, end,
 		)
 
 		db.Exec(t, "DROP TABLE bar")
-		end = getTime()
+		end = getTime(t)
 		db.Exec(
 			t,
-			fmt.Sprintf(incBackupAostCmd, end),
+			fmt.Sprintf(incBackupAostCmd, 2, end),
 		)
-		waitForSuccessfulJob(t, tc, startCompaction(start, end))
+		waitForSuccessfulJob(t, tc, startCompaction(2, start, end))
 
 		db.Exec(t, "DROP TABLE foo, baz")
-		db.Exec(t, "RESTORE FROM LATEST IN 'nodelocal://1/backup'")
+		db.Exec(t, "RESTORE FROM LATEST IN 'nodelocal://1/backup/2'")
 		rows := db.QueryStr(t, "SELECT * FROM [SHOW TABLES] WHERE table_name = 'bar'")
 		require.Empty(t, rows)
 	})
@@ -145,26 +153,26 @@ func TestBackupCompaction(t *testing.T) {
 			db.Exec(t, "DROP TABLE foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1), (2, 2), (3, 3)")
-		start := getTime()
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, start))
+		start := getTime(t)
+		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 3, start))
 
 		db.Exec(t, "CREATE INDEX bar ON foo (a)")
 		db.Exec(t, "CREATE INDEX baz ON foo (a)")
-		db.Exec(t, incBackupCmd)
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 3))
 
 		db.Exec(t, "CREATE INDEX qux ON foo (b)")
 		db.Exec(t, "DROP INDEX foo@bar")
-		end := getTime()
+		end := getTime(t)
 		db.Exec(
 			t,
-			fmt.Sprintf(incBackupAostCmd, end),
+			fmt.Sprintf(incBackupAostCmd, 3, end),
 		)
-		waitForSuccessfulJob(t, tc, startCompaction(start, end))
+		waitForSuccessfulJob(t, tc, startCompaction(3, start, end))
 
 		var numIndexes, restoredNumIndexes int
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&numIndexes)
 		db.Exec(t, "DROP TABLE foo")
-		db.Exec(t, "RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/backup'")
+		db.Exec(t, "RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/backup/3'")
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&restoredNumIndexes)
 		require.Equal(t, numIndexes, restoredNumIndexes)
 	})
@@ -175,33 +183,33 @@ func TestBackupCompaction(t *testing.T) {
 			db.Exec(t, "DROP TABLE foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		db.Exec(t, "BACKUP INTO 'nodelocal://1/backup'")
+		db.Exec(t, "BACKUP INTO 'nodelocal://1/backup/4'")
 
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-		start := getTime()
+		start := getTime(t)
 		db.Exec(
 			t,
-			fmt.Sprintf(incBackupAostCmd, start),
+			fmt.Sprintf(incBackupAostCmd, 4, start),
 		)
 
 		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
-		db.Exec(t, incBackupCmd)
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 4))
 
 		db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
-		db.Exec(t, incBackupCmd)
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 4))
 
 		db.Exec(t, "INSERT INTO foo VALUES (5, 5)")
-		end := getTime()
+		end := getTime(t)
 		db.Exec(
 			t,
-			fmt.Sprintf(incBackupAostCmd, end),
+			fmt.Sprintf(incBackupAostCmd, 4, end),
 		)
 
 		db.Exec(t, "INSERT INTO foo VALUES (6, 6)")
-		db.Exec(t, incBackupCmd)
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 4))
 
-		waitForSuccessfulJob(t, tc, startCompaction(start, end))
-		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
+		waitForSuccessfulJob(t, tc, startCompaction(4, start, end))
+		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/4'", start, end)
 	})
 
 	t.Run("table-level backups", func(t *testing.T) {
@@ -210,26 +218,25 @@ func TestBackupCompaction(t *testing.T) {
 			db.Exec(t, "DROP TABLE foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		start := getTime()
+		start := getTime(t)
 		db.Exec(t, fmt.Sprintf(
-			fullBackupAostCmd, start,
+			fullBackupAostCmd, 5, start,
 		))
 
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-		db.Exec(t, incBackupCmd)
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 5))
 		db.Exec(t, "UPDATE foo SET b = b + 1 WHERE a = 2")
 		db.Exec(t, "DELETE FROM foo WHERE a = 1")
-		end := getTime()
+		end := getTime(t)
 		db.Exec(
 			t,
 			fmt.Sprintf(
-				incBackupAostCmd,
-				end,
+				incBackupAostCmd, 5, end,
 			),
 		)
 
-		waitForSuccessfulJob(t, tc, startCompaction(start, end))
-		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
+		waitForSuccessfulJob(t, tc, startCompaction(5, start, end))
+		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/5'", start, end)
 	})
 
 	t.Run("encrypted backups", func(t *testing.T) {
@@ -239,36 +246,38 @@ func TestBackupCompaction(t *testing.T) {
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
 		opts := "encryption_passphrase = 'correct-horse-battery-staple'"
-		start := getTime()
+		start := getTime(t)
 		db.Exec(t, fmt.Sprintf(
-			fullBackupAostCmd+" WITH %s", start, opts,
+			fullBackupAostCmd+" WITH %s", 6, start, opts,
 		))
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
 		db.Exec(
 			t,
-			fmt.Sprintf(incBackupCmd+" WITH %s", opts),
+			fmt.Sprintf(incBackupCmd+" WITH %s", 6, opts),
 		)
 		db.Exec(t, "UPDATE foo SET b = b + 1 WHERE a = 2")
-		end := getTime()
+		end := getTime(t)
 		db.Exec(
 			t,
-			fmt.Sprintf(incBackupAostCmd+" WITH %s", end, opts),
+			fmt.Sprintf(incBackupAostCmd+" WITH %s", 6, end, opts),
 		)
-		db.Exec(
+		var jobID jobspb.JobID
+		db.QueryRow(
 			t,
 			fmt.Sprintf(
 				`SELECT crdb_internal.backup_compaction(
-ARRAY['nodelocal://1/backup'], 
+ARRAY['nodelocal://1/backup/6'], 
 'LATEST',
 crdb_internal.json_to_pb(
 'cockroach.sql.jobs.jobspb.BackupEncryptionOptions',
 '{"mode": 0, "raw_passphrase": "correct-horse-battery-staple"}'
-), '%s', '%s')`,
+), '%d', '%d')`,
 				start, end,
 			),
-		)
+		).Scan(&jobID)
+		waitForSuccessfulJob(t, tc, jobID)
 		validateCompactedBackupForTablesWithOpts(
-			t, db, []string{"foo"}, "'nodelocal://1/backup'", opts,
+			t, db, []string{"foo"}, "'nodelocal://1/backup/6'", start, end, opts,
 		)
 	})
 
@@ -278,28 +287,28 @@ crdb_internal.json_to_pb(
 			db.Exec(t, "DROP TABLE foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		start := getTime()
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, start))
+		start := getTime(t)
+		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 7, start))
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-		end := getTime()
-		db.Exec(t, fmt.Sprintf(incBackupAostCmd, end))
+		end := getTime(t)
+		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 7, end))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
 		defer func() {
 			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		}()
 
-		jobID := startCompaction(start, end)
+		jobID := startCompaction(7, start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "RESUME JOB $1", jobID)
 		waitForSuccessfulJob(t, tc, jobID)
-		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup'")
+		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/7'", start, end)
 
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
-		end = getTime()
-		db.Exec(t, fmt.Sprintf(incBackupAostCmd, end))
+		end = getTime(t)
+		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 7, end))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
-		jobID = startCompaction(start, end)
+		jobID = startCompaction(7, start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "CANCEL JOB $1", jobID)
 		jobutils.WaitForJobToCancel(t, db, jobID)
@@ -360,10 +369,10 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 	}, ", ")
 	db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 	db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-	start := getTime()
+	start := getTime(t)
 	db.Exec(
 		t,
-		fmt.Sprintf("BACKUP INTO (%s) AS OF SYSTEM TIME '%s'", collectionURIs, start),
+		fmt.Sprintf("BACKUP INTO (%s) AS OF SYSTEM TIME '%d'", collectionURIs, start),
 	)
 
 	db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
@@ -373,30 +382,64 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 	)
 
 	db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
-	end := getTime()
+	end := getTime(t)
 	db.Exec(
 		t,
-		fmt.Sprintf("BACKUP INTO LATEST IN (%s) AS OF SYSTEM TIME '%s'", collectionURIs, end),
+		fmt.Sprintf("BACKUP INTO LATEST IN (%s) AS OF SYSTEM TIME '%d'", collectionURIs, end),
 	)
-	compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY[%s], 'LATEST', '', '%s', '%s')"
+	compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY[%s], 'LATEST', '', %d::DECIMAL, %d::DECIMAL)"
 	row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, collectionURIs, start, end))
 	var jobID jobspb.JobID
 	row.Scan(&jobID)
 	waitForSuccessfulJob(t, tc, jobID)
-	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs)
+	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs, start, end)
 }
 
+// Start and end are unix epoch in nanoseconds.
 func validateCompactedBackupForTables(
-	t *testing.T, db *sqlutils.SQLRunner, tables []string, collectionURIs string,
+	t *testing.T, db *sqlutils.SQLRunner, tables []string, collectionURIs string, start, end int64,
 ) {
 	t.Helper()
-	validateCompactedBackupForTablesWithOpts(t, db, tables, collectionURIs, "")
+	validateCompactedBackupForTablesWithOpts(t, db, tables, collectionURIs, start, end, "")
 }
 
+// Start and end are unix epoch in nanoseconds.
 func validateCompactedBackupForTablesWithOpts(
-	t *testing.T, db *sqlutils.SQLRunner, tables []string, collectionURIs string, opts string,
+	t *testing.T,
+	db *sqlutils.SQLRunner,
+	tables []string,
+	collectionURIs string,
+	start, end int64,
+	opts string,
 ) {
 	t.Helper()
+
+	// Ensure a backup exists that spans the start and end times.
+	showBackupQ := fmt.Sprintf(`SHOW BACKUP FROM LATEST IN (%s)`, collectionURIs)
+	if opts != "" {
+		showBackupQ += " WITH " + opts
+	}
+	// Convert times to millisecond epoch. We compare millisecond epoch instead of
+	// nanosecond epoch because the backup time is stored in milliseconds, but timeutil.Now()
+	// will return a nanosecond-precise epoch.
+	times := db.Query(t,
+		fmt.Sprintf(`SELECT DISTINCT 
+		COALESCE(start_time::DECIMAL * 1e6, 0), 
+		COALESCE(end_time::DECIMAL * 1e6, 0) 
+		FROM [%s]`, showBackupQ),
+	)
+	defer times.Close()
+	found := false
+	for times.Next() {
+		var startTime, endTime int64
+		require.NoError(t, times.Scan(&startTime, &endTime))
+		if startTime == start/1e3 && endTime == end/1e3 {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "missing backup with start time %d and end time %d", start, end)
+
 	rows := make(map[string][][]string)
 	for _, table := range tables {
 		rows[table] = db.QueryStr(t, "SELECT * FROM "+table)
@@ -414,6 +457,10 @@ func validateCompactedBackupForTablesWithOpts(
 	}
 }
 
-func getTime() string {
-	return hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}.AsOfSystemTime()
+// getTime returns the current time in nanoseconds since epoch.
+func getTime(t *testing.T) int64 {
+	t.Helper()
+	time, err := strconv.ParseFloat(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}.AsOfSystemTime(), 64)
+	require.NoError(t, err)
+	return int64(time)
 }
