@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -116,7 +117,9 @@ func TestEncDatum(t *testing.T) {
 }
 
 func columnTypeCompatibleWithEncoding(typ *types.T, enc catenumpb.DatumEncoding) bool {
-	return enc == catenumpb.DatumEncoding_VALUE || colinfo.ColumnTypeIsIndexable(typ)
+	return enc == catenumpb.DatumEncoding_VALUE ||
+		enc == catenumpb.DatumEncoding_VALUE_LEGACY ||
+		colinfo.ColumnTypeIsIndexable(typ)
 }
 
 func TestEncDatumNull(t *testing.T) {
@@ -245,6 +248,7 @@ func TestEncDatumCompare(t *testing.T) {
 		asc := catenumpb.DatumEncoding_ASCENDING_KEY
 		desc := catenumpb.DatumEncoding_DESCENDING_KEY
 		noncmp := catenumpb.DatumEncoding_VALUE
+		legacy := catenumpb.DatumEncoding_VALUE_LEGACY
 
 		checkEncDatumCmp(t, a, typ, &v1, &v2, asc, asc, -1, false)
 		checkEncDatumCmp(t, a, typ, &v2, &v1, asc, asc, +1, false)
@@ -263,6 +267,10 @@ func TestEncDatumCompare(t *testing.T) {
 			checkEncDatumCmp(t, a, typ, &v2, &v1, desc, noncmp, +1, true)
 			checkEncDatumCmp(t, a, typ, &v1, &v1, asc, desc, 0, true)
 			checkEncDatumCmp(t, a, typ, &v2, &v2, desc, asc, 0, true)
+			checkEncDatumCmp(t, a, typ, &v1, &v2, noncmp, legacy, -1, true)
+			checkEncDatumCmp(t, a, typ, &v2, &v1, desc, legacy, +1, true)
+			checkEncDatumCmp(t, a, typ, &v1, &v1, asc, legacy, 0, true)
+			checkEncDatumCmp(t, a, typ, &v2, &v2, legacy, legacy, 0, true)
 		}
 	}
 }
@@ -714,13 +722,17 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
-		asc   = catenumpb.DatumEncoding_ASCENDING_KEY
-		desc  = catenumpb.DatumEncoding_DESCENDING_KEY
-		value = catenumpb.DatumEncoding_VALUE
+		asc    = catenumpb.DatumEncoding_ASCENDING_KEY
+		desc   = catenumpb.DatumEncoding_DESCENDING_KEY
+		value  = catenumpb.DatumEncoding_VALUE
+		legacy = catenumpb.DatumEncoding_VALUE_LEGACY
 
 		i = 123
 		s = "abcde"
 	)
+
+	var v roachpb.Value
+	v.SetString(s)
 
 	testCases := []struct {
 		encDatum    rowenc.EncDatum
@@ -741,6 +753,11 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 		},
 		{
 			encDatum:    rowenc.EncDatumFromEncoded(value, encoding.EncodeBytesValue(nil, encoding.NoColumnID, []byte(s))),
+			typ:         types.String,
+			newMemUsage: int64(tree.NewDString(s).Size()),
+		},
+		{
+			encDatum:    rowenc.EncDatumFromEncoded(legacy, v.TagAndDataBytes()),
 			typ:         types.String,
 			newMemUsage: int64(tree.NewDString(s).Size()),
 		},
