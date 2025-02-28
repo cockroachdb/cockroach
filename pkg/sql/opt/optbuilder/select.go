@@ -1482,6 +1482,14 @@ func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
 		panic(err)
 	}
 
+	// We need to look at the original statement to know if the AOST clause was
+	// specified for a backfill, This must be set correctly in order to pass
+	// the validations below.
+	switch b.stmt.(type) {
+	case *tree.CreateTable:
+		asOf.ForBackfill = true
+	}
+
 	if b.evalCtx.AsOfSystemTime == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
