@@ -58,28 +58,16 @@ type jsonpathSymUnion struct {
   val interface{}
 }
 
-func (u *jsonpathSymUnion) expr() jsonpath.Expr {
-  return u.val.(jsonpath.Expr)
+func (u *jsonpathSymUnion) jsonpath() jsonpath.Jsonpath {
+  return u.val.(jsonpath.Jsonpath)
 }
 
-func (u *jsonpathSymUnion) accessor() jsonpath.Accessor {
-  return u.val.(jsonpath.Accessor)
+func (u *jsonpathSymUnion) path() jsonpath.Path {
+  return u.val.(jsonpath.Path)
 }
 
-func (u *jsonpathSymUnion) query() jsonpath.Query {
-  return u.val.(jsonpath.Query)
-}
-
-func (u *jsonpathSymUnion) root() jsonpath.Root {
-  return u.val.(jsonpath.Root)
-}
-
-func (u *jsonpathSymUnion) key() jsonpath.Key {
-  return u.val.(jsonpath.Key)
-}
-
-func (u *jsonpathSymUnion) wildcard() jsonpath.Wildcard {
-  return u.val.(jsonpath.Wildcard)
+func (u *jsonpathSymUnion) paths() []jsonpath.Path {
+  return u.val.([]jsonpath.Path)
 }
 
 func (u *jsonpathSymUnion) bool() bool {
@@ -113,15 +101,15 @@ func (u *jsonpathSymUnion) bool() bool {
 %token <str> STRICT
 %token <str> LAX
 
-%type <jsonpath.Expr> jsonpath
-%type <jsonpath.Expr> expr_or_predicate
-%type <jsonpath.Expr> expr
-%type <jsonpath.Expr> accessor_expr
-%type <jsonpath.Accessor> accessor_op
-%type <jsonpath.Accessor> path_primary
-%type <jsonpath.Accessor> key
+%type <jsonpath.Jsonpath> jsonpath
+%type <jsonpath.Path> expr_or_predicate
+%type <jsonpath.Path> expr
+%type <[]jsonpath.Path> accessor_expr
+%type <jsonpath.Path> accessor_op
+%type <jsonpath.Path> path_primary
+%type <jsonpath.Path> key
+%type <jsonpath.Path> array_accessor
 %type <str> key_name
-%type <jsonpath.Accessor> array_accessor
 %type <str> any_identifier
 %type <str> unreserved_keyword
 %type <bool> mode
@@ -131,7 +119,7 @@ func (u *jsonpathSymUnion) bool() bool {
 jsonpath:
   mode expr_or_predicate
   {
-    jp := jsonpath.Jsonpath{Query: $2.query(), Strict: $1.bool()}
+    jp := jsonpath.Jsonpath{Strict: $1.bool(), Path: $2.path()}
     jsonpathlex.(*lexer).SetJsonpath(jp)
   }
 ;
@@ -154,27 +142,25 @@ mode:
 expr_or_predicate:
   expr
   {
-    $$.val = $1.query()
+    $$.val = $1.path()
   }
 ;
 
 expr:
   accessor_expr
   {
-    $$.val = $1.query()
+    $$.val = jsonpath.Paths($1.paths())
   }
 ;
 
 accessor_expr:
   path_primary
   {
-    $$.val = jsonpath.Query{Accessors: []jsonpath.Accessor{$1.accessor()}}
+    $$.val = []jsonpath.Path{$1.path()}
   }
 | accessor_expr accessor_op
   {
-    a := $1.query()
-    a.Accessors = append(a.Accessors, $2.accessor())
-    $$.val = a
+    $$.val = append($1.paths(), $2.path())
   }
 ;
 
@@ -188,11 +174,11 @@ path_primary:
 accessor_op:
   '.' key
   {
-    $$.val = $2.key()
+    $$.val = $2.path()
   }
 | array_accessor
   {
-    $$.val = $1.wildcard()
+    $$.val = $1.path()
   }
 ;
 
