@@ -1320,7 +1320,12 @@ func (mb *mutationBuilder) disambiguateColumns() {
 
 // makeMutationPrivate builds a MutationPrivate struct containing the table and
 // column metadata needed for the mutation operator.
-func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationPrivate {
+//
+// - vectorInsert indicates that the mutation operator is an Insert with a
+// specialized vectorized implementation for Copy.
+func (mb *mutationBuilder) makeMutationPrivate(
+	needResults, vectorInsert bool,
+) *memo.MutationPrivate {
 	// Helper function that returns nil if there are no non-zero column IDs in a
 	// given list. A zero column ID indicates that column does not participate
 	// in this mutation operation.
@@ -1349,6 +1354,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		FKCascades:                     mb.cascades,
 		AfterTriggers:                  mb.afterTriggers,
 		UniqueWithTombstoneIndexes:     mb.uniqueWithTombstoneIndexes.Ordered(),
+		VectorInsert:                   vectorInsert,
 	}
 
 	// If we didn't actually plan any checks, cascades, or triggers, don't buffer
