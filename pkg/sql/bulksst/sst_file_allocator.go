@@ -43,8 +43,8 @@ func (f *fileAllocatorBase) addFile(
 ) {
 	f.fileInfo.SST = append(f.fileInfo.SST, &SSTFileInfo{
 		URI:      uri,
-		StartKey: string(span.Key),
-		EndKey:   string(span.EndKey),
+		StartKey: span.Key,
+		EndKey:   span.EndKey,
 		FileSize: fileSize,
 	})
 	f.fileInfo.TotalSize += fileSize
