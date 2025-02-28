@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -573,13 +574,61 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	// create stats files for them.
 	var tables, sequences, views []tree.TableName
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		tables, sequences, views, err = mem.Metadata().AllDataSourceNames(
-			ctx, b.plan.catalog, func(ds cat.DataSource) (cat.DataSourceName, error) {
-				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, ds, txn)
+		// Catalog objects can show up multiple times in our lists, so
+		// deduplicate them.
+		seen := make(map[tree.TableName]struct{})
+		getNames := func(count int, get func(int) cat.DataSource) ([]tree.TableName, error) {
+			names := make([]tree.TableName, 0, count)
+			for i := 0; i < count; i++ {
+				ds := get(i)
+				tn, err := b.plan.catalog.fullyQualifiedNameWithTxn(ctx, ds, txn)
+				if err != nil {
+					return nil, err
+				}
+				if _, ok := seen[tn]; !ok {
+					seen[tn] = struct{}{}
+					names = append(names, tn)
+				}
+			}
+			return names, nil
+		}
+
+		var refTables []cat.Table
+		var refTableIncluded intsets.Fast
+		opt.VisitFKReferenceTables(
+			ctx,
+			b.plan.catalog,
+			mem.Metadata().AllTables(),
+			func(cat.Table, cat.ForeignKeyConstraint) (exploreFKs bool) {
+				return true
 			},
-			false, /* includeVirtualTables */
+			func(table cat.Table, _ cat.ForeignKeyConstraint) {
+				if table.IsVirtualTable() {
+					return
+				}
+				if refTableIncluded.Contains(int(table.ID())) {
+					return
+				}
+				refTables = append(refTables, table)
+				refTableIncluded.Add(int(table.ID()))
+			},
 		)
+		var err error
+		tables, err = getNames(len(refTables), func(i int) cat.DataSource {
+			return refTables[i]
+		})
+		if err != nil {
+			return err
+		}
+		sequences, err = getNames(len(mem.Metadata().AllSequences()), func(i int) cat.DataSource {
+			return mem.Metadata().AllSequences()[i]
+		})
+		if err != nil {
+			return err
+		}
+		views, err = getNames(len(mem.Metadata().AllViews()), func(i int) cat.DataSource {
+			return mem.Metadata().AllViews()[i]
+		})
 		return err
 	})
 	if err != nil {
