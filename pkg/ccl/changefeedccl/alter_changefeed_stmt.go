@@ -113,7 +113,7 @@ func alterChangefeedPlanHook(
 		getLegacyPayload := func(ctx context.Context) (*jobspb.Payload, error) {
 			return &jobPayload, nil
 		}
-		err = jobsauth.Authorize(
+		err = jobsauth.AuthorizeAllowLegacyAuth(
 			ctx, p, jobID, getLegacyPayload, jobPayload.UsernameProto.Decode(), jobPayload.Type(), jobsauth.ControlAccess, globalPrivileges,
 		)
 		if err != nil {
