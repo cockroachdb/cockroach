@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -55,23 +56,33 @@ import (
 //	  decrement the entry. Otherwise, the row was on the right, but we've
 //	  already emitted as many as were on the right, don't emit.
 type unionNode struct {
+	setOpPlanningInfo
+
 	// right and left are the data source operands.
-	// right is read first, to populate the `emit` field.
 	right, left planNode
 
 	// columns contains the metadata for the results of this node.
 	columns colinfo.ResultColumns
+}
+
+type setOpPlanningInfo struct {
+	// unionType is the type of operation (UNION, INTERSECT, EXCEPT)
+	unionType tree.UnionType
+
+	// all indicates if the operation is the ALL or DISTINCT version
+	all bool
+
 	// inverted, when true, indicates that the right plan corresponds to
 	// the left operand in the input SQL syntax, and vice-versa.
 	inverted bool
-	// emitAll is a performance optimization for UNION ALL. When set
-	// the union logic avoids the `emit` logic entirely.
-	emitAll bool
 
-	// unionType is the type of operation (UNION, INTERSECT, EXCEPT)
-	unionType tree.UnionType
-	// all indicates if the operation is the ALL or DISTINCT version
-	all bool
+	// enforceHomeRegion is true if this UNION ALL is a locality-optimized search
+	// and the session setting `enforce_home_region` is true, indicating the
+	// operation should error out if the query cannot be satisfied by accessing
+	// only rows in the local region. The left branch of the UNION ALL is set up
+	// to only read rows in the local region when this flag is true, and the
+	// right branch reads rows in remote regions.
+	enforceHomeRegion bool
 
 	// streamingOrdering specifies the ordering on both inputs. If not empty, all
 	// columns must be included in this ordering.
@@ -89,13 +100,8 @@ type unionNode struct {
 	// guaranteed but the short-circuit behavior is not.
 	hardLimit uint64
 
-	// enforceHomeRegion is true if this UNION ALL is a locality-optimized search
-	// and the session setting `enforce_home_region` is true, indicating the
-	// operation should error out if the query cannot be satisfied by accessing
-	// only rows in the local region. The left branch of the UNION ALL is set up
-	// to only read rows in the local region when this flag is true, and the
-	// right branch reads rows in remote regions.
-	enforceHomeRegion bool
+	// finalizeLastStageCb will be nil in the spec factory.
+	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }
 
 func (p *planner) newUnionNode(
@@ -107,20 +113,47 @@ func (p *planner) newUnionNode(
 	hardLimit uint64,
 	enforceHomeRegion bool,
 ) (planNode, error) {
-	emitAll := false
 	switch typ {
-	case tree.UnionOp:
-		if all {
-			emitAll = true
-		}
-	case tree.IntersectOp:
-	case tree.ExceptOp:
+	case tree.UnionOp, tree.IntersectOp, tree.ExceptOp:
 	default:
 		return nil, errors.Errorf("%v is not supported", typ)
 	}
+	resultCols, err := getSetOpResultColumns(typ, planColumns(left), planColumns(right))
+	if err != nil {
+		return nil, err
+	}
 
-	leftColumns := planColumns(left)
-	rightColumns := planColumns(right)
+	inverted := false
+	if typ != tree.ExceptOp {
+		// The logic below reads the rows from the right operand first,
+		// because for EXCEPT in particular this is what we need to match.
+		// However for the other operators (UNION, INTERSECT) it is
+		// actually confusing to see the right values come up first in the
+		// results. So invert this here, to reduce surprise by users.
+		left, right = right, left
+		inverted = true
+	}
+
+	node := &unionNode{
+		right:   right,
+		left:    left,
+		columns: resultCols,
+		setOpPlanningInfo: setOpPlanningInfo{
+			inverted:          inverted,
+			unionType:         typ,
+			all:               all,
+			streamingOrdering: streamingOrdering,
+			reqOrdering:       reqOrdering,
+			hardLimit:         hardLimit,
+			enforceHomeRegion: enforceHomeRegion,
+		},
+	}
+	return node, nil
+}
+
+func getSetOpResultColumns(
+	typ tree.UnionType, leftColumns, rightColumns colinfo.ResultColumns,
+) (colinfo.ResultColumns, error) {
 	if len(leftColumns) != len(rightColumns) {
 		return nil, pgerror.Newf(
 			pgcode.Syntax,
@@ -143,32 +176,7 @@ func (p *planner) newUnionNode(
 			unionColumns[i].Typ = r.Typ
 		}
 	}
-
-	inverted := false
-	if typ != tree.ExceptOp {
-		// The logic below reads the rows from the right operand first,
-		// because for EXCEPT in particular this is what we need to match.
-		// However for the other operators (UNION, INTERSECT) it is
-		// actually confusing to see the right values come up first in the
-		// results. So invert this here, to reduce surprise by users.
-		left, right = right, left
-		inverted = true
-	}
-
-	node := &unionNode{
-		right:             right,
-		left:              left,
-		columns:           unionColumns,
-		inverted:          inverted,
-		emitAll:           emitAll,
-		unionType:         typ,
-		all:               all,
-		streamingOrdering: streamingOrdering,
-		reqOrdering:       reqOrdering,
-		hardLimit:         hardLimit,
-		enforceHomeRegion: enforceHomeRegion,
-	}
-	return node, nil
+	return unionColumns, nil
 }
 
 func (n *unionNode) startExec(params runParams) error {
