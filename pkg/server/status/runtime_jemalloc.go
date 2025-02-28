@@ -26,7 +26,10 @@ import (
 // #cgo linux LDFLAGS: -lrt -lm -lpthread
 //
 // #include <jemalloc/jemalloc.h>
-//
+// #include <stdbool.h>
+// #include <stdio.h>
+// #include <stdlib.h>
+// #include <string.h>
 // // https://github.com/jemalloc/jemalloc/wiki/Use-Case:-Introspection-Via-mallctl*()
 // // https://github.com/jemalloc/jemalloc/blob/4.5.0/src/stats.c#L960:L969
 //
@@ -86,6 +89,29 @@ import (
 // int jemalloc_purge() {
 //  return je_mallctl("arena." STRINGIFY(MALLCTL_ARENAS_ALL) ".purge", NULL, 0, NULL, 0);
 // }
+//
+//  typedef struct {
+//     bool seen_per_arenas_stats;
+// } stats_context_t;
+// static void truncate_before_arenas_cb(void *opaque, const char *msg) {
+//     stats_context_t *ctx = (stats_context_t *)opaque;
+//     if (ctx->seen_per_arenas_stats) {
+//         return;
+//     }
+//     const char *arena_pos = strstr(msg, "arenas[");
+//     if (arena_pos != NULL) {
+//         size_t len_to_print = (size_t)(arena_pos - msg);
+//         fwrite(msg, 1, len_to_print, stderr);
+//         ctx->seen_per_arenas_stats = true;
+//     } else {
+//         fputs(msg, stderr);
+//     }
+// }
+// void jemalloc_stats_print_abbreviated(void) {
+//     stats_context_t ctx = {.seen_per_arenas_stats = false};
+//     fputs("jemalloc stats (abbreviated):\n", stderr);
+//     je_malloc_stats_print(truncate_before_arenas_cb, &ctx, NULL);
+// }
 import "C"
 
 func init() {
@@ -121,9 +147,14 @@ func getJemallocStats(ctx context.Context) (cgoAlloc uint, cgoTotal uint, _ erro
 	// logs whenever log interception (log spy) is active. If we refactored
 	// je_malloc_stats_print to return a string that we can `log.Infof` instead,
 	// we wouldn't need this.
-	if log.V(3) && !log.V(math.MaxInt32) {
-		// Detailed jemalloc stats (very verbose, includes per-arena stats).
-		C.je_malloc_stats_print(nil, nil, nil)
+	if log.V(1) && !log.V(math.MaxInt32) {
+		if log.V(3) {
+			// Detailed jemalloc stats (very verbose, includes per-arena stats).
+			C.je_malloc_stats_print(nil, nil, nil)
+		} else {
+			// Abbreviated jemalloc stats (does not include per-arena stats).
+			C.jemalloc_stats_print_abbreviated()
+		}
 	}
 
 	// js.Allocated corresponds to stats.allocated, which is effectively the sum
@@ -185,6 +216,8 @@ func jemallocMaybePurge(
 		// have multiple servers running in the same process.
 		return
 	}
+
+	C.jemalloc_stats_print_abbreviated()
 	res, err := C.jemalloc_purge()
 	if err != nil || res != 0 {
 		log.Warningf(ctx, "jemalloc purging failed: %v (res=%d)", err, int(res))
