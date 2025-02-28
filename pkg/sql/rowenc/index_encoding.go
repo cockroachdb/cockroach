@@ -1814,3 +1814,46 @@ func SkipColumnNotInPrimaryIndexValue(
 	// sentinel.
 	return true, false
 }
+
+// DecodeValueBytes decodes the value bytes for a KV entry and writes the
+// decoded datums into the given EncDatumRow. It returns the indexes of the
+// columns for which values were decoded.
+//
+// neededValueCols allows an early exit if all the needed columns have been
+// decoded.
+func DecodeValueBytes(
+	colIdxMap catalog.TableColMap, valueBytes []byte, neededValueCols int, row EncDatumRow,
+) (colOrds intsets.Fast, err error) {
+	var colIDDiff uint32
+	var lastColID descpb.ColumnID
+	var typeOffset, dataOffset int
+	var typ encoding.Type
+	for len(valueBytes) > 0 && colOrds.Len() < neededValueCols {
+		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
+		if err != nil {
+			return intsets.Fast{}, err
+		}
+		colID := lastColID + descpb.ColumnID(colIDDiff)
+		lastColID = colID
+		idx, ok := colIdxMap.Get(colID)
+		if !ok {
+			// This column wasn't requested, so read its length and skip it.
+			numBytes, err := encoding.PeekValueLengthWithOffsetsAndType(valueBytes, dataOffset, typ)
+			if err != nil {
+				return intsets.Fast{}, err
+			}
+			valueBytes = valueBytes[numBytes:]
+			continue
+		}
+
+		var encValue EncDatum
+		encValue, valueBytes, err = EncDatumValueFromBufferWithOffsetsAndType(valueBytes, typeOffset,
+			dataOffset, typ)
+		if err != nil {
+			return intsets.Fast{}, err
+		}
+		row[idx] = encValue
+		colOrds.Add(idx)
+	}
+	return colOrds, nil
+}
