@@ -399,8 +399,8 @@ func ingestKvs(
 	var pkAdderName, indexAdderName = "rows", "indexes"
 	if len(spec.Tables) == 1 {
 		for k := range spec.Tables {
-			pkAdderName = fmt.Sprintf("%s rows", k)
-			indexAdderName = fmt.Sprintf("%s indexes", k)
+			pkAdderName = fmt.Sprintf("%s_rows", k)
+			indexAdderName = fmt.Sprintf("%s_indexes", k)
 		}
 	}
 
@@ -432,19 +432,27 @@ func ingestKvs(
 
 	// Setup external storage on node local for our generated SSTs.
 	var err error
-	var es cloud.ExternalStorage
-	var uriBase string
+	var rowStorage, indexStorage cloud.ExternalStorage
+	var rowAllocator, indexAllocator bulksst.FileAllocator
 	if useDistributedMerge {
-		uriBase = fmt.Sprintf("nodelocal://%d/import/%d/", flowCtx.Cfg.NodeID.SQLInstanceID(), spec.JobID)
-		es, err = flowCtx.Cfg.ExternalStorageFromURI(ctx, uriBase, spec.User())
+		rowUri := fmt.Sprintf("nodelocal://%d/import/%d/%s/", flowCtx.Cfg.NodeID.SQLInstanceID(), spec.JobID, pkAdderName)
+		rowStorage, err = flowCtx.Cfg.ExternalStorageFromURI(ctx, rowUri, spec.User())
 		if err != nil {
 			return nil, nil, err
 		}
-		defer es.Close()
+		defer rowStorage.Close()
+		rowAllocator = bulksst.NewExternalFileAllocator(rowStorage, rowUri)
+
+		indexUri := fmt.Sprintf("nodelocal://%d/import/%d/%s/", flowCtx.Cfg.NodeID.SQLInstanceID(), spec.JobID, indexAdderName)
+		indexStorage, err = flowCtx.Cfg.ExternalStorageFromURI(ctx, indexUri, spec.User())
+		if err != nil {
+			return nil, nil, err
+		}
+		defer indexStorage.Close()
+		indexAllocator = bulksst.NewExternalFileAllocator(indexStorage, indexUri)
 	}
 
 	var pkIndexAdder kvserverbase.BulkAdder
-	var pkFileAllocator bulksst.FileAllocator
 	if !useDistributedMerge {
 		pkIndexAdder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 			Name:                     pkAdderName,
@@ -462,8 +470,7 @@ func ingestKvs(
 		defer pkIndexAdder.Close(ctx)
 	} else {
 		// Setup a BulkAdder to generate SSTs into node local.
-		pkFileAllocator = bulksst.NewExternalFileAllocator(es, pkAdderName)
-		t := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, pkFileAllocator)
+		t := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, rowAllocator)
 		t.SetWriteTS(writeTS)
 		pkIndexAdder = t
 		defer pkIndexAdder.Close(ctx)
@@ -472,7 +479,6 @@ func ingestKvs(
 	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
 		false /* isPKAdder */)
 	var indexAdder kvserverbase.BulkAdder
-	var indexFileAllocator bulksst.FileAllocator
 	if !useDistributedMerge {
 		indexAdder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 			Name:                     indexAdderName,
@@ -492,8 +498,7 @@ func ingestKvs(
 		// Setup a BulkAdder to generate SSTs into node local.
 		// TODO (fqazi): We can use the same allocator and unsorted sst batcher
 		// for both primary and secondary indexes..
-		indexFileAllocator = bulksst.NewExternalFileAllocator(es, indexAdderName)
-		t := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, indexFileAllocator)
+		t := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, indexAllocator)
 		t.SetWriteTS(writeTS)
 		indexAdder = t
 		defer indexAdder.Close(ctx)
@@ -503,8 +508,8 @@ func ingestKvs(
 	// SSTs generated.
 	if useDistributedMerge {
 		defer func() {
-			log.Infof(ctx, "Generated SSTs file for primary indexes: %v, URI: %v", pkFileAllocator.GetFileList(), uriBase)
-			log.Infof(ctx, "Generated SSTs file for secondary indexes: %v, URI: %v", indexFileAllocator.GetFileList(), uriBase)
+			log.Infof(ctx, "Generated SSTs file for primary indexes: %v", rowAllocator.GetFileList())
+			log.Infof(ctx, "Generated SSTs file for secondary indexes: %v", indexAllocator.GetFileList())
 		}()
 	}
 
@@ -692,14 +697,11 @@ func ingestKvs(
 	addedSummary.Add(indexAdder.GetSummary())
 	var files *bulksst.SSTFiles
 	if useDistributedMerge {
-		files = pkFileAllocator.GetFileList()
-		indexFile := indexFileAllocator.GetFileList()
+		files = rowAllocator.GetFileList()
+		indexFile := indexAllocator.GetFileList()
 		files.RowSamples = append(files.RowSamples, indexFile.RowSamples...)
 		files.TotalSize += indexFile.TotalSize
 		files.SST = append(files.SST, indexFile.SST...)
-		for i := range files.SST {
-			files.SST[i].URI = uriBase + files.SST[i].URI
-		}
 	}
 	return &addedSummary, files, nil
 }

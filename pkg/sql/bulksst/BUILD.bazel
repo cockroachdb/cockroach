@@ -5,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "bulksst",
     srcs = [
+        "combine_file_info.go",
         "sst_file_allocator.go",
         "sst_writer.go",
     ],
@@ -18,6 +19,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/execinfrapb",
         "//pkg/storage",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_pebble//objstorage",

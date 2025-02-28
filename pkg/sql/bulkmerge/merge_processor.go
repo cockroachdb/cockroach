@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 )
 
 var (
@@ -32,7 +33,6 @@ var (
 	_ execinfra.RowSource = &bulkMergeProcessor{}
 )
 
-// TODO(jeffswenson/annie): pick an encoding for the output SSTs
 var bulkMergeProcessorOutputTypes = []*types.T{
 	types.Bytes, // The encoded SQL Instance ID used for routing
 	types.Int4,  // Task ID
@@ -103,7 +103,6 @@ func newBulkMergeProcessor(
 		// TODO(jeffswenson): should this use the root user or the user executing the job?
 		cloudMux: bulkutil.NewCloudStorageMux(flowCtx.Cfg.ExternalStorageFromURI, username.RootUserName()),
 	}
-	// TODO(jeffswenson): do I need more here?
 	err := mp.Init(ctx, mp, post, bulkMergeProcessorOutputTypes, flowCtx, processorID, nil, execinfra.ProcStateOpts{
 		InputsToDrain: []execinfra.RowSource{input},
 	})
@@ -125,11 +124,13 @@ func (m *bulkMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 			m.MoveToDraining(meta.Err)
 			return nil, m.DrainHelper()
 		case meta != nil:
-			m.MoveToDraining(errors.Newf("unexpected meta: %v", meta))
-			return nil, m.DrainHelper()
+			// If there is non-nil meta, we pass it up the processor chain. It might
+			// be something like a trace.
+			return nil, meta
 		case row != nil:
 			output, err := m.handleRow(row)
 			if err != nil {
+				log.Errorf(m.Ctx(), "merge processor error: %+v", err)
 				m.MoveToDraining(err)
 				return nil, m.DrainHelper()
 			}
@@ -175,36 +176,41 @@ func (m *bulkMergeProcessor) Close(ctx context.Context) {
 	m.ProcessorBase.Close(ctx)
 }
 
-func getKeysForTask(task int64, splits []roachpb.Key) (roachpb.Key, roachpb.Key) {
-	if task == 0 {
-		if len(splits) == 0 {
-			return nil, roachpb.KeyMax
-		}
-		return nil, splits[0]
+func getSpanForTask(task int64, splits []roachpb.Key) roachpb.Span {
+	start := roachpb.KeyMin
+	end := roachpb.KeyMax
+	if task != 0 {
+		start = splits[task-1]
 	}
-	last := int64(len(splits) - 1)
-	if task == last {
-		return splits[task], roachpb.KeyMax
+	if task != int64(len(splits)) {
+		end = splits[task]
 	}
-	if task > last {
-		panic(errors.AssertionFailedf("bad"))
+	if len(splits) < int(task) {
+		panic(errors.AssertionFailedf("task %d is out of range", task))
 	}
-	return splits[task-1], splits[task]
+	return roachpb.Span{Key: start, EndKey: end}
 }
 
-// This is stolen from roachpb/data.go where we check if spans overlap.
-func isOverlapping(startKey, endKey roachpb.Key, sst execinfrapb.BulkMergeSpec_SST) bool {
-	otherStartKey, otherEndKey := sst.StartKey, sst.EndKey
-	if len(endKey) == 0 {
-		return bytes.Compare(startKey, otherStartKey) >= 0 && bytes.Compare(startKey, otherEndKey) < 0
+// isOverlapping returns true if the sst may contribute keys to the merge span.
+// The merge span is a [start, end) range. The SST is a [start, end] range.
+func isOverlapping(mergeSpan roachpb.Span, sst execinfrapb.BulkMergeSpec_SST) bool {
+	// No overlap if sst.EndKey < mergeSpan.Key (SST is entirely left).
+	if bytes.Compare(sst.EndKey, mergeSpan.Key) < 0 {
+		return false
 	}
-	return bytes.Compare(endKey, otherStartKey) > 0 && bytes.Compare(startKey, otherEndKey) < 0
+
+	// No overlap if sst.EndKey < mergeSpan.Key (SST is entirely left).
+	if bytes.Compare(mergeSpan.EndKey, sst.StartKey) <= 0 {
+		return false
+	}
+
+	return true
 }
 
 func (m *bulkMergeProcessor) mergeSSTs(
 	ctx context.Context, taskID taskset.TaskId,
 ) (execinfrapb.BulkMergeSpec_Output, error) {
-	startKey, endKey := getKeysForTask(int64(taskID), m.spec.Splits)
+	mergeSpan := getSpanForTask(int64(taskID), m.spec.Splits)
 	var storeFiles []storageccl.StoreFile
 	dest, err := m.flowCtx.Cfg.ExternalStorageFromURI(ctx, m.spec.OutputUri, username.RootUserName())
 	if err != nil {
@@ -213,7 +219,7 @@ func (m *bulkMergeProcessor) mergeSSTs(
 
 	// Find the ssts that overlap with the given task's key range.
 	for _, sst := range m.spec.Ssts {
-		if !isOverlapping(startKey, endKey, sst) {
+		if !isOverlapping(mergeSpan, sst) {
 			continue
 		}
 		file, err := m.cloudMux.StoreFile(ctx, sst.Uri)
@@ -223,10 +229,16 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		storeFiles = append(storeFiles, file)
 	}
 
+	// It's possible that there are no ssts to merge for this task. In that case,
+	// we return an empty output.
+	if len(storeFiles) == 0 {
+		return execinfrapb.BulkMergeSpec_Output{}, nil
+	}
+
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		LowerBound: startKey,
-		UpperBound: endKey,
+		LowerBound: mergeSpan.Key,
+		UpperBound: mergeSpan.EndKey,
 	}
 	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
 	if err != nil {
@@ -240,12 +252,18 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		return execinfrapb.BulkMergeSpec_Output{}, err
 	}
 
-	sstWriter := storage.MakeIngestionSSTWriter(ctx, m.flowCtx.EvalCtx.Settings, storage.NoopFinishAbortWritable(mergedSST))
+	sstWriter := storage.MakeIngestionSSTWriter(ctx, m.flowCtx.EvalCtx.Settings, objstorageprovider.NewRemoteWritable(mergedSST))
 	defer sstWriter.Close()
 
 	var mergedSSTs execinfrapb.BulkMergeSpec_Output
+
+	// TODO(jeffwenson/annie): record this more efficiently. We are currently making a
+	// clone of every key, which is bad.
+	var firstKey roachpb.Key
+	var lastKey roachpb.Key
+
 	// Write all KVs
-	for iter.SeekGE(storage.MVCCKey{Key: startKey}); ; iter.NextKey() {
+	for iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key}); ; iter.NextKey() {
 		ok, err := iter.Valid()
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
@@ -258,6 +276,12 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
+
+		if firstKey == nil {
+			firstKey = key.Key.Clone()
+		}
+		lastKey = key.Key.Clone()
+
 		// TODO(annie): flush once > 128MiB
 		if err := sstWriter.PutRawMVCC(key, val); err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
@@ -270,8 +294,8 @@ func (m *bulkMergeProcessor) mergeSSTs(
 	}
 
 	mergedSSTs.Ssts = append(mergedSSTs.Ssts, execinfrapb.BulkMergeSpec_SST{
-		StartKey: startKey,
-		EndKey:   endKey,
+		StartKey: firstKey,
+		EndKey:   lastKey,
 		Uri:      m.spec.OutputUri + destSSTBase,
 	})
 	return mergedSSTs, nil

@@ -111,6 +111,35 @@ func CreateAvroData(
 	return data.String()
 }
 
+func TestImportDistributedMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dirname, cleanup := testutils.TempDir(t)
+	t.Cleanup(cleanup)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir:     dirname,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.import.distributed_merge = true`)
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dirname, "data.csv"),
+		[]byte("1,jeff,user@email.com"),
+		os.FileMode(0644),
+	))
+
+	sqlDB.Exec(t, `CREATE TABLE customers (id INT PRIMARY KEY, name STRING, email STRING)`)
+	sqlDB.Exec(t, `IMPORT INTO customers (id, name, email) CSV DATA ($1)`, "nodelocal://1/data.csv")
+
+	require.Equal(t, [][]string{{"1", "jeff"}}, sqlDB.QueryStr(t, `SELECT id, name FROM customers`))
+}
+
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

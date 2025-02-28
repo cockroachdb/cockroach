@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,7 +62,7 @@ func TestDistributedMergeThreeNodes(t *testing.T) {
 		}
 	}
 
-	tc := testcluster.StartTestCluster(t, instanceCount, args)
+	tc := serverutils.StartCluster(t, instanceCount, args)
 	defer tc.Stopper().Stop(ctx)
 
 	// Pick a random node to connect to

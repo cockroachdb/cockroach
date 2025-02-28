@@ -8,6 +8,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "bulkmerge",
     srcs = [
+        "merge.go",
         "merge_coordinator.go",
         "merge_loopback.go",
         "merge_planning.go",
@@ -35,6 +36,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/taskset",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
     ],
 )
 
@@ -42,7 +44,6 @@ go_test(
     name = "bulkmerge_test",
     srcs = [
         "main_test.go",
-        "merge_processor_test.go",
         "merge_test.go",
     ],
     embed = [":bulkmerge"],
@@ -62,7 +63,6 @@ go_test(
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

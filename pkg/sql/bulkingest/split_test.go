@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,7 +30,7 @@ func TestSplitAndScatterSpans(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a 3-node test cluster
-	tc := testcluster.StartTestCluster(t /* numNodes */, 3,
+	tc := serverutils.StartCluster(t /* numNodes */, 3,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,

@@ -80,6 +80,7 @@ func newBulkMergePlan(
 				Core: execinfrapb.ProcessorCoreUnion{
 					BulkMerge: &execinfrapb.BulkMergeSpec{
 						Ssts:      ssts,
+						Splits:    splits,
 						OutputUri: outputURI(sqlInstanceID),
 					},
 				},

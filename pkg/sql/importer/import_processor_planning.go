@@ -7,6 +7,7 @@ package importer
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"sync/atomic"
@@ -21,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkingest"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -67,6 +71,10 @@ func distImport(
 	ctx, sp := tracing.ChildSpan(ctx, "importer.distImport")
 	defer sp.Finish()
 
+	// When using distributed merge the processor will emit the SST's and their
+	// start and end keys.
+	useDistributedMerge := UseDistributedMergeForImport.Get(&execCtx.ExecCfg().Settings.SV)
+
 	dsp := execCtx.DistSQLPlanner()
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		evalCtx := execCtx.ExtendedEvalContext()
@@ -98,9 +106,6 @@ func distImport(
 			corePlacement[i].SQLInstanceID = sqlInstanceIDs[i%len(sqlInstanceIDs)]
 			corePlacement[i].Core.ReadImport = inputSpecs[i]
 		}
-		// When using distributed merge the processor will emit the SST's and their
-		// start and end keys.
-		useDistributedMerge := UseDistributedMergeForImport.Get(&execCtx.ExecCfg().Settings.SV)
 		outputTypes := []*types.T{types.Bytes, types.Bytes}
 		if useDistributedMerge {
 			outputTypes = []*types.T{types.Bytes, types.Bytes, types.Bytes}
@@ -210,12 +215,20 @@ func distImport(
 	}
 
 	var res kvpb.BulkOpSummary
+	var processorOutput []bulksst.SSTFiles
 	rowResultWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts kvpb.BulkOpSummary
 		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
 			return err
 		}
 		res.Add(counts)
+		if len(row) == 3 {
+			var sstFiles bulksst.SSTFiles
+			if err := protoutil.Unmarshal([]byte(*row[2].(*tree.DBytes)), &sstFiles); err != nil {
+				return err
+			}
+			processorOutput = append(processorOutput, sstFiles)
+		}
 		return nil
 	})
 
@@ -280,7 +293,28 @@ func distImport(
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
 		dsp.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, testingKnobs.onSetupFinish)
-		return rowResultWriter.Err()
+		if rowResultWriter.Err() != nil {
+			return rowResultWriter.Err()
+		}
+		if !useDistributedMerge {
+			return nil
+		}
+
+		inputSSTs, splits := bulksst.CombineFileInfo(processorOutput)
+
+		merged, err := bulkmerge.Merge(ctx, execCtx, inputSSTs, splits, func(instanceID base.SQLInstanceID) string {
+			return fmt.Sprintf("nodelocal://%d/job/%d/merge", instanceID, job.ID())
+		})
+		if err != nil {
+			return err
+		}
+
+		spans := make([]roachpb.Span, 0, len(tables))
+		for _, table := range tables {
+			spans = append(spans, execCfg.Codec.TableSpan(uint32(table.Desc.ID)))
+		}
+
+		return bulkingest.IngestFiles(ctx, execCtx, spans, merged)
 	})
 
 	g.GoCtx(replanChecker)

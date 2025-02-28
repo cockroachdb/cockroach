@@ -15,19 +15,6 @@ go_library(
 
 go_test(
     name = "bulkutil_test",
-    srcs = [
-        "cloud_storage_mux_test.go",
-        "main_test.go",
-    ],
+    srcs = ["cloud_storage_mux_test.go"],
     embed = [":bulkutil"],
-    deps = [
-        "//pkg/cloud/externalconn/providers",
-        "//pkg/kv/kvclient/kvtenant",
-        "//pkg/security/securityassets",
-        "//pkg/security/securitytest",
-        "//pkg/server",
-        "//pkg/testutils/serverutils",
-        "//pkg/testutils/testcluster",
-        "//pkg/util/randutil",
-    ],
 )
