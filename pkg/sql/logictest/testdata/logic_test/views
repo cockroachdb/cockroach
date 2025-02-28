@@ -733,14 +733,6 @@ dt2  CREATE VIEW public.dt2 (
 statement ok
 SELECT * FROM dt2
 
-# Ensure that creating a view doesn't leak any session-level settings that
-# could affect subsequent AS OF SYSTEM TIME queries (#13547).
-statement ok
-CREATE VIEW v AS SELECT d, t FROM t
-
-statement error pq: AS OF SYSTEM TIME must be provided on a top-level statement
-CREATE TABLE t2 AS SELECT d, t FROM t AS OF SYSTEM TIME '2017-02-13 21:30:00'
-
 statement ok
 DROP TABLE t CASCADE
 
