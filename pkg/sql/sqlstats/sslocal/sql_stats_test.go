@@ -1326,6 +1326,21 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			},
 		},
 		{
+			name:     "simple statement with rollback",
+			stmtLats: map[string]float64{"SELECT _": 0.1},
+			txnLat:   0.2,
+			ops: func(t *testing.T, db *gosql.DB) {
+				tx, err := db.Begin()
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				_, err = tx.Exec("SELECT 1")
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				err = tx.Rollback()
+				require.NoError(t, err)
+			},
+		},
+		{
 			name:     "compound statement",
 			stmtLats: map[string]float64{"SELECT _": 0.1, "SELECT count(*) FROM crdb_internal.statement_statistics": 0},
 			txnLat:   0.2,
