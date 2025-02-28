@@ -268,7 +268,9 @@ func setup(p perturbation, acceptableChange float64) variations {
 }
 
 func register(r registry.Registry, p perturbation) {
-	addMetamorphic(r, p)
+	// Metamorphic perturbation tests are currently disabled. See
+	// https://github.com/cockroachdb/cockroach/issues/142148.
+	// addMetamorphic(r, p)
 	addFull(r, p)
 	addDev(r, p)
 }
