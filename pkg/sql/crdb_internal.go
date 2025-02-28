@@ -9562,7 +9562,12 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 			return dur(now.Sub(t).Nanoseconds())
 		}
 
-		for _, s := range sm.DebugGetProducerStatuses(ctx) {
+		statuses, err := sm.DebugGetProducerStatuses(ctx)
+		if err != nil {
+			return err
+		}
+
+		for _, s := range statuses {
 			resolved := time.UnixMicro(s.RF.ResolvedMicros)
 			resolvedDatum := tree.DNull
 			if resolved.Unix() != 0 {
@@ -9637,7 +9642,8 @@ CREATE TABLE crdb_internal.cluster_replication_node_stream_spans (
 			}
 			return err
 		}
-		for _, status := range sm.DebugGetProducerStatuses(ctx) {
+		statuses, err := sm.DebugGetProducerStatuses(ctx)
+		for _, status := range statuses {
 			for _, s := range status.Spec.Spans {
 				if err := addRow(
 					tree.NewDInt(tree.DInt(status.StreamID)),
@@ -9673,7 +9679,11 @@ CREATE TABLE crdb_internal.cluster_replication_node_stream_checkpoints (
 			}
 			return err
 		}
-		for _, status := range sm.DebugGetProducerStatuses(ctx) {
+		statuses, err := sm.DebugGetProducerStatuses(ctx)
+		if err != nil {
+			return err
+		}
+		for _, status := range statuses {
 			for _, s := range status.LastCheckpoint.Spans {
 				if err := addRow(
 					tree.NewDInt(tree.DInt(status.StreamID)),
@@ -9744,8 +9754,11 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 			}
 			return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
 		}
-
-		for _, container := range sm.DebugGetLogicalConsumerStatuses(ctx) {
+		statuses, err := sm.DebugGetLogicalConsumerStatuses(ctx)
+		if err != nil {
+			return err
+		}
+		for _, container := range statuses {
 			status := container.GetStats()
 			curOrLast := func(currentNanos int64, lastNanos int64, currentState streampb.LogicalConsumerState) tree.Datum {
 				if status.CurrentState == currentState {
