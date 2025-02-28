@@ -18,7 +18,8 @@ import (
 )
 
 type allocatorState struct {
-	cs *clusterState
+	cs     *clusterState
+	nodeID roachpb.NodeID
 
 	// Ranges that are under-replicated, over-replicated, don't satisfy
 	// constraints, have low diversity etc. Avoids iterating through all ranges.
@@ -130,12 +131,85 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 	var disj [1]constraintsConj
 	var storesToExclude storeIDPostingList
 	var storesToExcludeForRange storeIDPostingList
+	scratchNodes := map[roachpb.NodeID]*nodeLoad{}
 	for _, store := range sheddingStores {
-		// TODO(sumeer): lease shedding for local stores first. And for remote
-		// stores that are cpu overloaded, wait for them to shed leases first. See
-		// earlier longer to do.
+		// TODO(sumeer): For remote stores that are cpu overloaded, wait for them
+		// to shed leases first. See earlier longer to do.
 
+		doneShedding := false
 		ss := a.cs.stores[store.StoreID]
+		if ss.NodeID == a.nodeID && store.storeCPUSummary <= overloadSlow {
+			// This store is local, and cpu overloaded. Shed leases first.
+			//
+			// TODO: is this path (for StoreRebalancer) also responsible for
+			// shedding leases for fdDrain and fdDead?
+
+			// NB: any ranges at this store that don't have pending changes must
+			// have this local store as the leaseholder.
+			for rangeID := range ss.adjusted.topKRanges {
+				rstate := a.cs.ranges[rangeID]
+				if len(rstate.pendingChanges) > 0 {
+					// If the range has pending changes, don't make more changes.
+					continue
+				}
+				if !a.ensureAnalyzedConstraints(rstate) {
+					continue
+				}
+				cands, _ := rstate.constraints.candidatesToMoveLease()
+				var candsPL storeIDPostingList
+				for _, cand := range cands {
+					candsPL.insert(cand.storeID)
+				}
+				candsPL.insert(store.StoreID)
+				var means meansForStoreSet
+				clear(scratchNodes)
+				computeMeansForStoreSet(candsPL, a.cs, &means, scratchNodes)
+				var candsSet candidateSet
+				for _, cand := range cands {
+					sls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
+					if sls.nls <= loadNoChange || sls.fd != fdOK || sls.sls <= loadNoChange {
+						continue
+					}
+					candsSet.candidates = append(candsSet.candidates, candidateInfo{
+						StoreID:          cand.storeID,
+						storeLoadSummary: sls,
+						// TODO: should we change this field to say score and set it to
+						// negative of cand.leasePreferenceIndex.
+						diversityScore: 0,
+					})
+				}
+				if len(candsSet.candidates) == 0 {
+					continue
+				}
+				// Have underloaded candidates.
+				//
+				// TODO: this is questionable. We should refactor
+				// sortTargetCandidateSetAndPick into multiple functions, one for
+				// sorting, one for picking etc. and compose them differently for
+				// different use cases. And we possibly don't want to pick just one
+				// since we can possibly afford to go through all (since a range has
+				// few replicas).
+				targetStoreID := sortTargetCandidateSetAndPick(candsSet, a.rand)
+				if targetStoreID == 0 {
+					continue
+				}
+				targetSS := a.cs.stores[targetStoreID]
+				if !a.cs.canAddLoad(targetSS, rstate.load.load, &means) {
+					continue
+				}
+				leaseChanges := makeLeaseTransferChanges(
+					rangeID, rstate.replicas, rstate.load, targetStoreID, ss.StoreID)
+				pendingChanges := a.cs.createPendingChanges(rangeID, leaseChanges[:]...)
+				changes = append(changes, pendingChanges[:]...)
+				doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
+				if doneShedding {
+					break
+				}
+			}
+			if doneShedding {
+				continue
+			}
+		}
 		// If the node is cpu overloaded, or the store/node is not fdOK, exclude
 		// the other stores on this node from receiving replicas shed by this
 		// store.
@@ -157,7 +231,6 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 			// to shed due to load.
 			loadSheddingStore = store.StoreID
 		}
-		doneShedding := false
 		// Iterate over top-K ranges first and try to move them.
 		//
 		// TODO: Don't include rangeLoad as the value in the topKRanges map -- we
@@ -170,27 +243,8 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 				// If the range has pending changes, don't make more changes.
 				continue
 			}
-			if rstate.constraints == nil {
-				// Populate the constraints.
-				rac := newRangeAnalyzedConstraints()
-				buf := rstate.constraints.stateForInit()
-				leaseholder := roachpb.StoreID(-1)
-				for _, replica := range rstate.replicas {
-					buf.tryAddingStore(replica.StoreID, replica.replicaIDAndType.replicaType.replicaType,
-						a.cs.stores[replica.StoreID].localityTiers)
-					if replica.isLeaseholder {
-						leaseholder = replica.StoreID
-					}
-				}
-				if leaseholder < 0 {
-					// Very dubious why the leaseholder (which must be a local store since there
-					// are no pending changes) is not known.
-					// TODO(sumeer): log an error.
-					releaseRangeAnalyzedConstraints(rac)
-					continue
-				}
-				rac.finishInit(rstate.conf, a.cs.constraintMatcher, leaseholder)
-				rstate.constraints = rac
+			if !a.ensureAnalyzedConstraints(rstate) {
+				continue
 			}
 			isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
 			if !isVoter && !isNonVoter {
@@ -255,7 +309,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 			if !isLeaseholder {
 				addedLoad[cpu] = rstate.load.raftCPU
 			}
-			if !a.cs.canAddLoad(targetSS, rstate.load.load, cands.means) {
+			if !a.cs.canAddLoad(targetSS, addedLoad, cands.means) {
 				continue
 			}
 			replicaChanges := makeRebalanceReplicaChanges(
@@ -281,9 +335,9 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 }
 
 func (a *allocatorState) allocChangeID() changeID {
-	changeID := a.changeIDCounter
+	id := a.changeIDCounter
 	a.changeIDCounter++
-	return changeID
+	return id
 }
 
 // TODO(sumeer): look at support methods for allocatorState.tryMovingRange in
@@ -358,7 +412,7 @@ func sortTargetCandidateSetAndPick(cands candidateSet, rng *rand.Rand) roachpb.S
 	// If we haven't filtered for overloaded stores, need to do that now by
 	// looking at the value of lowestLoad.
 	lowestLoad := cands.candidates[0].sls
-	for j := 1; j < len(cands.candidates); j++ {
+	for j = 1; j < len(cands.candidates); j++ {
 		if cands.candidates[j].sls != lowestLoad {
 			break
 		}
@@ -366,6 +420,33 @@ func sortTargetCandidateSetAndPick(cands candidateSet, rng *rand.Rand) roachpb.S
 	cands.candidates = cands.candidates[:j]
 	j = rng.Intn(j)
 	return cands.candidates[j].StoreID
+}
+
+func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
+	if rstate.constraints != nil {
+		return true
+	}
+	// Populate the constraints.
+	rac := newRangeAnalyzedConstraints()
+	buf := rstate.constraints.stateForInit()
+	leaseholder := roachpb.StoreID(-1)
+	for _, replica := range rstate.replicas {
+		buf.tryAddingStore(replica.StoreID, replica.replicaIDAndType.replicaType.replicaType,
+			a.cs.stores[replica.StoreID].localityTiers)
+		if replica.isLeaseholder {
+			leaseholder = replica.StoreID
+		}
+	}
+	if leaseholder < 0 {
+		// Very dubious why the leaseholder (which must be a local store since there
+		// are no pending changes) is not known.
+		// TODO(sumeer): log an error.
+		releaseRangeAnalyzedConstraints(rac)
+		return false
+	}
+	rac.finishInit(rstate.conf, a.cs.constraintMatcher, leaseholder)
+	rstate.constraints = rac
+	return true
 }
 
 // Consider the core logic for a change, rebalancing or recovery.
