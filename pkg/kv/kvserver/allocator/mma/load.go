@@ -181,6 +181,7 @@ type meanNodeLoad struct {
 type storeLoadSummary struct {
 	sls                      loadSummary
 	nls                      loadSummary
+	storeCPUSummary          loadSummary
 	highDiskSpaceUtilization bool
 	fd                       failureDetectionSummary
 	maxFractionPending       float64
@@ -312,51 +313,7 @@ func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
 	}
 	means.constraintsDisj = expr
 	mm.constraintMatcher.constrainStoresForExpr(expr, &means.stores)
-	n := len(means.stores)
-	clear(mm.scratchNodes)
-	for _, storeID := range means.stores {
-		sload := mm.loadInfoProvider.getStoreReportedLoad(storeID)
-		for j := range sload.reportedLoad {
-			means.storeLoad.load[j] += sload.reportedLoad[j]
-			if sload.capacity[j] == parentCapacity || sload.capacity[j] == unknownCapacity {
-				means.storeLoad.capacity[j] = parentCapacity
-			} else if means.storeLoad.capacity[j] != parentCapacity {
-				means.storeLoad.capacity[j] += sload.capacity[j]
-			}
-		}
-		for j := range sload.reportedSecondaryLoad {
-			means.storeLoad.secondaryLoad[j] += sload.reportedSecondaryLoad[j]
-		}
-		nodeID := sload.NodeID
-		nLoad := mm.scratchNodes[nodeID]
-		if nLoad == nil {
-			mm.scratchNodes[sload.NodeID] = mm.loadInfoProvider.getNodeReportedLoad(nodeID)
-		}
-	}
-	for i := range means.storeLoad.load {
-		if means.storeLoad.capacity[i] != parentCapacity {
-			means.storeLoad.util[i] =
-				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
-			means.storeLoad.capacity[i] /= loadValue(n)
-		} else {
-			means.storeLoad.util[i] = 0
-		}
-		means.storeLoad.load[i] /= loadValue(n)
-	}
-	for i := range means.storeLoad.secondaryLoad {
-		means.storeLoad.secondaryLoad[i] /= loadValue(n)
-	}
-
-	n = len(mm.scratchNodes)
-	for _, nl := range mm.scratchNodes {
-		means.nodeLoad.loadCPU += nl.reportedCPU
-		means.nodeLoad.capacityCPU += nl.capacityCPU
-	}
-	means.nodeLoad.utilCPU =
-		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
-	means.nodeLoad.loadCPU /= loadValue(n)
-	means.nodeLoad.capacityCPU /= loadValue(n)
-
+	computeMeansForStoreSet(means.stores, mm.loadInfoProvider, means, mm.scratchNodes)
 	return means
 }
 
@@ -373,6 +330,58 @@ func (mm *meansMemo) getStoreLoadSummary(
 	summary = mm.loadInfoProvider.computeLoadSummary(storeID, &means.storeLoad, &means.nodeLoad)
 	means.putStoreLoadSummary(storeID, summary)
 	return summary
+}
+
+func computeMeansForStoreSet(
+	stores storeIDPostingList,
+	loadProvider loadInfoProvider,
+	means *meansForStoreSet,
+	scratchNodes map[roachpb.NodeID]*nodeLoad,
+) {
+	n := len(means.stores)
+	clear(scratchNodes)
+	for _, storeID := range means.stores {
+		sload := loadProvider.getStoreReportedLoad(storeID)
+		for j := range sload.reportedLoad {
+			means.storeLoad.load[j] += sload.reportedLoad[j]
+			if sload.capacity[j] == parentCapacity || sload.capacity[j] == unknownCapacity {
+				means.storeLoad.capacity[j] = parentCapacity
+			} else if means.storeLoad.capacity[j] != parentCapacity {
+				means.storeLoad.capacity[j] += sload.capacity[j]
+			}
+		}
+		for j := range sload.reportedSecondaryLoad {
+			means.storeLoad.secondaryLoad[j] += sload.reportedSecondaryLoad[j]
+		}
+		nodeID := sload.NodeID
+		nLoad := scratchNodes[nodeID]
+		if nLoad == nil {
+			scratchNodes[sload.NodeID] = loadProvider.getNodeReportedLoad(nodeID)
+		}
+	}
+	for i := range means.storeLoad.load {
+		if means.storeLoad.capacity[i] != parentCapacity {
+			means.storeLoad.util[i] =
+				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
+			means.storeLoad.capacity[i] /= loadValue(n)
+		} else {
+			means.storeLoad.util[i] = 0
+		}
+		means.storeLoad.load[i] /= loadValue(n)
+	}
+	for i := range means.storeLoad.secondaryLoad {
+		means.storeLoad.secondaryLoad[i] /= loadValue(n)
+	}
+
+	n = len(scratchNodes)
+	for _, nl := range scratchNodes {
+		means.nodeLoad.loadCPU += nl.reportedCPU
+		means.nodeLoad.capacityCPU += nl.capacityCPU
+	}
+	means.nodeLoad.utilCPU =
+		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
+	means.nodeLoad.loadCPU /= loadValue(n)
+	means.nodeLoad.capacityCPU /= loadValue(n)
 }
 
 // loadSummary aggregates across all load dimensions for a store, or a node.
