@@ -1398,6 +1398,7 @@ func (ef *execFactory) ConstructInsert(
 	checkOrdSet exec.CheckOrdinalSet,
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
+	vectorInsert bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1426,6 +1427,7 @@ func (ef *execFactory) ConstructInsert(
 	ins := insertNodePool.Get().(*insertNode)
 	*ins = insertNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+		vectorInsert:        vectorInsert,
 		run: insertRun{
 			ti:         tableInserter{ri: ri},
 			checkOrds:  checkOrdSet,
