@@ -1,10 +1,10 @@
 {{- range .GitHubSummaryData}}
 <details><summary><strong>{{.BenchmarkStatus}} {{.DisplayName}}</strong> [{{.Labels}}]</summary>
 
-| Metric                      | Old Commit     | New Commit     | Delta      | Note         | Threshold      |
-|-----------------------------|----------------|----------------|------------|--------------|----------------|
+| Metric                      | Old Commit     | New Commit     | Delta      | Note         |
+|-----------------------------|----------------|----------------|------------|--------------|
 {{- range .Summaries}}
-| {{.Status}} **{{.Metric}}** | {{.OldCenter}} | {{.NewCenter}} | {{.Delta}} | {{.Note}}    | {{.Threshold}} |
+| {{.Status}} **{{.Metric}}** | {{.OldCenter}} | {{.NewCenter}} | {{.Delta}} | {{.Note}}    |
 {{- end}}
 
 <details><summary>Reproduce</summary>
@@ -43,9 +43,8 @@ gcloud storage cp {{$url}}\* {{$rev}}/
 <details><summary>Legend</summary>
 
 - ⚪ **Neutral:** No significant performance change.
-- 🟡 **Warning:** Slight degradation, likely due to variance, but still within thresholds.
 - 🔴 **Regression:** Likely performance regression, requiring investigation.
-- 🟢 **Improvement:** Possible performance gain.
+- 🟢 **Improvement:** Likely performance gain.
 
 </details>
 

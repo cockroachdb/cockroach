@@ -8,10 +8,9 @@ benchmarks:
     runner_group: 1
     count: 10
     iterations: 3000
-    thresholds:
-      "sec/op": .03
-      "B/op": .02
-      "allocs/op": .02
+    metrics:
+      - "sec/op"
+      - "allocs/op"
 
 ----
 
@@ -47,13 +46,13 @@ run group=1
 ----
 ----
 
-<details><summary><strong>🟡 Sysbench</strong> [SQL, 3node, oltp_read_write]</summary>
+<details><summary><strong>🔴 Sysbench</strong> [SQL, 3node, oltp_read_write]</summary>
 
-| Metric                      | Old Commit     | New Commit     | Delta      | Note         | Threshold      |
-|-----------------------------|----------------|----------------|------------|--------------|----------------|
-| 🟡 **sec/op** | 9.862m ±1% | 9.952m ±0% | +0.91% | p=0.001 n=10    | 3.0% |
-| ⚪ **allocs/op** | 10.38k ±1% | 10.38k ±1% | ~ | p=1.000 n=10    | 2.0% |
-| ⚪ **B/op** | 2.258Mi ±0% | 2.258Mi ±0% | ~ | p=1.000 n=10    | 2.0% |
+| Metric                      | Old Commit     | New Commit     | Delta      | Note         |
+|-----------------------------|----------------|----------------|------------|--------------|
+| 🔴 **sec/op** | 9.862m ±1% | 9.952m ±0% | +0.91% | p=0.001 n=10    |
+| ⚪ **allocs/op** | 10.38k ±1% | 10.38k ±1% | ~ | p=1.000 n=10    |
+| ⚪ **B/op** | 2.258Mi ±0% | 2.258Mi ±0% | ~ | p=1.000 n=10    |
 
 <details><summary>Reproduce</summary>
 
@@ -90,13 +89,12 @@ gcloud storage cp gs://cockroach-microbench-ci/artifacts/abcdef123//\* old/
 <details><summary>Legend</summary>
 
 - ⚪ **Neutral:** No significant performance change.
-- 🟡 **Warning:** Slight degradation, likely due to variance, but still within thresholds.
 - 🔴 **Regression:** Likely performance regression, requiring investigation.
-- 🟢 **Improvement:** Possible performance gain.
+- 🟢 **Improvement:** Likely performance gain.
 
 </details>
 
-No regressions detected!
+A regression has been detected, please investigate further!
 
 _built with commit: [qwerty456](https://github.com/cockroachdb/cockroach/commit/qwerty456)_
 ----
@@ -108,6 +106,7 @@ tree
 
 /abcdef123
 /abcdef123/artifacts
+/abcdef123/artifacts/.FAILED
 /abcdef123/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
 /abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
 /abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof
@@ -116,6 +115,7 @@ tree
 /github-summary.md
 /qwerty456
 /qwerty456/artifacts
+/qwerty456/artifacts/.FAILED
 /qwerty456/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
 /qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
 /qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof

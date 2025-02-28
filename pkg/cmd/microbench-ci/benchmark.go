@@ -26,8 +26,7 @@ type (
 		RunnerGroup int      `yaml:"runner_group"`
 		Count       int      `yaml:"count"`
 		Iterations  int      `yaml:"iterations"`
-
-		Thresholds map[string]float64 `yaml:"thresholds"`
+		Metrics     []string `yaml:"metrics"`
 	}
 	Benchmarks  []Benchmark
 	ProfileType string
