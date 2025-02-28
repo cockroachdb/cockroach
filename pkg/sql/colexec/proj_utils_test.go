@@ -30,17 +30,28 @@ import (
 // engine because all datum-backed types have the same backing datumVec which
 // would occur disproportionally often without adjusting the weights.
 func getRandomTypeFavorNative(rng *rand.Rand) *types.T {
-	typ := randgen.RandType(rng)
+	randTyp := func() *types.T {
+		for {
+			typ := randgen.RandType(rng)
+			switch typ.Family() {
+			case types.OidFamily:
+				// Skip the Oid family since casts to Oid type are handled by
+				// falling back to the row-by-row engine, and we don't set
+				// ProcessorConstructor in projection tests.
+			case types.VoidFamily:
+				// Skip the void family because it doesn't have some basic
+				// comparison operators defined.
+			default:
+				return typ
+			}
+		}
+	}
+	typ := randTyp()
 	for retry := 0; retry < 3; retry++ {
 		if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) != typeconv.DatumVecCanonicalTypeFamily {
 			break
 		}
-		typ = randgen.RandType(rng)
-		if typ.Family() == types.VoidFamily {
-			// Skip the void family because it doesn't have some basic
-			// comparison operators defined.
-			retry--
-		}
+		typ = randTyp()
 	}
 	return typ
 }
