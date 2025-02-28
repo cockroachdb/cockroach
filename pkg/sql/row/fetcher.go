@@ -1089,50 +1089,21 @@ func (rf *Fetcher) processValueBytes(
 		}
 		rf.prettyValueBuf.Reset()
 	}
-
-	var colIDDiff uint32
-	var lastColID descpb.ColumnID
-	var typeOffset, dataOffset int
-	var typ encoding.Type
-	for len(valueBytes) > 0 && rf.valueColsFound < table.neededValueCols {
-		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
-		if err != nil {
-			return "", "", err
-		}
-		colID := lastColID + descpb.ColumnID(colIDDiff)
-		lastColID = colID
-		idx, ok := table.colIdxMap.Get(colID)
-		if !ok {
-			// This column wasn't requested, so read its length and skip it.
-			numBytes, err := encoding.PeekValueLengthWithOffsetsAndType(valueBytes, dataOffset, typ)
-			if err != nil {
-				return "", "", err
-			}
-			valueBytes = valueBytes[numBytes:]
-			continue
-		}
-
-		if rf.args.TraceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
-		}
-
-		var encValue rowenc.EncDatum
-		encValue, valueBytes, err = rowenc.EncDatumValueFromBufferWithOffsetsAndType(valueBytes, typeOffset,
-			dataOffset, typ)
-		if err != nil {
-			return "", "", err
-		}
-		if rf.args.TraceKV {
-			err := encValue.EnsureDecoded(table.spec.FetchedColumns[idx].Type, rf.args.Alloc)
-			if err != nil {
-				return "", "", err
-			}
-			fmt.Fprintf(rf.prettyValueBuf, "/%v", encValue.Datum)
-		}
-		table.row[idx] = encValue
-		rf.valueColsFound++
+	neededCols := rf.table.neededValueCols - rf.valueColsFound
+	colOrds, err := rowenc.DecodeValueBytes(table.colIdxMap, valueBytes, neededCols, table.row)
+	if err != nil {
+		return "", "", err
 	}
+	rf.valueColsFound += colOrds.Len()
 	if rf.args.TraceKV {
+		for colOrd, ok := colOrds.Next(0); ok; colOrd, ok = colOrds.Next(colOrd + 1) {
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[colOrd].Name)
+			err = table.row[colOrd].EnsureDecoded(table.spec.FetchedColumns[colOrd].Type, rf.args.Alloc)
+			if err != nil {
+				return "", "", err
+			}
+			fmt.Fprintf(rf.prettyValueBuf, "/%v", table.row[colOrd].Datum)
+		}
 		prettyValue = rf.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
