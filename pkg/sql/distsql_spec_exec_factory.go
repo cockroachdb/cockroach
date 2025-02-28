@@ -1373,6 +1373,7 @@ func (e *distSQLSpecExecFactory) ConstructInsert(
 	checkCols exec.CheckOrdinalSet,
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
+	vectorInsert bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: insert")
 }
