@@ -154,7 +154,7 @@ func alterChangefeedPlanHook(
 		newTargets, newProgress, newStatementTime, originalSpecs, err := generateAndValidateNewTargets(
 			ctx, exprEval, p,
 			alterChangefeedStmt.Cmds,
-			newOptions.AsMap(), // TODO: Remove .AsMap()
+			newOptions,
 			prevDetails, job.Progress(),
 			newSinkURI,
 		)
@@ -375,7 +375,7 @@ func generateAndValidateNewTargets(
 	exprEval exprutil.Evaluator,
 	p sql.PlanHookState,
 	alterCmds tree.AlterChangefeedCmds,
-	opts map[string]string,
+	opts changefeedbase.StatementOptions,
 	prevDetails jobspb.ChangefeedDetails,
 	prevProgress jobspb.Progress,
 	sinkURI string,
@@ -406,7 +406,11 @@ func generateAndValidateNewTargets(
 	// initial_scan set to only so that we only do an initial scan on an alter
 	// changefeed with initial_scan = 'only' if the original one also had
 	// initial_scan = 'only'.
-	_, originalInitialScanOnlyOption := opts[changefeedbase.OptInitialScanOnly]
+	originalInitialScanType, err := opts.GetInitialScanType()
+	if err != nil {
+		return nil, nil, hlc.Timestamp{}, nil, err
+	}
+	originalInitialScanOnlyOption := originalInitialScanType == changefeedbase.OnlyInitialScan
 
 	// When we add new targets with or without initial scans, indicating
 	// initial_scan or no_initial_scan in the job description would lose its
@@ -415,9 +419,9 @@ func generateAndValidateNewTargets(
 	// newly added targets, we will introduce the initial_scan opt after the
 	// job record is created.
 
-	delete(opts, changefeedbase.OptInitialScanOnly)
-	delete(opts, changefeedbase.OptNoInitialScan)
-	delete(opts, changefeedbase.OptInitialScan)
+	opts.Unset(changefeedbase.OptInitialScanOnly)
+	opts.Unset(changefeedbase.OptNoInitialScan)
+	opts.Unset(changefeedbase.OptInitialScan)
 
 	// the new progress and statement time will start from the progress and
 	// statement time of the job prior to the alteration of the changefeed. Each
@@ -445,7 +449,7 @@ func generateAndValidateNewTargets(
 
 	prevTargets := AllTargets(prevDetails)
 	noLongerExist := make(map[string]descpb.ID)
-	err = prevTargets.EachTarget(func(targetSpec changefeedbase.Target) error {
+	if err := prevTargets.EachTarget(func(targetSpec changefeedbase.Target) error {
 		k := targetKey{TableID: targetSpec.TableID, FamilyName: tree.Name(targetSpec.FamilyName)}
 		var desc catalog.TableDescriptor
 		if d, exists := descResolver.DescByID[targetSpec.TableID]; exists {
@@ -482,9 +486,7 @@ func generateAndValidateNewTargets(
 			StatementTimeName: string(targetSpec.StatementTimeName),
 		}
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
@@ -515,25 +517,14 @@ func generateAndValidateNewTargets(
 				return nil, nil, hlc.Timestamp{}, nil, err
 			}
 
-			var withInitialScan bool
 			initialScanType, initialScanSet := targetOpts[changefeedbase.OptInitialScan]
 			_, noInitialScanSet := targetOpts[changefeedbase.OptNoInitialScan]
-			_, initialScanOnlySet := targetOpts[changefeedbase.OptInitialScanOnly]
-
-			if initialScanSet {
-				if initialScanType == `no` || (initialScanType == `only` && !originalInitialScanOnlyOption) {
-					withInitialScan = false
-				} else {
-					withInitialScan = true
-				}
-			} else {
-				withInitialScan = false
-			}
 
 			if initialScanType != `` && initialScanType != `yes` && initialScanType != `no` && initialScanType != `only` {
 				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 					pgcode.InvalidParameterValue,
-					`cannot set initial_scan to %q. possible values for initial_scan are "yes", "no", "only", or no value`, changefeedbase.OptInitialScan,
+					`cannot set %q to %q. possible values for initial_scan are "yes", "no", "only", or no value`,
+					changefeedbase.OptInitialScan, initialScanType,
 				)
 			}
 
@@ -545,21 +536,9 @@ func generateAndValidateNewTargets(
 				)
 			}
 
-			if initialScanSet && initialScanOnlySet {
-				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
-					pgcode.InvalidParameterValue,
-					`cannot specify both %q and %q`, changefeedbase.OptInitialScan,
-					changefeedbase.OptInitialScanOnly,
-				)
-			}
-
-			if noInitialScanSet && initialScanOnlySet {
-				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
-					pgcode.InvalidParameterValue,
-					`cannot specify both %q and %q`, changefeedbase.OptInitialScanOnly,
-					changefeedbase.OptNoInitialScan,
-				)
-			}
+			withInitialScan := (initialScanType == `` && initialScanSet) ||
+				initialScanType == `yes` ||
+				(initialScanType == `only` && originalInitialScanOnlyOption)
 
 			var existingTargetIDs []descpb.ID
 			for _, targetDesc := range newTableDescs {
@@ -760,12 +739,8 @@ func generateNewProgress(
 ) (jobspb.Progress, hlc.Timestamp, error) {
 	prevHighWater := prevProgress.GetHighWater()
 	changefeedProgress := prevProgress.GetChangefeed()
-	ptsRecord := uuid.UUID{}
-	if changefeedProgress != nil {
-		ptsRecord = changefeedProgress.ProtectedTimestampRecord
-	}
 
-	haveHighwater := !(prevHighWater == nil || prevHighWater.IsEmpty())
+	haveHighwater := prevHighWater != nil && prevHighWater.IsSet()
 	haveCheckpoint := changefeedProgress != nil &&
 		(!changefeedProgress.Checkpoint.IsEmpty() || !changefeedProgress.SpanLevelCheckpoint.IsEmpty())
 
@@ -786,6 +761,13 @@ func generateNewProgress(
 				`please unpause the changefeed and wait until the high watermark progresses past the current value %s to add these targets.`,
 			eval.TimestampToDecimalDatum(*prevHighWater).Decimal.String(),
 		)
+	}
+
+	// TODO(#142369): We should create a new PTS record instead of just
+	// copying the old one.
+	var ptsRecord uuid.UUID
+	if changefeedProgress != nil {
+		ptsRecord = changefeedProgress.ProtectedTimestampRecord
 	}
 
 	// Check if the user is trying to perform an initial scan while the high
@@ -865,10 +847,10 @@ func removeSpansFromProgress(prevProgress jobspb.Progress, spansToRemove []roach
 	changefeedProgress.Checkpoint.Spans = spanGroup.Slice()
 }
 
-func fetchSpansForDescs(p sql.PlanHookState, droppedIDs []descpb.ID) (primarySpans []roachpb.Span) {
+func fetchSpansForDescs(p sql.PlanHookState, descIDs []descpb.ID) (primarySpans []roachpb.Span) {
 	seen := make(map[descpb.ID]struct{})
 	codec := p.ExtendedEvalContext().Codec
-	for _, id := range droppedIDs {
+	for _, id := range descIDs {
 		if _, isDup := seen[id]; isDup {
 			continue
 		}
