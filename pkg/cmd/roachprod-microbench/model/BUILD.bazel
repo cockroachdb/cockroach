@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "builder.go",
         "metric.go",
+        "options.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model",
     visibility = ["//visibility:public"],
