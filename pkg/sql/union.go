@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -19,67 +20,45 @@ import (
 // unionNode is a planNode whose rows are the result of one of three set
 // operations (UNION, INTERSECT, or EXCEPT) on left and right. There are two
 // variations of each set operation: distinct, which always returns unique
-// results, and all, which does no uniqueing.
-//
-// Ordering of rows is expected to be handled externally to unionNode.
-// TODO(dan): In the long run, this is insufficient. If we know both left and
-// right are ordered the same way, we can do the set logic without the map
-// state. Additionally, if the unionNode has an ordering then we can hint it
-// down to left and right and force the condition for this first optimization.
-//
-// All six of the operations can be completed without cacheing rows by
-// iterating one side then the other and keeping counts of unique rows
-// in a map. The logic is common for all six. However, because EXCEPT
-// needs to iterate the right side first, the common code always reads
-// the right operand first. Meanwhile, we invert the operands for the
-// non-EXCEPT cases in order to preserve the appearance of the
-// original specified order.
-//
-// The emit logic for each op is represented by implementors of the
-// unionNodeEmit interface. The emitRight method is called for each row output
-// by the right side and passed a hashable representation of the row. If it
-// returns true, the row is emitted. After all right rows are examined, then
-// each left row is passed to emitLeft in the same way.
-//
-// An example: intersectNodeEmitAll
-// VALUES (1), (1), (1), (2), (2) INTERSECT ALL VALUES (1), (3), (1)
-// ----
-// 1
-// 1
-// There are three 1s on the left and two 1s on the right, so we emit 1, 1.
-// Nothing else is in both.
-//
-//	emitRight: For each row, increment the map entry.
-//	emitLeft: For each row, if the row is not present in the map, it was not in
-//	  both, don't emit. Otherwise, if the count for the row was > 0, emit and
-//	  decrement the entry. Otherwise, the row was on the right, but we've
-//	  already emitted as many as were on the right, don't emit.
+// results, and all, which does no de-duplication.
 type unionNode struct {
+	setOpPlanningInfo
+
 	// right and left are the data source operands.
-	// right is read first, to populate the `emit` field.
 	right, left planNode
 
 	// columns contains the metadata for the results of this node.
 	columns colinfo.ResultColumns
-	// inverted, when true, indicates that the right plan corresponds to
-	// the left operand in the input SQL syntax, and vice-versa.
-	inverted bool
-	// emitAll is a performance optimization for UNION ALL. When set
-	// the union logic avoids the `emit` logic entirely.
-	emitAll bool
+}
 
+type setOpPlanningInfo struct {
 	// unionType is the type of operation (UNION, INTERSECT, EXCEPT)
 	unionType tree.UnionType
+
 	// all indicates if the operation is the ALL or DISTINCT version
 	all bool
 
-	// streamingOrdering specifies the ordering on both inputs. If not empty, all
-	// columns must be included in this ordering.
+	// enforceHomeRegion is true if this UNION ALL is a locality-optimized search
+	// and the session setting `enforce_home_region` is true, indicating the
+	// operation should error out if the query cannot be satisfied by accessing
+	// only rows in the local region. The left branch of the UNION ALL is set up
+	// to only read rows in the local region when this flag is true, and the
+	// right branch reads rows in remote regions.
+	enforceHomeRegion bool
+
+	// leftOrdering and rightOrdering are the orderings of the left and right
+	// inputs, respectively.
+	leftOrdering, rightOrdering colinfo.ColumnOrdering
+
+	// streamingOrdering specifies the ordering on both inputs in terms of the
+	// output columns they map to. If not empty, all columns must be included in
+	// this ordering.
 	streamingOrdering colinfo.ColumnOrdering
 
 	// reqOrdering specifies the required output ordering. If not empty, both
 	// inputs are already ordered according to streamingOrdering, and reqOrdering
-	// is a prefix of streamingOrdering.
+	// is a prefix of streamingOrdering except for optional columns, which do not
+	// affect the ordering.
 	reqOrdering ReqOrdering
 
 	// hardLimit can only be set for UNION ALL operations. It is used to implement
@@ -89,38 +68,50 @@ type unionNode struct {
 	// guaranteed but the short-circuit behavior is not.
 	hardLimit uint64
 
-	// enforceHomeRegion is true if this UNION ALL is a locality-optimized search
-	// and the session setting `enforce_home_region` is true, indicating the
-	// operation should error out if the query cannot be satisfied by accessing
-	// only rows in the local region. The left branch of the UNION ALL is set up
-	// to only read rows in the local region when this flag is true, and the
-	// right branch reads rows in remote regions.
-	enforceHomeRegion bool
+	// finalizeLastStageCb will be nil in the spec factory.
+	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }
 
 func (p *planner) newUnionNode(
 	typ tree.UnionType,
 	all bool,
 	left, right planNode,
-	streamingOrdering colinfo.ColumnOrdering,
+	leftOrdering, rightOrdering, streamingOrdering colinfo.ColumnOrdering,
 	reqOrdering ReqOrdering,
 	hardLimit uint64,
 	enforceHomeRegion bool,
 ) (planNode, error) {
-	emitAll := false
 	switch typ {
-	case tree.UnionOp:
-		if all {
-			emitAll = true
-		}
-	case tree.IntersectOp:
-	case tree.ExceptOp:
+	case tree.UnionOp, tree.IntersectOp, tree.ExceptOp:
 	default:
 		return nil, errors.Errorf("%v is not supported", typ)
 	}
+	resultCols, err := getSetOpResultColumns(typ, planColumns(left), planColumns(right))
+	if err != nil {
+		return nil, err
+	}
 
-	leftColumns := planColumns(left)
-	rightColumns := planColumns(right)
+	node := &unionNode{
+		right:   right,
+		left:    left,
+		columns: resultCols,
+		setOpPlanningInfo: setOpPlanningInfo{
+			unionType:         typ,
+			all:               all,
+			leftOrdering:      leftOrdering,
+			rightOrdering:     rightOrdering,
+			streamingOrdering: streamingOrdering,
+			reqOrdering:       reqOrdering,
+			hardLimit:         hardLimit,
+			enforceHomeRegion: enforceHomeRegion,
+		},
+	}
+	return node, nil
+}
+
+func getSetOpResultColumns(
+	typ tree.UnionType, leftColumns, rightColumns colinfo.ResultColumns,
+) (colinfo.ResultColumns, error) {
 	if len(leftColumns) != len(rightColumns) {
 		return nil, pgerror.Newf(
 			pgcode.Syntax,
@@ -143,32 +134,7 @@ func (p *planner) newUnionNode(
 			unionColumns[i].Typ = r.Typ
 		}
 	}
-
-	inverted := false
-	if typ != tree.ExceptOp {
-		// The logic below reads the rows from the right operand first,
-		// because for EXCEPT in particular this is what we need to match.
-		// However for the other operators (UNION, INTERSECT) it is
-		// actually confusing to see the right values come up first in the
-		// results. So invert this here, to reduce surprise by users.
-		left, right = right, left
-		inverted = true
-	}
-
-	node := &unionNode{
-		right:             right,
-		left:              left,
-		columns:           unionColumns,
-		inverted:          inverted,
-		emitAll:           emitAll,
-		unionType:         typ,
-		all:               all,
-		streamingOrdering: streamingOrdering,
-		reqOrdering:       reqOrdering,
-		hardLimit:         hardLimit,
-		enforceHomeRegion: enforceHomeRegion,
-	}
-	return node, nil
+	return unionColumns, nil
 }
 
 func (n *unionNode) startExec(params runParams) error {
