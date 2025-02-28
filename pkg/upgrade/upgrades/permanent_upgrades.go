@@ -67,7 +67,6 @@ func bootstrapCluster(
 		{"initialize the cluster.secret setting", initializeClusterSecret},
 		{"update system.locations with default location data", updateSystemLocationData},
 		{"create default databases", createDefaultDbs},
-		{"add default SQL schema telemetry schedule", ensureSQLSchemaTelemetrySchedule},
 		{"create jobs metrics polling job", createJobsMetricsPollingJob},
 		{"create sql activity updater job", createActivityUpdateJobMigration},
 		{"create mvcc stats job", createMVCCStatisticsJob},
