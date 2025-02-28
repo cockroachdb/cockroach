@@ -2238,6 +2238,18 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSy
 		asOf = s.Options.AsOf
 	case *tree.Explain:
 		return p.isAsOf(ctx, s.Statement)
+	case *tree.CreateTable:
+		if !s.As() {
+			return nil, nil
+		}
+		ts, err := p.isAsOf(ctx, s.AsSource)
+		if err != nil {
+			return nil, err
+		}
+		if ts != nil {
+			ts.ForBackfill = true
+		}
+		return ts, nil
 	default:
 		return nil, nil
 	}
