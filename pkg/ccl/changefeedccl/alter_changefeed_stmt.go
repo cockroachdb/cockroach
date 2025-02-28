@@ -750,6 +750,7 @@ func validateNewTargets(
 // no_initial_scan), and the current status of the job. If the progress does not
 // need to be updated, we will simply return the previous progress and statement
 // time that is passed into the function.
+// TODO(#140509): Update this function to work with the new span-level checkpoint.
 func generateNewProgress(
 	prevProgress jobspb.Progress,
 	prevStatementTime hlc.Timestamp,
@@ -765,8 +766,8 @@ func generateNewProgress(
 	}
 
 	haveHighwater := !(prevHighWater == nil || prevHighWater.IsEmpty())
-	haveCheckpoint := changefeedProgress != nil && changefeedProgress.Checkpoint != nil &&
-		len(changefeedProgress.Checkpoint.Spans) != 0
+	haveCheckpoint := changefeedProgress != nil &&
+		(!changefeedProgress.Checkpoint.IsEmpty() || !changefeedProgress.SpanLevelCheckpoint.IsEmpty())
 
 	// Check if the progress does not need to be updated. The progress does not
 	// need to be updated if:
@@ -846,6 +847,7 @@ func generateNewProgress(
 	return newProgress, prevStatementTime, nil
 }
 
+// TODO(#140509): Update this function to work with the new span-level checkpoint.
 func removeSpansFromProgress(prevProgress jobspb.Progress, spansToRemove []roachpb.Span) {
 	changefeedProgress := prevProgress.GetChangefeed()
 	if changefeedProgress == nil {

@@ -1226,6 +1226,8 @@ message ChangefeedProgress {
     option deprecated = true;
     repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
     util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+
+    // NOTE: When adding fields to this message, make sure to also update IsEmpty.
   }
 
   reserved 2;
@@ -1259,7 +1261,6 @@ message ChangefeedProgress {
   // checkpoint to its corresponding resolved timestamp, which will be higher
   // than the overall resolved timestamp and thus allow us to do less work.
   // This is especially useful during backfills or if some spans are lagging.
-  // TODO(#137692): Write to this field.
   TimestampSpansMap span_level_checkpoint = 5;
 }
 
