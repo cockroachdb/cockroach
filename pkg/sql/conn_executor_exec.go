@@ -2621,6 +2621,9 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 func (ex *connExecutor) rollbackSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
+	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
+		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
+
 	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnRollback); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
