@@ -64,7 +64,6 @@ func (c *CompareResult) generateSummaryData(
 			log.Printf("WARN: no comparison found for benchmark metric %q:%q", c.EntryName, metricName)
 			continue
 		}
-		threshold := c.Benchmark.Thresholds[metricName] * 100.0
 		status := statusTemplateFunc(c.status(metricName))
 		oldSum := benchmark.Summaries[string(Old)]
 		newSum := benchmark.Summaries[string(New)]
@@ -74,7 +73,6 @@ func (c *CompareResult) generateSummaryData(
 			NewCenter: fmt.Sprintf("%s ±%s", formatValue(newSum.Center, metricName), newSum.PctRangeString()),
 			Delta:     cc.FormattedDelta,
 			Note:      cc.Distribution.String(),
-			Threshold: fmt.Sprintf("%.1f%%", threshold),
 			Status:    status,
 		})
 	}
@@ -192,7 +190,7 @@ func (c CompareResults) writeGitHubSummary(path string) error {
 			if status > finalStatus {
 				finalStatus = status
 			}
-			if status == Regression {
+			if status == Regressed {
 				regressionDetected = true
 			}
 			return statusToDot(status)
@@ -227,7 +225,7 @@ func (c CompareResults) writeGitHubSummary(path string) error {
 }
 
 func statusToDot(status Status) string {
-	return string([]rune("⚪🟢🟡🔴")[status])
+	return string([]rune("⚪🟢🔴")[status])
 }
 
 // formatValue formats a value according to the unit of the metric.
