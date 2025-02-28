@@ -7,6 +7,7 @@ package mma
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -19,8 +20,6 @@ import (
 )
 
 // TODO: tests for
-// - localityTierInterner
-// - localityTiers.diversityScore
 // - rangeAnalyzedConstraints initialization: pool and release; stateForInit, finishInit
 // - rangeAnalyzedConstraints read-only functions.
 
@@ -257,6 +256,13 @@ func parseReplicaType(val string) (roachpb.ReplicaType, error) {
 	return roachpb.ReplicaType(typ), nil
 }
 
+func leasePrefIndexStr(index int32) string {
+	if index == math.MaxInt32 {
+		return "none"
+	}
+	return fmt.Sprintf("%d", index)
+}
+
 func printRangeAnalyzedConstraints(
 	b *strings.Builder, rac *rangeAnalyzedConstraints, lti *localityTierInterner,
 ) {
@@ -298,6 +304,15 @@ func printRangeAnalyzedConstraints(
 	if !rac.voterConstraints.isEmpty() {
 		printAnalyzedConstraints("voter-constraints:", rac.voterConstraints)
 	}
+
+	fmt.Fprintf(b, "leaseholder pref-index s%d:%s\n", rac.leaseholderID,
+		leasePrefIndexStr(rac.leaseholderPreferenceIndex))
+	fmt.Fprintf(b, "lease pref-indices:")
+	for i := range rac.leasePreferenceIndices {
+		fmt.Fprintf(b, " s%d:%s",
+			rac.replicas[voterIndex][i].StoreID, leasePrefIndexStr(rac.leasePreferenceIndices[i]))
+	}
+	fmt.Fprintf(b, "\n")
 	fmt.Fprintf(b, "diversity: voter %f, all %f",
 		rac.votersDiversityScore, rac.replicasDiversityScore)
 }
@@ -373,6 +388,8 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 			case "analyze-constraints":
 				var configName string
 				d.ScanArgs(t, "config-name", &configName)
+				var leaseholder int
+				d.ScanArgs(t, "leaseholder", &leaseholder)
 				nConf := configs[configName]
 				rac := rangeAnalyzedConstraintsPool.Get().(*rangeAnalyzedConstraints)
 				buf := rac.stateForInit()
@@ -400,7 +417,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 					buf.tryAddingStore(roachpb.StoreID(storeID), typ,
 						ltInterner.intern(stores[roachpb.StoreID(storeID)].Locality()))
 				}
-				rac.finishInit(nConf, cm)
+				rac.finishInit(nConf, cm, roachpb.StoreID(leaseholder))
 				var b strings.Builder
 				printRangeAnalyzedConstraints(&b, rac, ltInterner)
 				// If there is a previous rangeAnalyzedConstraints, release it before
@@ -410,6 +427,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 				}
 				lastRangeAnalyzedConstraints = rac
 				return b.String()
+
 			case "candidates":
 				if lastRangeAnalyzedConstraints == nil {
 					return "error: cannot evaluate nil analyzed constraints"
@@ -484,7 +502,16 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 						}
 					}
 				}
+				cands, leaseholderPrefIndex := rac.candidatesToMoveLease()
+				fmt.Fprintf(&buf, "toMoveLease\n")
+				fmt.Fprintf(&buf, "  leaseholder-pref-index: %s cands:",
+					leasePrefIndexStr(leaseholderPrefIndex))
+				for _, c := range cands {
+					fmt.Fprintf(&buf, " s%d:%s", c.storeID, leasePrefIndexStr(c.leasePreferenceIndex))
+				}
+				fmt.Fprintf(&buf, "\n")
 				return buf.String()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
