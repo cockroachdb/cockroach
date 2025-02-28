@@ -8,7 +8,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"os"
 	"path"
 
@@ -31,9 +30,8 @@ type (
 
 const (
 	NoChange Status = iota
-	Better
-	Worse
-	Regression
+	Improved
+	Regressed
 )
 
 // status returns the status of a metric in the comparison.
@@ -47,14 +45,10 @@ func (c *CompareResult) status(metricName string) Status {
 		return NoChange
 	}
 	status := NoChange
-	threshold := c.Benchmark.Thresholds[metricName] * 100.0
 	if cc.Delta*float64(entry.Better) > 0 {
-		status = Better
+		status = Improved
 	} else if cc.Delta*float64(entry.Better) < 0 {
-		status = Worse
-		if math.Abs(cc.Delta) >= threshold {
-			status = Regression
-		}
+		status = Regressed
 	}
 	return status
 }
@@ -63,7 +57,7 @@ func (c *CompareResult) status(metricName string) Status {
 func (c *CompareResult) regressed() bool {
 	for metric := range c.MetricMap {
 		status := c.status(metric)
-		if status == Regression {
+		if status == Regressed {
 			return true
 		}
 	}

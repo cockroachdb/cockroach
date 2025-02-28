@@ -6,10 +6,9 @@ benchmarks:
     runner_group: 1
     count: 10
     iterations: 3000
-    thresholds:
-      "sec/op": .03
-      "B/op": .02
-      "allocs/op": .02
+    metrics:
+      - "sec/op"
+      - "allocs/op"
 
   - display_name: Sysbench
     labels: ["KV", "1node", "local", "oltp_read_only"]
@@ -18,10 +17,9 @@ benchmarks:
     runner_group: 2
     count: 10
     iterations: 12000
-    thresholds:
-      "sec/op": .02
-      "B/op": .015
-      "allocs/op": .015
+    metrics:
+      - "sec/op"
+      - "allocs/op"
 
   - display_name: Sysbench
     labels: ["KV", "1node", "local", "oltp_write_only"]
@@ -30,7 +28,6 @@ benchmarks:
     runner_group: 2
     count: 10
     iterations: 12000
-    thresholds:
-      "sec/op": .025
-      "B/op": .0175
-      "allocs/op": .0175
+    metrics:
+      - "sec/op"
+      - "allocs/op"
