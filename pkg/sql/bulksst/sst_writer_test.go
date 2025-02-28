@@ -66,8 +66,8 @@ func TestBulkSSTWriter(t *testing.T) {
 		currFileMax := -1
 		values := readKeyValuesFromSST(t, fs, sstInfo.URI)
 		// Validate the span of the SST file.
-		require.Equal(t, sstInfo.StartKey, string(values[0].Key.Key))
-		require.Equal(t, sstInfo.EndKey, string(values[len(values)-1].Key.Key))
+		require.Equal(t, sstInfo.StartKey, values[0].Key.Key)
+		require.Equal(t, sstInfo.EndKey, values[len(values)-1].Key.Key)
 		for _, value := range values {
 			keyString := string(value.Key.Key)
 			var num int
@@ -84,8 +84,8 @@ func TestBulkSSTWriter(t *testing.T) {
 		}
 		// Validate the row sample is within the span of the SST file.
 		fileSpan := roachpb.Span{
-			Key:    roachpb.Key(sstInfo.StartKey),
-			EndKey: roachpb.Key(sstInfo.EndKey).Next(),
+			Key:    sstInfo.StartKey,
+			EndKey: sstInfo.EndKey.Next(),
 		}
 		require.True(t, fileSpan.ContainsKey(roachpb.Key(sstFiles.RowSamples[idx])),
 			"row sample key should be within the span of the SST files span: %v, row sample: %v", fileSpan, sstFiles.RowSamples[idx])

@@ -21,7 +21,9 @@ go_library(
         "//pkg/ccl/storageccl",
         "//pkg/roachpb",
         "//pkg/security/username",
+        "//pkg/settings",
         "//pkg/sql",
+        "//pkg/sql/bulksst",
         "//pkg/sql/bulkutil",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/execinfra",
@@ -36,7 +38,6 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/taskset",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
     ],
 )
 
@@ -49,6 +50,7 @@ go_test(
     embed = [":bulkmerge"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/storageccl",
         "//pkg/cloud",
         "//pkg/cloud/externalconn/providers",
         "//pkg/kv/kvclient/kvtenant",
@@ -59,6 +61,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/bulksst",
+        "//pkg/sql/bulkutil",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/tree",
         "//pkg/storage",
