@@ -408,6 +408,7 @@ func (r Replica) Load(
 	if ls.LastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
 		return LoadedReplicaState{}, err
 	}
+	//read term
 	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, eng); err != nil {
 		return LoadedReplicaState{}, err
 	}

@@ -82,7 +82,7 @@ func (r *replicaLogStorage) entriesLocked(
 		r.AnnotateCtx(context.TODO()),
 		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
-		&r.raftMu.bytesAccount,
+		&r.raftMu.bytesAccount, r.raftMu.logStorage.TermCache,
 	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return entries, err
@@ -118,7 +118,8 @@ func (r *replicaLogStorage) termLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) 
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
 		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
+		r.store.raftEntryCache, i, r.raftMu.logStorage.TermCache,
+		r.raftMu.logStorage.Metrics,
 	)
 }
 
@@ -227,7 +228,7 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 		r.AnnotateCtx(context.TODO()),
 		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
-		&r.raftMu.bytesAccount,
+		&r.raftMu.bytesAccount, r.raftMu.logStorage.TermCache,
 	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return entries, err
@@ -253,7 +254,8 @@ func (r *replicaRaftMuLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
 		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
+		r.store.raftEntryCache, i, r.raftMu.logStorage.TermCache,
+		r.raftMu.logStorage.Metrics,
 	)
 }
 

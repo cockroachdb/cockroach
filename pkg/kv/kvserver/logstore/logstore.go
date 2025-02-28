@@ -172,7 +172,10 @@ type AppendStats struct {
 
 // Metrics contains metrics specific to the log storage.
 type Metrics struct {
-	RaftLogCommitLatency metric.IHistogram
+	RaftLogCommitLatency       metric.IHistogram
+	LoadTermFromStorageLatency metric.IHistogram
+	TermCacheAccesses          *metric.Counter
+	TermCacheHits              *metric.Counter
 }
 
 // LogStore is a stub of a separated Raft log storage.
@@ -185,6 +188,9 @@ type LogStore struct {
 	EntryCache  *raftentry.Cache
 	Settings    *cluster.Settings
 	Metrics     Metrics
+
+	// p4 termCache
+	TermCache *raft.TermCache
 
 	DisableSyncLogWriteToss bool // for testing only
 }
@@ -392,6 +398,9 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// to be durable and a stable portion for entries that are known to be
 	// durable.
 	s.EntryCache.Add(s.RangeID, m.Entries, true /* truncate */)
+	// lock Replica.mu here
+	_ = s.TermCache.ScanAppend(m.Entries, true /* truncate */)
+	// unlock it
 
 	return state, nil
 }
@@ -618,14 +627,31 @@ func LoadTerm(
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	index kvpb.RaftIndex,
+	tc *raft.TermCache,
+	metrics Metrics,
 ) (kvpb.RaftTerm, error) {
+	metrics.TermCacheAccesses.Inc(1)
+	term, err := tc.Term(uint64(index))
+	if err == nil {
+		// found
+		metrics.TermCacheHits.Inc(1)
+		return kvpb.RaftTerm(term), nil
+	}
+
+	start := crtime.NowMono()
+	eCache.Metric.LoadTermAccesses.Inc(1)
 	entry, found := eCache.Get(rangeID, index)
 	if found {
+		eCache.Metric.LoadTermHits.Inc(1)
 		return kvpb.RaftTerm(entry.Term), nil
 	}
 
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
+
+	defer func() {
+		metrics.LoadTermFromStorageLatency.RecordValue(start.Elapsed().Nanoseconds())
+	}()
 
 	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {
@@ -653,6 +679,7 @@ func LoadTerm(
 		}
 		if !typ.IsSideloaded() {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
+			// _ = tc.ScanAppend([]raftpb.Entry{entry}, false /* truncate */)
 		}
 		return kvpb.RaftTerm(entry.Term), nil
 	}
@@ -697,6 +724,7 @@ func LoadEntries(
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
 	account *BytesAccount,
+	tc *raft.TermCache,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -772,6 +800,7 @@ func LoadEntries(
 		return nil, 0, 0, err
 	}
 	eCache.Add(rangeID, ents, false /* truncate */)
+	// _ = tc.ScanAppend(ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
 	// Did we hit the size limits? If so, return what we have.

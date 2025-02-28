@@ -84,6 +84,8 @@ const (
 	replicaChangeTxnUpdateDescOpName = "change-replica-update-desc"
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
+
+	TermCacheSize = 10
 )
 
 // StrictGCEnforcement controls whether requests are rejected based on the GC
