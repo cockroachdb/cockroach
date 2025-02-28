@@ -524,7 +524,9 @@ func (cs *clusterState) pendingChangesRejected(
 	// TODO(sumeer):
 }
 
-func (cs *clusterState) addPendingChanges(rangeID roachpb.RangeID, changes []pendingReplicaChange) {
+func (cs *clusterState) addPendingChanges(
+	rangeID roachpb.RangeID, changes []*pendingReplicaChange,
+) {
 	// TODO(sumeer):
 }
 
@@ -567,18 +569,30 @@ func (cs *clusterState) computeLoadSummary(
 	ss := cs.stores[storeID]
 	ns := cs.nodes[ss.NodeID]
 	sls := loadLow
+	var highDiskSpaceUtil bool
+	var cpuSummary loadSummary
 	for i := range msl.load {
 		ls := loadSummaryForDimension(ss.adjusted.load[i], ss.capacity[i], msl.load[i], msl.util[i])
 		if ls < sls {
 			sls = ls
 		}
+		switch loadDimension(i) {
+		case byteSize:
+			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
+		case cpu:
+			cpuSummary = ls
+		}
+
 	}
 	nls := loadSummaryForDimension(ns.adjustedCPU, ns.capacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
-		sls:        sls,
-		nls:        nls,
-		fd:         ns.fdSummary,
-		loadSeqNum: ss.loadSeqNum,
+		sls:                      sls,
+		nls:                      nls,
+		storeCPUSummary:          cpuSummary,
+		highDiskSpaceUtilization: highDiskSpaceUtil,
+		fd:                       ns.fdSummary,
+		maxFractionPending:       ss.maxFractionPending,
+		loadSeqNum:               ss.loadSeqNum,
 	}
 }
 

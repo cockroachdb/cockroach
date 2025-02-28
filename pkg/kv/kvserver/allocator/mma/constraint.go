@@ -766,9 +766,22 @@ type rangeAnalyzedConstraints struct {
 	replicas          [numReplicaKinds][]storeAndLocality
 	constraints       analyzedConstraints
 	voterConstraints  analyzedConstraints
+	// TODO(sumeer): add unit test for these.
+	replicaLocalityTiers replicasLocalityTiers
+	voterLocalityTiers   replicasLocalityTiers
+
+	// leasePreferenceIndices[i] is the index of the earliest entry in
+	// normalizedSpanConfig.leasePreferences, matched by the replica at
+	// replicas[voterIndex][i]. If the replica does not match any lease
+	// preference, this is set to math.MaxInt32.
+	leasePreferenceIndices     []int32
+	leaseholderID              roachpb.StoreID
+	leaseholderPreferenceIndex int32
 
 	votersDiversityScore   float64
 	replicasDiversityScore float64
+	// TODO: need []localityTiers for voters and all replicas so can call into
+	// diversityScoringMemo.
 
 	buf analyzeConstraintsBuf
 }
@@ -779,6 +792,10 @@ var rangeAnalyzedConstraintsPool = sync.Pool{
 	},
 }
 
+func newRangeAnalyzedConstraints() *rangeAnalyzedConstraints {
+	return rangeAnalyzedConstraintsPool.Get().(*rangeAnalyzedConstraints)
+}
+
 func releaseRangeAnalyzedConstraints(rac *rangeAnalyzedConstraints) {
 	rac.constraints.clear()
 	rac.voterConstraints.clear()
@@ -786,6 +803,7 @@ func releaseRangeAnalyzedConstraints(rac *rangeAnalyzedConstraints) {
 	for i := range rac.replicas {
 		rac.replicas[i] = rac.replicas[i][:0]
 	}
+	rac.leasePreferenceIndices = rac.leasePreferenceIndices[:0]
 	*rac = rangeAnalyzedConstraints{
 		replicas:         rac.replicas,
 		constraints:      rac.constraints,
@@ -812,7 +830,9 @@ type storeMatchesConstraintInterface interface {
 }
 
 func (rac *rangeAnalyzedConstraints) finishInit(
-	spanConfig *normalizedSpanConfig, constraintMatcher storeMatchesConstraintInterface,
+	spanConfig *normalizedSpanConfig,
+	constraintMatcher storeMatchesConstraintInterface,
+	leaseholder roachpb.StoreID,
 ) {
 	rac.numNeededReplicas[voterIndex] = spanConfig.numVoters
 	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
@@ -915,6 +935,49 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 		analyzeFunc(&rac.voterConstraints)
 	}
 
+	rac.leaseholderID = leaseholder
+	rac.leaseholderPreferenceIndex = -1
+	matchLeasePreferenceFunc := func(storeID roachpb.StoreID) int32 {
+		for j := range spanConfig.leasePreferences {
+			if constraintMatcher.storeMatches(storeID, spanConfig.leasePreferences[j].constraints) {
+				return int32(j)
+			}
+		}
+		return math.MaxInt32
+	}
+	for i := range rac.replicas[voterIndex] {
+		storeID := rac.replicas[voterIndex][i].StoreID
+		leasePreferenceIndex := matchLeasePreferenceFunc(storeID)
+		rac.leasePreferenceIndices = append(rac.leasePreferenceIndices, leasePreferenceIndex)
+		if storeID == leaseholder {
+			rac.leaseholderPreferenceIndex = leasePreferenceIndex
+		}
+	}
+	if rac.leaseholderPreferenceIndex == -1 {
+		// Must be a VOTER_DEMOTING_NON_VOTER, which we count as a non-voter.
+		for i := range rac.replicas[nonVoterIndex] {
+			storeID := rac.replicas[nonVoterIndex][i].StoreID
+			if storeID == leaseholder {
+				rac.leaseholderPreferenceIndex = matchLeasePreferenceFunc(storeID)
+				break
+			}
+		}
+		if rac.leaseholderPreferenceIndex == -1 {
+			panic("leaseholder not found in replicas")
+		}
+	}
+
+	var replicaLocalityTiers, voterLocalityTiers []localityTiers
+	for i := range rac.replicas[voterIndex] {
+		replicaLocalityTiers = append(replicaLocalityTiers, rac.replicas[voterIndex][i].localityTiers)
+		voterLocalityTiers = append(voterLocalityTiers, rac.replicas[voterIndex][i].localityTiers)
+	}
+	for i := range rac.replicas[nonVoterIndex] {
+		replicaLocalityTiers = append(replicaLocalityTiers, rac.replicas[nonVoterIndex][i].localityTiers)
+	}
+	rac.replicaLocalityTiers = makeReplicasLocalityTiers(replicaLocalityTiers)
+	rac.voterLocalityTiers = makeReplicasLocalityTiers(voterLocalityTiers)
+
 	diversityFunc := func(
 		stores1 []storeAndLocality, stores2 []storeAndLocality, sameStores bool,
 	) (sumScore float64, numSamples int) {
@@ -995,6 +1058,22 @@ func (cd constraintsDisj) isEqual(b mapKey) bool {
 }
 
 var _ mapKey = constraintsDisj{}
+
+func (rac *rangeAnalyzedConstraints) replicaRole(
+	storeID roachpb.StoreID,
+) (isVoter bool, isNonVoter bool) {
+	for _, s := range rac.replicas[voterIndex] {
+		if s.StoreID == storeID {
+			return true, false
+		}
+	}
+	for _, s := range rac.replicas[nonVoterIndex] {
+		if s.StoreID == storeID {
+			return false, true
+		}
+	}
+	return false, false
+}
 
 // Usage for a range that may need attention:
 //
@@ -1612,6 +1691,39 @@ func (rac *rangeAnalyzedConstraints) candidatesToReplaceNonVoterForRebalance(
 		errors.Errorf("expected replaced store %d to match a constraint", toReplace)
 }
 
+type storeAndLeasePreference struct {
+	// Smaller is better.
+	leasePreferenceIndex int32
+	storeID              roachpb.StoreID
+}
+
+// candidatesToMoveLease will return candidates equal to or better than the
+// current leaseholder wrt satisfaction of lease preferences. The candidates
+// exclude the current leaseholder, and are sorted in non-increasing order of
+// lease preference satisfaction.
+//
+// TODO(sumeer): the computation in this method can be performed once, when
+// constructing rangeAnalyzedConstraints.
+func (rac *rangeAnalyzedConstraints) candidatesToMoveLease() (
+	cands []storeAndLeasePreference,
+	curLeasePreferenceIndex int32,
+) {
+	curLeasePreferenceIndex = rac.leaseholderPreferenceIndex
+	for i := range rac.leasePreferenceIndices {
+		if rac.leasePreferenceIndices[i] <= curLeasePreferenceIndex &&
+			rac.replicas[voterIndex][i].StoreID != rac.leaseholderID {
+			cands = append(cands, storeAndLeasePreference{
+				leasePreferenceIndex: rac.leasePreferenceIndices[i],
+				storeID:              rac.replicas[voterIndex][i].StoreID,
+			})
+		}
+	}
+	slices.SortFunc(cands, func(a, b storeAndLeasePreference) int {
+		return cmp.Compare(a.leasePreferenceIndex, b.leasePreferenceIndex)
+	})
+	return cands, curLeasePreferenceIndex
+}
+
 // Helper for constructing rangeAnalyzedConstraints. Contains initial state
 // and intermediate scratch space needed for computing
 // rangeAnalyzedConstraints.
@@ -1651,6 +1763,13 @@ func (acb *analyzeConstraintsBuf) clear() {
 func (acb *analyzeConstraintsBuf) tryAddingStore(
 	storeID roachpb.StoreID, replicaType roachpb.ReplicaType, locality localityTiers,
 ) {
+	// We ae ignoring LEARNER and VOTER_DEMOTING_LEARNER, since these are
+	// in the process of going away.
+	//
+	// TODO(sumeer): if we are in a joint config with VOTER_DEMOTING_LEARNER,
+	// and ignore it here, we may propose another change. Will that happen after
+	// exiting from the joint config, or can that race ahead and confuse the
+	// joint config situation?
 	switch replicaType {
 	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING:
 		acb.replicas[voterIndex] = append(
