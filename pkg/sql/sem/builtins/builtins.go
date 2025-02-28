@@ -7072,6 +7072,27 @@ Parameters:` + randgencfg.ConfigDoc,
 			Info:       "Checks if given sqlliveness session id is not expired",
 			Volatility: volatility.Stable,
 		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "session_id", Typ: types.Bytes},
+				{Name: "is_sync", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sid := sqlliveness.SessionID(*(args[0].(*tree.DBytes)))
+				reader := evalCtx.SQLLivenessReader
+				if tree.MustBeDBool(args[1]) {
+					reader = evalCtx.BlockingSQLLivenessReader
+				}
+				live, err := reader.IsAlive(ctx, sid)
+				if err != nil {
+					return tree.MakeDBool(true), err
+				}
+				return tree.MakeDBool(tree.DBool(live)), nil
+			},
+			Info:       "Checks if given sqlliveness session id is not expired (sync if is_sync is specified)",
+			Volatility: volatility.Stable,
+		},
 	),
 
 	// Used to configure the tenant token bucket. See UpdateTenantResourceLimits.

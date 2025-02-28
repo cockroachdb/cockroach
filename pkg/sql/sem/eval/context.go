@@ -207,6 +207,11 @@ type Context struct {
 
 	SQLLivenessReader sqlliveness.Reader
 
+	// BlockingSQLLivenessReader is a sqlliveness.Reader that synchronously
+	// blocks to determine the status of a session which it does not know about or
+	// thinks might be expired.
+	BlockingSQLLivenessReader sqlliveness.Reader
+
 	SQLStatsController SQLStatsController
 
 	SchemaTelemetryController SchemaTelemetryController

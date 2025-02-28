@@ -2644,6 +2644,7 @@ var builtinOidsArray = []string{
 	2681: `varchar(jsonpath: jsonpath) -> varchar`,
 	2682: `char(jsonpath: jsonpath) -> "char"`,
 	2683: `substring_index(input: string, delim: string, count: int) -> string`,
+	2684: `crdb_internal.sql_liveness_is_alive(session_id: bytes, is_sync: bool) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
