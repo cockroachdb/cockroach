@@ -32,6 +32,18 @@ var (
 		Measurement: "Hits",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLoadTermAccesses = metric.Metadata{
+		Name:        "raft.loadterm.accesses",
+		Help:        "Number of cache lookups in the Raft entry cache for entry term",
+		Measurement: "LoadTermAccesses",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLoadTermHits = metric.Metadata{
+		Name:        "raft.loadterm.hits",
+		Help:        "Number of successful cache lookups in the Raft entry cache for entry term",
+		Measurement: "LoadTermHits",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaEntryCacheReadBytes = metric.Metadata{
 		Name:        "raft.entrycache.read_bytes",
 		Help:        "Counter of bytes in entries returned from the Raft entry cache",
@@ -44,19 +56,23 @@ var (
 type Metrics struct {
 	// NB: the values in the gauges are updated asynchronously and may hold stale
 	// values in the face of concurrent updates.
-	Size      *metric.Gauge
-	Bytes     *metric.Gauge
-	Accesses  *metric.Counter
-	Hits      *metric.Counter
-	ReadBytes *metric.Counter
+	Size             *metric.Gauge
+	Bytes            *metric.Gauge
+	Accesses         *metric.Counter
+	Hits             *metric.Counter
+	LoadTermAccesses *metric.Counter
+	LoadTermHits     *metric.Counter
+	ReadBytes        *metric.Counter
 }
 
 func makeMetrics() Metrics {
 	return Metrics{
-		Size:      metric.NewGauge(metaEntryCacheSize),
-		Bytes:     metric.NewGauge(metaEntryCacheBytes),
-		Accesses:  metric.NewCounter(metaEntryCacheAccesses),
-		Hits:      metric.NewCounter(metaEntryCacheHits),
-		ReadBytes: metric.NewCounter(metaEntryCacheReadBytes),
+		Size:             metric.NewGauge(metaEntryCacheSize),
+		Bytes:            metric.NewGauge(metaEntryCacheBytes),
+		Accesses:         metric.NewCounter(metaEntryCacheAccesses),
+		Hits:             metric.NewCounter(metaEntryCacheHits),
+		LoadTermAccesses: metric.NewCounter(metaLoadTermAccesses),
+		LoadTermHits:     metric.NewCounter(metaLoadTermHits),
+		ReadBytes:        metric.NewCounter(metaEntryCacheReadBytes),
 	}
 }

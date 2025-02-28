@@ -172,7 +172,10 @@ type AppendStats struct {
 
 // Metrics contains metrics specific to the log storage.
 type Metrics struct {
-	RaftLogCommitLatency metric.IHistogram
+	RaftLogCommitLatency       metric.IHistogram
+	LoadTermFromStorageLatency metric.IHistogram
+	TermCacheAccesses          *metric.Counter
+	TermCacheHits              *metric.Counter
 }
 
 // LogStore is a stub of a separated Raft log storage.
@@ -185,6 +188,9 @@ type LogStore struct {
 	EntryCache  *raftentry.Cache
 	Settings    *cluster.Settings
 	Metrics     Metrics
+
+	// p4 termCache
+	TermCache *raft.TermCache
 
 	DisableSyncLogWriteToss bool // for testing only
 }
@@ -380,8 +386,8 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		}
 	}
 
-	// Update raft log entry cache. We clear any older, uncommitted log entries
-	// and cache the latest ones.
+	// Update both the term cache and raft log entry cache.
+	// We clear any older, uncommitted log entries and cache the latest ones.
 	//
 	// In the blocking log sync case, these entries are already durable. In the
 	// non-blocking case, these entries have been written to the pebble engine (so
@@ -391,6 +397,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// splitting its log into an unstable portion for entries that are not known
 	// to be durable and a stable portion for entries that are known to be
 	// durable.
+	s.TermCache.ScanAppend(ctx, m.Entries)
 	s.EntryCache.Add(s.RangeID, m.Entries, true /* truncate */)
 
 	return state, nil
@@ -601,6 +608,15 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 
 // LoadTerm returns the term of the entry at the given index for the specified
 // range. The result is loaded from the storage engine if it's not in the cache.
+//
+// There are 3 cases for when the term is not found: (1) the index has been
+// compacted away, (2) the index is higher than LastIndex, or (3) there is a gap
+// in the log. In the first case, we return ErrCompacted, and ErrUnavailable
+// otherwise. Most callers never try to read indices above LastIndex, so an
+// error means (3) which is a serious issue. But if the caller is unsure, they
+// can check the LastIndex to distinguish.
+//
+// TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
 func LoadTerm(
 	ctx context.Context,
 	rsl StateLoader,
@@ -608,14 +624,31 @@ func LoadTerm(
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	index kvpb.RaftIndex,
+	tc *raft.TermCache,
+	metrics Metrics,
 ) (kvpb.RaftTerm, error) {
+	metrics.TermCacheAccesses.Inc(1)
+	term, err := tc.Term(uint64(index))
+	if err == nil {
+		// found
+		metrics.TermCacheHits.Inc(1)
+		return kvpb.RaftTerm(term), nil
+	}
+
+	start := crtime.NowMono()
+	eCache.Metric.LoadTermAccesses.Inc(1)
 	entry, found := eCache.Get(rangeID, index)
 	if found {
+		eCache.Metric.LoadTermHits.Inc(1)
 		return kvpb.RaftTerm(entry.Term), nil
 	}
 
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
+
+	defer func() {
+		metrics.LoadTermFromStorageLatency.RecordValue(start.Elapsed().Nanoseconds())
+	}()
 
 	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {
@@ -643,37 +676,36 @@ func LoadTerm(
 		}
 		if !typ.IsSideloaded() {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
+			// _ = tc.ScanAppend([]raftpb.Entry{entry}, false /* truncate */)
 		}
 		return kvpb.RaftTerm(entry.Term), nil
 	}
-	// Otherwise, the entry at the given index is not found. This can happen if
-	// the index is ahead of lastIndex, or it has been compacted away.
 
-	lastIndex, err := rsl.LoadLastIndex(ctx, reader)
-	if err != nil {
-		return 0, err
-	}
-	if index > lastIndex {
-		return 0, raft.ErrUnavailable
-	}
-
+	// Otherwise, the entry at the given index is not found. See the function
+	// comment for how this case is handled.
 	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return 0, err
-	}
-	if index == ts.Index {
+	} else if index == ts.Index {
 		return ts.Term, nil
+	} else if index < ts.Index {
+		return 0, raft.ErrCompacted
 	}
-	if index > ts.Index {
-		return 0, errors.Errorf("there is a gap at index %d", index)
-	}
-	return 0, raft.ErrCompacted
+	return 0, raft.ErrUnavailable
 }
 
 // LoadEntries retrieves entries from the engine. It inlines the sideloaded
 // entries, and caches all the loaded entries. The size of the returned entries
 // does not exceed maxSize, unless only one entry is returned.
 //
+// There are 3 cases for when an entry is not found: (1) the lo index has been
+// compacted away, (2) the hi index is higher than LastIndex, or (3) there is a
+// gap in the log. In the first case, we return ErrCompacted, and ErrUnavailable
+// otherwise. Most callers never try to read indices above LastIndex, so an
+// error means (3) which is a serious issue. But if the caller is unsure, they
+// can check the LastIndex to distinguish.
+//
+// TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
 // TODO(pavelkalinnikov): return all entries we've read, consider maxSize a
 // target size. Currently we may read one extra entry and drop it.
 func LoadEntries(
@@ -686,6 +718,7 @@ func LoadEntries(
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
 	account *BytesAccount,
+	tc *raft.TermCache,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -761,6 +794,7 @@ func LoadEntries(
 		return nil, 0, 0, err
 	}
 	eCache.Add(rangeID, ents, false /* truncate */)
+	// _ = tc.ScanAppend(ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
 	// Did we hit the size limits? If so, return what we have.
@@ -768,30 +802,15 @@ func LoadEntries(
 		return ents, cachedSize, sh.bytes - cachedSize, nil
 	}
 
-	// Did we get any results at all? Because something went wrong.
-	if len(ents) > 0 {
-		// Was the missing index after the last index?
-		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		if lastIndex <= expectedIndex {
-			return nil, 0, 0, raft.ErrUnavailable
-		}
-
-		// We have a gap in the record, if so, return a nasty error.
-		return nil, 0, 0, errors.Errorf("there is a gap in the index record between lo:%d and hi:%d at index:%d", lo, hi, expectedIndex)
-	}
-
-	// No results, was it due to unavailability or truncation?
+	// Something went wrong, and we could not load enough entries.
 	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return nil, 0, 0, err
-	}
-	if ts.Index >= lo {
+	} else if lo <= ts.Index {
 		// The requested lo index has already been truncated.
 		return nil, 0, 0, raft.ErrCompacted
 	}
-	// The requested lo index does not yet exist.
+	// We either have a gap in the log, or hi > LastIndex. Let the caller
+	// distinguish if they need to.
 	return nil, 0, 0, raft.ErrUnavailable
 }

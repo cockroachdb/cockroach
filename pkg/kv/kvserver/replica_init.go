@@ -217,8 +217,12 @@ func newUninitializedReplicaWithoutRaftGroup(
 		SyncWaiter: store.syncWaiters[int(rangeID)%len(store.syncWaiters)],
 		EntryCache: store.raftEntryCache,
 		Settings:   store.cfg.Settings,
+		TermCache:  raft.NewTermCache(TermCacheSize),
 		Metrics: logstore.Metrics{
-			RaftLogCommitLatency: store.metrics.RaftLogCommitLatency,
+			RaftLogCommitLatency:       store.metrics.RaftLogCommitLatency,
+			LoadTermFromStorageLatency: store.metrics.LoadTermFromStorageLatency,
+			TermCacheAccesses:          store.metrics.TermCacheAccesses,
+			TermCacheHits:              store.metrics.TermCacheHits,
 		},
 		DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
 			store.TestingKnobs().DisableSyncLogWriteToss,
@@ -309,8 +313,10 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 		r.flowControlV2.ForceFlushIndexChangedLocked(context.TODO(), r.shMu.state.ForceFlushIndex.Index)
 	}
 	r.shMu.raftTruncState = s.TruncState
-	r.shMu.lastIndexNotDurable = s.LastIndex
-	r.shMu.lastTermNotDurable = invalidLastTerm
+	r.shMu.lastIndexNotDurable = s.LastEntryID.Index
+	r.shMu.lastTermNotDurable = s.LastEntryID.Term
+
+	r.raftMu.logStorage.TermCache.ResetWithFirst(uint64(r.shMu.lastTermNotDurable), uint64(r.shMu.lastIndexNotDurable))
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.

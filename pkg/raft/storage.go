@@ -35,8 +35,10 @@ var ErrCompacted = errors.New("requested index is unavailable due to compaction"
 // TODO(pav-kv): this is used only in tests. Remove it.
 var ErrSnapOutOfDate = errors.New("requested index is older than the existing snapshot")
 
-// ErrUnavailable is returned by Storage interface when the requested log entries
-// are unavailable.
+// ErrUnavailable is returned by Storage interface when the requested log
+// entries are unavailable. Typically, this means that the index is higher than
+// LastIndex, but otherwise it means a gap in the log. The receiver of this
+// error can distinguish the two cases if necessary.
 var ErrUnavailable = errors.New("requested entry at index is unavailable")
 
 // LogStorage is a read-only API for the raft log.

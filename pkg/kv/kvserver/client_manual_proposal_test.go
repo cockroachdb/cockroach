@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -117,9 +118,12 @@ LIMIT
 	require.NoError(t, err)
 	defer it.Close()
 	rsl := logstore.NewStateLoader(rangeID)
-	lastIndex, err := rsl.LoadLastIndex(ctx, eng)
+	ts, err := rsl.LoadRaftTruncatedState(ctx, eng)
 	require.NoError(t, err)
-	t.Logf("loaded LastIndex: %d", lastIndex)
+	lastEntryID, err := rsl.LoadLastEntryID(ctx, eng, ts)
+	require.NoError(t, err)
+	t.Logf("loaded LastEntryID: %+v", lastEntryID)
+	lastIndex := lastEntryID.Index
 	ok, err := it.SeekGE(lastIndex)
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -228,6 +232,7 @@ LIMIT
 			SyncWaiter:  swl,
 			EntryCache:  raftentry.NewCache(1024),
 			Settings:    st,
+			TermCache:   raft.NewTermCache(kvserver.TermCacheSize),
 			Metrics: logstore.Metrics{
 				RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 					Mode:         metric.HistogramModePrometheus,

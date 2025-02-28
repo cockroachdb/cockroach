@@ -122,11 +122,11 @@ func NewEntryFromRawValue(b []byte) (*Entry, error) {
 	return e, nil
 }
 
-// raftEntryFromRawValue decodes a raft.Entry from a raw MVCC value.
+// RaftEntryFromRawValue decodes a raft.Entry from a raw MVCC value.
 //
 // Same as NewEntryFromRawValue, but doesn't decode the command and doesn't use
 // the pool of entries.
-func raftEntryFromRawValue(b []byte) (raftpb.Entry, error) {
+func RaftEntryFromRawValue(b []byte) (raftpb.Entry, error) {
 	var meta enginepb.MVCCMetadata
 	if err := protoutil.Unmarshal(b, &meta); err != nil {
 		return raftpb.Entry{}, errors.Wrap(err, "decoding raft log MVCCMetadata")
