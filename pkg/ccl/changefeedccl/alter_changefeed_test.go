@@ -1524,7 +1524,7 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
 			waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
-			expectPayloads := (initialScanOption == "initial_scan = 'yes'" || initialScanOption == "initial_scan")
+			expectPayloads := initialScanOption == "initial_scan = 'yes'" || initialScanOption == "initial_scan"
 			if expectPayloads {
 				assertPayloads(t, testFeed, []string{
 					`bar: [1]->{"after": {"a": 1}}`,
@@ -1543,8 +1543,10 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 	for _, initialScanOpt := range []string{
 		"initial_scan = 'yes'",
 		"initial_scan = 'no'",
+		"initial_scan = 'only'",
 		"initial_scan",
-		"no_initial_scan"} {
+		"no_initial_scan",
+	} {
 		cdcTest(t, testFn(initialScanOpt), feedTestForceSink("kafka"), feedTestNoExternalConnection)
 	}
 }
