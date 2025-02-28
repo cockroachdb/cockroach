@@ -2,17 +2,17 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-//
+
 // This file contains the proper logic of the public functions in the
 // goschedstats package. We only have access to the internal logic if we are
-// using a version of Go prior to 1.23, or are using our fork that has more
-// permissive logic for go:linkname.
+// using our fork which adds runtime.NumRunnableGoroutines().
 //
-//go:build bazel || (gc && !go1.23)
+//go:build bazel
 
 package goschedstats
 
 import (
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -36,13 +36,6 @@ import (
 func CumulativeNormalizedRunnableGoroutines() float64 {
 	return float64(atomic.LoadUint64(&total)) * fromFixedPoint
 }
-
-// If you get a compilation error here, the Go version you are using is not
-// supported by this package. Cross-check the structures in runtime_go1.18.go
-// against those in the new Go's runtime, and if they are still accurate adjust
-// the build tag in that file to accept the version. If they don't match, you
-// will have to add a new version of that file.
-var _ = numRunnableGoroutines
 
 // We sample the number of runnable goroutines once per samplePeriodShort or
 // samplePeriodLong (if the system is underloaded). Using samplePeriodLong can
@@ -178,7 +171,7 @@ func init() {
 		sst := schedStatsTicker{
 			lastTime:              timeutil.Now(),
 			curPeriod:             samplePeriodShort,
-			numRunnableGoroutines: numRunnableGoroutines,
+			numRunnableGoroutines: runtime.NumRunnableGoroutines,
 		}
 		ticker := time.NewTicker(sst.curPeriod)
 		for {
