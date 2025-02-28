@@ -13,6 +13,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
@@ -237,6 +238,25 @@ func ResolveDest(
 		URIsByLocalityKV: urisByLocalityKV,
 		PrevBackupURIs:   prevBackupURIs,
 	}, nil
+}
+
+// ResolveDestForCompaction resolves the destination for a compacted backup.
+// While the end time of this compacted backup matches the end time of
+// the last backup in the chain to compact, when resolving the
+// destination we need to adjust the end time to ensure that the backup
+// location doesn't clobber the last backup in the chain. We do this by
+// adding a small duration (large enough to change the backup path)
+// to the end time.
+func ResolveDestForCompaction(
+	ctx context.Context, execCtx sql.JobExecContext, details jobspb.BackupDetails,
+) (ResolvedDestination, error) {
+	return ResolveDest(
+		ctx,
+		execCtx.User(),
+		details.Destination,
+		details.EndTime.AddDuration(10*time.Millisecond),
+		execCtx.ExecCfg(),
+	)
 }
 
 // ReadLatestFile reads the LATEST file from collectionURI and returns the path
