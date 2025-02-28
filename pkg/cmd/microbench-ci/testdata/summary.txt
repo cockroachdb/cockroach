@@ -8,6 +8,7 @@ benchmarks:
     runner_group: 1
     count: 10
     iterations: 3000
+    compare_alpha: 0.05
     metrics:
       - "sec/op"
       - "allocs/op"
