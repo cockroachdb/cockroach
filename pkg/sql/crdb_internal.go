@@ -1116,7 +1116,7 @@ func populateSystemJobsTableRows(
 		getLegacyPayload := func(ctx context.Context) (*jobspb.Payload, error) {
 			return payload, nil
 		}
-		err = jobsauth.Authorize(
+		err = jobsauth.AuthorizeAllowLegacyAuth(
 			ctx, p, jobspb.JobID(jobID), getLegacyPayload, payload.UsernameProto.Decode(), payload.Type(), jobsauth.ViewAccess, globalPrivileges,
 		)
 		if err != nil {
@@ -1529,7 +1529,7 @@ LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
 				errorMsg = emptyString
 			}
 
-			if err := jobsauth.Authorize(
+			if err := jobsauth.AuthorizeAllowLegacyAuth(
 				ctx, p, jobID, getLegacyPayloadForAuth, owner, typ, jobsauth.ViewAccess, globalPrivileges,
 			); err != nil {
 				// Filter out jobs which the user is not allowed to see.

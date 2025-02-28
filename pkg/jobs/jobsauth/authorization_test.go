@@ -354,7 +354,7 @@ func TestAuthorization(t *testing.T) {
 			ctx := context.Background()
 			globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(ctx, testAuth)
 			assert.NoError(t, err)
-			err = jobsauth.Authorize(
+			err = jobsauth.AuthorizeAllowLegacyAuth(
 				ctx, testAuth, 0,
 				func(ctx context.Context) (*jobspb.Payload, error) { return tc.payload, nil },
 				tc.payload.UsernameProto.Decode(), tc.payload.Type(), tc.accessLevel, globalPrivileges,
