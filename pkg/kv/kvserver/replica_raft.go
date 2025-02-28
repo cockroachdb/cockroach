@@ -1536,19 +1536,25 @@ func (r *Replica) tick(
 	//
 	// This is likely unintentional, and the leader should likely consider itself
 	// live even when quiesced.
+	nowPhysicalTime := r.Clock().PhysicalTime()
 	if r.isRaftLeaderRLocked() {
-		r.mu.lastUpdateTimes.update(r.replicaID, r.Clock().PhysicalTime())
+		r.mu.lastUpdateTimes.update(r.replicaID, nowPhysicalTime)
 		// We also update lastUpdateTimes for replicas that provide store liveness
 		// support to the leader.
 		r.updateLastUpdateTimesUsingStoreLivenessRLocked(storeClockTimestamp)
 	}
 
 	r.mu.ticks++
-	preTickState := r.mu.internalRaftGroup.BasicStatus().RaftState
+	preTickStatus := r.mu.internalRaftGroup.BasicStatus()
 	r.mu.internalRaftGroup.Tick()
-	postTickState := r.mu.internalRaftGroup.BasicStatus().RaftState
-	if preTickState != postTickState {
-		if postTickState == raftpb.StatePreCandidate {
+	postTickStatus := r.mu.internalRaftGroup.BasicStatus()
+
+	// Check if the replica has been leaderless for too long, and potentially set
+	// the leaderless watcher replica state as unavailable.
+	r.maybeMarkReplicaUnavailableInLeaderlessWatcher(ctx, postTickStatus.Lead, nowPhysicalTime)
+
+	if preTickStatus.RaftState != postTickStatus.RaftState {
+		if postTickStatus.RaftState == raftpb.StatePreCandidate {
 			r.store.Metrics().RaftTimeoutCampaign.Inc(1)
 			if k := r.store.TestingKnobs(); k != nil && k.OnRaftTimeoutCampaign != nil {
 				k.OnRaftTimeoutCampaign(r.RangeID)
@@ -2172,6 +2178,45 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 		return true, nil
 	}); err != nil && !errors.Is(err, errRemoved) {
 		log.Fatalf(ctx, "%v", err)
+	}
+}
+
+// maybeMarkReplicaUnavailableInLeaderlessWatcher marks the replica as
+// unavailable in the leaderless watcher if the replica has been leaderless
+// for a duration of time greater than or equal to the threshold.
+func (r *Replica) maybeMarkReplicaUnavailableInLeaderlessWatcher(
+	ctx context.Context, postTickLead raftpb.PeerID, storeClockTime time.Time,
+) {
+	threshold := ReplicaLeaderlessUnavailableThreshold.Get(&r.store.cfg.Settings.SV)
+	if threshold == time.Duration(0) {
+		// The leaderless watcher is disabled.
+		return
+	}
+
+	r.LeaderlessWatcher.mu.Lock()
+	defer r.LeaderlessWatcher.mu.Unlock()
+
+	if postTickLead != raft.None {
+		// If we know about the leader, reset the leaderless timer, and mark the
+		// replica as available.
+		r.LeaderlessWatcher.mu.leaderlessTimestamp = time.Time{}
+		r.LeaderlessWatcher.mu.unavailable = false
+	} else if r.LeaderlessWatcher.mu.leaderlessTimestamp == (time.Time{}) {
+		// If we don't know about the leader, and we haven't been leaderless before,
+		// mark the time we became leaderless.
+		r.LeaderlessWatcher.mu.leaderlessTimestamp = storeClockTime
+	} else if !r.LeaderlessWatcher.mu.unavailable {
+		// At this point we know that we have been leaderless for sometime, and
+		// we haven't marked the replica as unavailable yet. Make sure we didn't
+		// exceed the threshold. Otherwise, mark the replica as unavailable.
+		durationSinceLeaderless := storeClockTime.Sub(r.LeaderlessWatcher.mu.leaderlessTimestamp)
+		if durationSinceLeaderless >= threshold {
+			err := errors.Errorf("have been leaderless for %.2fs, setting the "+
+				"leaderless watcher replica's state as unavailable",
+				durationSinceLeaderless.Seconds())
+			log.Warningf(ctx, "%s", err)
+			r.LeaderlessWatcher.mu.unavailable = true
+		}
 	}
 }
 
