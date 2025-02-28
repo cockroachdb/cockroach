@@ -390,6 +390,11 @@ func (ex *connExecutor) execBind(
 		}
 	}
 
+	// Check if we need to auto-commit the transaction due to DDL.
+	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, ps.AST); ev != nil {
+		return ev, payload
+	}
+
 	portalName := bindCmd.PortalName
 	// The unnamed portal can be freely overwritten.
 	if portalName != "" {
