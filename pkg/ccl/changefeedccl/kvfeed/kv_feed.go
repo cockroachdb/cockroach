@@ -466,7 +466,7 @@ func filterCheckpointSpans(
 ) []roachpb.Span {
 	var sg roachpb.SpanGroup
 	sg.Add(spans...)
-	for _, sp := range checkpoint.ToGoMap() {
+	for _, sp := range checkpoint.All() {
 		sg.Sub(sp...)
 	}
 	return sg.Slice()
