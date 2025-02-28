@@ -14,8 +14,8 @@ import "gogoproto/gogo.proto";
 
 message SSTFileInfo {
     required string uri = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URI"];;
-    required string start_key = 2 [(gogoproto.nullable) = false];
-    required string end_key = 3 [(gogoproto.nullable) = false];
+    required bytes start_key = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    required bytes end_key = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
     required uint64 file_size = 4 [(gogoproto.nullable) = false];
 }
 
