@@ -638,7 +638,7 @@ func (e *distSQLSpecExecFactory) ConstructStreamingSetOp(
 	typ tree.UnionType,
 	all bool,
 	left, right exec.Node,
-	streamingOrdering colinfo.ColumnOrdering,
+	leftOrdering, rightOrdering, streamingOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: streaming set op")
@@ -646,7 +646,11 @@ func (e *distSQLSpecExecFactory) ConstructStreamingSetOp(
 
 // ConstructUnionAll is part of the exec.Factory interface.
 func (e *distSQLSpecExecFactory) ConstructUnionAll(
-	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64, enforceHomeRegion bool,
+	left, right exec.Node,
+	leftOrdering, rightOrdering colinfo.ColumnOrdering,
+	reqOrdering exec.OutputOrdering,
+	hardLimit uint64,
+	enforceHomeRegion bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: union all")
 }
