@@ -527,9 +527,15 @@ func (r *Replica) applySnapshot(
 		log.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
 	}(timeutil.Now())
 
+	// Clear the raft state and reset it. The log starts from the applied entry ID
+	// of the snapshot.
+	truncState := kvserverpb.RaftTruncatedState{
+		Index: kvpb.RaftIndex(nonemptySnap.Metadata.Index),
+		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
+	}
 	clearedSpans := inSnap.clearedSpans
 	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
-		ctx, r.ID(), r.ClusterSettings(), nonemptySnap.Metadata, hs, &r.raftMu.stateLoader.StateLoader,
+		ctx, r.ID(), r.ClusterSettings(), truncState, hs, &r.raftMu.stateLoader.StateLoader,
 	)
 	if err != nil {
 		return err
@@ -663,10 +669,6 @@ func (r *Replica) applySnapshot(
 	state, err := sl.Load(ctx, r.store.TODOEngine(), desc)
 	if err != nil {
 		log.Fatalf(ctx, "unable to load replica state: %s", err)
-	}
-	truncState, err := sl.LoadRaftTruncatedState(ctx, r.store.TODOEngine())
-	if err != nil {
-		log.Fatalf(ctx, "unable to load raft truncated state: %s", err)
 	}
 
 	if uint64(state.RaftAppliedIndex) != nonemptySnap.Metadata.Index {
@@ -828,7 +830,7 @@ func writeUnreplicatedSST(
 	ctx context.Context,
 	id storage.FullReplicaID,
 	st *cluster.Settings,
-	meta raftpb.SnapshotMetadata,
+	ts kvserverpb.RaftTruncatedState,
 	hs raftpb.HardState,
 	sl *logstore.StateLoader,
 ) (_ *storage.MemObject, clearedSpan roachpb.Span, _ error) {
@@ -841,10 +843,7 @@ func writeUnreplicatedSST(
 	// Clear the raft state/log, and initialize the truncation state to match the
 	// entry ID of the snapshot. Subsequent log appends will be contiguous with
 	// the snapshot.
-	clearedSpan, err := rewriteRaftState(ctx, id, hs, kvserverpb.RaftTruncatedState{
-		Index: kvpb.RaftIndex(meta.Index),
-		Term:  kvpb.RaftTerm(meta.Term),
-	}, sl, &unreplicatedSST)
+	clearedSpan, err := rewriteRaftState(ctx, id, hs, ts, sl, &unreplicatedSST)
 	if err != nil {
 		return nil, roachpb.Span{}, err
 	}
