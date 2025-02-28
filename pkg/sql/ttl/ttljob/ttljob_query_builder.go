@@ -57,9 +57,17 @@ type SelectQueryParams struct {
 	SelectRateLimiter *quotapool.RateLimiter
 }
 
+type SelectQueryBuilder interface {
+	// Run will perform the SELECT operation and return the rows.
+	Run(ctx context.Context, ie isql.Executor) (_ []tree.Datums, hasNext bool, _ error)
+
+	// BuildQuery will generate the SELECT query for the given builder.
+	BuildQuery() string
+}
+
 // SelectQueryBuilder is responsible for maintaining state around the SELECT
 // portion of the TTL job.
-type SelectQueryBuilder struct {
+type selectQueryBuilder struct {
 	SelectQueryParams
 	selectOpName redact.RedactableString
 	// isFirst is true if we have not invoked a query using the builder yet.
@@ -91,7 +99,7 @@ func MakeSelectQueryBuilder(params SelectQueryParams, cutoff time.Time) SelectQu
 		cachedArgs = append(cachedArgs, d)
 	}
 
-	return SelectQueryBuilder{
+	return &selectQueryBuilder{
 		SelectQueryParams: params,
 		selectOpName:      redact.Sprintf("ttl select %s", params.RelationName),
 		cachedArgs:        cachedArgs,
@@ -99,7 +107,8 @@ func MakeSelectQueryBuilder(params SelectQueryParams, cutoff time.Time) SelectQu
 	}
 }
 
-func (b *SelectQueryBuilder) buildQuery() string {
+// BuildQuery implements the SelectQueryBuilder interface.
+func (b *selectQueryBuilder) BuildQuery() string {
 	return ttlbase.BuildSelectQuery(
 		b.RelationName,
 		b.PKColNames,
@@ -123,16 +132,17 @@ func getInternalExecutorOverride(
 	}
 }
 
-func (b *SelectQueryBuilder) Run(
+// Run implements the SelectQueryBuilder interface.
+func (b *selectQueryBuilder) Run(
 	ctx context.Context, ie isql.Executor,
 ) (_ []tree.Datums, hasNext bool, _ error) {
 	var query string
 	if b.isFirst {
-		query = b.buildQuery()
+		query = b.BuildQuery()
 		b.isFirst = false
 	} else {
 		if b.cachedQuery == "" {
-			b.cachedQuery = b.buildQuery()
+			b.cachedQuery = b.BuildQuery()
 		}
 		query = b.cachedQuery
 	}
@@ -188,7 +198,18 @@ type DeleteQueryParams struct {
 
 // DeleteQueryBuilder is responsible for maintaining state around the DELETE
 // portion of the TTL job.
-type DeleteQueryBuilder struct {
+type DeleteQueryBuilder interface {
+	// Run will perform the DELETE operation on the given rows.
+	Run(ctx context.Context, txn isql.Txn, rows []tree.Datums) (int64, error)
+
+	// BuildQuery generates the DELETE query for the given number of rows.
+	BuildQuery(numRows int) string
+
+	// GetBatchSize returns the batch size for the DELETE operation.
+	GetBatchSize() int
+}
+
+type deleteQueryBuilder struct {
 	DeleteQueryParams
 	deleteOpName redact.RedactableString
 	// cachedQuery is the cached query, which stays the same as long as we are
@@ -206,14 +227,14 @@ func MakeDeleteQueryBuilder(params DeleteQueryParams, cutoff time.Time) DeleteQu
 	cachedArgs := make([]interface{}, 0, 1+int64(len(params.PKColNames))*params.DeleteBatchSize)
 	cachedArgs = append(cachedArgs, cutoff)
 
-	return DeleteQueryBuilder{
+	return &deleteQueryBuilder{
 		DeleteQueryParams: params,
 		deleteOpName:      redact.Sprintf("ttl delete %s", params.RelationName),
 		cachedArgs:        cachedArgs,
 	}
 }
 
-func (b *DeleteQueryBuilder) buildQuery(numRows int) string {
+func (b *deleteQueryBuilder) BuildQuery(numRows int) string {
 	return ttlbase.BuildDeleteQuery(
 		b.RelationName,
 		b.PKColNames,
@@ -222,18 +243,24 @@ func (b *DeleteQueryBuilder) buildQuery(numRows int) string {
 	)
 }
 
-func (b *DeleteQueryBuilder) Run(
+// GetBatchSize implements the DeleteQueryBuilder interface.
+func (b *deleteQueryBuilder) GetBatchSize() int {
+	return int(b.DeleteBatchSize)
+}
+
+// Run implements the DeleteQueryBuilder interface.
+func (b *deleteQueryBuilder) Run(
 	ctx context.Context, txn isql.Txn, rows []tree.Datums,
 ) (int64, error) {
 	numRows := len(rows)
 	var query string
 	if int64(numRows) == b.DeleteBatchSize {
 		if b.cachedQuery == "" {
-			b.cachedQuery = b.buildQuery(numRows)
+			b.cachedQuery = b.BuildQuery(numRows)
 		}
 		query = b.cachedQuery
 	} else {
-		query = b.buildQuery(numRows)
+		query = b.BuildQuery(numRows)
 	}
 
 	deleteArgs := b.cachedArgs[:1]
