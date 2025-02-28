@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 	"golang.org/x/perf/benchfmt"
+	"golang.org/x/perf/benchmath"
 )
 
 type (
@@ -66,7 +67,9 @@ func (c *CompareResult) regressed() bool {
 
 // compare compares the metrics of a benchmark between two revisions.
 func (b *Benchmark) compare() (*CompareResult, error) {
-	builder := model.NewBuilder()
+	builder := model.NewBuilder(model.WithThresholds(&benchmath.Thresholds{
+		CompareAlpha: b.CompareAlpha,
+	}))
 	compareResult := CompareResult{Benchmark: b}
 	for _, revision := range []Revision{Old, New} {
 		data, err := os.ReadFile(path.Join(suite.artifactsDir(revision), b.cleanLog()))
