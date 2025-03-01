@@ -400,9 +400,95 @@ func TestWeightedFinderPopularKeyFrequency(t *testing.T) {
 	for i, test := range testCases {
 		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 		weightedFinder.samples = test.samples
-		popularKeyFrequency := weightedFinder.PopularKeyFrequency()
+		popularKeyFrequency := weightedFinder.PopularKey().Frequency
 		assert.True(t, math.Abs(test.expectedPopularKeyFrequency-popularKeyFrequency) < eps,
 			"%d: expected popular key frequency %f, got %f",
 			i, test.expectedPopularKeyFrequency, popularKeyFrequency)
+	}
+}
+
+func TestWeightedFinderKeyAccessDirection(t *testing.T) {
+	testCases := []struct {
+		name             string
+		samples          [splitKeySampleSize]weightedSample
+		expectedMovement float64
+	}{
+		{
+			name: "all samples to the left",
+			samples: [splitKeySampleSize]weightedSample{
+				{left: 10, right: 0, weight: 1},
+				{left: 20, right: 0, weight: 1},
+				{left: 30, right: 0, weight: 1},
+			},
+			expectedMovement: -1,
+		},
+		{
+			name: "all samples to the right",
+			samples: [splitKeySampleSize]weightedSample{
+				{left: 0, right: 10, weight: 1},
+				{left: 0, right: 20, weight: 1},
+				{left: 0, right: 30, weight: 1},
+			},
+			expectedMovement: 1,
+		},
+		{
+			name: "balanced samples",
+			samples: [splitKeySampleSize]weightedSample{
+				{left: 10, right: 10, weight: 1},
+				{left: 20, right: 20, weight: 1},
+				{left: 30, right: 30, weight: 1},
+			},
+			expectedMovement: 0,
+		},
+		{
+			name: "more samples to the left",
+			samples: [splitKeySampleSize]weightedSample{
+				{left: 30, right: 10, weight: 1},
+				{left: 40, right: 20, weight: 1},
+				{left: 50, right: 30, weight: 1},
+			},
+			expectedMovement: -(1.0 / 3),
+		},
+		{
+			name: "more samples to the right",
+			samples: [splitKeySampleSize]weightedSample{
+				{left: 10, right: 30, weight: 1},
+				{left: 20, right: 40, weight: 1},
+				{left: 30, right: 50, weight: 1},
+			},
+			expectedMovement: (1.0 / 3),
+		},
+		{
+			name: "more weight to the left",
+			samples: [splitKeySampleSize]weightedSample{
+				{left: 10, right: 20, weight: 1},
+				{left: 20, right: 10, weight: 2},
+			},
+			expectedMovement: -(1.0 / 9),
+		},
+		{
+			name: "more weight to the right",
+			samples: [splitKeySampleSize]weightedSample{
+				{left: 10, right: 20, weight: 2},
+				{left: 20, right: 10, weight: 1},
+			},
+			expectedMovement: (1.0 / 9),
+		},
+		{
+			name:             "no samples",
+			samples:          [splitKeySampleSize]weightedSample{},
+			expectedMovement: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			finder := NewWeightedFinder(timeutil.Now(), rand.New(rand.NewSource(2022)))
+			finder.samples = tc.samples
+			movement := finder.KeyAccessDirection()
+			if movement != tc.expectedMovement {
+				t.Errorf("expected movement %v, but got %v", tc.expectedMovement, movement)
+			}
+		})
 	}
 }
