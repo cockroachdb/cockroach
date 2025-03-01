@@ -247,7 +247,7 @@ func (q *RaBitQuantizer) EstimateSquaredDistances(
 		//        <o¯,q> = <x¯,q'> ~ <x¯,q¯>
 		//        <o,q> ~ <o¯,q> / <o¯,o>
 		//
-		// Note one tweak to the paper, where <o¯,o> (i.e. vector_products) is
+		// Note one tweak to the paper, where <o¯,o> (i.e. DotProducts) is
 		// stored as an inverted value so that it can be multiplied rather than
 		// divided, in order to avoid divide-by-zero.
 		term1 := 2 * delta * q.sqrtDimsInv * float32(bitProduct)

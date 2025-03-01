@@ -48,6 +48,8 @@ const opsPerSecPerProc = 500
 type fixup struct {
 	// Type is the kind of fixup.
 	Type fixupType
+	// TreeKey identifies the K-means tree to which the fixup is applied.
+	TreeKey TreeKey
 	// PartitionKey is the key of the fixup's target partition, if the fixup
 	// operates on a partition.
 	PartitionKey PartitionKey
@@ -56,6 +58,30 @@ type fixup struct {
 	ParentPartitionKey PartitionKey
 	// VectorKey is the primary key of the fixup vector.
 	VectorKey KeyBytes
+	// CachedKey caches the key for the fixup, suitable for use in a map.
+	CachedKey fixupKey
+}
+
+// fixupKey is used to detect duplicate fixups on the same partition/vector, so
+// that we don't enqueue duplicates. It contains fields from the fixup struct
+// that have been converted to types that can be used in a map key.
+type fixupKey struct {
+	// TreeKey is the fixup.TreeKey field converted to a string so that it's a
+	// valid map key.
+	// NOTE: This only results in an allocation if TreeKey is not empty.
+	TreeKey string
+	// PartitionKey is the fixup.PartitionKey field.
+	PartitionKey PartitionKey
+	// VectorKey is the fixup.VectorKey field converted to a string so that it's
+	// a valid map key.
+	VectorKey string
+}
+
+// makeFixupKey constructs a new key from the given fixup, that can be inserted
+// into a map.
+func makeFixupKey(f fixup) fixupKey {
+	return fixupKey{
+		TreeKey: string(f.TreeKey), PartitionKey: f.PartitionKey, VectorKey: string(f.VectorKey)}
 }
 
 // FixupProcessor applies index fixups in a background goroutine. Fixups repair
@@ -110,10 +136,8 @@ type FixupProcessor struct {
 	mu struct {
 		syncutil.Mutex
 
-		// pendingPartitions tracks pending split and merge fixups.
-		pendingPartitions map[PartitionKey]bool
-		// pendingVectors tracks pending fixups for deleting vectors.
-		pendingVectors map[string]bool
+		// pendingFixups tracks fixups that are waiting to be processed.
+		pendingFixups map[fixupKey]bool
 		// totalWorkers is the number of background workers available to process
 		// fixups.
 		totalWorkers int
@@ -156,8 +180,7 @@ func (fp *FixupProcessor) Init(
 	fp.fixups = make(chan fixup, maxFixups)
 	fp.fixupsLimitHit = log.Every(time.Second)
 
-	fp.mu.pendingPartitions = make(map[PartitionKey]bool, maxFixups)
-	fp.mu.pendingVectors = make(map[string]bool, maxFixups)
+	fp.mu.pendingFixups = make(map[fixupKey]bool, maxFixups)
 	fp.mu.waitForFixups.L = &fp.mu
 }
 
@@ -213,9 +236,10 @@ func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 
 // AddSplit enqueues a split fixup for later processing.
 func (fp *FixupProcessor) AddSplit(
-	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
+	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) {
 	fp.addFixup(ctx, fixup{
+		TreeKey:            treeKey,
 		Type:               splitOrMergeFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
@@ -224,9 +248,10 @@ func (fp *FixupProcessor) AddSplit(
 
 // AddMerge enqueues a merge fixup for later processing.
 func (fp *FixupProcessor) AddMerge(
-	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
+	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) {
 	fp.addFixup(ctx, fixup{
+		TreeKey:            treeKey,
 		Type:               splitOrMergeFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
@@ -300,22 +325,11 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	}
 
 	// Don't enqueue fixup if it's already pending.
-	switch fixup.Type {
-	case splitOrMergeFixup:
-		if _, ok := fp.mu.pendingPartitions[fixup.PartitionKey]; ok {
-			return
-		}
-		fp.mu.pendingPartitions[fixup.PartitionKey] = true
-
-	case vectorDeleteFixup:
-		if _, ok := fp.mu.pendingVectors[string(fixup.VectorKey)]; ok {
-			return
-		}
-		fp.mu.pendingVectors[string(fixup.VectorKey)] = true
-
-	default:
-		panic(errors.AssertionFailedf("unknown fixup %d", fixup.Type))
+	fixup.CachedKey = makeFixupKey(fixup)
+	if _, ok := fp.mu.pendingFixups[fixup.CachedKey]; ok {
+		return
 	}
+	fp.mu.pendingFixups[fixup.CachedKey] = true
 
 	// Note that the channel send operation should never block, since it has
 	// maxFixups capacity.
@@ -386,16 +400,7 @@ func (fp *FixupProcessor) removeFixup(toRemove fixup) {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
-	switch toRemove.Type {
-	case splitOrMergeFixup:
-		delete(fp.mu.pendingPartitions, toRemove.PartitionKey)
-
-	case vectorDeleteFixup:
-		delete(fp.mu.pendingVectors, string(toRemove.VectorKey))
-
-	default:
-		panic(errors.AssertionFailedf("unknown fixup %d", toRemove.Type))
-	}
+	delete(fp.mu.pendingFixups, toRemove.CachedKey)
 
 	fp.mu.runningWorkers--
 
@@ -412,5 +417,5 @@ func (fp *FixupProcessor) removeFixup(toRemove fixup) {
 // those that are currently being processed as well as those that are waiting to
 // be processed.
 func (fp *FixupProcessor) countFixupsLocked() int {
-	return len(fp.mu.pendingPartitions) + len(fp.mu.pendingVectors)
+	return len(fp.mu.pendingFixups)
 }

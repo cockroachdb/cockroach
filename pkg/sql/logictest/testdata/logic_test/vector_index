@@ -270,8 +270,6 @@ CREATE TABLE exec_test (
 )
 
 # TODO(drewk): write these tests once execution is supported.
-statement error partition not found
-INSERT INTO exec_test (a, vec1) values (1, '[1, 2, 3]')
 
 statement ok
 DROP TABLE exec_test

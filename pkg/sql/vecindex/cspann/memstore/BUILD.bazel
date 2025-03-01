@@ -65,6 +65,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",
+        "@com_github_stretchr_testify//suite",
         "@org_gonum_v1_gonum//floats/scalar",
     ],
 )

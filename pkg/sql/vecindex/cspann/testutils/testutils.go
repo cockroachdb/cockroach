@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
+	"gonum.org/v1/gonum/floats/scalar"
 )
 
 // LoadFeatures loads up to 10K 512 dimension float32 unit vectors that are laid
@@ -47,6 +48,11 @@ func LoadFeatures(t testing.TB, count int) vector.Set {
 	require.NoError(t, err)
 
 	return vector.MakeSetFromRawData(data[:count*512], 512)
+}
+
+// RoundFloat rounds the given float32 value using the given precision.
+func RoundFloat(s float32, prec int) float32 {
+	return float32(scalar.Round(float64(s), prec))
 }
 
 // RoundFloats rounds all float32 values in the slice using the given precision.
