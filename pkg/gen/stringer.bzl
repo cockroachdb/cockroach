@@ -12,7 +12,7 @@ STRINGER_SRCS = [
     "//pkg/kv/kvpb:method_string.go",
     "//pkg/kv/kvserver/closedts/sidetransport:cantclosereason_string.go",
     "//pkg/kv/kvserver:refreshraftreason_string.go",
-    "//pkg/multitenant/tenantcapabilities:id_string.go",
+    "//pkg/multitenant/tenantcapabilitiespb:id_string.go",
     "//pkg/raft/quorum:voteresult_string.go",
     "//pkg/roachpb:leasetype_string.go",
     "//pkg/server/license:lictype_string.go",

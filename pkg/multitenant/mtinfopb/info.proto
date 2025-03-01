@@ -10,7 +10,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb";
 import "gogoproto/gogo.proto";
 import "kv/kvpb/api.proto";
 import "roachpb/data.proto";
-import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
+import "multitenant/tenantcapabilitiespb/capabilities.proto";
 import "util/hlc/timestamp.proto";
 
 // ProtoInfo represents the metadata for a tenant as

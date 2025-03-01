@@ -17,7 +17,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -403,9 +403,9 @@ func TestTenantCapabilities(t *testing.T) {
 	}
 
 	var expectedRows [][]string
-	for _, cap := range tenantcapabilities.IDs {
+	for _, cap := range tenantcapabilitiespb.IDs {
 		capValue := `true`
-		if cap == tenantcapabilities.TenantSpanConfigBounds {
+		if cap == tenantcapabilitiespb.TenantSpanConfigBounds {
 			capValue = `{}`
 		}
 		expectedRows = append(expectedRows, []string{`3`, demoTenantName, `ready`, `shared`, cap.String(), capValue})

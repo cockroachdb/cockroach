@@ -42,7 +42,7 @@ PROTOBUF_SRCS = [
     "//pkg/kv/kvserver/storeliveness/storelivenesspb:storelivenesspb_go_proto",
     "//pkg/kv/kvserver:kvserver_go_proto",
     "//pkg/multitenant/mtinfopb:mtinfopb_go_proto",
-    "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_go_proto",
+    "//pkg/multitenant/tenantcapabilitiespb:tenantcapabilitiespb_go_proto",
     "//pkg/raft/raftpb:raftpb_go_proto",
     "//pkg/repstream/streampb:streampb_go_proto",
     "//pkg/roachpb:roachpb_go_proto",

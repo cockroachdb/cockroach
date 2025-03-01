@@ -14,6 +14,7 @@ go_library(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

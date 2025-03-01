@@ -89,6 +89,7 @@ go_test(
         "//pkg/col/coldatatestutils",
         "//pkg/kv",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
