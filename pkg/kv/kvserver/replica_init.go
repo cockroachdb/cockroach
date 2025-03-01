@@ -136,7 +136,8 @@ func newUninitializedReplicaWithoutRaftGroup(
 			DisableTxnPushing:  store.TestingKnobs().DontPushOnLockConflictError,
 			TxnWaitKnobs:       store.TestingKnobs().TxnWaitKnobs,
 		}),
-		allocatorToken: &plan.AllocatorToken{},
+		allocatorToken:                       &plan.AllocatorToken{},
+		avgProposalToLocalApplicationLatency: rpc.NewThreadMovingAverage(),
 	}
 	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, rangeID)
 

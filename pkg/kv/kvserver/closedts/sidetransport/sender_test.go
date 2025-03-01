@@ -89,6 +89,10 @@ func (f *mockConnFactory) new(_ *Sender, nodeID roachpb.NodeID) conn {
 	return &mockConn{nodeID: nodeID}
 }
 
+func (f *mockConnFactory) latency(_ roachpb.NodeID) time.Duration {
+	return 50 * time.Millisecond
+}
+
 // mockConn is a mock implementation of the conn interface.
 type mockConn struct {
 	nodeID  roachpb.NodeID
@@ -457,6 +461,10 @@ func (m *mockDialer) Dial(
 	return c, err
 }
 
+func (m *mockDialer) Latency(_ roachpb.NodeID) (time.Duration, error) {
+	return 50 * time.Millisecond, nil
+}
+
 func (m *mockDialer) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -621,6 +629,10 @@ func (f *failingDialer) Dial(
 ) (_ *grpc.ClientConn, err error) {
 	atomic.AddInt32(&f.dialCount, 1)
 	return nil, errors.New("failingDialer")
+}
+
+func (f *failingDialer) Latency(_ roachpb.NodeID) (time.Duration, error) {
+	return 50 * time.Millisecond, nil
 }
 
 func (f *failingDialer) callCount() int32 {
