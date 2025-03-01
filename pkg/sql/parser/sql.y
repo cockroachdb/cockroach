@@ -562,6 +562,9 @@ func (u *sqlSymUnion) privilegeList() privilege.List {
 func (u *sqlSymUnion) onConflict() *tree.OnConflict {
     return u.val.(*tree.OnConflict)
 }
+func (u *sqlSymUnion) overridingValue() *tree.OverridingValue {
+    return u.val.(*tree.OverridingValue)
+}
 func (u *sqlSymUnion) orderBy() tree.OrderBy {
     return u.val.(tree.OrderBy)
 }
@@ -1040,7 +1043,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD OLD_KMS ON ONLY OPT OPTION OPTIONS OR
-%token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
+%token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OVERRIDING OWNED OWNER OPERATOR
 
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PER PERMISSIVE PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLICIES POLICY POLYGON POLYGONM POLYGONZ POLYGONZM
@@ -1102,7 +1105,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 // references.
 // - TENANT_ALL is used to differentiate `ALTER TENANT <id>` from
 // `ALTER TENANT ALL`. Ditto `CLUSTER_ALL` and `CLUSTER ALL`.
-%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL
+%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT OVERRIDING_SYSTEM_VALUE OVERRIDING_USER_VALUE RESET_ALL ROLE_ALL
 %token USER_ALL ON_LA TENANT_ALL CLUSTER_ALL SET_TRACING
 
 %union {
@@ -1609,6 +1612,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.ColumnDefList> opt_col_def_list col_def_list opt_col_def_list_no_types col_def_list_no_types
 %type <tree.ColumnDef> col_def
 %type <*tree.OnConflict> on_conflict
+%type <*tree.OverridingValue> overriding_value
 
 %type <tree.Statement> begin_transaction
 %type <tree.TransactionModes> transaction_mode_list transaction_mode
@@ -13522,10 +13526,25 @@ insert_rest:
   {
     $$.val = &tree.Insert{Rows: $1.slct()}
   }
+|  overriding_value select_stmt
+  {
+    $$.val = &tree.Insert{
+    OverridingVal: $1.overridingValue(),
+    Rows: $2.slct(),
+    }
+  }
 | '(' insert_column_list ')' select_stmt
   {
     $$.val = &tree.Insert{Columns: $2.nameList(), Rows: $4.slct()}
   }
+| '(' insert_column_list ')' overriding_value select_stmt
+  {
+    $$.val = &tree.Insert{
+      Columns: $2.nameList(),
+      Rows: $5.slct(),
+      OverridingVal: $4.overridingValue(),
+      }
+   }
 | DEFAULT VALUES
   {
     $$.val = &tree.Insert{Rows: &tree.Select{}}
@@ -13558,6 +13577,20 @@ insert_column_list:
 insert_column_item:
   column_name
 | column_name '.' error { return unimplementedWithIssue(sqllex, 27792) }
+
+overriding_value:
+  OVERRIDING_SYSTEM_VALUE SYSTEM VALUE
+  {
+    $$.val = &tree.OverridingValue{
+      Type: tree.OverridingSystemValue,
+    }
+  }
+  | OVERRIDING_USER_VALUE USER VALUE
+  {
+    $$.val = &tree.OverridingValue{
+      Type: tree.OverridingUserValue,
+    }
+  }
 
 on_conflict:
   ON CONFLICT DO NOTHING
@@ -18296,6 +18329,7 @@ unreserved_keyword:
 | ORDINALITY
 | OTHERS
 | OVER
+| OVERRIDING
 | OWNED
 | OWNER
 | PARALLEL
@@ -18873,6 +18907,7 @@ bare_label_keywords:
 | OUT
 | OUTER
 | OVERLAY
+| OVERRIDING
 | OWNED
 | OWNER
 | PARALLEL
