@@ -220,6 +220,16 @@ func TestTypeCheck(t *testing.T) {
 		{`'a':::TSQUERY @@ 'b'`, `'''a''':::TSQUERY @@ to_tsvector('b':::STRING)`},
 		{`'a' @@ 'b':::TSVECTOR`, `'''a''':::TSQUERY @@ '''b''':::TSVECTOR`},
 		{`'a':::TSVECTOR @@ 'b'`, `'''a''':::TSVECTOR @@ '''b''':::TSQUERY`},
+
+		// MACADDR should be all normalized with : as seperators
+		{`NULL::macaddr`, `NULL::MACADDR`},
+		{`'08:00:2b:01:02:03'::macaddr`, `'08:00:2b:01:02:03':::MACADDR`},
+		{`'08-00-2b-01-02-03'::macaddr`, `'08:00:2b:01:02:03':::MACADDR`},
+		{`'08002b:010203'::macaddr`, `'08:00:2b:01:02:03':::MACADDR`},
+		{`'08002b-010203'::macaddr`, `'08:00:2b:01:02:03':::MACADDR`},
+		{`'0800.2b01.0203'::macaddr`, `'08:00:2b:01:02:03':::MACADDR`},
+		{`'0800-2b01-0203'::macaddr`, `'08:00:2b:01:02:03':::MACADDR`},
+		{`'08002b010203'::macaddr`, `'08:00:2b:01:02:03':::MACADDR`},
 	}
 	ctx := context.Background()
 	for _, d := range testData {

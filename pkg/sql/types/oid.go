@@ -100,6 +100,7 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_varbit:       VarBit,
 	oid.T_varchar:      VarChar,
 	oid.T_void:         Void,
+	oid.T_macaddr:      MACAddr,
 
 	oidext.T_geometry:  Geometry,
 	oidext.T_geography: Geography,
@@ -120,6 +121,7 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_float4:       oid.T__float4,
 	oid.T_float8:       oid.T__float8,
 	oid.T_inet:         oid.T__inet,
+	oid.T_macaddr:      oid.T__macaddr,
 	oid.T_int2:         oid.T__int2,
 	oid.T_int2vector:   oid.T__int2vector,
 	oid.T_int4:         oid.T__int4,
@@ -187,12 +189,11 @@ var familyToOid = map[Family]oid.Oid{
 	TupleFamily:          oid.T_record,
 	BitFamily:            oid.T_bit,
 	AnyFamily:            oid.T_anyelement,
-
-	GeometryFamily:  oidext.T_geometry,
-	GeographyFamily: oidext.T_geography,
-	Box2DFamily:     oidext.T_box2d,
-	PGVectorFamily:  oidext.T_pgvector,
-	JsonpathFamily:  oidext.T_jsonpath,
+	GeometryFamily:       oidext.T_geometry,
+	GeographyFamily:      oidext.T_geography,
+	Box2DFamily:          oidext.T_box2d,
+	PGVectorFamily:       oidext.T_pgvector,
+	JsonpathFamily:       oidext.T_jsonpath,
 }
 
 // ArrayOids is a set of all oids which correspond to an array type.

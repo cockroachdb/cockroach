@@ -535,6 +535,8 @@ var (
 		types.IntervalArray,
 		types.UUIDArray,
 		types.INet,
+		types.MACAddr,
+		types.MACAddrArray,
 		types.Jsonb,
 		types.Jsonpath,
 		types.PGLSN,
