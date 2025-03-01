@@ -61,7 +61,12 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		})
 		defer cleanup()
 		ec := pi.EvalContext()
-		return newReplicationStreamManagerWithPrivilegesCheck(ctx, ec, p.(resolver.SchemaResolver), pi.InternalSQLTxn(), clusterunique.ID{})
+		mgr, err := newReplicationStreamManager(ctx, ec, p.(resolver.SchemaResolver), pi.InternalSQLTxn(), clusterunique.ID{})
+		require.NoError(t, err)
+		if err := mgr.AuthorizeViaReplicationPriv(context.Background()); err != nil {
+			return nil, err
+		}
+		return mgr, nil
 	}
 
 	tDB.Exec(t, "CREATE ROLE somebody")
