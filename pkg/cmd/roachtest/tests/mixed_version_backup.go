@@ -2654,6 +2654,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
 		Suites:                    registry.Suites(registry.MixedVersion, registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		ArtificialLatency:         registry.GeoDistributedLatency,
 		Randomized:                true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			enabledDeploymentModes := []mixedversion.DeploymentMode{

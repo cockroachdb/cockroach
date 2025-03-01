@@ -153,6 +153,10 @@ type StartOpts struct {
 	// EnableFluentSink determines whether to enable the fluent-servers attribute
 	// in the CockroachDB logging configuration.
 	EnableFluentSink bool
+
+	// PreStartHooks are hooks that are run after service registration has occurred,
+	// but before starting the cockroach process.
+	PreStartHooks []ClusterHook
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {
@@ -432,6 +436,16 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		}, "\n"))
 		startOpts.SQLPort = config.DefaultSQLPort
 		startOpts.AdminUIPort = config.DefaultAdminUIPort
+	}
+
+	for _, hook := range startOpts.PreStartHooks {
+		if hook.Fn == nil {
+			continue
+		}
+		l.Printf("running pre-start hook: %s", hook.Name)
+		if err := hook.Fn(ctx); err != nil {
+			return err
+		}
 	}
 
 	if startOpts.IsVirtualCluster() {
@@ -1670,4 +1684,11 @@ func getEnvVars() []string {
 // this workaround and just log the constants once when the cluster is started.
 func SuppressMetamorphicConstantsEnvVar() string {
 	return config.DisableMetamorphicTestingEnvVar
+}
+
+// ClusterHook exposes a way to run functions in between steps normally
+// orchestrated by the roachprod framework.
+type ClusterHook struct {
+	Name string
+	Fn   func(context.Context) error
 }

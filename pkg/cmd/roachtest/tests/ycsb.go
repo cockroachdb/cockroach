@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -121,8 +120,9 @@ func registerYCSB(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus, ycsbOptions{})
 				},
-				CompatibleClouds: registry.AllClouds,
-				Suites:           registry.Suites(registry.Nightly),
+				CompatibleClouds:  registry.AllClouds,
+				Suites:            registry.Suites(registry.Nightly),
+				ArtificialLatency: registry.GeoDistributedLatency,
 			})
 
 			if wl == "A" {
