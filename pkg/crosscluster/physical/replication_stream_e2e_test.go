@@ -82,8 +82,13 @@ func TestPCRPrivs(t *testing.T) {
 	c.DestSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
 
 	// Ensure the source user has the REPLICATION privilege.
-	testuser.ExpectErr(t, "user testuser2 does not have REPLICATION system privilege", streamReplStmt)
-	c.SrcSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"2"))
+	testuser.ExpectErr(t, "user testuser2 does not have REPLICATIONSOURCE system privilege", streamReplStmt)
+	sourcePriv := "REPLICATIONSOURCE"
+	if c.Rng.Intn(3) == 0 {
+		// Test deprecated privilege name.
+		sourcePriv = "REPLICATION"
+	}
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM %s TO %s", sourcePriv, username.TestUser+"2"))
 	c.DestSysSQL.Exec(t, streamReplStmt)
 
 	// Ensure job based auth allows the replication to proceed.
