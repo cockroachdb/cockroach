@@ -71,9 +71,9 @@ stabilize
 > 4 handling Ready
   Ready MustSync=false:
   Messages:
-  4->1 MsgProp Term:0 Log:0/0 Entries:[0/0 EntryConfChangeV2]
+  4->1 MsgPropConfig Term:1 Log:0/0 Entries:[0/0 EntryConfChangeV2]
 > 1 receiving messages
-  4->1 MsgProp Term:0 Log:0/0 Entries:[0/0 EntryConfChangeV2]
+  4->1 MsgPropConfig Term:1 Log:0/0 Entries:[0/0 EntryConfChangeV2]
 > 1 handling Ready
   Ready MustSync=true:
   Entries:
