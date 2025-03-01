@@ -6,6 +6,8 @@
 package macaddr
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -189,4 +191,55 @@ func xtoi2(s string, e byte) (byte, bool) {
 	}
 	n, ei, ok := xtoi(s[:2])
 	return byte(n), ok && ei == 2
+}
+
+// hibits returns the higher 32 bits of the MAC address.
+func hibits(a MACAddr) uint32 {
+	return uint32(uint64(a) >> 32)
+}
+
+// lobits returns the lower 32 bits of the MAC address.
+func lobits(a MACAddr) uint32 {
+	return uint32(uint64(a) & 0xFFFFFFFF)
+}
+
+// CompareMACs compares two MAC addresses using their high and low bits.
+func (m MACAddr) Compare(addr MACAddr) int {
+	if hibits(m) < hibits(addr) {
+		return -1
+	} else if hibits(m) > hibits(addr) {
+		return 1
+	} else if lobits(m) < lobits(addr) {
+		return -1
+	} else if lobits(m) > lobits(addr) {
+		return 1
+	} else {
+		return 0
+	}
+}
+
+// MACAddrNot performs bitwise NOT on the MAC address.
+func MACAddrNot(addr MACAddr) MACAddr {
+	return MACAddr(^uint64(addr))
+}
+
+// MACAddrAnd performs bitwise AND between two MAC addresses.
+func MACAddrAnd(addr1, addr2 MACAddr) MACAddr {
+	return MACAddr(uint64(addr1) & uint64(addr2))
+}
+
+// MACAddrOr performs bitwise OR between two MAC addresses.
+func MACAddrOr(addr1, addr2 MACAddr) MACAddr {
+	return MACAddr(uint64(addr1) | uint64(addr2))
+}
+
+// String implements the stringer interface for MACAddr.
+func (m MACAddr) String() string {
+	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x",
+		byte(m>>40),
+		byte(m>>32),
+		byte(m>>24),
+		byte(m>>16),
+		byte(m>>8),
+		byte(m))
 }
