@@ -1581,6 +1581,7 @@ func (b *changefeedResumer) OnFailOrCancel(
 		errors.DecodeError(ctx, *b.job.Payload().FinalResumeError),
 	) {
 		telemetry.Count(`changefeed.enterprise.cancel`)
+		logChangefeedCanceledTelemetry(ctx, b.job)
 	} else {
 		telemetry.Count(`changefeed.enterprise.fail`)
 		exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
@@ -1700,6 +1701,19 @@ func logChangefeedFailedTelemetryDuringStartup(
 	}
 
 	log.StructuredEvent(ctx, severity.INFO, changefeedFailedEvent)
+}
+
+func logChangefeedCanceledTelemetry(ctx context.Context, job *jobs.Job) {
+	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
+	if job != nil {
+		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID())
+	}
+
+	changefeedCanceled := &eventpb.ChangefeedCanceled{
+		CommonChangefeedEventDetails: changefeedEventDetails,
+	}
+	log.StructuredEvent(ctx, severity.INFO, changefeedCanceled)
 }
 
 func makeCommonChangefeedEventDetails(
