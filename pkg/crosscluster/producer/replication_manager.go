@@ -435,11 +435,24 @@ func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 }
 
 func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(ctx context.Context) error {
-	if err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+	err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
 		syntheticprivilege.GlobalPrivilegeObject,
-		privilege.REPLICATION); err != nil {
+		privilege.REPLICATIONSOURCE)
+
+	if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+		// Fallback to legacy REPLICATION priv.
+		if fallbackErr := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+			syntheticprivilege.GlobalPrivilegeObject,
+			privilege.REPLICATION); fallbackErr != nil {
+			// We want to return the original error which relates to authorizing with
+			// the REPLICATIONSOURCE priv instead of the error from authorizing with
+			// the deprecated REPLICATION priv.
+			return err
+		}
+	} else if err != nil {
 		return err
 	}
+
 	r.authorized = true
 	return nil
 }
