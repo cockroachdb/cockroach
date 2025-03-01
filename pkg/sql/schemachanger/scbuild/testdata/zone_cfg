@@ -24,6 +24,7 @@ CREATE TABLE defaultdb.foo_index_zone_cfg (
 );
 CREATE INDEX idx ON defaultdb.foo_index_zone_cfg(k, l);
 ALTER INDEX defaultdb.foo_index_zone_cfg@idx CONFIGURE ZONE USING gc.ttlseconds=10;
+ALTER INDEX defaultdb.foo_index_zone_cfg@foo_index_zone_cfg_pkey CONFIGURE ZONE USING gc.ttlseconds=10;
 ----
 
 build
@@ -127,6 +128,8 @@ ALTER TABLE defaultdb.foo_index_zone_cfg DROP COLUMN k
   {columnId: 6, indexId: 6, kind: STORED, ordinalInKind: 3, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 6}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 6, tableId: 105}
+- [[TableZoneConfig:{DescID: 105, SeqNum: 1}, PUBLIC], ABSENT]
+  {seqNum: 1, tableId: 105, zoneConfig: {numReplicas: 0, subzoneSpans: [{key: jQ==, subzoneIndex: 1}], subzones: [{config: {gc: {ttlSeconds: 10}, inheritedConstraints: true, inheritedLeasePreferences: true}, indexId: 3}, {config: {gc: {ttlSeconds: 10}, inheritedConstraints: true, inheritedLeasePreferences: true}, indexId: 5}]}}
 
 build
 DROP INDEX defaultdb.foo_index_zone_cfg@idx
