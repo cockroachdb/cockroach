@@ -694,7 +694,7 @@ func TestResponseKeyIterate(t *testing.T) {
 			var keys []roachpb.Key
 			err := ResponseKeyIterate(tc.req, tc.resp, func(key roachpb.Key) {
 				keys = append(keys, key)
-			})
+			}, false /* includeLockedNonExisting */)
 			if tc.expErr == "" {
 				require.Equal(t, tc.expKeys, keys)
 				require.NoError(t, err)
