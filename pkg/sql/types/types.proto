@@ -413,6 +413,12 @@ enum Family {
     //  Oid: T_jsonpath
     JsonpathFamily = 34;
 
+    // MACAddrFamily is a type family for the MACAddr type, which is the type
+    // of 6 byte MAC addresses.
+    //  Canonical: types.MACAddr
+    //  Oid      : T_macaddr
+    MACAddrFamily = 35;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an
