@@ -529,9 +529,6 @@ PostCommitPhase stage 8 of 15 with 10 MutationType ops
       IndexID: 2
       Name: act_pkey
       TableID: 104
-    *scop.MakeValidatedPrimaryIndexPublic
-      IndexID: 2
-      TableID: 104
     *scop.MakeAbsentTempIndexDeleteOnly
       Index:
         ConstraintID: 5
@@ -550,6 +547,9 @@ PostCommitPhase stage 8 of 15 with 10 MutationType ops
       ColumnID: 3
       IndexID: 5
       Kind: 2
+      TableID: 104
+    *scop.MakeValidatedPrimaryIndexPublic
+      IndexID: 2
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104

@@ -125,6 +125,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		progress.MinimumWriteTimestamp,
 		spansToDo,
 		progress.DestIndexIDs,
+		progress.SourceIndexID,
 		updateFunc,
 	)
 	if retErr != nil {
@@ -175,6 +176,7 @@ func (ib *IndexBackfillPlanner) plan(
 	nowTimestamp, writeAsOf, readAsOf hlc.Timestamp,
 	sourceSpans []roachpb.Span,
 	indexesToBackfill []descpb.IndexID,
+	sourceIndexID descpb.IndexID,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
 ) (runFunc func(context.Context) error, _ error) {
 
@@ -197,6 +199,7 @@ func (ib *IndexBackfillPlanner) plan(
 		spec, err := initIndexBackfillerSpec(
 			*td.TableDesc(), writeAsOf, readAsOf, writeAtRequestTimestamp, chunkSize,
 			indexesToBackfill,
+			sourceIndexID,
 		)
 		if err != nil {
 			return err
