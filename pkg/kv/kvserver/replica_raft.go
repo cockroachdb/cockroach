@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -53,6 +54,20 @@ import (
 // raftDisableLeaderFollowsLeaseholder disables lease/leader collocation.
 var raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
 	"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
+
+// ReplicaLeaderlessUnavailableThreshold is the duration after which leaderless
+// replicas are considered unavailable. Set to 0 to disable.
+var ReplicaLeaderlessUnavailableThreshold = settings.RegisterDurationSettingWithExplicitUnit(
+	settings.SystemOnly,
+	"kv.replica_raft.leaderless_unavailable_threshold",
+	"duration after which leaderless replicas is considered unavailable. Set to 0"+
+		" to disable leaderless replica availability checks.",
+	60*time.Second,
+	settings.WithPublic,
+	// Setting the breaker duration too low could be very dangerous to cluster
+	// health as replicas under normal operation could be considered unavailable.
+	settings.DurationWithMinimumOrZeroDisable(5*time.Second),
+)
 
 // evalAndPropose prepares the necessary pending command struct and initializes
 // a client command ID if one hasn't been. A verified lease is supplied as a
