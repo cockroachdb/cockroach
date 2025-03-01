@@ -2112,7 +2112,7 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 				return err
 			})
 		}); err != nil {
-			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
+			log.Warningf(ctx, "unable to read orphaned leases: %v", err)
 			return
 		}
 		var wg sync.WaitGroup
