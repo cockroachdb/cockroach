@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -106,6 +107,7 @@ func newUnbufferedRegistration(
 		baseRegistration: baseRegistration{
 			streamCtx:              streamCtx,
 			span:                   span,
+			startAt:                crtime.NowMono(),
 			catchUpTimestamp:       startTS,
 			withDiff:               withDiff,
 			withFiltering:          withFiltering,
@@ -176,6 +178,7 @@ func (ubr *unbufferedRegistration) publish(
 // the processor in response to errors from the replica and by the StreamManager
 // in response to shutdowns.
 func (ubr *unbufferedRegistration) Disconnect(pErr *kvpb.Error) {
+	ubr.metrics.RangefeedLifetimeNanos.Inc(ubr.startAt.Elapsed().Nanoseconds())
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
 	ubr.disconnectLocked(pErr)
@@ -223,9 +226,13 @@ func (ubr *unbufferedRegistration) IsDisconnected() bool {
 //
 // nolint:deferunlockcheck
 func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks roachpb.RangeID) {
+	start := crtime.NowMono()
 	ubr.mu.Lock()
-	// Noop if publishCatchUpBuffer below returns no error.
-	defer ubr.drainAllocations(ctx)
+	defer func() {
+		// Noop if publishCatchUpBuffer below returns no error.
+		ubr.drainAllocations(ctx)
+		ubr.metrics.RangefeedOutputLoopNanosForUnbufferedReg.Inc(start.Elapsed().Nanoseconds())
+	}()
 
 	if ubr.mu.disconnected {
 		ubr.mu.Unlock()
