@@ -7,6 +7,7 @@ package jobsauth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -112,8 +113,25 @@ func GetGlobalJobPrivileges(
 //  2. they are an admin
 //  3. they have the global CONTROLJOB or VIEWJOB (for view access) privilege
 //     and the job is *not* owned by an admin in the case of attempted control
-//  4. a job-specific custom authorization check allows access.
 func Authorize(
+	ctx context.Context,
+	a AuthorizationAccessor,
+	jobID jobspb.JobID,
+	owner username.SQLUsername,
+	typ jobspb.Type,
+	accessLevel AccessLevel,
+	global GlobalJobPrivileges,
+) error {
+
+	legacyAuthErrFunc := func(ctx context.Context) (*jobspb.Payload, error) {
+		return nil, errors.New("legacy authorization check not implemented")
+	}
+	return AuthorizeAllowLegacyAuth(ctx, a, jobID, legacyAuthErrFunc, owner, typ, accessLevel, global)
+}
+
+// AutherizeAllowLegacyAuth functions like Authorize, and also provides
+// the deprecated job-specific custom authorization check allows access.
+func AuthorizeAllowLegacyAuth(
 	ctx context.Context,
 	a AuthorizationAccessor,
 	jobID jobspb.JobID,
