@@ -17,6 +17,7 @@ go_library(
         "schema_dependencies.go",
         "table_meta.go",
         "telemetry.go",
+        "util.go",
         "values.go",
         ":gen-operator",  # keep
         ":gen-rulenames",  # keep
