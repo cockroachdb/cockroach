@@ -7,6 +7,7 @@ package vecstore
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -16,197 +17,127 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestPersistentStore(t *testing.T) {
+// testStore implements the commontest.TestStore interface.
+type testStore struct {
+	*Store
+
+	inserted  int64
+	usePrefix bool
+	runner    *sqlutils.SQLRunner
+}
+
+func (ts *testStore) AllowMultipleTrees() bool {
+	return ts.usePrefix
+}
+
+func (ts *testStore) MakeTreeKey(t *testing.T, treeID int) cspann.TreeKey {
+	if !ts.usePrefix {
+		return nil
+	}
+	return keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, int64(treeID)), 0 /* famID */)
+}
+
+func (ts *testStore) InsertVector(t *testing.T, treeID int, vec vector.T) cspann.KeyBytes {
+	// TODO(andyk): For now, don't actually insert anything, since the execution
+	// engine doesn't yet support insertion into a table with a vector index. As
+	// a workaround, the vectors are pre-inserted when the test store is created,
+	// below.
+	ts.inserted++
+	return keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, ts.inserted), 0 /* famID */)
+}
+
+func TestStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var workspace workspace.T
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	internalDB := srv.ApplicationLayer().InternalDB().(descs.DB)
 	codec := srv.ApplicationLayer().Codec()
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
 	defer srv.Stopper().Stop(ctx)
 
-	childKey2 := cspann.ChildKey{PartitionKey: 2}
-	childKey10 := cspann.ChildKey{PartitionKey: 10}
-	childKey20 := cspann.ChildKey{PartitionKey: 20}
-	childKey30 := cspann.ChildKey{PartitionKey: 30}
-	valueBytes2 := cspann.ValueBytes{1, 2}
-	valueBytes10 := cspann.ValueBytes{3, 4}
-	valueBytes20 := cspann.ValueBytes{5, 6}
-	valueBytes30 := cspann.ValueBytes{7, 8}
-	primaryKey200 := cspann.ChildKey{KeyBytes: cspann.KeyBytes{2, 00}}
-	primaryKey300 := cspann.ChildKey{KeyBytes: cspann.KeyBytes{3, 00}}
-	primaryKey400 := cspann.ChildKey{KeyBytes: cspann.KeyBytes{4, 00}}
-	valueBytes200 := cspann.ValueBytes{9, 10}
-	valueBytes300 := cspann.ValueBytes{11, 12}
-	valueBytes400 := cspann.ValueBytes{13, 14}
+	tbl := 0
+	usePrefix := false
+	makeStore := func(quantizer quantize.Quantizer) commontest.TestStore {
+		tbl++
+		tblName := fmt.Sprintf("t%d", tbl)
 
-	tdb.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(2))")
-	tdb.Exec(t, "INSERT INTO t VALUES (11, '[100, 200]'), (12, '[300, 400]')")
+		//runner.Exec(t, "DROP TABLE IF EXISTS t")
+		runner.Exec(t, "CREATE TABLE "+tblName+" (id INT PRIMARY KEY, prefix INT NOT NULL, v VECTOR(2))")
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "t")
+		// TODO(andyk): Pre-insert the values that the common tests will insert
+		// via InsertVector. These can be removed once the execution engine
+		// supports insertion into a table with a vector index.
+		runner.Exec(t, "INSERT INTO "+tblName+" (id, prefix, v) VALUES ($1, $2, $3)", 1, 0, "[1, 2]")
+		runner.Exec(t, "INSERT INTO "+tblName+" (id, prefix, v) VALUES ($1, $2, $3)", 2, 0, "[7, 4]")
+		runner.Exec(t, "INSERT INTO "+tblName+" (id, prefix, v) VALUES ($1, $2, $3)", 3, 0, "[4, 3]")
+		runner.Exec(t, "INSERT INTO "+tblName+" (id, prefix, v) VALUES ($1, $2, $3)", 4, 1, "[1, 2]")
+		runner.Exec(t, "INSERT INTO "+tblName+" (id, prefix, v) VALUES ($1, $2, $3)", 5, 1, "[7, 4]")
+		runner.Exec(t, "INSERT INTO "+tblName+" (id, prefix, v) VALUES ($1, $2, $3)", 6, 1, "[4, 3]")
 
-	col, err := catalog.MustFindColumnByName(tableDesc, "v")
-	require.NoError(t, err)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", tblName)
+		vCol, err := catalog.MustFindColumnByName(tableDesc, "v")
+		require.NoError(t, err)
+		prefixCol, err := catalog.MustFindColumnByName(tableDesc, "prefix")
+		require.NoError(t, err)
 
-	indexDesc := descpb.IndexDescriptor{
-		ID: 42, Name: "idx_vector_t",
-		Type:                idxtype.VECTOR,
-		KeyColumnIDs:        []descpb.ColumnID{col.GetID()},
-		KeyColumnNames:      []string{col.GetName()},
-		KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
-		KeySuffixColumnIDs:  []descpb.ColumnID{tableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
-		Version:             descpb.LatestIndexDescriptorVersion,
-		EncodingType:        catenumpb.SecondaryIndexEncoding,
+		indexDesc1 := descpb.IndexDescriptor{
+			ID: 42, Name: "t_idx1",
+			Type:                idxtype.VECTOR,
+			KeyColumnIDs:        []descpb.ColumnID{vCol.GetID()},
+			KeyColumnNames:      []string{vCol.GetName()},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			KeySuffixColumnIDs:  []descpb.ColumnID{tableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
+			Version:             descpb.LatestIndexDescriptorVersion,
+			EncodingType:        catenumpb.SecondaryIndexEncoding,
+		}
+
+		indexDesc2 := descpb.IndexDescriptor{
+			ID: 43, Name: "t_idx2",
+			Type:                idxtype.VECTOR,
+			KeyColumnIDs:        []descpb.ColumnID{prefixCol.GetID(), vCol.GetID()},
+			KeyColumnNames:      []string{prefixCol.GetName(), vCol.GetName()},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+			KeySuffixColumnIDs:  []descpb.ColumnID{tableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
+			Version:             descpb.LatestIndexDescriptorVersion,
+			EncodingType:        catenumpb.SecondaryIndexEncoding,
+		}
+
+		indexID := indexDesc1.ID
+		if usePrefix {
+			indexID = indexDesc2.ID
+		}
+
+		store, err := NewWithColumnID(
+			internalDB,
+			quantizer,
+			codec,
+			tableDesc,
+			indexID,
+			vCol.GetID(),
+		)
+		require.NoError(t, err)
+
+		return &testStore{Store: store, usePrefix: usePrefix, runner: runner}
 	}
-	index := tabledesc.NewTestIndex(&indexDesc, 1)
 
-	quantizer := quantize.NewUnQuantizer(2)
-	store, err := NewWithColumnID(
-		internalDB,
-		quantizer,
-		codec,
-		tableDesc,
-		index.GetID(),
-		col.GetID(),
-	)
-	require.NoError(t, err)
+	// Run tests with a non-prefixed index.
+	suite.Run(t, commontest.NewStoreTestSuite(ctx, makeStore))
 
-	pk1 := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 11), 0 /* famID */)
-	pk2 := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 12), 0 /* famID */)
-	testPKs := []cspann.KeyBytes{pk1, pk2}
-	testVectors := []vector.T{{100, 200}, {300, 400}}
-
-	// TODO(mw5h): Figure out where to create the empty root partition.
-	t.Run("create empty root partition", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, store)
-		defer commontest.CommitTransaction(ctx, t, store, txn)
-
-		emptyRoot := cspann.NewPartition(
-			quantizer, quantizer.Quantize(&workspace, vector.Set{}),
-			[]cspann.ChildKey{}, []cspann.ValueBytes{}, cspann.LeafLevel)
-		require.NoError(t, txn.SetRootPartition(ctx, emptyRoot))
-	})
-
-	commontest.StoreTests(ctx, t, store, quantizer, testPKs, testVectors)
-
-	t.Run("insert a root partition into the store and read it back", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, store)
-		defer commontest.CommitTransaction(ctx, t, store, txn)
-
-		vectors := vector.T{4, 3}.AsSet()
-		quantizedSet := quantizer.Quantize(&workspace, vectors)
-		root := cspann.NewPartition(quantizer, quantizedSet,
-			[]cspann.ChildKey{childKey2}, []cspann.ValueBytes{valueBytes2}, cspann.Level(2))
-		require.NoError(t, txn.SetRootPartition(ctx, root))
-		readRoot, err := txn.GetPartition(ctx, cspann.RootKey)
-		require.NoError(t, err)
-		testingAssertPartitionsEqual(t, root, readRoot)
-
-		vectors = vector.T{4, 3}.AsSet()
-		vectors.Add(vector.T{2, 1})
-		quantizedSet = quantizer.Quantize(&workspace, vectors)
-		root = cspann.NewPartition(
-			quantizer, quantizedSet, []cspann.ChildKey{childKey10, childKey20},
-			[]cspann.ValueBytes{valueBytes10, valueBytes20}, cspann.Level(2))
-		require.NoError(t, txn.SetRootPartition(ctx, root))
-		readRoot, err = txn.GetPartition(ctx, cspann.RootKey)
-		require.NoError(t, err)
-		testingAssertPartitionsEqual(t, root, readRoot)
-
-		vectors = vector.T{4, 3}.AsSet()
-		vectors.Add(vector.T{2, 1})
-		vectors.Add(vector.T{5, 6})
-		quantizedSet = quantizer.Quantize(&workspace, vectors)
-		root = cspann.NewPartition(
-			quantizer, quantizedSet, []cspann.ChildKey{primaryKey200, primaryKey300, primaryKey400},
-			[]cspann.ValueBytes{valueBytes200, valueBytes300, valueBytes400}, cspann.LeafLevel)
-		require.NoError(t, txn.SetRootPartition(ctx, root))
-		readRoot, err = txn.GetPartition(ctx, cspann.RootKey)
-		require.NoError(t, err)
-		testingAssertPartitionsEqual(t, root, readRoot)
-	})
-
-	t.Run("insert a partition and then delete it", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, store)
-		defer commontest.CommitTransaction(ctx, t, store, txn)
-
-		vectors := vector.T{4, 3}.AsSet()
-		quantizedSet := quantizer.Quantize(&workspace, vectors)
-		testPartition := cspann.NewPartition(quantizer, quantizedSet,
-			[]cspann.ChildKey{childKey2}, []cspann.ValueBytes{valueBytes2}, cspann.Level(2))
-		partitionKey, err := txn.InsertPartition(ctx, testPartition)
-		require.NoError(t, err)
-		newPartition, err := txn.GetPartition(ctx, partitionKey)
-		require.NoError(t, err)
-		testingAssertPartitionsEqual(t, testPartition, newPartition)
-
-		err = txn.DeletePartition(ctx, partitionKey)
-		require.NoError(t, err)
-		_, err = txn.GetPartition(ctx, partitionKey)
-		require.Error(t, err)
-	})
-
-	t.Run("add to root partition", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, store)
-		defer commontest.CommitTransaction(ctx, t, store, txn)
-
-		emptySet := vector.MakeSet(2)
-		root := cspann.NewPartition(
-			quantizer, quantizer.Quantize(&workspace, emptySet),
-			[]cspann.ChildKey{}, []cspann.ValueBytes{}, cspann.Level(2))
-		err := txn.SetRootPartition(ctx, root)
-		require.NoError(t, err)
-
-		// Add to root partition.
-		metadata, err := txn.AddToPartition(
-			ctx, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
-		require.NoError(t, err)
-		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 1)
-		metadata, err = txn.AddToPartition(
-			ctx, cspann.RootKey, vector.T{7, 4}, childKey20, valueBytes20)
-		require.NoError(t, err)
-		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 2)
-		metadata, err = txn.AddToPartition(
-			ctx, cspann.RootKey, vector.T{4, 3}, childKey30, valueBytes30)
-		require.NoError(t, err)
-		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 3)
-
-		// Add duplicate and expect value to be overwritten
-		metadata, err = txn.AddToPartition(
-			ctx, cspann.RootKey, vector.T{5, 5}, childKey30, valueBytes30)
-		require.NoError(t, err)
-		commontest.CheckPartitionMetadata(t, metadata, cspann.Level(2), vector.T{0, 0}, 3)
-
-		// Search root partition.
-		searchSet := cspann.SearchSet{MaxResults: 2}
-		partitionCounts := []int{0}
-		level, err := txn.SearchPartitions(
-			ctx, []cspann.PartitionKey{cspann.RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
-		require.NoError(t, err)
-		require.Equal(t, cspann.Level(2), level)
-		result1 := cspann.SearchResult{
-			QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: 1, ChildKey: childKey10, ValueBytes: valueBytes10}
-		result2 := cspann.SearchResult{
-			QuerySquaredDistance: 32, ErrorBound: 0, CentroidDistance: 7.0711, ParentPartitionKey: 1, ChildKey: childKey30, ValueBytes: valueBytes30}
-		results := searchSet.PopResults()
-		commontest.RoundResults(results, 4)
-		require.Equal(t, cspann.SearchResults{result1, result2}, results)
-		require.Equal(t, 3, partitionCounts[0])
-	})
+	// Re-run the tests with a prefixed index.
+	usePrefix = true
+	suite.Run(t, commontest.NewStoreTestSuite(ctx, makeStore))
 }
