@@ -370,10 +370,10 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 		{
 			replicas: []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}},
 			prs:      []tracker.Progress{{RecentActive: false}, {RecentActive: true}},
-			lastUpdate: map[roachpb.ReplicaID]time.Time{
-				1: now.Add(-1 * inactivityThreashold / 2),
-				2: now.Add(-1 - inactivityThreashold),
-				3: now,
+			lastUpdate: map[roachpb.ReplicaID]lastReplicaUpdateTime{
+				1: {update: now.Add(-1 * inactivityThreashold / 2)},
+				2: {update: now.Add(-1 - inactivityThreashold)},
+				3: {update: now},
 			},
 			now: now,
 
