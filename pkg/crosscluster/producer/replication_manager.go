@@ -435,11 +435,19 @@ func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 }
 
 func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(ctx context.Context) error {
-	if err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+	err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
 		syntheticprivilege.GlobalPrivilegeObject,
-		privilege.REPLICATION); err != nil {
-		return err
+		privilege.REPLICATIONSOURCE)
+
+	if err != nil {
+		// Fallback to legacy REPLICATION priv.
+		if fallbackErr := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+			syntheticprivilege.GlobalPrivilegeObject,
+			privilege.REPLICATION); fallbackErr != nil {
+			return err
+		}
 	}
+
 	r.authorized = true
 	return nil
 }
