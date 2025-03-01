@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,6 +55,14 @@ func TestLargeKeys(t *testing.T) {
 			name:  "lookup join, with ordering",
 			query: "SELECT * FROM bar INNER LOOKUP JOIN foo ON lookup_blob = pk_blob ORDER BY pk_blob",
 		},
+		{
+			name:  "lookup join on non-unique index, with ordering",
+			query: "SELECT * FROM bar INNER LOOKUP JOIN foo ON lookup_attribute = attribute ORDER BY pk_blob",
+		},
+		{
+			name:  "lookup join on non-unique index, with reverse ordering",
+			query: "SELECT * FROM bar INNER LOOKUP JOIN foo ON lookup_attribute = attribute ORDER BY pk_blob DESC",
+		},
 	}
 
 	rng, _ := randutil.NewTestRand()
@@ -62,6 +71,11 @@ func TestLargeKeys(t *testing.T) {
 	// KV requests the Streamer issued.
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				// We disable the randomization of some batch sizes because with
+				// some low values the test takes much longer.
+				ForceProductionValues: true,
+			},
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 					for _, tc := range testCases {
@@ -133,7 +147,7 @@ func TestLargeKeys(t *testing.T) {
 						INDEX (attribute)%s
 					);`, familiesSuffix))
 				require.NoError(t, err)
-				_, err = db.Exec("CREATE TABLE bar (lookup_blob STRING PRIMARY KEY)")
+				_, err = db.Exec("CREATE TABLE bar (lookup_blob STRING PRIMARY KEY, lookup_attribute INT8)")
 				require.NoError(t, err)
 
 				// Insert some number of rows.
@@ -151,7 +165,7 @@ func TestLargeKeys(t *testing.T) {
 					blobSize := int(float64(valueSize)*5.0*rng.Float64()) + 1
 					_, err = db.Exec("INSERT INTO foo SELECT repeat($1, $2), 1, 1, repeat($1, $3);", letter, valueSize, blobSize)
 					require.NoError(t, err)
-					_, err = db.Exec("INSERT INTO bar SELECT repeat($1, $2);", letter, valueSize)
+					_, err = db.Exec("INSERT INTO bar SELECT repeat($1, $2), $3;", letter, valueSize, i)
 					require.NoError(t, err)
 				}
 
