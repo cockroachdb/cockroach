@@ -1197,6 +1197,28 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		}
 	}
 
+	// Builtin routines with a variadic argument of type Any can be called with any
+	// number of different typed arguments (instead of the normal Variadic definition
+	// of a fixed number of arguments of the same type). This is a special case for
+	// builtins that can accept any type of argument, like the builtin
+	// `jsonb_build_array`.
+	heterogeneousBuiltin := false
+	if numOverloads == 1 {
+		routineType, _, _ := s.overloads[0].outParamInfo()
+		if vt, ok := s.params[0].(VariadicType); ok && vt.VarType == types.Any && routineType == BuiltinRoutine {
+			homogeneousTyp = nil
+			heterogeneousBuiltin = true
+			for i, ok := s.placeholderIdxs.Next(len(vt.FixedTypes)); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
+				te := s.exprs[i].(*Placeholder)
+				if err := semaCtx.Placeholders.SetType(te.Idx, types.Any); err != nil {
+					return err
+				}
+				te.typ = types.Any
+				s.typedExprs[i] = te
+			}
+		}
+	}
+
 	// If this is a binary operator with one untyped literal or placeholder,
 	// check for a binary operator with parameter types matching the type of the
 	// opposite argument.
@@ -1334,7 +1356,11 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 			constExpr := s.exprs[i].(Constant)
 			filter := makeFilter(i, func(params TypeList, ordinal int) bool {
-				_, err := constExpr.ResolveAsType(ctx, semaCtx, params.GetAt(ordinal))
+				typ := params.GetAt(ordinal)
+				if typ.Identical(types.Any) {
+					typ = naturalConstantType(constExpr)
+				}
+				_, err := constExpr.ResolveAsType(ctx, semaCtx, typ)
 				return err == nil
 			})
 			s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
@@ -1400,6 +1426,9 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		// parameter types are ambiguous (like in the case of tuple-tuple binary
 		// operators).
 		for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
+			if s.typedExprs[i] != nil && heterogeneousBuiltin {
+				continue
+			}
 			if _, err := s.exprs[i].TypeCheck(ctx, semaCtx, homogeneousTyp); err != nil {
 				return err
 			}
