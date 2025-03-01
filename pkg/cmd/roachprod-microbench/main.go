@@ -173,7 +173,7 @@ func makeCompareCommand() *cobra.Command {
 		}
 
 		if c.influxConfig.token != "" {
-			err = c.pushToInfluxDB()
+			err = c.pushToInfluxDB(comparisonResult)
 			if err != nil {
 				return err
 			}
