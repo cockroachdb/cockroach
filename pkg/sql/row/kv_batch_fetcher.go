@@ -893,12 +893,12 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 			}
 			if len(t.Rows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
-					"unexpectedly got a ScanResponse using KEY_VALUES response format",
+					"unexpectedly got a ReverseScanResponse using KEY_VALUES response format",
 				)
 			}
 			if len(t.IntentRows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
-					"unexpectedly got a ScanResponse with non-nil IntentRows",
+					"unexpectedly got a ReverseScanResponse with non-nil IntentRows",
 				)
 			}
 			// Note that ret.BatchResponse and ret.ColBatch might be nil when
