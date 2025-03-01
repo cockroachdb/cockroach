@@ -677,7 +677,7 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 			wakeLeader := hasLeader && !fromLeader
 			r.maybeUnquiesceLocked(wakeLeader, false /* mayCampaign */)
 		}
-		r.maybeWakeUpRMuLocked()
+		r.maybeWakeUpReplicaMuLocked()
 
 		{
 			// Update the lastUpdateTimes map, unless configured not to by a testing
