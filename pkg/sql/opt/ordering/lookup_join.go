@@ -89,11 +89,7 @@ func LookupJoinCanProvideOrdering(
 func lookupJoinCanProvideOrdering(
 	mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
 ) bool {
-	canProvide, direction := LookupJoinCanProvideOrdering(mem, expr, required)
-	if direction == ReverseDirection {
-		// Do not allow reverse scans for now.
-		return false
-	}
+	canProvide, _ := LookupJoinCanProvideOrdering(mem, expr, required)
 	return canProvide
 }
 
